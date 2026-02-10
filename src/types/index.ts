@@ -608,6 +608,13 @@ export interface QuestionUiConfig {
    */
   choiceSearchEnabled?: boolean;
   /**
+   * For CHECKBOX fields rendered with `ui.control: "select"`, set the checkbox size (px) in the dropdown menu.
+   *
+   * - Values are clamped to a safe UI range at render time.
+   * - When omitted, the default checkbox size is used.
+   */
+  multiSelectCheckboxSizePx?: number;
+  /**
    * Optional disclaimer section appended below PARAGRAPH fields.
    *
    * The UI renders this as a non-editable block by default and keeps the stored value in sync by

@@ -383,7 +383,7 @@ export function computeNonMatchOptionKeys(args: {
 }): string[] {
   const { filter, dependencyValues, selectedValue } = args;
   const optionMap = filter?.optionMap;
-  if (!filter || !optionMap || filter.dataSourceField) return [];
+  if (!filter || !optionMap) return [];
   const bypassValues = normalizeBypassValues((filter as any).bypassValues);
   if (bypassValues.length) {
     const tokens = resolveBypassTokens(dependencyValues);

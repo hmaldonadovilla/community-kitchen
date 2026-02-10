@@ -368,8 +368,6 @@ Actions
 
 --
 
-Pending tasks Ingredients Management:
-
 ## Legend, create label and multi-select dropdown list adjustments
 
 ### Legend adjustments for Active ingredient
@@ -394,3 +392,26 @@ Pending tasks Ingredients Management:
 - Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_ingredients_mgmt.json`
 - Implement changes on the staging environment and test via playwright
 - Follow `.cursor/rules/dev_rules.mdc` and `.cursor/style_guide.mdc` rules strictly.
+
+--
+
+## Active status on html summary view bundled template
+
+- Concatenate the status and EFFECTIVE_START_DATE to produce this mention: {{status}} since {{EFFECTIVE_START_DATE}}
+- This only applies when the status is Active
+
+## Disabled status on html summary view bundled template
+
+- Concatenate the status, LAST_CHANGED_BY and EFFECTIVE_END_DATE to produce this mention: {{status}} by {{LAST_CHANGED_BY}} since {{EFFECTIVE_END_DATE}}
+- This only applies when the status is Disabled
+
+## Please increase the size of checkboxes in the multi-select dropdown
+
+### Implementation guidelines
+
+- Implement the adjustments to the html summary view bundled template for the Ingredients Management form as described above
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_ingredients_mgmt.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.
+
+--

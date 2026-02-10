@@ -1173,6 +1173,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       For `CHECKBOX` fields with options (multi-select), you can also set:
       - `ui.control: "select"` to render a native multi-select dropdown (`<select multiple>`).
+      - `ui.multiSelectCheckboxSizePx` (range `16..40`) to increase checkbox size/hit area in that dropdown.
+        Example: `{ "ui": { "control": "select", "multiSelectCheckboxSizePx": 32 } }`
 
     - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
 

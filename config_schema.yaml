@@ -1040,6 +1040,17 @@ components:
             - When `true`, always use the searchable control (even for smaller lists)
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables it automatically only for large option sets
+        multiSelectCheckboxSizePx:
+          type: integer
+          minimum: 16
+          maximum: 40
+          description: |
+            For `CHECKBOX` fields rendered as `ui.control: "select"`, sets checkbox size (px)
+            in the multi-select dropdown menu.
+
+            - Applies only to multi-select CHECKBOX UI.
+            - Values are clamped to `16..40` at runtime.
+            - When omitted, default checkbox size is used.
         overlayOpenActions:
           type: array
           items:

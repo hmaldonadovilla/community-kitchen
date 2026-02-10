@@ -8004,6 +8004,12 @@ const FormView: React.FC<FormViewProps> = ({
         }
         const controlOverride = (q.ui?.control || '').toString().trim().toLowerCase();
         const renderAsMultiSelect = controlOverride === 'select';
+        const multiSelectCheckboxSizePx = (() => {
+          const raw = q.ui?.multiSelectCheckboxSizePx;
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) return undefined;
+          return Math.max(16, Math.min(40, Math.round(parsed)));
+        })();
         return (
           <div
             key={q.id}
@@ -8027,6 +8033,7 @@ const FormView: React.FC<FormViewProps> = ({
                 disabled={submitting || q.readOnly === true || isFieldLockedByDedup(q.id)}
                 placeholder={placeholder}
                 aria-label={resolveLabel(q, language)}
+                checkboxSizePx={multiSelectCheckboxSizePx}
                 onChange={next => {
                   if (submitting || q.readOnly === true || isFieldLockedByDedup(q.id)) return;
                   onDiagnostic?.('ui.checkbox.select.change', { fieldPath: q.id, selectedCount: next.length });

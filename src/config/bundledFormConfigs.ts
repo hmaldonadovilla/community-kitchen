@@ -7216,6 +7216,9 @@ export const BUNDLED_FORM_CONFIGS = [
         "fr": "View",
         "nl": "View"
       },
+      "appHeader": {
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+      },
       "submitValidation": {
         "enforceFieldOrder": true,
         "hideSubmitTopErrorMessage": true,
@@ -7405,6 +7408,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "ui": {
           "control": "select",
+          "multiSelectCheckboxSizePx": 40,
           "helperText": {
             "en": "Select one or more suppliers.",
             "fr": "Sélectionnez un ou plusieurs fournisseurs.",
@@ -7476,6 +7480,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "ui": {
           "control": "select",
+          "multiSelectCheckboxSizePx": 40,
           "helperText": {
             "en": "Select None or one or more allergens.",
             "fr": "Sélectionnez Aucun ou un ou plusieurs allergènes.",
@@ -7551,6 +7556,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "ui": {
           "control": "select",
+          "multiSelectCheckboxSizePx": 40,
           "helperText": {
             "en": "Select one or more allowed units.",
             "fr": "Sélectionnez une ou plusieurs unités autorisées.",
@@ -7590,6 +7596,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "ui": {
           "control": "select",
+          "multiSelectCheckboxSizePx": 40,
           "helperText": {
             "en": "Select one or more dietary applicability values.",
             "fr": "Sélectionnez une ou plusieurs valeurs d’applicabilité diététique.",
@@ -11463,9 +11470,9 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             },
             "message": {
-              "en": "Enter at least one quantity greater than 0.",
-              "fr": "Veuillez entrer au moins une quantité supérieure à 0.",
-              "nl": "Voer minstens één hoeveelheid in die groter is dan 0."
+              "en": "Enter an integer ≥ 0 in all fields to record ordered portions.",
+              "fr": "Veuillez entrer un nombre entier ≥ 0 dans tous les champs pour enregistrer les portions commandées.",
+              "nl": "Voer een geheel getal ≥ 0 in in alle velden om de gevraagde porties te registreren."
             }
           }
         ]
@@ -13839,9 +13846,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 }
               },
               "message": {
-                "en": "Enter at least one quantity greater than 0.",
-                "fr": "Veuillez entrer au moins une quantité supérieure à 0.",
-                "nl": "Voer minstens één hoeveelheid in die groter is dan 0."
+                "en": "Enter an integer ≥ 0 in all fields to record ordered portions.",
+                "fr": "Veuillez entrer un nombre entier ≥ 0 dans tous les champs pour enregistrer les portions commandées.",
+                "nl": "Voer een geheel getal ≥ 0 in in alle velden om de gevraagde porties te registreren."
               }
             }
           ]

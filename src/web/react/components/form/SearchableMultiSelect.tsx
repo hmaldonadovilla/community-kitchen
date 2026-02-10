@@ -28,9 +28,10 @@ export const SearchableMultiSelect: React.FC<{
   placeholder?: string;
   emptyText?: string;
   ariaLabel?: string;
+  checkboxSizePx?: number;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onChange: (nextValues: string[]) => void;
-}> = ({ value, options, disabled, placeholder, emptyText, ariaLabel, onDiagnostic, onChange }) => {
+}> = ({ value, options, disabled, placeholder, emptyText, ariaLabel, checkboxSizePx, onDiagnostic, onChange }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuInteractingRef = useRef(false);
@@ -66,6 +67,11 @@ export const SearchableMultiSelect: React.FC<{
 
   const displayText = editing ? query : summaryText;
   const showClear = !disabled && (Boolean(normalizedQuery) || selectedValues.length > 0);
+  const resolvedCheckboxSizePx = useMemo(() => {
+    const valueNum = Number(checkboxSizePx);
+    if (!Number.isFinite(valueNum)) return null;
+    return Math.max(16, Math.min(40, Math.round(valueNum)));
+  }, [checkboxSizePx]);
 
   const toggleValue = (nextValue: string) => {
     const key = (nextValue || '').toString().trim();
@@ -247,7 +253,15 @@ export const SearchableMultiSelect: React.FC<{
                     disabled={!!disabled}
                     readOnly
                     tabIndex={-1}
-                    style={{ pointerEvents: 'none' }}
+                    style={{
+                      pointerEvents: 'none',
+                      ...(resolvedCheckboxSizePx !== null
+                        ? {
+                            width: `${resolvedCheckboxSizePx}px`,
+                            height: `${resolvedCheckboxSizePx}px`
+                          }
+                        : null)
+                    }}
                   />
                   <span>{opt.label}</span>
                 </div>

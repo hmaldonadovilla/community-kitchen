@@ -641,9 +641,9 @@
                       "includeWhen": {
                         "any": [
                           {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Entire dish",
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Entire dish",
                               "Part dish",
                               ""
                             ]
@@ -2266,8 +2266,8 @@
         "when": {
           "all": [
             {
-          "fieldId": "MP_SERVICE",
-          "notEmpty": true
+              "fieldId": "MP_SERVICE",
+              "notEmpty": true
             },
             {
               "fieldId": "MP_PREP_DATE",
@@ -3509,7 +3509,7 @@
                         "CATEGORY",
                         "ALLERGEN",
                         "STATUS"
-                        ]
+                      ]
                     }
                   },
                   {
@@ -4631,8 +4631,8 @@
           "when": {
             "all": [
               {
-            "fieldId": "MP_SERVICE",
-            "notEmpty": true
+                "fieldId": "MP_SERVICE",
+                "notEmpty": true
               },
               {
                 "fieldId": "MP_PREP_DATE",
@@ -5880,7 +5880,7 @@
                           "CATEGORY",
                           "ALLERGEN",
                           "STATUS"
-                          ]
+                        ]
                       }
                     },
                     {
@@ -6686,7 +6686,7 @@
                   {
                     "fieldId": "status",
                     "notEquals": "Closed"
-            },
+                  },
                   {
                     "any": [
                       {
@@ -6702,12 +6702,12 @@
                 ]
               },
               "actions": [
-            {
-              "text": {
-                "en": "View",
-                "fr": "Voir",
-                "nl": "Bekijken"
-              },
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
                   "hideText": true,
                   "style": "link",
                   "icon": "view",
@@ -6745,10 +6745,10 @@
                     "nl": "Bekijken"
                   },
                   "hideText": true,
-              "style": "link",
+                  "style": "link",
                   "icon": "view",
                   "openView": "summary"
-            }
+                }
               ]
             }
           ]
@@ -6836,7 +6836,7 @@
           "en": "Search by customer:",
           "fr": "Rechercher par client:",
           "nl": "Zoeken op klant:"
-      }
+        }
       },
       "rowClickEnabled": false
     },
@@ -7312,9 +7312,9 @@
                       "includeWhen": {
                         "any": [
                           {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Entire dish",
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Entire dish",
                               "Part dish",
                               ""
                             ]
