@@ -20,30 +20,6 @@
     max-width: 100%;
   }
 
-  .ck-summary-header {
-    padding: 4px 0 10px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 12px;
-  }
-
-  .ck-summary-title {
-    margin: 0;
-    font-size: var(--ck-font-control);
-    font-weight: 600;
-    line-height: 1.25;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
-
-  .ck-summary-subtitle {
-    margin-top: 6px;
-    font-size: var(--ck-font-label);
-    font-weight: 500;
-    color: var(--text);
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
-
   .ck-field-list {
     margin: 0;
     padding: 0;
@@ -97,12 +73,11 @@
 </style>
 
 <div class="ck-summary-template" data-ck-template="ingredients-summary">
-  <div class="ck-summary-header">
-    <h2 class="ck-summary-title">{{DEFAULT(INGREDIENT_NAME, "—")}}</h2>
-    <div class="ck-summary-subtitle" data-ck-status-summary>{{DEFAULT(STATUS, "—")}}</div>
-  </div>
-
   <ul class="ck-field-list">
+    <li class="ck-field-row">
+      <div class="ck-field-label">{{LABEL(INGREDIENT_NAME)}}</div>
+      <div class="ck-field-value">{{DEFAULT(INGREDIENT_NAME, "—")}}</div>
+    </li>
     <li class="ck-field-row">
       <div class="ck-field-label">{{LABEL(CATEGORY)}}</div>
       <div class="ck-field-value">{{DEFAULT(CATEGORY, "—")}}</div>
@@ -125,15 +100,7 @@
     </li>
     <li class="ck-field-row">
       <div class="ck-field-label">{{LABEL(STATUS)}}</div>
-      <div class="ck-field-value" data-ck-status-value>{{DEFAULT(STATUS, "—")}}</div>
-    </li>
-    <li class="ck-field-row" data-ck-start-row>
-      <div class="ck-field-label">{{LABEL(EFFECTIVE_START_DATE)}}</div>
-      <div class="ck-field-value" data-ck-start-date>{{DEFAULT(EFFECTIVE_START_DATE, "—")}}</div>
-    </li>
-    <li class="ck-field-row" data-ck-end-row>
-      <div class="ck-field-label">{{LABEL(EFFECTIVE_END_DATE)}}</div>
-      <div class="ck-field-value" data-ck-end-date>{{DEFAULT(EFFECTIVE_END_DATE, "—")}}</div>
+      <div class="ck-field-value">{{DEFAULT(STATUS, "—")}}</div>
     </li>
     <li class="ck-field-row">
       <div class="ck-field-label">{{LABEL(CREATED_BY)}}</div>
@@ -151,7 +118,6 @@
 
   <div class="ck-hidden-data" aria-hidden="true">
     <span data-ck-status-raw>{{DEFAULT(STATUS, "")}}</span>
-    <span data-ck-start-raw>{{DEFAULT(EFFECTIVE_START_DATE, "")}}</span>
     <span data-ck-end-raw>{{DEFAULT(EFFECTIVE_END_DATE, "")}}</span>
     <span data-ck-updated-raw>{{DEFAULT(UPDATED_AT, "")}}</span>
     <span data-ck-last-changed-by-raw>{{DEFAULT(LAST_CHANGED_BY, "")}}</span>
@@ -164,9 +130,7 @@
     if (!root || root.getAttribute('data-ck-init') === '1') return;
     root.setAttribute('data-ck-init', '1');
 
-    var GO_LIVE_DATE = '05-Feb-2026';
     var OPEN_END_ISO = '9999-12-31';
-    var OPEN_END_DISPLAY = '31-Dec-9999';
     var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     var text = function (selector) {
@@ -210,45 +174,22 @@
     };
 
     var statusRaw = text('[data-ck-status-raw]');
-    var startRaw = text('[data-ck-start-raw]');
     var endRaw = text('[data-ck-end-raw]');
     var updatedRaw = text('[data-ck-updated-raw]');
     var changedByRaw = text('[data-ck-last-changed-by-raw]');
 
     var statusKey = normalize(statusRaw);
-    var formattedStart = formatDate(startRaw) || GO_LIVE_DATE;
     var formattedEnd = formatDate(endRaw);
     var normalizedEndRaw = normalize(endRaw);
     var normalizedFormattedEnd = normalize(formattedEnd);
     var isOpenEnded = normalizedEndRaw === OPEN_END_ISO ||
-      normalizedFormattedEnd === normalize(OPEN_END_DISPLAY) ||
+      normalizedFormattedEnd === normalize('31-Dec-9999') ||
       normalizedEndRaw.indexOf('9999-12-31') >= 0 ||
       normalizedEndRaw.indexOf('31-dec-9999') >= 0 ||
       normalizedFormattedEnd.indexOf('31-dec-9999') >= 0;
 
-    var statusSummary = statusRaw || '—';
-    var statusValue = statusRaw || '—';
-    if (statusKey === 'active') {
-      statusSummary = 'Active since ' + formattedStart;
-      statusValue = statusSummary;
-    } else if (statusKey === 'disabled') {
-      var disabledDate = formattedEnd || OPEN_END_DISPLAY;
-      statusSummary = 'Disabled since ' + disabledDate;
-      statusValue = statusSummary;
-    }
-
-    setText('[data-ck-status-summary]', statusSummary);
-    setText('[data-ck-status-value]', statusValue);
-
-    setText('[data-ck-start-date]', formatDate(startRaw) || '—');
-    if (isOpenEnded) {
-      setText('[data-ck-end-date]', OPEN_END_DISPLAY);
-    } else {
-      setText('[data-ck-end-date]', formatDate(endRaw) || '—');
-    }
-
     if (statusKey === 'draft') {
-      var draftRows = ['[data-ck-start-row]', '[data-ck-end-row]', '[data-ck-changed-on-row]', '[data-ck-changed-by-row]'];
+      var draftRows = ['[data-ck-changed-on-row]', '[data-ck-changed-by-row]'];
       draftRows.forEach(function (selector) {
         var row = root.querySelector(selector);
         if (row) row.style.display = 'none';

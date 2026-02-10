@@ -3327,7 +3327,14 @@ components:
                 dedupIncompleteDialog:
                   $ref: '#/components/schemas/DedupIncompleteHomeDialogConfig'
                   description: |
-                    Optional Home-navigation guard dialog shown when reject-dedup keys are incomplete in the form view.
+                    Optional Home-navigation guard dialog shown when configured guard criteria is met in form view.
+                    Legacy key (defaults to `criteria: dedupKeys` when not set).
+                    On confirm, the app leaves the form and (by default) deletes the current persisted record before navigating Home.
+                incompleteFieldsDialog:
+                  $ref: '#/components/schemas/DedupIncompleteHomeDialogConfig'
+                  description: |
+                    Optional Home-navigation guard dialog for flexible field-based checks.
+                    If `criteria` is omitted, this key defaults to `criteria: fieldIds`.
                     On confirm, the app leaves the form and (by default) deletes the current persisted record before navigating Home.
             gates:
               $ref: '#/components/schemas/SystemActionGatesConfig'
@@ -3442,9 +3449,22 @@ components:
     DedupIncompleteHomeDialogConfig:
       type: object
       properties:
+        criteria:
+          type: string
+          enum: [dedupKeys, fieldIds, either]
+          description: |
+            Guard condition used to decide when to show the Home dialog.
+            - `dedupKeys`: show when reject-dedup keys are incomplete
+            - `fieldIds`: show when any configured `fieldIds` value is empty
+            - `either`: show when either condition matches
+        fieldIds:
+          type: array
+          description: Optional top-level field ids used when `criteria` includes `fieldIds`.
+          items:
+            type: string
         enabled:
           type: boolean
-          description: Enable this dialog when Home is pressed and reject-dedup keys are incomplete. Default true when object is present.
+          description: Enable this dialog when Home is pressed and criteria matches. Default true when object is present.
         title:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'

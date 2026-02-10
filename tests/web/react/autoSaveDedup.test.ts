@@ -4,7 +4,8 @@ import {
   getValueByFieldId,
   hasIncompleteConfiguredFields,
   normalizeFieldIdList,
-  resolveDedupCheckDialogCopy
+  resolveDedupCheckDialogCopy,
+  shouldForceAutoSaveOnConfiguredBlur
 } from '../../../src/web/react/app/autoSaveDedup';
 
 describe('autoSaveDedup helpers', () => {
@@ -66,5 +67,70 @@ describe('autoSaveDedup helpers', () => {
     expect(copy.availableAutoCloseMs).toBe(1300);
     expect(copy.duplicateAutoCloseMs).toBe(900);
   });
-});
 
+  it('forces autosave on configured blur when create-flow gate is complete and dedup passed', () => {
+    const shouldForce = shouldForceAutoSaveOnConfiguredBlur({
+      autoSaveEnabled: true,
+      isCreateFlow: true,
+      scope: 'top',
+      event: 'blur',
+      fieldId: 'CREATED_BY',
+      fieldPath: 'CREATED_BY',
+      enableWhenFieldIds: ['INGREDIENT_NAME', 'CREATED_BY'],
+      values: {
+        INGREDIENT_NAME: 'Tomato',
+        CREATED_BY: 'Que'
+      },
+      dedupSignature: 'name:tomato',
+      lastDedupCheckedSignature: 'name:tomato',
+      dedupChecking: false,
+      dedupConflict: false,
+      dedupHold: false
+    });
+    expect(shouldForce).toBe(true);
+  });
+
+  it('forces autosave on configured blur when dedup hold is stale but signature is settled', () => {
+    const shouldForce = shouldForceAutoSaveOnConfiguredBlur({
+      autoSaveEnabled: true,
+      isCreateFlow: true,
+      scope: 'top',
+      event: 'blur',
+      fieldId: 'CREATED_BY',
+      fieldPath: 'CREATED_BY',
+      enableWhenFieldIds: ['INGREDIENT_NAME', 'CREATED_BY'],
+      values: {
+        INGREDIENT_NAME: 'Tomato',
+        CREATED_BY: 'Que'
+      },
+      dedupSignature: 'name:tomato',
+      lastDedupCheckedSignature: 'name:tomato',
+      dedupChecking: false,
+      dedupConflict: false,
+      dedupHold: true
+    });
+    expect(shouldForce).toBe(true);
+  });
+
+  it('does not force autosave on configured blur when dedup is not settled', () => {
+    const shouldForce = shouldForceAutoSaveOnConfiguredBlur({
+      autoSaveEnabled: true,
+      isCreateFlow: true,
+      scope: 'top',
+      event: 'blur',
+      fieldId: 'CREATED_BY',
+      fieldPath: 'CREATED_BY',
+      enableWhenFieldIds: ['INGREDIENT_NAME', 'CREATED_BY'],
+      values: {
+        INGREDIENT_NAME: 'Tomato',
+        CREATED_BY: 'Que'
+      },
+      dedupSignature: 'name:tomato',
+      lastDedupCheckedSignature: '',
+      dedupChecking: true,
+      dedupConflict: false,
+      dedupHold: false
+    });
+    expect(shouldForce).toBe(false);
+  });
+});

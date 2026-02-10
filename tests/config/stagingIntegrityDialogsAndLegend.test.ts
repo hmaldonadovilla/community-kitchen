@@ -105,4 +105,39 @@ describe('staging integrity dialogs and list legend config', () => {
     assertChangeDialogs(cfg.questions);
     assertChangeDialogs(cfg.definition?.questions || []);
   });
+
+  test('ingredients management uses field-based home leave guard dialog', () => {
+    const cfg = readConfig('config_ingredients_mgmt.json');
+    const dialog = cfg.form?.actionBars?.system?.home?.incompleteFieldsDialog;
+    expect(dialog?.enabled).toBe(true);
+    expect(dialog?.criteria).toBe('fieldIds');
+    expect(Array.isArray(dialog?.fieldIds)).toBe(true);
+    expect(dialog?.fieldIds).toEqual(['INGREDIENT_NAME', 'CREATED_BY']);
+    expect(hasNonEmptyEnText(dialog?.title)).toBe(true);
+    expect(hasNonEmptyEnText(dialog?.message)).toBe(true);
+    expect(hasNonEmptyEnText(dialog?.confirmLabel)).toBe(true);
+    expect(hasNonEmptyEnText(dialog?.cancelLabel)).toBe(true);
+
+    expect(cfg.form?.createButtonLabel?.en).toBe('new ingredient');
+
+    const legend = Array.isArray(cfg.form?.listViewLegend) ? cfg.form.listViewLegend : [];
+    const legendIcons = new Set(legend.map((item: any) => (item?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
+    expect(legend.length).toBe(4);
+    expect(legendIcons.has('view')).toBe(true);
+    expect(legendIcons.has('edit')).toBe(true);
+    expect(legendIcons.has('copy')).toBe(false);
+    const legendPills = legend
+      .map((item: any) => (item?.pill?.text?.en || '').toString().trim().toLowerCase())
+      .filter(Boolean);
+    expect(legendPills.includes('disabled')).toBe(false);
+
+    const editCases = cfg.form?.listViewColumns?.find((col: any) => col?.fieldId === 'action_edit')?.cases || [];
+    expect(editCases.length).toBe(1);
+    expect(editCases[0]?.when?.fieldId).toBe('status');
+    expect(editCases[0]?.when?.equals).toBe('Draft');
+    const hasCopyColumn = Array.isArray(cfg.form?.listViewColumns)
+      ? cfg.form.listViewColumns.some((col: any) => col?.fieldId === 'action_copy')
+      : false;
+    expect(hasCopyColumn).toBe(false);
+  });
 });

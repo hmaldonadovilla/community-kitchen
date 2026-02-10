@@ -1603,7 +1603,8 @@ export const FORM_VIEW_STYLES = `
         .ck-searchable-multiselect__option {
           width: 100%;
           text-align: left;
-          padding: 10px 12px;
+          padding: 12px 14px;
+          min-height: 44px;
           border: 0;
           background: transparent;
           border-radius: 12px;
@@ -1614,7 +1615,7 @@ export const FORM_VIEW_STYLES = `
           cursor: pointer;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           box-sizing: border-box;
         }
         .ck-searchable-multiselect__option:hover,
@@ -1624,8 +1625,8 @@ export const FORM_VIEW_STYLES = `
           -webkit-text-fill-color: var(--text);
         }
         .ck-searchable-multiselect__option input {
-          width: 18px;
-          height: 18px;
+          width: 24px;
+          height: 24px;
           margin: 0;
           flex: 0 0 auto;
         }
