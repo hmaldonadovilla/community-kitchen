@@ -11,6 +11,8 @@ import { HeaderColumns, ListPageResult } from './types';
 import { SubmissionService } from './submissions';
 import { debugLog } from './debug';
 
+const LIST_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6h max supported by CacheService
+
 export class ListingService {
   private readonly submissionService: SubmissionService;
   private readonly cacheManager: CacheEtagManager;
@@ -75,11 +77,15 @@ export class ListingService {
     pageToken?: string,
     includePageRecords: boolean = true,
     recordIds?: string[],
-    sort?: { fieldId?: string; direction?: string }
+    sort?: { fieldId?: string; direction?: string; __ifNoneMatch?: boolean; __clientEtag?: string }
   ): SubmissionBatchResult<Record<string, any>> {
+    const startedAt = Date.now();
     const sortFieldOverride = (sort?.fieldId || '').toString().trim();
     const sortDirRaw = (sort?.direction || '').toString().trim().toLowerCase();
     const sortDirectionOverride = sortDirRaw === 'desc' ? 'desc' : 'asc';
+    const clientEtag = (((sort as any)?.__clientEtag ?? (sort as any)?.clientEtag ?? '') || '').toString().trim();
+    const ifNoneMatchRaw = (sort as any)?.__ifNoneMatch ?? (sort as any)?.ifNoneMatch;
+    const ifNoneMatch = ifNoneMatchRaw === true || ifNoneMatchRaw === 'true' || ifNoneMatchRaw === '1' || ifNoneMatchRaw === 1;
 
     const { sheet, headers, columns } = this.submissionService.ensureDestination(
       form.destinationTab || `${form.title} Responses`,
@@ -91,6 +97,21 @@ export class ListingService {
     const cappedTotal = Math.min(maxRows, 200);
     const size = Math.max(1, Math.min(pageSize || 10, 50));
     const offset = decodePageToken(pageToken);
+    const canReturnNotModified =
+      ifNoneMatch &&
+      !!clientEtag &&
+      offset <= 0 &&
+      !includePageRecords &&
+      (!recordIds || !recordIds.length);
+    if (canReturnNotModified && clientEtag === etag) {
+      const notModifiedList: PaginatedResult<Record<string, any>> = {
+        items: [],
+        totalCount: cappedTotal,
+        etag
+      };
+      (notModifiedList as any).notModified = true;
+      return { list: notModifiedList, records: {} };
+    }
     if (offset >= cappedTotal) {
       const emptyList: PaginatedResult<Record<string, any>> = { items: [], totalCount: cappedTotal, etag };
       return { list: emptyList, records: {} };
@@ -182,31 +203,24 @@ export class ListingService {
       questionTypeById[id] = (q.type || '').toString();
     });
 
-    // Read only the required columns (not the whole sheet width) to keep this endpoint fast and reliable.
-    // This is especially important on iOS where large Apps Script responses can appear as `null`.
-    const readColumn = (colIdx: number | undefined): any[] => {
-      if (!colIdx || cappedTotal <= 0) return new Array(cappedTotal).fill(undefined);
-      try {
-        return sheet.getRange(2, colIdx, cappedTotal, 1).getValues().map(r => r[0]);
-      } catch (_) {
-        return new Array(cappedTotal).fill(undefined);
-      }
+    const colIndexByKey: Record<string, number> = {};
+    const addColumnIndex = (key: string, colIdx?: number) => {
+      const idx = Number(colIdx || 0);
+      if (!key || !Number.isFinite(idx) || idx <= 0) return;
+      colIndexByKey[key] = idx;
     };
 
-    const colValuesByKey: Record<string, any[]> = {};
-    colValuesByKey.__id = readColumn(columns.recordId);
-    colValuesByKey.__createdAt = readColumn(columns.createdAt);
-    colValuesByKey.__updatedAt = readColumn(columns.updatedAt);
-    colValuesByKey.__status = readColumn(columns.status);
-    colValuesByKey.__pdfUrl = readColumn(columns.pdfUrl);
+    addColumnIndex('__id', columns.recordId);
+    addColumnIndex('__createdAt', columns.createdAt);
+    addColumnIndex('__updatedAt', columns.updatedAt);
+    addColumnIndex('__status', columns.status);
+    addColumnIndex('__pdfUrl', columns.pdfUrl);
 
     // Projection fields (list columns)
     fieldIds.forEach(fid => {
       const key = (fid || '').toString();
       if (!key) return;
-      const colIdx = columns.fields[key];
-      if (!colIdx) return;
-      colValuesByKey[key] = readColumn(colIdx);
+      addColumnIndex(key, columns.fields[key]);
     });
 
     // Sorting fields (may not be part of projection)
@@ -215,10 +229,21 @@ export class ListingService {
       if (!f) return;
       const metaSort = f === 'id' || f === 'createdAt' || f === 'updatedAt' || f === 'status' || f === 'pdfUrl';
       if (metaSort) return;
-      const colIdx = columns.fields[f];
-      if (colIdx && !colValuesByKey[f]) {
-        colValuesByKey[f] = readColumn(colIdx);
-      }
+      addColumnIndex(f, columns.fields[f]);
+    });
+    const columnReadStartedAt = Date.now();
+    const columnRead = this.readColumnsForRows(sheet, 2, cappedTotal, Object.values(colIndexByKey));
+    const colValuesByKey: Record<string, any[]> = {};
+    Object.keys(colIndexByKey).forEach(key => {
+      const idx = colIndexByKey[key];
+      colValuesByKey[key] = columnRead.valuesByColumn[idx] || new Array(cappedTotal).fill(undefined);
+    });
+    debugLog('listing.sorted.readColumns', {
+      formKey: form.configSheet,
+      rows: cappedTotal,
+      columns: Object.keys(colIndexByKey).length,
+      segments: columnRead.segmentCount,
+      durationMs: Date.now() - columnReadStartedAt
     });
 
     const asIso = (value: any): string | undefined => {
@@ -376,7 +401,16 @@ export class ListingService {
     }
 
     const result: SubmissionBatchResult<Record<string, any>> = { list: listResult, records };
-    this.cacheManager.cachePut(cacheKey, result);
+    this.cacheManager.cachePut(cacheKey, result, LIST_CACHE_TTL_SECONDS);
+    debugLog('listing.sorted.completed', {
+      formKey: form.configSheet,
+      totalRows: cappedTotal,
+      pageSize: size,
+      pageOffset: offset,
+      returnedItems: listResult.items.length,
+      sortKey: sortKey || null,
+      durationMs: Date.now() - startedAt
+    });
     return result;
   }
 
@@ -529,33 +563,10 @@ export class ListingService {
     const rowValues = new Array(maxCol).fill(undefined);
     if (!cols.length) return rowValues;
 
-    // Merge consecutive columns into segments to minimize Apps Script calls.
-    const segments: Array<{ start: number; end: number }> = [];
-    let segStart = cols[0];
-    let prev = cols[0];
-    for (let i = 1; i < cols.length; i += 1) {
-      const col = cols[i];
-      if (col === prev + 1) {
-        prev = col;
-        continue;
-      }
-      segments.push({ start: segStart, end: prev });
-      segStart = col;
-      prev = col;
-    }
-    segments.push({ start: segStart, end: prev });
-
-    segments.forEach(seg => {
-      const width = seg.end - seg.start + 1;
-      let values: any[] = [];
-      try {
-        values = sheet.getRange(rowNumber, seg.start, 1, width).getValues()[0] || [];
-      } catch (_) {
-        values = [];
-      }
-      for (let i = 0; i < width; i += 1) {
-        rowValues[seg.start - 1 + i] = values[i];
-      }
+    const read = this.readColumnsForRows(sheet, rowNumber, 1, cols);
+    cols.forEach(col => {
+      const values = read.valuesByColumn[col];
+      rowValues[col - 1] = values && values.length ? values[0] : undefined;
     });
 
     return rowValues;
@@ -593,29 +604,31 @@ export class ListingService {
 
     const readCount = Math.min(size, cappedTotal - offset);
     const startRow = 2 + offset;
-    const readColumn = (colIdx: number | undefined): any[] => {
-      if (!colIdx || readCount <= 0) return new Array(readCount).fill(undefined);
-      try {
-        return sheet.getRange(startRow, colIdx, readCount, 1).getValues().map(r => r[0]);
-      } catch (_) {
-        return new Array(readCount).fill(undefined);
-      }
-    };
-
     // When we don't need full record hydration, read only the required columns to keep calls snappy.
     const data = includeRecords && readCount > 0 ? sheet.getRange(startRow, 1, readCount, headers.length).getValues() : [];
     const colValuesByKey: Record<string, any[]> = includeRecords ? {} : (() => {
-      const map: Record<string, any[]> = {};
-      map.__id = readColumn(columns.recordId);
-      map.__createdAt = readColumn(columns.createdAt);
-      map.__updatedAt = readColumn(columns.updatedAt);
-      map.__status = readColumn(columns.status);
-      map.__pdfUrl = readColumn(columns.pdfUrl);
+      const colIndexByKey: Record<string, number> = {};
+      const addColumnIndex = (key: string, colIdx?: number) => {
+        const idx = Number(colIdx || 0);
+        if (!key || !Number.isFinite(idx) || idx <= 0) return;
+        colIndexByKey[key] = idx;
+      };
+
+      addColumnIndex('__id', columns.recordId);
+      addColumnIndex('__createdAt', columns.createdAt);
+      addColumnIndex('__updatedAt', columns.updatedAt);
+      addColumnIndex('__status', columns.status);
+      addColumnIndex('__pdfUrl', columns.pdfUrl);
       fieldIds.forEach(fid => {
         const key = (fid || '').toString();
-        const colIdx = columns.fields[key];
-        if (!key || !colIdx) return;
-        map[key] = readColumn(colIdx);
+        if (!key) return;
+        addColumnIndex(key, columns.fields[key]);
+      });
+      const read = this.readColumnsForRows(sheet, startRow, readCount, Object.values(colIndexByKey));
+      const map: Record<string, any[]> = {};
+      Object.keys(colIndexByKey).forEach(key => {
+        const idx = colIndexByKey[key];
+        map[key] = read.valuesByColumn[idx] || new Array(readCount).fill(undefined);
       });
       return map;
     })();
@@ -676,8 +689,68 @@ export class ListingService {
       etag
     };
 
-    this.cacheManager.cachePut(cacheKey, { list: listResult, records });
+    this.cacheManager.cachePut(cacheKey, { list: listResult, records }, LIST_CACHE_TTL_SECONDS);
     return { list: listResult, records, etag };
+  }
+
+  private readColumnsForRows(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    startRow: number,
+    rowCount: number,
+    colIndexes: number[]
+  ): { valuesByColumn: Record<number, any[]>; segmentCount: number } {
+    const normalizedCols = Array.from(
+      new Set(
+        (Array.isArray(colIndexes) ? colIndexes : [])
+          .map(col => Number(col))
+          .filter(col => Number.isFinite(col) && col > 0)
+      )
+    ).sort((a, b) => a - b);
+
+    const valuesByColumn: Record<number, any[]> = {};
+    normalizedCols.forEach(col => {
+      valuesByColumn[col] = rowCount > 0 ? new Array(rowCount).fill(undefined) : [];
+    });
+
+    if (!normalizedCols.length || rowCount <= 0) {
+      return { valuesByColumn, segmentCount: 0 };
+    }
+
+    const segments: Array<{ start: number; end: number }> = [];
+    let segStart = normalizedCols[0];
+    let prev = normalizedCols[0];
+    for (let i = 1; i < normalizedCols.length; i += 1) {
+      const col = normalizedCols[i];
+      if (col === prev + 1) {
+        prev = col;
+        continue;
+      }
+      segments.push({ start: segStart, end: prev });
+      segStart = col;
+      prev = col;
+    }
+    segments.push({ start: segStart, end: prev });
+
+    segments.forEach(seg => {
+      const width = seg.end - seg.start + 1;
+      let rows: any[][] = [];
+      try {
+        rows = sheet.getRange(startRow, seg.start, rowCount, width).getValues() || [];
+      } catch (_) {
+        rows = [];
+      }
+      for (let rowIdx = 0; rowIdx < rowCount; rowIdx += 1) {
+        const row = rows[rowIdx] || [];
+        for (let rel = 0; rel < width; rel += 1) {
+          const col = seg.start + rel;
+          const column = valuesByColumn[col];
+          if (!column) continue;
+          column[rowIdx] = row[rel];
+        }
+      }
+    });
+
+    return { valuesByColumn, segmentCount: segments.length };
   }
 
   private asIso(value: any): string | undefined {

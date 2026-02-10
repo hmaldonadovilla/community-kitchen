@@ -107,6 +107,9 @@ export function submitWebForm(formObject: any): { success: boolean; message: str
 export function fetchBootstrapContext(formKey?: string): {
   definition: WebFormDefinition;
   formKey: string;
+  listResponse?: any;
+  records?: Record<string, WebFormSubmission>;
+  homeRev?: number;
   configSource?: string;
   configEnv?: string;
   envTag?: string;
@@ -114,6 +117,12 @@ export function fetchBootstrapContext(formKey?: string): {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchBootstrapContext(formKey);
+}
+
+export function fetchHomeBootstrap(formKey: string, clientRev?: number): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchHomeBootstrap(formKey, clientRev);
 }
 
 export function fetchFormConfig(formKey?: string): any {
@@ -166,7 +175,7 @@ export function fetchSubmissionsSortedBatch(
   pageToken?: string,
   includePageRecords: boolean = true,
   recordIds?: string[],
-  sort?: { fieldId?: string; direction?: string }
+  sort?: { fieldId?: string; direction?: string; __ifNoneMatch?: boolean; __clientEtag?: string }
 ): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -307,6 +316,12 @@ export function triggerFollowupAction(formKey: string, recordId: string, action:
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.triggerFollowupAction(formKey, recordId, action);
+}
+
+export function triggerFollowupActions(formKey: string, recordId: string, actions: string[]): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.triggerFollowupActions(formKey, recordId, actions);
 }
 
 export function migrateFormTemplatesToIdPlaceholders(formKey: string): any {

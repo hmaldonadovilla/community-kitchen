@@ -19,7 +19,7 @@ import {
   BootstrapContext,
   submit,
   checkDedupConflictApi,
-  triggerFollowup,
+  triggerFollowupBatch,
   uploadFilesApi,
   prefetchTemplatesApi,
   renderDocTemplatePdfPreviewApi,
@@ -27,6 +27,7 @@ import {
   renderHtmlTemplateApi,
   renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
+  fetchHomeBootstrapApi,
   fetchSortedBatch,
   ListSort,
   ListResponse,
@@ -403,6 +404,106 @@ const HTML_PREVIEW_STYLES = `
   }
 `;
 
+const HOME_LIST_LOCAL_CACHE_PREFIX = 'ck.homeList.v1';
+const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
+
+type HomeListLocalCachePayload = {
+  savedAtMs: number;
+  response: ListResponse;
+  homeRev?: number;
+};
+
+type HomeListLocalCacheEntry = {
+  response: ListResponse;
+  homeRev?: number;
+};
+
+const resolveLocalStorageSafely = (): Storage | null => {
+  try {
+    const storage = (globalThis as any)?.localStorage;
+    if (!storage) return null;
+    if (typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function' || typeof storage.removeItem !== 'function') {
+      return null;
+    }
+    return storage as Storage;
+  } catch (_) {
+    return null;
+  }
+};
+
+const hashText32 = (value: string): string => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+};
+
+const resolveGlobalCacheVersion = (): string => {
+  try {
+    return (((globalThis as any)?.__CK_CACHE_VERSION__ ?? '') || '').toString().trim();
+  } catch (_) {
+    return '';
+  }
+};
+
+const buildHomeListLocalCacheKey = (formKey: string, listView: any, cacheVersion: string): string => {
+  const key = (formKey || '').toString().trim();
+  const viewSig = hashText32(JSON.stringify(listView || {}));
+  const version = (cacheVersion || '').toString().trim() || 'noversion';
+  if (!key) return '';
+  return `${HOME_LIST_LOCAL_CACHE_PREFIX}::${version}::${key}::${viewSig}`;
+};
+
+const readHomeListLocalCache = (key: string): HomeListLocalCacheEntry | null => {
+  if (!key) return null;
+  const storage = resolveLocalStorageSafely();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as HomeListLocalCachePayload;
+    const response = (parsed as any)?.response as ListResponse | undefined;
+    if (!response || !Array.isArray((response as any).items)) return null;
+    const savedAtMs = Number((parsed as any)?.savedAtMs || 0);
+    if (!Number.isFinite(savedAtMs) || savedAtMs <= 0) return null;
+    if (Date.now() - savedAtMs > HOME_LIST_LOCAL_CACHE_MAX_AGE_MS) {
+      storage.removeItem(key);
+      return null;
+    }
+    const homeRevRaw = Number((parsed as any)?.homeRev);
+    const homeRev = Number.isFinite(homeRevRaw) && homeRevRaw >= 0 ? homeRevRaw : undefined;
+    return { response, homeRev };
+  } catch (_) {
+    try {
+      storage.removeItem(key);
+    } catch (_) {
+      // ignore
+    }
+    return null;
+  }
+};
+
+const writeHomeListLocalCache = (key: string, response: ListResponse, homeRev?: number | null): void => {
+  if (!key) return;
+  const storage = resolveLocalStorageSafely();
+  if (!storage) return;
+  try {
+    const payload: HomeListLocalCachePayload = {
+      savedAtMs: Date.now(),
+      response: {
+        ...response,
+        notModified: undefined
+      },
+      homeRev: Number.isFinite(Number(homeRev)) ? Number(homeRev) : undefined
+    };
+    storage.setItem(key, JSON.stringify(payload));
+  } catch (_) {
+    // ignore storage errors (quota/private mode)
+  }
+};
+
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
@@ -485,6 +586,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const submitPrecheckInFlightRef = useRef<boolean>(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const submitConfirmedRef = useRef(false);
+  const submitPipelineInFlightRef = useRef(false);
+  const updateRecordActionInFlightRef = useRef(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
   const [recordLoadingId, setRecordLoadingId] = useState<string | null>(null);
@@ -512,6 +615,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
   const autoSaveNoticeSeenRef = useRef<boolean>(false);
+  const homeLoadStartedAtRef = useRef<number>(Date.now());
+  const homeTimeToDataMeasuredRef = useRef(false);
+  const openRecordPerfRef = useRef<{ recordId: string; startedAt: number; startMark: string } | null>(null);
+  const backToHomePerfRef = useRef<{ trigger: string; startedAt: number; startMark: string } | null>(null);
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
       // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
@@ -538,6 +645,54 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const resolveLogMessage = useCallback(
     (err: any, fallback: string) => (err?.message || err?.toString?.() || fallback).toString(),
     []
+  );
+  const perfEnabled = useMemo(() => {
+    const tag = (envTag || '').toString().trim().toLowerCase();
+    return tag.includes('staging');
+  }, [envTag]);
+  const perfMark = useCallback(
+    (name: string) => {
+      if (!perfEnabled) return;
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          performance.mark(name);
+        }
+      } catch (_) {
+        // ignore mark failures
+      }
+    },
+    [perfEnabled]
+  );
+  const perfMeasure = useCallback(
+    (name: string, startMark: string, endMark: string, payload?: Record<string, unknown>) => {
+      if (!perfEnabled) return;
+      let durationMs: number | null = null;
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
+          performance.measure(name, startMark, endMark);
+          const entries = performance.getEntriesByName(name, 'measure');
+          const duration = entries.length ? entries[entries.length - 1].duration : null;
+          durationMs = typeof duration === 'number' ? Math.round(duration) : null;
+          if (typeof performance.clearMarks === 'function') {
+            performance.clearMarks(startMark);
+            performance.clearMarks(endMark);
+          }
+          if (typeof performance.clearMeasures === 'function') {
+            performance.clearMeasures(name);
+          }
+        }
+      } catch (_) {
+        // ignore measure failures
+      }
+      if (typeof console !== 'undefined' && typeof console.info === 'function') {
+        try {
+          console.info('[ReactForm][perf]', name, { durationMs, ...(payload || {}) });
+        } catch (_) {
+          // ignore perf log failures
+        }
+      }
+    },
+    [perfEnabled]
   );
 
   const statusTransitions = definition.followup?.statusTransitions;
@@ -1991,10 +2146,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     };
   }, [logEvent]);
 
+  const homeListCacheVersion = useMemo(() => resolveGlobalCacheVersion(), []);
+  const homeListLocalCacheKey = useMemo(
+    () => buildHomeListLocalCacheKey(formKey, definition.listView, homeListCacheVersion),
+    [definition.listView, formKey, homeListCacheVersion]
+  );
+  const initialHomeListCache = useMemo(() => readHomeListLocalCache(homeListLocalCacheKey), [homeListLocalCacheKey]);
+  const initialHomeListResponse = initialHomeListCache?.response || null;
+  const initialHomeListSource = useMemo<'bootstrap' | 'localStorage' | 'none'>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    if (bootstrap?.listResponse) return 'bootstrap';
+    if (initialHomeListCache?.response) return 'localStorage';
+    return 'none';
+  }, [initialHomeListCache]);
+
+  const [homeRev, setHomeRev] = useState<number | null>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const bootstrapRev = Number((bootstrap as any)?.homeRev);
+    if (Number.isFinite(bootstrapRev) && bootstrapRev >= 0) return bootstrapRev;
+    const cachedRev = Number((initialHomeListCache as any)?.homeRev);
+    return Number.isFinite(cachedRev) && cachedRev >= 0 ? cachedRev : null;
+  });
+  const homeRevRef = useRef<number | null>(homeRev);
+  useEffect(() => {
+    homeRevRef.current = homeRev;
+  }, [homeRev]);
+
   const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    const response = bootstrap?.listResponse || null;
+    const response = bootstrap?.listResponse || initialHomeListResponse || null;
     const records = bootstrap?.records || {};
     return { response, records };
   });
@@ -2020,8 +2203,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const dataSourcePrefetchKeyRef = useRef<string>('');
 
   useEffect(() => {
+    if (initialHomeListSource !== 'localStorage') return;
+    logEvent('list.cache.hydrate.localStorage', {
+      formKey,
+      key: homeListLocalCacheKey || null,
+      itemCount: initialHomeListResponse?.items?.length || 0,
+      totalCount: initialHomeListResponse?.totalCount || 0,
+      hasEtag: Boolean((initialHomeListResponse?.etag || '').toString().trim()),
+      homeRev: homeRevRef.current
+    });
+  }, [formKey, homeListLocalCacheKey, initialHomeListResponse, initialHomeListSource, logEvent]);
+
+  useEffect(() => {
+    homeLoadStartedAtRef.current = Date.now();
+    homeTimeToDataMeasuredRef.current = false;
+    perfMark(`ck.home.timeToData.start.${formKey}.${language}`);
+  }, [formKey, language, perfMark]);
+
+  useEffect(() => {
     listRecordsRef.current = listCache.records || {};
   }, [listCache.records]);
+
+  useEffect(() => {
+    const response = listCache.response;
+    if (!homeListLocalCacheKey || !response || !Array.isArray(response.items)) return;
+    if (!response.items.length) return;
+    if (response.nextPageToken) return;
+    writeHomeListLocalCache(homeListLocalCacheKey, response, homeRevRef.current);
+  }, [homeListLocalCacheKey, listCache.response]);
+
+  useEffect(() => {
+    if (homeTimeToDataMeasuredRef.current) return;
+    const firstCount = listCache.response?.items?.length || 0;
+    if (firstCount <= 0) return;
+    homeTimeToDataMeasuredRef.current = true;
+    const startMark = `ck.home.timeToData.start.${formKey}.${language}`;
+    const endMark = `ck.home.timeToData.end.${formKey}.${language}`;
+    perfMark(endMark);
+    perfMeasure('ck.home.timeToData', startMark, endMark, {
+      formKey,
+      language,
+      elapsedMs: Date.now() - homeLoadStartedAtRef.current,
+      firstItemCount: firstCount
+    });
+  }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -2042,37 +2267,44 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }, [logEvent, pendingDeletedRecordApplyTick]);
 
   useEffect(() => {
+    const firstListItemCount = listCache.response?.items?.length || 0;
+    if (firstListItemCount <= 0) return;
     const key = `${formKey}::${language}`;
     if (dataSourcePrefetchKeyRef.current === key) return;
     dataSourcePrefetchKeyRef.current = key;
-    const startedAt = Date.now();
     const configs = collectDataSourceConfigsForPrefetch(definition);
     if (!configs.length) return;
-    logEvent('dataSource.prefetch.start', {
-      formKey,
-      language,
-      dataSources: configs.length
-    });
-    void prefetchDataSources(configs, language, { forceRefresh: true })
-      .then(res => {
-        logEvent('dataSource.prefetch.done', {
-          formKey,
-          language,
-          requested: res.requested,
-          succeeded: res.succeeded,
-          failed: res.failed,
-          durationMs: Date.now() - startedAt
-        });
-      })
-      .catch((err: any) => {
-        logEvent('dataSource.prefetch.error', {
-          formKey,
-          language,
-          message: err?.message || err?.toString?.() || 'unknown',
-          durationMs: Date.now() - startedAt
-        });
+    const startedAt = Date.now();
+    const timer = globalThis.setTimeout(() => {
+      logEvent('dataSource.prefetch.start', {
+        formKey,
+        language,
+        dataSources: configs.length
       });
-  }, [definition, formKey, language, logEvent]);
+      void prefetchDataSources(configs, language, { forceRefresh: false })
+        .then(res => {
+          logEvent('dataSource.prefetch.done', {
+            formKey,
+            language,
+            requested: res.requested,
+            succeeded: res.succeeded,
+            failed: res.failed,
+            durationMs: Date.now() - startedAt
+          });
+        })
+        .catch((err: any) => {
+          logEvent('dataSource.prefetch.error', {
+            formKey,
+            language,
+            message: err?.message || err?.toString?.() || 'unknown',
+            durationMs: Date.now() - startedAt
+          });
+        });
+    }, 250);
+    return () => {
+      globalThis.clearTimeout(timer);
+    };
+  }, [definition, formKey, language, listCache.response?.items?.length, logEvent]);
 
   const listViewProjection = useMemo(() => {
     const cols = (definition.listView?.columns || []) as any[];
@@ -2116,12 +2348,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }, [definition.listView]);
 
   useEffect(() => {
-    // If the server already embedded a complete list at bootstrap and the user hasn't requested refresh,
-    // do nothing. (Refresh requests increment listRefreshToken).
-    if (listRefreshToken === 0 && listCache.response?.items?.length && !listCache.response?.nextPageToken) {
-      setListFetch({ phase: 'idle' });
-      return;
-    }
     if (!definition.listView) return;
     const key = `${formKey}::${listRefreshToken}`;
     if (listPrefetchKeyRef.current === key) return;
@@ -2139,6 +2365,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
     const projection = listViewProjection.length ? listViewProjection : undefined;
     const hasExisting = Boolean(listCache.response?.items?.length);
+    const existingEtag = (listCache.response?.etag || '').toString().trim();
+    const canReuseFirstPage = hasExisting && listRefreshToken === 0;
+    const skipInitialServerCheck = canReuseFirstPage && initialHomeListSource === 'bootstrap';
+    const canUseConditionalFirstPage = canReuseFirstPage && !!existingEtag && !skipInitialServerCheck;
 
     setListFetchNotice(null);
     setListFetch({
@@ -2153,7 +2383,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       projectionCount: projection ? projection.length : 0,
       sortField: sort?.fieldId || null,
       sortDirection: sort?.direction || null,
-      keepExisting: hasExisting
+      keepExisting: hasExisting,
+      reuseFirstPage: canReuseFirstPage,
+      skipInitialServerCheck,
+      conditionalEtagCheck: canUseConditionalFirstPage,
+      homeRev: homeRevRef.current,
+      includePageRecords: false
     });
 
     void (async () => {
@@ -2175,11 +2410,93 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         const fetchPage = async (args: {
           token?: string;
           pageIndex: number;
-        }): Promise<{ list: ListResponse; batch: any; token?: string; pageIndex: number }> => {
+          allowConditional?: boolean;
+        }): Promise<{ list: ListResponse; batch: any; token?: string; pageIndex: number; notModified: boolean }> => {
           let batch: any = null;
+          if (args.allowConditional && !args.token && args.pageIndex === 0) {
+            const homeBootstrapStartMark = `ck.home.bootstrap.rpc.start.${seq}.${args.pageIndex}`;
+            const homeBootstrapEndMark = `ck.home.bootstrap.rpc.end.${seq}.${args.pageIndex}`;
+            perfMark(homeBootstrapStartMark);
+            try {
+              const bootstrapRes = await fetchHomeBootstrapApi(formKey, homeRevRef.current);
+              perfMark(homeBootstrapEndMark);
+              perfMeasure('ck.home.bootstrap.rpc', homeBootstrapStartMark, homeBootstrapEndMark, {
+                formKey,
+                pageIndex: args.pageIndex,
+                rev: (bootstrapRes as any)?.rev ?? null,
+                notModified: Boolean((bootstrapRes as any)?.notModified),
+                cache: (bootstrapRes as any)?.cache || null
+              });
+              if (seq !== listFetchSeqRef.current) {
+                return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: false };
+              }
+              const revRaw = Number((bootstrapRes as any)?.rev);
+              if (Number.isFinite(revRaw) && revRaw >= 0) {
+                setHomeRev(prev => (prev === revRaw ? prev : revRaw));
+              }
+              if ((bootstrapRes as any)?.notModified) {
+                const notModifiedList: ListResponse = {
+                  items: [],
+                  totalCount: Number((listCache.response as any)?.totalCount || 0),
+                  etag: existingEtag,
+                  notModified: true
+                };
+                return { list: notModifiedList, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: true };
+              }
+              const homeList = (() => {
+                const maybeList = (bootstrapRes as any)?.listResponse;
+                return maybeList && Array.isArray((maybeList as any).items) ? (maybeList as ListResponse) : null;
+              })();
+              if (homeList) {
+                const homeBatch = {
+                  list: homeList,
+                  records: ((bootstrapRes as any)?.records || {}) as Record<string, WebFormSubmission>
+                };
+                return {
+                  list: homeList,
+                  batch: homeBatch,
+                  token: args.token,
+                  pageIndex: args.pageIndex,
+                  notModified: false
+                };
+              }
+            } catch (err: any) {
+              perfMark(homeBootstrapEndMark);
+              perfMeasure('ck.home.bootstrap.rpc', homeBootstrapStartMark, homeBootstrapEndMark, {
+                formKey,
+                pageIndex: args.pageIndex,
+                failed: true
+              });
+              logEvent('list.homeBootstrap.error', {
+                message: err?.message || err?.toString?.() || 'unknown'
+              });
+            }
+          }
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            batch = await fetchSortedBatch(formKey, projection, pageSize, args.token, true, undefined, sort);
-            if (seq !== listFetchSeqRef.current) return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex };
+            const startMark = `ck.list.fetch.rpc.start.${seq}.${args.pageIndex}.${attempt}`;
+            const endMark = `ck.list.fetch.rpc.end.${seq}.${args.pageIndex}.${attempt}`;
+            perfMark(startMark);
+            const requestSort: ListSort | null =
+              args.allowConditional && !args.token && args.pageIndex === 0 && canUseConditionalFirstPage
+                ? ({
+                    ...(sort || {}),
+                    __ifNoneMatch: true,
+                    __clientEtag: existingEtag
+                  } as ListSort)
+                : sort;
+            batch = await fetchSortedBatch(formKey, projection, pageSize, args.token, false, undefined, requestSort);
+            perfMark(endMark);
+            perfMeasure('ck.list.fetch.rpc', startMark, endMark, {
+              formKey,
+              pageIndex: args.pageIndex,
+              attempt: attempt + 1,
+              pageSize,
+              token: args.token || null,
+              conditional: Boolean(args.allowConditional && !args.token && args.pageIndex === 0 && canUseConditionalFirstPage)
+            });
+            if (seq !== listFetchSeqRef.current) {
+              return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: false };
+            }
             if (batch && typeof batch === 'object') break;
             logEvent('list.sorted.prefetch.retry', {
               attempt: attempt + 1,
@@ -2190,7 +2507,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             await sleep(250 * (attempt + 1));
           }
           if (seq !== listFetchSeqRef.current) {
-            return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex };
+            return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: false };
           }
           const list = (() => {
             if (batch && typeof batch === 'object') {
@@ -2211,12 +2528,60 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             err.__ckUiKind = 'list_prefetch_unavailable';
             throw err;
           }
-          return { list, batch, token: args.token, pageIndex: args.pageIndex };
+          return {
+            list,
+            batch,
+            token: args.token,
+            pageIndex: args.pageIndex,
+            notModified: Boolean((list as any).notModified)
+          };
         };
 
-        const first = await fetchPage({ token: undefined, pageIndex: 0 });
+        const first = (() => {
+          if (!skipInitialServerCheck || !listCache.response || !Array.isArray((listCache.response as any).items)) return null;
+          const bootstrapList = {
+            ...(listCache.response as ListResponse),
+            notModified: undefined
+          } as ListResponse;
+          const bootstrapBatch = {
+            list: bootstrapList,
+            records: (listCache.records || {}) as Record<string, WebFormSubmission>
+          };
+          logEvent('list.sorted.prefetch.bootstrapReuse', {
+            formKey,
+            etag: existingEtag || null,
+            itemCount: (bootstrapList.items || []).length,
+            totalCount: (bootstrapList as any)?.totalCount || 0
+          });
+          return {
+            list: bootstrapList,
+            batch: bootstrapBatch,
+            token: undefined,
+            pageIndex: 0,
+            notModified: false
+          };
+        })() || (await fetchPage({ token: undefined, pageIndex: 0, allowConditional: canUseConditionalFirstPage }));
         if (seq !== listFetchSeqRef.current) return;
-
+        if (canReuseFirstPage && first.notModified) {
+          const existingCount = listCache.response?.items?.length || 0;
+          const existingTotalRaw = Number((listCache.response as any)?.totalCount || existingCount);
+          const existingTotal =
+            Number.isFinite(existingTotalRaw) && existingTotalRaw > 0 ? Math.min(existingTotalRaw, 200) : existingCount;
+          setListFetch({
+            phase: 'idle',
+            loaded: existingCount,
+            total: existingTotal || existingCount,
+            pages: Math.max(1, Math.ceil(Math.max(existingTotal, existingCount) / pageSize))
+          });
+          logEvent('list.sorted.prefetch.notModified', {
+            formKey,
+            etag: existingEtag,
+            existingCount,
+            total: existingTotal || existingCount,
+            durationMs: Date.now() - startedAt
+          });
+          return;
+        }
         const firstList = first.list;
         const totalCountRaw = Number((firstList as any).totalCount || 0);
         const hasNextToken = Boolean((firstList as any).nextPageToken);
@@ -2230,7 +2595,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
         const itemsByPage = new Map<number, ListItem[]>();
         const recordsAccum: Record<string, WebFormSubmission> = {
-          ...((((first.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as any)
+          ...((listCache.records || {}) as Record<string, WebFormSubmission>),
+          ...((((first as any).batch as any)?.records as Record<string, WebFormSubmission>) || {})
         };
         itemsByPage.set(0, (firstList.items || []) as ListItem[]);
 
@@ -2249,6 +2615,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           setListCache(prev => ({
             response: {
               ...firstList,
+              notModified: undefined,
               items: aggregated,
               nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined
             },
@@ -2288,7 +2655,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           const offset = pageIndex * pageSize;
           const token = encodePageTokenClient(offset);
           const pageStartedAt = Date.now();
-          return fetchPage({ token, pageIndex })
+          return fetchPage({ token, pageIndex, allowConditional: false })
             .then(res => {
               if (seq !== listFetchSeqRef.current) return;
               const items = (res.list.items || []) as ListItem[];
@@ -2341,7 +2708,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
     })();
     // Do NOT cancel on view changes; this prefetch should continue in the background.
-  }, [definition.listView, formKey, listCache.response, listRefreshToken, listViewProjection, logEvent]);
+  }, [
+    definition.listView,
+    formKey,
+    initialHomeListSource,
+    listCache.records,
+    listCache.response,
+    listRefreshToken,
+    listViewProjection,
+    logEvent,
+    perfMark,
+    perfMeasure
+  ]);
 
   /**
    * Merge a locally-known record update into the cached list rows so navigating back to the list
@@ -4411,7 +4789,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           : '';
 
         const run = () => {
+          if (updateRecordActionInFlightRef.current) {
+            logEvent('button.updateRecord.blocked.inFlightGuard', { buttonId: baseId, qIdx: qIdx ?? null });
+            return;
+          }
           const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
+          updateRecordActionInFlightRef.current = true;
+          const pipelineStartMark = `ck.updateRecord.pipeline.start.${Date.now()}`;
+          perfMark(pipelineStartMark);
           void runUpdateRecordAction(
             {
               definition,
@@ -4451,7 +4836,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               set: setObj as any,
               busyTitle
             }
-          );
+          )
+            .catch(() => {
+              // runUpdateRecordAction reports failures through UI/logs; guard reset happens in finally below.
+            })
+            .finally(() => {
+              updateRecordActionInFlightRef.current = false;
+              const pipelineEndMark = `ck.updateRecord.pipeline.end.${Date.now()}`;
+              perfMark(pipelineEndMark);
+              perfMeasure('ck.updateRecord.pipeline', pipelineStartMark, pipelineEndMark, {
+                buttonId: baseId,
+                qIdx: qIdx ?? null
+              });
+            });
         };
 
         if (confirmMessage) {
@@ -4489,6 +4886,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       openPdfPreviewWindow,
       openReport,
       parseButtonRef,
+      perfMark,
+      perfMeasure,
       resolveLabel,
       upsertListCacheRow
     ]
@@ -4769,10 +5168,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     return matchesStatusTransition(raw, statusTransitions, 'onClose', { includeDefaultOnClose: true });
   })();
 
-  const dedupSignature = useMemo(
-    () => computeDedupSignatureFromValues((definition as any)?.dedupRules, values as any),
-    [definition, values]
-  );
+  const dedupSignature = useMemo(() => {
+    const startMark = `ck.selector.dedupSignature.start.${Date.now()}`;
+    const endMark = `ck.selector.dedupSignature.end.${Date.now()}`;
+    perfMark(startMark);
+    const signature = computeDedupSignatureFromValues((definition as any)?.dedupRules, values as any);
+    perfMark(endMark);
+    perfMeasure('ck.selector.dedupSignature', startMark, endMark, {
+      valueCount: Object.keys(values || {}).length,
+      signatureLength: (signature || '').toString().length
+    });
+    return signature;
+  }, [definition, perfMark, perfMeasure, values]);
 
   const dedupKeyFieldIdMap = useMemo(
     () => computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
@@ -5304,6 +5711,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     async (trigger: string) => {
       if (viewRef.current === 'list') return;
       if (navigateHomeInFlightRef.current) return;
+      const startedAt = Date.now();
+      const startMark = `ck.nav.back.start.${startedAt}`;
+      backToHomePerfRef.current = { trigger, startedAt, startMark };
+      perfMark(startMark);
       const needsWait =
         uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current || autoSaveDirtyRef.current;
       if (!needsWait) {
@@ -5314,7 +5725,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
 
       navigateHomeInFlightRef.current = true;
-      const startedAt = Date.now();
       const seq = navigateHomeBusy.lock({
         title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
         message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
@@ -5342,7 +5752,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         navigateHomeInFlightRef.current = false;
       }
     },
-    [flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy]
+    [flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy, perfMark]
   );
 
   const handleGoHome = useCallback(() => {
@@ -6168,6 +6578,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   }
 
   async function handleSubmit(submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) {
+    if (submitPipelineInFlightRef.current) {
+      logEvent('submit.blocked.inFlightGuard');
+      return;
+    }
+    let submitPipelineStartMark: string | null = null;
     const submitRequestedFromSummary = summarySubmitIntentRef.current === true;
     if (isClosedRecord) {
       setStatus(tSystem('app.closedReadOnly', language, 'Closed (read-only)'));
@@ -6333,6 +6748,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
     submitConfirmedRef.current = false;
     summarySubmitIntentRef.current = false;
+    if (submitPipelineInFlightRef.current) {
+      logEvent('submit.blocked.inFlightGuard');
+      return;
+    }
+    submitPipelineInFlightRef.current = true;
+    submitPipelineStartMark = `ck.submit.pipeline.start.${Date.now()}`;
+    perfMark(submitPipelineStartMark);
 
     setSubmitting(true);
     // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
@@ -6475,7 +6897,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           );
         }
       }
+      const submitRpcStartMark = `ck.submit.rpc.start.${Date.now()}`;
+      const submitRpcEndMark = `ck.submit.rpc.end.${Date.now()}`;
+      perfMark(submitRpcStartMark);
       const res = await submit(payload);
+      perfMark(submitRpcEndMark);
+      perfMeasure('ck.submit.rpc', submitRpcStartMark, submitRpcEndMark, {
+        formKey,
+        recordId: existingRecordId || null
+      });
       if (!res) {
         logEvent('submit.emptyResponse', { formKey, existingRecordId: existingRecordId || null });
       }
@@ -6533,59 +6963,69 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         // Always close on submit (per UX requirement).
         actions.push('CLOSE_RECORD');
 
-        const labelForAction = (action: string): string => {
-          if (action === 'CREATE_PDF') return 'Creating PDF';
-          if (action === 'SEND_EMAIL') return 'Sending email';
-          if (action === 'CLOSE_RECORD') return 'Closing record';
-          return 'Running follow-up';
-        };
-
         const followupErrors: string[] = [];
-        for (const action of actions) {
-          try {
-            setStatus(`${labelForAction(action)}…`);
-            setStatusLevel('info');
-            logEvent('followup.auto.begin', { action, recordId });
-            const r = await triggerFollowup(formKey, recordId, action);
-            if (!r?.success) {
-              const msg = (r?.message || r?.status || 'Failed').toString();
+        try {
+          setStatus('Running follow-up…');
+          setStatusLevel('info');
+          logEvent('followup.auto.batch.begin', { recordId, actions });
+          const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
+          const followupRpcEndMark = `ck.submit.followup.rpc.end.${Date.now()}`;
+          perfMark(followupRpcStartMark);
+          const batch = await triggerFollowupBatch(formKey, recordId, actions);
+          perfMark(followupRpcEndMark);
+          perfMeasure('ck.submit.followup.rpc', followupRpcStartMark, followupRpcEndMark, {
+            formKey,
+            recordId,
+            actionsCount: actions.length
+          });
+          const entries = Array.isArray(batch?.results) ? batch.results : [];
+          const byAction = new Map<string, any>();
+          entries.forEach(entry => {
+            const key = (entry?.action || '').toString().trim().toUpperCase();
+            if (key) byAction.set(key, entry?.result || null);
+          });
+
+          for (const action of actions) {
+            const result = byAction.get(action) || null;
+            if (!result?.success) {
+              const msg = (result?.message || result?.status || 'Failed').toString();
               followupErrors.push(`${action}: ${msg}`);
               logEvent('followup.auto.error', { action, recordId, message: msg });
-              // Continue so we still attempt CLOSE_RECORD even if earlier steps fail.
               continue;
             }
-
-            // Keep list view up-to-date without triggering a refetch.
             upsertListCacheRow({
               recordId,
-              updatedAt: (r.updatedAt || '').toString() || undefined,
-              status: (r.status || null) as any,
-              pdfUrl: (r.pdfUrl || '').toString() || undefined
+              updatedAt: (result.updatedAt || '').toString() || undefined,
+              status: (result.status || null) as any,
+              pdfUrl: (result.pdfUrl || '').toString() || undefined
             });
-            logEvent('followup.auto.success', { action, recordId, status: r.status || null });
+            logEvent('followup.auto.success', { action, recordId, status: result.status || null });
             setLastSubmissionMeta(prev => ({
               ...(prev || { id: recordId }),
-              updatedAt: r.updatedAt || prev?.updatedAt,
-              status: r.status || prev?.status || null
+              updatedAt: result.updatedAt || prev?.updatedAt,
+              status: result.status || prev?.status || null
             }));
             setSelectedRecordSnapshot(prev =>
               prev
                 ? {
                     ...prev,
-                    updatedAt: r.updatedAt || prev.updatedAt,
-                    status: r.status || prev.status,
-                    pdfUrl: r.pdfUrl || prev.pdfUrl
+                    updatedAt: result.updatedAt || prev.updatedAt,
+                    status: result.status || prev.status,
+                    pdfUrl: result.pdfUrl || prev.pdfUrl
                   }
                 : prev
             );
-          } catch (err: any) {
-            const uiMessage = resolveUiErrorMessage(err, 'Failed');
-            const logMessage = resolveLogMessage(err, 'Failed');
-            if (uiMessage) {
-              followupErrors.push(`${action}: ${uiMessage}`);
-            }
-            logEvent('followup.auto.exception', { action, recordId, message: logMessage });
           }
+          logEvent('followup.auto.batch.done', {
+            recordId,
+            actionsCount: actions.length,
+            errorCount: followupErrors.length
+          });
+        } catch (err: any) {
+          const uiMessage = resolveUiErrorMessage(err, 'Failed');
+          const logMessage = resolveLogMessage(err, 'Failed');
+          followupErrors.push(`BATCH: ${uiMessage || 'Failed'}`);
+          logEvent('followup.auto.batch.exception', { recordId, message: logMessage });
         }
 
         if (followupErrors.length) {
@@ -6618,6 +7058,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       logEvent('submit.exception', { message: logMessage });
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
+      submitPipelineInFlightRef.current = false;
+      if (submitPipelineStartMark) {
+        const submitPipelineEndMark = `ck.submit.pipeline.end.${Date.now()}`;
+        perfMark(submitPipelineEndMark);
+        perfMeasure('ck.submit.pipeline', submitPipelineStartMark, submitPipelineEndMark, {
+          formKey
+        });
+      }
     }
   }
 
@@ -6645,6 +7094,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const shouldTriggerButton = requested === 'button' && !!openButtonId;
     const shouldCopy = requested === 'copy';
     const shouldSubmit = requested === 'submit';
+    const openStartedAt = Date.now();
+    const openStartMark = `ck.nav.openRecord.start.${openStartedAt}`;
+    openRecordPerfRef.current = { recordId: row.id, startedAt: openStartedAt, startMark: openStartMark };
+    perfMark(openStartMark);
 
     const scheduleListOpenSubmit = (args: { recordId: string; source: string }) => {
       const recordId = (args.recordId || '').toString().trim();
@@ -6934,6 +7387,70 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       });
     }
   };
+
+  const openRecordByIdForPerf = useCallback(
+    (recordId: string, openViewRaw?: string): boolean => {
+      if (!perfEnabled) return false;
+      const id = (recordId || '').toString().trim();
+      if (!id) return false;
+      const items = (listCache.response?.items || []) as ListItem[];
+      if (!items.length) return false;
+      const row = items.find(r => ((r as any)?.id || '').toString() === id);
+      if (!row) return false;
+      const lowered = (openViewRaw || 'auto').toString().trim().toLowerCase();
+      const openView: 'auto' | 'form' | 'summary' | 'submit' =
+        lowered === 'form' ? 'form' : lowered === 'summary' ? 'summary' : lowered === 'submit' ? 'submit' : 'auto';
+      logEvent('perf.openRecordById.attempt', { recordId: id, openView });
+      handleRecordSelect(row, listCache.records[id], { openView });
+      return true;
+    },
+    [handleRecordSelect, listCache.records, listCache.response?.items, logEvent, perfEnabled]
+  );
+
+  useEffect(() => {
+    if (!perfEnabled) return;
+    const globalAny = globalThis as any;
+    const hook = (recordId: any, openView?: any) => openRecordByIdForPerf((recordId || '').toString(), (openView || '').toString());
+    globalAny.__CK_PERF_OPEN_RECORD_BY_ID__ = hook;
+    return () => {
+      try {
+        if (globalAny.__CK_PERF_OPEN_RECORD_BY_ID__ === hook) {
+          delete globalAny.__CK_PERF_OPEN_RECORD_BY_ID__;
+        }
+      } catch (_) {
+        // ignore cleanup failures
+      }
+    };
+  }, [openRecordByIdForPerf, perfEnabled]);
+
+  useEffect(() => {
+    const pending = openRecordPerfRef.current;
+    if (!pending) return;
+    if (selectedRecordId !== pending.recordId) return;
+    if (view !== 'form' && view !== 'summary') return;
+    const endMark = `ck.nav.openRecord.end.${pending.startedAt}`;
+    perfMark(endMark);
+    perfMeasure('ck.nav.openRecord', pending.startMark, endMark, {
+      recordId: pending.recordId,
+      view
+    });
+    openRecordPerfRef.current = null;
+  }, [perfMark, perfMeasure, selectedRecordId, view]);
+
+  useEffect(() => {
+    const pending = backToHomePerfRef.current;
+    if (!pending) return;
+    if (view !== 'list') return;
+    const firstListItemCount = listCache.response?.items?.length || 0;
+    if (firstListItemCount <= 0) return;
+    const endMark = `ck.nav.back.end.${pending.startedAt}`;
+    perfMark(endMark);
+    perfMeasure('ck.nav.backToHome', pending.startMark, endMark, {
+      trigger: pending.trigger,
+      firstItemCount: firstListItemCount
+    });
+    backToHomePerfRef.current = null;
+  }, [listCache.response?.items?.length, perfMark, perfMeasure, view]);
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);
   const headerSaveIndicator = useMemo(() => {

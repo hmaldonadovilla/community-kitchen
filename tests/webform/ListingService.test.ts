@@ -139,6 +139,54 @@ describe('ListingService', () => {
     // Both rows tie on DATE and CHECK_FREQ, so Updated At desc puts id-2 (2025-01-03) before id-1 (2025-01-02).
     expect(ids).toEqual(['id-2', 'id-1']);
   });
-});
 
+  test('fetchSubmissionsSortedBatch returns notModified when client etag matches', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Responses');
+    sheet.setMockData([
+      ['Language', 'DATE', 'Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'],
+      ['EN', new Date('2025-01-02T00:00:00Z'), 'id-1', new Date('2025-01-01T00:00:00Z'), new Date('2025-01-02T00:00:00Z'), 'Open', ''],
+      ['EN', new Date('2025-01-03T00:00:00Z'), 'id-2', new Date('2025-01-01T00:00:00Z'), new Date('2025-01-03T00:00:00Z'), 'Open', '']
+    ]);
+
+    const cacheManager = new CacheEtagManager(null, null);
+    const uploads = new UploadService(ss);
+    const submissions = new SubmissionService(ss, uploads, cacheManager, null);
+    const listing = new ListingService(submissions, cacheManager);
+
+    const form: any = { title: 'Test', configSheet: 'Config: Test', destinationTab: 'Responses' };
+    const questions: any[] = [
+      {
+        id: 'DATE',
+        qEn: 'Date',
+        qFr: 'Date',
+        qNl: 'Date',
+        type: 'DATE',
+        status: 'Active',
+        required: false,
+        listView: true
+      }
+    ];
+
+    const first = listing.fetchSubmissionsSortedBatch(form, questions, ['DATE'], 10, undefined, false, undefined, {
+      fieldId: 'DATE',
+      direction: 'desc'
+    });
+    const etag = (first.list as any).etag;
+    expect(typeof etag).toBe('string');
+    expect((etag || '').toString().length).toBeGreaterThan(0);
+
+    const second = listing.fetchSubmissionsSortedBatch(form, questions, ['DATE'], 10, undefined, false, undefined, {
+      fieldId: 'DATE',
+      direction: 'desc',
+      __ifNoneMatch: true,
+      __clientEtag: etag
+    } as any);
+
+    expect((second.list as any).notModified).toBe(true);
+    expect(second.list.items).toEqual([]);
+    expect(second.list.totalCount).toBe(2);
+    expect((second.list as any).etag).toBe(etag);
+  });
+});
 
