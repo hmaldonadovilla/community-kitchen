@@ -131,6 +131,17 @@ export interface ActionBarViewConfig {
 
 export interface DedupIncompleteHomeDialogConfig {
   /**
+   * Guard condition used to decide when the Home dialog should open.
+   * - dedupKeys: open when reject-dedup keys are incomplete (legacy behavior)
+   * - fieldIds: open when any configured `fieldIds` value is empty
+   * - either: open when either condition above matches
+   */
+  criteria?: 'dedupKeys' | 'fieldIds' | 'either';
+  /**
+   * Optional top-level field ids used when `criteria` includes `fieldIds`.
+   */
+  fieldIds?: string[];
+  /**
    * Enable this dialog when Home is pressed and reject-dedup fields are incomplete on the form view.
    * Default: true when object is present.
    */
@@ -189,7 +200,7 @@ export interface ActionBarsConfig {
     home?: {
       hideWhenActive?: boolean;
       /**
-       * Optional Home-navigation guard dialog shown when reject-dedup fields are incomplete.
+       * Optional Home-navigation guard dialog shown when the configured criteria is met.
        */
       dedupIncompleteDialog?: DedupIncompleteHomeDialogConfig;
     };

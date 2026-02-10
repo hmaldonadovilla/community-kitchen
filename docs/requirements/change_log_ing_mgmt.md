@@ -340,8 +340,6 @@ Actions
 
 --
 
-Pending tasks Meal Production and recipes management:
-
 ## In recipe management form please organize the legend so all 3 elements related to actions are on the first column and the entries related to status are on the second column
 
 ## When we set `enforceFieldOrder` to true, I expect that the user is guided via validation messages to fill the fields in the correct order. This must happen in all UIs, specially in the Steps UI, where we can have a combination of top level fields and line item groups rendered as tables.
@@ -349,3 +347,50 @@ Pending tasks Meal Production and recipes management:
 ## There's a lot of unused width space in the legend, when using two columns. Please define a setting to set the percentage of width for each column.
 
 - on recipe management please set 25% for the first column and 75% for the second column
+
+--
+
+## Adjust the summary view bundled html template for the Ingredients Management form
+
+- The current View screen does not provide the information in the way it is requested in the requirement document. The current View screen shows:
+  - The value of 'Ingredient name' without the label 'Ingredient name', e.g. It shows Tomato instead of Ingredient name    Tomato
+  - On the second line, the system shows {Active since...} instead of Category. Remove this line that is not required
+  - It shows Effective start date which is not part of the requirement
+  - It shows Effective end date which is not part of the requirement
+
+### Implementation guidelines
+
+- Implement the adjustments to the summary view bundled html template for the Ingredients Management form as described in the requirements document and highlighted above
+- the requirements document is located in the `docs/requirements/ingredients_mgmt_design.md` file
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_ingredients_mgmt.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.
+
+--
+
+Pending tasks Ingredients Management:
+
+## Legend, create label and multi-select dropdown list adjustments
+
+### Legend adjustments for Active ingredient
+
+- For Active ingredient, only View action is allowed. Edit and Copy actions are valid actions but because these functionalities are not configured, these actions must be removed and the legend must be modified to reflect it.
+- For Draft ingredient, View and Edit actions are allowed. Current configuration is correct.
+- Until all requirements are implemented, the legend should not include Disabled status and should show
+  Legend:
+  - 👁 View draft or active ingredient
+  - ✏️Edit draft ingredient
+  - Draft: creation in progress, not available selectable in Recipe Management and Meal Production
+  - Active: Available in Recipe Management and Meal Production
+
+### Rename[ + Create] to [ + new ingredient] as per requirement. Set a label for the create record button instead of the default
+
+### The tick boxes in multi-select dropdown list for Supplier, Allergen, Dietary applicability are too small and very difficult to reach.  It is not ergonomic
+
+### Implementation guidelines
+
+- Implement the adjustments to the legend as described in the requirements document and highlighted above
+- the requirements document is located in the `docs/requirements/ingredients_mgmt_design.md` file
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_ingredients_mgmt.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/style_guide.mdc` rules strictly.

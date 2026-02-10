@@ -110,7 +110,8 @@ import {
   hasEnteredTopLevelValues,
   hasIncompleteConfiguredFields,
   normalizeFieldIdList,
-  resolveDedupCheckDialogCopy
+  resolveDedupCheckDialogCopy,
+  shouldForceAutoSaveOnConfiguredBlur
 } from './app/autoSaveDedup';
 import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
 import {
@@ -1648,6 +1649,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           }
         }
 
+        if (args?.scope === 'top' && args?.event === 'blur') {
+          const shouldForceAutoSave = shouldForceAutoSaveOnConfiguredBlur({
+            autoSaveEnabled,
+            isCreateFlow: createFlowRef.current,
+            scope: args.scope,
+            event: args.event,
+            fieldPath,
+            fieldId,
+            enableWhenFieldIds: autoSaveEnableFieldIds,
+            values: valuesRef.current as any,
+            dedupSignature: (dedupSignatureRef.current || '').toString(),
+            lastDedupCheckedSignature: (lastDedupCheckedSignatureRef.current || '').toString(),
+            dedupChecking: dedupCheckingRef.current,
+            dedupConflict: Boolean(dedupConflictRef.current),
+            dedupHold: dedupHoldRef.current
+          });
+
+          if (shouldForceAutoSave) {
+            // Release stale dedup hold before forcing immediate save.
+            dedupHoldRef.current = false;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            autoSaveDirtyRef.current = true;
+            setDraftSave(prev => (prev.phase === 'saving' || prev.phase === 'dirty' ? prev : { phase: 'dirty' }));
+            logEvent('autosave.trigger.configuredBlur', {
+              fieldId: fieldId || null,
+              fieldPath: fieldPath || null
+            });
+            void performAutoSaveRef.current('configuredFields.blurReady');
+          }
+        }
+
         // Warnings UX: recompute and show inline warnings for the field that just blurred.
         if (args?.event === 'blur' && fieldPath) {
           warningTouchedRef.current.add(fieldPath);
@@ -1686,6 +1721,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [
       dedupNotice,
       definition,
+      autoSaveEnabled,
+      autoSaveEnableFieldIds,
       ingredientsFormActive,
       logEvent,
       openFieldChangeDialog,
@@ -1833,6 +1870,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const autoSaveDirtyRef = useRef<boolean>(false);
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
+  const performAutoSaveRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const autoSaveUserEditedRef = useRef<boolean>(false);
   const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
   const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
@@ -5558,6 +5596,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     [autoSaveEnabled, isClosedRecord, logEvent, performAutoSave]
   );
 
+  useEffect(() => {
+    performAutoSaveRef.current = performAutoSave;
+  }, [performAutoSave]);
+
   const requestNavigateToList = useCallback(
     async (trigger: string) => {
       if (viewRef.current === 'list') return;
@@ -5604,16 +5646,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   );
 
   const handleGoHome = useCallback(() => {
-    const incompleteDedupKeys =
-      viewRef.current === 'form' && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any);
-    const homeDedupDialog = resolveDedupIncompleteHomeDialogConfig(definition.actionBars);
-    const homeDedupDialogEnabled = homeDedupDialog && homeDedupDialog.enabled !== false;
+    const inFormView = viewRef.current === 'form';
+    const incompleteDedupKeys = inFormView && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any);
+    const homeLeaveDialog = resolveDedupIncompleteHomeDialogConfig(definition.actionBars);
+    const homeLeaveDialogEnabled = homeLeaveDialog && homeLeaveDialog.enabled !== false;
+    const homeLeaveCriteria = homeLeaveDialog?.criteria || 'dedupKeys';
+    const incompleteConfiguredFields =
+      inFormView &&
+      hasIncompleteConfiguredFields(Array.isArray(homeLeaveDialog?.fieldIds) ? homeLeaveDialog.fieldIds : [], valuesRef.current as any);
     const hasEnteredData =
       hasEnteredTopLevelValues(definition.questions || [], valuesRef.current as any) ||
       hasEnteredLineItemValues(lineItemsRef.current || {});
     const allowLeaveUntouchedCreate = createFlowRef.current && !hasEnteredData;
-    if (incompleteDedupKeys && homeDedupDialogEnabled && !allowLeaveUntouchedCreate) {
-      const copy = resolveDedupIncompleteHomeDialogCopy(homeDedupDialog, languageRef.current);
+    const shouldOpenHomeLeaveDialog =
+      !allowLeaveUntouchedCreate &&
+      inFormView &&
+      homeLeaveDialogEnabled &&
+      (homeLeaveCriteria === 'dedupKeys'
+        ? incompleteDedupKeys
+        : homeLeaveCriteria === 'fieldIds'
+          ? incompleteConfiguredFields
+          : incompleteDedupKeys || incompleteConfiguredFields);
+    if (shouldOpenHomeLeaveDialog) {
+      const activeHomeLeaveDialog = homeLeaveDialog || {};
+      const copy = resolveDedupIncompleteHomeDialogCopy(activeHomeLeaveDialog, languageRef.current);
       customConfirm.openConfirm({
         title: copy.title,
         message: copy.message,
@@ -5634,7 +5690,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               selectedRecordSnapshot: selectedRecordSnapshotRef.current,
               lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
             }) || '';
-          const shouldDeleteCurrentRecord = homeDedupDialog.deleteRecordOnConfirm !== false;
+          const shouldDeleteCurrentRecord = activeHomeLeaveDialog.deleteRecordOnConfirm !== false;
           if (shouldDeleteCurrentRecord && existingRecordId) {
             const deleted = await triggerDedupDeleteOnKeyChange('navigate.home.dedupIncomplete.confirm', {
               force: true,
@@ -5657,13 +5713,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             setDraftSave({ phase: 'idle' });
           }
           logEvent('navigate.home.dedupIncomplete.confirm', {
+            criteria: homeLeaveCriteria,
+            incompleteDedupKeys,
+            incompleteConfiguredFields,
             recordId: existingRecordId || null,
             deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
           });
           await requestNavigateToList('navigate.home.dedupIncomplete.confirm');
         }
       });
-      logEvent('navigate.home.dedupIncomplete.dialog.open');
+      logEvent('navigate.home.dedupIncomplete.dialog.open', {
+        criteria: homeLeaveCriteria,
+        incompleteDedupKeys,
+        incompleteConfiguredFields
+      });
       return;
     }
     void requestNavigateToList('navigate.home');
