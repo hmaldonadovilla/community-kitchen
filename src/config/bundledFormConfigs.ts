@@ -7945,13 +7945,31 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": "Zoeken op klant:"
         }
       },
+      "listViewMetric": {
+        "label": {
+          "en": "portions delivered",
+          "fr": "portions livrées",
+          "nl": "porties geleverd"
+        },
+        "groupId": "MP_MEALS_REQUEST",
+        "fieldId": "FINAL_QTY",
+        "when": {
+          "fieldId": "status",
+          "equals": "Closed"
+        },
+        "maximumFractionDigits": 0
+      },
       "autoSave": {
         "enabled": true,
         "debounceMs": 2000,
         "status": "In progress"
       },
       "dedupDeleteOnKeyChange": true,
-      "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
+      "summaryHtmlTemplateId": {
+        "EN": "bundle:meal_production.summary.html",
+        "FR": "bundle:meal_production.summary.html",
+        "NL": "bundle:meal_production.summary.html"
+      },
       "copyCurrentRecordEnabled": false,
       "copyCurrentRecordDropFields": [
         "MP_PREP_DATE"
@@ -9142,9 +9160,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                       },
                                       "searchHelperText": {
-                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                        "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                       },
                                       "placeholder": {
                                         "en": "Search leftover ingredients",
@@ -9218,9 +9236,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
                                         "searchHelperText": {
-                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                          "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                          "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                          "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",
@@ -10147,7 +10165,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"validationRules\": [\n    {\n      \"phase\": \"submit\",\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"integer\": true },\n      \"message\": { \"en\": \"Enter a whole number\", \"fr\": \"Entrez un nombre entier\", \"nl\": \"Voer een geheel getal in\" },\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"notEmpty\": true }\n    },\n    {\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"lessThan\": 0 },\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"min\": 0 },\n      \"message\": {\n        \"en\": \"Ordered portions must be 0 or more\",\n        \"fr\": \"Les portions demandées doivent être égales ou supérieures à 0\",\n        \"nl\": \"Gevraagde porties moeten 0 of meer zijn\"\n      },\n      \"phase\": \"submit\"\n    }\n  ],\n  \"requiredMessage\": {\n    \"en\": \"Enter the number of portions.\",\n    \"fr\": \"Entrez le nombre de portions.\",\n    \"nl\": \"Voer het aantal porties in.\"\n  }\n}\n",
+            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"validationRules\": [\n    {\n      \"phase\": \"both\",\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"integer\": true },\n      \"message\": { \"en\": \"Enter a whole number\", \"fr\": \"Entrez un nombre entier\", \"nl\": \"Voer een geheel getal in\" },\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"notEmpty\": true }\n    },\n    {\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"lessThan\": 0 },\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"min\": 0 },\n      \"message\": {\n        \"en\": \"Ordered portions must be 0 or more\",\n        \"fr\": \"Les portions demandées doivent être égales ou supérieures à 0\",\n        \"nl\": \"Gevraagde porties moeten 0 of meer zijn\"\n      },\n      \"phase\": \"both\"\n    }\n  ],\n  \"requiredMessage\": {\n    \"en\": \"Enter the number of portions.\",\n    \"fr\": \"Entrez le nombre de portions.\",\n    \"nl\": \"Voer het aantal porties in.\"\n  }\n}\n",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -10496,7 +10514,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "optionsNl": [],
               "validationRules": [
                 {
-                  "phase": "submit",
+                  "phase": "both",
                   "then": {
                     "fieldId": "ORD_QTY",
                     "integer": true
@@ -10525,7 +10543,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "fr": "Les portions demandées doivent être égales ou supérieures à 0",
                     "nl": "Gevraagde porties moeten 0 of meer zijn"
                   },
-                  "phase": "submit"
+                  "phase": "both"
                 }
               ],
               "changeDialog": {
@@ -11420,9 +11438,9 @@ export const BUNDLED_FORM_CONFIGS = [
                       "nl": ""
                     },
                     "searchHelperText": {
-                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                      "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                      "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                      "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                     },
                     "placeholder": {
                       "en": "Search ingredients",
@@ -12518,7 +12536,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (EN)": "",
                 "Options (FR)": "",
                 "Options (NL)": "",
-                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"validationRules\": [\n    {\n      \"phase\": \"submit\",\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"integer\": true },\n      \"message\": { \"en\": \"Enter a whole number\", \"fr\": \"Entrez un nombre entier\", \"nl\": \"Voer een geheel getal in\" },\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"notEmpty\": true }\n    },\n    {\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"lessThan\": 0 },\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"min\": 0 },\n      \"message\": {\n        \"en\": \"Ordered portions must be 0 or more\",\n        \"fr\": \"Les portions demandées doivent être égales ou supérieures à 0\",\n        \"nl\": \"Gevraagde porties moeten 0 of meer zijn\"\n      },\n      \"phase\": \"submit\"\n    }\n  ],\n  \"requiredMessage\": {\n    \"en\": \"Enter the number of portions.\",\n    \"fr\": \"Entrez le nombre de portions.\",\n    \"nl\": \"Voer het aantal porties in.\"\n  }\n}\n",
+                "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"validationRules\": [\n    {\n      \"phase\": \"both\",\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"integer\": true },\n      \"message\": { \"en\": \"Enter a whole number\", \"fr\": \"Entrez un nombre entier\", \"nl\": \"Voer een geheel getal in\" },\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"notEmpty\": true }\n    },\n    {\n      \"when\": { \"fieldId\": \"ORD_QTY\", \"lessThan\": 0 },\n      \"then\": { \"fieldId\": \"ORD_QTY\", \"min\": 0 },\n      \"message\": {\n        \"en\": \"Ordered portions must be 0 or more\",\n        \"fr\": \"Les portions demandées doivent être égales ou supérieures à 0\",\n        \"nl\": \"Gevraagde porties moeten 0 of meer zijn\"\n      },\n      \"phase\": \"both\"\n    }\n  ],\n  \"requiredMessage\": {\n    \"en\": \"Enter the number of portions.\",\n    \"fr\": \"Entrez le nombre de portions.\",\n    \"nl\": \"Voer het aantal porties in.\"\n  }\n}\n",
                 "Option Filter (JSON)": "",
                 "Validation Rules (JSON)": "",
                 "List View?": "",
@@ -12867,7 +12885,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "optionsNl": [],
                 "validationRules": [
                   {
-                    "phase": "submit",
+                    "phase": "both",
                     "then": {
                       "fieldId": "ORD_QTY",
                       "integer": true
@@ -12896,7 +12914,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "fr": "Les portions demandées doivent être égales ou supérieures à 0",
                       "nl": "Gevraagde porties moeten 0 of meer zijn"
                     },
-                    "phase": "submit"
+                    "phase": "both"
                   }
                 ],
                 "changeDialog": {
@@ -13796,9 +13814,9 @@ export const BUNDLED_FORM_CONFIGS = [
                         "nl": ""
                       },
                       "searchHelperText": {
-                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                        "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                        "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                        "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                       },
                       "placeholder": {
                         "en": "Search ingredients",
@@ -14572,6 +14590,20 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Zoeken op klant:"
           }
         },
+        "metric": {
+          "label": {
+            "en": "portions delivered",
+            "fr": "portions livrées",
+            "nl": "porties geleverd"
+          },
+          "groupId": "MP_MEALS_REQUEST",
+          "fieldId": "FINAL_QTY",
+          "when": {
+            "fieldId": "status",
+            "equals": "Closed"
+          },
+          "maximumFractionDigits": 0
+        },
         "rowClickEnabled": false
       },
       "dedupRules": [
@@ -14644,7 +14676,11 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "In progress"
       },
       "dedupDeleteOnKeyChange": true,
-      "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
+      "summaryHtmlTemplateId": {
+        "EN": "bundle:meal_production.summary.html",
+        "FR": "bundle:meal_production.summary.html",
+        "NL": "bundle:meal_production.summary.html"
+      },
       "copyCurrentRecordEnabled": false,
       "copyCurrentRecordDropFields": [
         "MP_PREP_DATE"
@@ -15815,9 +15851,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                       },
                                       "searchHelperText": {
-                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                        "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                       },
                                       "placeholder": {
                                         "en": "Search leftover ingredients",
@@ -15891,9 +15927,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                           "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                         },
                                         "searchHelperText": {
-                                          "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                          "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                          "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                          "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                          "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                          "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                         },
                                         "placeholder": {
                                           "en": "Search leftover ingredients",

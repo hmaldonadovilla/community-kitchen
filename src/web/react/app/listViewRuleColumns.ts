@@ -272,6 +272,12 @@ const matchesWhen = (when: ListViewRuleWhen | undefined, row: Record<string, any
   return true;
 };
 
+export const matchesListViewRuleWhen = (
+  when: ListViewRuleWhen | undefined,
+  row: Record<string, any>,
+  now: Date = new Date()
+): boolean => matchesWhen(when, row, now);
+
 export const collectListViewRuleColumnDependencies = (col: ListViewRuleColumnConfig): string[] => {
   const ids = new Set<string>();
 

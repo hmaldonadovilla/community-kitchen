@@ -553,6 +553,31 @@ export function buildWebFormHtml(
       .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
       .tabs button { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
       .tabs button.active { background: var(--accent); color: var(--accentText); border-color: var(--accent); }
+      .ck-list-title-row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .ck-list-title-main {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .ck-list-title-main h3 {
+        margin: 0;
+        font-size: var(--ck-font-group-title);
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .ck-list-metric {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        color: var(--text);
+        font-size: var(--ck-font-control);
+        font-weight: 500;
+        text-align: right;
+      }
       .list-toolbar {
         display: flex;
         flex-wrap: wrap;

@@ -415,3 +415,33 @@ Actions
 - Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.
 
 --
+
+## Validation on meal-production form
+
+In the `orderInfo` step we are showing a table with `MP_MEALS_REQUEST` rows, in these rows we show the `MEAL_TYPE` as label and the `ORD_QTY` as value. We already see validation at the line item group level, however we do not see it for each individual entry of the `ORD_QTY` field in the table. The user is for example able to enter a negative value for `ORD_QTY` and the system will not show any validation error.
+
+### Implementation guidelines
+
+- Implement the adjustments to the validation on the meal-production form as described above
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_meal_production.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.
+
+--
+
+## Meal production summary view bundled html template adjustments
+
+### Total delivered portions
+
+In the summary view this field need to be hidden until the record has been submitted and the status is `Closed`.
+
+### `Cooked` mention
+
+In the summary view this mention need to be displayed as `To cook` until the `foodSafety` step is completed. After that it need to be displayed as `Cooked`.
+
+### Implementation guidelines
+
+- Implement the adjustments to the summary view bundled html template for the Meal production form as described above
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_meal_production.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.

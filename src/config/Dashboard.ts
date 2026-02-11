@@ -20,6 +20,7 @@ import {
   GroupBehaviorConfig,
   ListViewColumnConfig,
   ListViewLegendItem,
+  ListViewMetricConfig,
   ListViewSearchConfig,
   ListViewViewConfig,
   LocalizedString,
@@ -141,6 +142,7 @@ export class Dashboard {
       const listViewLegendColumnWidths = dashboardConfig?.listViewLegendColumnWidths;
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
+      const listViewMetric = dashboardConfig?.listViewMetric;
       const autoSave = dashboardConfig?.autoSave;
       const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
@@ -196,6 +198,7 @@ export class Dashboard {
           listViewLegendColumnWidths,
           listViewSearch,
           listViewView,
+          listViewMetric,
           autoSave,
           auditLogging,
           summaryViewEnabled,
@@ -269,6 +272,7 @@ export class Dashboard {
     listViewLegendColumnWidths?: [number, number];
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
+    listViewMetric?: ListViewMetricConfig;
     autoSave?: AutoSaveConfig;
     auditLogging?: AuditLoggingConfig;
     summaryViewEnabled?: boolean;
@@ -681,6 +685,17 @@ export class Dashboard {
                 ? (listViewObj as any).ui
                 : undefined;
     const listViewView = this.normalizeListViewView(listViewViewRaw);
+    const listViewMetricRaw =
+      (parsed as any).listViewMetric !== undefined
+        ? (parsed as any).listViewMetric
+        : (parsed as any).listMetric !== undefined
+          ? (parsed as any).listMetric
+          : listViewObj && (listViewObj as any).metric !== undefined
+            ? (listViewObj as any).metric
+            : listViewObj && (listViewObj as any).listMetric !== undefined
+              ? (listViewObj as any).listMetric
+              : undefined;
+    const listViewMetric = this.normalizeListViewMetric(listViewMetricRaw);
     const fieldDisableRulesRaw =
       (parsed as any).fieldDisableRules !== undefined
         ? (parsed as any).fieldDisableRules
@@ -1204,6 +1219,7 @@ export class Dashboard {
       listViewLegendColumnWidths === undefined &&
       !listViewSearch &&
       !listViewView &&
+      !listViewMetric &&
       !autoSave &&
       !auditLogging &&
       summaryViewEnabled === undefined &&
@@ -1254,6 +1270,7 @@ export class Dashboard {
       listViewLegendColumnWidths,
       listViewSearch,
       listViewView,
+      listViewMetric,
       autoSave,
       auditLogging,
       summaryViewEnabled,
@@ -2726,6 +2743,105 @@ export class Dashboard {
     if (toggleEnabled !== undefined) out.toggleEnabled = toggleEnabled;
     if (defaultMode) out.defaultMode = defaultMode;
     return Object.keys(out).length ? out : undefined;
+  }
+
+  private normalizeListViewMetric(value: any): ListViewMetricConfig | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value !== 'object') return undefined;
+
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') {
+        const s = input.trim();
+        return s ? s : undefined;
+      }
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizeWhen = (when: any): any => {
+      if (when === undefined || when === null) return undefined;
+      if (Array.isArray(when)) {
+        const list = when.map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ all: list } as any) : undefined;
+      }
+      if (typeof when !== 'object') return undefined;
+      if (Array.isArray((when as any).all)) {
+        const list = ((when as any).all as any[]).map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ all: list } as any) : undefined;
+      }
+      if (Array.isArray((when as any).any)) {
+        const list = ((when as any).any as any[]).map(normalizeWhen).filter(Boolean);
+        return list.length ? ({ any: list } as any) : undefined;
+      }
+      const fieldIdRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
+      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+      if (!fieldId) return undefined;
+      const out: any = { fieldId };
+      if ((when as any).equals !== undefined) out.equals = (when as any).equals;
+      if ((when as any).notEquals !== undefined) out.notEquals = (when as any).notEquals;
+      if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
+      if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
+      if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
+      if ((when as any).isInPast !== undefined) out.isInPast = Boolean((when as any).isInPast);
+      if ((when as any).isInFuture !== undefined) out.isInFuture = Boolean((when as any).isInFuture);
+      return out;
+    };
+
+    const groupIdRaw =
+      (value as any).groupId !== undefined
+        ? (value as any).groupId
+        : (value as any).lineItemGroupId !== undefined
+          ? (value as any).lineItemGroupId
+          : (value as any).sourceGroupId !== undefined
+            ? (value as any).sourceGroupId
+            : (value as any).group !== undefined
+              ? (value as any).group
+              : (value as any).lineGroupId;
+    const fieldIdRaw =
+      (value as any).fieldId !== undefined
+        ? (value as any).fieldId
+        : (value as any).lineItemFieldId !== undefined
+          ? (value as any).lineItemFieldId
+          : (value as any).valueFieldId !== undefined
+            ? (value as any).valueFieldId
+            : (value as any).valueField !== undefined
+              ? (value as any).valueField
+              : (value as any).sumFieldId !== undefined
+                ? (value as any).sumFieldId
+                : (value as any).sumField;
+    const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+    const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+    if (!groupId || !fieldId) return undefined;
+
+    const label = normalizeLocalized((value as any).label ?? (value as any).text ?? (value as any).suffix ?? (value as any).title);
+    const when = normalizeWhen((value as any).when ?? (value as any).filter ?? (value as any).where ?? (value as any).condition);
+
+    const maxFractionDigitsRaw =
+      (value as any).maximumFractionDigits !== undefined
+        ? (value as any).maximumFractionDigits
+        : (value as any).maxFractionDigits !== undefined
+          ? (value as any).maxFractionDigits
+          : (value as any).decimals;
+    const maximumFractionDigits = (() => {
+      if (maxFractionDigitsRaw === undefined || maxFractionDigitsRaw === null || maxFractionDigitsRaw === '') return undefined;
+      const n = Number(maxFractionDigitsRaw);
+      if (!Number.isFinite(n)) return undefined;
+      return Math.max(0, Math.min(6, Math.round(n)));
+    })();
+
+    const out: ListViewMetricConfig = { groupId, fieldId };
+    if (label !== undefined) out.label = label;
+    if (when) out.when = when;
+    if (maximumFractionDigits !== undefined) out.maximumFractionDigits = maximumFractionDigits;
+    return out;
   }
 
   private normalizeTemplateId(value: any): FollowupConfig['pdfTemplateId'] {

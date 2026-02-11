@@ -23,6 +23,13 @@ describe('DefinitionBuilder', () => {
         legendColumnWidths: [25, 75],
         view: { mode: 'cards', toggleEnabled: true, defaultMode: 'cards' },
         search: { mode: 'advanced', fields: ['Q1', 'status'] },
+        metric: {
+          label: { en: 'portions delivered' },
+          groupId: 'MP_MEALS_REQUEST',
+          fieldId: 'FINAL_QTY',
+          when: { fieldId: 'status', equals: 'Closed' },
+          maximumFractionDigits: 0
+        },
         columns: [{ type: 'rule', fieldId: 'action', label: { en: 'Action' }, showIn: 'cards', cases: [{ text: 'Edit' }] }]
       },
       listViewMetaColumns: ['createdAt', 'status'],
@@ -114,6 +121,13 @@ describe('DefinitionBuilder', () => {
     expect((def.listView as any)?.legendColumnWidths).toEqual([25, 75]);
     expect(def.listView?.view).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
     expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
+    expect((def.listView as any)?.metric).toEqual({
+      label: { en: 'portions delivered' },
+      groupId: 'MP_MEALS_REQUEST',
+      fieldId: 'FINAL_QTY',
+      when: { fieldId: 'status', equals: 'Closed' },
+      maximumFractionDigits: 0
+    });
     expect(def.fieldDisableRules).toEqual([
       {
         id: 'future-date-lock',

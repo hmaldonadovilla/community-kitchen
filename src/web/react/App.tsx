@@ -70,6 +70,7 @@ import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
+import { collectListViewMetricDependencies } from './app/listViewMetric';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
   resolveDedupIncompleteHomeDialogConfig,
@@ -2705,7 +2706,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
   const listViewProjection = useMemo(() => {
     const cols = (definition.listView?.columns || []) as any[];
-    if (!cols.length) return [] as string[];
     const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
     const ids = new Set<string>();
     const add = (fid: string) => {
@@ -2741,6 +2741,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       })();
       fields.forEach(add);
     }
+    collectListViewMetricDependencies(definition.listView?.metric).forEach(add);
     return Array.from(ids);
   }, [definition.listView]);
 

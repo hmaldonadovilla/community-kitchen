@@ -52,4 +52,32 @@ describe('validateForm guided row filters', () => {
 
     expect(errors['G__NOTE__r1']).toBeDefined();
   });
+
+  it('does not fallback to other step row filters when scoped definition explicitly has no row filter', () => {
+    const scopedDefinition: any = {
+      ...definition,
+      questions: [
+        {
+          id: 'G',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            _guidedRowFilter: undefined,
+            fields: [
+              { id: 'QTY', type: 'NUMBER' },
+              { id: 'NOTE', type: 'TEXT', required: true }
+            ]
+          }
+        }
+      ]
+    };
+
+    const errors = validateForm({
+      definition: scopedDefinition,
+      language: 'EN' as any,
+      values: {} as any,
+      lineItems: { G: [{ id: 'r1', values: { QTY: -1, NOTE: '' } }] } as any
+    });
+
+    expect(errors['G__NOTE__r1']).toBeDefined();
+  });
 });

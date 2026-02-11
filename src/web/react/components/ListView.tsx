@@ -8,6 +8,7 @@ import { fetchBatch, fetchList, ListItem, ListResponse, resolveUserFacingErrorMe
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
+import { collectListViewMetricDependencies, computeListViewMetricValue } from '../app/listViewMetric';
 import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { resolveListViewUiState } from '../app/listViewUiState';
@@ -194,6 +195,11 @@ const ListView: React.FC<ListViewProps> = ({
     return map;
   }, [definition.questions]);
 
+  const metricDependencies = useMemo(
+    () => collectListViewMetricDependencies(definition.listView?.metric),
+    [definition.listView?.metric]
+  );
+
   const projection = useMemo(() => {
     const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
     const ids = new Set<string>();
@@ -214,8 +220,9 @@ const ListView: React.FC<ListViewProps> = ({
     if (dateSearchEnabled && dateSearchFieldId) {
       add(dateSearchFieldId);
     }
+    metricDependencies.forEach(add);
     return Array.from(ids);
-  }, [columnsAll, dateSearchEnabled, dateSearchFieldId]);
+  }, [columnsAll, dateSearchEnabled, dateSearchFieldId, metricDependencies]);
 
   const activeFetchRef = useRef(0);
 
@@ -1456,6 +1463,60 @@ const ListView: React.FC<ListViewProps> = ({
   );
 
   const showResults = viewMode === 'table' || activeSearch;
+  const listMetricCfg = definition.listView?.metric;
+  const listMetricLabelText = useMemo(() => {
+    if (!listMetricCfg?.label) return '';
+    return resolveLocalizedString(listMetricCfg.label, language, '');
+  }, [language, listMetricCfg?.label]);
+  const listMetricComputed = useMemo(
+    () => computeListViewMetricValue(allItems || [], listMetricCfg),
+    [allItems, listMetricCfg]
+  );
+  const listMetricMaximumFractionDigits = useMemo(() => {
+    const raw = Number((listMetricCfg as any)?.maximumFractionDigits);
+    if (!Number.isFinite(raw)) return 0;
+    return Math.max(0, Math.min(6, Math.round(raw)));
+  }, [listMetricCfg]);
+  const listMetricNumberFormatter = useMemo(() => {
+    const locale = language === 'FR' ? 'fr-BE' : language === 'NL' ? 'nl-BE' : 'en-US';
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: listMetricMaximumFractionDigits });
+  }, [language, listMetricMaximumFractionDigits]);
+  const listMetricCompleteData =
+    !!listMetricCfg && !uiLoading && !uiPrefetching && (totalCount <= 0 || loadedCount >= totalCount);
+  const listMetricDisplayText = useMemo(() => {
+    if (!listMetricCfg) return '';
+    const valueText = listMetricCompleteData ? listMetricNumberFormatter.format(listMetricComputed.value) : '…';
+    const suffix = (listMetricLabelText || '').toString().trim();
+    return suffix ? `${valueText} ${suffix}` : valueText;
+  }, [listMetricCfg, listMetricCompleteData, listMetricLabelText, listMetricNumberFormatter, listMetricComputed.value]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !listMetricCfg) return;
+    onDiagnostic('list.metric.config', {
+      groupId: (listMetricCfg as any).groupId || null,
+      fieldId: (listMetricCfg as any).fieldId || null,
+      hasWhen: Boolean((listMetricCfg as any).when),
+      maximumFractionDigits: listMetricMaximumFractionDigits
+    });
+  }, [listMetricCfg, listMetricMaximumFractionDigits, onDiagnostic]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !listMetricCfg) return;
+    onDiagnostic('list.metric.value', {
+      value: listMetricComputed.value,
+      matchedRecords: listMetricComputed.matchedRecords,
+      matchedLineItems: listMetricComputed.matchedLineItems,
+      completeData: listMetricCompleteData,
+      loadedCount,
+      totalCount
+    });
+  }, [listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic, totalCount]);
+
+  const metricNode = listMetricCfg ? (
+    <div className="ck-list-metric" aria-live="polite">
+      {listMetricDisplayText}
+    </div>
+  ) : null;
 
   const titleNode = (() => {
     const configured = definition.listView?.title;
@@ -1515,8 +1576,13 @@ const ListView: React.FC<ListViewProps> = ({
           }}
         />
       ) : null}
-      <div style={{ pointerEvents: uiDisabled ? 'none' : 'auto' }}>
-        {titleNode}
+        <div style={{ pointerEvents: uiDisabled ? 'none' : 'auto' }}>
+        {titleNode || metricNode ? (
+          <div className="ck-list-title-row">
+            <div className="ck-list-title-main">{titleNode}</div>
+            {metricNode}
+          </div>
+        ) : null}
 
         <div className="list-toolbar">
           <label className="ck-list-search-label" htmlFor={searchInputId}>

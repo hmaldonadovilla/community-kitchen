@@ -3736,9 +3736,9 @@
             }
           },
           "message": {
-            "en": "Enter at least one quantity greater than 0.",
-            "fr": "Veuillez entrer au moins une quantité supérieure à 0.",
-            "nl": "Voer minstens één hoeveelheid in die groter is dan 0."
+            "en": "Enter an integer ≥ 0 in all fields to record ordered portions.",
+            "fr": "Veuillez entrer un nombre entier ≥ 0 dans tous les champs pour enregistrer les portions commandées.",
+            "nl": "Voer een geheel getal ≥ 0 in in alle velden om de gevraagde porties te registreren."
           }
         }
       ]
@@ -6112,9 +6112,9 @@
               }
             },
             "message": {
-              "en": "Enter at least one quantity greater than 0.",
-              "fr": "Veuillez entrer au moins une quantité supérieure à 0.",
-              "nl": "Voer minstens één hoeveelheid in die groter is dan 0."
+              "en": "Enter an integer ≥ 0 in all fields to record ordered portions.",
+              "fr": "Veuillez entrer un nombre entier ≥ 0 dans tous les champs pour enregistrer les portions commandées.",
+              "nl": "Voer een geheel getal ≥ 0 in in alle velden om de gevraagde porties te registreren."
             }
           }
         ]
@@ -6660,9 +6660,9 @@
               "when": {
                 "all": [
                   {
-                "fieldId": "status",
-                "notEquals": "Closed"
-              },
+                    "fieldId": "status",
+                    "notEquals": "Closed"
+                  },
                   {
                     "fieldId": "MP_PREP_DATE",
                     "isInPast": true
