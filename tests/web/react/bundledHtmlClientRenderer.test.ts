@@ -99,6 +99,66 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
   });
 
+  it('fetches projection dataSource details in parallel for bundled templates', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const fetchDataSource = jest.fn(async (req: any) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise(resolve => setTimeout(resolve, 25));
+      active -= 1;
+      if ((req?.source?.id || '').toString() === 'DS2') {
+        return { items: [{ DIST_B_NAME: 'Beta', DIST_B_ADDR: 'Rue B' }] };
+      }
+      return { items: [{ DIST_A_NAME: 'Alpha', DIST_A_ADDR: 'Rue A' }] };
+    });
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'DIST_A',
+          type: 'CHOICE',
+          label: { en: 'A', fr: 'A', nl: 'A' },
+          required: false,
+          dataSource: { id: 'DS1', mapping: { DIST_A_NAME: 'value' }, projection: ['DIST_A_NAME'] }
+        },
+        {
+          id: 'DIST_B',
+          type: 'CHOICE',
+          label: { en: 'B', fr: 'B', nl: 'B' },
+          required: false,
+          dataSource: { id: 'DS2', mapping: { DIST_B_NAME: 'value' }, projection: ['DIST_B_NAME'] }
+        }
+      ]
+    };
+
+    const payload: any = {
+      formKey: 'F',
+      language: 'EN',
+      id: 'R1',
+      values: { DIST_A: 'Alpha', DIST_B: 'Beta' }
+    };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      fetchDataSource,
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{DIST_A.DIST_A_ADDR}} {{DIST_B.DIST_B_ADDR}}</div>'
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Rue A');
+    expect(res.html).toContain('Rue B');
+    expect(fetchDataSource).toHaveBeenCalledTimes(2);
+    expect(maxActive).toBeGreaterThanOrEqual(2);
+  });
+
   it('replaces {{LABEL(FIELD_ID)}} placeholders using configured question labels', async () => {
     const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
 

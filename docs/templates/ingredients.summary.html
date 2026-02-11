@@ -100,7 +100,7 @@
     </li>
     <li class="ck-field-row">
       <div class="ck-field-label">{{LABEL(STATUS)}}</div>
-      <div class="ck-field-value">{{DEFAULT(STATUS, "—")}}</div>
+      <div class="ck-field-value" data-ck-status-display>{{DEFAULT(STATUS, "—")}}</div>
     </li>
     <li class="ck-field-row">
       <div class="ck-field-label">{{LABEL(CREATED_BY)}}</div>
@@ -118,6 +118,7 @@
 
   <div class="ck-hidden-data" aria-hidden="true">
     <span data-ck-status-raw>{{DEFAULT(STATUS, "")}}</span>
+    <span data-ck-start-raw>{{DEFAULT(EFFECTIVE_START_DATE, "")}}</span>
     <span data-ck-end-raw>{{DEFAULT(EFFECTIVE_END_DATE, "")}}</span>
     <span data-ck-updated-raw>{{DEFAULT(UPDATED_AT, "")}}</span>
     <span data-ck-last-changed-by-raw>{{DEFAULT(LAST_CHANGED_BY, "")}}</span>
@@ -174,12 +175,24 @@
     };
 
     var statusRaw = text('[data-ck-status-raw]');
+    var startRaw = text('[data-ck-start-raw]');
     var endRaw = text('[data-ck-end-raw]');
     var updatedRaw = text('[data-ck-updated-raw]');
     var changedByRaw = text('[data-ck-last-changed-by-raw]');
 
     var statusKey = normalize(statusRaw);
+    var formattedStart = formatDate(startRaw);
     var formattedEnd = formatDate(endRaw);
+    var statusDisplay = statusRaw || '—';
+
+    if (statusKey === 'active') {
+      statusDisplay = (statusRaw || '—') + ' since ' + (formattedStart || '—');
+    } else if (statusKey === 'disabled') {
+      statusDisplay = (statusRaw || '—') + ' by ' + (changedByRaw || '—') + ' since ' + (formattedEnd || '—');
+    }
+
+    setText('[data-ck-status-display]', statusDisplay);
+
     var normalizedEndRaw = normalize(endRaw);
     var normalizedFormattedEnd = normalize(formattedEnd);
     var isOpenEnded = normalizedEndRaw === OPEN_END_ISO ||

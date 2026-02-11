@@ -100,6 +100,30 @@ export class FollowupService {
     }
   }
 
+  triggerFollowupActions(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    actions: string[]
+  ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
+    const normalizedActions = Array.isArray(actions)
+      ? actions
+          .map(a => (a || '').toString().trim())
+          .filter(Boolean)
+      : [];
+    if (!normalizedActions.length) {
+      return { success: false, results: [{ action: '', result: { success: false, message: 'No follow-up actions provided.' } }] };
+    }
+
+    const results: Array<{ action: string; result: FollowupActionResult }> = [];
+    for (const action of normalizedActions) {
+      const result = this.triggerFollowupAction(form, questions, recordId, action);
+      results.push({ action, result });
+    }
+    const allOk = results.every(entry => !!entry.result?.success);
+    return { success: allOk, results };
+  }
+
   /**
    * Render a Google Doc template (with placeholders + line-item table directives) into a PDF.
    * Used by follow-up actions and by the web app's report BUTTON field previews.
@@ -234,5 +258,4 @@ export class FollowupService {
     return this.submissionService.getRecordContext(form, questions, recordId);
   }
 }
-
 

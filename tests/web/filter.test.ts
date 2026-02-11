@@ -203,6 +203,25 @@ describe('computeNonMatchOptionKeys', () => {
     });
     expect(nonMatch).toEqual(['No-salt']);
   });
+
+  it('supports non-matching keys when optionFilter uses dataSourceField and optionMapRef-resolved map', () => {
+    const filter = {
+      dependsOn: 'x',
+      matchMode: 'or',
+      dataSourceField: 'dietary',
+      optionMap: {
+        Vegan: ['Rice', 'Beans'],
+        'No-salt': ['Rice'],
+        '*': ['Rice', 'Beans', 'Salt']
+      }
+    };
+    const nonMatch = computeNonMatchOptionKeys({
+      filter: filter as any,
+      dependencyValues: ['Vegan|No-salt'],
+      selectedValue: 'Beans'
+    });
+    expect(nonMatch).toEqual(['No-salt']);
+  });
 });
 
 describe('buildLocalizedOptions (optionSort)', () => {

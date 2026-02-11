@@ -113,7 +113,8 @@ export class DefinitionBuilder {
       form.listViewPaginationControlsEnabled,
       form.listViewHideHeaderRow,
       form.listViewRowClickEnabled,
-      form.listViewSearch
+      form.listViewSearch,
+      form.listViewMetric
     );
     if (listView && form.listViewHeaderSortEnabled !== undefined) {
       listView.headerSortEnabled = Boolean(form.listViewHeaderSortEnabled);
@@ -523,7 +524,8 @@ export class DefinitionBuilder {
     paginationControlsEnabledOverride?: ListViewConfig['paginationControlsEnabled'],
     hideHeaderRowOverride?: ListViewConfig['hideHeaderRow'],
     rowClickEnabledOverride?: ListViewConfig['rowClickEnabled'],
-    searchOverride?: ListViewConfig['search']
+    searchOverride?: ListViewConfig['search'],
+    metricOverride?: ListViewConfig['metric']
   ): ListViewConfig | undefined {
     const listQuestions = questions.filter(q => q.listView);
     const customColumns = Array.isArray(dashboardColumns) ? dashboardColumns : [];
@@ -585,6 +587,7 @@ export class DefinitionBuilder {
     if (hideHeaderRowOverride !== undefined) out.hideHeaderRow = Boolean(hideHeaderRowOverride);
     if (rowClickEnabledOverride !== undefined) out.rowClickEnabled = Boolean(rowClickEnabledOverride);
     if (searchOverride) out.search = searchOverride;
+    if (metricOverride) out.metric = metricOverride;
     return out;
   }
 

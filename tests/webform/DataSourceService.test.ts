@@ -95,4 +95,27 @@ describe('DataSourceService', () => {
     expect(res.items.length).toBe(1);
     expect((res.items[0] as any).Name).toBe('Alpha');
   });
+
+  test('reuses short-lived shared fetch cache across service instances', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Source');
+    sheet.setMockData([
+      ['Name', 'Status'],
+      ['Alpha', 'Active']
+    ]);
+
+    const firstService = new DataSourceService(ss);
+    const first = firstService.fetchDataSource({ id: 'Source', projection: ['Name', 'Status'] } as any, 'EN');
+    expect((first.items[0] as any).Name).toBe('Alpha');
+
+    // Update sheet data immediately; second read should still hit the shared short-lived cache.
+    sheet.setMockData([
+      ['Name', 'Status'],
+      ['Beta', 'Active']
+    ]);
+
+    const secondService = new DataSourceService(ss);
+    const second = secondService.fetchDataSource({ id: 'Source', projection: ['Name', 'Status'] } as any, 'EN');
+    expect((second.items[0] as any).Name).toBe('Alpha');
+  });
 });

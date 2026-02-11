@@ -209,6 +209,8 @@
         <span class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</span>
       </div>
       <div class="ck-meta-item ck-meta-item--full ck-notes ck-value">{{MP_NOTES}}</div>
+      <div class="ck-hidden" data-record-status>{{STATUS}}</div>
+      <div class="ck-hidden" data-record-status-key>{{STATUS_KEY}}</div>
     </div>
   </div>
 
@@ -249,7 +251,7 @@
         <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.ORD_QTY)}}</div>
         <div class="ck-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
       </div>
-      <div class="ck-total-row">
+      <div class="ck-total-row" data-total-delivered-row>
         <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
         <div class="ck-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
       </div>
@@ -284,15 +286,33 @@
       // ignore
     }
 
-    var listContainer = root.querySelector('[data-ck-meal-list]');
-    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
-    if (!listContainer || !dataTables.length) return;
-
     var normalize = function (value) {
       return (value || '').toString().trim().toLowerCase();
     };
     var toText = function (value) {
       return (value || '').toString().trim();
+    };
+    var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
+    var statusRaw = toText((root.querySelector('[data-record-status]') || {}).textContent || '');
+    var isClosedStatus = normalize(statusKeyRaw) === 'onclose' || normalize(statusRaw) === 'closed';
+    var deliveredRow = root.querySelector('[data-total-delivered-row]');
+    if (deliveredRow && !isClosedStatus) {
+      deliveredRow.classList.add('ck-hidden');
+    }
+
+    var listContainer = root.querySelector('[data-ck-meal-list]');
+    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
+    if (!listContainer || !dataTables.length) return;
+
+    var isTemplateToken = function (value) {
+      var text = toText(value);
+      return /^{{[\s\S]*}}$/.test(text);
+    };
+    var hasMeaningfulValue = function (value) {
+      var text = toText(value);
+      if (!text || text === '—') return false;
+      if (isTemplateToken(text)) return false;
+      return true;
     };
     var parseNumber = function (value) {
       var n = Number((value || '').toString().trim());
@@ -401,6 +421,38 @@
         groups.set(key, group);
       }
       group.entries.push(entry);
+    });
+
+    var rowRequiresFoodSafety = function (requestedRaw) {
+      var requestedNumber = parseNumber(requestedRaw);
+      if (!Number.isNaN(requestedNumber)) return requestedNumber > 0;
+      var requestedText = toText(requestedRaw);
+      if (!requestedText || requestedText === '0') return false;
+      return !isTemplateToken(requestedText);
+    };
+
+    var foodSafetyComplete = true;
+    groups.forEach(function (group) {
+      if (!foodSafetyComplete) return;
+      if (!group || !group.entries || !group.entries.length) return;
+      var requestedRaw = '';
+      for (var i = 0; i < group.entries.length; i += 1) {
+        if (hasMeaningfulValue(group.entries[i].ordQty)) {
+          requestedRaw = group.entries[i].ordQty;
+          break;
+        }
+      }
+      if (!rowRequiresFoodSafety(requestedRaw)) return;
+
+      var hasCoreTemp = group.entries.some(function (entry) {
+        return hasMeaningfulValue(entry.coreTemp);
+      });
+      var hasTempEvidence = group.entries.some(function (entry) {
+        return Array.isArray(entry.tempPhotoUrls) && entry.tempPhotoUrls.length > 0;
+      });
+      if (!hasCoreTemp || !hasTempEvidence) {
+        foodSafetyComplete = false;
+      }
     });
 
     var formatPortions = function (rawValue, fallbackValue) {
@@ -594,7 +646,8 @@
         cookedAllergens = cookedAllergens.concat(entry.allergens);
       });
 
-      var cookedLine = 'Cooked: ' + formatPortions(toCook, requested);
+      var cookedMention = foodSafetyComplete ? 'Cooked' : 'To cook';
+      var cookedLine = cookedMention + ': ' + formatPortions(toCook, requested);
       var cookedRecipe = cookEntry ? cookEntry.recipe : '';
       if (!cookedRecipe) cookedRecipe = 'Recipe not set';
       cookedLine += ' | ' + cookedRecipe;

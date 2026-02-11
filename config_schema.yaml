@@ -1040,6 +1040,17 @@ components:
             - When `true`, always use the searchable control (even for smaller lists)
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables it automatically only for large option sets
+        multiSelectCheckboxSizePx:
+          type: integer
+          minimum: 16
+          maximum: 40
+          description: |
+            For `CHECKBOX` fields rendered as `ui.control: "select"`, sets checkbox size (px)
+            in the multi-select dropdown menu.
+
+            - Applies only to multi-select CHECKBOX UI.
+            - Values are clamped to `16..40` at runtime.
+            - When omitted, default checkbox size is used.
         overlayOpenActions:
           type: array
           items:
@@ -2109,12 +2120,13 @@ components:
               - Supports computed/action columns via `type: "rule"`
             - `metaColumns`: optional system columns appended after question columns (`createdAt`, `updatedAt`, `status`, `pdfUrl`)
             - `legend`: optional legend shown below the table to explain icons / table elements (only shown when defined)
+            - `metric`: optional right-aligned aggregate metric shown next to the list title
             - `defaultSort`: initial sort field/direction
             - `pageSize`: rows per page (default 10, max 50)
 
             Notes:
             - The List screen appears when at least one question is marked `listView: true` or when you provide `columns`.
-            - Legacy top-level aliases (`listViewMetaColumns`, `listViewColumns`, `listViewLegend`) are still accepted but deprecated.
+            - Legacy top-level aliases (`listViewMetaColumns`, `listViewColumns`, `listViewLegend`, `listViewMetric`) are still accepted but deprecated.
         appHeader:
           $ref: '#/components/schemas/AppHeaderConfig'
           description: Optional app header branding (logo shown next to the title).
@@ -2300,6 +2312,10 @@ components:
           description: Deprecated. Use `listView.legend`.
           items:
             $ref: '#/components/schemas/ListViewLegendItem'
+        listViewMetric:
+          deprecated: true
+          $ref: '#/components/schemas/ListViewMetricConfig'
+          description: Deprecated. Use `listView.metric`.
         listViewLegendColumns:
           deprecated: true
           type: integer
@@ -4257,6 +4273,13 @@ components:
             - Legend text supports basic inline Markdown (bold/italic/code/links).
           items:
             $ref: '#/components/schemas/ListViewLegendItem'
+        metric:
+          $ref: '#/components/schemas/ListViewMetricConfig'
+          description: |
+            Optional right-aligned list metric shown next to the list title.
+
+            Use this for lightweight aggregate KPIs on the Home/List screen (for example,
+            total delivered portions across closed records).
         defaultSort:
           type: object
           properties:
@@ -4326,6 +4349,40 @@ components:
           fieldId: createdAt
           direction: desc
         pageSize: 10
+
+    ListViewMetricConfig:
+      type: object
+      properties:
+        label:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional metric label text shown after the computed value.
+            Example: `"portions delivered"` -> `200 portions delivered`.
+        groupId:
+          type: string
+          description: |
+            Top-level `LINE_ITEM_GROUP` field id used as the metric source.
+        fieldId:
+          type: string
+          description: |
+            Line-item row field id to sum.
+        when:
+          $ref: '#/components/schemas/ListViewRuleWhen'
+          description: |
+            Optional row-level filter applied before summing line-item rows.
+            Uses the same condition shape as rule-based list-view columns.
+        maximumFractionDigits:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: |
+            Optional value formatting precision.
+            Defaults to `0` when omitted.
+      required:
+        - groupId
+        - fieldId
 
 
     DedupRule:
@@ -5090,6 +5147,9 @@ components:
           type: object
           description: List view mode config (dashboard-level).
           additionalProperties: true
+        listViewMetric:
+          $ref: '#/components/schemas/ListViewMetricConfig'
+          description: List view metric config (dashboard-level).
         languages:
           type: array
           items:

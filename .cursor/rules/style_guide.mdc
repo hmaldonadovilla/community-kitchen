@@ -33,6 +33,21 @@ The following clean-up actions must be applied mechanically across all applicati
 - Enforce a strict typography hierarchy (page title, section title, label, helper text, system feedback)
 - Ensure typography always matches behaviour (actions look like actions)
 
+>**Scope Gate (Authoritative)**
+>
+> This contract is ONLY in scope when:
+>
+> - The explicit task is UI hygiene / typography cleanup, OR
+> - The change request is primarily UI/visual consistency, OR
+> - A UI file is being modified specifically for UI reasons.
+>
+> If the current task is performance, reliability, security, backend changes, or bugfixing:
+>
+> - Do NOT initiate global UI hygiene cleanup.
+> - Do NOT expand the scope beyond the smallest UI surface required by the task.
+> - When touching UI code for non-UI tasks, do not introduce new violations of this contract,
+>   but avoid mechanical styling changes unless strictly required by the task.
+
 ## Global Typography Rules (Non-negotiable)
 
 - One font family across all applications (platform system font only)
@@ -221,6 +236,9 @@ AI agents must continue the clean-up until all of the following are true:
 
 If any condition fails, the clean-up must continue.
 If a conflict is detected that prevents compliance, the agent must stop and report the conflict.
+
+> - When this contract is in scope, continue cleanup until all conditions are true.
+> - When out of scope, do not start or expand cleanup. If compliance is impossible within the task scope, report the conflict and proceed with the task’s primary objective.
 
 ## Final Note
 

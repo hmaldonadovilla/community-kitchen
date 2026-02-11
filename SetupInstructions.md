@@ -312,6 +312,26 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       { "listView": { "title": { "en": "My Records" } } }
       ```
 
+    - Want to show a right-aligned **list metric** next to the title (for example, total delivered portions)? Set `listView.metric`:
+
+      ```json
+      {
+        "listView": {
+          "metric": {
+            "label": { "en": "portions delivered" },
+            "groupId": "MP_MEALS_REQUEST",
+            "fieldId": "FINAL_QTY",
+            "when": { "fieldId": "status", "equals": "Closed" }
+          }
+        }
+      }
+      ```
+
+      Notes:
+      - `groupId` must be a top-level `LINE_ITEM_GROUP` field id.
+      - `fieldId` must be a row field inside that line-item group.
+      - `when` is optional and uses the same condition shape as list-view rule columns.
+
     - Want to replace the default keyword search with **search by date**? Set `listView.search`:
 
       ```json
@@ -1173,6 +1193,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       For `CHECKBOX` fields with options (multi-select), you can also set:
       - `ui.control: "select"` to render a native multi-select dropdown (`<select multiple>`).
+      - `ui.multiSelectCheckboxSizePx` (range `16..40`) to increase checkbox size/hit area in that dropdown.
+        Example: `{ "ui": { "control": "select", "multiSelectCheckboxSizePx": 32 } }`
 
     - **Label/control layout override**: For any field (top-level, line-item, subgroup), you can force the label to be stacked above the control:
 

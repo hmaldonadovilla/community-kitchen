@@ -374,8 +374,12 @@ export const validateForm = (args: {
     };
 
     const resolvedRowFilters = (() => {
-      const guidedRowFilter = (groupCfg as any)?._guidedRowFilter ?? null;
-      if (guidedRowFilter) return [guidedRowFilter];
+      const hasScopedGuidedRowFilter =
+        !!groupCfg && Object.prototype.hasOwnProperty.call(groupCfg as any, '_guidedRowFilter');
+      if (hasScopedGuidedRowFilter) {
+        const guidedRowFilter = (groupCfg as any)?._guidedRowFilter;
+        return guidedRowFilter ? [guidedRowFilter] : null;
+      }
       if (!rowFilterOverrides) return null;
       if (groupKey === rootGroupId) return rowFilterOverrides.groups[rootGroupId] || null;
       const subId = resolveSubgroupKey(groupCfg as any);

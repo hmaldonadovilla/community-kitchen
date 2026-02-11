@@ -608,6 +608,13 @@ export interface QuestionUiConfig {
    */
   choiceSearchEnabled?: boolean;
   /**
+   * For CHECKBOX fields rendered with `ui.control: "select"`, set the checkbox size (px) in the dropdown menu.
+   *
+   * - Values are clamped to a safe UI range at render time.
+   * - When omitted, the default checkbox size is used.
+   */
+  multiSelectCheckboxSizePx?: number;
+  /**
    * Optional disclaimer section appended below PARAGRAPH fields.
    *
    * The UI renders this as a non-editable block by default and keeps the stored value in sync by
@@ -2237,6 +2244,10 @@ export interface FormConfig {
    */
   listViewView?: ListViewConfig['view'];
   /**
+   * Optional configurable list metric rendered next to the list title (recommended: `listView.metric`).
+   */
+  listViewMetric?: ListViewConfig['metric'];
+  /**
    * Enabled languages for the web app UI (max 3).
    *
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -3560,6 +3571,33 @@ export interface ListViewViewConfig {
   defaultMode?: 'table' | 'cards';
 }
 
+export interface ListViewMetricConfig {
+  /**
+   * Localized suffix label shown after the computed metric value.
+   * Example: "portions delivered".
+   */
+  label?: LocalizedString | string;
+  /**
+   * Top-level LINE_ITEM_GROUP field id to read from each list row.
+   * The metric sums `fieldId` across these line-item rows.
+   */
+  groupId: string;
+  /**
+   * Line-item row field id to sum.
+   */
+  fieldId: string;
+  /**
+   * Optional row filter (evaluated against the list row before summing line items).
+   * Uses the same condition shape as list-view rule columns.
+   */
+  when?: ListViewRuleWhen;
+  /**
+   * Optional formatting override for displayed precision.
+   * Default: 0.
+   */
+  maximumFractionDigits?: number;
+}
+
 export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
@@ -3597,6 +3635,10 @@ export interface ListViewConfig {
    * Optional legend shown below the list view table to explain icons/visual indicators.
    */
   legend?: ListViewLegendItem[];
+  /**
+   * Optional summary metric shown at the right side of the list heading.
+   */
+  metric?: ListViewMetricConfig;
   /**
    * Optional legend layout columns for the list view bottom legend.
    *

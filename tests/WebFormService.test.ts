@@ -198,6 +198,35 @@ describe('WebFormService', () => {
     expect(optionsArg.name).toBe('Community Kitchen');
   });
 
+  test('triggerFollowupActions batches actions and returns per-action results', () => {
+    const followups = (service as any).followups || (service as any);
+    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'http://pdf',
+      fileId: 'file-1',
+      blob: null
+    });
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-BATCH-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    const result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-BATCH-1', ['SEND_EMAIL', 'CLOSE_RECORD']);
+    expect(result.success).toBe(true);
+    expect(Array.isArray(result.results)).toBe(true);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].action).toBe('SEND_EMAIL');
+    expect(result.results[0].result?.success).toBe(true);
+    expect(result.results[1].action).toBe('CLOSE_RECORD');
+    expect(result.results[1].result?.success).toBe(true);
+  });
+
   test('emailTemplateId supports conditional cases based on record field values', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard');
     if (!dashboardSheet) throw new Error('Dashboard not created');

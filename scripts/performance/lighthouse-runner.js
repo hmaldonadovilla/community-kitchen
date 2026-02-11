@@ -28,6 +28,47 @@ const lighthouse = lighthouseModule.default || lighthouseModule;
 
 const chromeLauncher = require('chrome-launcher');
 
+const PRESET_MOBILE_4G = {
+  id: 'mobile-4g',
+  description: 'Mid-tier Android + average 4G (simulated)',
+  settings: {
+    emulatedFormFactor: 'mobile',
+    formFactor: 'mobile',
+    throttlingMethod: 'simulate',
+    throttling: {
+      rttMs: 150,
+      throughputKbps: 1600,
+      requestLatencyMs: 150,
+      downloadThroughputKbps: 1600,
+      uploadThroughputKbps: 750,
+      cpuSlowdownMultiplier: 4
+    }
+  }
+};
+
+const PRESET_MOBILE_WIFI = {
+  id: 'mobile-wifi',
+  description: 'Mid-tier Android + typical Wi-Fi (simulated)',
+  settings: {
+    emulatedFormFactor: 'mobile',
+    formFactor: 'mobile',
+    throttlingMethod: 'simulate',
+    throttling: {
+      rttMs: 40,
+      throughputKbps: 10000,
+      requestLatencyMs: 40,
+      downloadThroughputKbps: 10000,
+      uploadThroughputKbps: 5000,
+      cpuSlowdownMultiplier: 3
+    }
+  }
+};
+
+const THROTTLING_PRESETS = {
+  [PRESET_MOBILE_4G.id]: PRESET_MOBILE_4G,
+  [PRESET_MOBILE_WIFI.id]: PRESET_MOBILE_WIFI
+};
+
 /**
  * Very small CLI argument parser: --key=value → { key: value }
  */
@@ -52,6 +93,21 @@ function parseArgs(argv) {
     args[key] = value;
   }
   return args;
+}
+
+function resolvePreset(presetRaw) {
+  const key = (presetRaw || PRESET_MOBILE_4G.id).toString().trim().toLowerCase();
+  return THROTTLING_PRESETS[key] || null;
+}
+
+function buildLighthouseConfigFromPreset(preset) {
+  return {
+    extends: 'lighthouse:default',
+    settings: {
+      onlyCategories: ['performance'],
+      ...(preset?.settings || {})
+    }
+  };
 }
 
 async function runLighthouseOnce(url, options = {}, config = null) {
@@ -87,6 +143,8 @@ function extractMetrics(lhr) {
   const fcp = audits['first-contentful-paint']?.numericValue ?? null;
   const lcp = audits['largest-contentful-paint']?.numericValue ?? null;
   const tti = audits['interactive']?.numericValue ?? null;
+  const speedIndex = audits['speed-index']?.numericValue ?? null;
+  const totalBlockingTime = audits['total-blocking-time']?.numericValue ?? null;
 
   // TTFB approximations: Lighthouse exposes a few related audits.
   const serverResponseTime = audits['server-response-time']?.numericValue ?? null;
@@ -101,11 +159,13 @@ function extractMetrics(lhr) {
     fcp,
     lcp,
     tti,
+    speedIndex,
+    totalBlockingTime
   };
 }
 
 function summarizeMetrics(runs) {
-  const fields = ['ttfb', 'serverResponseTime', 'fcp', 'lcp', 'tti', 'performanceScore'];
+  const fields = ['ttfb', 'serverResponseTime', 'fcp', 'lcp', 'tti', 'speedIndex', 'totalBlockingTime', 'performanceScore'];
   const summary = {};
 
   for (const field of fields) {
@@ -138,7 +198,9 @@ async function main() {
 
   let url = args.url || args.u;
   if (!url) {
-    console.error('Usage: node scripts/performance/lighthouse-runner.js --url="<target-url>" [--runs=3] [--output=./perf-results.json]');
+    console.error(
+      'Usage: node scripts/performance/lighthouse-runner.js --url="<target-url>" [--runs=3] [--preset=mobile-4g|mobile-wifi] [--output=./perf-results.json]'
+    );
     process.exit(1);
   }
 
@@ -165,26 +227,46 @@ async function main() {
     process.exit(1);
   }
   const outputPath = args.output || null;
+  const presetRaw = args.preset || args.profile || PRESET_MOBILE_4G.id;
+  const preset = resolvePreset(presetRaw);
+  if (!preset) {
+    console.error(`Invalid --preset value "${presetRaw}". Allowed: ${Object.keys(THROTTLING_PRESETS).join(', ')}`);
+    process.exit(1);
+  }
+  const lighthouseConfig = buildLighthouseConfigFromPreset(preset);
 
   console.log(`Running Lighthouse performance audit for: ${url}`);
   console.log(`Number of runs: ${runs}`);
+  console.log(`Throttling preset: ${preset.id} (${preset.description})`);
+  console.log(`Throttling settings: ${JSON.stringify(preset.settings)}`);
 
   const allRuns = [];
 
   for (let i = 0; i < runs; i++) {
     console.log(`\n--- Run ${i + 1}/${runs} ---`);
-    const { metrics } = await runLighthouseOnce(url);
+    const { metrics } = await runLighthouseOnce(url, {}, lighthouseConfig);
     allRuns.push({ run: i + 1, metrics });
 
     console.log(`TTFB: ${metrics.ttfb} ms`);
     console.log(`FCP:  ${metrics.fcp} ms`);
     console.log(`LCP:  ${metrics.lcp} ms`);
     console.log(`TTI:  ${metrics.tti} ms`);
+    console.log(`Speed Index: ${metrics.speedIndex} ms`);
+    console.log(`TBT: ${metrics.totalBlockingTime} ms`);
     console.log(`Perf score: ${metrics.performanceScore}`);
   }
 
   const summary = summarizeMetrics(allRuns);
-  const result = { url, runs: allRuns, summary };
+  const result = {
+    url,
+    preset: {
+      id: preset.id,
+      description: preset.description,
+      settings: preset.settings
+    },
+    runs: allRuns,
+    summary
+  };
 
   if (outputPath) {
     const abs = path.resolve(outputPath);

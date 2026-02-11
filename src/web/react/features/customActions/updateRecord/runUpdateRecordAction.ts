@@ -9,6 +9,61 @@ type DraftSaveState = { phase: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' |
 type StatusTone = 'info' | 'success' | 'error' | null;
 type SubmissionMeta = { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; status?: string | null };
 
+const isStagingPerfEnabled = (): boolean => {
+  try {
+    const raw = ((globalThis as any)?.__CK_ENV_TAG__ || '').toString().trim().toLowerCase();
+    return raw.includes('staging');
+  } catch (_) {
+    return false;
+  }
+};
+
+const perfMarkIfEnabled = (enabled: boolean, name: string): void => {
+  if (!enabled) return;
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      performance.mark(name);
+    }
+  } catch (_) {
+    // ignore
+  }
+};
+
+const perfMeasureIfEnabled = (
+  enabled: boolean,
+  name: string,
+  startMark: string,
+  endMark: string,
+  payload?: Record<string, unknown>
+): void => {
+  if (!enabled) return;
+  let durationMs: number | null = null;
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
+      performance.measure(name, startMark, endMark);
+      const entries = performance.getEntriesByName(name, 'measure');
+      const duration = entries.length ? entries[entries.length - 1].duration : null;
+      durationMs = typeof duration === 'number' ? Math.round(duration) : null;
+      if (typeof performance.clearMarks === 'function') {
+        performance.clearMarks(startMark);
+        performance.clearMarks(endMark);
+      }
+      if (typeof performance.clearMeasures === 'function') {
+        performance.clearMeasures(name);
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+  if (typeof console !== 'undefined' && typeof console.info === 'function') {
+    try {
+      console.info('[ReactForm][perf]', name, { durationMs, ...(payload || {}) });
+    } catch (_) {
+      // ignore
+    }
+  }
+};
+
 export type UpdateRecordActionSet = {
   status?: string | null;
   values?: Record<string, any> | null;
@@ -85,6 +140,9 @@ export type UpdateRecordActionDeps = {
  * Owner: Feature `updateRecord` (WebForm UI)
  */
 export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: UpdateRecordActionRequest): Promise<void> {
+  const perfEnabled = isStagingPerfEnabled();
+  const pipelineStartMark = `ck.updateRecord.action.start.${Date.now()}`;
+  perfMarkIfEnabled(perfEnabled, pipelineStartMark);
   const language = deps.refs.languageRef.current;
   const busyTitle = (req.busyTitle || '').toString() || deps.tSystem('common.loading', language, 'Loading…');
   const busySeq = deps.busy.lock({
@@ -213,7 +271,15 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
         });
       }
 
+      const submitStartMark = `ck.updateRecord.submit.start.${Date.now()}`;
+      const submitEndMark = `ck.updateRecord.submit.end.${Date.now()}`;
+      perfMarkIfEnabled(perfEnabled, submitStartMark);
       const res = await deps.submit(draft);
+      perfMarkIfEnabled(perfEnabled, submitEndMark);
+      perfMeasureIfEnabled(perfEnabled, 'ck.updateRecord.submit', submitStartMark, submitEndMark, {
+        buttonId: req.buttonId,
+        qIdx: req.qIdx ?? null
+      });
       if (!res?.success) {
         const msg = (res?.message || 'Update failed.').toString();
         deps.setDraftSave({ phase: 'error', message: msg });
@@ -327,5 +393,11 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
     }
   } finally {
     deps.busy.unlock(busySeq, { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
+    const pipelineEndMark = `ck.updateRecord.action.end.${Date.now()}`;
+    perfMarkIfEnabled(perfEnabled, pipelineEndMark);
+    perfMeasureIfEnabled(perfEnabled, 'ck.updateRecord.action', pipelineStartMark, pipelineEndMark, {
+      buttonId: req.buttonId,
+      qIdx: req.qIdx ?? null
+    });
   }
 }

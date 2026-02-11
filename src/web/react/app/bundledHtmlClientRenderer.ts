@@ -841,26 +841,36 @@ export const renderBundledHtmlTemplateClient = async (args: {
         pdfUrl: payload.pdfUrl ? payload.pdfUrl.toString() : undefined
       };
 
-      const projectionFieldIds = extractProjectionFieldIds({ html: raw, questions: definition.questions || [] });
+      const projectionFieldIds = Array.from(extractProjectionFieldIds({ html: raw, questions: definition.questions || [] }));
       const dataSourceDetailsByFieldId: Record<string, Record<string, string> | null> = {};
-      for (const fieldId of projectionFieldIds) {
-        const q = (definition.questions || []).find(qq => qq && qq.id === fieldId) as any;
-        const ds = q?.dataSource as DataSourceConfig | undefined;
-        const selectedValue = (recordValues as any)?.[fieldId];
-        if (!ds || typeof selectedValue !== 'string' || !selectedValue.trim()) {
-          dataSourceDetailsByFieldId[fieldId] = null;
-          continue;
-        }
-	        const details = await lookupDataSourceDetailsClient({
-	          dataSource: ds,
-	          selectedValue: selectedValue.toString(),
-	          language,
-	          limit: (ds as any)?.limit,
-	          fetchDataSource: args.fetchDataSource,
-	          onDiagnostic: args.onDiagnostic
-	        });
-	        dataSourceDetailsByFieldId[fieldId] = details;
-	      }
+      if (projectionFieldIds.length) {
+        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.projection.batch.start', {
+          count: projectionFieldIds.length
+        });
+        await Promise.all(
+          projectionFieldIds.map(async fieldId => {
+            const q = (definition.questions || []).find(qq => qq && qq.id === fieldId) as any;
+            const ds = q?.dataSource as DataSourceConfig | undefined;
+            const selectedValue = (recordValues as any)?.[fieldId];
+            if (!ds || typeof selectedValue !== 'string' || !selectedValue.trim()) {
+              dataSourceDetailsByFieldId[fieldId] = null;
+              return;
+            }
+            const details = await lookupDataSourceDetailsClient({
+              dataSource: ds,
+              selectedValue: selectedValue.toString(),
+              language,
+              limit: (ds as any)?.limit,
+              fetchDataSource: args.fetchDataSource,
+              onDiagnostic: args.onDiagnostic
+            });
+            dataSourceDetailsByFieldId[fieldId] = details;
+          })
+        );
+        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.projection.batch.done', {
+          count: projectionFieldIds.length
+        });
+      }
 
       const lineItemRows = collectLineItemRows(record as any, definition.questions as any);
       const lineItemConfigMap = buildLineItemConfigMap(definition.questions || []);

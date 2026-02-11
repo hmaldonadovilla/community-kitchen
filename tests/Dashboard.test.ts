@@ -198,6 +198,64 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewLegendColumnWidths).toEqual([25, 75]);
   });
 
+  test('getForms parses list view metric config from dashboard config (listView.metric)', () => {
+    const configJson = JSON.stringify({
+      listView: {
+        metric: {
+          label: { EN: 'portions delivered' },
+          groupId: 'MP_MEALS_REQUEST',
+          fieldId: 'FINAL_QTY',
+          when: { fieldId: 'status', equals: 'Closed' },
+          maximumFractionDigits: 0
+        }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).listViewMetric).toEqual({
+      label: { en: 'portions delivered' },
+      groupId: 'MP_MEALS_REQUEST',
+      fieldId: 'FINAL_QTY',
+      when: { fieldId: 'status', equals: 'Closed' },
+      maximumFractionDigits: 0
+    });
+  });
+
+  test('getForms parses legacy listViewMetric alias from dashboard config', () => {
+    const configJson = JSON.stringify({
+      listViewMetric: {
+        text: 'portions delivered',
+        lineItemGroupId: 'MP_MEALS_REQUEST',
+        lineItemFieldId: 'FINAL_QTY',
+        where: { field: 'status', equals: 'Closed' },
+        decimals: 1
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).listViewMetric).toEqual({
+      label: 'portions delivered',
+      groupId: 'MP_MEALS_REQUEST',
+      fieldId: 'FINAL_QTY',
+      when: { fieldId: 'status', equals: 'Closed' },
+      maximumFractionDigits: 1
+    });
+  });
+
   test('getForms parses list view inline rule actions from dashboard config (listView.columns)', () => {
     const configJson = JSON.stringify({
       listView: {

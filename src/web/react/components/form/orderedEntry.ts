@@ -122,8 +122,7 @@ const findFirstErrorInGroup = (args: {
 }): string => {
   const { errors, lineItems, groupId, groupCfg } = args;
   if (!groupId) return '';
-  if (errors[groupId]) return groupId;
-  if (!groupCfg) return '';
+  if (!groupCfg) return errors[groupId] ? groupId : '';
   const rootRows = (lineItems[groupId] || []) as any[];
   const fields = Array.isArray(groupCfg?.fields) ? groupCfg.fields : [];
   const subGroups = Array.isArray(groupCfg?.subGroups) ? groupCfg.subGroups : [];
@@ -157,6 +156,7 @@ const findFirstErrorInGroup = (args: {
 
   const hit = scanGroup({ groupKey: groupId, groupCfg: { fields, subGroups }, rows: rootRows });
   if (hit) return hit;
+  if (errors[groupId]) return groupId;
 
   // Fallback (only when the group has no configured fields/subgroups): return a deterministic matching key.
   // Important: do not fall back when the group is step-scoped/filtered; hidden fields must not block ordered entry.

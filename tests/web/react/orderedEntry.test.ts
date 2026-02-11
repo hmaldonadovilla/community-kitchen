@@ -256,6 +256,49 @@ describe('ordered entry blocking', () => {
     });
   });
 
+  test('prefers row-level field errors over group-level errors for ordered-entry blocking', () => {
+    const group: any = {
+      id: 'MP_MEALS_REQUEST',
+      type: 'LINE_ITEM_GROUP',
+      required: false,
+      lineItemConfig: {
+        fields: [
+          { id: 'MEAL_TYPE', type: 'TEXT', required: true, options: [], optionsFr: [], optionsNl: [] },
+          { id: 'ORD_QTY', type: 'NUMBER', required: true, options: [], optionsFr: [], optionsNl: [] }
+        ]
+      }
+    };
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [group, { id: 'NOTES', type: 'PARAGRAPH', required: false, options: [], optionsFr: [], optionsNl: [] }]
+    };
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'row1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: -1 } }]
+    };
+    const errors = {
+      MP_MEALS_REQUEST: 'Enter an integer ≥ 0 in all fields to record ordered portions.',
+      MP_MEALS_REQUEST__ORD_QTY__row1: 'Ordered portions must be 0 or more'
+    };
+    const block = findOrderedEntryBlock({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems,
+      errors,
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions,
+      target: { scope: 'top', questionId: 'NOTES' }
+    });
+    expect(block).toEqual({
+      missingFieldPath: 'MP_MEALS_REQUEST__ORD_QTY__row1',
+      scope: 'top',
+      reason: 'invalid'
+    });
+  });
+
   test('blocks line item edits when an earlier row field has a validation error', () => {
     const group: any = {
       id: 'ITEMS',

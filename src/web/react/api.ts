@@ -48,6 +48,7 @@ export interface ListItem {
 
 export interface ListResponse extends PaginatedResult<ListItem> {
   etag?: string;
+  notModified?: boolean;
 }
 
 export interface BatchResponse {
@@ -55,7 +56,12 @@ export interface BatchResponse {
   records: Record<string, WebFormSubmission>;
 }
 
-export type ListSort = { fieldId?: string; direction?: 'asc' | 'desc' };
+export type ListSort = {
+  fieldId?: string;
+  direction?: 'asc' | 'desc';
+  __ifNoneMatch?: boolean;
+  __clientEtag?: string;
+};
 
 export interface DataSourceRequest {
   source: DataSourceConfig;
@@ -103,6 +109,11 @@ export interface RenderHtmlTemplateResult {
   html?: string;
   fileName?: string;
   message?: string;
+}
+
+export interface FollowupBatchResponse {
+  success: boolean;
+  results: Array<{ action: string; result: FollowupActionResult }>;
 }
 
 // ----------------------------
@@ -278,6 +289,48 @@ type Runner = typeof google.script.run;
 
 const APPS_SCRIPT_CONNECTION_ERROR_CODE = 'CK_APPS_SCRIPT_CONNECTION';
 
+const isStagingPerfEnabled = (): boolean => {
+  try {
+    const raw = ((globalThis as any)?.__CK_ENV_TAG__ || '').toString().trim().toLowerCase();
+    return raw.includes('staging');
+  } catch (_) {
+    return false;
+  }
+};
+
+const perfMarkIfEnabled = (enabled: boolean, name: string): void => {
+  if (!enabled) return;
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+      performance.mark(name);
+    }
+  } catch (_) {
+    // ignore mark failures
+  }
+};
+
+const perfMeasureIfEnabled = (enabled: boolean, name: string, startMark: string, endMark: string): number | null => {
+  if (!enabled) return null;
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
+      performance.measure(name, startMark, endMark);
+      const entries = performance.getEntriesByName(name, 'measure');
+      const duration = entries.length ? entries[entries.length - 1].duration : null;
+      if (typeof performance.clearMarks === 'function') {
+        performance.clearMarks(startMark);
+        performance.clearMarks(endMark);
+      }
+      if (typeof performance.clearMeasures === 'function') {
+        performance.clearMeasures(name);
+      }
+      return typeof duration === 'number' ? duration : null;
+    }
+  } catch (_) {
+    // ignore measure failures
+  }
+  return null;
+};
+
 const resolveErrorLanguage = (): LangCode => {
   const navLang =
     (typeof navigator !== 'undefined' && (navigator.language || (navigator as any).userLanguage)) || undefined;
@@ -335,12 +388,41 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
       reject(new Error('google.script.run is unavailable.'));
       return;
     }
+    const perfEnabled = isStagingPerfEnabled();
+    const perfId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const startMark = `ck.rpc.${fnName}.start.${perfId}`;
+    const endMark = `ck.rpc.${fnName}.end.${perfId}`;
+    perfMarkIfEnabled(perfEnabled, startMark);
+    const startedAt = Date.now();
+    const logPerf = (outcome: 'success' | 'failure', detail?: Record<string, unknown>) => {
+      const durationMs =
+        perfMeasureIfEnabled(perfEnabled, `ck.rpc.${fnName}.duration.${perfId}`, startMark, endMark) ??
+        (Date.now() - startedAt);
+      if (!perfEnabled || typeof console === 'undefined' || typeof console.info !== 'function') return;
+      try {
+        console.info('[ReactForm][perf]', 'rpc', {
+          fnName,
+          outcome,
+          durationMs: Math.round(durationMs),
+          argCount: args.length,
+          ...detail
+        });
+      } catch (_) {
+        // ignore perf logging failures
+      }
+    };
     try {
       runner
-        .withSuccessHandler((res: T) => resolve(res))
+        .withSuccessHandler((res: T) => {
+          perfMarkIfEnabled(perfEnabled, endMark);
+          logPerf('success');
+          resolve(res);
+        })
         .withFailureHandler((err: any) => {
+          perfMarkIfEnabled(perfEnabled, endMark);
           const rawMessage = (err?.message || err?.toString?.() || '').toString();
           if (isAppsScriptConnectionFailureMessage(rawMessage)) {
+            logPerf('failure', { kind: 'connectionFailure' });
             const language = resolveErrorLanguage();
             const userMessage = tSystem(
               'app.refreshToRetry',
@@ -365,9 +447,12 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
             reject(error);
             return;
           }
+          logPerf('failure');
           reject(new Error(toAppsScriptErrorMessage(err)));
         })[fnName](...args);
     } catch (err) {
+      perfMarkIfEnabled(perfEnabled, endMark);
+      logPerf('failure', { kind: 'exception' });
       reject(new Error(toAppsScriptErrorMessage(err)));
     }
   });
@@ -413,6 +498,12 @@ export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSub
 export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
   runAppsScript<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
 
+export const fetchRecordsByRowNumbers = (
+  formKey: string,
+  rowNumbers: number[]
+): Promise<Record<string, WebFormSubmission>> =>
+  runAppsScript<Record<string, WebFormSubmission>>('fetchSubmissionsByRowNumbers', formKey, rowNumbers);
+
 export const getRecordVersionApi = (formKey: string, recordId: string, rowNumberHint?: number | null): Promise<RecordVersionResult> =>
   runAppsScript<RecordVersionResult>('getRecordVersion', formKey, recordId, rowNumberHint ?? null);
 
@@ -424,6 +515,13 @@ export const triggerFollowup = (
   recordId: string,
   action: string
 ): Promise<FollowupActionResult> => runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+
+export const triggerFollowupBatch = (
+  formKey: string,
+  recordId: string,
+  actions: string[]
+): Promise<FollowupBatchResponse> =>
+  runAppsScript<FollowupBatchResponse>('triggerFollowupActions', formKey, recordId, actions);
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
   runAppsScript<UploadFilesResult>('uploadFiles', files, uploadConfig);
@@ -502,13 +600,30 @@ export interface BootstrapContext {
   definition: WebFormDefinition;
   formKey: string;
   record?: WebFormSubmission;
+  listResponse?: ListResponse;
+  records?: Record<string, WebFormSubmission>;
+  homeRev?: number;
   configSource?: string;
   configEnv?: string;
   envTag?: string;
 }
 
+export interface HomeBootstrapResponse {
+  notModified: boolean;
+  rev: number;
+  listResponse?: ListResponse;
+  records?: Record<string, WebFormSubmission>;
+  cache?: 'hit' | 'miss';
+}
+
 export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
   runAppsScript<BootstrapContext>('fetchBootstrapContext', formKey ?? null);
+
+export const fetchHomeBootstrapApi = (
+  formKey: string,
+  clientRev?: number | null
+): Promise<HomeBootstrapResponse> =>
+  runAppsScript<HomeBootstrapResponse>('fetchHomeBootstrap', formKey, clientRev ?? null);
 
 export const fetchFormConfigApi = (formKey?: string | null): Promise<FormConfigExport> =>
   runAppsScript<FormConfigExport>('fetchFormConfig', formKey ?? null);
