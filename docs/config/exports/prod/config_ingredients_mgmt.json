@@ -509,6 +509,7 @@
       "status": "Active",
       "ui": {
         "control": "select",
+        "multiSelectCheckboxSizePx": 40,
         "helperText": {
           "en": "Select one or more suppliers.",
           "fr": "Sélectionnez un ou plusieurs fournisseurs.",
@@ -580,6 +581,7 @@
       "status": "Active",
       "ui": {
         "control": "select",
+        "multiSelectCheckboxSizePx": 40,
         "helperText": {
           "en": "Select None or one or more allergens.",
           "fr": "Sélectionnez Aucun ou un ou plusieurs allergènes.",
@@ -655,6 +657,7 @@
       "status": "Active",
       "ui": {
         "control": "select",
+        "multiSelectCheckboxSizePx": 40,
         "helperText": {
           "en": "Select one or more allowed units.",
           "fr": "Sélectionnez une ou plusieurs unités autorisées.",
@@ -694,6 +697,7 @@
       "status": "Active",
       "ui": {
         "control": "select",
+        "multiSelectCheckboxSizePx": 40,
         "helperText": {
           "en": "Select one or more dietary applicability values.",
           "fr": "Sélectionnez une ou plusieurs valeurs d’applicabilité diététique.",

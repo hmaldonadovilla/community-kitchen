@@ -445,3 +445,16 @@ In the summary view this mention need to be displayed as `To cook` until the `fo
 - Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_meal_production.json`
 - Implement changes on the staging environment and test via playwright
 - Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.
+
+--
+
+## User display metrics
+
+Create a new feature were we can display a simple information metric on the home page (listView), aligned to the right of the list view title. The metric will contain configurable text and a calculated value. Our current use case is to display to total of delivered portions for all `Closed` records. This specifically means to sum the `FINAL_QTY` field for all `MP_MEALS_REQUEST` rows in records with status `Closed`. Please refer to the attached screenshot for the expected layout. I expect a configurable feature.
+
+### Implementation guidelines
+
+- Implement the adjustments to the user display metrics as described above
+- Perform configuration changes in the relevant file in the `docs/config/exports/staging/config_meal_production.json`
+- Implement changes on the staging environment and test via playwright
+- Follow `.cursor/rules/dev_rules.mdc` and `.cursor/rules/style_guide.mdc` rules strictly.

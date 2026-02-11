@@ -211,13 +211,31 @@
         "nl": "Zoeken op klant:"
       }
     },
+    "listViewMetric": {
+      "label": {
+        "en": "portions delivered",
+        "fr": "portions livrées",
+        "nl": "porties geleverd"
+      },
+      "groupId": "MP_MEALS_REQUEST",
+      "fieldId": "FINAL_QTY",
+      "when": {
+        "fieldId": "status",
+        "equals": "Closed"
+      },
+      "maximumFractionDigits": 0
+    },
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
       "status": "In progress"
     },
     "dedupDeleteOnKeyChange": true,
-    "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
+    "summaryHtmlTemplateId": {
+      "EN": "bundle:meal_production.summary.html",
+      "FR": "bundle:meal_production.summary.html",
+      "NL": "bundle:meal_production.summary.html"
+    },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
       "MP_PREP_DATE"
@@ -1408,9 +1426,9 @@
                                       "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                     },
                                     "searchHelperText": {
-                                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                      "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                      "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                     },
                                     "placeholder": {
                                       "en": "Search leftover ingredients",
@@ -1484,9 +1502,9 @@
                                         "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                       },
                                       "searchHelperText": {
-                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                        "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                       },
                                       "placeholder": {
                                         "en": "Search leftover ingredients",
@@ -2762,7 +2780,7 @@
             "optionsNl": [],
             "validationRules": [
               {
-                "phase": "submit",
+                "phase": "both",
                 "then": {
                   "fieldId": "ORD_QTY",
                   "integer": true
@@ -2791,7 +2809,7 @@
                   "fr": "Les portions demandées doivent être égales ou supérieures à 0",
                   "nl": "Gevraagde porties moeten 0 of meer zijn"
                 },
-                "phase": "submit"
+                "phase": "both"
               }
             ],
             "changeDialog": {
@@ -3686,9 +3704,9 @@
                     "nl": ""
                   },
                   "searchHelperText": {
-                    "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                    "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                    "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                    "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                    "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                    "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                   },
                   "placeholder": {
                     "en": "Search ingredients",
@@ -5133,7 +5151,7 @@
               "optionsNl": [],
               "validationRules": [
                 {
-                  "phase": "submit",
+                  "phase": "both",
                   "then": {
                     "fieldId": "ORD_QTY",
                     "integer": true
@@ -5162,7 +5180,7 @@
                     "fr": "Les portions demandées doivent être égales ou supérieures à 0",
                     "nl": "Gevraagde porties moeten 0 of meer zijn"
                   },
-                  "phase": "submit"
+                  "phase": "both"
                 }
               ],
               "changeDialog": {
@@ -6062,9 +6080,9 @@
                       "nl": ""
                     },
                     "searchHelperText": {
-                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                      "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                      "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                      "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                     },
                     "placeholder": {
                       "en": "Search ingredients",
@@ -6838,6 +6856,20 @@
           "nl": "Zoeken op klant:"
         }
       },
+      "metric": {
+        "label": {
+          "en": "portions delivered",
+          "fr": "portions livrées",
+          "nl": "porties geleverd"
+        },
+        "groupId": "MP_MEALS_REQUEST",
+        "fieldId": "FINAL_QTY",
+        "when": {
+          "fieldId": "status",
+          "equals": "Closed"
+        },
+        "maximumFractionDigits": 0
+      },
       "rowClickEnabled": false
     },
     "dedupRules": [
@@ -6908,7 +6940,11 @@
       "status": "In progress"
     },
     "dedupDeleteOnKeyChange": true,
-    "summaryHtmlTemplateId": "bundle:meal_production.summary.html",
+    "summaryHtmlTemplateId": {
+      "EN": "bundle:meal_production.summary.html",
+      "FR": "bundle:meal_production.summary.html",
+      "NL": "bundle:meal_production.summary.html"
+    },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
       "MP_PREP_DATE"
@@ -8079,9 +8115,9 @@
                                       "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                     },
                                     "searchHelperText": {
-                                      "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                      "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                      "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                      "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                      "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                      "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                     },
                                     "placeholder": {
                                       "en": "Search leftover ingredients",
@@ -8155,9 +8191,9 @@
                                         "nl": "Selecteer het/de ingrediënt(en) die de restauro voorstellen die aan de maaltijd van vandaag wordt toegevoegd."
                                       },
                                       "searchHelperText": {
-                                        "en": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "fr": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-                                        "nl": "Use exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+                                        "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "fr": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom).",
+                                        "nl": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
                                       },
                                       "placeholder": {
                                         "en": "Search leftover ingredients",
