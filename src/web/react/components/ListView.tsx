@@ -11,12 +11,17 @@ import {
 } from '../../types';
 import { toOptionSet } from '../../core';
 import { tSystem } from '../../systemStrings';
-import { fetchBatch, fetchList, ListItem, ListResponse, resolveUserFacingErrorMessage } from '../api';
+import { fetchBatch, fetchList, fetchSortedBatch, ListItem, ListResponse, ListSort, resolveUserFacingErrorMessage } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
 import { collectListViewMetricDependencies, computeListViewMetricValue } from '../app/listViewMetric';
-import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../app/listViewSearch';
+import {
+  normalizeToIsoDateLocal,
+  resolveOldestPrefetchedIsoDate,
+  shouldClearAppliedQueryOnInputClear,
+  shouldUseServerDateSearch
+} from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { resolveListViewUiState } from '../app/listViewUiState';
 import { ListViewIcon } from './ListViewIcon';
@@ -79,6 +84,17 @@ const ListView: React.FC<ListViewProps> = ({
   const [records, setRecords] = useState<Record<string, WebFormSubmission>>(cachedRecords || {});
   const [allItems, setAllItems] = useState<ListItem[]>(cachedResponse?.items || []);
   const [totalCount, setTotalCount] = useState<number>(cachedResponse?.totalCount || 0);
+  const [serverDateSearch, setServerDateSearch] = useState<{
+    query: string;
+    response: ListResponse | null;
+    loading: boolean;
+    error: string | null;
+  }>({
+    query: '',
+    response: null,
+    loading: false,
+    error: null
+  });
   const [pageIndex, setPageIndex] = useState(0);
   const defaultSortField = definition.listView?.defaultSort?.fieldId || 'updatedAt';
   const defaultSortDirection = (definition.listView?.defaultSort?.direction || 'desc') as 'asc' | 'desc';
@@ -236,6 +252,7 @@ const ListView: React.FC<ListViewProps> = ({
   }, [columnsAll, dateSearchEnabled, dateSearchFieldId, metricDependencies]);
 
   const activeFetchRef = useRef(0);
+  const serverDateSearchSeqRef = useRef(0);
 
   const encodePageTokenClient = (offset: number): string => {
     const n = Math.max(0, Math.floor(Number(offset) || 0));
@@ -656,6 +673,12 @@ const ListView: React.FC<ListViewProps> = ({
     setAdvancedOpen(false);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
+    setServerDateSearch({
+      query: '',
+      response: null,
+      loading: false,
+      error: null
+    });
     setSortField(defaultSortField);
     setSortDirection(defaultSortDirection);
   }, [formKey, refreshToken, defaultSortField, defaultSortDirection]);
@@ -793,8 +816,238 @@ const ListView: React.FC<ListViewProps> = ({
     return `${a}`.localeCompare(`${b}`);
   };
 
+  const dateSearchQueryNormalized = useMemo(() => {
+    if (!dateSearchEnabled) return null;
+    return normalizeToIsoDateLocal(searchQueryValue);
+  }, [dateSearchEnabled, searchQueryValue]);
+
+  const guaranteedPrefetchedItemCount = useMemo(() => {
+    const raw = Number((cachedResponse as any)?.contiguousItemCount);
+    if (!Number.isFinite(raw) || raw <= 0) return (allItems || []).length;
+    return Math.max(0, Math.min((allItems || []).length, Math.floor(raw)));
+  }, [allItems, cachedResponse]);
+
+  const guaranteedPrefetchedItems = useMemo(
+    () => (allItems || []).slice(0, guaranteedPrefetchedItemCount) as Array<Record<string, any>>,
+    [allItems, guaranteedPrefetchedItemCount]
+  );
+
+  const oldestPrefetchedDate = useMemo(
+    () => resolveOldestPrefetchedIsoDate(guaranteedPrefetchedItems, dateSearchFieldId),
+    [dateSearchFieldId, guaranteedPrefetchedItems]
+  );
+
+  const completePrefetchedData = useMemo(() => {
+    if (typeof (cachedResponse as any)?.completeData === 'boolean') {
+      return Boolean((cachedResponse as any)?.completeData);
+    }
+    return totalCount > 0 && guaranteedPrefetchedItemCount >= totalCount && totalCount < 200;
+  }, [cachedResponse, guaranteedPrefetchedItemCount, totalCount]);
+
+  const dateSearchUsesServer = useMemo(() => {
+    if (!dateSearchEnabled || !dateSearchQueryNormalized) return false;
+    if (uiNotice || uiError) return true;
+    return shouldUseServerDateSearch({
+      queryDate: dateSearchQueryNormalized,
+      fieldId: dateSearchFieldId,
+      items: guaranteedPrefetchedItems,
+      loadedCount: guaranteedPrefetchedItemCount,
+      totalCount,
+      completeData: completePrefetchedData
+    });
+  }, [
+    completePrefetchedData,
+    dateSearchEnabled,
+    dateSearchFieldId,
+    dateSearchQueryNormalized,
+    guaranteedPrefetchedItemCount,
+    guaranteedPrefetchedItems,
+    totalCount,
+    uiError,
+    uiNotice
+  ]);
+
+  useEffect(() => {
+    if (!dateSearchEnabled || !dateSearchQueryNormalized || !dateSearchUsesServer) {
+      setServerDateSearch(prev =>
+        prev.query || prev.response || prev.loading || prev.error
+          ? {
+              query: '',
+              response: null,
+              loading: false,
+              error: null
+            }
+          : prev
+      );
+      return;
+    }
+
+    const seq = ++serverDateSearchSeqRef.current;
+    let cancelled = false;
+    const fetchPageSize = 50;
+
+    const mergeUniqueItems = (existing: ListItem[], incoming: ListItem[]): ListItem[] => {
+      const out = [...existing];
+      const seen = new Set<string>();
+      existing.forEach(item => {
+        const id = (item?.id || '').toString();
+        if (id) seen.add(id);
+      });
+      incoming.forEach(item => {
+        const id = (item?.id || '').toString();
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        out.push(item);
+      });
+      return out;
+    };
+
+    setServerDateSearch({
+      query: dateSearchQueryNormalized,
+      response: null,
+      loading: true,
+      error: null
+    });
+    onDiagnostic?.('list.search.date.server.start', {
+      queryDate: dateSearchQueryNormalized,
+      oldestPrefetchedDate,
+      loadedCount: (allItems || []).length,
+      guaranteedLoadedCount: guaranteedPrefetchedItemCount,
+      totalCount
+    });
+
+    void (async () => {
+      try {
+        const maxAttempts = 5;
+        const fetchFilteredBatchWithRetries = async (
+          pageToken?: string
+        ): Promise<{ batch: any; list: ListResponse }> => {
+          let lastBatch: any = null;
+          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            lastBatch = await fetchSortedBatch(
+              formKey,
+              projection.length ? projection : undefined,
+              fetchPageSize,
+              pageToken,
+              true,
+              undefined,
+              {
+                fieldId: defaultSortField,
+                direction: defaultSortDirection,
+                __dateFieldId: dateSearchFieldId,
+                __dateEquals: dateSearchQueryNormalized
+              } as ListSort
+            );
+            if (cancelled || seq !== serverDateSearchSeqRef.current) {
+              return {
+                batch: { records: {} },
+                list: { items: [], totalCount: 0 }
+              };
+            }
+            const list = (lastBatch as any)?.list as ListResponse | undefined;
+            if (list && Array.isArray((list as any).items)) {
+              return { batch: lastBatch, list };
+            }
+            onDiagnostic?.('list.search.date.server.retry', {
+              queryDate: dateSearchQueryNormalized,
+              attempt: attempt + 1,
+              maxAttempts,
+              token: pageToken || null,
+              resType: lastBatch === null ? 'null' : typeof lastBatch
+            });
+            if (attempt < maxAttempts - 1) {
+              await new Promise<void>(resolve => setTimeout(resolve, Math.min(2000, 250 * Math.pow(2, attempt))));
+            }
+          }
+          throw new Error('Failed to load filtered records.');
+        };
+
+        let token: string | undefined = undefined;
+        let aggregatedItems: ListItem[] = [];
+        const aggregatedRecords: Record<string, WebFormSubmission> = {};
+        let lastResponse: ListResponse | null = null;
+        let pages = 0;
+
+        while (true) {
+          const { batch, list } = await fetchFilteredBatchWithRetries(token);
+          if (cancelled || seq !== serverDateSearchSeqRef.current) return;
+          aggregatedItems = mergeUniqueItems(aggregatedItems, (list.items || []) as ListItem[]);
+          Object.assign(aggregatedRecords, (((batch as any)?.records || {}) as Record<string, WebFormSubmission>) || {});
+          lastResponse = list;
+          token = list.nextPageToken;
+          pages += 1;
+          if (!token || aggregatedItems.length >= (list.totalCount || aggregatedItems.length)) break;
+        }
+
+        if (cancelled || seq !== serverDateSearchSeqRef.current) return;
+        if (Object.keys(aggregatedRecords).length) {
+          setRecords(prev => ({ ...prev, ...aggregatedRecords }));
+        }
+        setServerDateSearch({
+          query: dateSearchQueryNormalized,
+          response: {
+            ...(lastResponse || ({ items: [], totalCount: 0 } as ListResponse)),
+            items: aggregatedItems,
+            nextPageToken: undefined
+          },
+          loading: false,
+          error: null
+        });
+        onDiagnostic?.('list.search.date.server.ok', {
+          queryDate: dateSearchQueryNormalized,
+          pages,
+          items: aggregatedItems.length,
+          totalCount: (lastResponse as any)?.totalCount || aggregatedItems.length
+        });
+      } catch (err: any) {
+        if (cancelled || seq !== serverDateSearchSeqRef.current) return;
+        const message = resolveUserFacingErrorMessage(err, 'Failed to load filtered records.') || 'Failed to load filtered records.';
+        setServerDateSearch({
+          query: dateSearchQueryNormalized,
+          response: null,
+          loading: false,
+          error: message
+        });
+        onDiagnostic?.('list.search.date.server.error', {
+          queryDate: dateSearchQueryNormalized,
+          message: (err?.message || err?.toString?.() || 'Failed to load filtered records.').toString()
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dateSearchEnabled,
+    dateSearchFieldId,
+    dateSearchQueryNormalized,
+    dateSearchUsesServer,
+    defaultSortDirection,
+    defaultSortField,
+    formKey,
+    onDiagnostic,
+    projection,
+    totalCount
+    ,
+    guaranteedPrefetchedItemCount,
+    oldestPrefetchedDate
+  ]);
+
+  const activeDateSearchResponse =
+    dateSearchEnabled && dateSearchUsesServer && dateSearchQueryNormalized && serverDateSearch.query === dateSearchQueryNormalized
+      ? serverDateSearch.response
+      : null;
+  const activeItems = activeDateSearchResponse?.items || [];
+  const activeTotalCount = activeDateSearchResponse?.totalCount || 0;
+  const effectiveItems = dateSearchEnabled && dateSearchUsesServer ? activeItems : allItems || [];
+  const effectiveTotalCount = dateSearchEnabled && dateSearchUsesServer ? activeTotalCount : totalCount;
+  const effectiveUiLoading = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.loading : uiLoading;
+  const effectiveUiError = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.error : uiError;
+  const effectiveUiNotice = dateSearchEnabled && dateSearchUsesServer ? null : uiNotice;
+
   const visibleItems = useMemo(() => {
-    const baseItems = allItems || [];
+    const baseItems = effectiveItems;
     const items: ListItem[] =
       ruleColumns.length
         ? baseItems.map(row => {
@@ -814,7 +1067,9 @@ const ListView: React.FC<ListViewProps> = ({
     const applyAdvanced = advancedActive;
     const filtered =
       dateSearchEnabled && trimmed
-        ? items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === trimmed)
+        ? dateSearchUsesServer
+          ? items
+          : items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === (dateSearchQueryNormalized || trimmed))
         : dateSearchEnabled
           ? items
           : applyAdvanced
@@ -846,6 +1101,9 @@ const ListView: React.FC<ListViewProps> = ({
     allItems,
     dateSearchEnabled,
     dateSearchFieldId,
+    dateSearchQueryNormalized,
+    dateSearchUsesServer,
+    effectiveItems,
     fieldTypeById,
     keywordSearchFieldIds,
     language,
@@ -863,7 +1121,7 @@ const ListView: React.FC<ListViewProps> = ({
   const totalPages = paginationEnabled ? Math.max(1, Math.ceil(visibleItems.length / pageSize)) : 1;
   const showPrev = paginationEnabled && pageIndex > 0;
   const showNext = paginationEnabled && pageIndex < totalPages - 1;
-  const loadedCount = (allItems || []).length;
+  const loadedCount = effectiveItems.length;
   const advancedActive =
     advancedHasSearched && hasActiveAdvancedSearch({ keyword: advancedKeyword, fieldFilters: advancedFieldFilters });
   const activeSearch =
@@ -872,13 +1130,13 @@ const ListView: React.FC<ListViewProps> = ({
       : listSearchMode === 'advanced'
         ? advancedActive
         : advancedActive || Boolean(searchQueryValue.trim());
-  const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
+  const showLoadedOfTotal = !activeSearch && effectiveTotalCount > 0 && loadedCount > 0 && loadedCount < effectiveTotalCount;
   const { showNoRecords, showLoadingStatus } = resolveListViewUiState({
     visibleCount: pagedItems.length,
     hasLoadedOnce,
-    loading: uiLoading,
-    prefetching: uiPrefetching,
-    error: uiError,
+    loading: effectiveUiLoading,
+    prefetching: dateSearchEnabled && dateSearchUsesServer ? false : uiPrefetching,
+    error: effectiveUiError,
     assumeInitialLoad
   });
 
@@ -1561,9 +1819,9 @@ const ListView: React.FC<ListViewProps> = ({
       matchedLineItems: listMetricComputed.matchedLineItems,
       completeData: listMetricCompleteData,
       loadedCount,
-      totalCount
+      totalCount: effectiveTotalCount
     });
-  }, [listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic, totalCount]);
+  }, [effectiveTotalCount, listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic]);
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -1912,17 +2170,17 @@ const ListView: React.FC<ListViewProps> = ({
 
         {showLoadingStatus ? (
           <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
-        ) : uiPrefetching ? (
+        ) : !dateSearchUsesServer && uiPrefetching ? (
           <div className="status muted" style={{ opacity: 0.9 }}>
             {tSystem('list.loadingMore', language, 'Loading more…')}
           </div>
-        ) : uiNotice ? (
+        ) : effectiveUiNotice ? (
           <div className="status muted" style={{ opacity: 0.9 }} role="note">
-            {uiNotice}
+            {effectiveUiNotice}
           </div>
         ) : null}
 
-        {uiError && <div className="error">{uiError}</div>}
+        {effectiveUiError && <div className="error">{effectiveUiError}</div>}
 
         {viewMode === 'table' ? (
           <div className="list-table-wrapper">
@@ -2086,13 +2344,13 @@ const ListView: React.FC<ListViewProps> = ({
               {showLoadedOfTotal
                 ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', {
                     loaded: loadedCount,
-                    total: totalCount
+                    total: effectiveTotalCount
                   })
                 : tSystem(
-                    (visibleItems.length || totalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
+                    (visibleItems.length || effectiveTotalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
                     language,
-                    (visibleItems.length || totalCount) === 1 ? '{count} record' : '{count} records',
-                    { count: visibleItems.length || totalCount }
+                    (visibleItems.length || effectiveTotalCount) === 1 ? '{count} record' : '{count} records',
+                    { count: visibleItems.length || effectiveTotalCount }
                   )}
             </div>
             <button

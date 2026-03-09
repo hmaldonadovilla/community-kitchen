@@ -101,6 +101,7 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
+import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
 import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
@@ -2416,6 +2417,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     pages?: number;
   }>(() => ({ phase: 'idle' }));
   const [listFetchNotice, setListFetchNotice] = useState<string | null>(null);
+  const listCacheRef = useRef(listCache);
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
@@ -2457,6 +2459,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     listRecordsRef.current = listCache.records || {};
   }, [listCache.records]);
+  useEffect(() => {
+    listCacheRef.current = listCache;
+  }, [listCache]);
 
   useEffect(() => {
     const response = listCache.response;
@@ -2786,8 +2791,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       : null;
 
     const projection = listViewProjection.length ? listViewProjection : undefined;
-    const hasExisting = Boolean(listCache.response?.items?.length);
-    const existingEtag = (listCache.response?.etag || '').toString().trim();
+    const existingListCache = listCacheRef.current;
+    const hasExisting = Boolean(existingListCache.response?.items?.length);
+    const existingEtag = (existingListCache.response?.etag || '').toString().trim();
     const canReuseFirstPage = hasExisting && listRefreshToken === 0;
     const skipInitialServerCheck = canReuseFirstPage && initialHomeListSource === 'bootstrap';
     const canUseConditionalFirstPage = canReuseFirstPage && !!existingEtag && !skipInitialServerCheck;
@@ -2795,8 +2801,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setListFetchNotice(null);
     setListFetch({
       phase: hasExisting ? 'prefetching' : 'loading',
-      loaded: hasExisting ? (listCache.response?.items?.length || 0) : 0,
-      total: listCache.response?.totalCount || undefined,
+      loaded: hasExisting ? (existingListCache.response?.items?.length || 0) : 0,
+      total: existingListCache.response?.totalCount || undefined,
       pages: 0
     });
     logEvent('list.sorted.prefetch.start', {
@@ -2867,7 +2873,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               if ((bootstrapRes as any)?.notModified) {
                 const notModifiedList: ListResponse = {
                   items: [],
-                  totalCount: Number((listCache.response as any)?.totalCount || 0),
+                  totalCount: Number((existingListCache.response as any)?.totalCount || 0),
                   etag: existingEtag,
                   notModified: true
                 };
@@ -2902,7 +2908,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               });
             }
           }
-          for (let attempt = 0; attempt < 3; attempt += 1) {
+          const maxAttempts = 5;
+          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
             const startMark = `ck.list.fetch.rpc.start.${seq}.${args.pageIndex}.${attempt}`;
             const endMark = `ck.list.fetch.rpc.end.${seq}.${args.pageIndex}.${attempt}`;
             perfMark(startMark);
@@ -2930,11 +2937,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (batch && typeof batch === 'object') break;
             logEvent('list.sorted.prefetch.retry', {
               attempt: attempt + 1,
+              maxAttempts,
               token: args.token || null,
               pageIndex: args.pageIndex,
               resType: batch === null ? 'null' : typeof batch
             });
-            await sleep(250 * (attempt + 1));
+            if (attempt < maxAttempts - 1) {
+              await sleep(Math.min(2000, 250 * Math.pow(2, attempt)));
+            }
           }
           if (seq !== listFetchSeqRef.current) {
             return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: false };
@@ -2968,14 +2978,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
 
         const first = (() => {
-          if (!skipInitialServerCheck || !listCache.response || !Array.isArray((listCache.response as any).items)) return null;
+          if (!skipInitialServerCheck || !existingListCache.response || !Array.isArray((existingListCache.response as any).items)) {
+            return null;
+          }
           const bootstrapList = {
-            ...(listCache.response as ListResponse),
+            ...(existingListCache.response as ListResponse),
             notModified: undefined
           } as ListResponse;
           const bootstrapBatch = {
             list: bootstrapList,
-            records: (listCache.records || {}) as Record<string, WebFormSubmission>
+            records: (existingListCache.records || {}) as Record<string, WebFormSubmission>
           };
           logEvent('list.sorted.prefetch.bootstrapReuse', {
             formKey,
@@ -2992,9 +3004,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           };
         })() || (await fetchPage({ token: undefined, pageIndex: 0, allowConditional: canUseConditionalFirstPage }));
         if (seq !== listFetchSeqRef.current) return;
-        if (canReuseFirstPage && first.notModified) {
-          const existingCount = listCache.response?.items?.length || 0;
-          const existingTotalRaw = Number((listCache.response as any)?.totalCount || existingCount);
+        const existingResponseHasPrefetchMeta =
+          typeof (existingListCache.response as any)?.contiguousItemCount === 'number' &&
+          typeof (existingListCache.response as any)?.completeData === 'boolean';
+        if (canReuseFirstPage && first.notModified && existingResponseHasPrefetchMeta) {
+          const existingCount = existingListCache.response?.items?.length || 0;
+          const existingTotalRaw = Number((existingListCache.response as any)?.totalCount || existingCount);
           const existingTotal =
             Number.isFinite(existingTotalRaw) && existingTotalRaw > 0 ? Math.min(existingTotalRaw, 200) : existingCount;
           setListFetch({
@@ -3012,7 +3027,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
           return;
         }
-        const firstList = first.list;
+        if (canReuseFirstPage && first.notModified && existingListCache.response && !existingResponseHasPrefetchMeta) {
+          logEvent('list.sorted.prefetch.cacheBackfill', {
+            formKey,
+            cachedItems: existingListCache.response.items?.length || 0,
+            totalCount: (existingListCache.response as any)?.totalCount || 0
+          });
+        }
+        const firstList =
+          canReuseFirstPage && first.notModified && existingListCache.response
+            ? ({
+                ...(existingListCache.response as ListResponse),
+                notModified: undefined
+              } as ListResponse)
+            : first.list;
         const totalCountRaw = Number((firstList as any).totalCount || 0);
         const hasNextToken = Boolean((firstList as any).nextPageToken);
         const cappedTotalCount =
@@ -3024,30 +3052,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const totalPages = Math.max(1, Math.ceil(cappedTotalCount / pageSize));
 
         const itemsByPage = new Map<number, ListItem[]>();
+        const failedPages = new Map<number, string>();
         const recordsAccum: Record<string, WebFormSubmission> = {
-          ...((listCache.records || {}) as Record<string, WebFormSubmission>),
+          ...((existingListCache.records || {}) as Record<string, WebFormSubmission>),
           ...((((first as any).batch as any)?.records as Record<string, WebFormSubmission>) || {})
         };
         itemsByPage.set(0, (firstList.items || []) as ListItem[]);
 
-        const buildAggregated = (): ListItem[] => {
-          const aggregated: ListItem[] = [];
-          for (let page = 0; page < totalPages; page += 1) {
-            if (!itemsByPage.has(page)) break;
-            aggregated.push(...(itemsByPage.get(page) || []));
-          }
-          return aggregated;
-        };
+        const buildAggregated = (): ListItem[] => aggregatePrefetchedPageItems(itemsByPage, totalPages);
+        const buildContiguous = (): ListItem[] => aggregateContiguousPrefetchedPageItems(itemsByPage, totalPages);
 
-        const applyProgress = (loadedPages: number) => {
+        const applyProgress = () => {
           const aggregated = buildAggregated();
-          const hasMore = loadedPages < totalPages;
+          const contiguous = buildContiguous();
+          const resolvedPageCount = itemsByPage.size + failedPages.size;
+          const hasMore = resolvedPageCount < totalPages;
+          const completeData = !hasMore && failedPages.size === 0 && aggregated.length >= cappedTotalCount && cappedTotalCount < 200;
           setListCache(prev => ({
             response: {
               ...firstList,
               notModified: undefined,
               items: aggregated,
-              nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined
+              nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined,
+              contiguousItemCount: contiguous.length,
+              completeData
             },
             records: { ...(prev.records || {}), ...recordsAccum }
           }));
@@ -3055,13 +3083,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             phase: hasMore ? 'prefetching' : 'idle',
             loaded: aggregated.length,
             total: cappedTotalCount || aggregated.length,
-            pages: loadedPages
+            pages: itemsByPage.size
           });
           return aggregated.length;
         };
 
-        let loadedPages = 1;
-        applyProgress(loadedPages);
+        applyProgress();
         logEvent('list.sorted.prefetch.page', {
           page: 1,
           pageItems: (itemsByPage.get(0) || []).length,
@@ -3081,36 +3108,64 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
 
-        const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex => {
-          const offset = pageIndex * pageSize;
-          const token = encodePageTokenClient(offset);
-          const pageStartedAt = Date.now();
-          return fetchPage({ token, pageIndex, allowConditional: false })
-            .then(res => {
+        const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex =>
+          (async () => {
+            const offset = pageIndex * pageSize;
+            const token = encodePageTokenClient(offset);
+            const pageStartedAt = Date.now();
+            try {
+              const res = await fetchPage({ token, pageIndex, allowConditional: false });
               if (seq !== listFetchSeqRef.current) return;
               const items = (res.list.items || []) as ListItem[];
               itemsByPage.set(pageIndex, items);
+              failedPages.delete(pageIndex);
               const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
               Object.keys(newRecords).forEach(id => {
                 recordsAccum[id] = newRecords[id];
               });
-              loadedPages += 1;
-              const aggregatedCount = applyProgress(loadedPages);
+              const aggregatedCount = applyProgress();
+              const resolvedPageCount = itemsByPage.size + failedPages.size;
               logEvent('list.sorted.prefetch.page', {
                 page: pageIndex + 1,
                 pageItems: items.length,
                 aggregated: aggregatedCount,
                 totalCount: cappedTotalCount,
-                hasNext: loadedPages < totalPages,
+                hasNext: resolvedPageCount < totalPages,
                 durationMs: Date.now() - startedAt,
                 pageDurationMs: Date.now() - pageStartedAt
               });
-            });
-        });
+            } catch (err: any) {
+              if (seq !== listFetchSeqRef.current) return;
+              const message = resolveLogMessage(err, 'Failed to load list page.');
+              failedPages.set(pageIndex, message);
+              const aggregatedCount = applyProgress();
+              logEvent('list.sorted.prefetch.page.error', {
+                page: pageIndex + 1,
+                totalCount: cappedTotalCount,
+                loadedPages: itemsByPage.size,
+                loadedItems: aggregatedCount,
+                message,
+                durationMs: Date.now() - startedAt,
+                pageDurationMs: Date.now() - pageStartedAt
+              });
+            }
+          })()
+        );
 
-        await Promise.all(pagePromises);
+        await Promise.allSettled(pagePromises);
         if (seq !== listFetchSeqRef.current) return;
-        const finalAggregatedCount = applyProgress(totalPages);
+        if (failedPages.size) {
+          const partialAggregatedCount = applyProgress();
+          logEvent('list.sorted.prefetch.partial', {
+            pages: itemsByPage.size,
+            items: partialAggregatedCount,
+            failedPages: Array.from(failedPages.keys()).map(page => page + 1),
+            failedCount: failedPages.size,
+            durationMs: Date.now() - startedAt
+          });
+          return;
+        }
+        const finalAggregatedCount = applyProgress();
         logEvent('list.sorted.prefetch.done', {
           pages: totalPages,
           items: finalAggregatedCount,
@@ -3121,11 +3176,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load list.');
         const logMessage = resolveLogMessage(err, 'Failed to load list.');
         if ((err as any)?.__ckUiTone === 'info') {
-          setListFetchNotice(uiMessage || null);
           setListFetch(prev => ({ ...prev, phase: 'idle', message: undefined }));
-          logEvent('list.sorted.prefetch.notice', {
+          logEvent('list.sorted.prefetch.noticeSuppressed', {
             kind: (err as any)?.__ckUiKind || null,
-            message: logMessage
+            message: logMessage,
+            existingCount: (listCacheRef.current.response?.items || []).length
           });
           return;
         }
@@ -3142,8 +3197,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     definition.listView,
     formKey,
     initialHomeListSource,
-    listCache.records,
-    listCache.response,
     listRefreshToken,
     listViewProjection,
     logEvent,

@@ -39,3 +39,42 @@ export const shouldClearAppliedQueryOnInputClear = (mode: string | null | undefi
   return (mode || '').toString().trim().toLowerCase() === 'date';
 };
 
+export const resolveOldestPrefetchedIsoDate = (items: Array<Record<string, any>> | undefined | null, fieldId: string): string | null => {
+  if (!Array.isArray(items) || !items.length) return null;
+  const targetFieldId = (fieldId || '').toString().trim();
+  if (!targetFieldId) return null;
+
+  let oldest: string | null = null;
+  items.forEach(item => {
+    const next = normalizeToIsoDateLocal((item as any)?.[targetFieldId]);
+    if (!next) return;
+    if (!oldest || next < oldest) oldest = next;
+  });
+  return oldest;
+};
+
+export const shouldUseServerDateSearch = (args: {
+  queryDate: string | null | undefined;
+  fieldId: string | null | undefined;
+  items: Array<Record<string, any>> | undefined | null;
+  loadedCount: number;
+  totalCount: number;
+  completeData?: boolean;
+}): boolean => {
+  const queryDate = normalizeToIsoDateLocal(args.queryDate);
+  const fieldId = (args.fieldId || '').toString().trim();
+  if (!queryDate || !fieldId) return false;
+
+  const loadedCount = Math.max(0, Math.floor(Number(args.loadedCount) || 0));
+  const totalCount = Math.max(0, Math.floor(Number(args.totalCount) || 0));
+  const completeData =
+    typeof args.completeData === 'boolean'
+      ? args.completeData
+      : totalCount > 0 && loadedCount >= totalCount && totalCount < 200;
+
+  if (completeData) return false;
+
+  const oldestPrefetchedDate = resolveOldestPrefetchedIsoDate(args.items, fieldId);
+  if (!oldestPrefetchedDate) return true;
+  return queryDate <= oldestPrefetchedDate;
+};

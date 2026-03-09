@@ -50,6 +50,8 @@ export interface ListItem {
 export interface ListResponse extends PaginatedResult<ListItem> {
   etag?: string;
   notModified?: boolean;
+  contiguousItemCount?: number;
+  completeData?: boolean;
 }
 
 export interface BatchResponse {
@@ -62,6 +64,8 @@ export type ListSort = {
   direction?: 'asc' | 'desc';
   __ifNoneMatch?: boolean;
   __clientEtag?: string;
+  __dateFieldId?: string;
+  __dateEquals?: string;
 };
 
 export interface DataSourceRequest {

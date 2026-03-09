@@ -900,7 +900,14 @@ export class WebFormService {
     pageToken?: string,
     includePageRecords: boolean = true,
     recordIds?: string[],
-    sort?: { fieldId?: string; direction?: string; __ifNoneMatch?: boolean; __clientEtag?: string }
+    sort?: {
+      fieldId?: string;
+      direction?: string;
+      __ifNoneMatch?: boolean;
+      __clientEtag?: string;
+      __dateFieldId?: string;
+      __dateEquals?: string;
+    }
   ): SubmissionBatchResult<Record<string, any>> {
     const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, sort);

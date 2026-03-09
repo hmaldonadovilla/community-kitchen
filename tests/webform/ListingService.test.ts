@@ -188,5 +188,48 @@ describe('ListingService', () => {
     expect(second.list.totalCount).toBe(2);
     expect((second.list as any).etag).toBe(etag);
   });
-});
 
+  test('fetchSubmissionsSortedBatch exact-date filter scans beyond the default 200-row window', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Responses');
+    const header = ['Language', 'DATE', 'Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+    const rows = Array.from({ length: 205 }, (_, idx) => {
+      const day = idx + 1;
+      const date = new Date(Date.UTC(2025, 0, day, 0, 0, 0));
+      return ['EN', date, `id-${day}`, date, date, 'Open', ''];
+    });
+    sheet.setMockData([header, ...rows]);
+
+    const cacheManager = new CacheEtagManager(null, null);
+    const uploads = new UploadService(ss);
+    const submissions = new SubmissionService(ss, uploads, cacheManager, null);
+    const listing = new ListingService(submissions, cacheManager);
+
+    const form: any = { title: 'Test', configSheet: 'Config: Test', destinationTab: 'Responses' };
+    const questions: any[] = [
+      {
+        id: 'DATE',
+        qEn: 'Date',
+        qFr: 'Date',
+        qNl: 'Date',
+        type: 'DATE',
+        status: 'Active',
+        required: false,
+        listView: true
+      }
+    ];
+
+    const targetDate = new Date(Date.UTC(2025, 6, 24, 0, 0, 0));
+    const res = listing.fetchSubmissionsSortedBatch(form, questions, ['DATE'], 10, undefined, false, undefined, {
+      fieldId: 'DATE',
+      direction: 'desc',
+      __dateFieldId: 'DATE',
+      __dateEquals: '2025-07-24'
+    } as any);
+
+    expect(res.list.totalCount).toBe(1);
+    expect((res.list.items || []).map((row: any) => row.id)).toEqual(['id-205']);
+    expect((res.list.items || [])[0]?.DATE instanceof Date).toBe(true);
+    expect(((res.list.items || [])[0]?.DATE as Date).toISOString()).toBe(targetDate.toISOString());
+  });
+});

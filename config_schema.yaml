@@ -4216,6 +4216,7 @@ components:
               description: |
                 When `mode: date`, filter on this field id (typically a `DATE` question id).
                 The list fetch projection is automatically expanded to include this field so filtering works even if the field is not visible as a column.
+                If the requested date falls at or beyond the oldest prefetched recent row, the client automatically switches to a server-side exact-date query so older matching records remain reachable.
             fields:
               type: array
               items:
