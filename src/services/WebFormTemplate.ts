@@ -46,12 +46,14 @@ const resolveCacheVersion = (): string => {
   }
 };
 
-const buildBundleSrc = (bundleTarget?: string): string => {
+const buildBundleSrc = (bundleTarget?: string, requestParams?: Record<string, string>): string => {
   const target = (bundleTarget || '').toString().trim();
   const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
   const cacheVersion = resolveCacheVersion();
   const versionParam = cacheVersion ? `&v=${encodeURIComponent(cacheVersion)}` : '';
-  const query = `bundle=react${appParam}${versionParam}`;
+  const tsParamRaw = (requestParams?.ts || requestParams?.t || '').toString().trim();
+  const tsParam = tsParamRaw ? `&ts=${encodeURIComponent(tsParamRaw)}` : '';
+  const query = `bundle=react${appParam}${versionParam}${tsParam}`;
   const baseUrl = resolveServiceUrl();
   if (!baseUrl) return `?${query}`;
   const sep = baseUrl.includes('?') ? '&' : '?';
@@ -68,7 +70,7 @@ export function buildWebFormHtml(
   const defJson = escapeJsonForScript(def || null);
   const keyJson = escapeJsonForScript(formKey || def?.title || '');
   const debugJson = isDebugEnabled() ? 'true' : 'false';
-  const bundleSrc = buildBundleSrc(bundleTarget);
+  const bundleSrc = buildBundleSrc(bundleTarget, requestParams);
   const cacheVersion = resolveCacheVersion();
   const cacheVersionJson = escapeJsonForScript(cacheVersion);
   const envTag = getUiEnvTag();

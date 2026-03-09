@@ -1,4 +1,9 @@
-import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../../../src/web/react/app/listViewSearch';
+import {
+  normalizeToIsoDateLocal,
+  resolveOldestPrefetchedIsoDate,
+  shouldClearAppliedQueryOnInputClear,
+  shouldUseServerDateSearch
+} from '../../../src/web/react/app/listViewSearch';
 
 describe('listViewSearch', () => {
   it('normalizes Date objects to local YYYY-MM-DD', () => {
@@ -30,5 +35,81 @@ describe('listViewSearch', () => {
     expect(shouldClearAppliedQueryOnInputClear('advanced')).toBe(false);
     expect(shouldClearAppliedQueryOnInputClear(undefined)).toBe(false);
   });
-});
 
+  it('resolves the oldest prefetched date for a list field', () => {
+    expect(
+      resolveOldestPrefetchedIsoDate(
+        [
+          { MP_PREP_DATE: '2026-03-09' },
+          { MP_PREP_DATE: '2026-03-08' },
+          { MP_PREP_DATE: '2026-02-27' }
+        ],
+        'MP_PREP_DATE'
+      )
+    ).toBe('2026-02-27');
+  });
+
+  it('uses local date search when the full dataset is already loaded', () => {
+    expect(
+      shouldUseServerDateSearch({
+        queryDate: '2026-02-27',
+        fieldId: 'MP_PREP_DATE',
+        items: [{ MP_PREP_DATE: '2026-02-27' }],
+        loadedCount: 100,
+        totalCount: 100,
+        completeData: true
+      })
+    ).toBe(false);
+  });
+
+  it('uses server date search for the oldest currently prefetched date', () => {
+    expect(
+      shouldUseServerDateSearch({
+        queryDate: '2026-02-27',
+        fieldId: 'MP_PREP_DATE',
+        items: [
+          { MP_PREP_DATE: '2026-03-09' },
+          { MP_PREP_DATE: '2026-03-08' },
+          { MP_PREP_DATE: '2026-02-27' }
+        ],
+        loadedCount: 200,
+        totalCount: 250,
+        completeData: false
+      })
+    ).toBe(true);
+  });
+
+  it('uses local date search for dates newer than the oldest prefetched date', () => {
+    expect(
+      shouldUseServerDateSearch({
+        queryDate: '2026-03-08',
+        fieldId: 'MP_PREP_DATE',
+        items: [
+          { MP_PREP_DATE: '2026-03-09' },
+          { MP_PREP_DATE: '2026-03-08' },
+          { MP_PREP_DATE: '2026-02-27' }
+        ],
+        loadedCount: 200,
+        totalCount: 250,
+        completeData: false
+      })
+    ).toBe(false);
+  });
+
+  it('uses server date search when later pages are loaded after a gap but the contiguous prefix stops at a newer date', () => {
+    expect(
+      shouldUseServerDateSearch({
+        queryDate: '2026-02-27',
+        fieldId: 'MP_PREP_DATE',
+        items: [
+          { MP_PREP_DATE: '2026-03-09' },
+          { MP_PREP_DATE: '2026-03-08' },
+          { MP_PREP_DATE: '2026-02-28' }
+        ],
+        loadedCount: 28,
+        totalCount: 100,
+        completeData: false
+      })
+    ).toBe(true);
+  });
+});

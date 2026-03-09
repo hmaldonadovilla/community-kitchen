@@ -175,7 +175,14 @@ export function fetchSubmissionsSortedBatch(
   pageToken?: string,
   includePageRecords: boolean = true,
   recordIds?: string[],
-  sort?: { fieldId?: string; direction?: string; __ifNoneMatch?: boolean; __clientEtag?: string }
+  sort?: {
+    fieldId?: string;
+    direction?: string;
+    __ifNoneMatch?: boolean;
+    __clientEtag?: string;
+    __dateFieldId?: string;
+    __dateEquals?: string;
+  }
 ): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
