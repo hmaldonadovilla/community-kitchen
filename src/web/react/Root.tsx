@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import App from './App';
-import { WebFormDefinition, WebFormSubmission } from '../types';
+import { AnalyticsSnapshot, WebFormDefinition, WebFormSubmission } from '../types';
 import { LoadingScreen } from './components/app/LoadingScreen';
 import { fetchBootstrapContextApi } from './api';
 import { readCachedFormDefinition, writeCachedFormDefinition, StorageLike } from '../data/formDefinitionCache';
@@ -11,6 +11,8 @@ export interface RootProps {
   definition?: WebFormDefinition | null;
   formKey: string;
   record?: WebFormSubmission | null;
+  analytics?: AnalyticsSnapshot;
+  analyticsRev?: number;
   envTag?: string | null;
 }
 
@@ -23,7 +25,14 @@ const logBootEvent = (event: string, payload?: Record<string, unknown>): void =>
   }
 };
 
-export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formKey, record, envTag: initialEnvTag }) => {
+export const Root: React.FC<RootProps> = ({
+  definition: initialDefinition,
+  formKey,
+  record,
+  analytics: initialAnalytics,
+  analyticsRev: initialAnalyticsRev,
+  envTag: initialEnvTag
+}) => {
   const [phase, setPhase] = useState<AppPhase>('bootstrapping');
   const [showSlowMessage, setShowSlowMessage] = useState(false);
   const [allowRetry, setAllowRetry] = useState(false);
@@ -32,6 +41,8 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
   const [definition, setDefinition] = useState<WebFormDefinition | null>(initialDefinition ?? null);
   const [activeFormKey, setActiveFormKey] = useState(formKey);
   const [activeRecord, setActiveRecord] = useState<WebFormSubmission | null>(record ?? null);
+  const [analytics, setAnalytics] = useState<AnalyticsSnapshot | undefined>(initialAnalytics);
+  const [analyticsRev, setAnalyticsRev] = useState<number | undefined>(initialAnalyticsRev);
   const [envTag, setEnvTag] = useState<string | null>(() => {
     const globalAny = globalThis as any;
     const bootstrapTag = globalAny?.__WEB_FORM_BOOTSTRAP__?.envTag;
@@ -122,6 +133,8 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           resolvedKey = bootstrap.formKey || formKey;
           setActiveFormKey(resolvedKey);
           setActiveRecord(bootstrap.record ?? null);
+          setAnalytics((bootstrap as any).analytics);
+          setAnalyticsRev(Number((bootstrap as any).analyticsRev || (bootstrap as any).analytics?.revision || 0) || 0);
           const resolvedEnvTag = (bootstrap.envTag || '').toString().trim();
           setEnvTag(resolvedEnvTag ? resolvedEnvTag : null);
           logBootEvent('bootstrap.prefetch.used', { formKey: resolvedKey || null });
@@ -145,6 +158,8 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
             resolvedKey = res.formKey || formKey;
             setActiveFormKey(resolvedKey);
             setActiveRecord(res.record ?? null);
+            setAnalytics((res as any).analytics);
+            setAnalyticsRev(Number((res as any).analyticsRev || (res as any).analytics?.revision || 0) || 0);
             const resolvedEnvTag = (res.envTag || '').toString().trim();
             setEnvTag(resolvedEnvTag ? resolvedEnvTag : null);
             const configSource = res.configSource || 'sheet';
@@ -224,6 +239,8 @@ export const Root: React.FC<RootProps> = ({ definition: initialDefinition, formK
           definition={definition}
           formKey={activeFormKey || formKey}
           record={activeRecord || undefined}
+          analytics={analytics}
+          analyticsRev={analyticsRev}
           envTag={envTag || undefined}
         />
       )}

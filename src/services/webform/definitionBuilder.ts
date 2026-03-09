@@ -136,6 +136,7 @@ export class DefinitionBuilder {
       questions: webQuestions,
       dataSources: [],
       listView,
+      analytics: form.analytics,
       dedupRules: resolvedDedupRules,
       startRoute: listView ? 'list' : 'form',
       followup: form.followupConfig,

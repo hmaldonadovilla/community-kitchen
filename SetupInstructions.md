@@ -312,25 +312,49 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       { "listView": { "title": { "en": "My Records" } } }
       ```
 
-    - Want to show a right-aligned **list metric** next to the title (for example, total delivered portions)? Set `listView.metric`:
+    - Want to show computed analytics on Home/List and on a dedicated analytics page? Use the trigger-based `analytics.widgets` module (recommended):
 
       ```json
       {
-        "listView": {
-          "metric": {
-            "label": { "en": "portions delivered" },
-            "groupId": "MP_MEALS_REQUEST",
-            "fieldId": "FINAL_QTY",
-            "when": { "fieldId": "status", "equals": "Closed" }
-          }
+        "analytics": {
+          "widgets": [
+            {
+              "id": "portions_delivered",
+              "label": { "en": "portions delivered" },
+              "placements": ["listView", "analyticsPage"],
+              "maximumFractionDigits": 0,
+              "calculation": {
+                "type": "aggregate",
+                "aggregate": "sum",
+                "groupId": "MP_MEALS_REQUEST",
+                "fieldId": "FINAL_QTY",
+                "when": { "fieldId": "status", "equals": "Closed" }
+              }
+            }
+          ]
         }
       }
       ```
 
       Notes:
-      - `groupId` must be a top-level `LINE_ITEM_GROUP` field id.
-      - `fieldId` must be a row field inside that line-item group.
-      - `when` is optional and uses the same condition shape as list-view rule columns.
+      - Supported calculation types: `aggregate`, `arithmetic`, `script`.
+      - Custom scripts must be named server functions with prefix `analytics_` (for example `analytics_mealKpi`).
+      - Trigger policy: recompute on save/edit/follow-up actions + daily reconciliation trigger (`runDailyAnalyticsRecompute`).
+      - Legacy `listView.metric` / `listViewMetric` are still runtime-compatible but deprecated.
+
+    - Open the dedicated analytics page for a form with:
+
+      ```text
+      ?form=<ConfigSheetName>&page=analytics
+      ```
+
+    - Open the central form landing page by visiting the base web-app URL without `form`:
+
+      ```text
+      <web-app-url>/exec
+      ```
+
+      Admin aliases are accepted (`?admin-true` or `?admin=1|true|yes|on`) and links are propagated with canonical `admin=true`.
 
     - Want to replace the default keyword search with **search by date**? Set `listView.search`:
 
@@ -2268,7 +2292,8 @@ Recommended steps after deploying a new bundle:
 - Run **Community Kitchen → Create/Update All Forms** (ensures columns exist).
 - Run **Community Kitchen → Rebuild Indexes (Data Version + Dedup)** (backfills existing rows).
 - Run **Community Kitchen → Install Triggers (Options + Response indexing)**:
-  - Installs an `onEdit` trigger to keep `Data Version` + indexes consistent when users manually edit the destination sheet.
+  - Installs `onEdit` triggers to keep options + `Data Version` + indexes consistent when users manually edit sheets.
+  - Installs a daily time-based trigger for `runDailyAnalyticsRecompute` to reconcile analytics snapshots.
 
 ### UI tips (React edit + Summary)
 

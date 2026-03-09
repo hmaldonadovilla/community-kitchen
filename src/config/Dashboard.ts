@@ -1,6 +1,7 @@
 import {
   AutoSaveConfig,
   AuditLoggingConfig,
+  AnalyticsConfig,
   AppHeaderConfig,
   ActionBarsConfig,
   ActionBarItemConfig,
@@ -143,6 +144,7 @@ export class Dashboard {
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const listViewMetric = dashboardConfig?.listViewMetric;
+      const analytics = dashboardConfig?.analytics;
       const autoSave = dashboardConfig?.autoSave;
       const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
@@ -199,6 +201,7 @@ export class Dashboard {
           listViewSearch,
           listViewView,
           listViewMetric,
+          analytics,
           autoSave,
           auditLogging,
           summaryViewEnabled,
@@ -273,6 +276,7 @@ export class Dashboard {
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     listViewMetric?: ListViewMetricConfig;
+    analytics?: AnalyticsConfig;
     autoSave?: AutoSaveConfig;
     auditLogging?: AuditLoggingConfig;
     summaryViewEnabled?: boolean;
@@ -696,6 +700,17 @@ export class Dashboard {
               ? (listViewObj as any).listMetric
               : undefined;
     const listViewMetric = this.normalizeListViewMetric(listViewMetricRaw);
+    const analyticsRaw =
+      (parsed as any).analytics !== undefined
+        ? (parsed as any).analytics
+        : (parsed as any).analyticsConfig !== undefined
+          ? (parsed as any).analyticsConfig
+          : (parsed as any).analyticsWidgets !== undefined
+            ? { widgets: (parsed as any).analyticsWidgets }
+            : listViewObj && (listViewObj as any).analytics !== undefined
+              ? (listViewObj as any).analytics
+              : undefined;
+    const analytics = this.normalizeAnalyticsConfig(analyticsRaw);
     const fieldDisableRulesRaw =
       (parsed as any).fieldDisableRules !== undefined
         ? (parsed as any).fieldDisableRules
@@ -1220,6 +1235,7 @@ export class Dashboard {
       !listViewSearch &&
       !listViewView &&
       !listViewMetric &&
+      !analytics?.widgets?.length &&
       !autoSave &&
       !auditLogging &&
       summaryViewEnabled === undefined &&
@@ -1271,6 +1287,7 @@ export class Dashboard {
       listViewSearch,
       listViewView,
       listViewMetric,
+      analytics,
       autoSave,
       auditLogging,
       summaryViewEnabled,
@@ -2173,6 +2190,275 @@ export class Dashboard {
     return unique;
   }
 
+  private normalizeWhenClause(value: any): any {
+    if (value === undefined || value === null) return undefined;
+    if (Array.isArray(value)) {
+      const list = value.map(entry => this.normalizeWhenClause(entry)).filter(Boolean);
+      return list.length ? ({ all: list } as any) : undefined;
+    }
+    if (typeof value !== 'object') return undefined;
+    const allRaw = (value as any).all ?? (value as any).and;
+    if (Array.isArray(allRaw)) {
+      const list = allRaw.map((entry: any) => this.normalizeWhenClause(entry)).filter(Boolean);
+      return list.length ? ({ all: list } as any) : undefined;
+    }
+    const anyRaw = (value as any).any ?? (value as any).or;
+    if (Array.isArray(anyRaw)) {
+      const list = anyRaw.map((entry: any) => this.normalizeWhenClause(entry)).filter(Boolean);
+      return list.length ? ({ any: list } as any) : undefined;
+    }
+    if (Object.prototype.hasOwnProperty.call(value as any, 'not')) {
+      const nested = this.normalizeWhenClause((value as any).not);
+      return nested ? ({ not: nested } as any) : undefined;
+    }
+    const lineItemsRaw = (value as any).lineItems ?? (value as any).lineItem;
+    if (lineItemsRaw && typeof lineItemsRaw === 'object') {
+      const lineItems = lineItemsRaw as any;
+      const groupIdRaw = lineItems.groupId ?? lineItems.group ?? lineItems.lineGroupId ?? lineItems.lineGroup;
+      const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+      if (!groupId) return undefined;
+      const out: any = {
+        lineItems: {
+          groupId
+        }
+      };
+      const subGroupIdRaw = lineItems.subGroupId ?? lineItems.subGroup;
+      const subGroupId = subGroupIdRaw !== undefined && subGroupIdRaw !== null ? subGroupIdRaw.toString().trim() : '';
+      if (subGroupId) out.lineItems.subGroupId = subGroupId;
+      if (lineItems.subGroupPath !== undefined) out.lineItems.subGroupPath = lineItems.subGroupPath;
+      const when = this.normalizeWhenClause(lineItems.when ?? lineItems.condition ?? lineItems.filter);
+      if (when) out.lineItems.when = when;
+      const parentWhen = this.normalizeWhenClause(lineItems.parentWhen ?? lineItems.parentCondition ?? lineItems.parentFilter);
+      if (parentWhen) out.lineItems.parentWhen = parentWhen;
+      const matchRaw = (lineItems.match ?? '').toString().trim().toLowerCase();
+      if (matchRaw === 'all' || matchRaw === 'any') out.lineItems.match = matchRaw;
+      const parentMatchRaw = (lineItems.parentMatch ?? '').toString().trim().toLowerCase();
+      if (parentMatchRaw === 'all' || parentMatchRaw === 'any') out.lineItems.parentMatch = parentMatchRaw;
+      const parentScopeRaw = (lineItems.parentScope ?? '').toString().trim().toLowerCase();
+      if (parentScopeRaw === 'immediate' || parentScopeRaw === 'ancestor') out.lineItems.parentScope = parentScopeRaw;
+      return out;
+    }
+
+    const fieldIdRaw = (value as any).fieldId ?? (value as any).field ?? (value as any).id;
+    const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+    if (!fieldId) return undefined;
+    const out: any = { fieldId };
+    if ((value as any).equals !== undefined) out.equals = (value as any).equals;
+    if ((value as any).notEquals !== undefined) out.notEquals = (value as any).notEquals;
+    if ((value as any).greaterThan !== undefined) out.greaterThan = (value as any).greaterThan;
+    if ((value as any).lessThan !== undefined) out.lessThan = (value as any).lessThan;
+    if ((value as any).notEmpty !== undefined) out.notEmpty = Boolean((value as any).notEmpty);
+    if ((value as any).isEmpty !== undefined) out.isEmpty = Boolean((value as any).isEmpty);
+    if ((value as any).isToday !== undefined) out.isToday = Boolean((value as any).isToday);
+    if ((value as any).isNotToday !== undefined) out.isNotToday = Boolean((value as any).isNotToday);
+    if ((value as any).isInPast !== undefined) out.isInPast = Boolean((value as any).isInPast);
+    if ((value as any).isInFuture !== undefined) out.isInFuture = Boolean((value as any).isInFuture);
+    return out;
+  }
+
+  private normalizeAnalyticsConfig(value: any): AnalyticsConfig | undefined {
+    if (!value) return undefined;
+    const source =
+      typeof value === 'object' && !Array.isArray(value)
+        ? (value as any)
+        : Array.isArray(value)
+          ? { widgets: value }
+          : undefined;
+    if (!source || typeof source !== 'object') return undefined;
+
+    const normalizeLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') {
+        const trimmed = input.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        const trimmed = v.trim();
+        if (!trimmed) return;
+        out[k.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizePlacement = (raw: any): 'listView' | 'analyticsPage' | null => {
+      const token = raw !== undefined && raw !== null ? raw.toString().trim().toLowerCase() : '';
+      if (!token) return null;
+      if (token === 'listview' || token === 'list' || token === 'home') return 'listView';
+      if (token === 'analyticspage' || token === 'analytics' || token === 'page') return 'analyticsPage';
+      return null;
+    };
+
+    const normalizeAggregate = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const aggregateRaw =
+        (raw as any).aggregate !== undefined
+          ? (raw as any).aggregate
+          : (raw as any).operation !== undefined
+            ? (raw as any).operation
+            : (raw as any).op;
+      const aggregateToken = aggregateRaw !== undefined && aggregateRaw !== null ? aggregateRaw.toString().trim().toLowerCase() : '';
+      const aggregate = aggregateToken === 'sum' ? 'sum' : aggregateToken === 'count' ? 'count' : '';
+      if (!aggregate) return undefined;
+
+      const groupIdRaw =
+        (raw as any).groupId !== undefined
+          ? (raw as any).groupId
+          : (raw as any).lineItemGroupId !== undefined
+            ? (raw as any).lineItemGroupId
+            : (raw as any).group;
+      const fieldIdRaw =
+        (raw as any).fieldId !== undefined
+          ? (raw as any).fieldId
+          : (raw as any).lineItemFieldId !== undefined
+            ? (raw as any).lineItemFieldId
+            : (raw as any).valueFieldId !== undefined
+              ? (raw as any).valueFieldId
+              : (raw as any).valueField;
+      const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+      if (aggregate === 'sum' && !fieldId) return undefined;
+      const out: any = { type: 'aggregate', aggregate };
+      if (groupId) out.groupId = groupId;
+      if (fieldId) out.fieldId = fieldId;
+      const when = this.normalizeWhenClause((raw as any).when ?? (raw as any).filter ?? (raw as any).where ?? (raw as any).condition);
+      if (when) out.when = when;
+      const lineWhen = this.normalizeWhenClause(
+        (raw as any).lineWhen ?? (raw as any).rowWhen ?? (raw as any).itemWhen ?? (raw as any).lineFilter
+      );
+      if (lineWhen) out.lineWhen = lineWhen;
+      return out;
+    };
+
+    const normalizeArithmetic = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const opRaw = (raw as any).operator ?? (raw as any).op ?? (raw as any).operation;
+      const opToken = opRaw !== undefined && opRaw !== null ? opRaw.toString().trim().toLowerCase() : '';
+      const operator =
+        opToken === 'add' || opToken === '+' || opToken === 'addition'
+          ? 'add'
+          : opToken === 'subtract' || opToken === '-' || opToken === 'subtraction' || opToken === 'substraction'
+            ? 'subtract'
+            : opToken === 'multiply' || opToken === '*' || opToken === 'multiplication'
+              ? 'multiply'
+              : '';
+      if (!operator) return undefined;
+      const operandsRaw = Array.isArray((raw as any).operands)
+        ? (raw as any).operands
+        : Array.isArray((raw as any).values)
+          ? (raw as any).values
+          : [];
+      const operands = operandsRaw
+        .map((entry: any): any | null => {
+          if (typeof entry === 'number' && Number.isFinite(entry)) return entry;
+          if (typeof entry === 'string') {
+            const trimmed = entry.trim();
+            if (!trimmed) return null;
+            const asNumber = Number(trimmed);
+            if (Number.isFinite(asNumber)) return asNumber;
+            return { metricId: trimmed };
+          }
+          if (!entry || typeof entry !== 'object') return null;
+          const metricIdRaw = (entry as any).metricId ?? (entry as any).ref ?? (entry as any).widgetId;
+          const metricId = metricIdRaw !== undefined && metricIdRaw !== null ? metricIdRaw.toString().trim() : '';
+          if (metricId) return { metricId };
+          if ((entry as any).value !== undefined) {
+            const num = Number((entry as any).value);
+            if (Number.isFinite(num)) return { value: num };
+          }
+          const aggregate = normalizeAggregate((entry as any).aggregate || entry);
+          if (aggregate) return { aggregate };
+          return null;
+        })
+        .filter(Boolean);
+      if (!operands.length) return undefined;
+      return { type: 'arithmetic', operator, operands };
+    };
+
+    const normalizeScript = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const fnRaw = (raw as any).functionName ?? (raw as any).function ?? (raw as any).script;
+      const functionName = fnRaw !== undefined && fnRaw !== null ? fnRaw.toString().trim() : '';
+      if (!functionName || !/^analytics_[A-Za-z0-9_]+$/.test(functionName)) return undefined;
+      const out: any = { type: 'script', functionName };
+      if ((raw as any).args && typeof (raw as any).args === 'object') {
+        out.args = { ...(raw as any).args };
+      }
+      return out;
+    };
+
+    const normalizeCalculation = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const typeRaw = (raw as any).type ?? (raw as any).kind ?? (raw as any).mode;
+      const typeToken = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim().toLowerCase() : '';
+      if (typeToken === 'aggregate') return normalizeAggregate(raw);
+      if (typeToken === 'arithmetic') return normalizeArithmetic(raw);
+      if (typeToken === 'script') return normalizeScript(raw);
+
+      // Type inference fallback
+      if ((raw as any).functionName !== undefined || (raw as any).function !== undefined || (raw as any).script !== undefined) {
+        return normalizeScript(raw);
+      }
+      if ((raw as any).operator !== undefined || (raw as any).op !== undefined || (raw as any).operands !== undefined) {
+        return normalizeArithmetic(raw);
+      }
+      if ((raw as any).aggregate !== undefined || (raw as any).operation !== undefined || (raw as any).groupId !== undefined) {
+        return normalizeAggregate(raw);
+      }
+      return undefined;
+    };
+
+    const widgetsRaw = Array.isArray((source as any).widgets)
+      ? (source as any).widgets
+      : Array.isArray((source as any).items)
+        ? (source as any).items
+        : Array.isArray((source as any).metrics)
+          ? (source as any).metrics
+          : [];
+    const widgets = widgetsRaw
+      .map((entry: any): any | null => {
+        if (!entry || typeof entry !== 'object') return null;
+        const idRaw = (entry as any).id ?? (entry as any).key ?? (entry as any).name;
+        const id = idRaw !== undefined && idRaw !== null ? idRaw.toString().trim() : '';
+        if (!id) return null;
+        const calculation = normalizeCalculation((entry as any).calculation ?? (entry as any).calc ?? entry);
+        if (!calculation) return null;
+        const out: any = { id, calculation };
+        const label = normalizeLocalized((entry as any).label ?? (entry as any).title ?? (entry as any).text);
+        if (label !== undefined) out.label = label;
+        const description = normalizeLocalized((entry as any).description ?? (entry as any).helperText ?? (entry as any).subtitle);
+        if (description !== undefined) out.description = description;
+        const placementsRaw =
+          (entry as any).placements !== undefined
+            ? (entry as any).placements
+            : (entry as any).placement !== undefined
+              ? (entry as any).placement
+              : (entry as any).showIn;
+        const placementsList = Array.isArray(placementsRaw) ? placementsRaw : placementsRaw !== undefined ? [placementsRaw] : [];
+        const placements = placementsList
+          .map(raw => normalizePlacement(raw))
+          .filter(Boolean) as Array<'listView' | 'analyticsPage'>;
+        out.placements = placements.length ? Array.from(new Set(placements)) : ['analyticsPage'];
+        const maxFractionDigitsRaw =
+          (entry as any).maximumFractionDigits !== undefined
+            ? (entry as any).maximumFractionDigits
+            : (entry as any).maxFractionDigits !== undefined
+              ? (entry as any).maxFractionDigits
+              : (entry as any).decimals;
+        if (maxFractionDigitsRaw !== undefined && maxFractionDigitsRaw !== null && maxFractionDigitsRaw !== '') {
+          const n = Number(maxFractionDigitsRaw);
+          if (Number.isFinite(n)) out.maximumFractionDigits = Math.max(0, Math.min(6, Math.round(n)));
+        }
+        return out;
+      })
+      .filter(Boolean);
+
+    if (!widgets.length) return undefined;
+    return { widgets } as AnalyticsConfig;
+  }
+
   private normalizeListViewColumns(value: any): ListViewColumnConfig[] | undefined {
     if (value === undefined || value === null) return undefined;
     const raw: any[] = Array.isArray(value) ? value : [value];
@@ -2310,35 +2596,6 @@ export class Dashboard {
       return out.length ? out : undefined;
     };
 
-    const normalizeWhen = (when: any): any => {
-      if (when === undefined || when === null) return undefined;
-      if (Array.isArray(when)) {
-        const list = when.map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ all: list } as any) : undefined;
-      }
-      if (typeof when !== 'object') return undefined;
-      if (Array.isArray((when as any).all)) {
-        const list = ((when as any).all as any[]).map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ all: list } as any) : undefined;
-      }
-      if (Array.isArray((when as any).any)) {
-        const list = ((when as any).any as any[]).map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ any: list } as any) : undefined;
-      }
-      const fieldIdRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
-      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
-      if (!fieldId) return undefined;
-      const out: any = { fieldId };
-      if ((when as any).equals !== undefined) out.equals = (when as any).equals;
-      if ((when as any).notEquals !== undefined) out.notEquals = (when as any).notEquals;
-      if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
-      if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
-      if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
-      if ((when as any).isInPast !== undefined) out.isInPast = Boolean((when as any).isInPast);
-      if ((when as any).isInFuture !== undefined) out.isInFuture = Boolean((when as any).isInFuture);
-      return out;
-    };
-
     const normalizeRuleAction = (entry: any): any | null => {
       if (!entry || typeof entry !== 'object') return null;
       const text = normalizeLocalized((entry as any).text ?? (entry as any).value ?? (entry as any).label);
@@ -2376,7 +2633,7 @@ export class Dashboard {
       const out: any = {};
       if (text !== undefined) out.text = text;
       else out.text = '';
-      const when = normalizeWhen((entry as any).when ?? (entry as any).if ?? (entry as any).condition);
+      const when = this.normalizeWhenClause((entry as any).when ?? (entry as any).if ?? (entry as any).condition);
       if (when) out.when = when;
       if ((entry as any).hideText !== undefined) out.hideText = Boolean((entry as any).hideText);
       const styleRaw = ((entry as any).style ?? (entry as any).variant ?? (entry as any).tone ?? '').toString().trim().toLowerCase();
@@ -2766,35 +3023,6 @@ export class Dashboard {
       return Object.keys(out).length ? out : undefined;
     };
 
-    const normalizeWhen = (when: any): any => {
-      if (when === undefined || when === null) return undefined;
-      if (Array.isArray(when)) {
-        const list = when.map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ all: list } as any) : undefined;
-      }
-      if (typeof when !== 'object') return undefined;
-      if (Array.isArray((when as any).all)) {
-        const list = ((when as any).all as any[]).map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ all: list } as any) : undefined;
-      }
-      if (Array.isArray((when as any).any)) {
-        const list = ((when as any).any as any[]).map(normalizeWhen).filter(Boolean);
-        return list.length ? ({ any: list } as any) : undefined;
-      }
-      const fieldIdRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
-      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
-      if (!fieldId) return undefined;
-      const out: any = { fieldId };
-      if ((when as any).equals !== undefined) out.equals = (when as any).equals;
-      if ((when as any).notEquals !== undefined) out.notEquals = (when as any).notEquals;
-      if ((when as any).notEmpty !== undefined) out.notEmpty = Boolean((when as any).notEmpty);
-      if ((when as any).isToday !== undefined) out.isToday = Boolean((when as any).isToday);
-      if ((when as any).isNotToday !== undefined) out.isNotToday = Boolean((when as any).isNotToday);
-      if ((when as any).isInPast !== undefined) out.isInPast = Boolean((when as any).isInPast);
-      if ((when as any).isInFuture !== undefined) out.isInFuture = Boolean((when as any).isInFuture);
-      return out;
-    };
-
     const groupIdRaw =
       (value as any).groupId !== undefined
         ? (value as any).groupId
@@ -2822,7 +3050,7 @@ export class Dashboard {
     if (!groupId || !fieldId) return undefined;
 
     const label = normalizeLocalized((value as any).label ?? (value as any).text ?? (value as any).suffix ?? (value as any).title);
-    const when = normalizeWhen((value as any).when ?? (value as any).filter ?? (value as any).where ?? (value as any).condition);
+    const when = this.normalizeWhenClause((value as any).when ?? (value as any).filter ?? (value as any).where ?? (value as any).condition);
 
     const maxFractionDigitsRaw =
       (value as any).maximumFractionDigits !== undefined

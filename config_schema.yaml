@@ -2120,13 +2120,27 @@ components:
               - Supports computed/action columns via `type: "rule"`
             - `metaColumns`: optional system columns appended after question columns (`createdAt`, `updatedAt`, `status`, `pdfUrl`)
             - `legend`: optional legend shown below the table to explain icons / table elements (only shown when defined)
-            - `metric`: optional right-aligned aggregate metric shown next to the list title
+            - `metric`: legacy list-only metric (deprecated; use `analytics.widgets` with `placements: ["listView"]`)
             - `defaultSort`: initial sort field/direction
             - `pageSize`: rows per page (default 10, max 50)
 
             Notes:
             - The List screen appears when at least one question is marked `listView: true` or when you provide `columns`.
             - Legacy top-level aliases (`listViewMetaColumns`, `listViewColumns`, `listViewLegend`, `listViewMetric`) are still accepted but deprecated.
+        analytics:
+          $ref: '#/components/schemas/AnalyticsConfig'
+          description: |
+            Trigger-based analytics configuration.
+
+            Widgets are computed and persisted in a hidden per-form analytics sheet by server-side triggers:
+            - on save/edit/follow-up actions
+            - daily reconciliation (`runDailyAnalyticsRecompute`)
+
+            Supported aliases in dashboard JSON:
+            - `analytics`
+            - `analyticsConfig`
+            - `analyticsWidgets` (array shorthand)
+            - `listView.analytics`
         appHeader:
           $ref: '#/components/schemas/AppHeaderConfig'
           description: Optional app header branding (logo shown next to the title).
@@ -2315,7 +2329,8 @@ components:
         listViewMetric:
           deprecated: true
           $ref: '#/components/schemas/ListViewMetricConfig'
-          description: Deprecated. Use `listView.metric`.
+          description: |
+            Deprecated legacy metric. Use `analytics.widgets` with `placements: ["listView"]`.
         listViewLegendColumns:
           deprecated: true
           type: integer
@@ -4066,68 +4081,17 @@ components:
 
     ListViewRuleWhen:
       description: |
-        Rule condition used by list view computed columns.
-
-        Notes:
-        - Use `{ "all": [...] }` for AND conditions.
-        - Use `{ "any": [...] }` for OR conditions.
-        - `isToday` / `isNotToday` treat `YYYY-MM-DD` as a **local date** (not UTC).
-      oneOf:
-        - $ref: '#/components/schemas/ListViewRulePredicate'
-        - type: object
-          properties:
-            all:
-              type: array
-              items:
-                $ref: '#/components/schemas/ListViewRuleWhen'
-          required: [all]
-        - type: object
-          properties:
-            any:
-              type: array
-              items:
-                $ref: '#/components/schemas/ListViewRuleWhen'
-          required: [any]
+        Deprecated alias of `WhenClause` for list-view rule columns.
+        List rules now use the same evaluation engine as visibility/validation rules.
+      deprecated: true
+      allOf:
+        - $ref: '#/components/schemas/WhenClause'
 
     ListViewRulePredicate:
-      type: object
-      properties:
-        fieldId:
-          type: string
-          description: |
-            Field id to evaluate.
-
-            You can reference question IDs or system meta fields: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
-        equals:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-            - type: array
-              items:
-                oneOf:
-                  - type: string
-                  - type: number
-                  - type: boolean
-        notEquals:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-            - type: array
-              items:
-                oneOf:
-                  - type: string
-                  - type: number
-                  - type: boolean
-        notEmpty:
-          type: boolean
-        isToday:
-          type: boolean
-        isNotToday:
-          type: boolean
-      required:
-        - fieldId
+      description: Deprecated alias of `VisibilityCondition`.
+      deprecated: true
+      allOf:
+        - $ref: '#/components/schemas/VisibilityCondition'
 
     ListViewLegendItem:
       type: object
@@ -4351,6 +4315,7 @@ components:
         pageSize: 10
 
     ListViewMetricConfig:
+      deprecated: true
       type: object
       properties:
         label:
@@ -4369,10 +4334,10 @@ components:
           description: |
             Line-item row field id to sum.
         when:
-          $ref: '#/components/schemas/ListViewRuleWhen'
+          $ref: '#/components/schemas/WhenClause'
           description: |
             Optional row-level filter applied before summing line-item rows.
-            Uses the same condition shape as rule-based list-view columns.
+            Uses the shared `WhenClause` shape.
         maximumFractionDigits:
           type: integer
           minimum: 0
@@ -4383,6 +4348,137 @@ components:
       required:
         - groupId
         - fieldId
+      description: |
+        Legacy client-side list metric configuration.
+        Kept for backward compatibility; prefer trigger-based `AnalyticsConfig`.
+
+    AnalyticsPlacement:
+      type: string
+      enum: [listView, analyticsPage]
+      description: |
+        Analytics widget placement target.
+        - `listView`: render on home/list cards.
+        - `analyticsPage`: render on `?form=<...>&page=analytics`.
+
+    AnalyticsAggregateCalculation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [aggregate]
+        aggregate:
+          type: string
+          enum: [sum, count]
+        groupId:
+          type: string
+          description: Optional line-item group id source (omit for top-level fields/records).
+        fieldId:
+          type: string
+          description: Field id to aggregate. Required for `sum`, optional for `count`.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional record-level filter.
+        lineWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional line-item row filter (used when `groupId` is set).
+      required: [type, aggregate]
+
+    AnalyticsArithmeticOperand:
+      oneOf:
+        - type: number
+        - type: object
+          properties:
+            value:
+              type: number
+          required: [value]
+        - type: object
+          properties:
+            metricId:
+              type: string
+          required: [metricId]
+        - type: object
+          properties:
+            aggregate:
+              $ref: '#/components/schemas/AnalyticsAggregateCalculation'
+          required: [aggregate]
+
+    AnalyticsArithmeticCalculation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [arithmetic]
+        operator:
+          type: string
+          enum: [add, subtract, multiply]
+        operands:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsArithmeticOperand'
+      required: [type, operator, operands]
+
+    AnalyticsScriptCalculation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [script]
+        functionName:
+          type: string
+          pattern: '^analytics_[A-Za-z0-9_]+$'
+          description: |
+            Server-side function name to execute for custom analytics.
+            Functions must be globally available and prefixed with `analytics_`.
+        args:
+          type: object
+          additionalProperties: true
+          description: Optional script arguments payload.
+      required: [type, functionName]
+
+    AnalyticsCalculation:
+      oneOf:
+        - $ref: '#/components/schemas/AnalyticsAggregateCalculation'
+        - $ref: '#/components/schemas/AnalyticsArithmeticCalculation'
+        - $ref: '#/components/schemas/AnalyticsScriptCalculation'
+
+    AnalyticsWidgetConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable widget id.
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        description:
+          $ref: '#/components/schemas/LocalizedString'
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsPlacement'
+          description: Defaults to `["analyticsPage"]` when omitted.
+        maximumFractionDigits:
+          type: integer
+          minimum: 0
+          maximum: 6
+        calculation:
+          $ref: '#/components/schemas/AnalyticsCalculation'
+      required: [id, calculation]
+
+    AnalyticsConfig:
+      type: object
+      properties:
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsWidgetConfig'
+      required: [widgets]
+      description: |
+        Trigger-based analytics module.
+
+        Computation lifecycle:
+        - Event triggers: save/edit/follow-up actions recompute affected form widgets.
+        - Daily reconciliation: `runDailyAnalyticsRecompute` recomputes all forms.
+        - Results are persisted in a hidden per-form analytics sheet.
 
 
     DedupRule:
@@ -4615,6 +4711,12 @@ components:
             - type: array
               items:
                 type: string
+        notEquals:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
         greaterThan:
           oneOf:
             - type: number
@@ -4638,6 +4740,14 @@ components:
             Notes:
             - `YYYY-MM-DD` is treated as a local date (not UTC).
             - Empty/invalid dates do not match.
+        isNotToday:
+          type: boolean
+          description: |
+            When true, condition matches when the field value is not today's local date.
+
+            Notes:
+            - `YYYY-MM-DD` is treated as a local date (not UTC).
+            - Empty/invalid dates are treated as "not today".
         isInPast:
           type: boolean
           description: |
@@ -5149,7 +5259,10 @@ components:
           additionalProperties: true
         listViewMetric:
           $ref: '#/components/schemas/ListViewMetricConfig'
-          description: List view metric config (dashboard-level).
+          description: Deprecated list metric config (dashboard-level).
+        analytics:
+          $ref: '#/components/schemas/AnalyticsConfig'
+          description: Trigger-based analytics config (dashboard-level).
         languages:
           type: array
           items:

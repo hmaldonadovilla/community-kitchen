@@ -256,6 +256,98 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses analytics widgets from dashboard config', () => {
+    const configJson = JSON.stringify({
+      analytics: {
+        widgets: [
+          {
+            id: 'portions_delivered',
+            label: { EN: 'Portions delivered' },
+            placements: ['listView', 'analyticsPage'],
+            maximumFractionDigits: 0,
+            calculation: {
+              type: 'aggregate',
+              aggregate: 'sum',
+              groupId: 'MP_MEALS_REQUEST',
+              fieldId: 'FINAL_QTY',
+              when: { fieldId: 'status', equals: 'Closed' }
+            }
+          },
+          {
+            id: 'x2',
+            calculation: {
+              type: 'arithmetic',
+              operator: 'multiply',
+              operands: [{ metricId: 'portions_delivered' }, 2]
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).analytics).toEqual({
+      widgets: [
+        {
+          id: 'portions_delivered',
+          label: { en: 'Portions delivered' },
+          placements: ['listView', 'analyticsPage'],
+          maximumFractionDigits: 0,
+          calculation: {
+            type: 'aggregate',
+            aggregate: 'sum',
+            groupId: 'MP_MEALS_REQUEST',
+            fieldId: 'FINAL_QTY',
+            when: { fieldId: 'status', equals: 'Closed' }
+          }
+        },
+        {
+          id: 'x2',
+          placements: ['analyticsPage'],
+          calculation: {
+            type: 'arithmetic',
+            operator: 'multiply',
+            operands: [{ metricId: 'portions_delivered' }, 2]
+          }
+        }
+      ]
+    });
+  });
+
+  test('getForms enforces analytics script function naming contract', () => {
+    const configJson = JSON.stringify({
+      analyticsWidgets: [
+        {
+          id: 'valid_script',
+          calculation: { type: 'script', functionName: 'analytics_validScript' }
+        },
+        {
+          id: 'invalid_script',
+          calculation: { type: 'script', functionName: 'customScript' }
+        }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const widgets = ((forms[0] as any).analytics?.widgets || []) as any[];
+    expect(widgets.map(w => w.id)).toEqual(['valid_script']);
+    expect(widgets[0].calculation).toEqual({ type: 'script', functionName: 'analytics_validScript' });
+  });
+
   test('getForms parses list view inline rule actions from dashboard config (listView.columns)', () => {
     const configJson = JSON.stringify({
       listView: {

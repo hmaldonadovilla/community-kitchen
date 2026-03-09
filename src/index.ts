@@ -5,6 +5,31 @@ import { WebFormDefinition, WebFormSubmission } from './types';
 import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
 import { renderReactBundle } from './services/webform/bundles';
 
+const isTruthyParam = (raw: any): boolean => {
+  if (raw === undefined || raw === null) return false;
+  const token = raw.toString().trim().toLowerCase();
+  if (!token) return false;
+  return token === '1' || token === 'true' || token === 'yes' || token === 'on';
+};
+
+const normalizeRequestParams = (params: Record<string, any>): Record<string, string> => {
+  const out: Record<string, string> = {};
+  Object.keys(params || {}).forEach(key => {
+    if (!key) return;
+    const raw = (params as any)[key];
+    if (raw === undefined || raw === null) return;
+    const value = raw.toString();
+    if (!value && key !== 'admin-true') return;
+    out[key] = value;
+  });
+  const adminAliasEnabled = Object.prototype.hasOwnProperty.call(params || {}, 'admin-true');
+  const adminEnabled = adminAliasEnabled || isTruthyParam((params as any)?.admin);
+  if (adminEnabled) {
+    out.admin = 'true';
+  }
+  return out;
+};
+
 export function setup(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const generator = new FormGenerator(ss);
@@ -74,13 +99,15 @@ export function doGet(
   e: GoogleAppsScript.Events.DoGet
 ): GoogleAppsScript.HTML.HtmlOutput | GoogleAppsScript.Content.TextOutput {
   const params = e?.parameter || {};
+  const normalizedParams = normalizeRequestParams(params as any);
   const bundle = (params.bundle || '').toString().trim().toLowerCase();
   if (bundle === 'react') {
     return renderReactBundle((params.app ?? params.page ?? '').toString());
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  const formKey = params.form;
+  const formKeyRaw = params.form;
+  const formKey = formKeyRaw !== undefined && formKeyRaw !== null ? formKeyRaw.toString().trim() : '';
   const configParam = (params.config || params.export || '').toString().trim().toLowerCase();
   const wantsConfig =
     configParam === '1' ||
@@ -95,7 +122,13 @@ export function doGet(
     output.setMimeType(ContentService.MimeType.JSON);
     return output;
   }
-  return service.renderForm(formKey, params);
+  if (!formKey) {
+    if (!normalizedParams.app && !normalizedParams.page) {
+      normalizedParams.app = 'landing';
+    }
+    return service.renderForm(undefined, normalizedParams);
+  }
+  return service.renderForm(formKey, normalizedParams);
 }
 
 export function submitWebForm(formObject: any): { success: boolean; message: string } {
@@ -129,6 +162,18 @@ export function fetchFormConfig(formKey?: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchFormConfig(formKey);
+}
+
+export function fetchFormCatalog(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchFormCatalog();
+}
+
+export function runDailyAnalyticsRecompute(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.runDailyAnalyticsRecompute();
 }
 
 // New endpoints (scaffolding)
@@ -342,6 +387,7 @@ export function installTriggers(): void {
   const triggers = ScriptApp.getProjectTriggers();
   const hasConfig = triggers.some(t => t.getHandlerFunction() === 'onConfigEdit');
   const hasResponses = triggers.some(t => t.getHandlerFunction() === 'onResponsesEdit');
+  const hasDailyAnalytics = triggers.some(t => t.getHandlerFunction() === 'runDailyAnalyticsRecompute');
   
   if (!hasConfig) {
     ScriptApp.newTrigger('onConfigEdit')
@@ -357,12 +403,22 @@ export function installTriggers(): void {
       .create();
   }
 
-  if (!hasConfig && !hasResponses) {
-    Browser.msgBox('Triggers installed! (Options + Response indexing)');
-  } else if (!hasConfig && hasResponses) {
+  if (!hasDailyAnalytics) {
+    ScriptApp.newTrigger('runDailyAnalyticsRecompute')
+      .timeBased()
+      .everyDays(1)
+      .atHour(23)
+      .create();
+  }
+
+  if (!hasConfig && !hasResponses && !hasDailyAnalytics) {
+    Browser.msgBox('Triggers installed! (Options + Response indexing + Daily analytics)');
+  } else if (!hasConfig && hasResponses && hasDailyAnalytics) {
     Browser.msgBox('Trigger installed! (Options)');
-  } else if (hasConfig && !hasResponses) {
+  } else if (hasConfig && !hasResponses && hasDailyAnalytics) {
     Browser.msgBox('Trigger installed! (Response indexing)');
+  } else if (hasConfig && hasResponses && !hasDailyAnalytics) {
+    Browser.msgBox('Trigger installed! (Daily analytics)');
   } else {
     Browser.msgBox('Triggers already installed.');
   }
@@ -372,7 +428,7 @@ export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
     .addItem('Setup Forms', 'setup')
-    .addItem('Install Triggers (Options + Response indexing)', 'installTriggers')
+    .addItem('Install Triggers (Options + Response indexing + Daily analytics)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
     .addItem('Invalidate Web App Cache', 'invalidateWebAppCache')
     .addItem('Rebuild Indexes (Data Version + Dedup)', 'rebuildIndexes')

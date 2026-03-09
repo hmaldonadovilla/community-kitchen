@@ -952,6 +952,14 @@ export interface VisibilityCondition {
    */
   isToday?: boolean;
   /**
+   * Date-only mismatch against the user's local "today".
+   *
+   * Notes:
+   * - `YYYY-MM-DD` values are treated as local dates (not UTC).
+   * - Empty/invalid dates are treated as "not today" (match).
+   */
+  isNotToday?: boolean;
+  /**
    * Date-only match against dates before the user's local "today".
    *
    * Notes:
@@ -2248,6 +2256,10 @@ export interface FormConfig {
    */
   listViewMetric?: ListViewConfig['metric'];
   /**
+   * Optional trigger-driven analytics configuration for this form (recommended: `analytics.widgets`).
+   */
+  analytics?: AnalyticsConfig;
+  /**
    * Enabled languages for the web app UI (max 3).
    *
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -3099,6 +3111,7 @@ export interface WebFormDefinition {
   questions: WebQuestionDefinition[];
   dataSources?: DataSourceConfig[];
   listView?: ListViewConfig;
+  analytics?: AnalyticsConfig;
   dedupRules?: DedupRule[];
   startRoute?: 'list' | 'form' | 'summary' | string;
   followup?: FollowupConfig;
@@ -3315,48 +3328,17 @@ export type ListViewRuleIcon =
   | 'copy'
   | 'view';
 
-export interface ListViewRulePredicate {
-  /**
-   * Field id to evaluate.
-   *
-   * Notes:
-   * - You can reference both question IDs and system meta fields: `id`, `createdAt`, `updatedAt`, `status`, `pdfUrl`.
-   */
-  fieldId: string;
-  equals?: string | number | boolean | Array<string | number | boolean>;
-  notEquals?: string | number | boolean | Array<string | number | boolean>;
-  /**
-   * Match based on emptiness rather than a specific value.
-   * - true: matches when the field has any non-empty value (not null/undefined/blank)
-   * - false: matches when the field is empty
-   */
-  notEmpty?: boolean;
-  /**
-   * Date-only match against the user's local "today".
-   */
-  isToday?: boolean;
-  /**
-   * Date-only mismatch against the user's local "today" (empty/invalid dates are treated as "not today").
-   */
-  isNotToday?: boolean;
-  /**
-   * Date-only match against dates before the user's local "today".
-   */
-  isInPast?: boolean;
-  /**
-   * Date-only match against dates after the user's local "today".
-   */
-  isInFuture?: boolean;
-}
+/**
+ * @deprecated Use `VisibilityCondition` / `WhenClause`.
+ * Kept for list-view config compatibility and schema tooling references.
+ */
+export type ListViewRulePredicate = VisibilityCondition;
 
-export type ListViewRuleWhen =
-  | ListViewRulePredicate
-  | {
-      all: ListViewRuleWhen[];
-    }
-  | {
-      any: ListViewRuleWhen[];
-    };
+/**
+ * @deprecated Use `WhenClause`.
+ * Kept for list-view config compatibility and schema tooling references.
+ */
+export type ListViewRuleWhen = WhenClause;
 
 export type ListViewOpenViewTarget = 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit';
 
@@ -3569,6 +3551,115 @@ export interface ListViewViewConfig {
    * Default: `mode` (or `table` when `mode` is not set).
    */
   defaultMode?: 'table' | 'cards';
+}
+
+export type AnalyticsPlacement = 'listView' | 'analyticsPage';
+
+export interface AnalyticsAggregateCalculation {
+  /**
+   * Aggregate over records or line-item rows.
+   */
+  type: 'aggregate';
+  /**
+   * Supported aggregate operators.
+   */
+  aggregate: 'sum' | 'count';
+  /**
+   * Optional record-level filter.
+   */
+  when?: WhenClause;
+  /**
+   * Optional LINE_ITEM_GROUP id. When set, aggregation runs on line-item rows.
+   */
+  groupId?: string;
+  /**
+   * Field id used by `sum` (required for numeric sums), and optional for `count` (counts non-empty values when set).
+   */
+  fieldId?: string;
+  /**
+   * Optional line-item row-level filter (evaluated in row context).
+   */
+  lineWhen?: WhenClause;
+}
+
+export type AnalyticsArithmeticOperand =
+  | number
+  | { value: number }
+  | { metricId: string }
+  | { aggregate: AnalyticsAggregateCalculation };
+
+export interface AnalyticsArithmeticCalculation {
+  /**
+   * Arithmetic composition across literals, metric references, and aggregate operands.
+   */
+  type: 'arithmetic';
+  operator: 'add' | 'subtract' | 'multiply';
+  operands: AnalyticsArithmeticOperand[];
+}
+
+export interface AnalyticsScriptCalculation {
+  /**
+   * Execute a named Apps Script function (`analytics_*`) for custom workflows.
+   */
+  type: 'script';
+  functionName: string;
+  args?: Record<string, any>;
+}
+
+export type AnalyticsCalculation =
+  | AnalyticsAggregateCalculation
+  | AnalyticsArithmeticCalculation
+  | AnalyticsScriptCalculation;
+
+export interface AnalyticsWidgetConfig {
+  /**
+   * Stable widget id.
+   */
+  id: string;
+  /**
+   * Optional display label.
+   */
+  label?: LocalizedString | string;
+  /**
+   * Optional helper/description text.
+   */
+  description?: LocalizedString | string;
+  /**
+   * Where this widget should render.
+   * Default: ["analyticsPage"].
+   */
+  placements?: AnalyticsPlacement[];
+  /**
+   * Optional numeric formatting precision.
+   */
+  maximumFractionDigits?: number;
+  calculation: AnalyticsCalculation;
+}
+
+export interface AnalyticsConfig {
+  widgets: AnalyticsWidgetConfig[];
+}
+
+export type AnalyticsValueType = 'number' | 'string' | 'boolean' | 'object' | 'array' | 'null' | 'unknown';
+
+export interface AnalyticsSnapshotItem {
+  id: string;
+  label?: LocalizedString | string;
+  value: any;
+  valueNumber?: number;
+  valueText?: string;
+  valueType?: AnalyticsValueType;
+  placements: AnalyticsPlacement[];
+  updatedAt: string;
+  revision: number;
+  metadata?: Record<string, any>;
+}
+
+export interface AnalyticsSnapshot {
+  formKey: string;
+  revision: number;
+  updatedAt: string;
+  items: AnalyticsSnapshotItem[];
 }
 
 export interface ListViewMetricConfig {

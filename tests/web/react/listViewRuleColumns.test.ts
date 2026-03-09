@@ -59,6 +59,22 @@ describe('listViewRuleColumns', () => {
     expect(evaluateListViewRuleColumnCell(col, { DATE: '2025-12-30' } as any, { now })?.text).toBe('Today');
   });
 
+  it('keeps list compatibility for isNotToday when date is empty/invalid', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [
+        { when: { fieldId: 'DATE', isNotToday: true }, text: 'Missing', style: 'warning' },
+        { text: 'Today', style: 'link' }
+      ]
+    };
+    const now = new Date(2025, 11, 30);
+    expect(evaluateListViewRuleColumnCell(col, { DATE: '' } as any, { now })?.text).toBe('Missing');
+    expect(evaluateListViewRuleColumnCell(col, { DATE: 'not-a-date' } as any, { now })?.text).toBe('Missing');
+    expect(evaluateListViewRuleColumnCell(col, { DATE: '2025-12-30' } as any, { now })?.text).toBe('Today');
+  });
+
   it('returns View when status is closed (case-insensitive)', () => {
     const now = new Date(2025, 11, 30); // 2025-12-30 (local)
     const row = { status: 'CLOSED', DATE: '2025-12-29' };
@@ -169,5 +185,31 @@ describe('listViewRuleColumns', () => {
     };
     const deps = collectListViewRuleColumnDependencies(col);
     expect(deps.sort()).toEqual(['pdfUrl', 'altUrl'].sort());
+  });
+
+  it('collects dependencies from not and lineItems clauses', () => {
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [
+        {
+          when: {
+            all: [
+              { not: { fieldId: 'status', equals: 'Closed' } },
+              {
+                lineItems: {
+                  groupId: 'MEALS',
+                  when: { fieldId: 'QTY', greaterThan: 0 }
+                }
+              }
+            ]
+          },
+          text: 'Edit'
+        }
+      ]
+    };
+    const deps = collectListViewRuleColumnDependencies(col);
+    expect(deps.sort()).toEqual(['status', 'MEALS', 'QTY'].sort());
   });
 });

@@ -578,6 +578,12 @@ export function buildWebFormHtml(
         font-weight: 500;
         text-align: right;
       }
+      .ck-list-metric-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+      }
       .list-toolbar {
         display: flex;
         flex-wrap: wrap;

@@ -2,10 +2,10 @@ import type {
   ListViewOpenViewTarget,
   ListViewRuleCase,
   ListViewRuleColumnConfig,
-  ListViewRulePredicate,
   ListViewRuleWhen,
   LocalizedString
 } from '../../types';
+import { matchesWhenClause } from '../../rules/visibility';
 
 export type EvaluatedListViewRuleCell = {
   text?: LocalizedString;
@@ -45,6 +45,19 @@ const debugLog = (event: string, payload?: Record<string, unknown>) => {
   if (!debugEnabled() || typeof console === 'undefined' || typeof console.info !== 'function') return;
   try {
     console.info('[ReactForm][ListViewRuleColumn]', event, payload || {});
+  } catch (_) {
+    // ignore
+  }
+};
+
+let sharedWhenEngineLogged = false;
+const logSharedWhenEngineOnce = (): void => {
+  if (sharedWhenEngineLogged) return;
+  if (!debugEnabled()) return;
+  sharedWhenEngineLogged = true;
+  if (typeof console === 'undefined' || typeof console.info !== 'function') return;
+  try {
+    console.info('[ReactForm][ListViewRuleColumn]', 'whenEngine.shared', { engine: 'matchesWhenClause' });
   } catch (_) {
     // ignore
   }
@@ -112,171 +125,24 @@ const resolveOpenTarget = (
   };
 };
 
-const pad2 = (n: number): string => n.toString().padStart(2, '0');
-
-const formatLocalYmd = (d: Date): string => {
-  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-};
-
-const parseDateValue = (raw: any): Date | null => {
-  if (raw === undefined || raw === null) return null;
-  if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw;
-  if (typeof raw === 'number') {
-    const d = new Date(raw);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-  const s = raw?.toString?.().trim?.() || '';
-  if (!s) return null;
-  // Treat YYYY-MM-DD as a local date to avoid UTC parsing surprises.
-  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (ymd) {
-    const y = Number(ymd[1]);
-    const m = Number(ymd[2]);
-    const d = Number(ymd[3]);
-    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
-      const local = new Date(y, m - 1, d, 0, 0, 0, 0);
-      return Number.isNaN(local.getTime()) ? null : local;
-    }
-  }
-  // Common display/storage fallback: DD/MM/YYYY
-  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmy) {
-    const d = Number(dmy[1]);
-    const m = Number(dmy[2]);
-    const y = Number(dmy[3]);
-    const local = new Date(y, m - 1, d, 0, 0, 0, 0);
-    return Number.isNaN(local.getTime()) ? null : local;
-  }
-  const parsed = new Date(s);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const isEmpty = (value: any): boolean => {
-  if (value === undefined || value === null) return true;
-  if (typeof value === 'string') return value.trim() === '';
-  if (Array.isArray(value)) return value.length === 0;
-  return false;
-};
-
-const normalizeScalar = (value: any): string => {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (Array.isArray(value)) {
-    // For checkbox values, treat equality as "any element matches"; callers handle arrays specially.
-    return value.map(v => `${v ?? ''}`).join(',');
-  }
-  return `${value}`.trim();
-};
-
-const normalizeEqualsList = (raw: any): string[] => {
-  if (raw === undefined || raw === null) return [];
-  const list = Array.isArray(raw) ? raw : [raw];
-  return list.map(v => normalizeScalar(v)).filter(Boolean);
-};
-
-const isStatusField = (fieldId: string): boolean => (fieldId || '').toString().trim().toLowerCase() === 'status';
-
-const matchesPredicate = (pred: ListViewRulePredicate, row: Record<string, any>, now: Date): boolean => {
-  const fieldId = (pred.fieldId || '').toString().trim();
-  if (!fieldId) return true;
-  const raw = (row as any)[fieldId];
-
-  const comparisons: boolean[] = [];
-
-  if (pred.notEmpty !== undefined) {
-    comparisons.push(pred.notEmpty ? !isEmpty(raw) : isEmpty(raw));
-  }
-
-  const wantsIsToday = pred.isToday === true;
-  const wantsIsNotToday = pred.isNotToday === true;
-  const wantsIsInPast = (pred as any).isInPast === true;
-  const wantsIsInFuture = (pred as any).isInFuture === true;
-
-  if (wantsIsToday || wantsIsNotToday || wantsIsInPast || wantsIsInFuture) {
-    const parsed = parseDateValue(raw);
-    const today = formatLocalYmd(now);
-    const candidate = parsed ? formatLocalYmd(parsed) : '';
-    const same = Boolean(candidate) && candidate === today;
-    const past = Boolean(candidate) && candidate < today;
-    const future = Boolean(candidate) && candidate > today;
-    if (wantsIsToday) comparisons.push(same);
-    if (wantsIsNotToday) {
-      // Treat empty/invalid as "not today".
-      comparisons.push(!same);
-    }
-    if (wantsIsInPast) comparisons.push(past);
-    if (wantsIsInFuture) comparisons.push(future);
-  }
-
-  if (pred.equals !== undefined) {
-    const expected = normalizeEqualsList(pred.equals);
-    if (!expected.length) {
-      comparisons.push(false);
-    } else if (Array.isArray(raw)) {
-      const current = raw.map(v => normalizeScalar(v)).filter(Boolean);
-      comparisons.push(current.some(v => expected.includes(v)));
-    } else {
-      const current = normalizeScalar(raw);
-      if (isStatusField(fieldId)) {
-        const cur = current.toLowerCase();
-        comparisons.push(expected.map(v => v.toLowerCase()).includes(cur));
-      } else {
-        comparisons.push(expected.includes(current));
-      }
-    }
-  }
-
-  if (pred.notEquals !== undefined) {
-    const disallowed = normalizeEqualsList(pred.notEquals);
-    if (!disallowed.length) {
-      comparisons.push(true);
-    } else if (Array.isArray(raw)) {
-      const current = raw.map(v => normalizeScalar(v)).filter(Boolean);
-      comparisons.push(!current.some(v => disallowed.includes(v)));
-    } else {
-      const current = normalizeScalar(raw);
-      if (isStatusField(fieldId)) {
-        const cur = current.toLowerCase();
-        comparisons.push(!disallowed.map(v => v.toLowerCase()).includes(cur));
-      } else {
-        comparisons.push(!disallowed.includes(current));
-      }
-    }
-  }
-
-  return comparisons.every(Boolean);
-};
-
-const matchesWhen = (when: ListViewRuleWhen | undefined, row: Record<string, any>, now: Date): boolean => {
-  if (!when) return true;
-  if (Array.isArray(when)) {
-    // Backward-compat: treat a plain array as "all".
-    const list = (when as any[]).filter(Boolean) as any[];
-    if (!list.length) return true;
-    return list.every(entry => matchesWhen(entry as any, row, now));
-  }
-  if (typeof when === 'object' && (when as any)) {
-    if (Array.isArray((when as any).all)) {
-      const list = ((when as any).all as any[]).filter(Boolean);
-      if (!list.length) return true;
-      return list.every(entry => matchesWhen(entry as any, row, now));
-    }
-    if (Array.isArray((when as any).any)) {
-      const list = ((when as any).any as any[]).filter(Boolean);
-      if (!list.length) return true;
-      return list.some(entry => matchesWhen(entry as any, row, now));
-    }
-    return matchesPredicate(when as ListViewRulePredicate, row, now);
-  }
-  return true;
-};
-
 export const matchesListViewRuleWhen = (
   when: ListViewRuleWhen | undefined,
   row: Record<string, any>,
   now: Date = new Date()
-): boolean => matchesWhen(when, row, now);
+): boolean => {
+  if (!when) return true;
+  logSharedWhenEngineOnce();
+  const safeNow = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  return matchesWhenClause(
+    when as any,
+    {
+      getValue: (fieldId: string) => (row as any)?.[fieldId],
+      getLineItems: undefined,
+      getLineValue: undefined
+    } as any,
+    { now: safeNow }
+  );
+};
 
 export const collectListViewRuleColumnDependencies = (col: ListViewRuleColumnConfig): string[] => {
   const ids = new Set<string>();
@@ -294,6 +160,23 @@ export const collectListViewRuleColumnDependencies = (col: ListViewRuleColumnCon
     }
     if (Array.isArray((when as any).any)) {
       ((when as any).any as any[]).forEach(visitWhen);
+      return;
+    }
+    if ((when as any).not !== undefined) {
+      visitWhen((when as any).not);
+      return;
+    }
+    const lineItems = (when as any).lineItems ?? (when as any).lineItem;
+    if (lineItems && typeof lineItems === 'object') {
+      const groupId =
+        (lineItems as any).groupId !== undefined && (lineItems as any).groupId !== null
+          ? (lineItems as any).groupId.toString().trim()
+          : (lineItems as any).group !== undefined && (lineItems as any).group !== null
+            ? (lineItems as any).group.toString().trim()
+            : '';
+      if (groupId) ids.add(groupId);
+      visitWhen((lineItems as any).when);
+      visitWhen((lineItems as any).parentWhen);
       return;
     }
     const fieldId = (when as any).fieldId !== undefined && (when as any).fieldId !== null ? (when as any).fieldId.toString().trim() : '';
@@ -335,7 +218,7 @@ export const evaluateListViewRuleColumnCell = (
   const cases = Array.isArray(col?.cases) ? col.cases : [];
   for (const c of cases) {
     if (!c) continue;
-    const ok = matchesWhen(c.when as any, row, now);
+    const ok = matchesListViewRuleWhen(c.when as any, row, now);
     if (!ok) continue;
     const hrefFieldId = (c.hrefFieldId || (col as any).hrefFieldId || '').toString().trim() || undefined;
     const open = resolveOpenTarget(col, c);

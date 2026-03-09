@@ -112,6 +112,7 @@ const mount = () => {
   const def: WebFormDefinition | null | undefined = globalAny.__WEB_FORM_DEF__;
   const formKey: string = globalAny.__WEB_FORM_KEY__ || (def && def.title) || '';
   const record: any = globalAny.__WEB_FORM_RECORD__;
+  const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || {};
   const rootEl = document.getElementById('react-prototype-root');
   if (!rootEl) return;
 
@@ -136,7 +137,16 @@ const mount = () => {
 
   const root = createRoot(rootEl);
   const Root = require('./Root').default as typeof import('./Root').Root;
-  root.render(<Root definition={def ?? null} formKey={formKey} record={record} />);
+  root.render(
+    <Root
+      definition={def ?? null}
+      formKey={formKey}
+      record={record}
+      analytics={(bootstrap as any).analytics}
+      analyticsRev={Number((bootstrap as any).analyticsRev || (bootstrap as any).analytics?.revision || 0) || undefined}
+      envTag={(bootstrap as any).envTag}
+    />
+  );
 };
 
 if (typeof document !== 'undefined') {

@@ -1,4 +1,5 @@
 import {
+  AnalyticsSnapshot,
   DataSourceConfig,
   FollowupActionResult,
   FormConfigExport,
@@ -602,6 +603,8 @@ export interface BootstrapContext {
   record?: WebFormSubmission;
   listResponse?: ListResponse;
   records?: Record<string, WebFormSubmission>;
+  analytics?: AnalyticsSnapshot;
+  analyticsRev?: number;
   homeRev?: number;
   configSource?: string;
   configEnv?: string;
@@ -613,7 +616,16 @@ export interface HomeBootstrapResponse {
   rev: number;
   listResponse?: ListResponse;
   records?: Record<string, WebFormSubmission>;
+  analytics?: AnalyticsSnapshot;
+  analyticsRev?: number;
   cache?: 'hit' | 'miss';
+}
+
+export interface FormCatalogItem {
+  formKey: string;
+  title: string;
+  description?: string;
+  targetUrl: string;
 }
 
 export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
@@ -627,3 +639,6 @@ export const fetchHomeBootstrapApi = (
 
 export const fetchFormConfigApi = (formKey?: string | null): Promise<FormConfigExport> =>
   runAppsScript<FormConfigExport>('fetchFormConfig', formKey ?? null);
+
+export const fetchFormCatalogApi = (): Promise<FormCatalogItem[]> =>
+  runAppsScript<FormCatalogItem[]>('fetchFormCatalog');

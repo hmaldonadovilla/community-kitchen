@@ -213,20 +213,6 @@
         "nl": "Zoeken op klant:"
       }
     },
-    "listViewMetric": {
-      "label": {
-        "en": "portions delivered",
-        "fr": "portions livrées",
-        "nl": "porties geleverd"
-      },
-      "groupId": "MP_MEALS_REQUEST",
-      "fieldId": "FINAL_QTY",
-      "when": {
-        "fieldId": "status",
-        "equals": "Closed"
-      },
-      "maximumFractionDigits": 0
-    },
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
@@ -1966,7 +1952,34 @@
         "unlockStatus": "In progress"
       }
     ],
-    "listViewRowClickEnabled": false
+    "listViewRowClickEnabled": false,
+    "analytics": {
+      "widgets": [
+        {
+          "id": "portions_delivered",
+          "label": {
+            "en": "portions delivered",
+            "fr": "portions livrées",
+            "nl": "porties geleverd"
+          },
+          "placements": [
+            "listView",
+            "analyticsPage"
+          ],
+          "maximumFractionDigits": 0,
+          "calculation": {
+            "type": "aggregate",
+            "aggregate": "sum",
+            "groupId": "MP_MEALS_REQUEST",
+            "fieldId": "FINAL_QTY",
+            "when": {
+              "fieldId": "status",
+              "equals": "Closed"
+            }
+          }
+        }
+      ]
+    }
   },
   "questions": [
     {
@@ -6858,20 +6871,6 @@
           "nl": "Zoeken op klant:"
         }
       },
-      "metric": {
-        "label": {
-          "en": "portions delivered",
-          "fr": "portions livrées",
-          "nl": "porties geleverd"
-        },
-        "groupId": "MP_MEALS_REQUEST",
-        "fieldId": "FINAL_QTY",
-        "when": {
-          "fieldId": "status",
-          "equals": "Closed"
-        },
-        "maximumFractionDigits": 0
-      },
       "rowClickEnabled": false
     },
     "dedupRules": [
@@ -8668,7 +8667,34 @@
         "bypassFields": [],
         "unlockStatus": "In progress"
       }
-    ]
+    ],
+    "analytics": {
+      "widgets": [
+        {
+          "id": "portions_delivered",
+          "label": {
+            "en": "portions delivered",
+            "fr": "portions livrées",
+            "nl": "porties geleverd"
+          },
+          "placements": [
+            "listView",
+            "analyticsPage"
+          ],
+          "maximumFractionDigits": 0,
+          "calculation": {
+            "type": "aggregate",
+            "aggregate": "sum",
+            "groupId": "MP_MEALS_REQUEST",
+            "fieldId": "FINAL_QTY",
+            "when": {
+              "fieldId": "status",
+              "equals": "Closed"
+            }
+          }
+        }
+      ]
+    }
   },
   "validationErrors": []
 }

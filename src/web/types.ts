@@ -1,4 +1,6 @@
 import {
+  AnalyticsSnapshot,
+  AnalyticsSnapshotItem,
   DedupRule,
   DedupDialogConfig,
   FileUploadConfig,
@@ -141,6 +143,8 @@ export interface LineItemTotalsInput {
 }
 
 export {
+  AnalyticsSnapshot,
+  AnalyticsSnapshotItem,
   WebFormDefinition,
   WebQuestionDefinition,
   LocalizedString,

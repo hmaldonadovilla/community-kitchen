@@ -75,7 +75,7 @@ const toLocalYmd = (raw: unknown): string => {
   return d ? formatLocalYmd(d) : '';
 };
 
-export function matchesWhen(value: unknown, when?: VisibilityCondition | any): boolean {
+export function matchesWhen(value: unknown, when?: VisibilityCondition | any, options?: { now?: Date }): boolean {
   if (!when) return true;
   const values = Array.isArray(value) ? value : [value];
   // Normalize undefined/null and trim/standardize strings for tolerant comparisons
@@ -122,17 +122,22 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any): b
   }
 
   const wantsIsToday = (when as any).isToday === true;
+  const wantsIsNotToday = (when as any).isNotToday === true;
   const wantsIsInPast = (when as any).isInPast === true;
   const wantsIsInFuture = (when as any).isInFuture === true;
 
-  if (wantsIsToday || wantsIsInPast || wantsIsInFuture) {
+  if (wantsIsToday || wantsIsNotToday || wantsIsInPast || wantsIsInFuture) {
     logDateWhenOnce();
-    const todayYmd = formatLocalYmd(new Date());
+    const now = options?.now instanceof Date && !Number.isNaN(options.now.getTime()) ? options.now : new Date();
+    const todayYmd = formatLocalYmd(now);
     const dateYmds = candidates.map(v => toLocalYmd(v)).filter(Boolean);
-    if (!dateYmds.length) return false;
-    if (wantsIsToday && !dateYmds.some(ymd => ymd === todayYmd)) return false;
-    if (wantsIsInPast && !dateYmds.some(ymd => ymd < todayYmd)) return false;
-    if (wantsIsInFuture && !dateYmds.some(ymd => ymd > todayYmd)) return false;
+    const same = dateYmds.some(ymd => ymd === todayYmd);
+    const inPast = dateYmds.some(ymd => ymd < todayYmd);
+    const inFuture = dateYmds.some(ymd => ymd > todayYmd);
+    if (wantsIsToday && !same) return false;
+    if (wantsIsNotToday && same) return false;
+    if (wantsIsInPast && !inPast) return false;
+    if (wantsIsInFuture && !inFuture) return false;
   }
 
   if (when.equals !== undefined) {
@@ -390,7 +395,7 @@ export const containsParentLineItemsClause = (when: WhenClause | undefined): boo
 export const matchesWhenClause = (
   when: WhenClause | undefined,
   ctx: VisibilityContext,
-  options?: { rowId?: string; linePrefix?: string }
+  options?: { rowId?: string; linePrefix?: string; now?: Date }
 ): boolean => {
   if (!when) return true;
 
@@ -429,13 +434,13 @@ export const matchesWhenClause = (
   if (!fieldId) return true;
   const leaf: VisibilityCondition = { ...(when as any), fieldId };
   const value = resolveVisibilityValue(leaf, ctx, options?.rowId, options?.linePrefix);
-  return matchesWhen(value, leaf as any);
+  return matchesWhen(value, leaf as any, { now: options?.now });
 };
 
 const matchesLineItemsClause = (
   raw: any,
   ctx: VisibilityContext,
-  options?: { rowId?: string; linePrefix?: string }
+  options?: { rowId?: string; linePrefix?: string; now?: Date }
 ): boolean => {
   if (!raw || typeof raw !== 'object') return true;
   if (typeof ctx.getLineItems !== 'function') return false;
@@ -532,7 +537,7 @@ const matchesLineItemsClause = (
     const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
     const rowCtx = buildRowCtx(rowValues, parentValues, linePrefix);
     const rowId = (row as any)?.id ?? '';
-    return matchesWhenClause(clause, rowCtx, { rowId, linePrefix });
+    return matchesWhenClause(clause, rowCtx, { rowId, linePrefix, now: options?.now });
   };
 
   if (!subGroupId && !subGroupPath.length) {

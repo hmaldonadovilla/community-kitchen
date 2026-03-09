@@ -524,7 +524,7 @@ const writeHomeListLocalCache = (key: string, response: ListResponse, homeRev?: 
   }
 };
 
-const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }) => {
+const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
   >;
@@ -2389,6 +2389,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const records = bootstrap?.records || {};
     return { response, records };
   });
+  const [analyticsSnapshot, setAnalyticsSnapshot] = useState<any>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    return (bootstrap?.analytics || analytics || null) as any;
+  });
+  const [analyticsSnapshotRev, setAnalyticsSnapshotRev] = useState<number>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
+    return Number.isFinite(rev) && rev >= 0 ? rev : 0;
+  });
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
@@ -2411,6 +2422,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const dataSourcePrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
+
+  useEffect(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    setAnalyticsSnapshot((bootstrap?.analytics || analytics || null) as any);
+  }, [analytics, formKey]);
+
+  useEffect(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
+    setAnalyticsSnapshotRev(Number.isFinite(rev) && rev >= 0 ? rev : 0);
+  }, [analytics, analyticsRev, formKey]);
 
   useEffect(() => {
     if (initialHomeListSource !== 'localStorage') return;
@@ -2831,6 +2855,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
               const revRaw = Number((bootstrapRes as any)?.rev);
               if (Number.isFinite(revRaw) && revRaw >= 0) {
                 setHomeRev(prev => (prev === revRaw ? prev : revRaw));
+              }
+              const analyticsRes = (bootstrapRes as any)?.analytics;
+              if (analyticsRes && typeof analyticsRes === 'object') {
+                setAnalyticsSnapshot(analyticsRes);
+                const nextAnalyticsRev = Number((bootstrapRes as any)?.analyticsRev ?? (analyticsRes as any)?.revision ?? 0);
+                if (Number.isFinite(nextAnalyticsRev) && nextAnalyticsRev >= 0) {
+                  setAnalyticsSnapshotRev(nextAnalyticsRev);
+                }
               }
               if ((bootstrapRes as any)?.notModified) {
                 const notModifiedList: ListResponse = {
@@ -8953,6 +8985,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           formKey={formKey}
           definition={definition}
           language={language}
+          analyticsSnapshot={analyticsSnapshot || undefined}
+          analyticsRevision={analyticsSnapshotRev}
           disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}
