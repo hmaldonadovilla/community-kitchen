@@ -667,6 +667,105 @@ describe('ConfigSheet', () => {
     });
   });
 
+  test('getQuestions parses BUTTON updateRecord dependencyGuard config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: UpdateRecordDependencies');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN_DEP',
+        'BUTTON',
+        'Deactivate',
+        'Désactiver',
+        'Deactiveren',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "updateRecord",
+            "set": { "status": "Disabled" },
+            "dependencyGuard": {
+              "targetFormKey": "Meal Production",
+              "when": {
+                "all": [
+                  { "fieldId": "status", "notEquals": "Closed" },
+                  {
+                    "lineItems": {
+                      "groupId": "MP_MEALS_REQUEST",
+                      "subGroupId": "MP_TYPE_LI",
+                      "when": { "fieldId": "RECIPE", "equals": "{{source.RECIPE_NAME}}" }
+                    }
+                  }
+                ]
+              },
+              "dialog": {
+                "title": { "en": "Recipe used" },
+                "message": { "en": "This recipe is still used on {{count}} records." },
+                "confirmLabel": { "en": "Deactivate and clear" },
+                "cancelLabel": { "en": "Cancel" }
+              },
+              "mutations": [
+                {
+                  "type": "setLineItemValues",
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupPath": ["MP_TYPE_LI"],
+                  "when": { "fieldId": "RECIPE", "equals": "{{source.RECIPE_NAME}}" },
+                  "values": { "RECIPE": null },
+                  "clearSubGroups": ["MP_INGREDIENTS_LI"]
+                }
+              ]
+            }
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: UpdateRecordDependencies');
+    expect(questions.length).toBe(1);
+    expect((questions[0] as any).button).toEqual({
+      action: 'updateRecord',
+      set: { status: 'Disabled' },
+      navigateTo: 'auto',
+      dependencyGuard: {
+        targetFormKey: 'Meal Production',
+        when: {
+          all: [
+            { fieldId: 'status', notEquals: 'Closed' },
+            {
+              lineItems: {
+                groupId: 'MP_MEALS_REQUEST',
+                subGroupId: 'MP_TYPE_LI',
+                when: { fieldId: 'RECIPE', equals: '{{source.RECIPE_NAME}}' }
+              }
+            }
+          ]
+        },
+        dialog: {
+          title: { en: 'Recipe used' },
+          message: { en: 'This recipe is still used on {{count}} records.' },
+          confirmLabel: { en: 'Deactivate and clear' },
+          cancelLabel: { en: 'Cancel' }
+        },
+        mutations: [
+          {
+            type: 'setLineItemValues',
+            groupId: 'MP_MEALS_REQUEST',
+            subGroupPath: ['MP_TYPE_LI'],
+            when: { fieldId: 'RECIPE', equals: '{{source.RECIPE_NAME}}' },
+            values: { RECIPE: null },
+            clearSubGroups: ['MP_INGREDIENTS_LI']
+          }
+        ]
+      }
+    });
+  });
+
   test('getQuestions parses BUTTON renderDocTemplate loadingLabel config JSON', () => {
     const configSheet = mockSS.insertSheet('Config: PdfButtons');
     const exampleRows = [

@@ -269,6 +269,67 @@ export interface ButtonConfirmConfig {
   cancelLabel?: LocalizedString | string;
 }
 
+export interface UpdateRecordDependencySetRecordMutation {
+  /**
+   * Update top-level fields on each impacted target record.
+   *
+   * Notes:
+   * - `status` updates the target form's status column (or configured follow-up status field).
+   * - `values` updates top-level question fields only.
+   */
+  type: 'setRecord';
+  status?: string | null;
+  values?: Record<string, DefaultValue | null>;
+}
+
+export interface UpdateRecordDependencySetLineItemValuesMutation {
+  /**
+   * Update matching line-item rows inside a target record.
+   *
+   * Notes:
+   * - `groupId` identifies the root LINE_ITEM_GROUP question.
+   * - `subGroupPath` optionally walks into nested subgroup rows before applying `when` / `values`.
+   * - `clearSubGroups` clears direct child subgroup arrays on each matched row.
+   */
+  type: 'setLineItemValues';
+  groupId: string;
+  subGroupPath?: string | string[];
+  when?: WhenClause;
+  values: Record<string, DefaultValue | null>;
+  clearSubGroups?: string[];
+}
+
+export type UpdateRecordDependencyMutation =
+  | UpdateRecordDependencySetRecordMutation
+  | UpdateRecordDependencySetLineItemValuesMutation;
+
+export interface UpdateRecordDependencyGuardConfig {
+  /**
+   * Target form where impacted downstream records should be checked and updated.
+   */
+  targetFormKey: string;
+  /**
+   * Condition evaluated against each target record. Reuses the standard `WhenClause` DSL.
+   *
+   * String values may reference the source record using `{{source.FIELD_ID}}`, plus
+   * `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, and `{{source.updatedAt}}`.
+   */
+  when: WhenClause;
+  /**
+   * Confirmation dialog shown when impacted target records are found.
+   *
+   * Supported placeholders in strings:
+   * - `{{count}}`: number of impacted records
+   * - `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, `{{source.updatedAt}}`
+   * - `{{targetFormKey}}`
+   */
+  dialog: ButtonConfirmConfig;
+  /**
+   * Mutations applied to each impacted target record when the user confirms.
+   */
+  mutations: UpdateRecordDependencyMutation[];
+}
+
 export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
 
 export type SystemActionGateDialogTrigger = 'onAttempt' | 'onEnable';
@@ -472,6 +533,14 @@ export interface UpdateRecordButtonConfig {
    * Optional confirmation dialog shown before applying the update.
    */
   confirm?: ButtonConfirmConfig;
+  /**
+   * Optional downstream dependency guard.
+   *
+   * When configured, the client previews impacted target records before applying the update.
+   * If matches are found, the user must confirm and the server applies `mutations` to those
+   * target records before saving the current record.
+   */
+  dependencyGuard?: UpdateRecordDependencyGuardConfig;
   /**
    * After a successful update, navigate to the specified view.
    * - auto: preserve current behavior (no forced navigation)

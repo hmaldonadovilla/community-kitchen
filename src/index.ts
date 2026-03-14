@@ -304,6 +304,18 @@ export function saveSubmissionWithId(formObject: WebFormSubmission): { success: 
   return service.saveSubmissionWithId(formObject);
 }
 
+export function previewUpdateRecordDependencies(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.previewUpdateRecordDependencies(formObject, buttonId);
+}
+
+export function applyUpdateRecordWithDependencies(formObject: WebFormSubmission, buttonId: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.applyUpdateRecordWithDependencies(formObject, buttonId);
+}
+
 export function checkDedupConflict(formObject: WebFormSubmission): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

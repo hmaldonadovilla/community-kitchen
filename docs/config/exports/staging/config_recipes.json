@@ -1042,6 +1042,80 @@
             "nl": "Nee"
           }
         },
+        "dependencyGuard": {
+          "targetFormKey": "Meal Production",
+          "when": {
+            "all": [
+              {
+                "fieldId": "status",
+                "notEquals": "Closed"
+              },
+              {
+                "any": [
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isToday": true
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInFuture": true
+                  }
+                ]
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupId": "MP_TYPE_LI",
+                  "when": {
+                    "fieldId": "RECIPE",
+                    "equals": "{{source.QFTD5RD2EM}}"
+                  }
+                }
+              }
+            ]
+          },
+          "dialog": {
+            "title": {
+              "en": "Recipe used in meal production",
+              "fr": "Recette utilisée en production de repas",
+              "nl": "Recept gebruikt in maaltijdproductie"
+            },
+            "message": {
+              "en": "This recipe is still selected on {{count}} open Meal Production record(s) scheduled for today or later. If you continue, the recipe and its linked ingredients will be cleared from those records. Do you want to continue?",
+              "fr": "Cette recette est encore sélectionnée dans {{count}} fiche(s) de production de repas ouverte(s) prévue(s) pour aujourd'hui ou plus tard. Si vous continuez, la recette et ses ingrédients liés seront supprimés de ces fiches. Voulez-vous continuer ?",
+              "nl": "Dit recept is nog geselecteerd in {{count}} open maaltijdproductie-record(s) gepland voor vandaag of later. Als je doorgaat, worden het recept en de gekoppelde ingrediënten uit die records verwijderd. Wil je doorgaan?"
+            },
+            "confirmLabel": {
+              "en": "Deactivate and clear",
+              "fr": "Désactiver et effacer",
+              "nl": "Deactiveren en wissen"
+            },
+            "cancelLabel": {
+              "en": "Cancel",
+              "fr": "Annuler",
+              "nl": "Annuleren"
+            }
+          },
+          "mutations": [
+            {
+              "type": "setLineItemValues",
+              "groupId": "MP_MEALS_REQUEST",
+              "subGroupPath": [
+                "MP_TYPE_LI"
+              ],
+              "when": {
+                "fieldId": "RECIPE",
+                "equals": "{{source.QFTD5RD2EM}}"
+              },
+              "values": {
+                "RECIPE": null
+              },
+              "clearSubGroups": [
+                "MP_INGREDIENTS_LI"
+              ]
+            }
+          ]
+        },
         "placements": [
           "summaryBar"
         ]

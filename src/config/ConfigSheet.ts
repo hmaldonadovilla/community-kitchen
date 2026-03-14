@@ -29,6 +29,7 @@ import {
   QuestionType,
   PresetValue,
   SelectionEffect,
+  UpdateRecordDependencyGuardConfig,
   ValidationRule,
   VisibilityCondition,
   WhenClause,
@@ -1429,10 +1430,14 @@ export class ConfigSheet {
           : undefined;
       const confirmRaw = cfgRaw.confirm ?? cfgRaw.confirmation;
       const confirm = confirmRaw && typeof confirmRaw === 'object' ? confirmRaw : undefined;
+      const dependencyGuard = this.normalizeUpdateRecordDependencyGuard(
+        cfgRaw.dependencyGuard ?? cfgRaw.dependencyCheck ?? cfgRaw.dependencyImpact
+      );
 
       const config: ButtonConfig = { action: 'updateRecord', set: outSet } as any;
       if (navigateTo) (config as any).navigateTo = navigateTo;
       if (confirm) (config as any).confirm = confirm;
+      if (dependencyGuard) (config as any).dependencyGuard = dependencyGuard;
       if (placements.length) (config as any).placements = placements as any;
       return config;
     }
@@ -1449,6 +1454,127 @@ export class ConfigSheet {
       const config: ButtonConfig = { action: 'openUrlField', fieldId: resolved } as any;
       if (placements.length) (config as any).placements = placements as any;
       return config;
+    }
+
+    return undefined;
+  }
+
+  private static normalizeUpdateRecordDependencyGuard(raw: any): UpdateRecordDependencyGuardConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const targetFormKeyRaw = raw.targetFormKey ?? raw.formKey ?? raw.targetForm ?? raw.form;
+    const targetFormKey = targetFormKeyRaw !== undefined && targetFormKeyRaw !== null ? targetFormKeyRaw.toString().trim() : '';
+    if (!targetFormKey) return undefined;
+
+    const when = this.normalizeWhenClause(raw.when ?? raw.match ?? raw.filter);
+    if (!when) return undefined;
+
+    const dialogRaw = raw.dialog ?? raw.confirm ?? raw.confirmation;
+    const dialog = dialogRaw && typeof dialogRaw === 'object' ? dialogRaw : undefined;
+    if (!dialog) return undefined;
+
+    const mutationsRaw = Array.isArray(raw.mutations)
+      ? raw.mutations
+      : Array.isArray(raw.apply)
+        ? raw.apply
+        : Array.isArray(raw.effects)
+          ? raw.effects
+          : [];
+    const mutations = mutationsRaw
+      .map((entry: any) => this.normalizeUpdateRecordDependencyMutation(entry))
+      .filter(Boolean) as UpdateRecordDependencyGuardConfig['mutations'];
+    if (!mutations.length) return undefined;
+
+    return {
+      targetFormKey,
+      when,
+      dialog,
+      mutations
+    };
+  }
+
+  private static normalizeUpdateRecordDependencyMutation(raw: any): UpdateRecordDependencyGuardConfig['mutations'][number] | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const typeRaw = raw.type ?? raw.kind ?? '';
+    const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';
+
+    if (type === 'setRecord') {
+      const mutation: any = { type: 'setRecord' };
+      if (Object.prototype.hasOwnProperty.call(raw, 'status')) {
+        const statusRaw = raw.status;
+        mutation.status = statusRaw === undefined ? undefined : statusRaw === null ? null : statusRaw.toString();
+      }
+      const valuesRaw = raw.values ?? raw.set ?? raw.fields;
+      if (valuesRaw && typeof valuesRaw === 'object' && !Array.isArray(valuesRaw)) {
+        const values: Record<string, any> = {};
+        Object.keys(valuesRaw).forEach(fieldIdRaw => {
+          const fieldId = (fieldIdRaw || '').toString().trim();
+          if (!fieldId) return;
+          const normalized = this.normalizeDefaultValue((valuesRaw as any)[fieldIdRaw]);
+          if ((valuesRaw as any)[fieldIdRaw] === null) {
+            values[fieldId] = null;
+            return;
+          }
+          if (normalized === undefined) return;
+          values[fieldId] = normalized;
+        });
+        if (Object.keys(values).length) mutation.values = values;
+      }
+      const hasStatus = Object.prototype.hasOwnProperty.call(mutation, 'status');
+      const hasValues = !!mutation.values && Object.keys(mutation.values || {}).length > 0;
+      return hasStatus || hasValues ? mutation : undefined;
+    }
+
+    if (type === 'setLineItemValues') {
+      const groupIdRaw = raw.groupId ?? raw.group ?? raw.lineGroupId ?? raw.lineGroup;
+      const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+      if (!groupId) return undefined;
+
+      const valuesRaw = raw.values ?? raw.set ?? raw.fields;
+      if (!valuesRaw || typeof valuesRaw !== 'object' || Array.isArray(valuesRaw)) return undefined;
+      const values: Record<string, any> = {};
+      Object.keys(valuesRaw).forEach(fieldIdRaw => {
+        const fieldId = (fieldIdRaw || '').toString().trim();
+        if (!fieldId) return;
+        const rawValue = (valuesRaw as any)[fieldIdRaw];
+        if (rawValue === null) {
+          values[fieldId] = null;
+          return;
+        }
+        const normalized = this.normalizeDefaultValue(rawValue);
+        if (normalized === undefined) return;
+        values[fieldId] = normalized;
+      });
+      if (!Object.keys(values).length) return undefined;
+
+      const mutation: any = {
+        type: 'setLineItemValues',
+        groupId,
+        values
+      };
+
+      const subGroupPathRaw = raw.subGroupPath ?? raw.path;
+      if (Array.isArray(subGroupPathRaw)) {
+        const subGroupPath = subGroupPathRaw
+          .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+          .filter(Boolean);
+        if (subGroupPath.length) mutation.subGroupPath = subGroupPath;
+      } else if (subGroupPathRaw !== undefined && subGroupPathRaw !== null) {
+        const subGroupPath = subGroupPathRaw.toString().trim();
+        if (subGroupPath) mutation.subGroupPath = subGroupPath;
+      }
+
+      const when = this.normalizeWhenClause(raw.when ?? raw.match ?? raw.filter);
+      if (when) mutation.when = when;
+
+      const clearSubGroupsRaw = raw.clearSubGroups ?? raw.clearSubgroups ?? raw.clearChildren;
+      if (Array.isArray(clearSubGroupsRaw)) {
+        const clearSubGroups = clearSubGroupsRaw
+          .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+          .filter(Boolean);
+        if (clearSubGroups.length) mutation.clearSubGroups = clearSubGroups;
+      }
+
+      return mutation;
     }
 
     return undefined;

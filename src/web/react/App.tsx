@@ -18,6 +18,8 @@ import {
 import {
   BootstrapContext,
   submit,
+  previewUpdateRecordDependenciesApi,
+  applyUpdateRecordWithDependenciesApi,
   checkDedupConflictApi,
   triggerFollowupBatch,
   uploadFilesApi,
@@ -5256,6 +5258,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       if (action === 'updateRecord') {
         const setObj = (cfg?.set || cfg?.patch || cfg?.update || {}) as any;
+        const dependencyGuardCfg = (cfg?.dependencyGuard || null) as any;
         const navigateToRaw = (cfg?.navigateTo || cfg?.targetView || cfg?.openView || 'auto').toString().trim().toLowerCase();
         const navigateTo =
           navigateToRaw === 'form' || navigateToRaw === 'summary' || navigateToRaw === 'list' || navigateToRaw === 'auto'
@@ -5271,7 +5274,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim()
           : '';
 
-        const run = () => {
+        const run = (submitMode: 'default' | 'dependencyGuard' = 'default') => {
           if (updateRecordActionInFlightRef.current) {
             logEvent('button.updateRecord.blocked.inFlightGuard', { buttonId: baseId, qIdx: qIdx ?? null });
             return;
@@ -5285,6 +5288,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               definition,
               formKey,
               submit,
+              submitWithDependencies: applyUpdateRecordWithDependenciesApi,
               tSystem,
               logEvent,
               refs: {
@@ -5317,7 +5321,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               qIdx: qIdx,
               navigateTo,
               set: setObj as any,
-              busyTitle
+              busyTitle,
+              submitMode
             }
           )
             .catch(() => {
@@ -5334,24 +5339,121 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
         };
 
-        if (confirmMessage) {
-          const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
-          const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
-          const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
-          customConfirm.openConfirm({
-            title,
-            message: confirmMessage,
-            confirmLabel: okLabel,
-            cancelLabel: cancel,
-            kind: 'updateRecord',
-            refId: buttonId,
-            onConfirm: run
-          });
-          logEvent('button.updateRecord.confirm.open', { buttonId: baseId, qIdx: qIdx ?? null, navigateTo });
+        const runDefaultFlow = () => {
+          if (confirmMessage) {
+            const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
+            const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
+            const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
+            customConfirm.openConfirm({
+              title,
+              message: confirmMessage,
+              confirmLabel: okLabel,
+              cancelLabel: cancel,
+              kind: 'updateRecord',
+              refId: buttonId,
+              onConfirm: () => run('default')
+            });
+            logEvent('button.updateRecord.confirm.open', { buttonId: baseId, qIdx: qIdx ?? null, navigateTo });
+            return;
+          }
+
+          run('default');
+        };
+
+        if (!dependencyGuardCfg) {
+          runDefaultFlow();
           return;
         }
 
-        run();
+        const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
+        const previewSeq = updateRecordBusy.lock({
+          title: busyTitle || tSystem('common.loading', languageRef.current, 'Loading…'),
+          message: tSystem('common.loading', languageRef.current, 'Loading…'),
+          kind: 'updateRecord.dependencyPreview',
+          diagnosticMeta: { buttonId: baseId, qIdx: qIdx ?? null }
+        });
+        logEvent('button.updateRecord.dependencyPreview.start', {
+          buttonId: baseId,
+          qIdx: qIdx ?? null,
+          targetFormKey: dependencyGuardCfg?.targetFormKey || null
+        });
+
+        void (async () => {
+          try {
+            const existingRecordId = resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            });
+            const draft = buildDraftPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              existingRecordId
+            }) as any;
+            const metaSource: any = selectedRecordSnapshotRef.current || lastSubmissionMetaRef.current || null;
+            if (metaSource?.status !== undefined && metaSource?.status !== null) draft.status = metaSource.status;
+            if (metaSource?.createdAt !== undefined && metaSource?.createdAt !== null) draft.createdAt = metaSource.createdAt;
+            if (metaSource?.updatedAt !== undefined && metaSource?.updatedAt !== null) draft.updatedAt = metaSource.updatedAt;
+            if (metaSource?.pdfUrl !== undefined && metaSource?.pdfUrl !== null) draft.pdfUrl = metaSource.pdfUrl;
+
+            const preview = await previewUpdateRecordDependenciesApi(draft, buttonId);
+            if (!preview?.success) {
+              const msg = (preview?.message || 'Failed to check dependent records.').toString();
+              setStatus(msg);
+              setStatusLevel('error');
+              logEvent('button.updateRecord.dependencyPreview.error', {
+                buttonId: baseId,
+                qIdx: qIdx ?? null,
+                message: msg
+              });
+              return;
+            }
+
+            const impactedCount = Number(preview.impactedCount || 0);
+            logEvent('button.updateRecord.dependencyPreview.ok', {
+              buttonId: baseId,
+              qIdx: qIdx ?? null,
+              impactedCount,
+              targetFormKey: preview.targetFormKey || null
+            });
+
+            if (impactedCount > 0) {
+              const dialog = preview.dialog || { title: '', message: '', confirmLabel: '', cancelLabel: '' };
+              customConfirm.openConfirm({
+                title: dialog.title || tSystem('common.confirm', languageRef.current, 'Confirm'),
+                message: dialog.message || '',
+                confirmLabel: dialog.confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
+                cancelLabel: dialog.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
+                kind: 'updateRecord.dependencyGuard',
+                refId: buttonId,
+                onConfirm: () => run('dependencyGuard')
+              });
+              logEvent('button.updateRecord.dependencyConfirm.open', {
+                buttonId: baseId,
+                qIdx: qIdx ?? null,
+                impactedCount,
+                targetFormKey: preview.targetFormKey || null
+              });
+              return;
+            }
+
+            runDefaultFlow();
+          } catch (err: any) {
+            const msg = resolveUserFacingErrorMessage(err, 'Failed to check dependent records.') || 'Failed to check dependent records.';
+            setStatus(msg);
+            setStatusLevel('error');
+            logEvent('button.updateRecord.dependencyPreview.exception', {
+              buttonId: baseId,
+              qIdx: qIdx ?? null,
+              message: (err?.message || err?.toString?.() || msg).toString()
+            });
+          } finally {
+            updateRecordBusy.unlock(previewSeq, { buttonId: baseId, qIdx: qIdx ?? null });
+          }
+        })();
         return;
       }
 
@@ -5359,6 +5461,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       createRecordFromPreset,
+      customConfirm,
       definition,
       formKey,
       definition.title,
@@ -5372,7 +5475,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       perfMark,
       perfMeasure,
       resolveLabel,
-      upsertListCacheRow
+      upsertListCacheRow,
+      updateRecordBusy
     ]
   );
 

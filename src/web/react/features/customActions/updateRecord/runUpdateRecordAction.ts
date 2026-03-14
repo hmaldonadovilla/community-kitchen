@@ -8,6 +8,11 @@ import { resolveStatusTransitionValue } from '../../../../../domain/statusTransi
 type DraftSaveState = { phase: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused'; updatedAt?: string; message?: string };
 type StatusTone = 'info' | 'success' | 'error' | null;
 type SubmissionMeta = { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; status?: string | null };
+type UpdateRecordSubmitResult = {
+  success: boolean;
+  message?: string;
+  meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
+};
 
 const isStagingPerfEnabled = (): boolean => {
   try {
@@ -78,12 +83,14 @@ export type UpdateRecordActionRequest = {
   navigateTo: UpdateRecordActionNavigateTo;
   set: UpdateRecordActionSet;
   busyTitle?: string;
+  submitMode?: 'default' | 'dependencyGuard';
 };
 
 export type UpdateRecordActionDeps = {
   definition: WebFormDefinition;
   formKey: string;
   submit: (payload: any) => Promise<any>;
+  submitWithDependencies?: (payload: any, buttonRef: string) => Promise<UpdateRecordSubmitResult>;
   tSystem: (key: string, language: LangCode, fallback?: string) => string;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 
@@ -274,7 +281,10 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       const submitStartMark = `ck.updateRecord.submit.start.${Date.now()}`;
       const submitEndMark = `ck.updateRecord.submit.end.${Date.now()}`;
       perfMarkIfEnabled(perfEnabled, submitStartMark);
-      const res = await deps.submit(draft);
+      const res =
+        req.submitMode === 'dependencyGuard' && deps.submitWithDependencies
+          ? await deps.submitWithDependencies(draft, req.buttonRef)
+          : await deps.submit(draft);
       perfMarkIfEnabled(perfEnabled, submitEndMark);
       perfMeasureIfEnabled(perfEnabled, 'ck.updateRecord.submit', submitStartMark, submitEndMark, {
         buttonId: req.buttonId,
@@ -377,6 +387,7 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
         updatedAt: updatedAt || null,
         dataVersion: nextDataVersion || null,
         navigateTo: req.navigateTo,
+        submitMode: req.submitMode || 'default',
         appliedValueCount: appliedValueFields.length,
         skippedValueCount: skippedValueFields.length
       });

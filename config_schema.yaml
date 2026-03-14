@@ -463,6 +463,15 @@ components:
                         type: string
                   description: Optional cancel button label.
               required: [message]
+            dependencyGuard:
+              $ref: '#/components/schemas/UpdateRecordDependencyGuardConfig'
+              description: |
+                Optional downstream dependency preflight.
+
+                When configured, the app evaluates `when` against records in `targetFormKey` before
+                applying the source update. If impacted records are found, the dedicated dialog is
+                shown and, on confirm, the configured `mutations` are applied to each impacted target
+                record before the current record is saved.
             navigateTo:
               type: string
               enum: [auto, form, summary, list]
@@ -528,6 +537,116 @@ components:
                 - `primary`: accent-filled button
                 - `secondary`: neutral/outline button
           required: [action, fieldId]
+
+    UpdateRecordDependencyGuardConfig:
+      type: object
+      properties:
+        targetFormKey:
+          type: string
+          description: Target form whose saved records should be checked and updated.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: |
+            Condition evaluated against each target record. Reuses the standard `WhenClause` DSL.
+
+            String values may reference the current source record using:
+            - `{{source.FIELD_ID}}`
+            - `{{source.id}}`
+            - `{{source.status}}`
+            - `{{source.createdAt}}`
+            - `{{source.updatedAt}}`
+        dialog:
+          $ref: '#/components/schemas/ButtonConfirmConfig'
+          description: |
+            Confirmation dialog shown only when impacted target records are found.
+
+            Supported placeholders in localized strings:
+            - `{{count}}`
+            - `{{targetFormKey}}`
+            - `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, `{{source.updatedAt}}`
+        mutations:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateRecordDependencyMutation'
+          description: Mutations to apply to each impacted target record when the user confirms.
+      required: [targetFormKey, when, dialog, mutations]
+
+    UpdateRecordDependencyMutation:
+      oneOf:
+        - $ref: '#/components/schemas/UpdateRecordDependencySetRecordMutation'
+        - $ref: '#/components/schemas/UpdateRecordDependencySetLineItemValuesMutation'
+
+    UpdateRecordDependencySetRecordMutation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [setRecord]
+        status:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: |
+            Optional target-record status override.
+            Writes to the configured follow-up `statusFieldId` when present; otherwise writes to the system Status column.
+        values:
+          type: object
+          additionalProperties:
+            oneOf:
+              - $ref: '#/components/schemas/DefaultValue'
+              - type: 'null'
+          description: Optional top-level target field updates by question id.
+      required: [type]
+
+    UpdateRecordDependencySetLineItemValuesMutation:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [setLineItemValues]
+        groupId:
+          type: string
+          description: Root `LINE_ITEM_GROUP` question id on the target form.
+        subGroupPath:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: |
+            Optional subgroup path under `groupId` before row matching/mutation is applied.
+            Use a string like `MP_TYPE_LI` or an array for deeper paths.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional row-level condition applied inside the targeted group/path.
+        values:
+          type: object
+          additionalProperties:
+            oneOf:
+              - $ref: '#/components/schemas/DefaultValue'
+              - type: 'null'
+          description: Field updates applied to each matched row.
+        clearSubGroups:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional direct child subgroup ids to clear (`[]`) on each matched row.
+            Use this when a target row owns derived child rows that become invalid after the parent value is cleared.
+      required: [type, groupId, values]
+
+    ButtonConfirmConfig:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+        message:
+          $ref: '#/components/schemas/LocalizedString'
+        confirmLabel:
+          $ref: '#/components/schemas/LocalizedString'
+        cancelLabel:
+          $ref: '#/components/schemas/LocalizedString'
+      required: [message]
 
     FileUploadConfig:
       type: object

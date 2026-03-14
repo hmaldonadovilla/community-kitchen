@@ -31,11 +31,16 @@ import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
 import { getUiEnvTag } from './webform/envTag';
+import {
+  applyUpdateRecordDependencyMutationsToRecord,
+  evaluateUpdateRecordDependencyPreview
+} from './webform/updateRecordDependencies';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
 const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
 const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~100KB item limit.
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
+const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
 
 type HomeBootstrapCachePayload = {
   rev: number;
@@ -953,6 +958,208 @@ export class WebFormService {
     return result;
   }
 
+  public previewUpdateRecordDependencies(
+    formObject: WebFormSubmission,
+    buttonId: string
+  ): {
+    success: boolean;
+    impactedCount?: number;
+    targetFormKey?: string;
+    dialog?: { title: string; message: string; confirmLabel: string; cancelLabel: string };
+    message?: string;
+  } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) return { success: false, message: 'Form key is required.' };
+
+    const { form, questions } = this.getFormContext(formKey);
+    const parsed = this.parseButtonRef((buttonId || '').toString());
+    const btn = this.resolveButtonQuestion(questions, parsed);
+    const cfg: any = (btn as any)?.button;
+    const guard = cfg?.dependencyGuard;
+    if (!btn || !cfg || cfg.action !== 'updateRecord' || !guard) {
+      return { success: false, message: `Unknown or misconfigured button "${buttonId}".` };
+    }
+
+    const sourceRecord = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    const targetContext = this.getFormContext(guard.targetFormKey);
+    const targetRecords = this.fetchAllSubmissionRecords(targetContext.form, targetContext.questions);
+    const preview = evaluateUpdateRecordDependencyPreview({
+      guard,
+      sourceRecord,
+      language: sourceRecord.language,
+      targetFormKey: targetContext.form.configSheet || targetContext.form.title,
+      targetFormTitle: targetContext.form.title,
+      targetQuestions: targetContext.questions,
+      targetRecords
+    });
+
+    debugLog('updateRecordDependencies.preview.rpc', {
+      formKey,
+      buttonId: parsed.id || buttonId,
+      impactedCount: preview.impactedCount,
+      targetFormKey: preview.targetFormKey
+    });
+
+    return {
+      success: true,
+      impactedCount: preview.impactedCount,
+      targetFormKey: preview.targetFormKey,
+      dialog: preview.dialog
+    };
+  }
+
+  public applyUpdateRecordWithDependencies(
+    formObject: WebFormSubmission,
+    buttonId: string
+  ): { success: boolean; message: string; meta: any; dependency?: any } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.', meta: {} };
+    }
+
+    const { form, questions } = this.getFormContext(formKey);
+    const parsed = this.parseButtonRef((buttonId || '').toString());
+    const btn = this.resolveButtonQuestion(questions, parsed);
+    const cfg: any = (btn as any)?.button;
+    const guard = cfg?.dependencyGuard;
+    if (!btn || !cfg || cfg.action !== 'updateRecord' || !guard) {
+      return { success: false, message: `Unknown or misconfigured button "${buttonId}".`, meta: {} };
+    }
+
+    const sourceRecord = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    const targetContext = this.getFormContext(guard.targetFormKey);
+    const targetDedupRules = this.resolveDedupRules(guard.targetFormKey, targetContext.form);
+    const targetRecords = this.fetchAllSubmissionRecords(targetContext.form, targetContext.questions);
+    const preview = evaluateUpdateRecordDependencyPreview({
+      guard,
+      sourceRecord,
+      language: sourceRecord.language,
+      targetFormKey: targetContext.form.configSheet || targetContext.form.title,
+      targetFormTitle: targetContext.form.title,
+      targetQuestions: targetContext.questions,
+      targetRecords
+    });
+
+    if (!preview.impactedCount) {
+      const sourceResult = this.saveSubmissionWithId(formObject);
+      return {
+        ...sourceResult,
+        dependency: {
+          targetFormKey: preview.targetFormKey,
+          impactedCount: 0,
+          updatedCount: 0
+        }
+      };
+    }
+
+    const rollbackRecords: WebFormSubmission[] = [];
+    let updatedCount = 0;
+    try {
+      preview.impactedRecords.forEach(targetRecord => {
+        const applied = applyUpdateRecordDependencyMutationsToRecord({
+          guard,
+          sourceRecord,
+          targetQuestions: targetContext.questions,
+          targetRecord
+        });
+        if (!applied.changed) return;
+
+        const payload = this.buildDependencyMutationSavePayload({
+          record: applied.record,
+          formKey: targetContext.form.configSheet || targetContext.form.title,
+          auditAction: `${parsed.id || buttonId}:dependencyGuard`,
+          clientDataVersion: targetRecord.dataVersion
+        });
+        const result = this.submissions.saveSubmissionWithId(payload, targetContext.form, targetContext.questions, targetDedupRules);
+        if (!result?.success) {
+          throw new Error((result?.message || 'Failed to update dependent records.').toString());
+        }
+        rollbackRecords.push(targetRecord);
+        updatedCount += 1;
+      });
+
+      const sourceResult = this.saveSubmissionWithId(formObject);
+      if (!sourceResult?.success) {
+        throw new Error((sourceResult?.message || 'Update failed.').toString());
+      }
+
+      if (updatedCount > 0) {
+        this.refreshAnalyticsAndHomeBootstrap(
+          targetContext.form,
+          targetContext.questions,
+          'applyUpdateRecordWithDependencies.target'
+        );
+      }
+
+      debugLog('updateRecordDependencies.apply.rpc', {
+        formKey,
+        buttonId: parsed.id || buttonId,
+        targetFormKey: preview.targetFormKey,
+        impactedCount: preview.impactedCount,
+        updatedCount
+      });
+
+      return {
+        ...sourceResult,
+        dependency: {
+          targetFormKey: preview.targetFormKey,
+          impactedCount: preview.impactedCount,
+          updatedCount
+        }
+      };
+    } catch (err: any) {
+      const message = (err?.message || err?.toString?.() || 'Update failed.').toString();
+      let rollbackFailed = false;
+      if (rollbackRecords.length) {
+        rollbackRecords.forEach(originalRecord => {
+          try {
+            const rollbackPayload = this.buildDependencyMutationSavePayload({
+              record: originalRecord,
+              formKey: targetContext.form.configSheet || targetContext.form.title,
+              auditAction: `${parsed.id || buttonId}:dependencyRollback`
+            });
+            const rollbackResult = this.submissions.saveSubmissionWithId(
+              rollbackPayload,
+              targetContext.form,
+              targetContext.questions,
+              targetDedupRules
+            );
+            if (!rollbackResult?.success) rollbackFailed = true;
+          } catch (_) {
+            rollbackFailed = true;
+          }
+        });
+        this.refreshAnalyticsAndHomeBootstrap(
+          targetContext.form,
+          targetContext.questions,
+          rollbackFailed ? 'applyUpdateRecordWithDependencies.rollback.partial' : 'applyUpdateRecordWithDependencies.rollback'
+        );
+      }
+
+      debugLog('updateRecordDependencies.apply.error', {
+        formKey,
+        buttonId: parsed.id || buttonId,
+        targetFormKey: preview.targetFormKey,
+        impactedCount: preview.impactedCount,
+        updatedCount,
+        rollbackFailed,
+        message
+      });
+
+      return {
+        success: false,
+        message: rollbackFailed ? `${message} Rollback failed for some dependent records.` : message,
+        meta: {},
+        dependency: {
+          targetFormKey: preview.targetFormKey,
+          impactedCount: preview.impactedCount,
+          updatedCount,
+          rollbackFailed
+        }
+      };
+    }
+  }
+
   /**
    * Lightweight dedup precheck used by the React client to avoid creating duplicate records
    * (e.g., when presets/defaults populate dedup keys).
@@ -1742,6 +1949,49 @@ export class WebFormService {
       pdfUrl: undefined
     };
     return record;
+  }
+
+  private fetchAllSubmissionRecords(form: FormConfig, questions: QuestionConfig[]): WebFormSubmission[] {
+    const { sheet, headers, columns } = this.submissions.ensureDestination(
+      form.destinationTab || `${form.title} Responses`,
+      questions
+    );
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return [];
+    const rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    return rows
+      .map(rowValues => this.submissions.buildSubmissionRecord(form.configSheet || form.title, questions, columns, rowValues))
+      .filter((record): record is WebFormSubmission => !!record);
+  }
+
+  private buildDependencyMutationSavePayload(args: {
+    record: WebFormSubmission;
+    formKey: string;
+    auditAction: string;
+    clientDataVersion?: number;
+  }): WebFormSubmission {
+    const payloadValues = cloneRecordValues(args.record.values || {});
+    const payload: WebFormSubmission = {
+      formKey: args.formKey,
+      language: args.record.language,
+      values: payloadValues,
+      id: args.record.id,
+      createdAt: args.record.createdAt,
+      updatedAt: args.record.updatedAt,
+      status: args.record.status || undefined,
+      pdfUrl: args.record.pdfUrl
+    };
+    Object.keys(payloadValues).forEach(fieldId => {
+      (payload as any)[fieldId] = payloadValues[fieldId];
+    });
+    (payload as any).__ckSaveMode = 'draft';
+    (payload as any).__ckAllowClosedUpdate = '1';
+    (payload as any).__ckStatus = args.record.status === undefined || args.record.status === null ? '' : args.record.status;
+    (payload as any).__ckAuditAction = args.auditAction;
+    if (Number.isFinite(Number(args.clientDataVersion)) && Number(args.clientDataVersion) > 0) {
+      (payload as any).__ckClientDataVersion = Number(args.clientDataVersion);
+    }
+    return payload;
   }
 
   private getFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {

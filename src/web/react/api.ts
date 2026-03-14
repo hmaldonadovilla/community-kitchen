@@ -27,6 +27,28 @@ export interface SubmissionResult {
   meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
 }
 
+export interface UpdateRecordDependencyPreviewResult {
+  success: boolean;
+  impactedCount?: number;
+  targetFormKey?: string;
+  dialog?: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel: string;
+  };
+  message?: string;
+}
+
+export interface UpdateRecordDependencyApplyResult extends SubmissionResult {
+  dependency?: {
+    targetFormKey?: string;
+    impactedCount?: number;
+    updatedCount?: number;
+    rollbackFailed?: boolean;
+  };
+}
+
 export interface DedupConflictCheckResult {
   success: boolean;
   conflict?: {
@@ -465,6 +487,18 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
 
 export const submit = (payload: SubmissionPayload): Promise<SubmissionResult> =>
   runAppsScript<SubmissionResult>('saveSubmissionWithId', payload);
+
+export const previewUpdateRecordDependenciesApi = (
+  payload: SubmissionPayload,
+  buttonId: string
+): Promise<UpdateRecordDependencyPreviewResult> =>
+  runAppsScript<UpdateRecordDependencyPreviewResult>('previewUpdateRecordDependencies', payload, buttonId);
+
+export const applyUpdateRecordWithDependenciesApi = (
+  payload: SubmissionPayload,
+  buttonId: string
+): Promise<UpdateRecordDependencyApplyResult> =>
+  runAppsScript<UpdateRecordDependencyApplyResult>('applyUpdateRecordWithDependencies', payload, buttonId);
 
 export const checkDedupConflictApi = (payload: SubmissionPayload): Promise<DedupConflictCheckResult> =>
   runAppsScript<DedupConflictCheckResult>('checkDedupConflict', payload);

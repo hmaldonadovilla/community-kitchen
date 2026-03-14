@@ -634,6 +634,82 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       **UX note**: After the user confirms, the UI shows a **full-screen blocking overlay** (spinner + message) and locks interaction until the update completes.
 
+      Optional: add a reusable downstream dependency check before the update is applied.
+      Use `button.dependencyGuard` when changing the current record would invalidate data on other forms that still reference it.
+
+      Example: before deactivating a Recipe, check open Meal Production records scheduled for today or later; if matches are found, show a dedicated dialog and clear the matching recipe rows plus their linked ingredient subgroup on confirm:
+
+      ```json
+      {
+        "button": {
+          "action": "updateRecord",
+          "placements": ["summaryBar"],
+          "set": { "status": "Disabled" },
+          "navigateTo": "form",
+          "confirm": {
+            "title": { "en": "Please confirm" },
+            "message": { "en": "This recipe will stop appearing in the Meal Production form. Do you want to proceed?" }
+          },
+          "dependencyGuard": {
+            "targetFormKey": "Meal Production",
+            "when": {
+              "all": [
+                { "fieldId": "status", "notEquals": "Closed" },
+                {
+                  "any": [
+                    { "fieldId": "MP_PREP_DATE", "isToday": true },
+                    { "fieldId": "MP_PREP_DATE", "isInFuture": true }
+                  ]
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        { "fieldId": "PREP_TYPE", "equals": "Cook" },
+                        { "fieldId": "RECIPE", "equals": "{{source.QFTD5RD2EM}}" }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": { "en": "Recipe used in meal production" },
+              "message": {
+                "en": "This recipe is still selected on {{count}} open Meal Production record(s) scheduled for today or later. If you continue, the recipe and its linked ingredients will be cleared from those records. Do you want to continue?"
+              },
+              "confirmLabel": { "en": "Deactivate and clear" },
+              "cancelLabel": { "en": "Cancel" }
+            },
+            "mutations": [
+              {
+                "type": "setLineItemValues",
+                "groupId": "MP_MEALS_REQUEST",
+                "subGroupPath": ["MP_TYPE_LI"],
+                "when": {
+                  "all": [
+                    { "fieldId": "PREP_TYPE", "equals": "Cook" },
+                    { "fieldId": "RECIPE", "equals": "{{source.QFTD5RD2EM}}" }
+                  ]
+                },
+                "values": { "RECIPE": null },
+                "clearSubGroups": ["MP_INGREDIENTS_LI"]
+              }
+            ]
+          }
+        }
+      }
+      ```
+
+      Notes:
+      - `dependencyGuard.when` reuses the standard `WhenClause` DSL, including `all` / `any` / `not`, date comparisons, and `lineItems` conditions.
+      - String values can reference the current source record via `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, and `{{source.updatedAt}}`.
+      - The dedicated `dependencyGuard.dialog` only appears when impacted downstream records are found. If there are no matches, the normal `confirm` dialog (if configured) is used.
+      - `mutations.type: "setRecord"` updates top-level fields on each impacted target record.
+      - `mutations.type: "setLineItemValues"` updates matching rows inside a line-item group or subgroup path. Use `clearSubGroups` to empty direct child subgroup arrays on those matched rows.
+
     - Want a guided-step **Ready for Production** lock from the `Order` step? Add an inline BUTTON with `button.action: "updateRecord"` that sets status to `"Ready for Production"`, and add a form-level `fieldDisableRules` rule scoped to `__ckStep`.
 
       Example:
@@ -2230,7 +2306,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 
 ### BUTTON fields (custom actions)
 
-`BUTTON` questions render as **custom actions** in the web UI. Five actions are supported:
+`BUTTON` questions render as **custom actions** in the web UI. Six actions are supported:
 
 - **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into a PDF preview. The app opens a new tab immediately (shows a Loading page) and then navigates that tab to the generated PDF blob (single click, no extra “Open” step).
   - Optional: set `button.loadingLabel` to customize the loading text while the PDF is being generated.
@@ -2247,6 +2323,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   HTML templates also support an icon placeholder for photo/attachment fields:
   - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
+- **Update the current record** (`action: "updateRecord"`): draft-save specific top-level fields and/or status changes on the current record, optionally show a confirmation dialog, optionally navigate to another view, and optionally run a reusable `dependencyGuard` against another form before saving.
 - **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
 
 Visibility:
