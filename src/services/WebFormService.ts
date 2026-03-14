@@ -143,6 +143,29 @@ export class WebFormService {
     }, {} as Record<string, string>);
   }
 
+  private resolveCurrentWebAppUrl(): string {
+    try {
+      const service = ScriptApp.getService();
+      const raw = service && typeof service.getUrl === 'function' ? service.getUrl() : '';
+      return (raw || '').toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  private stripQueryAndHash(rawUrl: string): string {
+    const source = (rawUrl || '').toString().trim();
+    if (!source) return '';
+    const hashIndex = source.indexOf('#');
+    const withoutHash = hashIndex >= 0 ? source.slice(0, hashIndex) : source;
+    const queryIndex = withoutHash.indexOf('?');
+    return queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+  }
+
+  private encodeQueryParam(value: string): string {
+    return encodeURIComponent((value || '').toString()).replace(/%20/g, '+');
+  }
+
   private buildFormTargetUrl(form: FormConfig): string {
     const formKey = (form.configSheet || form.title || '').toString().trim();
     if (!formKey) return '?';
@@ -150,8 +173,17 @@ export class WebFormService {
     const appUrlParams = this.parseQueryParamsFromUrl((form as any).appUrl || '');
     if (appUrlParams.app) params.app = appUrlParams.app;
     if (appUrlParams.page) params.page = appUrlParams.page;
-    const pairs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
-    return `?${pairs.join('&')}`;
+    const pairs = Object.entries(params).map(([k, v]) => `${this.encodeQueryParam(k)}=${this.encodeQueryParam(v)}`);
+    const query = pairs.join('&');
+    const currentExecUrl = this.stripQueryAndHash(this.resolveCurrentWebAppUrl());
+    if (currentExecUrl) {
+      return `${currentExecUrl}?${query}`;
+    }
+    const appUrlBase = this.stripQueryAndHash((form as any).appUrl || '');
+    if (appUrlBase) {
+      return `${appUrlBase}?${query}`;
+    }
+    return `?${query}`;
   }
 
   private buildFormMatchKeys(form: FormConfig): string[] {

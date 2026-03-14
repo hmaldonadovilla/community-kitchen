@@ -167,6 +167,62 @@ describe('WebFormService', () => {
     expect(metaCols).toEqual([]);
   });
 
+  test('fetchFormCatalog builds absolute links against the current web app url', () => {
+    const previousScriptApp = (global as any).ScriptApp;
+    (global as any).ScriptApp = {
+      getService: () => ({
+        getUrl: () => 'https://script.google.com/macros/s/current-deployment/exec'
+      })
+    };
+
+    try {
+      const items = service.fetchFormCatalog();
+      const delivery = items.find(item => item.formKey === 'Config: Delivery');
+      expect(delivery).toBeDefined();
+      expect(delivery?.targetUrl).toBe(
+        'https://script.google.com/macros/s/current-deployment/exec?form=Config%3A+Delivery'
+      );
+    } finally {
+      (global as any).ScriptApp = previousScriptApp;
+    }
+  });
+
+  test('fetchFormCatalog preserves app and page params from the stored form url', () => {
+    const previousScriptApp = (global as any).ScriptApp;
+    (global as any).ScriptApp = {
+      getService: () => ({
+        getUrl: () => 'https://script.google.com/macros/s/current-deployment/exec'
+      })
+    };
+
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
+    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)'],
+      [
+        'Delivery Form',
+        'Config: Delivery',
+        'Deliveries',
+        'Desc',
+        'https://script.google.com/macros/s/old-deployment/exec?form=Config%3A+Delivery&app=meal-production&page=analytics'
+      ]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    try {
+      const items = service.fetchFormCatalog();
+      const delivery = items.find(item => item.formKey === 'Config: Delivery');
+      expect(delivery).toBeDefined();
+      expect(delivery?.targetUrl).toBe(
+        'https://script.google.com/macros/s/current-deployment/exec?form=Config%3A+Delivery&app=meal-production&page=analytics'
+      );
+    } finally {
+      (global as any).ScriptApp = previousScriptApp;
+    }
+  });
+
   test('triggerFollowupAction sends emails using data source recipients', () => {
     const followups = (service as any).followups || (service as any);
     jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
