@@ -505,9 +505,96 @@ export interface ListViewSearchPresetButtonConfig {
    */
   fieldFilters?: Record<string, string | string[]>;
   /**
+   * Which list view modes should render this preset button.
+   *
+   * Default: `['cards']` for backward compatibility.
+   */
+  showIn?: Array<'table' | 'cards'>;
+  /**
+   * How this preset should present matching results.
+   *
+   * - `inline`: apply within the current list view
+   * - `overlay`: open a full-screen overlay containing the filtered results
+   *
+   * Default: `inline`.
+   */
+  target?: 'inline' | 'overlay';
+  /**
+   * Optional title used when `target = "overlay"`.
+   */
+  title?: LocalizedString | string;
+  /**
+   * Optional overlay presentation config used when `target = "overlay"`.
+   */
+  overlay?: ListViewSearchPresetOverlayConfig;
+  /**
+   * Optional list-view column ids to render inside the preset overlay.
+   *
+   * Entries can reference existing list-view field columns, meta columns, or rule columns by `fieldId`.
+   * When omitted, the main list-view columns are reused.
+   */
+  resultColumns?: string[];
+  /**
+   * Optional extra condition applied to the prefetched list rows when this preset runs.
+   * Reuses the shared `WhenClause` engine.
+   */
+  when?: WhenClause;
+  /**
+   * Optional date field used by the relative lookback filter.
+   *
+   * When omitted, falls back to `listView.search.dateFieldId`.
+   */
+  dateFieldId?: string;
+  /**
+   * Optional rolling lookback window in days, evaluated against the local current date.
+   *
+   * Example: `7` matches records from the last 7 calendar days.
+   */
+  lookbackDays?: number;
+  /**
+   * Optional rolling lookahead window in days, evaluated against the local current date.
+   *
+   * Example: `7` matches records from today through the next 7 calendar days when `includeToday` is true.
+   */
+  lookaheadDays?: number;
+  /**
+   * Whether the relative date window should include today's date.
+   *
+   * Default: true.
+   */
+  includeToday?: boolean;
+  /**
    * Optional tone override for inline button rendering in the form view.
    */
   tone?: ButtonTone;
+}
+
+export interface ListViewSearchPresetOverlayConfig {
+  /**
+   * Overlay result presentation mode.
+   *
+   * - `table`: render results as a table using `resultColumns`
+   * - `groupedList`: render expandable groups using `groupByFieldId`
+   *
+   * Default: `table`.
+   */
+  presentation?: 'table' | 'groupedList';
+  /**
+   * Field id used to group overlay results when `presentation = "groupedList"`.
+   */
+  groupByFieldId?: string;
+  /**
+   * Optional localized suffix appended to each group title.
+   *
+   * Example: `Belliard last 7 days`.
+   */
+  groupTitleSuffix?: LocalizedString | string;
+  /**
+   * Whether grouped sections should start expanded.
+   *
+   * Default: false.
+   */
+  defaultExpanded?: boolean;
 }
 
 export interface UpdateRecordButtonConfig {
@@ -2313,6 +2400,14 @@ export interface FormConfig {
    */
   listViewLegendColumnWidths?: [number, number];
   /**
+   * Optional default row filter for the list view (recommended: `listView.defaultWhen`).
+   */
+  listViewDefaultWhen?: ListViewConfig['defaultWhen'];
+  /**
+   * Optional inline date heading config for date-driven list results (recommended: `listView.dateHeading`).
+   */
+  listViewDateHeading?: ListViewConfig['dateHeading'];
+  /**
    * Optional override for the list view search UI/behavior (recommended: `listView.search`).
    */
   listViewSearch?: ListViewConfig['search'];
@@ -3595,10 +3690,29 @@ export interface ListViewSearchConfig {
    */
   placeholder?: LocalizedString | string;
   /**
+   * Optional helper text shown below the list-view search control.
+   */
+  helperText?: LocalizedString | string;
+  /**
    * Optional title shown inline before list view preset buttons.
    * Example: "View recipes:".
    */
   presetsTitle?: LocalizedString | string;
+}
+
+export interface ListViewDateHeadingConfig {
+  /**
+   * Date field used to build the inline date heading above the results list.
+   *
+   * Typical use: display headings like "Wed, 04-Feb-2026 activities".
+   */
+  fieldId: string;
+  /**
+   * Optional localized suffix appended after the formatted date.
+   *
+   * Default fallback: `activities`.
+   */
+  suffix?: LocalizedString | string;
 }
 
 export interface ListViewViewConfig {
@@ -3762,6 +3876,16 @@ export interface ListViewConfig {
   title?: LocalizedString;
   columns: ListViewColumnConfig[];
   metaColumns?: string[];
+  /**
+   * Optional default filter applied only when the user has not yet started a search flow.
+   *
+   * This is evaluated against prefetched list rows using the shared `WhenClause` engine.
+   */
+  defaultWhen?: WhenClause;
+  /**
+   * Optional inline date heading shown above the visible results when the list is date-driven.
+   */
+  dateHeading?: ListViewDateHeadingConfig;
   /**
    * Optional UI configuration for the list view (table vs record list/cards).
    */

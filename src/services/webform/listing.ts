@@ -67,7 +67,8 @@ export class ListingService {
    *
    * Notes:
    * - Sorting is limited to a single field (fieldId) + direction.
-   * - Unfiltered recent-list results remain capped to 200 rows.
+   * - Unfiltered recent-list results remain capped to 200 rows, but the sort is evaluated against the full sheet
+   *   so the client receives the globally newest 200 sorted records rather than the first physical 200 rows.
    * - Exact-date filtered queries may scan the full sheet so older matches remain reachable.
    */
   fetchSubmissionsSortedBatch(
@@ -105,29 +106,8 @@ export class ListingService {
     const etag = this.cacheManager.getSheetEtag(sheet, columns);
 
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
-    const rowsToScan = hasDateFilter ? maxRows : Math.min(maxRows, 200);
     const size = Math.max(1, Math.min(pageSize || 10, 50));
     const offset = decodePageToken(pageToken);
-    const canReturnNotModified =
-      ifNoneMatch &&
-      !!clientEtag &&
-      offset <= 0 &&
-      !hasDateFilter &&
-      !includePageRecords &&
-      (!recordIds || !recordIds.length);
-    if (canReturnNotModified && clientEtag === etag) {
-      const notModifiedList: PaginatedResult<Record<string, any>> = {
-        items: [],
-        totalCount: rowsToScan,
-        etag
-      };
-      (notModifiedList as any).notModified = true;
-      return { list: notModifiedList, records: {} };
-    }
-    if (offset >= rowsToScan) {
-      const emptyList: PaginatedResult<Record<string, any>> = { items: [], totalCount: rowsToScan, etag };
-      return { list: emptyList, records: {} };
-    }
 
     const fieldIds = projection && projection.length ? projection : questions.map(q => q.id);
 
@@ -188,6 +168,28 @@ export class ListingService {
       };
       ensure('updatedAt', 'desc');
       ensure('id', 'asc');
+    }
+
+    const rowsToScan = hasDateFilter || effectiveSorts.length ? maxRows : Math.min(maxRows, 200);
+    const canReturnNotModified =
+      ifNoneMatch &&
+      !!clientEtag &&
+      offset <= 0 &&
+      !hasDateFilter &&
+      !includePageRecords &&
+      (!recordIds || !recordIds.length);
+    if (canReturnNotModified && clientEtag === etag) {
+      const notModifiedList: PaginatedResult<Record<string, any>> = {
+        items: [],
+        totalCount: rowsToScan,
+        etag
+      };
+      (notModifiedList as any).notModified = true;
+      return { list: notModifiedList, records: {} };
+    }
+    if (offset >= rowsToScan) {
+      const emptyList: PaginatedResult<Record<string, any>> = { items: [], totalCount: rowsToScan, etag };
+      return { list: emptyList, records: {} };
     }
 
     const sortKey = effectiveSorts.length

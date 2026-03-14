@@ -232,4 +232,45 @@ describe('ListingService', () => {
     expect((res.list.items || [])[0]?.DATE instanceof Date).toBe(true);
     expect(((res.list.items || [])[0]?.DATE as Date).toISOString()).toBe(targetDate.toISOString());
   });
+
+  test('fetchSubmissionsSortedBatch sorts across the full sheet before capping recent results to 200', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Responses');
+    const header = ['Language', 'DATE', 'Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+    const olderRows = Array.from({ length: 200 }, (_, idx) => {
+      const day = idx + 1;
+      const date = new Date(Date.UTC(2025, 0, day, 0, 0, 0));
+      return ['EN', date, `old-${day}`, date, date, 'Open', ''];
+    });
+    const newestRowDate = new Date(Date.UTC(2026, 2, 14, 0, 0, 0));
+    const newestRow = ['EN', newestRowDate, 'newest', newestRowDate, newestRowDate, 'Open', ''];
+    sheet.setMockData([header, ...olderRows, newestRow]);
+
+    const cacheManager = new CacheEtagManager(null, null);
+    const uploads = new UploadService(ss);
+    const submissions = new SubmissionService(ss, uploads, cacheManager, null);
+    const listing = new ListingService(submissions, cacheManager);
+
+    const form: any = { title: 'Test', configSheet: 'Config: Test', destinationTab: 'Responses' };
+    const questions: any[] = [
+      {
+        id: 'DATE',
+        qEn: 'Date',
+        qFr: 'Date',
+        qNl: 'Date',
+        type: 'DATE',
+        status: 'Active',
+        required: false,
+        listView: true
+      }
+    ];
+
+    const res = listing.fetchSubmissionsSortedBatch(form, questions, ['DATE'], 10, undefined, false, undefined, {
+      fieldId: 'DATE',
+      direction: 'desc'
+    });
+
+    expect((res.list.items || []).map((row: any) => row.id)[0]).toBe('newest');
+    expect(res.list.totalCount).toBe(201);
+  });
 });

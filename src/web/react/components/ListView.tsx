@@ -27,6 +27,17 @@ import { resolveListViewUiState } from '../app/listViewUiState';
 import { ListViewIcon } from './ListViewIcon';
 import { DateInput } from './form/DateInput';
 import { resolveStatusPillKey } from '../utils/statusPill';
+import { FullPageOverlay } from './form/overlays/FullPageOverlay';
+import {
+  filterItemsByWhenClause,
+  filterItemsForSearchPreset,
+  shouldShowSearchPresetInMode,
+  whenClauseContainsTodayFilter
+} from '../app/listViewFilters';
+import { sortListItems } from '../app/listViewSorting';
+import { groupListItemsByField } from '../app/listViewGrouping';
+import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../app/listViewLegend';
+import { ListViewLegend } from './app/ListViewLegend';
 
 interface ListViewProps {
   formKey: string;
@@ -54,6 +65,9 @@ interface ListViewProps {
   prefetching?: boolean;
   notice?: string | null;
   error?: string | null;
+  legendItems?: ResolvedListViewLegendItem[];
+  legendColumns?: number;
+  legendColumnWidths?: [number, number] | null;
 }
 
 const ListView: React.FC<ListViewProps> = ({
@@ -73,7 +87,10 @@ const ListView: React.FC<ListViewProps> = ({
   loading: loadingProp,
   prefetching: prefetchingProp,
   notice: noticeProp,
-  error: errorProp
+  error: errorProp,
+  legendItems,
+  legendColumns = 1,
+  legendColumnWidths = null
 }) => {
   const uiDisabled = Boolean(disabled);
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
@@ -117,6 +134,7 @@ const ListView: React.FC<ListViewProps> = ({
   const [advancedFieldFilters, setAdvancedFieldFilters] = useState<Record<string, string | string[]>>({});
   const [advancedHasSearched, setAdvancedHasSearched] = useState(false);
   const [advancedKeyword, setAdvancedKeyword] = useState('');
+  const [overlayPresetButton, setOverlayPresetButton] = useState<{ q: any; cfg: any } | null>(null);
 
   const viewToggleEnabled = Boolean(definition.listView?.view?.toggleEnabled);
   const viewModeConfigured: 'table' | 'cards' = definition.listView?.view?.mode === 'cards' ? 'cards' : 'table';
@@ -673,6 +691,7 @@ const ListView: React.FC<ListViewProps> = ({
     setAdvancedOpen(false);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
+    setOverlayPresetButton(null);
     setServerDateSearch({
       query: '',
       response: null,
@@ -797,23 +816,6 @@ const ListView: React.FC<ListViewProps> = ({
     const t = (questionTypeById[fieldId] || '').toString().toUpperCase();
     if (t === 'DATE' || t === 'DATETIME') return 'desc';
     return 'asc';
-  };
-
-  const compareValues = (a: any, b: any): number => {
-    if (a === b) return 0;
-    if (a === undefined || a === null) return -1;
-    if (b === undefined || b === null) return 1;
-    const numA = Number(a);
-    const numB = Number(b);
-    if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
-      return numA - numB;
-    }
-    const dateA = new Date(a);
-    const dateB = new Date(b);
-    if (!Number.isNaN(dateA.getTime()) && !Number.isNaN(dateB.getTime())) {
-      return dateA.getTime() - dateB.getTime();
-    }
-    return `${a}`.localeCompare(`${b}`);
   };
 
   const dateSearchQueryNormalized = useMemo(() => {
@@ -1065,6 +1067,12 @@ const ListView: React.FC<ListViewProps> = ({
     const advancedQuery = { keyword: advancedKeyword, fieldFilters: advancedFieldFilters };
     const advancedActive = advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
     const applyAdvanced = advancedActive;
+    const hasInlineSearch =
+      dateSearchEnabled
+        ? Boolean(trimmed)
+        : advancedSearchEnabled
+          ? applyAdvanced
+          : applyAdvanced || Boolean(trimmed);
     const filtered =
       dateSearchEnabled && trimmed
         ? dateSearchUsesServer
@@ -1087,12 +1095,17 @@ const ListView: React.FC<ListViewProps> = ({
                 );
               })()
             : items;
-    const field = sortField || 'updatedAt';
-    const sorted = [...filtered].sort((rowA, rowB) => {
-      const result = compareValues((rowA as any)[field], (rowB as any)[field]);
-      return sortDirection === 'asc' ? result : -result;
+    const filteredWithDefaultWhen =
+      !hasInlineSearch && definition.listView?.defaultWhen
+        ? filterItemsByWhenClause(filtered, definition.listView.defaultWhen, new Date())
+        : filtered;
+    return sortListItems({
+      items: filteredWithDefaultWhen,
+      sortField: sortField || 'updatedAt',
+      sortDirection,
+      questions: definition.questions || [],
+      fieldTypeById
     });
-    return sorted;
   }, [
     advancedFieldFilters,
     advancedHasSearched,
@@ -1107,6 +1120,8 @@ const ListView: React.FC<ListViewProps> = ({
     fieldTypeById,
     keywordSearchFieldIds,
     language,
+    definition.listView?.defaultWhen,
+    definition.questions,
     ruleColumns,
     searchQueryValue,
     searchableFieldIds,
@@ -1130,6 +1145,27 @@ const ListView: React.FC<ListViewProps> = ({
       : listSearchMode === 'advanced'
         ? advancedActive
         : advancedActive || Boolean(searchQueryValue.trim());
+  const inlineDateHeadingText = useMemo(() => {
+    const dateHeadingCfg = definition.listView?.dateHeading;
+    const fieldId = (dateHeadingCfg?.fieldId || '').toString().trim();
+    if (!fieldId) return '';
+    const suffix = resolveLocalizedString(dateHeadingCfg?.suffix, language, 'activities').toString().trim() || 'activities';
+    if (dateSearchEnabled && fieldId === dateSearchFieldId && dateSearchQueryNormalized) {
+      return `${formatDateEeeDdMmmYyyy(dateSearchQueryNormalized, language)} ${suffix}`.trim();
+    }
+    if (!activeSearch && whenClauseContainsTodayFilter(definition.listView?.defaultWhen, fieldId)) {
+      return `${formatDateEeeDdMmmYyyy(new Date(), language)} ${suffix}`.trim();
+    }
+    return '';
+  }, [
+    activeSearch,
+    dateSearchEnabled,
+    dateSearchFieldId,
+    dateSearchQueryNormalized,
+    definition.listView?.dateHeading,
+    definition.listView?.defaultWhen,
+    language
+  ]);
   const showLoadedOfTotal = !activeSearch && effectiveTotalCount > 0 && loadedCount > 0 && loadedCount < effectiveTotalCount;
   const { showNoRecords, showLoadingStatus } = resolveListViewUiState({
     visibleCount: pagedItems.length,
@@ -1731,6 +1767,44 @@ const ListView: React.FC<ListViewProps> = ({
     [advancedSearchEnabled, dateSearchEnabled, listSearchMode, onDiagnostic]
   );
 
+  const visiblePresetButtons = useMemo(
+    () => listSearchPresetButtons.filter(({ cfg }) => shouldShowSearchPresetInMode(cfg as any, viewMode)),
+    [listSearchPresetButtons, viewMode]
+  );
+
+  const overlayPresetItems = useMemo(() => {
+    if (!overlayPresetButton) return [] as ListItem[];
+    const cfg = (overlayPresetButton.cfg || {}) as any;
+    const filtered = filterItemsForSearchPreset({
+      items: allItems || [],
+      preset: cfg,
+      defaultMode: listSearchMode,
+      searchDateFieldId: dateSearchFieldId,
+      searchableFieldIds,
+      keywordFieldIds: keywordSearchFieldIds,
+      fieldTypeById,
+      now: new Date()
+    });
+    return sortListItems({
+      items: filtered,
+      sortField: sortField || 'updatedAt',
+      sortDirection,
+      questions: definition.questions || [],
+      fieldTypeById
+    });
+  }, [
+    allItems,
+    dateSearchFieldId,
+    definition.questions,
+    fieldTypeById,
+    keywordSearchFieldIds,
+    listSearchMode,
+    overlayPresetButton,
+    searchableFieldIds,
+    sortField,
+    sortDirection
+  ]);
+
   const showResults = viewMode === 'table' || activeSearch;
   const analyticsListMetrics = useMemo(() => {
     const items = Array.isArray((analyticsSnapshot as any)?.items) ? ((analyticsSnapshot as any).items as any[]) : [];
@@ -1869,6 +1943,12 @@ const ListView: React.FC<ListViewProps> = ({
   const searchPlaceholder = placeholderIsExplicitlyEmpty
     ? ''
     : resolveLocalizedString(configuredPlaceholder, language, tSystem('list.searchPlaceholder', language, 'Search records'));
+  const configuredHelperText = (definition.listView?.search as any)?.helperText;
+  const searchHelperText = useMemo(() => {
+    if (configuredHelperText === undefined || configuredHelperText === null) return '';
+    if (typeof configuredHelperText === 'string' && configuredHelperText.trim() === '') return '';
+    return resolveLocalizedString(configuredHelperText, language, '');
+  }, [configuredHelperText, language]);
   const presetsTitleConfig = (definition.listView?.search as any)?.presetsTitle;
   const presetsTitleText = useMemo(() => {
     if (presetsTitleConfig === undefined || presetsTitleConfig === null) return '';
@@ -1880,16 +1960,85 @@ const ListView: React.FC<ListViewProps> = ({
   useEffect(() => {
     if (!onDiagnostic) return;
     onDiagnostic('list.search.presets.config', {
-      count: listSearchPresetButtons.length,
+      count: visiblePresetButtons.length,
       title: showPresetsTitle ? presetsTitleText : null
     });
-  }, [listSearchPresetButtons.length, onDiagnostic, presetsTitleText, showPresetsTitle]);
+  }, [onDiagnostic, presetsTitleText, showPresetsTitle, visiblePresetButtons.length]);
+
+  const overlayColumns = useMemo(() => {
+    const raw = Array.isArray((overlayPresetButton?.cfg as any)?.resultColumns) ? ((overlayPresetButton?.cfg as any)?.resultColumns as any[]) : [];
+    if (!raw.length) return columnsForTable;
+    return raw
+      .map(value => {
+        const fieldId = value !== undefined && value !== null ? value.toString().trim() : '';
+        if (!fieldId) return null;
+        return columnsAll.find(col => (col.fieldId || '').toString() === fieldId) || null;
+      })
+      .filter(Boolean) as ListViewColumnConfig[];
+  }, [columnsAll, columnsForTable, overlayPresetButton]);
+
+  const overlayTitleText = useMemo(() => {
+    if (!overlayPresetButton) return '';
+    const labelNode = resolveLocalizedString(
+      (overlayPresetButton.q as any)?.label ?? (overlayPresetButton.cfg as any)?.title ?? (overlayPresetButton.q as any)?.id ?? '',
+      language,
+      ''
+    );
+    const explicitTitle = resolveLocalizedString((overlayPresetButton.cfg as any)?.title, language, '');
+    return (explicitTitle || labelNode || '').toString().trim();
+  }, [language, overlayPresetButton]);
+
+  const overlayPresentation = useMemo(() => {
+    const raw = ((overlayPresetButton?.cfg as any)?.overlay?.presentation || 'table').toString().trim().toLowerCase();
+    return raw === 'groupedlist' || raw === 'grouped_list' || raw === 'grouped-list' ? 'groupedList' : 'table';
+  }, [overlayPresetButton]);
+
+  const overlayGroupByFieldId = useMemo(
+    () => (((overlayPresetButton?.cfg as any)?.overlay?.groupByFieldId || '').toString().trim()),
+    [overlayPresetButton]
+  );
+
+  const overlayGroupTitleSuffixText = useMemo(() => {
+    const raw = (overlayPresetButton?.cfg as any)?.overlay?.groupTitleSuffix;
+    if (raw === undefined || raw === null) return '';
+    return resolveLocalizedString(raw, language, '').toString().trim();
+  }, [language, overlayPresetButton]);
+
+  const overlayDefaultExpanded = useMemo(
+    () => Boolean((overlayPresetButton?.cfg as any)?.overlay?.defaultExpanded),
+    [overlayPresetButton]
+  );
+
+  const overlayGroupedItems = useMemo(() => {
+    if (overlayPresentation !== 'groupedList' || !overlayGroupByFieldId) return [];
+    return groupListItemsByField(overlayPresetItems, overlayGroupByFieldId, { sort: 'asc' });
+  }, [overlayGroupByFieldId, overlayPresetItems, overlayPresentation]);
+
+  const resolvedLegendItems = useMemo(() => {
+    if (legendItems) return legendItems;
+    const configuredLegend =
+      (Array.isArray(definition.listView?.legend) && definition.listView?.legend.length
+        ? definition.listView.legend
+        : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
+    return buildListViewLegendItems(columnsAll as any, configuredLegend as any, language);
+  }, [columnsAll, definition, definition.listView?.legend, language, legendItems]);
+
+  useEffect(() => {
+    if (!onDiagnostic || !overlayPresetButton) return;
+    onDiagnostic('list.search.preset.overlay.results', {
+      buttonId: (overlayPresetButton.q as any)?.id || null,
+      presentation: overlayPresentation,
+      count: overlayPresetItems.length,
+      groupCount: overlayGroupedItems.length || null
+    });
+  }, [onDiagnostic, overlayGroupedItems.length, overlayPresentation, overlayPresetButton, overlayPresetItems.length]);
 
   const searchControlClass = `ck-list-search-control${
     (advancedSearchEnabled ? ' ck-has-advanced' : '') + (showClearSearch ? ' ck-has-clear' : '') + ((advancedSearchEnabled || showClearSearch) ? ' ck-has-icons' : '')
   }`;
 
   return (
+    <>
     <div className="card" style={{ position: 'relative' }} aria-disabled={uiDisabled} aria-busy={uiDisabled}>
       {uiDisabled ? (
         <div
@@ -1910,6 +2059,10 @@ const ListView: React.FC<ListViewProps> = ({
             <div className="ck-list-title-main">{titleNode}</div>
             {metricNode}
           </div>
+        ) : null}
+
+        {inlineDateHeadingText ? (
+          <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 'var(--ck-font-label)' }}>{inlineDateHeadingText}</div>
         ) : null}
 
         <div className="list-toolbar">
@@ -2016,21 +2169,33 @@ const ListView: React.FC<ListViewProps> = ({
           ) : null}
         </div>
 
-        {viewMode === 'cards' && listSearchPresetButtons.length ? (
+        {searchHelperText ? (
+          <div className="muted" role="note" style={{ marginTop: 10, marginBottom: 14 }}>
+            {searchHelperText}
+          </div>
+        ) : null}
+
+        {visiblePresetButtons.length ? (
           <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
             {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
-            {listSearchPresetButtons.map(({ q, cfg }) => {
+            {visiblePresetButtons.map(({ q, cfg }) => {
               const labelNode = resolveLocalizedString((q as any)?.label ?? q?.id ?? cfg.action ?? '', language, q?.id ?? '');
               const mode = (cfg.mode || listSearchMode) as 'text' | 'date' | 'advanced';
               const keyword = (cfg.keyword || '').toString();
               const dateValue = (cfg.dateValue || '').toString();
               const fieldFilters = (cfg.fieldFilters || {}) as Record<string, string | string[]>;
+              const target = ((cfg.target || 'inline') as string).toString().trim().toLowerCase() === 'overlay' ? 'overlay' : 'inline';
               return (
                 <button
                   key={(q as any)?.id || cfg.action}
                   type="button"
                   className="secondary"
                   onClick={() => {
+                    if (target === 'overlay') {
+                      setOverlayPresetButton({ q, cfg });
+                      onDiagnostic?.('list.search.preset.overlay.open', { buttonId: (q as any)?.id || null, mode });
+                      return;
+                    }
                     applySearchPreset({ mode, keyword, dateValue, fieldFilters });
                     onDiagnostic?.('list.search.preset.click', { buttonId: (q as any)?.id || null, mode });
                   }}
@@ -2367,6 +2532,124 @@ const ListView: React.FC<ListViewProps> = ({
         ) : null}
       </div>
     </div>
+    <FullPageOverlay
+      open={Boolean(overlayPresetButton)}
+      title={overlayTitleText || tSystem('list.predefinedSearches', language, 'Quick filters')}
+      leftAction={
+        <button type="button" className="secondary" onClick={() => setOverlayPresetButton(null)}>
+          {tSystem('common.close', language, 'Close')}
+        </button>
+      }
+    >
+      <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {overlayPresentation === 'groupedList' && overlayGroupByFieldId ? (
+          overlayGroupedItems.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {overlayGroupedItems.map(group => {
+                const title = [group.label, overlayGroupTitleSuffixText].filter(Boolean).join(' ').trim() || EMPTY_DISPLAY;
+                return (
+                  <details
+                    key={group.key}
+                    open={overlayDefaultExpanded}
+                    style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)' }}
+                  >
+                    <summary
+                      style={{
+                        cursor: 'pointer',
+                        padding: '12px 14px',
+                        fontWeight: 600,
+                        fontSize: 'var(--ck-font-label)',
+                        listStyle: 'auto'
+                      }}
+                    >
+                      {title}
+                    </summary>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px 14px' }}>
+                      {group.items.map(row => (
+                        <div
+                          key={`${group.key}-${row.id}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            paddingTop: 8,
+                            borderTop: '1px solid var(--border)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minWidth: 0 }}>
+                            {overlayColumns
+                              .filter(col => col.fieldId !== overlayGroupByFieldId)
+                              .map(col => (
+                                <span key={`${row.id}-${col.fieldId}`} style={{ minWidth: 0 }}>
+                                  {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
+          )
+        ) : (
+          <div className="list-table-wrapper">
+            <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <thead>
+                <tr>
+                  {overlayColumns.map(col => (
+                    <th
+                      key={col.fieldId}
+                      scope="col"
+                      style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word', background: 'var(--card)' }}
+                    >
+                      {resolveLocalizedString(col.label, language, col.fieldId)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {overlayPresetItems.length ? (
+                  overlayPresetItems.map(row => (
+                    <tr key={`overlay-${row.id}`}>
+                      {overlayColumns.map(col => (
+                        <td
+                          key={col.fieldId}
+                          style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                        >
+                          {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={Math.max(1, overlayColumns.length)} className="muted">
+                      {tSystem('list.noRecords', language, 'No records found.')}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {resolvedLegendItems.length ? (
+          <ListViewLegend
+            items={resolvedLegendItems}
+            language={language}
+            columns={legendColumns}
+            columnWidths={legendColumnWidths}
+            className="ck-list-legend--overlay ck-list-legend--bottomBar"
+            style={{ marginTop: 'auto', borderTop: '1px solid var(--border)' }}
+          />
+        ) : null}
+      </div>
+    </FullPageOverlay>
+    </>
   );
 };
 

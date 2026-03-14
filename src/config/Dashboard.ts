@@ -141,6 +141,8 @@ export class Dashboard {
       const listViewLegend = dashboardConfig?.listViewLegend;
       const listViewLegendColumns = dashboardConfig?.listViewLegendColumns;
       const listViewLegendColumnWidths = dashboardConfig?.listViewLegendColumnWidths;
+      const listViewDefaultWhen = dashboardConfig?.listViewDefaultWhen;
+      const listViewDateHeading = dashboardConfig?.listViewDateHeading;
       const listViewSearch = dashboardConfig?.listViewSearch;
       const listViewView = dashboardConfig?.listViewView;
       const listViewMetric = dashboardConfig?.listViewMetric;
@@ -198,6 +200,8 @@ export class Dashboard {
           listViewLegend,
           listViewLegendColumns,
           listViewLegendColumnWidths,
+          listViewDefaultWhen,
+          listViewDateHeading,
           listViewSearch,
           listViewView,
           listViewMetric,
@@ -273,6 +277,8 @@ export class Dashboard {
     listViewLegend?: ListViewLegendItem[];
     listViewLegendColumns?: number;
     listViewLegendColumnWidths?: [number, number];
+    listViewDefaultWhen?: any;
+    listViewDateHeading?: { fieldId: string; suffix?: LocalizedString | string };
     listViewSearch?: ListViewSearchConfig;
     listViewView?: ListViewViewConfig;
     listViewMetric?: ListViewMetricConfig;
@@ -663,6 +669,35 @@ export class Dashboard {
             ? ((parsed.listView as any).legendColumnWidths ?? (parsed.listView as any).legendWidths)
             : undefined;
     const listViewLegendColumnWidths = this.normalizeListViewLegendColumnWidths(listViewLegendColumnWidthsRaw);
+    const listViewDefaultWhenRaw =
+      (parsed as any).listViewDefaultWhen !== undefined
+        ? (parsed as any).listViewDefaultWhen
+        : listViewObj && (listViewObj as any).defaultWhen !== undefined
+          ? (listViewObj as any).defaultWhen
+          : listViewObj && (listViewObj as any).defaultFilter !== undefined
+            ? (listViewObj as any).defaultFilter
+            : undefined;
+    const listViewDefaultWhen = this.normalizeWhenClause(listViewDefaultWhenRaw);
+    const listViewDateHeadingRaw =
+      (parsed as any).listViewDateHeading !== undefined
+        ? (parsed as any).listViewDateHeading
+        : listViewObj && (listViewObj as any).dateHeading !== undefined
+          ? (listViewObj as any).dateHeading
+          : undefined;
+    const listViewDateHeading = (() => {
+      if (!listViewDateHeadingRaw || typeof listViewDateHeadingRaw !== 'object') return undefined;
+      const fieldIdRaw =
+        (listViewDateHeadingRaw as any).fieldId ??
+        (listViewDateHeadingRaw as any).field ??
+        (listViewDateHeadingRaw as any).dateFieldId;
+      const fieldId =
+        fieldIdRaw === undefined || fieldIdRaw === null ? undefined : fieldIdRaw.toString().trim() || undefined;
+      if (!fieldId) return undefined;
+      const out: any = { fieldId };
+      const suffix = normalizeLocalized((listViewDateHeadingRaw as any).suffix ?? (listViewDateHeadingRaw as any).label);
+      if (suffix !== undefined) out.suffix = suffix;
+      return out as { fieldId: string; suffix?: LocalizedString | string };
+    })();
 
     const listViewSearchRaw =
       parsed.listViewSearch !== undefined
@@ -1232,6 +1267,8 @@ export class Dashboard {
       !listViewLegend?.length &&
       listViewLegendColumns === undefined &&
       listViewLegendColumnWidths === undefined &&
+      !listViewDefaultWhen &&
+      !listViewDateHeading &&
       !listViewSearch &&
       !listViewView &&
       !listViewMetric &&
@@ -1284,6 +1321,8 @@ export class Dashboard {
       listViewLegend,
       listViewLegendColumns,
       listViewLegendColumnWidths,
+      listViewDefaultWhen,
+      listViewDateHeading,
       listViewSearch,
       listViewView,
       listViewMetric,
@@ -2910,6 +2949,15 @@ export class Dashboard {
               ? (value as any).hint
               : undefined;
     const placeholder = normalizeLocalizedMaybeEmpty(placeholderRaw);
+    const helperTextRaw =
+      (value as any).helperText !== undefined
+        ? (value as any).helperText
+        : (value as any).helper !== undefined
+          ? (value as any).helper
+          : (value as any).helpText !== undefined
+            ? (value as any).helpText
+            : undefined;
+    const helperText = normalizeLocalizedMaybeEmpty(helperTextRaw);
     const presetsTitleRaw = (value as any).presetsTitle;
     const presetsTitle = normalizeLocalizedMaybeEmpty(presetsTitleRaw);
     if (mode === 'advanced') {
@@ -2938,12 +2986,14 @@ export class Dashboard {
       })();
       const out: any = fields ? { mode: 'advanced', fields } : { mode: 'advanced' };
       if (placeholder !== undefined) out.placeholder = placeholder;
+      if (helperText !== undefined) out.helperText = helperText;
       if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
       return out as ListViewSearchConfig;
     }
     if (mode !== 'date') {
       const out: any = { mode };
       if (placeholder !== undefined) out.placeholder = placeholder;
+      if (helperText !== undefined) out.helperText = helperText;
       if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
       return out as ListViewSearchConfig;
     }
@@ -2961,6 +3011,7 @@ export class Dashboard {
     const dateFieldId = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
     const out: any = dateFieldId ? { mode: 'date', dateFieldId } : { mode: 'date' };
     if (placeholder !== undefined) out.placeholder = placeholder;
+    if (helperText !== undefined) out.helperText = helperText;
     if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
     return out as ListViewSearchConfig;
   }

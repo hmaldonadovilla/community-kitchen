@@ -7793,11 +7793,29 @@ export const BUNDLED_FORM_CONFIGS = [
         "fr": "Activité récente",
         "nl": "Recente activiteit"
       },
-      "listViewPageSize": 7,
+      "listViewPageSize": 50,
       "listViewPaginationControlsEnabled": false,
       "listViewHideHeaderRow": true,
       "listViewMetaColumns": [],
       "listViewColumns": [
+        {
+          "fieldId": "MP_DISTRIBUTOR",
+          "label": {
+            "en": "Customer",
+            "fr": "Client",
+            "nl": "Klant"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "MP_SERVICE",
+          "label": {
+            "en": "Service",
+            "fr": "Service",
+            "nl": "Dienst"
+          },
+          "kind": "question"
+        },
         {
           "type": "rule",
           "fieldId": "action",
@@ -7807,29 +7825,6 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Actie"
           },
           "cases": [
-            {
-              "text": {
-                "en": "Warning",
-                "fr": "Avertissement",
-                "nl": "Waarschuwing"
-              },
-              "when": {
-                "all": [
-                  {
-                    "fieldId": "status",
-                    "notEquals": "Closed"
-                  },
-                  {
-                    "fieldId": "MP_PREP_DATE",
-                    "isInPast": true
-                  }
-                ]
-              },
-              "style": "warning",
-              "icon": "warning",
-              "hideText": true,
-              "openView": "summary"
-            },
             {
               "text": {
                 "en": "Actions",
@@ -7860,17 +7855,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "actions": [
                 {
                   "text": {
-                    "en": "View",
-                    "fr": "Voir",
-                    "nl": "Bekijken"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "view",
-                  "openView": "summary"
-                },
-                {
-                  "text": {
                     "en": "Edit",
                     "fr": "Modifier",
                     "nl": "Bewerken"
@@ -7893,36 +7877,25 @@ export const BUNDLED_FORM_CONFIGS = [
                 "all": [
                   {
                     "fieldId": "status",
-                    "equals": "Closed"
+                    "notEquals": "Closed"
                   },
                   {
-                    "fieldId": "__ckRequestParam_admin",
-                    "equals": "true"
+                    "fieldId": "MP_PREP_DATE",
+                    "isInPast": true
                   }
                 ]
               },
               "actions": [
                 {
                   "text": {
-                    "en": "View",
-                    "fr": "Voir",
-                    "nl": "Bekijken"
+                    "en": "Past record incomplete or missing",
+                    "fr": "Enregistrement passe incomplet ou manquant",
+                    "nl": "Afgelopen record onvolledig of ontbrekend"
                   },
                   "hideText": true,
-                  "style": "link",
-                  "icon": "view",
+                  "style": "warning",
+                  "icon": "warning",
                   "openView": "summary"
-                },
-                {
-                  "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopiëren"
-                  },
-                  "hideText": true,
-                  "style": "link",
-                  "icon": "copy",
-                  "openView": "copy"
                 }
               ]
             },
@@ -7948,10 +7921,31 @@ export const BUNDLED_FORM_CONFIGS = [
                   "style": "link",
                   "icon": "view",
                   "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Copy",
+                    "fr": "Copier",
+                    "nl": "Kopieren"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "copy",
+                  "openView": "copy"
                 }
               ]
             }
           ]
+        },
+        {
+          "fieldId": "MP_PREP_DATE",
+          "label": {
+            "en": "Date",
+            "fr": "Date",
+            "nl": "Datum"
+          },
+          "kind": "question",
+          "showIn": []
         }
       ],
       "listViewLegend": [
@@ -7959,8 +7953,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "icon": "edit",
           "text": {
             "en": "Edit (not allowed for past records)",
-            "fr": "Modifier (non autorisé pour les enregistrements passés)",
-            "nl": "Bewerken (niet toegestaan voor eerdere records)"
+            "fr": "Modifier (non autorise pour les enregistrements passes)",
+            "nl": "Bewerken (niet toegestaan voor afgelopen records)"
           }
         },
         {
@@ -7972,21 +7966,39 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
+          "icon": "copy",
+          "text": {
+            "en": "Copy",
+            "fr": "Copier",
+            "nl": "Kopieren"
+          }
+        },
+        {
           "icon": "warning",
           "text": {
             "en": "Past record incomplete or missing",
-            "fr": "Enregistrement passé incomplet ou manquant",
-            "nl": "Vorige record onvolledig of ontbrekend"
+            "fr": "Enregistrement passe incomplet ou manquant",
+            "nl": "Afgelopen record onvolledig of ontbrekend"
           }
         }
+      ],
+      "listViewLegendColumns": 2,
+      "listViewLegendColumnWidths": [
+        50,
+        50
       ],
       "listViewSearch": {
         "mode": "date",
         "dateFieldId": "MP_PREP_DATE",
+        "helperText": {
+          "en": "Pick a date for which you want to see meal production information.",
+          "fr": "Choisissez une date pour laquelle vous souhaitez voir les informations de production des repas.",
+          "nl": "Kies een datum waarvoor u de informatie over de maaltijdproductie wilt zien."
+        },
         "presetsTitle": {
-          "en": "Search by customer:",
-          "fr": "Rechercher par client:",
-          "nl": "Zoeken op klant:"
+          "en": "Predefined lists:",
+          "fr": "Listes predefinies :",
+          "nl": "Voorgedefinieerde lijsten:"
         }
       },
       "autoSave": {
@@ -9755,6 +9767,22 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         ]
+      },
+      "listViewDefaultSort": {
+        "fieldId": "MP_PREP_DATE",
+        "direction": "desc"
+      },
+      "listViewDefaultWhen": {
+        "fieldId": "MP_PREP_DATE",
+        "isToday": true
+      },
+      "listViewDateHeading": {
+        "fieldId": "MP_PREP_DATE",
+        "suffix": {
+          "en": "activities",
+          "fr": "activites",
+          "nl": "activiteiten"
+        }
       }
     },
     "questions": [
@@ -9794,7 +9822,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "ui": {
           "labelLayout": "inline"
         },
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -9853,7 +9881,7 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "listViewSort": {
           "direction": "asc",
-          "priority": 3
+          "priority": 2
         }
       },
       {
@@ -9863,7 +9891,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Service",
         "qNl": "Dienst",
         "required": true,
-        "listView": true,
+        "listView": false,
         "ui": {
           "labelLayout": "inline"
         },
@@ -9944,7 +9972,7 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "listViewSort": {
           "direction": "asc",
-          "priority": 2
+          "priority": 3
         }
       },
       {
@@ -9954,7 +9982,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Cuisinier responsable",
         "qNl": "Verantwoordelijke kok",
         "required": true,
-        "listView": true,
+        "listView": false,
         "ui": {
           "labelLayout": "inline"
         },
@@ -10063,7 +10091,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Date",
         "qNl": "Datum",
         "required": true,
-        "listView": true,
+        "listView": false,
         "ui": {
           "labelLayout": "inline"
         },
@@ -11931,66 +11959,6 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       {
-        "id": "BELL_SH_BTN",
-        "type": "BUTTON",
-        "qEn": "Belliard – last 7 days",
-        "qFr": "Belliard – last 7 days",
-        "qNl": "Belliard – last 7 days",
-        "required": false,
-        "listView": false,
-        "options": [],
-        "optionsFr": [],
-        "optionsNl": [],
-        "status": "Active",
-        "button": {
-          "action": "listViewSearchPreset",
-          "mode": "advanced",
-          "fieldFilters": {
-            "MP_DISTRIBUTOR": "Belliard"
-          }
-        }
-      },
-      {
-        "id": "HUB_SH_BTN",
-        "type": "BUTTON",
-        "qEn": "HUB – last 7 days",
-        "qFr": "HUB – last 7 days",
-        "qNl": "HUB – last 7 days",
-        "required": false,
-        "listView": false,
-        "options": [],
-        "optionsFr": [],
-        "optionsNl": [],
-        "status": "Active",
-        "button": {
-          "action": "listViewSearchPreset",
-          "mode": "advanced",
-          "fieldFilters": {
-            "MP_DISTRIBUTOR": "HUB"
-          }
-        }
-      },
-      {
-        "id": "PHARE_SH_BTN",
-        "type": "BUTTON",
-        "qEn": "Le Phare – last 7 days",
-        "qFr": "Le Phare – last 7 days",
-        "qNl": "Le Phare – last 7 days",
-        "required": false,
-        "listView": false,
-        "options": [],
-        "optionsFr": [],
-        "optionsNl": [],
-        "status": "Active",
-        "button": {
-          "action": "listViewSearchPreset",
-          "mode": "advanced",
-          "fieldFilters": {
-            "MP_DISTRIBUTOR": "Le Phare"
-          }
-        }
-      },
-      {
         "id": "MP_READY_FOR_PRODUCTION",
         "type": "BUTTON",
         "qEn": "Ready for Production",
@@ -12096,6 +12064,92 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         }
+      },
+      {
+        "id": "PAST_7_DAYS_BTN",
+        "type": "BUTTON",
+        "qEn": "Last 7 days",
+        "qFr": "7 derniers jours",
+        "qNl": "Laatste 7 dagen",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "button": {
+          "action": "listViewSearchPreset",
+          "showIn": [
+            "table"
+          ],
+          "target": "overlay",
+          "title": {
+            "en": "Last 7 days activities",
+            "fr": "Activites des 7 derniers jours",
+            "nl": "Activiteiten van de laatste 7 dagen"
+          },
+          "resultColumns": [
+            "MP_PREP_DATE",
+            "MP_SERVICE",
+            "action"
+          ],
+          "dateFieldId": "MP_PREP_DATE",
+          "lookbackDays": 7,
+          "includeToday": false,
+          "overlay": {
+            "presentation": "groupedList",
+            "groupByFieldId": "MP_DISTRIBUTOR",
+            "groupTitleSuffix": {
+              "en": "last 7 days",
+              "fr": "7 derniers jours",
+              "nl": "laatste 7 dagen"
+            },
+            "defaultExpanded": false
+          }
+        }
+      },
+      {
+        "id": "NEXT_7_DAYS_BTN",
+        "type": "BUTTON",
+        "qEn": "Today and next 7 days",
+        "qFr": "Aujourd'hui et les 7 prochains jours",
+        "qNl": "Vandaag en de volgende 7 dagen",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "button": {
+          "action": "listViewSearchPreset",
+          "showIn": [
+            "table"
+          ],
+          "target": "overlay",
+          "title": {
+            "en": "Today and next 7 days activities",
+            "fr": "Activites d'aujourd'hui et des 7 prochains jours",
+            "nl": "Activiteiten van vandaag en de volgende 7 dagen"
+          },
+          "resultColumns": [
+            "MP_PREP_DATE",
+            "MP_SERVICE",
+            "action"
+          ],
+          "dateFieldId": "MP_PREP_DATE",
+          "lookaheadDays": 7,
+          "includeToday": true,
+          "overlay": {
+            "presentation": "groupedList",
+            "groupByFieldId": "MP_DISTRIBUTOR",
+            "groupTitleSuffix": {
+              "en": "today and next 7 days",
+              "fr": "aujourd'hui et les 7 prochains jours",
+              "nl": "vandaag en de volgende 7 dagen"
+            },
+            "defaultExpanded": false
+          }
+        }
       }
     ],
     "dedupRules": [
@@ -12162,7 +12216,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "ui": {
             "labelLayout": "inline"
           },
-          "listView": true,
+          "listView": false,
           "dataSource": {
             "id": "Distributor Data",
             "mode": "options",
@@ -12217,7 +12271,7 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "listViewSort": {
             "direction": "asc",
-            "priority": 3
+            "priority": 2
           }
         },
         {
@@ -12229,7 +12283,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Dienst"
           },
           "required": true,
-          "listView": true,
+          "listView": false,
           "ui": {
             "labelLayout": "inline"
           },
@@ -12310,7 +12364,7 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           "listViewSort": {
             "direction": "asc",
-            "priority": 2
+            "priority": 3
           }
         },
         {
@@ -12322,7 +12376,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Verantwoordelijke kok"
           },
           "required": true,
-          "listView": true,
+          "listView": false,
           "ui": {
             "labelLayout": "inline"
           },
@@ -12432,7 +12486,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "nl": "Datum"
           },
           "required": true,
-          "listView": true,
+          "listView": false,
           "ui": {
             "labelLayout": "inline"
           },
@@ -14289,60 +14343,6 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         {
-          "id": "BELL_SH_BTN",
-          "type": "BUTTON",
-          "label": {
-            "en": "Belliard – last 7 days",
-            "fr": "Belliard – last 7 days",
-            "nl": "Belliard – last 7 days"
-          },
-          "required": false,
-          "listView": false,
-          "button": {
-            "action": "listViewSearchPreset",
-            "mode": "advanced",
-            "fieldFilters": {
-              "MP_DISTRIBUTOR": "Belliard"
-            }
-          }
-        },
-        {
-          "id": "HUB_SH_BTN",
-          "type": "BUTTON",
-          "label": {
-            "en": "HUB – last 7 days",
-            "fr": "HUB – last 7 days",
-            "nl": "HUB – last 7 days"
-          },
-          "required": false,
-          "listView": false,
-          "button": {
-            "action": "listViewSearchPreset",
-            "mode": "advanced",
-            "fieldFilters": {
-              "MP_DISTRIBUTOR": "HUB"
-            }
-          }
-        },
-        {
-          "id": "PHARE_SH_BTN",
-          "type": "BUTTON",
-          "label": {
-            "en": "Le Phare – last 7 days",
-            "fr": "Le Phare – last 7 days",
-            "nl": "Le Phare – last 7 days"
-          },
-          "required": false,
-          "listView": false,
-          "button": {
-            "action": "listViewSearchPreset",
-            "mode": "advanced",
-            "fieldFilters": {
-              "MP_DISTRIBUTOR": "Le Phare"
-            }
-          }
-        },
-        {
           "id": "MP_READY_FOR_PRODUCTION",
           "type": "BUTTON",
           "label": {
@@ -14446,11 +14446,119 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             }
           }
+        },
+        {
+          "id": "PAST_7_DAYS_BTN",
+          "type": "BUTTON",
+          "label": {
+            "en": "Last 7 days",
+            "fr": "7 derniers jours",
+            "nl": "Laatste 7 dagen"
+          },
+          "required": false,
+          "listView": false,
+          "options": [],
+          "optionsFr": [],
+          "optionsNl": [],
+          "status": "Active",
+          "button": {
+            "action": "listViewSearchPreset",
+            "showIn": [
+              "table"
+            ],
+            "target": "overlay",
+            "title": {
+              "en": "Last 7 days activities",
+              "fr": "Activites des 7 derniers jours",
+              "nl": "Activiteiten van de laatste 7 dagen"
+            },
+            "resultColumns": [
+              "MP_PREP_DATE",
+              "MP_SERVICE",
+              "action"
+            ],
+            "dateFieldId": "MP_PREP_DATE",
+            "lookbackDays": 7,
+            "includeToday": false,
+            "overlay": {
+              "presentation": "groupedList",
+              "groupByFieldId": "MP_DISTRIBUTOR",
+              "groupTitleSuffix": {
+                "en": "last 7 days",
+                "fr": "7 derniers jours",
+                "nl": "laatste 7 dagen"
+              },
+              "defaultExpanded": false
+            }
+          }
+        },
+        {
+          "id": "NEXT_7_DAYS_BTN",
+          "type": "BUTTON",
+          "label": {
+            "en": "Today and next 7 days",
+            "fr": "Aujourd'hui et les 7 prochains jours",
+            "nl": "Vandaag en de volgende 7 dagen"
+          },
+          "required": false,
+          "listView": false,
+          "options": [],
+          "optionsFr": [],
+          "optionsNl": [],
+          "status": "Active",
+          "button": {
+            "action": "listViewSearchPreset",
+            "showIn": [
+              "table"
+            ],
+            "target": "overlay",
+            "title": {
+              "en": "Today and next 7 days activities",
+              "fr": "Activites d'aujourd'hui et des 7 prochains jours",
+              "nl": "Activiteiten van vandaag en de volgende 7 dagen"
+            },
+            "resultColumns": [
+              "MP_PREP_DATE",
+              "MP_SERVICE",
+              "action"
+            ],
+            "dateFieldId": "MP_PREP_DATE",
+            "lookaheadDays": 7,
+            "includeToday": true,
+            "overlay": {
+              "presentation": "groupedList",
+              "groupByFieldId": "MP_DISTRIBUTOR",
+              "groupTitleSuffix": {
+                "en": "today and next 7 days",
+                "fr": "aujourd'hui et les 7 prochains jours",
+                "nl": "vandaag en de volgende 7 dagen"
+              },
+              "defaultExpanded": false
+            }
+          }
         }
       ],
       "dataSources": [],
       "listView": {
         "columns": [
+          {
+            "fieldId": "MP_DISTRIBUTOR",
+            "label": {
+              "en": "Customer",
+              "fr": "Client",
+              "nl": "Klant"
+            },
+            "kind": "question"
+          },
+          {
+            "fieldId": "MP_SERVICE",
+            "label": {
+              "en": "Service",
+              "fr": "Service",
+              "nl": "Dienst"
+            },
+            "kind": "question"
+          },
           {
             "type": "rule",
             "fieldId": "action",
@@ -14460,29 +14568,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Actie"
             },
             "cases": [
-              {
-                "text": {
-                  "en": "Warning",
-                  "fr": "Avertissement",
-                  "nl": "Waarschuwing"
-                },
-                "when": {
-                  "all": [
-                    {
-                      "fieldId": "status",
-                      "notEquals": "Closed"
-                    },
-                    {
-                      "fieldId": "MP_PREP_DATE",
-                      "isInPast": true
-                    }
-                  ]
-                },
-                "style": "warning",
-                "icon": "warning",
-                "hideText": true,
-                "openView": "summary"
-              },
               {
                 "text": {
                   "en": "Actions",
@@ -14513,17 +14598,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "actions": [
                   {
                     "text": {
-                      "en": "View",
-                      "fr": "Voir",
-                      "nl": "Bekijken"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "view",
-                    "openView": "summary"
-                  },
-                  {
-                    "text": {
                       "en": "Edit",
                       "fr": "Modifier",
                       "nl": "Bewerken"
@@ -14546,36 +14620,25 @@ export const BUNDLED_FORM_CONFIGS = [
                   "all": [
                     {
                       "fieldId": "status",
-                      "equals": "Closed"
+                      "notEquals": "Closed"
                     },
                     {
-                      "fieldId": "__ckRequestParam_admin",
-                      "equals": "true"
+                      "fieldId": "MP_PREP_DATE",
+                      "isInPast": true
                     }
                   ]
                 },
                 "actions": [
                   {
                     "text": {
-                      "en": "View",
-                      "fr": "Voir",
-                      "nl": "Bekijken"
+                      "en": "Past record incomplete or missing",
+                      "fr": "Enregistrement passe incomplet ou manquant",
+                      "nl": "Afgelopen record onvolledig of ontbrekend"
                     },
                     "hideText": true,
-                    "style": "link",
-                    "icon": "view",
+                    "style": "warning",
+                    "icon": "warning",
                     "openView": "summary"
-                  },
-                  {
-                    "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopiëren"
-                    },
-                    "hideText": true,
-                    "style": "link",
-                    "icon": "copy",
-                    "openView": "copy"
                   }
                 ]
               },
@@ -14601,37 +14664,21 @@ export const BUNDLED_FORM_CONFIGS = [
                     "style": "link",
                     "icon": "view",
                     "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Copy",
+                      "fr": "Copier",
+                      "nl": "Kopieren"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "copy",
+                    "openView": "copy"
                   }
                 ]
               }
             ]
-          },
-          {
-            "fieldId": "MP_DISTRIBUTOR",
-            "label": {
-              "en": "Customer",
-              "fr": "Client",
-              "nl": "Klant"
-            },
-            "kind": "question"
-          },
-          {
-            "fieldId": "MP_SERVICE",
-            "label": {
-              "en": "Service",
-              "fr": "Service",
-              "nl": "Dienst"
-            },
-            "kind": "question"
-          },
-          {
-            "fieldId": "MP_COOK_NAME",
-            "label": {
-              "en": "Responsible cook",
-              "fr": "Cuisinier responsable",
-              "nl": "Verantwoordelijke kok"
-            },
-            "kind": "question"
           },
           {
             "fieldId": "MP_PREP_DATE",
@@ -14640,7 +14687,8 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Date",
               "nl": "Datum"
             },
-            "kind": "question"
+            "kind": "question",
+            "showIn": []
           }
         ],
         "metaColumns": [],
@@ -14650,10 +14698,10 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "title": {
           "en": "Recent activity",
-          "fr": "Activité récente",
+          "fr": "Activite recente",
           "nl": "Recente activiteit"
         },
-        "pageSize": 7,
+        "pageSize": 50,
         "paginationControlsEnabled": false,
         "hideHeaderRow": true,
         "legend": [
@@ -14661,8 +14709,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "icon": "edit",
             "text": {
               "en": "Edit (not allowed for past records)",
-              "fr": "Modifier (non autorisé pour les enregistrements passés)",
-              "nl": "Bewerken (niet toegestaan voor eerdere records)"
+              "fr": "Modifier (non autorise pour les enregistrements passes)",
+              "nl": "Bewerken (niet toegestaan voor afgelopen records)"
             }
           },
           {
@@ -14674,24 +14722,54 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
+            "icon": "copy",
+            "text": {
+              "en": "Copy",
+              "fr": "Copier",
+              "nl": "Kopieren"
+            }
+          },
+          {
             "icon": "warning",
             "text": {
               "en": "Past record incomplete or missing",
-              "fr": "Enregistrement passé incomplet ou manquant",
-              "nl": "Vorige record onvolledig of ontbrekend"
+              "fr": "Enregistrement passe incomplet ou manquant",
+              "nl": "Afgelopen record onvolledig of ontbrekend"
             }
           }
+        ],
+        "legendColumns": 2,
+        "legendColumnWidths": [
+          50,
+          50
         ],
         "search": {
           "mode": "date",
           "dateFieldId": "MP_PREP_DATE",
+          "helperText": {
+            "en": "Pick a date for which you want to see meal production information.",
+            "fr": "Choisissez une date pour laquelle vous souhaitez voir les informations de production des repas.",
+            "nl": "Kies een datum waarvoor u de informatie over de maaltijdproductie wilt zien."
+          },
           "presetsTitle": {
-            "en": "Search by customer:",
-            "fr": "Rechercher par client:",
-            "nl": "Zoeken op klant:"
+            "en": "Predefined lists:",
+            "fr": "Listes predefinies :",
+            "nl": "Voorgedefinieerde lijsten:"
           }
         },
-        "rowClickEnabled": false
+        "rowClickEnabled": false,
+        "defaultWhen": {
+          "fieldId": "MP_PREP_DATE",
+          "isToday": true
+        },
+        "dateHeading": {
+          "fieldId": "MP_PREP_DATE",
+          "suffix": {
+            "en": "activities",
+            "fr": "activites",
+            "nl": "activiteiten"
+          }
+        }
       },
       "dedupRules": [
         {

@@ -361,8 +361,8 @@ components:
               type: string
               enum: [listViewSearchPreset]
               description: |
-                Trigger a predefined search query in the list view (cards mode).
-                These buttons render below the search bar when no search results are showing.
+                Trigger a predefined search query in the list view.
+                These buttons render below the search bar in the configured list view modes.
             mode:
               type: string
               enum: [text, date, advanced]
@@ -382,6 +382,51 @@ components:
                     items:
                       type: string
               description: Advanced field filters (AND-ed together).
+            showIn:
+              type: array
+              items:
+                type: string
+                enum: [table, cards]
+              description: Which list view modes should render this preset button.
+            target:
+              type: string
+              enum: [inline, overlay]
+              description: |
+                How the preset should present results.
+                - `inline`: apply inside the current list view
+                - `overlay`: open a full-screen overlay with the filtered results
+            title:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/LocalizedString'
+              description: Optional overlay title used when `target = overlay`.
+            overlay:
+              $ref: '#/components/schemas/ListViewSearchPresetOverlayConfig'
+              description: Optional overlay presentation config used when `target = overlay`.
+            resultColumns:
+              type: array
+              items:
+                type: string
+              description: |
+                Optional list-view column ids rendered inside the preset overlay.
+                When omitted, the main list-view columns are reused.
+            when:
+              $ref: '#/components/schemas/WhenClause'
+              description: Optional extra row filter applied to prefetched rows for this preset.
+            dateFieldId:
+              type: string
+              description: Optional date field id used by the relative lookback filter.
+            lookbackDays:
+              type: integer
+              minimum: 0
+              description: Optional rolling lookback window in days evaluated against the local current date.
+            lookaheadDays:
+              type: integer
+              minimum: 0
+              description: Optional rolling lookahead window in days evaluated against the local current date.
+            includeToday:
+              type: boolean
+              description: Whether the relative date window includes today's date (default `true`).
             tone:
               type: string
               enum: [primary, secondary]
@@ -2241,6 +2286,8 @@ components:
             - `legend`: optional legend shown below the table to explain icons / table elements (only shown when defined)
             - `metric`: legacy list-only metric (deprecated; use `analytics.widgets` with `placements: ["listView"]`)
             - `defaultSort`: initial sort field/direction
+            - `defaultWhen`: optional default row filter applied before the user starts searching
+            - `dateHeading`: optional inline date heading shown above date-driven list results
             - `pageSize`: rows per page (default 10, max 50)
 
             Notes:
@@ -4246,6 +4293,41 @@ components:
       required:
         - text
 
+    ListViewDateHeadingConfig:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          description: Date field id used to build the inline heading text.
+        suffix:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized suffix appended after the formatted date.
+      required: [fieldId]
+
+    ListViewSearchPresetOverlayConfig:
+      type: object
+      properties:
+        presentation:
+          type: string
+          enum: [table, groupedList]
+          description: |
+            Overlay result presentation mode.
+            - `table`: standard table using `resultColumns`
+            - `groupedList`: expandable grouped lists using `groupByFieldId`
+        groupByFieldId:
+          type: string
+          description: Field id used to group overlay results when `presentation = groupedList`.
+        groupTitleSuffix:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional localized suffix appended to each grouped-list heading.
+        defaultExpanded:
+          type: boolean
+          description: When true, grouped-list sections start expanded.
+
     ListViewConfig:
       type: object
       properties:
@@ -4323,6 +4405,11 @@ components:
 
                 When omitted, the UI falls back to system strings (e.g., "Search records").
                 Set to an empty string (`""`) to remove the placeholder text.
+            helperText:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/LocalizedString'
+              description: Optional helper text shown below the list search control.
             presetsTitle:
               oneOf:
                 - type: string
@@ -4342,6 +4429,19 @@ components:
                 type: string
               description: |
                 When `mode: advanced`, the list of field ids that appear as filter rows in the advanced search panel.
+
+        defaultWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: |
+            Optional default row filter applied only when the user has not started an inline search flow yet.
+
+            Typical use:
+            - show only today's records on first load
+        dateHeading:
+          $ref: '#/components/schemas/ListViewDateHeadingConfig'
+          description: |
+            Optional inline date heading shown above visible results for date-driven list experiences.
+            Example: `Wed, 04-Feb-2026 activities`.
 
                 Notes:
                 - Field ids can reference questions **or** meta columns like `createdAt`, `updatedAt`, `status`, `pdfUrl`.

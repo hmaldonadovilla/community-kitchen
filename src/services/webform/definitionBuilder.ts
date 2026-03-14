@@ -109,6 +109,8 @@ export class DefinitionBuilder {
       form.listViewLegendColumnWidths,
       form.listViewTitle,
       form.listViewDefaultSort,
+      form.listViewDefaultWhen,
+      form.listViewDateHeading,
       form.listViewPageSize,
       form.listViewPaginationControlsEnabled,
       form.listViewHideHeaderRow,
@@ -521,6 +523,8 @@ export class DefinitionBuilder {
     legendColumnWidthsOverride?: ListViewConfig['legendColumnWidths'],
     title?: ListViewConfig['title'],
     defaultSortOverride?: ListViewConfig['defaultSort'],
+    defaultWhenOverride?: ListViewConfig['defaultWhen'],
+    dateHeadingOverride?: ListViewConfig['dateHeading'],
     pageSizeOverride?: ListViewConfig['pageSize'],
     paginationControlsEnabledOverride?: ListViewConfig['paginationControlsEnabled'],
     hideHeaderRowOverride?: ListViewConfig['hideHeaderRow'],
@@ -568,6 +572,8 @@ export class DefinitionBuilder {
     const out: ListViewConfig = { columns, metaColumns: resolvedMetaColumns, defaultSort };
     // Allow explicit empty title ("") to hide the list view title in the UI.
     if (title !== undefined) out.title = title;
+    if (defaultWhenOverride) out.defaultWhen = defaultWhenOverride;
+    if (dateHeadingOverride) out.dateHeading = dateHeadingOverride;
     if (legend && Array.isArray(legend) && legend.length) out.legend = legend;
     if (legendColumnsOverride !== undefined) {
       const n = Number(legendColumnsOverride);

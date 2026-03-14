@@ -198,6 +198,36 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewLegendColumnWidths).toEqual([25, 75]);
   });
 
+  test('getForms parses list view defaultWhen, dateHeading, and search helper text', () => {
+    const configJson = JSON.stringify({
+      listView: {
+        defaultWhen: { fieldId: 'MP_PREP_DATE', isToday: true },
+        dateHeading: { fieldId: 'MP_PREP_DATE', suffix: { EN: 'activities' } },
+        search: {
+          mode: 'date',
+          dateFieldId: 'MP_PREP_DATE',
+          helperText: { EN: 'Pick a date.' }
+        }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).listViewDefaultWhen).toEqual({ fieldId: 'MP_PREP_DATE', isToday: true });
+    expect((forms[0] as any).listViewDateHeading).toEqual({ fieldId: 'MP_PREP_DATE', suffix: { en: 'activities' } });
+    expect((forms[0] as any).listViewSearch).toEqual({
+      mode: 'date',
+      dateFieldId: 'MP_PREP_DATE',
+      helperText: { en: 'Pick a date.' }
+    });
+  });
+
   test('getForms parses list view metric config from dashboard config (listView.metric)', () => {
     const configJson = JSON.stringify({
       listView: {

@@ -1384,12 +1384,77 @@ export class ConfigSheet {
         });
         if (!Object.keys(fieldFilters).length) fieldFilters = undefined;
       }
+      const showInRaw = Array.isArray(cfgRaw.showIn) ? cfgRaw.showIn : cfgRaw.showIn ? [cfgRaw.showIn] : [];
+      const showIn = showInRaw
+        .map((value: any) => (value === undefined || value === null ? '' : value.toString().trim().toLowerCase()))
+        .filter((value: string) => value === 'table' || value === 'cards') as Array<'table' | 'cards'>;
+      const targetRaw = cfgRaw.target !== undefined && cfgRaw.target !== null ? cfgRaw.target.toString().trim().toLowerCase() : '';
+      const target = targetRaw === 'overlay' ? 'overlay' : targetRaw === 'inline' ? 'inline' : undefined;
+      const title = cfgRaw.title !== undefined ? cfgRaw.title : undefined;
+      const overlayRaw = cfgRaw.overlay && typeof cfgRaw.overlay === 'object' ? cfgRaw.overlay : null;
+      const overlay = (() => {
+        if (!overlayRaw) return undefined;
+        const presentationRaw =
+          overlayRaw.presentation !== undefined && overlayRaw.presentation !== null
+            ? overlayRaw.presentation.toString().trim().toLowerCase()
+            : '';
+        const presentation = presentationRaw === 'groupedlist' || presentationRaw === 'grouped_list' || presentationRaw === 'grouped-list'
+          ? 'groupedList'
+          : presentationRaw === 'table'
+            ? 'table'
+            : undefined;
+        const groupByFieldId =
+          overlayRaw.groupByFieldId !== undefined && overlayRaw.groupByFieldId !== null
+            ? overlayRaw.groupByFieldId.toString().trim()
+            : undefined;
+        const groupTitleSuffix =
+          overlayRaw.groupTitleSuffix !== undefined ? overlayRaw.groupTitleSuffix : undefined;
+        const defaultExpanded =
+          overlayRaw.defaultExpanded !== undefined && overlayRaw.defaultExpanded !== null
+            ? Boolean(overlayRaw.defaultExpanded)
+            : undefined;
+        const out: any = {};
+        if (presentation) out.presentation = presentation;
+        if (groupByFieldId) out.groupByFieldId = groupByFieldId;
+        if (groupTitleSuffix !== undefined) out.groupTitleSuffix = groupTitleSuffix;
+        if (defaultExpanded !== undefined) out.defaultExpanded = defaultExpanded;
+        return Object.keys(out).length ? out : undefined;
+      })();
+      const resultColumnsRaw = Array.isArray(cfgRaw.resultColumns)
+        ? cfgRaw.resultColumns
+        : cfgRaw.resultColumns
+          ? [cfgRaw.resultColumns]
+          : [];
+      const resultColumns = resultColumnsRaw
+        .map((value: any) => (value === undefined || value === null ? '' : value.toString().trim()))
+        .filter(Boolean);
+      const when = this.normalizeWhenClause(cfgRaw.when ?? cfgRaw.filter ?? cfgRaw.match);
+      const dateFieldId =
+        cfgRaw.dateFieldId !== undefined && cfgRaw.dateFieldId !== null ? cfgRaw.dateFieldId.toString().trim() : undefined;
+      const lookbackDaysRaw = Number(cfgRaw.lookbackDays);
+      const lookbackDays =
+        Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw >= 0 ? Math.max(0, Math.round(lookbackDaysRaw)) : undefined;
+      const lookaheadDaysRaw = Number(cfgRaw.lookaheadDays);
+      const lookaheadDays =
+        Number.isFinite(lookaheadDaysRaw) && lookaheadDaysRaw >= 0 ? Math.max(0, Math.round(lookaheadDaysRaw)) : undefined;
+      const includeToday =
+        cfgRaw.includeToday !== undefined && cfgRaw.includeToday !== null ? Boolean(cfgRaw.includeToday) : undefined;
 
       const config: ButtonConfig = { action: 'listViewSearchPreset' } as any;
       if (mode) (config as any).mode = mode;
       if (keyword !== undefined) (config as any).keyword = keyword;
       if (dateValue !== undefined) (config as any).dateValue = dateValue;
       if (fieldFilters) (config as any).fieldFilters = fieldFilters;
+      if (showIn.length) (config as any).showIn = showIn;
+      if (target) (config as any).target = target;
+      if (title !== undefined) (config as any).title = title;
+      if (overlay) (config as any).overlay = overlay;
+      if (resultColumns.length) (config as any).resultColumns = resultColumns;
+      if (when) (config as any).when = when;
+      if (dateFieldId) (config as any).dateFieldId = dateFieldId;
+      if (lookbackDays !== undefined) (config as any).lookbackDays = lookbackDays;
+      if (lookaheadDays !== undefined) (config as any).lookaheadDays = lookaheadDays;
+      if (includeToday !== undefined) (config as any).includeToday = includeToday;
       return config;
     }
 

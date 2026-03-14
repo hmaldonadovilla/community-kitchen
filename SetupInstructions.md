@@ -366,6 +366,9 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `dateFieldId` should usually be a `DATE` question id.
       - The list view automatically fetches this field for filtering even if it is not shown as a visible column.
       - Recent rows are still prefetched for fast initial load. If the searched date is older than, or exactly equal to, the oldest currently prefetched date, the app automatically falls back to a server-side date query so older records remain reachable.
+      - Optional: add `listView.search.helperText` to show helper copy below the date picker.
+      - Optional: add `listView.defaultWhen` to apply a default row filter before the user starts searching.
+      - Optional: add `listView.dateHeading` to show headings such as `Wed, 04-Feb-2026 activities` above the results.
 
     - Want a Gmail-like **multi-field advanced search**? Set `listView.search.mode: "advanced"` and provide `fields` (the filterable field ids):
 
@@ -389,7 +392,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       { "listView": { "view": { "toggleEnabled": true, "defaultMode": "cards" } } }
       ```
 
-    - Want **quick search presets** under the search bar in cards view? Add a BUTTON question with `button.action: "listViewSearchPreset"`:
+    - Want **quick search presets** under the search bar? Add a BUTTON question with `button.action: "listViewSearchPreset"`:
 
       ```json
       {
@@ -425,7 +428,54 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       }
       ```
 
-      Note: presets can apply advanced `fieldFilters` even when the main list search mode is `text`.
+      Notes:
+      - Presets can apply advanced `fieldFilters` even when the main list search mode is `text`.
+      - Use `showIn: ["table"]` or `showIn: ["cards"]` to control which list-view modes render the preset button.
+      - Use `target: "overlay"` to open a full-screen overlay instead of applying the preset inline.
+      - Overlay presets can add extra filtering via `when`, rolling past/future date windows via `dateFieldId` + `lookbackDays` / `lookaheadDays` + `includeToday`, and a dedicated column set via `resultColumns`.
+      - Overlay presets can also render grouped expandable lists:
+
+      ```json
+      {
+        "id": "PRESET_LAST_7_DAYS",
+        "type": "BUTTON",
+        "label": { "en": "Last 7 days" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "showIn": ["table"],
+          "target": "overlay",
+          "resultColumns": ["DATE", "SERVICE", "action"],
+          "dateFieldId": "DATE",
+          "lookbackDays": 7,
+          "includeToday": false,
+          "overlay": {
+            "presentation": "groupedList",
+            "groupByFieldId": "CUSTOMER",
+            "groupTitleSuffix": { "en": "last 7 days" },
+            "defaultExpanded": false
+          }
+        }
+      }
+      ```
+
+      Future windows use the same model:
+
+      ```json
+      {
+        "id": "PRESET_NEXT_7_DAYS",
+        "type": "BUTTON",
+        "label": { "en": "Today and next 7 days" },
+        "button": {
+          "action": "listViewSearchPreset",
+          "showIn": ["table"],
+          "target": "overlay",
+          "resultColumns": ["DATE", "SERVICE", "action"],
+          "dateFieldId": "DATE",
+          "lookaheadDays": 7,
+          "includeToday": true
+        }
+      }
+      ```
 
     - Want a **rule-based Action column** (computed from record fields)? Add `"listViewColumns"` to the same dashboard JSON column. These columns are **prepended** before question + meta columns.
       - Recommended (consolidated): use `listView.columns` instead of `listViewColumns`.

@@ -107,24 +107,61 @@ describe('staging integrity dialogs and list legend config', () => {
           ? root.listView.columns
           : [];
       const actionCases = columns.find((col: any) => col?.fieldId === 'action')?.cases || [];
-      const closedAdminCase = actionCases.find(
-        (entry: any) =>
-          Array.isArray(entry?.when?.all) &&
-          entry.when.all.some((cond: any) => cond?.fieldId === 'status' && cond?.equals === 'Closed') &&
-          entry.when.all.some((cond: any) => cond?.fieldId === '__ckRequestParam_admin' && cond?.equals === 'true')
-      );
-      expect(closedAdminCase?.actions?.length).toBe(2);
-      expect(closedAdminCase?.actions?.[0]?.icon).toBe('view');
-      expect(closedAdminCase?.actions?.[0]?.openView).toBe('summary');
-      expect(closedAdminCase?.actions?.[1]?.icon).toBe('copy');
-      expect(closedAdminCase?.actions?.[1]?.openView).toBe('copy');
-
-      const closedDefaultCase = actionCases.find(
+      const closedCase = actionCases.find(
         (entry: any) => entry?.when?.fieldId === 'status' && entry?.when?.equals === 'Closed'
       );
-      expect(closedDefaultCase?.actions?.length).toBe(1);
-      expect(closedDefaultCase?.actions?.[0]?.icon).toBe('view');
-      expect(closedDefaultCase?.actions?.[0]?.openView).toBe('summary');
+      expect(closedCase?.actions?.length).toBe(2);
+      expect(closedCase?.actions?.[0]?.icon).toBe('view');
+      expect(closedCase?.actions?.[0]?.openView).toBe('summary');
+      expect(closedCase?.actions?.[1]?.icon).toBe('copy');
+      expect(closedCase?.actions?.[1]?.openView).toBe('copy');
+    };
+
+    const assertPastIncompleteWarningAction = (root: any) => {
+      const columns = Array.isArray(root?.listViewColumns)
+        ? root.listViewColumns
+        : Array.isArray(root?.listView?.columns)
+          ? root.listView.columns
+          : [];
+      const actionCases = columns.find((col: any) => col?.fieldId === 'action')?.cases || [];
+      const pastIncompleteCase = actionCases.find(
+        (entry: any) =>
+          Array.isArray(entry?.when?.all) &&
+          entry.when.all.some((clause: any) => clause?.fieldId === 'status' && clause?.notEquals === 'Closed') &&
+          entry.when.all.some((clause: any) => clause?.fieldId === 'MP_PREP_DATE' && clause?.isInPast === true)
+      );
+      expect(pastIncompleteCase?.actions?.length).toBe(1);
+      expect(pastIncompleteCase?.actions?.[0]?.icon).toBe('warning');
+      expect(pastIncompleteCase?.actions?.[0]?.style).toBe('warning');
+      expect(pastIncompleteCase?.actions?.[0]?.openView).toBe('summary');
+    };
+
+    const assertMealProductionLegend = (root: any) => {
+      const legend = Array.isArray(root?.listViewLegend)
+        ? root.listViewLegend
+        : Array.isArray(root?.listView?.legend)
+          ? root.listView.legend
+          : [];
+      expect(legend.length).toBe(4);
+      containsIcons(legend, ['edit', 'view', 'copy', 'warning']);
+
+      const columnsRaw = Number(root?.listViewLegendColumns ?? root?.listView?.legendColumns);
+      expect(columnsRaw).toBe(2);
+
+      const widths = root?.listViewLegendColumnWidths ?? root?.listView?.legendColumnWidths;
+      assertLegendColumnWidthsValid(widths);
+    };
+
+    const assertSearchPresets = (questions: any[]) => {
+      const past = findQuestion(questions, 'PAST_7_DAYS_BTN');
+      expect(past?.button?.action).toBe('listViewSearchPreset');
+      expect(past?.button?.lookbackDays).toBe(7);
+      expect(past?.button?.includeToday).toBe(false);
+
+      const future = findQuestion(questions, 'NEXT_7_DAYS_BTN');
+      expect(future?.button?.action).toBe('listViewSearchPreset');
+      expect(future?.button?.lookaheadDays).toBe(7);
+      expect(future?.button?.includeToday).toBe(true);
     };
 
     assertMainHomeDialog(cfg.form);
@@ -133,6 +170,12 @@ describe('staging integrity dialogs and list legend config', () => {
     assertChangeDialogs(cfg.definition?.questions || []);
     assertClosedListActions(cfg.form);
     assertClosedListActions(cfg.definition);
+    assertPastIncompleteWarningAction(cfg.form);
+    assertPastIncompleteWarningAction(cfg.definition);
+    assertMealProductionLegend(cfg.form);
+    assertMealProductionLegend(cfg.definition);
+    assertSearchPresets(cfg.questions);
+    assertSearchPresets(cfg.definition?.questions || []);
   });
 
   test('ingredients management uses field-based home leave guard dialog', () => {

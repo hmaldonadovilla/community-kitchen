@@ -1140,4 +1140,110 @@ describe('ConfigSheet', () => {
       Standard: ['Chicken']
     });
   });
+
+  test('getQuestions parses listViewSearchPreset overlay config', () => {
+    const sheet = mockSS.insertSheet('Config: ListPresetOverlay');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'PAST_7_DAYS_BTN',
+        'BUTTON',
+        'Last 7 days',
+        '7 derniers jours',
+        'Laatste 7 dagen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        JSON.stringify({
+          button: {
+            action: 'listViewSearchPreset',
+            showIn: ['table'],
+            target: 'overlay',
+            title: { en: 'Last 7 days activities' },
+            resultColumns: ['MP_PREP_DATE', 'MP_SERVICE', 'action'],
+            when: { fieldId: 'status', notEquals: 'Deleted' },
+            dateFieldId: 'MP_PREP_DATE',
+            lookbackDays: 7,
+            includeToday: false,
+            overlay: {
+              presentation: 'groupedList',
+              groupByFieldId: 'MP_DISTRIBUTOR',
+              groupTitleSuffix: { en: 'last 7 days' },
+              defaultExpanded: true
+            }
+          }
+        }),
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(rows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: ListPresetOverlay');
+    expect(questions).toHaveLength(1);
+    expect((questions[0].button as any)).toEqual({
+      action: 'listViewSearchPreset',
+      showIn: ['table'],
+      target: 'overlay',
+      title: { en: 'Last 7 days activities' },
+      resultColumns: ['MP_PREP_DATE', 'MP_SERVICE', 'action'],
+      when: { fieldId: 'status', notEquals: 'Deleted' },
+      dateFieldId: 'MP_PREP_DATE',
+      lookbackDays: 7,
+      includeToday: false,
+      overlay: {
+        presentation: 'groupedList',
+        groupByFieldId: 'MP_DISTRIBUTOR',
+        groupTitleSuffix: { en: 'last 7 days' },
+        defaultExpanded: true
+      }
+    });
+  });
+
+  test('getQuestions parses listViewSearchPreset future date window config', () => {
+    const sheet = mockSS.insertSheet('Config: ListPresetFutureWindow');
+    const rows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'NEXT_7_DAYS_BTN',
+        'BUTTON',
+        'Today and next 7 days',
+        'Aujourd’hui et les 7 prochains jours',
+        'Vandaag en de volgende 7 dagen',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        JSON.stringify({
+          button: {
+            action: 'listViewSearchPreset',
+            showIn: ['table'],
+            target: 'overlay',
+            dateFieldId: 'MP_PREP_DATE',
+            lookaheadDays: 7,
+            includeToday: true
+          }
+        }),
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(rows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: ListPresetFutureWindow');
+    expect(questions).toHaveLength(1);
+    expect((questions[0].button as any)).toEqual({
+      action: 'listViewSearchPreset',
+      showIn: ['table'],
+      target: 'overlay',
+      dateFieldId: 'MP_PREP_DATE',
+      lookaheadDays: 7,
+      includeToday: true
+    });
+  });
 });

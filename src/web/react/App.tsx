@@ -42,13 +42,12 @@ import {
 } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
-import { ListViewIcon } from './components/ListViewIcon';
 import { AppHeader } from './components/app/AppHeader';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
-import { InlineMarkdown } from './components/app/InlineMarkdown';
+import { ListViewLegend } from './components/app/ListViewLegend';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
@@ -8817,30 +8816,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {precreateDedupChecking ? dedupCheckingNotice : null}
         {listLegendItems.length ? (
-          <div className="ck-list-legend ck-list-legend--bottomBar" role="note" aria-label={tSystem('list.legend.title', language, 'Legend')}>
-            <span className="ck-list-legend-title">{tSystem('list.legend.title', language, 'Legend')}:</span>
-            <ul
-              className="ck-list-legend-list"
-              data-columns={listLegendColumns > 1 ? '2' : '1'}
-              style={
-                listLegendColumns > 1 && listLegendColumnWidths
-                  ? { gridTemplateColumns: `${listLegendColumnWidths[0]}% ${listLegendColumnWidths[1]}%` }
-                  : undefined
-              }
-            >
-              {listLegendItems.map((item, idx) => (
-                <li key={`legend-bottom-${item.icon || 'text'}-${idx}`} className="ck-list-legend-item">
-                  {item.icon ? <ListViewIcon name={item.icon} /> : null}
-                  {item.pill ? (
-                    <span className="ck-list-legend-pill" data-tone={item.pill.tone || 'default'}>
-                      {item.pill.text}
-                    </span>
-                  ) : null}
-                  <InlineMarkdown className="ck-list-legend-text" markdown={item.text} />
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ListViewLegend
+            items={listLegendItems}
+            language={language}
+            columns={listLegendColumns}
+            columnWidths={listLegendColumnWidths}
+            className="ck-list-legend--bottomBar"
+          />
         ) : null}
       </div>
     ) : null;
@@ -9154,6 +9136,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           prefetching={listFetch.phase === 'prefetching'}
           notice={listFetchNotice}
           error={listFetch.phase === 'error' ? (listFetch.message || 'Failed to load list.') : null}
+          legendItems={listLegendItems}
+          legendColumns={listLegendColumns}
+          legendColumnWidths={listLegendColumnWidths}
           onSelect={handleRecordSelect}
         />
       )}
