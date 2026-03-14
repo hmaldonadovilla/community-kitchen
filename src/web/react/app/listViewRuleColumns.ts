@@ -6,6 +6,7 @@ import type {
   LocalizedString
 } from '../../types';
 import { matchesWhenClause } from '../../rules/visibility';
+import { getSystemFieldValue } from '../../rules/systemFields';
 
 export type EvaluatedListViewRuleCell = {
   text?: LocalizedString;
@@ -136,7 +137,11 @@ export const matchesListViewRuleWhen = (
   return matchesWhenClause(
     when as any,
     {
-      getValue: (fieldId: string) => (row as any)?.[fieldId],
+      getValue: (fieldId: string) => {
+        const direct = (row as any)?.[fieldId];
+        if (direct !== undefined && direct !== null && direct !== '') return direct;
+        return getSystemFieldValue(fieldId, row as any);
+      },
       getLineItems: undefined,
       getLineValue: undefined
     } as any,

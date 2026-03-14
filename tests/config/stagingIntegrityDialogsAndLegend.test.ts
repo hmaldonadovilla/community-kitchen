@@ -100,10 +100,39 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.cancelLabel)).toBe(true);
     };
 
+    const assertClosedListActions = (root: any) => {
+      const columns = Array.isArray(root?.listViewColumns)
+        ? root.listViewColumns
+        : Array.isArray(root?.listView?.columns)
+          ? root.listView.columns
+          : [];
+      const actionCases = columns.find((col: any) => col?.fieldId === 'action')?.cases || [];
+      const closedAdminCase = actionCases.find(
+        (entry: any) =>
+          Array.isArray(entry?.when?.all) &&
+          entry.when.all.some((cond: any) => cond?.fieldId === 'status' && cond?.equals === 'Closed') &&
+          entry.when.all.some((cond: any) => cond?.fieldId === '__ckRequestParam_admin' && cond?.equals === 'true')
+      );
+      expect(closedAdminCase?.actions?.length).toBe(2);
+      expect(closedAdminCase?.actions?.[0]?.icon).toBe('view');
+      expect(closedAdminCase?.actions?.[0]?.openView).toBe('summary');
+      expect(closedAdminCase?.actions?.[1]?.icon).toBe('copy');
+      expect(closedAdminCase?.actions?.[1]?.openView).toBe('copy');
+
+      const closedDefaultCase = actionCases.find(
+        (entry: any) => entry?.when?.fieldId === 'status' && entry?.when?.equals === 'Closed'
+      );
+      expect(closedDefaultCase?.actions?.length).toBe(1);
+      expect(closedDefaultCase?.actions?.[0]?.icon).toBe('view');
+      expect(closedDefaultCase?.actions?.[0]?.openView).toBe('summary');
+    };
+
     assertMainHomeDialog(cfg.form);
     assertMainHomeDialog(cfg.definition);
     assertChangeDialogs(cfg.questions);
     assertChangeDialogs(cfg.definition?.questions || []);
+    assertClosedListActions(cfg.form);
+    assertClosedListActions(cfg.definition);
   });
 
   test('ingredients management uses field-based home leave guard dialog', () => {

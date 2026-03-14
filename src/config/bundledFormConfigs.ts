@@ -7890,6 +7890,50 @@ export const BUNDLED_FORM_CONFIGS = [
               },
               "hideText": true,
               "when": {
+                "all": [
+                  {
+                    "fieldId": "status",
+                    "equals": "Closed"
+                  },
+                  {
+                    "fieldId": "__ckRequestParam_admin",
+                    "equals": "true"
+                  }
+                ]
+              },
+              "actions": [
+                {
+                  "text": {
+                    "en": "View",
+                    "fr": "Voir",
+                    "nl": "Bekijken"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "view",
+                  "openView": "summary"
+                },
+                {
+                  "text": {
+                    "en": "Copy",
+                    "fr": "Copier",
+                    "nl": "Kopiëren"
+                  },
+                  "hideText": true,
+                  "style": "link",
+                  "icon": "copy",
+                  "openView": "copy"
+                }
+              ]
+            },
+            {
+              "text": {
+                "en": "Actions",
+                "fr": "Actions",
+                "nl": "Acties"
+              },
+              "hideText": true,
+              "when": {
                 "fieldId": "status",
                 "equals": "Closed"
               },
@@ -14488,6 +14532,50 @@ export const BUNDLED_FORM_CONFIGS = [
                     "style": "link",
                     "icon": "edit",
                     "openView": "form"
+                  }
+                ]
+              },
+              {
+                "text": {
+                  "en": "Actions",
+                  "fr": "Actions",
+                  "nl": "Acties"
+                },
+                "hideText": true,
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "status",
+                      "equals": "Closed"
+                    },
+                    {
+                      "fieldId": "__ckRequestParam_admin",
+                      "equals": "true"
+                    }
+                  ]
+                },
+                "actions": [
+                  {
+                    "text": {
+                      "en": "View",
+                      "fr": "Voir",
+                      "nl": "Bekijken"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "view",
+                    "openView": "summary"
+                  },
+                  {
+                    "text": {
+                      "en": "Copy",
+                      "fr": "Copier",
+                      "nl": "Kopiëren"
+                    },
+                    "hideText": true,
+                    "style": "link",
+                    "icon": "copy",
+                    "openView": "copy"
                   }
                 ]
               },

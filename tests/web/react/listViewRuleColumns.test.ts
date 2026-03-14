@@ -1,6 +1,17 @@
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../../../src/web/react/app/listViewRuleColumns';
 
 describe('listViewRuleColumns', () => {
+  const globalAny = globalThis as any;
+  const originalRequestParams = globalAny.__WEB_FORM_REQUEST_PARAMS__;
+
+  afterEach(() => {
+    if (originalRequestParams === undefined) {
+      delete globalAny.__WEB_FORM_REQUEST_PARAMS__;
+    } else {
+      globalAny.__WEB_FORM_REQUEST_PARAMS__ = originalRequestParams;
+    }
+  });
+
   const actionColumn: any = {
     type: 'rule',
     fieldId: 'action',
@@ -135,6 +146,34 @@ describe('listViewRuleColumns', () => {
     };
     const submit = evaluateListViewRuleColumnCell(colSubmit, { status: 'Anything' } as any);
     expect(submit?.openView).toBe('submit');
+  });
+
+  it('supports request-param when clauses in list rule columns', () => {
+    globalAny.__WEB_FORM_REQUEST_PARAMS__ = { admin: 'true' };
+    const col: any = {
+      type: 'rule',
+      fieldId: 'action',
+      label: { en: 'Action' },
+      cases: [
+        {
+          when: {
+            all: [{ fieldId: 'status', equals: 'Closed' }, { fieldId: '__ckRequestParam_admin', equals: 'true' }]
+          },
+          text: 'Copy',
+          openView: 'copy'
+        },
+        { text: 'View', openView: 'summary' }
+      ]
+    };
+
+    const adminCell = evaluateListViewRuleColumnCell(col, { status: 'Closed' } as any);
+    expect(adminCell?.text).toBe('Copy');
+    expect(adminCell?.openView).toBe('copy');
+
+    globalAny.__WEB_FORM_REQUEST_PARAMS__ = { admin: 'false' };
+    const nonAdminCell = evaluateListViewRuleColumnCell(col, { status: 'Closed' } as any);
+    expect(nonAdminCell?.text).toBe('View');
+    expect(nonAdminCell?.openView).toBe('summary');
   });
 
   it('supports inline actions rendered from a single rule case', () => {
