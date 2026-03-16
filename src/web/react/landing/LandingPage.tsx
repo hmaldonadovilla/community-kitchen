@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import packageJson from '../../../../package.json';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
+import { AppHeader } from '../components/app/AppHeader';
+import { appendAdminQuery, isTruthyParam, pickLandingLogoUrl, resolveLandingHeaderTitle } from './model';
 
-const isTruthyParam = (raw: any): boolean => {
-  if (raw === undefined || raw === null) return false;
-  const token = raw.toString().trim().toLowerCase();
-  if (!token) return false;
-  return token === '1' || token === 'true' || token === 'yes' || token === 'on';
-};
+const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 
 const resolveAdminEnabled = (): boolean => {
   try {
@@ -29,16 +27,39 @@ const resolveAdminEnabled = (): boolean => {
   return false;
 };
 
-const appendAdminQuery = (targetUrl: string, adminEnabled: boolean): string => {
-  if (!adminEnabled) return targetUrl;
-  const raw = (targetUrl || '').toString().trim();
-  if (!raw) return '?admin=true';
-  const hashIndex = raw.indexOf('#');
-  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : '';
-  const base = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
-  const sep = base.includes('?') ? '&' : '?';
-  if (/[?&]admin=/.test(base)) return `${base}${hash}`;
-  return `${base}${sep}admin=true${hash}`;
+const resolveEnvTag = (): string | null => {
+  try {
+    const globalAny = globalThis as any;
+    const raw = globalAny?.__WEB_FORM_BOOTSTRAP__?.envTag ?? globalAny?.__CK_ENV_TAG__ ?? '';
+    const trimmed = raw.toString().trim();
+    return trimmed || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+const navigateToTopLevel = (targetUrl: string): void => {
+  const resolved = (targetUrl || '').toString().trim();
+  if (!resolved) return;
+  try {
+    if (typeof globalThis.open === 'function') {
+      globalThis.open(resolved, '_top');
+      return;
+    }
+  } catch (_) {
+    // ignore
+  }
+  try {
+    globalThis.location.assign(resolved);
+    return;
+  } catch (_) {
+    // ignore
+  }
+  try {
+    globalThis.location.href = resolved;
+  } catch (_) {
+    // ignore
+  }
 };
 
 const logEvent = (event: string, payload?: Record<string, unknown>): void => {
@@ -54,7 +75,27 @@ const LandingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FormCatalogItem[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
+  const envTag = useMemo(() => resolveEnvTag(), []);
+  const headerTitle = useMemo(() => resolveLandingHeaderTitle(typeof document !== 'undefined' ? document.title : ''), []);
+  const headerLogoUrl = useMemo(() => pickLandingLogoUrl(items), [items]);
+
+  useEffect(() => {
+    const apply = () => {
+      try {
+        const next = typeof globalThis.matchMedia === 'function'
+          ? globalThis.matchMedia('(max-width: 720px)').matches
+          : (globalThis.innerWidth || 0) <= 720;
+        setIsMobile(Boolean(next));
+      } catch (_) {
+        setIsMobile(false);
+      }
+    };
+    apply();
+    globalThis.addEventListener?.('resize', apply);
+    return () => globalThis.removeEventListener?.('resize', apply);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,8 +124,29 @@ const LandingPage: React.FC = () => {
     };
   }, [adminEnabled]);
 
+  const headerRight = useMemo(() => {
+    if (!envTag) return null;
+    return (
+      <span className="ck-env-tag" role="status" aria-label={`Environment: ${envTag}`}>
+        {envTag}
+      </span>
+    );
+  }, [envTag]);
+
   return (
     <div className="page">
+      <AppHeader
+        title={headerTitle}
+        titleRight={headerRight}
+        logoUrl={headerLogoUrl}
+        buildMarker={BUILD_MARKER}
+        isMobile={isMobile}
+        languages={['EN']}
+        language="EN"
+        onLanguageChange={() => undefined}
+        onRefresh={() => globalThis.location.reload()}
+        onDiagnostic={logEvent}
+      />
       <main className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <h1 style={{ margin: 0 }}>Forms</h1>
         <p className="muted" style={{ margin: 0 }}>
@@ -104,21 +166,30 @@ const LandingPage: React.FC = () => {
         {!loading && !error && !items.length ? <p className="muted">No forms were found.</p> : null}
         {!loading && !error && items.length ? (
           <div style={{ display: 'grid', gap: 10 }}>
-            {items.map(item => (
-              <a
-                key={item.formKey}
-                href={appendAdminQuery(item.targetUrl || `?form=${encodeURIComponent(item.formKey)}`, adminEnabled)}
-                className="card"
-                style={{ textDecoration: 'none', color: 'var(--text)', display: 'block' }}
-              >
-                <div style={{ fontWeight: 600 }}>{item.title}</div>
-                {item.description ? (
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {item.description}
-                  </div>
-                ) : null}
-              </a>
-            ))}
+            {items.map(item => {
+              const targetUrl = appendAdminQuery(item.targetUrl || `?form=${encodeURIComponent(item.formKey)}`, adminEnabled);
+              return (
+                <a
+                  key={item.formKey}
+                  href={targetUrl}
+                  target="_top"
+                  className="card"
+                  style={{ textDecoration: 'none', color: 'var(--text)', display: 'block' }}
+                  onClick={event => {
+                    event.preventDefault();
+                    logEvent('catalog.navigate', { formKey: item.formKey, targetUrl });
+                    navigateToTopLevel(targetUrl);
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>{item.title}</div>
+                  {item.description ? (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {item.description}
+                    </div>
+                  ) : null}
+                </a>
+              );
+            })}
           </div>
         ) : null}
       </main>
@@ -138,4 +209,3 @@ if (typeof document !== 'undefined') {
 }
 
 export default LandingPage;
-

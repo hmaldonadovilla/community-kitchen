@@ -529,7 +529,7 @@ export class WebFormService {
     };
   }
 
-  public fetchFormCatalog(): Array<{ formKey: string; title: string; description?: string; targetUrl: string }> {
+  public fetchFormCatalog(): Array<{ formKey: string; title: string; description?: string; targetUrl: string; logoUrl?: string }> {
     const forms = this.getFormsCached();
     const items = forms
       .map(form => {
@@ -541,10 +541,11 @@ export class WebFormService {
           formKey,
           title,
           description,
-          targetUrl: this.buildFormTargetUrl(form)
+          targetUrl: this.buildFormTargetUrl(form),
+          logoUrl: (form.appHeader?.logoUrl || '').toString().trim() || undefined
         };
       })
-      .filter(Boolean) as Array<{ formKey: string; title: string; description?: string; targetUrl: string }>;
+      .filter(Boolean) as Array<{ formKey: string; title: string; description?: string; targetUrl: string; logoUrl?: string }>;
     items.sort((a, b) => a.title.localeCompare(b.title));
     return items;
   }

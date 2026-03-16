@@ -14,6 +14,7 @@ describe('WebFormService', () => {
     if (!dashboardSheet) throw new Error('Dashboard not created');
 
     const followupJson = JSON.stringify({
+      appHeader: { logoUrl: 'https://assets.example.test/community-kitchen.png' },
       pdfTemplateId: { EN: 'pdf-template-en', FR: 'pdf-template-fr' },
       emailTemplateId: { EN: 'email-template-en', FR: 'email-template-fr' },
       emailFrom: 'kitchen@example.com',
@@ -182,6 +183,7 @@ describe('WebFormService', () => {
       expect(delivery?.targetUrl).toBe(
         'https://script.google.com/macros/s/current-deployment/exec?form=Config%3A+Delivery'
       );
+      expect(delivery?.logoUrl).toBe('https://assets.example.test/community-kitchen.png');
     } finally {
       (global as any).ScriptApp = previousScriptApp;
     }

@@ -664,6 +664,7 @@ export interface FormCatalogItem {
   title: string;
   description?: string;
   targetUrl: string;
+  logoUrl?: string;
 }
 
 export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
