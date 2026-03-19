@@ -401,7 +401,7 @@ export class WebFormService {
       const bootstrap = includeHomeData || includeAnalytics ? this.buildBootstrap(resolvedKey, def, { includeHomeData, includeAnalytics }) : null;
       const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
       const rev = this.readHomeRevision(canonicalKey);
-      if (bootstrap) {
+      if ((bootstrap as any)?.listResponse) {
         this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.bundled');
       }
       debugLog('bootstrap.context.ready', {
@@ -438,7 +438,7 @@ export class WebFormService {
     const bootstrap = includeHomeData || includeAnalytics ? this.buildBootstrap(resolvedKey, def, { includeHomeData, includeAnalytics }) : null;
     const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
     const rev = this.readHomeRevision(canonicalKey);
-    if (bootstrap) {
+    if ((bootstrap as any)?.listResponse) {
       this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.sheet');
     }
     debugLog('bootstrap.context.ready', {
@@ -470,8 +470,6 @@ export class WebFormService {
     rev: number;
     listResponse?: PaginatedResult<Record<string, any>>;
     records?: Record<string, WebFormSubmission>;
-    analytics?: AnalyticsSnapshot;
-    analyticsRev?: number;
     cache?: 'hit' | 'miss';
   } {
     const canonicalKey = this.resolveCanonicalFormKey(formKey) || (formKey || '').toString().trim();
@@ -482,29 +480,25 @@ export class WebFormService {
     }
 
     const cached = this.readCachedHomeBootstrap(canonicalKey, rev);
-    if (cached?.listResponse || cached?.analytics) {
+    if (cached?.listResponse) {
       return {
         notModified: false,
         rev,
         listResponse: cached.listResponse,
         records: cached.records || {},
-        analytics: cached.analytics,
-        analyticsRev: Number((cached as any)?.analyticsRev || 0) || 0,
         cache: 'hit'
       };
     }
 
     const bundled = this.resolveBundledConfig(canonicalKey || formKey);
     const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(canonicalKey || formKey);
-    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true, includeAnalytics: true });
+    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true });
     this.cacheHomeBootstrap(canonicalKey || formKey, rev, bootstrap || null, 'fetchHomeBootstrap.cacheMiss');
     return {
       notModified: false,
       rev,
       listResponse: (bootstrap as any)?.listResponse,
       records: (bootstrap as any)?.records || {},
-      analytics: (bootstrap as any)?.analytics,
-      analyticsRev: Number((bootstrap as any)?.analyticsRev || 0) || 0,
       cache: 'miss'
     };
   }
@@ -737,83 +731,9 @@ export class WebFormService {
         return Object.keys(out).length ? out : null;
       }
 
-      const metaFields = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
-      const projectionIds = new Set<string>();
-      const addProjection = (fieldId: string) => {
-        const fid = (fieldId || '').toString().trim();
-        if (!fid || metaFields.has(fid)) return;
-        projectionIds.add(fid);
-      };
-      const collectWhenFieldIds = (when: any) => {
-        if (!when) return;
-        if (Array.isArray(when)) {
-          when.forEach(collectWhenFieldIds);
-          return;
-        }
-        if (typeof when !== 'object') return;
-        if (Array.isArray((when as any).all)) {
-          ((when as any).all as any[]).forEach(collectWhenFieldIds);
-          return;
-        }
-        if (Array.isArray((when as any).any)) {
-          ((when as any).any as any[]).forEach(collectWhenFieldIds);
-          return;
-        }
-        if ((when as any).not) {
-          collectWhenFieldIds((when as any).not);
-          return;
-        }
-        const lineItems = (when as any).lineItems ?? (when as any).lineItem;
-        if (lineItems && typeof lineItems === 'object') {
-          const groupIdRaw = (lineItems as any).groupId ?? (lineItems as any).group;
-          const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
-          if (groupId) addProjection(groupId);
-          collectWhenFieldIds((lineItems as any).when);
-          collectWhenFieldIds((lineItems as any).parentWhen);
-          return;
-        }
-        const fidRaw = (when as any).fieldId ?? (when as any).field ?? (when as any).id;
-        const fid = fidRaw !== undefined && fidRaw !== null ? fidRaw.toString().trim() : '';
-        if (fid) addProjection(fid);
-      };
-      (def.listView.columns || []).forEach(col => {
-        if (!col) return;
-        const type = (col as any).type;
-        if (type === 'rule') {
-          const colHref = (col as any).hrefFieldId;
-          if (colHref !== undefined && colHref !== null) addProjection(colHref);
-          const cases = Array.isArray((col as any).cases) ? ((col as any).cases as any[]) : [];
-          cases.forEach(entry => {
-            collectWhenFieldIds(entry?.when);
-            addProjection(entry?.hrefFieldId);
-          });
-          addProjection((col as any)?.default?.hrefFieldId);
-          return;
-        }
-        if ((col as any).kind === 'meta') return;
-        addProjection((col as any).fieldId);
-      });
-      const projection = Array.from(projectionIds);
-      const listSearchMode = (def.listView?.search?.mode || 'text').toString();
-      const dateSearchFieldId = ((def.listView?.search as any)?.dateFieldId || '').toString().trim();
-      if (listSearchMode === 'date' && dateSearchFieldId) addProjection(dateSearchFieldId);
-      if (listSearchMode === 'advanced') {
-        const fieldsRaw = (def.listView?.search as any)?.fields;
-        const fields: string[] = (() => {
-          if (fieldsRaw === undefined || fieldsRaw === null) return [];
-          if (Array.isArray(fieldsRaw)) return fieldsRaw.map(v => (v === undefined || v === null ? '' : `${v}`.trim())).filter(Boolean);
-          const str = `${fieldsRaw}`.trim();
-          if (!str) return [];
-          return str
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean);
-        })();
-        fields.forEach(addProjection);
-      }
-
       const startedAt = Date.now();
-      const fetchPageSize = Math.max(1, Math.min(def.listView?.pageSize || 10, 50));
+      const projection = this.buildHomeSummaryProjection(def);
+      const fetchPageSize = this.resolveHomeSummaryPageSize(def);
       const sort: { fieldId?: string; direction?: string } | undefined = def.listView?.defaultSort?.fieldId
         ? {
             fieldId: def.listView.defaultSort.fieldId,
@@ -845,6 +765,7 @@ export class WebFormService {
         formKey,
         pageSize: fetchPageSize,
         projectionCount: projection.length,
+        summaryMode: true,
         durationMs: Date.now() - startedAt
       });
       out.listResponse = listResponse;
@@ -2094,6 +2015,75 @@ export class WebFormService {
     return next;
   }
 
+  private resolveHomeSummaryPageSize(def: WebFormDefinition): number {
+    const configured = Number(def.listView?.pageSize || 10);
+    return Number.isFinite(configured) && configured > 0 ? Math.max(1, Math.min(Math.floor(configured), 50)) : 10;
+  }
+
+  private buildHomeSummaryProjection(def: WebFormDefinition): string[] {
+    const metaFields = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
+    const projectionIds = new Set<string>();
+    const addProjection = (fieldId: any) => {
+      const fid = fieldId === undefined || fieldId === null ? '' : fieldId.toString().trim();
+      if (!fid || metaFields.has(fid)) return;
+      projectionIds.add(fid);
+    };
+    const collectWhenFieldIds = (when: any) => {
+      if (!when) return;
+      if (Array.isArray(when)) {
+        when.forEach(collectWhenFieldIds);
+        return;
+      }
+      if (typeof when !== 'object') return;
+      if (Array.isArray((when as any).all)) {
+        ((when as any).all as any[]).forEach(collectWhenFieldIds);
+        return;
+      }
+      if (Array.isArray((when as any).any)) {
+        ((when as any).any as any[]).forEach(collectWhenFieldIds);
+        return;
+      }
+      if ((when as any).not) {
+        collectWhenFieldIds((when as any).not);
+        return;
+      }
+      const lineItems = (when as any).lineItems ?? (when as any).lineItem;
+      if (lineItems && typeof lineItems === 'object') {
+        addProjection((lineItems as any).groupId ?? (lineItems as any).group);
+        collectWhenFieldIds((lineItems as any).when);
+        collectWhenFieldIds((lineItems as any).parentWhen);
+        return;
+      }
+      addProjection((when as any).fieldId ?? (when as any).field ?? (when as any).id);
+    };
+
+    (def.listView?.columns || []).forEach(col => {
+      if (!col || (col as any).kind === 'meta') return;
+      if ((col as any).type === 'rule') {
+        addProjection((col as any).hrefFieldId);
+        const cases = Array.isArray((col as any).cases) ? ((col as any).cases as any[]) : [];
+        cases.forEach(entry => {
+          collectWhenFieldIds(entry?.when);
+          addProjection(entry?.hrefFieldId);
+        });
+        addProjection((col as any)?.default?.hrefFieldId);
+        return;
+      }
+      addProjection((col as any).fieldId);
+    });
+
+    addProjection((def.listView?.dateHeading as any)?.fieldId);
+    collectWhenFieldIds((def.listView as any)?.defaultWhen);
+
+    const presets = Array.isArray((def.listView?.search as any)?.presets) ? ((def.listView?.search as any).presets as any[]) : [];
+    presets.forEach(preset => {
+      collectWhenFieldIds((preset as any)?.when);
+      addProjection((preset as any)?.dateFieldId);
+    });
+
+    return Array.from(projectionIds);
+  }
+
   private homeBootstrapCacheKey(formKey: string): string {
     return this.cacheManager.makeCacheKey('HOME_BOOTSTRAP_LATEST', [(formKey || '').toString().trim()]);
   }
@@ -2258,10 +2248,10 @@ export class WebFormService {
       if (lock) hasLock = !!lock.tryLock(150);
       const expectedRev = Number.isFinite(Number(rev)) ? Number(rev) : this.readHomeRevision(key);
       const cached = this.readCachedHomeBootstrap(key, expectedRev);
-      if (cached?.listResponse || cached?.analytics) return;
+      if (cached?.listResponse) return;
       const bundled = this.resolveBundledConfig(key);
       const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(key);
-      const bootstrap = this.buildBootstrap(key, def);
+      const bootstrap = this.buildBootstrap(key, def, { includeHomeData: true });
       this.cacheHomeBootstrap(key, expectedRev, bootstrap || null, reason || 'primeHomeBootstrapCache');
     } catch (_) {
       // ignore warm failures

@@ -242,6 +242,12 @@ The repo includes two complementary performance runners:
     - `pageUsableMs`
   - also captures app-level Home timings such as `homeTimeToDataMs`, `homeBootstrapRpcMs`, and `listFetchRpcMs` when perf instrumentation is enabled in non-production environments
 
+Home page runtime strategy in the current Apps Script architecture:
+
+- the initial Home callback now uses a lightweight summary-first payload instead of mixing list bootstrap and analytics in the same request
+- analytics widgets that render on the list view are fetched after the first Home data is ready
+- broader recent-activity hydration and record snapshot prefetching are deferred to idle/background work so they no longer block the first usable Home state
+
 ## Setup
 
 1. **Install Dependencies**:

@@ -443,6 +443,10 @@ const HTML_PREVIEW_STYLES = `
 
 const HOME_LIST_LOCAL_CACHE_PREFIX = 'ck.homeList.v1';
 const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
+const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 1800;
+const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
+const HOME_RECORD_PREFETCH_DELAY_MS = 2400;
+const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 
 type HomeListLocalCachePayload = {
   savedAtMs: number;
@@ -2417,6 +2421,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
     return Number.isFinite(rev) && rev >= 0 ? rev : 0;
   });
+  const hasListViewAnalyticsWidgets = useMemo(() => {
+    const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
+    return widgets.some(widget => {
+      const placements = Array.isArray(widget?.placements) ? widget.placements : ['analyticsPage'];
+      return placements.some(token => (token || '').toString().trim() === 'listView');
+    });
+  }, [definition.analytics?.widgets]);
   const [analyticsOverlayOpen, setAnalyticsOverlayOpen] = useState(false);
   const [analyticsOverlayLoading, setAnalyticsOverlayLoading] = useState(false);
   const [analyticsOverlayError, setAnalyticsOverlayError] = useState<string | null>(null);
@@ -2440,10 +2451,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const listCacheRef = useRef(listCache);
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
+  const listBackgroundPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
   const dataSourcePrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
+  const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
 
   useEffect(() => {
     const globalAny = globalThis as any;
@@ -2516,6 +2529,67 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
 
   useEffect(() => {
+    if (view !== 'list') return;
+    if (homeFirstDataReadyAtMs <= 0) return;
+    if (!hasListViewAnalyticsWidgets) return;
+    if (analyticsSnapshot && Array.isArray((analyticsSnapshot as any)?.items) && (analyticsSnapshot as any).items.length > 0) return;
+    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}`;
+    if (deferredAnalyticsPrefetchKeyRef.current === key) return;
+    deferredAnalyticsPrefetchKeyRef.current = key;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let idleHandle: number | null = null;
+    const run = () => {
+      if (cancelled) return;
+      const startedAt = Date.now();
+      logEvent('analytics.listView.prefetch.start', {
+        formKey,
+        startedAfterHomeDataMs: Math.max(0, Date.now() - homeFirstDataReadyAtMs)
+      });
+      fetchBootstrapContextApi(formKey, { includeAnalytics: true })
+        .then(res => {
+          if (cancelled) return;
+          const snapshot = ((res as any)?.analytics || null) as any;
+          setAnalyticsSnapshot(snapshot);
+          const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
+          setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
+          logEvent('analytics.listView.prefetch.ok', {
+            formKey,
+            itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+            durationMs: Date.now() - startedAt
+          });
+        })
+        .catch((err: any) => {
+          if (cancelled) return;
+          logEvent('analytics.listView.prefetch.error', {
+            formKey,
+            message: err?.message || err?.toString?.() || 'unknown',
+            durationMs: Date.now() - startedAt
+          });
+        });
+    };
+
+    try {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleHandle = (window as any).requestIdleCallback(run, { timeout: HOME_ANALYTICS_PREFETCH_DELAY_MS + 1200 }) as number;
+      } else {
+        timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
+      }
+    } catch (_) {
+      timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) globalThis.clearTimeout(timer);
+      if (idleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
+
+  useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
     const ids = Array.from(new Set((pendingDeletedRecordIdsRef.current || []).map(id => (id || '').toString().trim()).filter(Boolean)));
     pendingDeletedRecordIdsRef.current = [];
@@ -2536,6 +2610,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     const firstListItemCount = listCache.response?.items?.length || 0;
     if (firstListItemCount <= 0) return;
+    if (homeFirstDataReadyAtMs <= 0) return;
     const key = `${formKey}::${language}`;
     if (dataSourcePrefetchKeyRef.current === key) return;
     dataSourcePrefetchKeyRef.current = key;
@@ -2567,11 +2642,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             durationMs: Date.now() - startedAt
           });
         });
-    }, 250);
+    }, HOME_DATA_SOURCE_PREFETCH_DELAY_MS);
     return () => {
       globalThis.clearTimeout(timer);
     };
-  }, [definition, formKey, language, listCache.response?.items?.length, logEvent]);
+  }, [definition, formKey, homeFirstDataReadyAtMs, language, listCache.response?.items?.length, logEvent]);
 
   useEffect(() => {
     if (!hasTemplateRenderTargets) return;
@@ -2729,7 +2804,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       restTimerHandle = globalThis.setTimeout(() => {
         restTimerHandle = null;
         void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
-      }, 650);
+      }, HOME_RECORD_PREFETCH_DELAY_MS);
     };
 
     primeTimerHandle = globalThis.setTimeout(() => {
@@ -2737,7 +2812,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       void runPrefetch('prime', primeRowHints, 'ck.list.records.prefetch.rpc').finally(() => {
         scheduleRestPrefetch();
       });
-    }, 120);
+    }, HOME_RECORD_PREFETCH_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -2845,6 +2920,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       includePageRecords: false
     });
 
+    let backgroundCancelled = false;
+    let backgroundTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let backgroundIdleHandle: number | null = null;
+
     void (async () => {
       try {
         const encodePageTokenClient = (offset: number): string => {
@@ -2867,7 +2946,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           allowConditional?: boolean;
         }): Promise<{ list: ListResponse; batch: any; token?: string; pageIndex: number; notModified: boolean }> => {
           let batch: any = null;
-          if (args.allowConditional && !args.token && args.pageIndex === 0) {
+          if (!args.token && args.pageIndex === 0 && !skipInitialServerCheck) {
             const homeBootstrapStartMark = `ck.home.bootstrap.rpc.start.${seq}.${args.pageIndex}`;
             const homeBootstrapEndMark = `ck.home.bootstrap.rpc.end.${seq}.${args.pageIndex}`;
             perfMark(homeBootstrapStartMark);
@@ -2887,14 +2966,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               const revRaw = Number((bootstrapRes as any)?.rev);
               if (Number.isFinite(revRaw) && revRaw >= 0) {
                 setHomeRev(prev => (prev === revRaw ? prev : revRaw));
-              }
-              const analyticsRes = (bootstrapRes as any)?.analytics;
-              if (analyticsRes && typeof analyticsRes === 'object') {
-                setAnalyticsSnapshot(analyticsRes);
-                const nextAnalyticsRev = Number((bootstrapRes as any)?.analyticsRev ?? (analyticsRes as any)?.revision ?? 0);
-                if (Number.isFinite(nextAnalyticsRev) && nextAnalyticsRev >= 0) {
-                  setAnalyticsSnapshotRev(nextAnalyticsRev);
-                }
               }
               if ((bootstrapRes as any)?.notModified) {
                 const notModifiedList: ListResponse = {
@@ -3088,7 +3159,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const buildAggregated = (): ListItem[] => aggregatePrefetchedPageItems(itemsByPage, totalPages);
         const buildContiguous = (): ListItem[] => aggregateContiguousPrefetchedPageItems(itemsByPage, totalPages);
 
-        const applyProgress = () => {
+        const applyProgress = (phaseOverride?: 'idle' | 'prefetching') => {
           const aggregated = buildAggregated();
           const contiguous = buildContiguous();
           const resolvedPageCount = itemsByPage.size + failedPages.size;
@@ -3106,7 +3177,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             records: { ...(prev.records || {}), ...recordsAccum }
           }));
           setListFetch({
-            phase: hasMore ? 'prefetching' : 'idle',
+            phase: phaseOverride || (hasMore ? 'prefetching' : 'idle'),
             loaded: aggregated.length,
             total: cappedTotalCount || aggregated.length,
             pages: itemsByPage.size
@@ -3114,11 +3185,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return aggregated.length;
         };
 
-        applyProgress();
+        const firstAggregatedCount = applyProgress(totalPages > 1 ? 'idle' : undefined);
         logEvent('list.sorted.prefetch.page', {
           page: 1,
           pageItems: (itemsByPage.get(0) || []).length,
-          aggregated: (itemsByPage.get(0) || []).length,
+          aggregated: firstAggregatedCount,
           totalCount: cappedTotalCount,
           hasNext: totalPages > 1,
           durationMs: Date.now() - startedAt
@@ -3134,69 +3205,113 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
 
-        const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex =>
-          (async () => {
-            const offset = pageIndex * pageSize;
-            const token = encodePageTokenClient(offset);
-            const pageStartedAt = Date.now();
-            try {
-              const res = await fetchPage({ token, pageIndex, allowConditional: false });
-              if (seq !== listFetchSeqRef.current) return;
-              const items = (res.list.items || []) as ListItem[];
-              itemsByPage.set(pageIndex, items);
-              failedPages.delete(pageIndex);
-              const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
-              Object.keys(newRecords).forEach(id => {
-                recordsAccum[id] = newRecords[id];
-              });
-              const aggregatedCount = applyProgress();
-              const resolvedPageCount = itemsByPage.size + failedPages.size;
-              logEvent('list.sorted.prefetch.page', {
-                page: pageIndex + 1,
-                pageItems: items.length,
-                aggregated: aggregatedCount,
-                totalCount: cappedTotalCount,
-                hasNext: resolvedPageCount < totalPages,
-                durationMs: Date.now() - startedAt,
-                pageDurationMs: Date.now() - pageStartedAt
-              });
-            } catch (err: any) {
-              if (seq !== listFetchSeqRef.current) return;
-              const message = resolveLogMessage(err, 'Failed to load list page.');
-              failedPages.set(pageIndex, message);
-              const aggregatedCount = applyProgress();
-              logEvent('list.sorted.prefetch.page.error', {
-                page: pageIndex + 1,
-                totalCount: cappedTotalCount,
-                loadedPages: itemsByPage.size,
-                loadedItems: aggregatedCount,
-                message,
-                durationMs: Date.now() - startedAt,
-                pageDurationMs: Date.now() - pageStartedAt
-              });
-            }
-          })()
-        );
-
-        await Promise.allSettled(pagePromises);
-        if (seq !== listFetchSeqRef.current) return;
-        if (failedPages.size) {
-          const partialAggregatedCount = applyProgress();
-          logEvent('list.sorted.prefetch.partial', {
-            pages: itemsByPage.size,
-            items: partialAggregatedCount,
-            failedPages: Array.from(failedPages.keys()).map(page => page + 1),
-            failedCount: failedPages.size,
-            durationMs: Date.now() - startedAt
-          });
+        const backgroundPrefetchKey = `${formKey}::${existingEtag || (firstList as any).etag || 'noetag'}::${listRefreshToken}`;
+        if (listBackgroundPrefetchKeyRef.current === backgroundPrefetchKey) {
           return;
         }
-        const finalAggregatedCount = applyProgress();
-        logEvent('list.sorted.prefetch.done', {
-          pages: totalPages,
-          items: finalAggregatedCount,
-          durationMs: Date.now() - startedAt
+        listBackgroundPrefetchKeyRef.current = backgroundPrefetchKey;
+        logEvent('list.sorted.prefetch.deferred', {
+          formKey,
+          pagesRemaining: Math.max(0, totalPages - 1),
+          loaded: firstAggregatedCount,
+          totalCount: cappedTotalCount,
+          delayMs: HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS
         });
+
+        const runRemainingPages = async () => {
+          if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+          setListFetch(prev => ({
+            phase: 'prefetching',
+            loaded: prev.loaded,
+            total: prev.total,
+            pages: prev.pages
+          }));
+          const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex =>
+            (async () => {
+              const offset = pageIndex * pageSize;
+              const token = encodePageTokenClient(offset);
+              const pageStartedAt = Date.now();
+              try {
+                const res = await fetchPage({ token, pageIndex, allowConditional: false });
+                if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+                const items = (res.list.items || []) as ListItem[];
+                itemsByPage.set(pageIndex, items);
+                failedPages.delete(pageIndex);
+                const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
+                Object.keys(newRecords).forEach(id => {
+                  recordsAccum[id] = newRecords[id];
+                });
+                const aggregatedCount = applyProgress();
+                const resolvedPageCount = itemsByPage.size + failedPages.size;
+                logEvent('list.sorted.prefetch.page', {
+                  page: pageIndex + 1,
+                  pageItems: items.length,
+                  aggregated: aggregatedCount,
+                  totalCount: cappedTotalCount,
+                  hasNext: resolvedPageCount < totalPages,
+                  durationMs: Date.now() - startedAt,
+                  pageDurationMs: Date.now() - pageStartedAt
+                });
+              } catch (err: any) {
+                if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+                const message = resolveLogMessage(err, 'Failed to load list page.');
+                failedPages.set(pageIndex, message);
+                const aggregatedCount = applyProgress();
+                logEvent('list.sorted.prefetch.page.error', {
+                  page: pageIndex + 1,
+                  totalCount: cappedTotalCount,
+                  loadedPages: itemsByPage.size,
+                  loadedItems: aggregatedCount,
+                  message,
+                  durationMs: Date.now() - startedAt,
+                  pageDurationMs: Date.now() - pageStartedAt
+                });
+              }
+            })()
+          );
+
+          await Promise.allSettled(pagePromises);
+          if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+          if (failedPages.size) {
+            const partialAggregatedCount = applyProgress('idle');
+            logEvent('list.sorted.prefetch.partial', {
+              pages: itemsByPage.size,
+              items: partialAggregatedCount,
+              failedPages: Array.from(failedPages.keys()).map(page => page + 1),
+              failedCount: failedPages.size,
+              durationMs: Date.now() - startedAt
+            });
+            return;
+          }
+          const finalAggregatedCount = applyProgress('idle');
+          logEvent('list.sorted.prefetch.done', {
+            pages: totalPages,
+            items: finalAggregatedCount,
+            durationMs: Date.now() - startedAt
+          });
+        };
+
+        try {
+          if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            backgroundIdleHandle = (window as any).requestIdleCallback(
+              () => {
+                backgroundIdleHandle = null;
+                void runRemainingPages();
+              },
+              { timeout: HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS + 1200 }
+            ) as number;
+          } else {
+            backgroundTimerHandle = globalThis.setTimeout(() => {
+              backgroundTimerHandle = null;
+              void runRemainingPages();
+            }, HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS);
+          }
+        } catch (_) {
+          backgroundTimerHandle = globalThis.setTimeout(() => {
+            backgroundTimerHandle = null;
+            void runRemainingPages();
+          }, HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS);
+        }
       } catch (err: any) {
         if (seq !== listFetchSeqRef.current) return;
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load list.');
@@ -3218,6 +3333,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('list.sorted.prefetch.error', { message: logMessage });
       }
     })();
+    return () => {
+      backgroundCancelled = true;
+      if (backgroundTimerHandle !== null) globalThis.clearTimeout(backgroundTimerHandle);
+      if (backgroundIdleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(backgroundIdleHandle);
+      }
+    };
     // Do NOT cancel on view changes; this prefetch should continue in the background.
   }, [
     definition.listView,

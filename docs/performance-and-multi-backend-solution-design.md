@@ -676,6 +676,7 @@ Phase 0 work items:
    - precompute latest incomplete records
    - precompute recent activity slices
    - treat this as a performance buffer inside the current Sheets-based solution
+   - the current implementation direction is summary-first Home loading, with analytics and broader list hydration deferred until after the first usable state
 
 7. Review spreadsheet design and archive early
    - review tabs, formulas, whole-column references, `QUERY` or `FILTER` chains, conditional formatting, and duplicated calculations

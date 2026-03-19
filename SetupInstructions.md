@@ -212,6 +212,11 @@ Use the performance scripts together so you capture both web-vitals metrics and 
    - `listFetchRpcMs`
    - `listRecordsPrefetchRpcMs`
 
+   Current Home load strategy:
+   - the first Home request returns a lightweight summary-first payload for recent activity
+   - analytics widgets for the Home/List view are fetched only after the first Home data is ready
+   - broader recent-activity hydration, row snapshot prefetching, and data-source prefetching are deferred so they do not block the first usable Home state
+
 ## 3. Create a Google Sheet
 
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new blank spreadsheet.

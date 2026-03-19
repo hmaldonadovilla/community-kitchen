@@ -87,8 +87,9 @@ describe('WebFormService analytics integration', () => {
 
     const home = service.fetchHomeBootstrap('Config: Analytics');
     expect(home.notModified).toBe(false);
-    expect(home.analytics).toBeDefined();
-    expect((home.analytics?.items || []).find(item => item.id === 'closed_qty')?.value).toBe(9);
+    expect(home.cache === 'hit' || home.cache === 'miss').toBe(true);
+    expect(home.listResponse).toBeUndefined();
+    expect((home as any).analytics).toBeUndefined();
 
     const notModified = service.fetchHomeBootstrap('Config: Analytics', home.rev);
     expect(notModified.notModified).toBe(true);

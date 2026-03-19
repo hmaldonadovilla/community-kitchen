@@ -4464,6 +4464,10 @@ components:
 
             Use this for lightweight aggregate KPIs on the Home/List screen (for example,
             total delivered portions across closed records).
+
+            Runtime note:
+            - The Home/List screen now uses a summary-first load strategy and defers broader list hydration.
+            - Prefer trigger-based `analytics.widgets` for Home/List KPIs when you need a precomputed value that should appear quickly on first load.
         defaultSort:
           type: object
           properties:
