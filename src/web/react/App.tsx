@@ -72,6 +72,7 @@ import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId, renderBundledHtm
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
+import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
@@ -691,8 +692,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     []
   );
   const perfEnabled = useMemo(() => {
-    const tag = (envTag || '').toString().trim().toLowerCase();
-    return tag.includes('staging');
+    return isPerfInstrumentationEnv(envTag);
   }, [envTag]);
   const perfMark = useCallback(
     (name: string) => {

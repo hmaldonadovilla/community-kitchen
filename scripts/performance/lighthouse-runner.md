@@ -2,6 +2,13 @@
 
 This document describes the `lighthouse-runner.js` helper used to collect web performance metrics for Community Kitchen forms (especially the Google Apps Script UIs like **Config: Recipes**).
 
+Use `scenario-runner.js` alongside this script when you need the concrete initial-load buckets shown in browser DevTools:
+
+- Apps Script document response time
+- React bundle load time
+- first Home-page data callback load time
+- total wall-clock time until the page is usable
+
 ## What it measures
 
 The runner invokes Lighthouse programmatically and extracts a small, focused set of metrics from the `performance` category:

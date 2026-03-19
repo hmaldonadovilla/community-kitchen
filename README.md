@@ -227,6 +227,21 @@ Important positioning:
 
 The placeholder service lives in `cloud-run/api/` and currently exposes `/` and `/statusz`. It is only an optional bootstrap target so we can validate project setup, IAM, and CLI deploys before moving real application data APIs into Cloud Run.
 
+### Performance measurement
+
+The repo includes two complementary performance runners:
+
+- `npm run perf:lighthouse -- --url="<web-app-url>" --runs=3 --output=./perf-results/lighthouse.json`
+  - captures web vitals such as TTFB, FCP, LCP, and TTI
+- `npm run perf:scenario -- --url="<web-app-url>" --formKey="Config: Meal Production" --runs=1 --preset=mobile-4g --output=./perf-results/scenario.json`
+  - captures app-specific initial-load buckets:
+    - `documentTtfbMs`
+    - `documentRequestMs`
+    - `bundleLoadMs`
+    - `firstPageDataLoadMs`
+    - `pageUsableMs`
+  - also captures app-level Home timings such as `homeTimeToDataMs`, `homeBootstrapRpcMs`, and `listFetchRpcMs` when perf instrumentation is enabled in non-production environments
+
 ## Setup
 
 1. **Install Dependencies**:

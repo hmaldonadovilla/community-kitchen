@@ -4,6 +4,7 @@ import type { View } from '../../../types';
 import { buildDraftPayload, resolveExistingRecordId } from '../../../app/submission';
 import type { LineItemState } from '../../../types';
 import { resolveStatusTransitionValue } from '../../../../../domain/statusTransitions';
+import { isGlobalPerfInstrumentationEnabled } from '../../../perfInstrumentation';
 
 type DraftSaveState = { phase: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused'; updatedAt?: string; message?: string };
 type StatusTone = 'info' | 'success' | 'error' | null;
@@ -12,15 +13,6 @@ type UpdateRecordSubmitResult = {
   success: boolean;
   message?: string;
   meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
-};
-
-const isStagingPerfEnabled = (): boolean => {
-  try {
-    const raw = ((globalThis as any)?.__CK_ENV_TAG__ || '').toString().trim().toLowerCase();
-    return raw.includes('staging');
-  } catch (_) {
-    return false;
-  }
 };
 
 const perfMarkIfEnabled = (enabled: boolean, name: string): void => {
@@ -147,7 +139,7 @@ export type UpdateRecordActionDeps = {
  * Owner: Feature `updateRecord` (WebForm UI)
  */
 export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: UpdateRecordActionRequest): Promise<void> {
-  const perfEnabled = isStagingPerfEnabled();
+  const perfEnabled = isGlobalPerfInstrumentationEnabled();
   const pipelineStartMark = `ck.updateRecord.action.start.${Date.now()}`;
   perfMarkIfEnabled(perfEnabled, pipelineStartMark);
   const language = deps.refs.languageRef.current;

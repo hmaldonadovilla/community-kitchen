@@ -10,6 +10,7 @@ import {
 import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
+import { isGlobalPerfInstrumentationEnabled } from './perfInstrumentation';
 
 declare const google: any;
 
@@ -316,15 +317,6 @@ type Runner = typeof google.script.run;
 
 const APPS_SCRIPT_CONNECTION_ERROR_CODE = 'CK_APPS_SCRIPT_CONNECTION';
 
-const isStagingPerfEnabled = (): boolean => {
-  try {
-    const raw = ((globalThis as any)?.__CK_ENV_TAG__ || '').toString().trim().toLowerCase();
-    return raw.includes('staging');
-  } catch (_) {
-    return false;
-  }
-};
-
 const perfMarkIfEnabled = (enabled: boolean, name: string): void => {
   if (!enabled) return;
   try {
@@ -419,7 +411,7 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
       reject(new Error('google.script.run is unavailable.'));
       return;
     }
-    const perfEnabled = isStagingPerfEnabled();
+    const perfEnabled = isGlobalPerfInstrumentationEnabled();
     const perfId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const startMark = `ck.rpc.${fnName}.start.${perfId}`;
     const endMark = `ck.rpc.${fnName}.end.${perfId}`;

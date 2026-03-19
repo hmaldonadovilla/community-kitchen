@@ -54,6 +54,164 @@ const PRESETS = {
   [PRESET_MOBILE_WIFI.id]: PRESET_MOBILE_WIFI
 };
 
+function toFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? Number(value) : null;
+}
+
+function normalizeUrl(raw) {
+  return (raw || '').toString().trim().toLowerCase();
+}
+
+function isBundleResourceEntry(entry) {
+  const name = normalizeUrl(entry?.name);
+  if (!name) return false;
+  if (name.includes('bundle=react')) return true;
+  if (name.includes('echo?user_content_key=') && (entry?.initiatorType || '').toString().toLowerCase() === 'script') {
+    return true;
+  }
+  const bodySize = toFiniteNumber(entry?.encodedBodySize) ?? toFiniteNumber(entry?.transferSize) ?? 0;
+  return (entry?.initiatorType || '').toString().toLowerCase() === 'script' && bodySize >= 150000;
+}
+
+function isHomeDataRequestEntry(entry) {
+  const name = normalizeUrl(entry?.name);
+  const initiator = (entry?.initiatorType || '').toString().trim().toLowerCase();
+  return (initiator === 'xmlhttprequest' || initiator === 'fetch') && name.includes('callback?nocache_id=');
+}
+
+function buildEntryWindow(entries) {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  let startTime = null;
+  let endTime = null;
+  let totalDuration = 0;
+  for (const entry of entries) {
+    const entryStart = toFiniteNumber(entry?.startTime);
+    const entryEnd =
+      toFiniteNumber(entry?.responseEnd) ??
+      (entryStart !== null && toFiniteNumber(entry?.duration) !== null ? entryStart + Number(entry.duration) : null);
+    const entryDuration = toFiniteNumber(entry?.duration);
+    if (entryStart !== null && (startTime === null || entryStart < startTime)) startTime = entryStart;
+    if (entryEnd !== null && (endTime === null || entryEnd > endTime)) endTime = entryEnd;
+    if (entryDuration !== null) totalDuration += entryDuration;
+  }
+  if (startTime === null && endTime === null) return null;
+  return {
+    startTime,
+    endTime,
+    spanMs: startTime !== null && endTime !== null ? endTime - startTime : null,
+    totalDurationMs: totalDuration || null
+  };
+}
+
+function extractInitialLoadNetworkBuckets({ pageSnapshot, frameSnapshot, homeReadyWallClockMs }) {
+  const pageNavigation = pageSnapshot?.navigation || null;
+  const combinedResources = []
+    .concat(Array.isArray(pageSnapshot?.resources) ? pageSnapshot.resources : [])
+    .concat(Array.isArray(frameSnapshot?.resources) ? frameSnapshot.resources : []);
+  const frameReadyTimeMs = toFiniteNumber(frameSnapshot?.now);
+  const entriesBeforeReady =
+    frameReadyTimeMs === null
+      ? combinedResources
+      : combinedResources.filter(entry => {
+          const startTime = toFiniteNumber(entry?.startTime);
+          return startTime === null || startTime <= frameReadyTimeMs + 50;
+        });
+
+  const bundleEntries = entriesBeforeReady.filter(isBundleResourceEntry);
+  const bundleWindow = buildEntryWindow(bundleEntries);
+  const bundlePrimary = bundleEntries.length
+    ? [...bundleEntries].sort((a, b) => {
+        const aStart = toFiniteNumber(a?.startTime) ?? Number.MAX_SAFE_INTEGER;
+        const bStart = toFiniteNumber(b?.startTime) ?? Number.MAX_SAFE_INTEGER;
+        return aStart - bStart;
+      })[0]
+    : null;
+
+  const dataEntries = combinedResources
+    .filter(isHomeDataRequestEntry)
+    .sort((a, b) => (toFiniteNumber(a?.startTime) ?? Number.MAX_SAFE_INTEGER) - (toFiniteNumber(b?.startTime) ?? Number.MAX_SAFE_INTEGER));
+  const firstDataEntry = dataEntries.length ? dataEntries[0] : null;
+  const dataWindow = buildEntryWindow(firstDataEntry ? [firstDataEntry] : []);
+  const allDataWindow = buildEntryWindow(dataEntries);
+  const firstDataEndTime =
+    toFiniteNumber(firstDataEntry?.responseEnd) ??
+    (toFiniteNumber(firstDataEntry?.startTime) !== null && toFiniteNumber(firstDataEntry?.duration) !== null
+      ? Number(firstDataEntry.startTime) + Number(firstDataEntry.duration)
+      : null);
+  const pageUsableMs =
+    toFiniteNumber(homeReadyWallClockMs) !== null
+      ? Number(homeReadyWallClockMs) +
+        Math.max(0, (firstDataEndTime ?? frameReadyTimeMs ?? 0) - (frameReadyTimeMs ?? firstDataEndTime ?? 0))
+      : null;
+
+  return {
+    documentTtfbMs: toFiniteNumber(pageNavigation?.responseStart),
+    documentRequestMs:
+      toFiniteNumber(pageNavigation?.responseEnd) ??
+      toFiniteNumber(pageNavigation?.duration) ??
+      null,
+    bundleLoadMs: bundleWindow?.spanMs ?? bundleWindow?.totalDurationMs ?? null,
+    bundleRequestUrl: bundlePrimary?.name || null,
+    firstPageDataLoadMs:
+      toFiniteNumber(firstDataEntry?.duration) ??
+      dataWindow?.spanMs ??
+      dataWindow?.totalDurationMs ??
+      null,
+    firstPageDataRequestUrl: firstDataEntry?.name || null,
+    initialDataRequestCount: dataEntries.length,
+    initialDataWindowMs: allDataWindow?.spanMs ?? allDataWindow?.totalDurationMs ?? null,
+    pageUsableMs
+  };
+}
+
+async function readPerformanceSnapshot(target) {
+  return target.evaluate(() => {
+    const asNumber = value => (typeof value === 'number' && Number.isFinite(value) ? Number(value) : null);
+    const navigation = performance.getEntriesByType('navigation')[0];
+    const resources = performance.getEntriesByType('resource').map(entry => ({
+      name: entry.name || '',
+      initiatorType: entry.initiatorType || '',
+      startTime: asNumber(entry.startTime),
+      duration: asNumber(entry.duration),
+      responseStart: asNumber(entry.responseStart),
+      responseEnd: asNumber(entry.responseEnd),
+      transferSize: asNumber(entry.transferSize),
+      encodedBodySize: asNumber(entry.encodedBodySize),
+      decodedBodySize: asNumber(entry.decodedBodySize)
+    }));
+    return {
+      now: asNumber(typeof performance.now === 'function' ? performance.now() : null),
+      navigation: navigation
+        ? {
+            name: navigation.name || '',
+            startTime: asNumber(navigation.startTime),
+            duration: asNumber(navigation.duration),
+            responseStart: asNumber(navigation.responseStart),
+            responseEnd: asNumber(navigation.responseEnd),
+            domContentLoadedEventEnd: asNumber(navigation.domContentLoadedEventEnd),
+            loadEventEnd: asNumber(navigation.loadEventEnd)
+          }
+        : null,
+      resources
+    };
+  });
+}
+
+async function waitForInitialLoadSnapshots(page, frame, timeoutMs = 12000) {
+  const startedAt = Date.now();
+  let lastPageSnapshot = await readPerformanceSnapshot(page).catch(() => ({ navigation: null, resources: [], now: null }));
+  let lastFrameSnapshot = await readPerformanceSnapshot(frame).catch(() => ({ navigation: null, resources: [], now: null }));
+  while (Date.now() - startedAt < timeoutMs) {
+    if ((lastFrameSnapshot.resources || []).some(isHomeDataRequestEntry)) {
+      break;
+    }
+    await frame.waitForTimeout(300);
+    lastPageSnapshot = await readPerformanceSnapshot(page).catch(() => lastPageSnapshot);
+    lastFrameSnapshot = await readPerformanceSnapshot(frame).catch(() => lastFrameSnapshot);
+  }
+  return { pageSnapshot: lastPageSnapshot, frameSnapshot: lastFrameSnapshot };
+}
+
 function parseArgs(argv) {
   const out = {};
   for (const arg of argv) {
@@ -568,6 +726,18 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
   const page = await context.newPage();
   const consoleEvents = createConsoleCollector(page);
   const createdRecordIds = [];
+  const scenarioStartedAt = Date.now();
+  let initialLoadBuckets = {
+    documentTtfbMs: null,
+    documentRequestMs: null,
+    bundleLoadMs: null,
+    bundleRequestUrl: null,
+    firstPageDataLoadMs: null,
+    firstPageDataRequestUrl: null,
+    initialDataRequestCount: 0,
+    initialDataWindowMs: null,
+    pageUsableMs: null
+  };
 
   try {
     console.log('[scenario] open target url');
@@ -578,6 +748,12 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
     console.log('[scenario] wait for home frame and readiness');
     let frame = await waitForAppFrame(page);
     await waitForHomeReady(frame, 90000);
+    const { pageSnapshot: initialPageSnapshot, frameSnapshot: initialFrameSnapshot } = await waitForInitialLoadSnapshots(page, frame, 12000);
+    initialLoadBuckets = extractInitialLoadNetworkBuckets({
+      pageSnapshot: initialPageSnapshot,
+      frameSnapshot: initialFrameSnapshot,
+      homeReadyWallClockMs: Date.now() - scenarioStartedAt
+    });
     console.log('[scenario] load config and seed template');
     const formConfig = await runAppsScript(frame, 'fetchFormConfig', formKey).catch(() => null);
     const defaultSortFieldId = ((((formConfig || {}).definition || {}).listView || {}).defaultSort || {}).fieldId || '';
@@ -794,7 +970,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
         resolvedTargetButton = await resolveVisibleActionButton(frame, listActionSelectors, 12000, true);
       }
       if (!resolvedTargetButton) throw new Error('No list action button found after seeding.');
-      await resolvedTargetButton.click({ timeout: 10000 });
+      await clickWithOverlayRecovery(frame, resolvedTargetButton, 10000);
       await frame.waitForTimeout(1200);
     }
 
@@ -953,6 +1129,15 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       typeof templatePrefetchStartAfterHomeDataMs === 'number' ? templatePrefetchStartAfterHomeDataMs < 0 : null;
     console.log('[scenario] collect metrics');
     const metrics = {
+      documentTtfbMs: initialLoadBuckets.documentTtfbMs,
+      documentRequestMs: initialLoadBuckets.documentRequestMs,
+      bundleLoadMs: initialLoadBuckets.bundleLoadMs,
+      bundleRequestUrl: initialLoadBuckets.bundleRequestUrl,
+      firstPageDataLoadMs: initialLoadBuckets.firstPageDataLoadMs,
+      firstPageDataRequestUrl: initialLoadBuckets.firstPageDataRequestUrl,
+      initialDataRequestCount: initialLoadBuckets.initialDataRequestCount,
+      initialDataWindowMs: initialLoadBuckets.initialDataWindowMs,
+      pageUsableMs: initialLoadBuckets.pageUsableMs,
       homeTimeToDataMs,
       homeBootstrapRpcMs,
       listFetchRpcMs,
@@ -1011,6 +1196,15 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
       metrics: {
+        documentTtfbMs: initialLoadBuckets.documentTtfbMs,
+        documentRequestMs: initialLoadBuckets.documentRequestMs,
+        bundleLoadMs: initialLoadBuckets.bundleLoadMs,
+        bundleRequestUrl: initialLoadBuckets.bundleRequestUrl,
+        firstPageDataLoadMs: initialLoadBuckets.firstPageDataLoadMs,
+        firstPageDataRequestUrl: initialLoadBuckets.firstPageDataRequestUrl,
+        initialDataRequestCount: initialLoadBuckets.initialDataRequestCount,
+        initialDataWindowMs: initialLoadBuckets.initialDataWindowMs,
+        pageUsableMs: initialLoadBuckets.pageUsableMs,
         homeTimeToDataMs: findPerfDuration(consoleEvents, 'ck.home.timeToData'),
         homeBootstrapRpcMs: findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc'),
         listFetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc'),
@@ -1075,6 +1269,12 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
 
 function summarizeRuns(runs) {
   const metricKeys = [
+    'documentTtfbMs',
+    'documentRequestMs',
+    'bundleLoadMs',
+    'firstPageDataLoadMs',
+    'initialDataWindowMs',
+    'pageUsableMs',
     'homeTimeToDataMs',
     'homeBootstrapRpcMs',
     'listFetchRpcMs',
@@ -1185,6 +1385,12 @@ async function main() {
 
     console.log(`ok=${res.ok}`);
     if (!res.ok) console.log(`error=${res.error}`);
+    console.log(`documentTtfbMs=${res.metrics?.documentTtfbMs}`);
+    console.log(`documentRequestMs=${res.metrics?.documentRequestMs}`);
+    console.log(`bundleLoadMs=${res.metrics?.bundleLoadMs}`);
+    console.log(`firstPageDataLoadMs=${res.metrics?.firstPageDataLoadMs}`);
+    console.log(`initialDataWindowMs=${res.metrics?.initialDataWindowMs}`);
+    console.log(`pageUsableMs=${res.metrics?.pageUsableMs}`);
     console.log(`homeTimeToDataMs=${res.metrics?.homeTimeToDataMs}`);
     console.log(`homeBootstrapRpcMs=${res.metrics?.homeBootstrapRpcMs}`);
     console.log(`listFetchRpcMs=${res.metrics?.listFetchRpcMs}`);
@@ -1227,3 +1433,11 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+
+module.exports = {
+  buildEntryWindow,
+  extractInitialLoadNetworkBuckets,
+  isBundleResourceEntry,
+  isHomeDataRequestEntry,
+  summarizeRuns
+};

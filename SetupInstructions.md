@@ -169,6 +169,49 @@ Important positioning:
 
 8. Keep using `npm run deploy:apps-script` for the public Apps Script web app. The Cloud Run deploy is an optional backend-preparation step and does not replace the existing staging Apps Script deployment flow.
 
+## 2e. Performance measurement baseline
+
+Use the performance scripts together so you capture both web-vitals metrics and the concrete initial-load buckets visible in browser DevTools.
+
+1. Capture Lighthouse metrics:
+
+   ```bash
+   npm run perf:lighthouse -- \
+     --url="<web-app-url>" \
+     --runs=3 \
+     --output=./perf-results/lighthouse.json
+   ```
+
+   This reports:
+   - `ttfb`
+   - `fcp`
+   - `lcp`
+   - `tti`
+
+2. Capture Home-page load buckets:
+
+   ```bash
+   npm run perf:scenario -- \
+     --url="<web-app-url>" \
+     --formKey="Config: Meal Production" \
+     --runs=1 \
+     --preset=mobile-4g \
+     --output=./perf-results/scenario.json
+   ```
+
+   This reports:
+   - `documentTtfbMs`: time until the Apps Script document starts responding
+   - `documentRequestMs`: total Apps Script document request time
+   - `bundleLoadMs`: React bundle load time
+   - `firstPageDataLoadMs`: first Home-page callback/XHR load time
+   - `pageUsableMs`: wall-clock time until the Home page is usable
+
+   In staging-like environments it also reports app-level Home timings:
+   - `homeTimeToDataMs`
+   - `homeBootstrapRpcMs`
+   - `listFetchRpcMs`
+   - `listRecordsPrefetchRpcMs`
+
 ## 3. Create a Google Sheet
 
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new blank spreadsheet.
