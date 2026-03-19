@@ -77,7 +77,7 @@ describe('WebFormService analytics integration', () => {
     } as any);
     expect(third.success).toBe(true);
 
-    const bootstrap = service.fetchBootstrapContext('Config: Analytics');
+    const bootstrap = service.fetchBootstrapContext('Config: Analytics', { includeAnalytics: true });
     expect(bootstrap.analytics).toBeDefined();
     expect(bootstrap.analyticsRev).toBeGreaterThanOrEqual(1);
     const metric = (bootstrap.analytics?.items || []).find(item => item.id === 'closed_qty');

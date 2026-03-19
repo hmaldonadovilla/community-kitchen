@@ -152,6 +152,26 @@ export function fetchBootstrapContext(formKey?: string): {
   return service.fetchBootstrapContext(formKey);
 }
 
+export function fetchBootstrapContextWithOptions(
+  formKey?: string,
+  options?: { includeHomeData?: boolean; includeAnalytics?: boolean }
+): {
+  definition: WebFormDefinition;
+  formKey: string;
+  listResponse?: any;
+  records?: Record<string, WebFormSubmission>;
+  analytics?: any;
+  analyticsRev?: number;
+  homeRev?: number;
+  configSource?: string;
+  configEnv?: string;
+  envTag?: string;
+} {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchBootstrapContext(formKey, options);
+}
+
 export function fetchHomeBootstrap(formKey: string, clientRev?: number): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

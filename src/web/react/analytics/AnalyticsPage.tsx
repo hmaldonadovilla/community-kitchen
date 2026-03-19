@@ -92,7 +92,7 @@ const AnalyticsPage: React.FC = () => {
     setLoading(true);
     setError(null);
     logEvent('bootstrap.fetch.start', { formKey, adminEnabled });
-    fetchBootstrapContextApi(formKey)
+    fetchBootstrapContextApi(formKey, { includeAnalytics: true })
       .then(res => {
         if (cancelled) return;
         const definition = (res as any)?.definition || null;

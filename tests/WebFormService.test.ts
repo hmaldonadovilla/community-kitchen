@@ -111,6 +111,15 @@ describe('WebFormService', () => {
     }
   });
 
+  test('fetchBootstrapContext stays lean by default', () => {
+    const res = service.fetchBootstrapContext('Config: Delivery');
+    expect(res.definition).toBeDefined();
+    expect(res.listResponse).toBeUndefined();
+    expect(res.records).toBeUndefined();
+    expect(res.analytics).toBeUndefined();
+    expect(res.analyticsRev).toBe(0);
+  });
+
   test('submitWebForm appends rows with line item JSON and file url', () => {
     const result = service.submitWebForm({
       formKey: 'Config: Delivery',

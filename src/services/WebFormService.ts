@@ -57,6 +57,11 @@ type HomeBootstrapChunkMeta = {
   cachedAt?: string;
 };
 
+type BootstrapContextOptions = {
+  includeHomeData?: boolean;
+  includeAnalytics?: boolean;
+};
+
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private dashboard: Dashboard;
@@ -355,7 +360,10 @@ export class WebFormService {
     return def;
   }
 
-  public fetchBootstrapContext(formKey?: string): {
+  public fetchBootstrapContext(
+    formKey?: string,
+    options?: BootstrapContextOptions
+  ): {
     definition: WebFormDefinition;
     formKey: string;
     listResponse?: PaginatedResult<Record<string, any>>;
@@ -367,6 +375,9 @@ export class WebFormService {
     configEnv?: string;
     envTag?: string;
   } {
+    const includeHomeData = options?.includeHomeData === true;
+    const includeAnalytics = options?.includeAnalytics === true;
+    const startedAt = Date.now();
     const configEnv = getBundledConfigEnv() || undefined;
     const envTag = getUiEnvTag() || undefined;
     const bundled = this.resolveBundledConfig(formKey);
@@ -382,13 +393,24 @@ export class WebFormService {
         formKey: resolvedKey,
         questions: def.questions?.length || 0,
         source: 'bundled',
+        includeHomeData,
+        includeAnalytics,
         configEnv: configEnv || null,
         envTag: envTag || null
       });
-      const bootstrap = this.buildBootstrap(resolvedKey, def);
+      const bootstrap = includeHomeData || includeAnalytics ? this.buildBootstrap(resolvedKey, def, { includeHomeData, includeAnalytics }) : null;
       const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
       const rev = this.readHomeRevision(canonicalKey);
-      this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.bundled');
+      if (bootstrap) {
+        this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.bundled');
+      }
+      debugLog('bootstrap.context.ready', {
+        formKey: resolvedKey,
+        source: 'bundled',
+        includeHomeData,
+        includeAnalytics,
+        elapsedMs: Date.now() - startedAt
+      });
       return {
         definition: def,
         formKey: resolvedKey,
@@ -408,13 +430,24 @@ export class WebFormService {
       formKey: resolvedKey,
       questions: def.questions?.length || 0,
       source: 'sheet',
+      includeHomeData,
+      includeAnalytics,
       configEnv: configEnv || null,
       envTag: envTag || null
     });
-    const bootstrap = this.buildBootstrap(resolvedKey, def);
+    const bootstrap = includeHomeData || includeAnalytics ? this.buildBootstrap(resolvedKey, def, { includeHomeData, includeAnalytics }) : null;
     const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
     const rev = this.readHomeRevision(canonicalKey);
-    this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.sheet');
+    if (bootstrap) {
+      this.cacheHomeBootstrap(canonicalKey, rev, bootstrap || null, 'fetchBootstrapContext.sheet');
+    }
+    debugLog('bootstrap.context.ready', {
+      formKey: resolvedKey,
+      source: 'sheet',
+      includeHomeData,
+      includeAnalytics,
+      elapsedMs: Date.now() - startedAt
+    });
     return {
       definition: def,
       formKey: resolvedKey,
@@ -463,7 +496,7 @@ export class WebFormService {
 
     const bundled = this.resolveBundledConfig(canonicalKey || formKey);
     const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(canonicalKey || formKey);
-    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def);
+    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true, includeAnalytics: true });
     this.cacheHomeBootstrap(canonicalKey || formKey, rev, bootstrap || null, 'fetchHomeBootstrap.cacheMiss');
     return {
       notModified: false,
@@ -595,65 +628,9 @@ export class WebFormService {
       const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
       const homeRev = this.readHomeRevision(canonicalKey);
       const bootstrapPayload = { configSource: 'bundled', configEnv, envTag, homeRev } as any;
-      const cachedBootstrap = this.readCachedHomeBootstrap(canonicalKey, homeRev);
-      if (cachedBootstrap?.listResponse || cachedBootstrap?.analytics) {
-        if (cachedBootstrap.listResponse) {
-          bootstrapPayload.listResponse = cachedBootstrap.listResponse;
-          bootstrapPayload.records = cachedBootstrap.records || {};
-        }
-        if (cachedBootstrap.analytics) {
-          bootstrapPayload.analytics = cachedBootstrap.analytics;
-          bootstrapPayload.analyticsRev = Number((cachedBootstrap as any).analyticsRev || cachedBootstrap.analytics.revision || 0) || 0;
-        }
-        debugLog('renderForm.bootstrap.cached.hit', {
-          formKey: resolvedKey,
-          rev: homeRev,
-          items: (cachedBootstrap.listResponse?.items || []).length,
-          totalCount: (cachedBootstrap.listResponse as any)?.totalCount || 0,
-          analyticsRev: Number((cachedBootstrap as any)?.analyticsRev || cachedBootstrap.analytics?.revision || 0) || 0
-        });
-      } else {
-        debugLog('renderForm.bootstrap.cached.miss', {
-          formKey: resolvedKey,
-          rev: homeRev
-        });
-      }
-
-      if (def?.analytics?.widgets?.length && !bootstrapPayload.analytics) {
-        try {
-          const { form, questions } = this.getFormContextLite(resolvedKey);
-          let analytics = this.analytics.readSnapshot(form);
-          if (!analytics.revision) {
-            analytics = this.analytics.recomputeForm(form, questions, def);
-          }
-          bootstrapPayload.analytics = analytics;
-          bootstrapPayload.analyticsRev = Number(analytics.revision || 0) || 0;
-          this.cacheHomeBootstrap(
-            canonicalKey,
-            homeRev,
-            {
-              listResponse: bootstrapPayload.listResponse,
-              records: bootstrapPayload.records || {},
-              analytics,
-              analyticsRev: Number(analytics.revision || 0) || 0
-            },
-            'renderForm.analytics.embed'
-          );
-          debugLog('renderForm.bootstrap.analytics.embedded', {
-            formKey: resolvedKey,
-            analyticsRev: Number(analytics.revision || 0) || 0,
-            items: Array.isArray(analytics.items) ? analytics.items.length : 0
-          });
-        } catch (err: any) {
-          debugLog('renderForm.bootstrap.analytics.error', {
-            formKey: resolvedKey,
-            message: err?.message || err?.toString?.() || 'unknown'
-          });
-        }
-      }
 
       if (serverListBootstrapEnabled) {
-        const bootstrap = this.buildBootstrap(resolvedKey, def);
+        const bootstrap = this.buildBootstrap(resolvedKey, def, { includeHomeData: true, includeAnalytics: true });
         if (bootstrap?.listResponse || bootstrap?.analytics) {
           if (bootstrap.listResponse) {
             bootstrapPayload.listResponse = bootstrap.listResponse;
@@ -731,19 +708,32 @@ export class WebFormService {
     };
   }
 
-  private buildBootstrap(formKey: string, def: WebFormDefinition): any {
+  private buildBootstrap(
+    formKey: string,
+    def: WebFormDefinition,
+    options?: BootstrapContextOptions
+  ): any {
     try {
+      const includeHomeData = options?.includeHomeData === true;
+      const includeAnalytics = options?.includeAnalytics === true;
       const { form, questions } = this.getFormContextLite(formKey);
       const out: any = {};
-      if (def?.analytics?.widgets?.length) {
+      const analyticsStartedAt = Date.now();
+      if (includeAnalytics && def?.analytics?.widgets?.length) {
         let analytics = this.analytics.readSnapshot(form);
         if (!analytics.revision) {
           analytics = this.analytics.recomputeForm(form, questions, def);
         }
         out.analytics = analytics;
         out.analyticsRev = Number(analytics.revision || 0) || 0;
+        debugLog('bootstrap.analytics.ready', {
+          formKey,
+          revision: out.analyticsRev,
+          items: Array.isArray(analytics.items) ? analytics.items.length : 0,
+          durationMs: Date.now() - analyticsStartedAt
+        });
       }
-      if (!def?.listView?.columns?.length) {
+      if (!includeHomeData || !def?.listView?.columns?.length) {
         return Object.keys(out).length ? out : null;
       }
 
@@ -849,6 +839,12 @@ export class WebFormService {
         pageSize: fetchPageSize,
         items: (listResponse as any).items?.length || 0,
         totalCount: (listResponse as any).totalCount || 0,
+        durationMs: Date.now() - startedAt
+      });
+      debugLog('bootstrap.homeData.ready', {
+        formKey,
+        pageSize: fetchPageSize,
+        projectionCount: projection.length,
         durationMs: Date.now() - startedAt
       });
       out.listResponse = listResponse;

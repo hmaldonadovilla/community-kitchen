@@ -8343,7 +8343,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const requestId = analyticsOverlayRequestRef.current + 1;
     analyticsOverlayRequestRef.current = requestId;
     logEvent('ui.header.drawer.analytics.open', { formKey, requestId });
-    fetchBootstrapContextApi(formKey)
+    fetchBootstrapContextApi(formKey, { includeAnalytics: true })
       .then(res => {
         if (analyticsOverlayRequestRef.current !== requestId) return;
         const snapshot = ((res as any)?.analytics || null) as any;

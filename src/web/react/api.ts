@@ -408,6 +408,10 @@ const getRunner = (): Runner | null => {
   return runner && typeof runner.withSuccessHandler === 'function' ? runner : null;
 };
 
+export interface BackendTransport {
+  invoke<T>(fnName: string, ...args: any[]): Promise<T>;
+}
+
 const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
   return new Promise((resolve, reject) => {
     const runner = getRunner();
@@ -485,30 +489,44 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
   });
 };
 
+export const createAppsScriptTransport = (): BackendTransport => ({
+  invoke<T>(fnName: string, ...args: any[]): Promise<T> {
+    return runAppsScript<T>(fnName, ...args);
+  }
+});
+
+let activeTransport: BackendTransport = createAppsScriptTransport();
+
+export const configureBackendTransport = (transport?: BackendTransport | null): void => {
+  activeTransport = transport || createAppsScriptTransport();
+};
+
+const invokeTransport = <T,>(fnName: string, ...args: any[]): Promise<T> => activeTransport.invoke<T>(fnName, ...args);
+
 export const submit = (payload: SubmissionPayload): Promise<SubmissionResult> =>
-  runAppsScript<SubmissionResult>('saveSubmissionWithId', payload);
+  invokeTransport<SubmissionResult>('saveSubmissionWithId', payload);
 
 export const previewUpdateRecordDependenciesApi = (
   payload: SubmissionPayload,
   buttonId: string
 ): Promise<UpdateRecordDependencyPreviewResult> =>
-  runAppsScript<UpdateRecordDependencyPreviewResult>('previewUpdateRecordDependencies', payload, buttonId);
+  invokeTransport<UpdateRecordDependencyPreviewResult>('previewUpdateRecordDependencies', payload, buttonId);
 
 export const applyUpdateRecordWithDependenciesApi = (
   payload: SubmissionPayload,
   buttonId: string
 ): Promise<UpdateRecordDependencyApplyResult> =>
-  runAppsScript<UpdateRecordDependencyApplyResult>('applyUpdateRecordWithDependencies', payload, buttonId);
+  invokeTransport<UpdateRecordDependencyApplyResult>('applyUpdateRecordWithDependencies', payload, buttonId);
 
 export const checkDedupConflictApi = (payload: SubmissionPayload): Promise<DedupConflictCheckResult> =>
-  runAppsScript<DedupConflictCheckResult>('checkDedupConflict', payload);
+  invokeTransport<DedupConflictCheckResult>('checkDedupConflict', payload);
 
 export const fetchList = (
   formKey: string,
   projection?: string[],
   pageSize?: number,
   pageToken?: string
-): Promise<ListResponse> => runAppsScript<ListResponse>('fetchSubmissions', formKey, projection, pageSize, pageToken);
+): Promise<ListResponse> => invokeTransport<ListResponse>('fetchSubmissions', formKey, projection, pageSize, pageToken);
 
 export const fetchBatch = (
   formKey: string,
@@ -518,7 +536,7 @@ export const fetchBatch = (
   includePageRecords: boolean = true,
   recordIds?: string[]
 ): Promise<BatchResponse> =>
-  runAppsScript<BatchResponse>('fetchSubmissionsBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds);
+  invokeTransport<BatchResponse>('fetchSubmissionsBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds);
 
 export const fetchSortedBatch = (
   formKey: string,
@@ -529,56 +547,56 @@ export const fetchSortedBatch = (
   recordIds?: string[],
   sort?: ListSort | null
 ): Promise<BatchResponse> =>
-  runAppsScript<BatchResponse>('fetchSubmissionsSortedBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds, sort || null);
+  invokeTransport<BatchResponse>('fetchSubmissionsSortedBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds, sort || null);
 
 export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSubmission | null> =>
-  runAppsScript<WebFormSubmission | null>('fetchSubmissionById', formKey, id);
+  invokeTransport<WebFormSubmission | null>('fetchSubmissionById', formKey, id);
 
 export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
-  runAppsScript<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
+  invokeTransport<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
 
 export const fetchRecordsByRowNumbers = (
   formKey: string,
   rowNumbers: number[]
 ): Promise<Record<string, WebFormSubmission>> =>
-  runAppsScript<Record<string, WebFormSubmission>>('fetchSubmissionsByRowNumbers', formKey, rowNumbers);
+  invokeTransport<Record<string, WebFormSubmission>>('fetchSubmissionsByRowNumbers', formKey, rowNumbers);
 
 export const getRecordVersionApi = (formKey: string, recordId: string, rowNumberHint?: number | null): Promise<RecordVersionResult> =>
-  runAppsScript<RecordVersionResult>('getRecordVersion', formKey, recordId, rowNumberHint ?? null);
+  invokeTransport<RecordVersionResult>('getRecordVersion', formKey, recordId, rowNumberHint ?? null);
 
 export const fetchDataSourceApi = (req: DataSourceRequest): Promise<DataSourceResponse> =>
-  runAppsScript<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);
+  invokeTransport<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);
 
 export const triggerFollowup = (
   formKey: string,
   recordId: string,
   action: string
-): Promise<FollowupActionResult> => runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+): Promise<FollowupActionResult> => invokeTransport<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
 
 export const triggerFollowupBatch = (
   formKey: string,
   recordId: string,
   actions: string[]
 ): Promise<FollowupBatchResponse> =>
-  runAppsScript<FollowupBatchResponse>('triggerFollowupActions', formKey, recordId, actions);
+  invokeTransport<FollowupBatchResponse>('triggerFollowupActions', formKey, recordId, actions);
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
-  runAppsScript<UploadFilesResult>('uploadFiles', files, uploadConfig);
+  invokeTransport<UploadFilesResult>('uploadFiles', files, uploadConfig);
 
 export const renderDocTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocTemplateResult> =>
-  runAppsScript<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
+  invokeTransport<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
 
 export const renderDocTemplatePdfPreviewApi = (
   payload: SubmissionPayload,
   buttonId: string
 ): Promise<RenderDocTemplatePdfPreviewResult> =>
-  runAppsScript<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
+  invokeTransport<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
 
 export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
-  runAppsScript<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
+  invokeTransport<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
 
 export const renderMarkdownTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderMarkdownTemplateResult> =>
-  runAppsScript<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
+  invokeTransport<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
 
 export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderHtmlTemplateResult> => {
   const key = buildButtonHtmlCacheKey(payload, buttonId);
@@ -588,7 +606,7 @@ export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: stri
   }
   const inflight = htmlRenderInflight.get(key);
   if (inflight) return inflight;
-  const promise = runAppsScript<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId)
+  const promise = invokeTransport<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId)
     .then(res => {
       if (res?.success && res?.html) {
         htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
@@ -604,10 +622,10 @@ export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: stri
 };
 
 export const prefetchTemplatesApi = (formKey: string): Promise<PrefetchTemplatesResult> =>
-  runAppsScript<PrefetchTemplatesResult>('prefetchTemplates', formKey);
+  invokeTransport<PrefetchTemplatesResult>('prefetchTemplates', formKey);
 
 export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promise<RenderDocPreviewResult> =>
-  runAppsScript<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
+  invokeTransport<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
 
 export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promise<RenderHtmlTemplateResult> => {
   const key = buildSummaryHtmlCacheKey(payload);
@@ -617,7 +635,7 @@ export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promis
   }
   const inflight = htmlRenderInflight.get(key);
   if (inflight) return inflight;
-  const promise = runAppsScript<RenderHtmlTemplateResult>('renderSummaryHtmlTemplate', payload)
+  const promise = invokeTransport<RenderHtmlTemplateResult>('renderSummaryHtmlTemplate', payload)
     .then(res => {
       if (res?.success && res?.html) {
         htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
@@ -633,7 +651,12 @@ export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promis
 };
 
 export const trashPreviewArtifactApi = (cleanupToken: string): Promise<TrashPreviewResult> =>
-  runAppsScript<TrashPreviewResult>('trashPreviewArtifact', cleanupToken);
+  invokeTransport<TrashPreviewResult>('trashPreviewArtifact', cleanupToken);
+
+export interface BootstrapContextOptions {
+  includeHomeData?: boolean;
+  includeAnalytics?: boolean;
+}
 
 export interface BootstrapContext {
   definition: WebFormDefinition;
@@ -667,17 +690,24 @@ export interface FormCatalogItem {
   logoUrl?: string;
 }
 
-export const fetchBootstrapContextApi = (formKey?: string | null): Promise<BootstrapContext> =>
-  runAppsScript<BootstrapContext>('fetchBootstrapContext', formKey ?? null);
+export const fetchBootstrapContextApi = (
+  formKey?: string | null,
+  options?: BootstrapContextOptions | null
+): Promise<BootstrapContext> => {
+  if (options && (options.includeHomeData || options.includeAnalytics)) {
+    return invokeTransport<BootstrapContext>('fetchBootstrapContextWithOptions', formKey ?? null, options);
+  }
+  return invokeTransport<BootstrapContext>('fetchBootstrapContext', formKey ?? null);
+};
 
 export const fetchHomeBootstrapApi = (
   formKey: string,
   clientRev?: number | null
 ): Promise<HomeBootstrapResponse> =>
-  runAppsScript<HomeBootstrapResponse>('fetchHomeBootstrap', formKey, clientRev ?? null);
+  invokeTransport<HomeBootstrapResponse>('fetchHomeBootstrap', formKey, clientRev ?? null);
 
 export const fetchFormConfigApi = (formKey?: string | null): Promise<FormConfigExport> =>
-  runAppsScript<FormConfigExport>('fetchFormConfig', formKey ?? null);
+  invokeTransport<FormConfigExport>('fetchFormConfig', formKey ?? null);
 
 export const fetchFormCatalogApi = (): Promise<FormCatalogItem[]> =>
-  runAppsScript<FormCatalogItem[]>('fetchFormCatalog');
+  invokeTransport<FormCatalogItem[]>('fetchFormCatalog');
