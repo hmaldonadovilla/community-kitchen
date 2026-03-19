@@ -4,6 +4,8 @@ import { WebFormService } from './services/WebFormService';
 import { WebFormDefinition, WebFormSubmission } from './types';
 import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
 import { renderReactBundle } from './services/webform/bundles';
+import { getUiEnvTag } from './services/webform/envTag';
+import { ServerTimingRecorder, isServerTimingEnabled } from './services/webform/serverTiming';
 
 const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
@@ -99,13 +101,14 @@ export function doGet(
   e: GoogleAppsScript.Events.DoGet
 ): GoogleAppsScript.HTML.HtmlOutput | GoogleAppsScript.Content.TextOutput {
   const params = e?.parameter || {};
-  const normalizedParams = normalizeRequestParams(params as any);
+  const serverTiming = new ServerTimingRecorder(isServerTimingEnabled(getUiEnvTag()));
+  const normalizedParams = serverTiming.measure('doGet.normalizeRequestParamsMs', () => normalizeRequestParams(params as any));
   const bundle = (params.bundle || '').toString().trim().toLowerCase();
   if (bundle === 'react') {
     return renderReactBundle((params.app ?? params.page ?? '').toString());
   }
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const service = new WebFormService(ss);
+  const ss = serverTiming.measure('doGet.getActiveSpreadsheetMs', () => SpreadsheetApp.getActiveSpreadsheet());
+  const service = serverTiming.measure('doGet.initWebFormServiceMs', () => new WebFormService(ss));
   const formKeyRaw = params.form;
   const formKey = formKeyRaw !== undefined && formKeyRaw !== null ? formKeyRaw.toString().trim() : '';
   const configParam = (params.config || params.export || '').toString().trim().toLowerCase();
@@ -126,9 +129,9 @@ export function doGet(
     if (!normalizedParams.app && !normalizedParams.page) {
       normalizedParams.app = 'landing';
     }
-    return service.renderForm(undefined, normalizedParams);
+    return serverTiming.measure('doGet.renderFormMs', () => service.renderForm(undefined, normalizedParams, serverTiming));
   }
-  return service.renderForm(formKey, normalizedParams);
+  return serverTiming.measure('doGet.renderFormMs', () => service.renderForm(formKey, normalizedParams, serverTiming));
 }
 
 export function submitWebForm(formObject: any): { success: boolean; message: string } {

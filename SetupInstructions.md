@@ -202,11 +202,14 @@ Use the performance scripts together so you capture both web-vitals metrics and 
    This reports:
    - `documentTtfbMs`: time until the Apps Script document starts responding
    - `documentRequestMs`: total Apps Script document request time
+   - `serverDocumentMeasuredMs`: server-side measured time inside `doGet -> renderForm -> buildHtml`
+   - `serverDocumentGapMs`: unattributed portion of the document request (primarily Apps Script/platform startup plus minor transport overhead)
    - `bundleLoadMs`: React bundle load time
    - `firstPageDataLoadMs`: first Home-page callback/XHR load time
    - `pageUsableMs`: wall-clock time until the Home page is usable
 
    In staging-like environments it also reports app-level Home timings:
+   - `serverTimingSteps`
    - `homeTimeToDataMs`
    - `homeBootstrapRpcMs`
    - `listFetchRpcMs`
@@ -214,6 +217,8 @@ Use the performance scripts together so you capture both web-vitals metrics and 
 
    Current Home load strategy:
    - the first Home request returns a lightweight summary-first payload for recent activity
+   - the shell starts the first Home bootstrap RPC inline so it can overlap with the React bundle load
+   - bundled form definitions reuse the embedded exported definition when available, and cache fallback rebuilds otherwise
    - analytics widgets for the Home/List view are fetched only after the first Home data is ready
    - broader recent-activity hydration, row snapshot prefetching, and data-source prefetching are deferred so they do not block the first usable Home state
 

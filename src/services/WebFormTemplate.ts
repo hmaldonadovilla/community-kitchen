@@ -3,6 +3,7 @@ import { SYSTEM_FONT_STACK } from '../constants/typography';
 import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
 import { isDebugEnabled } from './webform/debug';
 import { getUiEnvTag } from './webform/envTag';
+import { ServerTimingRecorder } from './webform/serverTiming';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
@@ -46,15 +47,20 @@ const resolveCacheVersion = (): string => {
   }
 };
 
-const buildBundleSrc = (bundleTarget?: string, requestParams?: Record<string, string>): string => {
+const buildBundleSrc = (
+  bundleTarget?: string,
+  requestParams?: Record<string, string>,
+  cacheVersionOverride?: string,
+  serviceUrlOverride?: string | null
+): string => {
   const target = (bundleTarget || '').toString().trim();
   const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
-  const cacheVersion = resolveCacheVersion();
+  const cacheVersion = (cacheVersionOverride || resolveCacheVersion() || '').toString().trim();
   const versionParam = cacheVersion ? `&v=${encodeURIComponent(cacheVersion)}` : '';
   const tsParamRaw = (requestParams?.ts || requestParams?.t || '').toString().trim();
   const tsParam = tsParamRaw ? `&ts=${encodeURIComponent(tsParamRaw)}` : '';
   const query = `bundle=react${appParam}${versionParam}${tsParam}`;
-  const baseUrl = resolveServiceUrl();
+  const baseUrl = serviceUrlOverride !== undefined ? serviceUrlOverride : resolveServiceUrl();
   if (!baseUrl) return `?${query}`;
   const sep = baseUrl.includes('?') ? '&' : '?';
   return `${baseUrl}${sep}${query}`;
@@ -65,29 +71,54 @@ export function buildWebFormHtml(
   formKey: string,
   bootstrap?: any,
   bundleTarget?: string,
-  requestParams?: Record<string, string>
+  requestParams?: Record<string, string>,
+  serverTiming?: ServerTimingRecorder | null
 ): string {
-  const defJson = escapeJsonForScript(def || null);
-  const keyJson = escapeJsonForScript(formKey || def?.title || '');
-  const debugJson = isDebugEnabled() ? 'true' : 'false';
-  const bundleSrc = buildBundleSrc(bundleTarget, requestParams);
-  const cacheVersion = resolveCacheVersion();
-  const cacheVersionJson = escapeJsonForScript(cacheVersion);
-  const envTag = getUiEnvTag();
-  const envTagJson = escapeJsonForScript(envTag || null);
-  const serviceUrlJson = escapeJsonForScript(resolveServiceUrl() || null);
-
-  const bootstrapPayload = (() => {
-    if (bootstrap && typeof bootstrap === 'object') {
-      const existingEnvTag = (bootstrap as any).envTag;
-      return { ...(bootstrap as any), envTag: existingEnvTag !== undefined ? existingEnvTag : (envTag || null) };
-    }
-    return { envTag: envTag || null };
-  })();
-  const bootstrapJson = escapeJsonForScript(bootstrapPayload);
-  const requestParamsPayload =
-    requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {};
-  const requestParamsJson = escapeJsonForScript(requestParamsPayload);
+  const cacheVersion = serverTiming?.measure('template.resolveCacheVersionMs', () => resolveCacheVersion()) ?? resolveCacheVersion();
+  const envTag = serverTiming?.measure('template.resolveUiEnvTagMs', () => getUiEnvTag()) ?? getUiEnvTag();
+  const serviceUrl = serverTiming?.measure('template.resolveServiceUrlMs', () => resolveServiceUrl()) ?? resolveServiceUrl();
+  const bundleSrc =
+    serverTiming?.measure('template.buildBundleSrcMs', () => buildBundleSrc(bundleTarget, requestParams, cacheVersion, serviceUrl)) ??
+    buildBundleSrc(bundleTarget, requestParams, cacheVersion, serviceUrl);
+  const serialized =
+    serverTiming?.measure('template.serializeGlobalsMs', () => {
+      const bootstrapPayload = (() => {
+        if (bootstrap && typeof bootstrap === 'object') {
+          const existingEnvTag = (bootstrap as any).envTag;
+          return { ...(bootstrap as any), envTag: existingEnvTag !== undefined ? existingEnvTag : envTag || null };
+        }
+        return { envTag: envTag || null };
+      })();
+      const requestParamsPayload =
+        requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {};
+      return {
+        defJson: escapeJsonForScript(def || null),
+        keyJson: escapeJsonForScript(formKey || def?.title || ''),
+        debugJson: isDebugEnabled() ? 'true' : 'false',
+        bootstrapJson: escapeJsonForScript(bootstrapPayload),
+        requestParamsJson: escapeJsonForScript(requestParamsPayload),
+        cacheVersionJson: escapeJsonForScript(cacheVersion),
+        envTagJson: escapeJsonForScript(envTag || null),
+        serviceUrlJson: escapeJsonForScript(serviceUrl || null)
+      };
+    }) ?? {
+      defJson: escapeJsonForScript(def || null),
+      keyJson: escapeJsonForScript(formKey || def?.title || ''),
+      debugJson: isDebugEnabled() ? 'true' : 'false',
+      bootstrapJson: escapeJsonForScript(
+        bootstrap && typeof bootstrap === 'object'
+          ? { ...(bootstrap as any), envTag: (bootstrap as any).envTag !== undefined ? (bootstrap as any).envTag : envTag || null }
+          : { envTag: envTag || null }
+      ),
+      requestParamsJson: escapeJsonForScript(
+        requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {}
+      ),
+      cacheVersionJson: escapeJsonForScript(cacheVersion),
+      envTagJson: escapeJsonForScript(envTag || null),
+      serviceUrlJson: escapeJsonForScript(serviceUrl || null)
+    };
+  const serverTimingsJson = escapeJsonForScript(serverTiming?.snapshot() || null);
+  const { defJson, keyJson, debugJson, bootstrapJson, requestParamsJson, cacheVersionJson, envTagJson, serviceUrlJson } = serialized;
 
   return `<!DOCTYPE html>
 <html>
@@ -1363,6 +1394,7 @@ export function buildWebFormHtml(
         window.__CK_CACHE_VERSION__ = ${cacheVersionJson};
         window.__CK_ENV_TAG__ = ${envTagJson};
         window.__CK_SERVICE_URL__ = ${serviceUrlJson};
+        window.__CK_SERVER_TIMINGS__ = ${serverTimingsJson};
 
         var log = function (event, payload) {
           try {
@@ -1408,7 +1440,7 @@ export function buildWebFormHtml(
           // ignore
         }
 
-        // Start bootstrap fetch as early as possible to overlap with bundle download.
+        // Start config bootstrap fetch as early as possible for non-bundled shells.
         try {
           if (!window.__WEB_FORM_DEF__ && !window.__CK_BOOTSTRAP_PROMISE__ && window.google && window.google.script && window.google.script.run) {
             var startedAt = Date.now();
@@ -1437,6 +1469,66 @@ export function buildWebFormHtml(
                 reject(e);
               }
             });
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Start Home bootstrap fetch as early as possible to overlap with bundle download and execution.
+        try {
+          var homeKey = (window.__WEB_FORM_KEY__ || '').toString().trim();
+          var bootstrap = window.__WEB_FORM_BOOTSTRAP__ || {};
+          var hasHomeList = !!(bootstrap && bootstrap.listResponse && Array.isArray(bootstrap.listResponse.items));
+          if (homeKey && !hasHomeList && !window.__CK_HOME_BOOTSTRAP_PREFETCH__ && window.google && window.google.script && window.google.script.run) {
+            var homeStartedAt = Date.now();
+            log('home.bootstrap.prefetch.start', { formKey: homeKey || null });
+            var prefetchState = {
+              formKey: homeKey,
+              startedAt: homeStartedAt,
+              used: false,
+              promise: null
+            };
+            prefetchState.promise = new Promise(function (resolve, reject) {
+              try {
+                window.google.script.run
+                  .withSuccessHandler(function (res) {
+                    try {
+                      if (res && res.listResponse && Array.isArray(res.listResponse.items)) {
+                        var currentBootstrap = window.__WEB_FORM_BOOTSTRAP__ || {};
+                        window.__WEB_FORM_BOOTSTRAP__ = Object.assign({}, currentBootstrap, {
+                          homeRev: res.rev,
+                          listResponse: res.listResponse,
+                          records: res.records || {}
+                        });
+                      }
+                    } catch (e) {
+                      // ignore
+                    }
+                    log('home.bootstrap.prefetch.success', {
+                      formKey: homeKey || null,
+                      elapsedMs: Date.now() - homeStartedAt,
+                      rev: res && typeof res.rev !== 'undefined' ? res.rev : null,
+                      notModified: !!(res && res.notModified),
+                      cache: res && res.cache ? res.cache : null
+                    });
+                    resolve(res);
+                  })
+                  .withFailureHandler(function (err) {
+                    var msg = (err && err.message) ? err.message.toString() : (err ? err.toString() : 'unknown');
+                    log('home.bootstrap.prefetch.error', { formKey: homeKey || null, elapsedMs: Date.now() - homeStartedAt, message: msg });
+                    reject(err);
+                  })
+                  .fetchHomeBootstrap(homeKey, null);
+              } catch (e) {
+                log('home.bootstrap.prefetch.error', {
+                  formKey: homeKey || null,
+                  elapsedMs: Date.now() - homeStartedAt,
+                  message: e ? e.toString() : 'unknown'
+                });
+                reject(e);
+              }
+            });
+            window.__CK_HOME_BOOTSTRAP_PREFETCH__ = prefetchState;
           }
         } catch (e) {
           // ignore

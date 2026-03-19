@@ -29,6 +29,7 @@ import {
   renderHtmlTemplateApi,
   renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
+  consumePrefetchedHomeBootstrapApi,
   fetchBootstrapContextApi,
   fetchHomeBootstrapApi,
   fetchSortedBatch,
@@ -2951,14 +2952,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             const homeBootstrapEndMark = `ck.home.bootstrap.rpc.end.${seq}.${args.pageIndex}`;
             perfMark(homeBootstrapStartMark);
             try {
-              const bootstrapRes = await fetchHomeBootstrapApi(formKey, homeRevRef.current);
+              const prefetchedHomeBootstrap = consumePrefetchedHomeBootstrapApi(formKey);
+              const bootstrapRes = prefetchedHomeBootstrap
+                ? await prefetchedHomeBootstrap
+                : await fetchHomeBootstrapApi(formKey, homeRevRef.current);
               perfMark(homeBootstrapEndMark);
               perfMeasure('ck.home.bootstrap.rpc', homeBootstrapStartMark, homeBootstrapEndMark, {
                 formKey,
                 pageIndex: args.pageIndex,
                 rev: (bootstrapRes as any)?.rev ?? null,
                 notModified: Boolean((bootstrapRes as any)?.notModified),
-                cache: (bootstrapRes as any)?.cache || null
+                cache: (bootstrapRes as any)?.cache || null,
+                prefetched: Boolean(prefetchedHomeBootstrap)
               });
               if (seq !== listFetchSeqRef.current) {
                 return { list: { items: [] } as any, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: false };

@@ -692,6 +692,23 @@ export const fetchBootstrapContextApi = (
   return invokeTransport<BootstrapContext>('fetchBootstrapContext', formKey ?? null);
 };
 
+export const consumePrefetchedHomeBootstrapApi = (formKey: string): Promise<HomeBootstrapResponse> | null => {
+  try {
+    const globalAny = globalThis as any;
+    const prefetch = globalAny?.__CK_HOME_BOOTSTRAP_PREFETCH__;
+    if (!prefetch || prefetch.used) return null;
+    const prefetchKey = (prefetch.formKey || '').toString().trim();
+    const targetKey = (formKey || '').toString().trim();
+    if (!prefetchKey || prefetchKey !== targetKey) return null;
+    const promise = prefetch.promise;
+    if (!promise || typeof promise.then !== 'function') return null;
+    prefetch.used = true;
+    return promise as Promise<HomeBootstrapResponse>;
+  } catch (_) {
+    return null;
+  }
+};
+
 export const fetchHomeBootstrapApi = (
   formKey: string,
   clientRev?: number | null

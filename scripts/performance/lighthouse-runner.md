@@ -5,6 +5,8 @@ This document describes the `lighthouse-runner.js` helper used to collect web pe
 Use `scenario-runner.js` alongside this script when you need the concrete initial-load buckets shown in browser DevTools:
 
 - Apps Script document response time
+- Apps Script server-measured `doGet -> renderForm -> buildHtml` time
+- unattributed document-request gap (useful proxy for Apps Script platform/startup cost)
 - React bundle load time
 - first Home-page data callback load time
 - total wall-clock time until the page is usable

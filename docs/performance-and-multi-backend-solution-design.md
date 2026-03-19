@@ -161,6 +161,8 @@ The existing performance tooling is useful, but it covers two different layers:
   - Total Blocking Time
   - Lighthouse performance score
 - [`scripts/performance/scenario-runner.js`](/Users/a57321/Documents/Repos/community-kitchen/scripts/performance/scenario-runner.js) measures app-specific interaction timings:
+  - document server-measured `doGet -> renderForm -> buildHtml` timing
+  - document unattributed gap (`documentRequestMs - serverDocumentMeasuredMs`)
   - home time-to-data
   - bootstrap RPC timing
   - list fetch timing
@@ -676,7 +678,7 @@ Phase 0 work items:
    - precompute latest incomplete records
    - precompute recent activity slices
    - treat this as a performance buffer inside the current Sheets-based solution
-   - the current implementation direction is summary-first Home loading, with analytics and broader list hydration deferred until after the first usable state
+   - the current implementation direction is summary-first Home loading, with the first Home bootstrap RPC started from the shell to overlap bundle load, bundled definitions reused from exported config when available, and analytics plus broader list hydration deferred until after the first usable state
 
 7. Review spreadsheet design and archive early
    - review tabs, formulas, whole-column references, `QUERY` or `FILTER` chains, conditional formatting, and duplicated calculations

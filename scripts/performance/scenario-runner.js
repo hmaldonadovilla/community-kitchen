@@ -58,6 +58,22 @@ function toFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Number(value) : null;
 }
 
+function normalizeServerTimings(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const stepsRaw = raw.steps && typeof raw.steps === 'object' ? raw.steps : {};
+  const steps = {};
+  for (const [key, value] of Object.entries(stepsRaw)) {
+    const ms = toFiniteNumber(value);
+    if (ms === null) continue;
+    steps[key] = ms;
+  }
+  return {
+    enabled: !!raw.enabled,
+    totalMs: toFiniteNumber(raw.totalMs),
+    steps
+  };
+}
+
 function normalizeUrl(raw) {
   return (raw || '').toString().trim().toLowerCase();
 }
@@ -143,6 +159,12 @@ function extractInitialLoadNetworkBuckets({ pageSnapshot, frameSnapshot, homeRea
       ? Number(homeReadyWallClockMs) +
         Math.max(0, (firstDataEndTime ?? frameReadyTimeMs ?? 0) - (frameReadyTimeMs ?? firstDataEndTime ?? 0))
       : null;
+  const serverTimings = normalizeServerTimings(frameSnapshot?.serverTimings);
+  const serverDocumentMeasuredMs = toFiniteNumber(serverTimings?.totalMs);
+  const serverDocumentGapMs =
+    toFiniteNumber(pageNavigation?.responseEnd) !== null && serverDocumentMeasuredMs !== null
+      ? Math.max(0, Number(pageNavigation.responseEnd) - serverDocumentMeasuredMs)
+      : null;
 
   return {
     documentTtfbMs: toFiniteNumber(pageNavigation?.responseStart),
@@ -160,7 +182,10 @@ function extractInitialLoadNetworkBuckets({ pageSnapshot, frameSnapshot, homeRea
     firstPageDataRequestUrl: firstDataEntry?.name || null,
     initialDataRequestCount: dataEntries.length,
     initialDataWindowMs: allDataWindow?.spanMs ?? allDataWindow?.totalDurationMs ?? null,
-    pageUsableMs
+    pageUsableMs,
+    serverDocumentMeasuredMs,
+    serverDocumentGapMs,
+    serverTimingSteps: serverTimings?.steps || null
   };
 }
 
@@ -181,6 +206,14 @@ async function readPerformanceSnapshot(target) {
     }));
     return {
       now: asNumber(typeof performance.now === 'function' ? performance.now() : null),
+      serverTimings: (() => {
+        try {
+          const raw = (globalThis && globalThis.__CK_SERVER_TIMINGS__) || null;
+          return raw ? JSON.parse(JSON.stringify(raw)) : null;
+        } catch (_) {
+          return null;
+        }
+      })(),
       navigation: navigation
         ? {
             name: navigation.name || '',
@@ -746,7 +779,10 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
     firstPageDataRequestUrl: null,
     initialDataRequestCount: 0,
     initialDataWindowMs: null,
-    pageUsableMs: null
+    pageUsableMs: null,
+    serverDocumentMeasuredMs: null,
+    serverDocumentGapMs: null,
+    serverTimingSteps: null
   };
 
   try {
@@ -1148,6 +1184,9 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       initialDataRequestCount: initialLoadBuckets.initialDataRequestCount,
       initialDataWindowMs: initialLoadBuckets.initialDataWindowMs,
       pageUsableMs: initialLoadBuckets.pageUsableMs,
+      serverDocumentMeasuredMs: initialLoadBuckets.serverDocumentMeasuredMs,
+      serverDocumentGapMs: initialLoadBuckets.serverDocumentGapMs,
+      serverTimingSteps: initialLoadBuckets.serverTimingSteps,
       homeTimeToDataMs,
       homeBootstrapRpcMs,
       listFetchRpcMs,
@@ -1215,6 +1254,9 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
         initialDataRequestCount: initialLoadBuckets.initialDataRequestCount,
         initialDataWindowMs: initialLoadBuckets.initialDataWindowMs,
         pageUsableMs: initialLoadBuckets.pageUsableMs,
+        serverDocumentMeasuredMs: initialLoadBuckets.serverDocumentMeasuredMs,
+        serverDocumentGapMs: initialLoadBuckets.serverDocumentGapMs,
+        serverTimingSteps: initialLoadBuckets.serverTimingSteps,
         homeTimeToDataMs: findPerfDurationFirst(consoleEvents, 'ck.home.timeToData'),
         homeBootstrapRpcMs: findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc'),
         listFetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc'),
@@ -1285,6 +1327,8 @@ function summarizeRuns(runs) {
     'firstPageDataLoadMs',
     'initialDataWindowMs',
     'pageUsableMs',
+    'serverDocumentMeasuredMs',
+    'serverDocumentGapMs',
     'homeTimeToDataMs',
     'homeBootstrapRpcMs',
     'listFetchRpcMs',
@@ -1401,6 +1445,8 @@ async function main() {
     console.log(`firstPageDataLoadMs=${res.metrics?.firstPageDataLoadMs}`);
     console.log(`initialDataWindowMs=${res.metrics?.initialDataWindowMs}`);
     console.log(`pageUsableMs=${res.metrics?.pageUsableMs}`);
+    console.log(`serverDocumentMeasuredMs=${res.metrics?.serverDocumentMeasuredMs}`);
+    console.log(`serverDocumentGapMs=${res.metrics?.serverDocumentGapMs}`);
     console.log(`homeTimeToDataMs=${res.metrics?.homeTimeToDataMs}`);
     console.log(`homeBootstrapRpcMs=${res.metrics?.homeBootstrapRpcMs}`);
     console.log(`listFetchRpcMs=${res.metrics?.listFetchRpcMs}`);

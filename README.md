@@ -237,14 +237,20 @@ The repo includes two complementary performance runners:
   - captures app-specific initial-load buckets:
     - `documentTtfbMs`
     - `documentRequestMs`
+    - `serverDocumentMeasuredMs`
+    - `serverDocumentGapMs`
     - `bundleLoadMs`
     - `firstPageDataLoadMs`
     - `pageUsableMs`
-  - also captures app-level Home timings such as `homeTimeToDataMs`, `homeBootstrapRpcMs`, and `listFetchRpcMs` when perf instrumentation is enabled in non-production environments
+  - also captures:
+    - `serverTimingSteps` from the Apps Script `doGet -> renderForm -> buildHtml` path
+    - app-level Home timings such as `homeTimeToDataMs`, `homeBootstrapRpcMs`, and `listFetchRpcMs` when perf instrumentation is enabled in non-production environments
 
 Home page runtime strategy in the current Apps Script architecture:
 
 - the initial Home callback now uses a lightweight summary-first payload instead of mixing list bootstrap and analytics in the same request
+- the Apps Script shell now starts the first Home bootstrap RPC inline so it can overlap with bundle download and execution instead of waiting for React mount
+- bundled form definitions now reuse the embedded exported definition when present, and cache fallback rebuilds when they are not
 - analytics widgets that render on the list view are fetched after the first Home data is ready
 - broader recent-activity hydration and record snapshot prefetching are deferred to idle/background work so they no longer block the first usable Home state
 

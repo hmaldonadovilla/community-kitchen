@@ -31,6 +31,7 @@ import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
 import { getUiEnvTag } from './webform/envTag';
+import { ServerTimingRecorder } from './webform/serverTiming';
 import {
   applyUpdateRecordDependencyMutationsToRecord,
   evaluateUpdateRecordDependencyPreview
@@ -255,9 +256,87 @@ export class WebFormService {
     return { form: bundled.form, questions: this.filterActiveQuestions(bundled.questions) };
   }
 
+  private resolveBundledDefinitionKey(bundled: FormConfigExport): string {
+    return (
+      bundled.formKey ||
+      bundled.form?.configSheet ||
+      bundled.form?.title ||
+      '__DEFAULT__'
+    )
+      .toString()
+      .trim() || '__DEFAULT__';
+  }
+
+  private resolveEmbeddedBundledDefinition(bundled: FormConfigExport): WebFormDefinition | null {
+    const raw = bundled?.definition;
+    if (!raw || typeof raw !== 'object') return null;
+    const hasQuestions = Array.isArray((raw as any).questions) && (raw as any).questions.length > 0;
+    const hasTitle = !!(raw as any).title;
+    const hasDestinationTab = !!(raw as any).destinationTab;
+    if (!hasQuestions && !hasTitle && !hasDestinationTab) return null;
+    const normalized = cloneRecordValues(raw as WebFormDefinition);
+    const formTitle = (bundled.form?.title || '').toString().trim();
+    const destinationTab = (bundled.form?.destinationTab || '').toString().trim();
+    if (formTitle) normalized.title = formTitle;
+    if (destinationTab) normalized.destinationTab = destinationTab;
+    return normalized;
+  }
+
+  private buildBundledDefinitionCacheKey(
+    bundled: FormConfigExport,
+    activeQuestions: QuestionConfig[],
+    dedupRules: DedupRule[]
+  ): string {
+    const fingerprint = this.cacheManager.digestKey(
+      JSON.stringify({
+        form: bundled.form || {},
+        questions: activeQuestions || [],
+        dedupRules: dedupRules || []
+      })
+    );
+    return this.cacheManager.makeCacheKey('BDEF', [this.resolveBundledDefinitionKey(bundled), fingerprint]);
+  }
+
   private buildBundledDefinition(bundled: FormConfigExport): WebFormDefinition {
+    const embedded = this.resolveEmbeddedBundledDefinition(bundled);
+    if (embedded) {
+      debugLog('definition.bundle.prebuilt.hit', {
+        formKey: this.resolveBundledDefinitionKey(bundled),
+        questions: embedded.questions?.length || 0
+      });
+      return embedded;
+    }
+
     const activeQuestions = this.filterActiveQuestions(bundled.questions || []);
-    return this.definitionBuilder.buildDefinitionFromConfig(bundled.form, activeQuestions, bundled.dedupRules || []);
+    const dedupRules = bundled.dedupRules || [];
+    const cacheKey = this.buildBundledDefinitionCacheKey(bundled, activeQuestions, dedupRules);
+    const startedAt = Date.now();
+    try {
+      const cached = this.cacheManager.cacheGet<WebFormDefinition>(cacheKey);
+      if (cached) {
+        debugLog('definition.bundle.cache.hit', {
+          formKey: this.resolveBundledDefinitionKey(bundled),
+          questions: cached.questions?.length || 0,
+          elapsedMs: Date.now() - startedAt
+        });
+        return cached;
+      }
+    } catch (_) {
+      // Ignore cache read failures and rebuild below.
+    }
+
+    const definition = this.definitionBuilder.buildDefinitionFromConfig(bundled.form, activeQuestions, dedupRules);
+    try {
+      this.cacheManager.cachePut(cacheKey, definition, 60 * 60 * 24);
+      debugLog('definition.bundle.cache.miss', {
+        formKey: this.resolveBundledDefinitionKey(bundled),
+        questions: definition.questions?.length || 0,
+        elapsedMs: Date.now() - startedAt
+      });
+    } catch (_) {
+      // Ignore cache write failures; definition is still valid for this request.
+    }
+    return definition;
   }
 
   private resolveDedupRules(formKey?: string, form?: FormConfig): DedupRule[] {
@@ -577,15 +656,35 @@ export class WebFormService {
     return items;
   }
 
-  public renderForm(formKey?: string, params?: Record<string, any>): GoogleAppsScript.HTML.HtmlOutput {
+  public renderForm(
+    formKey?: string,
+    params?: Record<string, any>,
+    serverTiming?: ServerTimingRecorder | null
+  ): GoogleAppsScript.HTML.HtmlOutput {
     const targetKey = (formKey || '').toString().trim();
     const bundleTarget = ((params as any)?.app ?? (params as any)?.page ?? '').toString().trim();
-    const serverListBootstrapEnabled = (() => {
+    const serverListBootstrapEnabled = serverTiming?.measure('renderForm.resolveServerListBootstrapMs', () => {
+      const raw = ((params as any)?.serverListBootstrap ?? (params as any)?.bootstrapList ?? '').toString().trim().toLowerCase();
+      if (!raw) return false;
+      return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+    }) ?? (() => {
       const raw = ((params as any)?.serverListBootstrap ?? (params as any)?.bootstrapList ?? '').toString().trim().toLowerCase();
       if (!raw) return false;
       return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
     })();
-    const requestParams = (() => {
+    const requestParams = serverTiming?.measure('renderForm.normalizeRequestParamsMs', () => {
+      if (!params || typeof params !== 'object') return {} as Record<string, string>;
+      const out: Record<string, string> = {};
+      Object.keys(params).forEach(key => {
+        if (!key) return;
+        const raw = (params as any)[key];
+        if (raw === undefined || raw === null) return;
+        const value = raw.toString();
+        if (!value) return;
+        out[key] = value;
+      });
+      return out;
+    }) ?? (() => {
       if (!params || typeof params !== 'object') return {} as Record<string, string>;
       const out: Record<string, string> = {};
       Object.keys(params).forEach(key => {
@@ -598,9 +697,14 @@ export class WebFormService {
       });
       return out;
     })();
-    const bundled = this.resolveBundledConfig(targetKey || undefined);
-    const configEnv = getBundledConfigEnv() || undefined;
-    const envTag = getUiEnvTag() || undefined;
+    const bundled = serverTiming?.measure('renderForm.resolveBundledConfigMs', () => this.resolveBundledConfig(targetKey || undefined))
+      ?? this.resolveBundledConfig(targetKey || undefined);
+    const configEnv =
+      serverTiming?.measure('renderForm.resolveBundledConfigEnvMs', () => getBundledConfigEnv() || undefined) ??
+      (getBundledConfigEnv() || undefined);
+    const envTag =
+      serverTiming?.measure('renderForm.resolveUiEnvTagMs', () => getUiEnvTag() || undefined) ??
+      (getUiEnvTag() || undefined);
 
     const mode = bundled ? 'react-embedded' : 'react-shell';
     debugLog('renderForm.start', {
@@ -611,8 +715,12 @@ export class WebFormService {
     });
 
     const html = (() => {
-      if (!bundled) return buildReactShellTemplate(targetKey, bundleTarget, requestParams);
-      const def = this.buildBundledDefinition(bundled);
+      if (!bundled) {
+        return serverTiming?.measure('renderForm.buildShellHtmlMs', () => buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming))
+          ?? buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming);
+      }
+      const def = serverTiming?.measure('renderForm.buildBundledDefinitionMs', () => this.buildBundledDefinition(bundled))
+        ?? this.buildBundledDefinition(bundled);
       const resolvedKey =
         targetKey ||
         bundled.formKey ||
@@ -620,7 +728,8 @@ export class WebFormService {
         bundled.form?.title ||
         '__DEFAULT__';
       const canonicalKey = this.resolveCanonicalFormKey(resolvedKey) || resolvedKey;
-      const homeRev = this.readHomeRevision(canonicalKey);
+      const homeRev = serverTiming?.measure('renderForm.readHomeRevisionMs', () => this.readHomeRevision(canonicalKey))
+        ?? this.readHomeRevision(canonicalKey);
       const bootstrapPayload = { configSource: 'bundled', configEnv, envTag, homeRev } as any;
 
       if (serverListBootstrapEnabled) {
@@ -653,7 +762,10 @@ export class WebFormService {
           reason: 'disabled'
         });
       }
-      return buildReactTemplate(def, resolvedKey, bootstrapPayload, bundleTarget, requestParams);
+      return serverTiming?.measure(
+        'renderForm.buildEmbeddedHtmlMs',
+        () => buildReactTemplate(def, resolvedKey, bootstrapPayload, bundleTarget, requestParams, serverTiming)
+      ) ?? buildReactTemplate(def, resolvedKey, bootstrapPayload, bundleTarget, requestParams, serverTiming);
     })();
 
     debugLog('renderForm.htmlBuilt', {
@@ -663,7 +775,8 @@ export class WebFormService {
       hasInitCall: html.includes('init();'),
       scriptCloseCount: (html.match(/<\/script/gi) || []).length
     });
-    const output = HtmlService.createHtmlOutput(html);
+    const output = serverTiming?.measure('renderForm.createHtmlOutputMs', () => HtmlService.createHtmlOutput(html))
+      ?? HtmlService.createHtmlOutput(html);
     output.setTitle(targetKey || 'Community Kitchen');
     return output;
   }

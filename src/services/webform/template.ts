@@ -1,20 +1,23 @@
 import { WebFormDefinition } from '../../types';
 import { buildWebFormHtml } from '../WebFormTemplate';
+import { ServerTimingRecorder } from './serverTiming';
 
 export const buildReactTemplate = (
   def: WebFormDefinition,
   formKey: string,
   bootstrap?: any,
   bundleTarget?: string,
-  requestParams?: Record<string, string>
+  requestParams?: Record<string, string>,
+  serverTiming?: ServerTimingRecorder | null
 ): string => {
-  return buildWebFormHtml(def, formKey, bootstrap, bundleTarget, requestParams);
+  return buildWebFormHtml(def, formKey, bootstrap, bundleTarget, requestParams, serverTiming);
 };
 
 export const buildReactShellTemplate = (
   formKey: string,
   bundleTarget?: string,
-  requestParams?: Record<string, string>
+  requestParams?: Record<string, string>,
+  serverTiming?: ServerTimingRecorder | null
 ): string => {
-  return buildWebFormHtml(null, formKey, null, bundleTarget, requestParams);
+  return buildWebFormHtml(null, formKey, null, bundleTarget, requestParams, serverTiming);
 };
