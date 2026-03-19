@@ -81,6 +81,94 @@ CI (GitHub Actions):
    - Optional: `CLASP_DEPLOYMENT_ID` to update a specific web app deployment
 2. Run the **Deploy Apps Script** workflow (manual `workflow_dispatch`).
 
+## 2d. Optional: Cloud Run + Firestore backend bootstrap
+
+Use this only as optional backend preparation so Cloud Run + Firestore can be provisioned and deployed from the CLI in the same env-driven style as `clasp`.
+
+Important positioning:
+
+- this is not the default flow for the current performance work
+- Phase 0 and Phase 1 of the current plan are still executed inside the Apps Script architecture
+- keep using the Apps Script deployment flow as the normal path unless the post-measurement decision gate says the project should move to the HTTP API phase
+
+1. Install Google Cloud CLI:
+   - macOS: `brew install --cask google-cloud-sdk`
+   - Other platforms: follow the official installer instructions at `https://cloud.google.com/sdk/docs/install`
+2. Authenticate the CLI:
+
+   ```bash
+   gcloud auth login
+   gcloud auth login --update-adc
+   ```
+   - If you are on a machine without a browser, use `gcloud auth login --no-browser --update-adc`.
+   - If Google Cloud CLI warns that your Application Default Credentials quota project does not match the active project, fix it with:
+
+     ```bash
+     gcloud auth application-default set-quota-project <your-project-id>
+     ```
+
+3. Create a local env file:
+
+   ```bash
+   cp .env.gcp.example .env.gcp.staging
+   ```
+   - Repeat with `.env.gcp.stage-two` or `.env.gcp.prod` for additional environments.
+
+4. Update `.env.gcp.<env>` with your Google Cloud values:
+   - `DEPLOY_ENV=staging|stage-two|prod`
+   - `GCP_PROJECT_ID=<your-project-id>`
+   - `GCP_REGION=europe-west1`
+   - `GCP_FIRESTORE_DATABASE=(default)`
+   - `GCP_FIRESTORE_LOCATION=eur3`
+   - `GCP_CLOUD_RUN_SERVICE=community-kitchen-api-<env>`
+   - `GCP_CLOUD_RUN_SOURCE_DIR=cloud-run/api`
+   - `GCP_RUNTIME_SERVICE_ACCOUNT_ID=<runtime-service-account-id>`
+   - `GCP_ALLOW_UNAUTHENTICATED=1`
+   - Example values used in this repo:
+     - staging: `GCP_CLOUD_RUN_SERVICE=community-kitchen-api-staging`, `GCP_RUNTIME_SERVICE_ACCOUNT_ID=community-kitchen-api-staging`
+     - stage-two: `GCP_CLOUD_RUN_SERVICE=community-kitchen-api-stage-two`, `GCP_RUNTIME_SERVICE_ACCOUNT_ID=ck-api-stage-two`
+     - prod: `GCP_CLOUD_RUN_SERVICE=community-kitchen-api-prod`, `GCP_RUNTIME_SERVICE_ACCOUNT_ID=community-kitchen-api-prod`
+   - Keep service account IDs within Google Cloud's length limit. `community-kitchen-api-stage-two` is too long, which is why the `stage-two` environment uses `ck-api-stage-two`.
+
+5. Provision the backend resources:
+
+   ```bash
+   DEPLOY_ENV=staging npm run gcp:setup
+   ```
+
+   This command:
+   - enables the required Google Cloud APIs
+   - creates the Firestore database if it does not exist
+   - creates the Cloud Run runtime service account if it does not exist
+   - grants `roles/datastore.user` to the runtime service account
+   - grants `roles/run.builder` to the project's default build service account
+   - Run the setup commands sequentially per environment. `gcloud config set project ...` changes the active project globally, so parallel runs can report the wrong project state.
+
+6. Deploy the placeholder Cloud Run service:
+
+   ```bash
+   DEPLOY_ENV=staging npm run deploy:cloud-run
+   ```
+
+   The placeholder service source is in `cloud-run/api/` and returns JSON from `/` and `/statusz`. It is only used to validate that deployment, IAM, and Firestore wiring are working before application endpoints are implemented.
+   - When `GCP_ALLOW_UNAUTHENTICATED=1`, the deploy script uses `--no-invoker-iam-check` rather than `allUsers` IAM binding. This avoids the common Workspace org-policy failure where public IAM members are blocked.
+   - On the first deploy in a fresh project, `gcloud` prompts to create the `cloud-run-source-deploy` Artifact Registry repository in the selected region. Confirm with `y`.
+   - Verify the deployed placeholder service after deploy:
+     - copy the `Service URL` printed by the command
+     - run `curl <service-url>/`
+
+7. Inspect the backend status:
+
+   ```bash
+   DEPLOY_ENV=staging npm run gcp:status
+   ```
+   - For this repository's environments:
+     - `DEPLOY_ENV=staging npm run gcp:status`
+     - `DEPLOY_ENV=stage-two npm run gcp:status`
+     - `DEPLOY_ENV=prod npm run gcp:status`
+
+8. Keep using `npm run deploy:apps-script` for the public Apps Script web app. The Cloud Run deploy is an optional backend-preparation step and does not replace the existing staging Apps Script deployment flow.
+
 ## 3. Create a Google Sheet
 
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new blank spreadsheet.

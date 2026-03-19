@@ -11,10 +11,12 @@ perf-results/
 .clasprc.json
 .env
 .env.deploy
-.env.deploy.staging
-.env.deploy.prod
+.env.deploy.*
+.env.gcp
+.env.gcp.*
 .clasp.staging.json
 .clasp.prod.json
+.clasp.stage-2.json
 
 .vscode/
 # Snyk Security Extension - AI Rules (auto-generated)

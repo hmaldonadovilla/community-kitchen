@@ -188,6 +188,45 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
   - Optionally add `CLASP_DEPLOYMENT_ID` to update a specific web app deployment.
   - Run the **Deploy Apps Script** workflow (manual trigger).
 
+### Optional: Cloud Run + Firestore backend bootstrap
+
+The project includes optional backend-preparation scripts for Cloud Run + Firestore, using env-specific files in the same style as the existing `clasp` flow.
+
+Important positioning:
+
+- this is prepared infrastructure, not the default execution path for the current performance work
+- the current implementation plan starts with Apps Script-based Phase 0 and Phase 1 work
+- use this setup only if and when the post-measurement decision gate says the project should proceed to the HTTP API phase
+
+1. Install Google Cloud CLI and authenticate:
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+2. Copy `.env.gcp.example` to `.env.gcp.<env>` (for example `.env.gcp.staging`, `.env.gcp.stage-two`, or `.env.gcp.prod`) and fill in:
+   - `GCP_PROJECT_ID`
+   - `GCP_REGION`
+   - `GCP_FIRESTORE_DATABASE`
+   - `GCP_FIRESTORE_LOCATION`
+   - `GCP_CLOUD_RUN_SERVICE`
+   - `GCP_RUNTIME_SERVICE_ACCOUNT_ID`
+3. Provision the backend resources:
+   ```bash
+   DEPLOY_ENV=staging npm run gcp:setup
+   ```
+   This enables the required APIs, creates the Firestore database if needed, creates the Cloud Run runtime service account, and grants Firestore access to that service account.
+4. Deploy the placeholder Cloud Run service:
+   ```bash
+   DEPLOY_ENV=staging npm run deploy:cloud-run
+   ```
+   When `GCP_ALLOW_UNAUTHENTICATED=1`, the deploy script uses `--no-invoker-iam-check` so public access still works in Google Workspace environments that block `allUsers` IAM bindings.
+5. Check the configured backend state at any time:
+   ```bash
+   DEPLOY_ENV=staging npm run gcp:status
+   ```
+
+The placeholder service lives in `cloud-run/api/` and currently exposes `/` and `/statusz`. It is only an optional bootstrap target so we can validate project setup, IAM, and CLI deploys before moving real application data APIs into Cloud Run.
+
 ## Setup
 
 1. **Install Dependencies**:

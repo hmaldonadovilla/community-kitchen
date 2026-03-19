@@ -1,0 +1,12 @@
+{
+  "name": "community-kitchen-cloud-run-api",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Minimal Cloud Run bootstrap service for Community Kitchen",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
