@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 
+type DrawerAction = {
+  id: string;
+  label: string;
+  onClick: () => void;
+  placement?: 'main' | 'secondary' | 'footer';
+};
+
 export const AppHeader: React.FC<{
   title: string;
   /**
@@ -15,8 +22,9 @@ export const AppHeader: React.FC<{
   language: LangCode;
   onLanguageChange: (nextLanguage: string) => void;
   onRefresh: () => void;
+  drawerActions?: DrawerAction[];
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-}> = ({ title, titleRight, logoUrl, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh, onDiagnostic }) => {
+}> = ({ title, titleRight, logoUrl, buildMarker, isMobile, languages, language, onLanguageChange, onRefresh, drawerActions, onDiagnostic }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -121,6 +129,18 @@ export const AppHeader: React.FC<{
   }, [drawerOpen]);
 
   const showLogo = !!logoSrc && !logoFailed;
+  const mainDrawerActions = useMemo(
+    () => (Array.isArray(drawerActions) ? drawerActions.filter(action => action?.placement === 'main') : []),
+    [drawerActions]
+  );
+  const secondaryDrawerActions = useMemo(
+    () => (Array.isArray(drawerActions) ? drawerActions.filter(action => action?.placement === 'secondary') : []),
+    [drawerActions]
+  );
+  const footerDrawerActions = useMemo(
+    () => (Array.isArray(drawerActions) ? drawerActions.filter(action => action?.placement === 'footer') : []),
+    [drawerActions]
+  );
 
   const renderAvatar = (size: 'header' | 'drawer') => {
     if (showLogo && logoSrc) {
@@ -204,58 +224,112 @@ export const AppHeader: React.FC<{
               {renderAvatar('drawer')}
               <div className="ck-app-drawer-brand-text">
                 <div className="ck-app-drawer-brand-title">{title || 'Form'}</div>
-            <div className="ck-app-drawer-brand-subtitle muted">{tSystem('app.menu', language, 'Menu')}</div>
+                <div className="ck-app-drawer-brand-subtitle muted">{tSystem('app.menu', language, 'Menu')}</div>
               </div>
             </div>
             <button
               type="button"
               className="ck-app-drawer-close"
               onClick={() => setDrawerOpen(false)}
-          aria-label={tSystem('app.closeMenu', language, 'Close menu')}
+              aria-label={tSystem('app.closeMenu', language, 'Close menu')}
             >
               ×
             </button>
           </div>
 
-	          <div className="ck-app-drawer-section">
-	            <button
-	              type="button"
-	              className="ck-app-drawer-item ck-app-drawer-item--primary"
-	              onClick={() => {
-	                setDrawerOpen(false);
-	                onRefresh();
-	              }}
+          <div className="ck-app-drawer-section">
+            <button
+              type="button"
+              className="ck-app-drawer-item ck-app-drawer-item--primary"
+              onClick={() => {
+                setDrawerOpen(false);
+                onRefresh();
+              }}
             >
-          ⟳ {tSystem('app.refresh', language, 'Refresh')}
+              ⟳ {tSystem('app.refresh', language, 'Refresh')}
             </button>
           </div>
 
-      {languages.length > 1 ? (
-        <div className="ck-app-drawer-section">
-          <div className="ck-app-drawer-section-title muted">{tSystem('app.language', language, 'Language')}</div>
-          <select
-            className="ck-app-drawer-select"
-            value={language}
-            onChange={e => onLanguageChange(e.target.value)}
-            aria-label={tSystem('app.selectLanguage', language, 'Select language')}
-          >
-            {(languages.length ? languages : ['EN']).map(lang => (
-              <option key={lang} value={lang}>
-                {lang}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+          {mainDrawerActions.length ? (
+            <div className="ck-app-drawer-section">
+              {mainDrawerActions.map(action => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="ck-app-drawer-item"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    action.onClick();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {languages.length > 1 ? (
+            <div className="ck-app-drawer-section">
+              <div className="ck-app-drawer-section-title muted">{tSystem('app.language', language, 'Language')}</div>
+              <select
+                className="ck-app-drawer-select"
+                value={language}
+                onChange={e => onLanguageChange(e.target.value)}
+                aria-label={tSystem('app.selectLanguage', language, 'Select language')}
+              >
+                {(languages.length ? languages : ['EN']).map(lang => (
+                  <option key={lang} value={lang}>
+                    {lang}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {secondaryDrawerActions.length ? (
+            <div className="ck-app-drawer-section">
+              {secondaryDrawerActions.map(action => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="ck-app-drawer-item"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    action.onClick();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <div className="ck-app-drawer-section">
-        <div className="ck-app-drawer-section-title muted">{tSystem('app.build', language, 'Build')}</div>
+            <div className="ck-app-drawer-section-title muted">{tSystem('app.build', language, 'Build')}</div>
             <div className="ck-app-drawer-build">{buildMarker}</div>
           </div>
+
+          <div className="ck-app-drawer-spacer" aria-hidden="true" />
+
+          {footerDrawerActions.length ? (
+            <div className="ck-app-drawer-section">
+              {footerDrawerActions.map(action => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="ck-app-drawer-item"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    action.onClick();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </>
   );
 };
-
-

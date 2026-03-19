@@ -31,4 +31,10 @@ describe('WebFormTemplate', () => {
 
     expect(html).toContain('bundle=react&app=meal-production&v=cache-v-test&ts=1741513400');
   });
+
+  test('exposes the service url to the client bootstrap globals', () => {
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'landing');
+
+    expect(html).toContain('window.__CK_SERVICE_URL__ = "https://script.google.com/macros/s/example-deployment/exec"');
+  });
 });

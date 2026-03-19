@@ -29,6 +29,7 @@ import {
   renderHtmlTemplateApi,
   renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
+  fetchBootstrapContextApi,
   fetchHomeBootstrapApi,
   fetchSortedBatch,
   ListSort,
@@ -48,6 +49,7 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { ListViewLegend } from './components/app/ListViewLegend';
+import { AnalyticsOverlay } from './components/app/AnalyticsOverlay';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
@@ -108,6 +110,7 @@ import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
+import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
 import {
   buildFieldIdMap,
   filterDedupRulesForPrecheck,
@@ -2402,6 +2405,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
     return Number.isFinite(rev) && rev >= 0 ? rev : 0;
   });
+  const [analyticsOverlayOpen, setAnalyticsOverlayOpen] = useState(false);
+  const [analyticsOverlayLoading, setAnalyticsOverlayLoading] = useState(false);
+  const [analyticsOverlayError, setAnalyticsOverlayError] = useState<string | null>(null);
+  const analyticsOverlayRequestRef = useRef(0);
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
@@ -8320,6 +8327,76 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       </>
     );
   }, [headerEnvTag, headerSaveIndicator]);
+  const headerServiceUrl = useMemo(() => resolveServiceUrl(), []);
+  const headerAdminEnabled = useMemo(() => resolveAdminEnabled(), []);
+  const hasAnalyticsPageWidgets = useMemo(() => {
+    const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
+    return widgets.some(widget => {
+      const placements = Array.isArray(widget?.placements) ? widget.placements : ['analyticsPage'];
+      return placements.some(token => (token || '').toString().trim() === 'analyticsPage');
+    });
+  }, [definition.analytics?.widgets]);
+  const openAnalyticsOverlay = useCallback(() => {
+    setAnalyticsOverlayOpen(true);
+    setAnalyticsOverlayError(null);
+    setAnalyticsOverlayLoading(true);
+    const requestId = analyticsOverlayRequestRef.current + 1;
+    analyticsOverlayRequestRef.current = requestId;
+    logEvent('ui.header.drawer.analytics.open', { formKey, requestId });
+    fetchBootstrapContextApi(formKey)
+      .then(res => {
+        if (analyticsOverlayRequestRef.current !== requestId) return;
+        const snapshot = ((res as any)?.analytics || null) as any;
+        setAnalyticsSnapshot(snapshot);
+        const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
+        setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
+        logEvent('ui.header.drawer.analytics.ready', {
+          formKey,
+          itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+          requestId
+        });
+      })
+      .catch((err: any) => {
+        if (analyticsOverlayRequestRef.current !== requestId) return;
+        const message = resolveUserFacingErrorMessage(err, 'Failed to load analytics.');
+        setAnalyticsOverlayError(message);
+        logEvent('ui.header.drawer.analytics.error', { formKey, message, requestId });
+      })
+      .finally(() => {
+        if (analyticsOverlayRequestRef.current !== requestId) return;
+        setAnalyticsOverlayLoading(false);
+      });
+  }, [formKey, logEvent]);
+  const closeAnalyticsOverlay = useCallback(() => {
+    setAnalyticsOverlayOpen(false);
+    setAnalyticsOverlayLoading(false);
+    setAnalyticsOverlayError(null);
+    logEvent('ui.header.drawer.analytics.close', { formKey });
+  }, [formKey, logEvent]);
+  const drawerActions = useMemo(() => {
+    const actions: Array<{ id: string; label: string; onClick: () => void; placement?: 'main' | 'secondary' | 'footer' }> = [];
+    if (hasAnalyticsPageWidgets) {
+      actions.push({
+        id: 'analytics',
+        label: tSystem('app.analytics', language, 'Analytics'),
+        placement: 'secondary',
+        onClick: () => {
+          openAnalyticsOverlay();
+        }
+      });
+    }
+    actions.push({
+      id: 'landing',
+      label: tSystem('app.forms', language, 'Forms'),
+      placement: 'footer',
+      onClick: () => {
+        const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
+        logEvent('ui.header.drawer.landing.navigate', { targetUrl });
+        navigateToTopLevel(targetUrl);
+      }
+    });
+    return actions;
+  }, [hasAnalyticsPageWidgets, headerAdminEnabled, headerServiceUrl, language, openAnalyticsOverlay]);
 
   const dedupDialogConflict = useMemo(() => {
     const conflict = (dedupConflict || dedupNotice) as any;
@@ -8996,6 +9073,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setLanguage(next);
         }}
         onRefresh={handleGlobalRefresh}
+        drawerActions={drawerActions}
         onDiagnostic={logEvent}
       />
 
@@ -9142,6 +9220,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onSelect={handleRecordSelect}
         />
       )}
+
+      <AnalyticsOverlay
+        open={analyticsOverlayOpen}
+        language={language}
+        title={tSystem('app.analytics', language, 'Analytics')}
+        subtitle={definition.title || formKey || ''}
+        items={Array.isArray((analyticsSnapshot as any)?.items) ? ((analyticsSnapshot as any).items as any[]) : []}
+        loading={analyticsOverlayLoading}
+        error={analyticsOverlayError}
+        updatedAt={(analyticsSnapshot as any)?.updatedAt || ''}
+        onClose={closeAnalyticsOverlay}
+      />
 
       <BlockingOverlay
         open={dedupProgress.open}

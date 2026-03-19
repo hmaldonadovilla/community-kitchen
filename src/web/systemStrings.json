@@ -2,6 +2,8 @@
   "app": {
     "menu": { "en": "Menu", "fr": "Menu", "nl": "Menu" },
     "refresh": { "en": "Refresh", "fr": "Actualiser", "nl": "Vernieuwen" },
+    "analytics": { "en": "Analytics", "fr": "Analytique", "nl": "Analyse" },
+    "forms": { "en": "Forms", "fr": "Formulaires", "nl": "Formulieren" },
     "language": { "en": "Language", "fr": "Langue", "nl": "Taal" },
     "build": { "en": "Build", "fr": "Version", "nl": "Versie" },
     "bottomActions": { "en": "Bottom actions", "fr": "Actions", "nl": "Acties" },
@@ -21,6 +23,18 @@
       "en": "We could not load this right now. Tap the app logo in the top left, then tap Refresh.",
       "fr": "Impossible de charger pour le moment. Touchez le logo de l’application en haut à gauche, puis touchez Actualiser.",
       "nl": "We kunnen dit nu niet laden. Tik op het app-logo linksboven en tik daarna op Vernieuwen."
+    }
+  },
+  "analytics": {
+    "updated": {
+      "en": "Updated: {value}",
+      "fr": "Mis a jour : {value}",
+      "nl": "Bijgewerkt: {value}"
+    },
+    "empty": {
+      "en": "No analytics widgets are configured.",
+      "fr": "Aucun widget analytique n'est configure.",
+      "nl": "Er zijn geen analysewidgets geconfigureerd."
     }
   },
   "draft": {

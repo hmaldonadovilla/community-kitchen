@@ -75,6 +75,7 @@ export function buildWebFormHtml(
   const cacheVersionJson = escapeJsonForScript(cacheVersion);
   const envTag = getUiEnvTag();
   const envTagJson = escapeJsonForScript(envTag || null);
+  const serviceUrlJson = escapeJsonForScript(resolveServiceUrl() || null);
 
   const bootstrapPayload = (() => {
     if (bootstrap && typeof bootstrap === 'object') {
@@ -327,7 +328,7 @@ export function buildWebFormHtml(
       .ck-app-drawer-overlay {
         position: fixed;
         inset: 0;
-        z-index: 80;
+        z-index: 2200;
         background: transparent;
         pointer-events: none;
         transition: background 180ms ease;
@@ -347,7 +348,7 @@ export function buildWebFormHtml(
         box-shadow: none;
         transform: translateX(-104%);
         transition: transform 220ms ease;
-        padding: calc(16px + var(--safe-top)) 16px 16px;
+        padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom) + var(--vv-bottom));
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -405,6 +406,10 @@ export function buildWebFormHtml(
         display: flex;
         flex-direction: column;
         gap: 10px;
+      }
+      .ck-app-drawer-spacer {
+        flex: 1 0 24px;
+        min-height: 24px;
       }
       .ck-app-drawer-section-title {
         font-weight: 600;
@@ -1357,6 +1362,7 @@ export function buildWebFormHtml(
         window.__WEB_FORM_REQUEST_PARAMS__ = ${requestParamsJson};
         window.__CK_CACHE_VERSION__ = ${cacheVersionJson};
         window.__CK_ENV_TAG__ = ${envTagJson};
+        window.__CK_SERVICE_URL__ = ${serviceUrlJson};
 
         var log = function (event, payload) {
           try {
