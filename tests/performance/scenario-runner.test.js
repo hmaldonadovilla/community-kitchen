@@ -1,5 +1,6 @@
 const {
   extractInitialLoadNetworkBuckets,
+  findPerfDuration,
   isBundleResourceEntry,
   isHomeDataRequestEntry,
 } = require('../../scripts/performance/scenario-runner.js');
@@ -79,5 +80,22 @@ describe('scenario-runner network buckets', () => {
     expect(metrics.pageUsableMs).toBe(12640);
     expect(metrics.bundleRequestUrl).toContain('bundle=react');
     expect(metrics.firstPageDataRequestUrl).toContain('callback?nocache_id=6');
+  });
+
+  test('falls back to elapsedMs when durationMs is zero', () => {
+    const duration = findPerfDuration(
+      [
+        {
+          args: [
+            '[ReactForm][perf]',
+            'ck.home.timeToData',
+            { durationMs: 0, elapsedMs: 5123 },
+          ],
+          text: '',
+        },
+      ],
+      'ck.home.timeToData'
+    );
+    expect(duration).toBe(5123);
   });
 });

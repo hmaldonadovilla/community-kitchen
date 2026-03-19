@@ -222,6 +222,17 @@ const collectDedupKeyFieldIds = (rulesRaw: any): string[] => {
   return out;
 };
 
+const getPerfNow = (): number => {
+  try {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+  } catch (_) {
+    // ignore
+  }
+  return Date.now();
+};
+
 const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
   const map: Record<string, true> = {};
   collectDedupKeyFieldIds(rulesRaw).forEach(id => {
@@ -660,8 +671,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
   const [ingredientNameBlurredForAutoSave, setIngredientNameBlurredForAutoSave] = useState<boolean>(false);
   const autoSaveNoticeSeenRef = useRef<boolean>(false);
-  const homeLoadStartedAtRef = useRef<number>(Date.now());
+  const homeLoadStartedAtRef = useRef<number>(getPerfNow());
   const homeTimeToDataMeasuredRef = useRef(false);
+  const homePerfInitialisedRef = useRef(false);
   const openRecordPerfRef = useRef<{ recordId: string; startedAt: number; startMark: string } | null>(null);
   const backToHomePerfRef = useRef<{ trigger: string; startedAt: number; startMark: string } | null>(null);
   const logEvent = useCallback(
@@ -2459,7 +2471,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [formKey, homeListLocalCacheKey, initialHomeListResponse, initialHomeListSource, logEvent]);
 
   useEffect(() => {
-    homeLoadStartedAtRef.current = Date.now();
+    if (!homePerfInitialisedRef.current) {
+      homePerfInitialisedRef.current = true;
+      homeTimeToDataMeasuredRef.current = false;
+      perfMark(`ck.home.timeToData.start.${formKey}.${language}`);
+      return;
+    }
+    homeLoadStartedAtRef.current = getPerfNow();
     homeTimeToDataMeasuredRef.current = false;
     perfMark(`ck.home.timeToData.start.${formKey}.${language}`);
   }, [formKey, language, perfMark]);
@@ -2484,8 +2502,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const firstCount = listCache.response?.items?.length || 0;
     if (firstCount <= 0) return;
     homeTimeToDataMeasuredRef.current = true;
-    const measuredAtMs = Date.now();
-    setHomeFirstDataReadyAtMs(prev => (prev > 0 ? prev : measuredAtMs));
+    const measuredAtMs = getPerfNow();
+    setHomeFirstDataReadyAtMs(prev => (prev > 0 ? prev : Date.now()));
     const startMark = `ck.home.timeToData.start.${formKey}.${language}`;
     const endMark = `ck.home.timeToData.end.${formKey}.${language}`;
     perfMark(endMark);

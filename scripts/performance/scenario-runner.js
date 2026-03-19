@@ -344,11 +344,16 @@ function findPerfDuration(events, name) {
     const a0 = ev.args?.[0];
     const a1 = ev.args?.[1];
     const a2 = ev.args?.[2];
-    if (a0 === '[ReactForm][perf]' && a1 === name && a2 && typeof a2.durationMs === 'number') {
-      return Number(a2.durationMs);
+    if (a0 === '[ReactForm][perf]' && a1 === name && a2) {
+      if (typeof a2.durationMs === 'number' && a2.durationMs > 0) {
+        return Number(a2.durationMs);
+      }
+      if (typeof a2.elapsedMs === 'number' && a2.elapsedMs > 0) {
+        return Number(a2.elapsedMs);
+      }
     }
     if (typeof ev.text === 'string' && ev.text.includes(name)) {
-      const m = ev.text.match(/durationMs[:=]\s*(\d+(?:\.\d+)?)/i);
+      const m = ev.text.match(/(?:durationMs|elapsedMs)[:=]\s*(\d+(?:\.\d+)?)/i);
       if (m) return Number(m[1]);
     }
   }
@@ -361,11 +366,16 @@ function findPerfDurationFirst(events, name) {
     const a0 = ev.args?.[0];
     const a1 = ev.args?.[1];
     const a2 = ev.args?.[2];
-    if (a0 === '[ReactForm][perf]' && a1 === name && a2 && typeof a2.durationMs === 'number') {
-      return Number(a2.durationMs);
+    if (a0 === '[ReactForm][perf]' && a1 === name && a2) {
+      if (typeof a2.durationMs === 'number' && a2.durationMs > 0) {
+        return Number(a2.durationMs);
+      }
+      if (typeof a2.elapsedMs === 'number' && a2.elapsedMs > 0) {
+        return Number(a2.elapsedMs);
+      }
     }
     if (typeof ev.text === 'string' && ev.text.includes(name)) {
-      const m = ev.text.match(/durationMs[:=]\s*(\d+(?:\.\d+)?)/i);
+      const m = ev.text.match(/(?:durationMs|elapsedMs)[:=]\s*(\d+(?:\.\d+)?)/i);
       if (m) return Number(m[1]);
     }
   }
@@ -1101,7 +1111,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       navBackManualMs = Date.now() - navBackStartedAt;
     }
 
-    const homeTimeToDataRaw = findPerfDuration(consoleEvents, 'ck.home.timeToData');
+    const homeTimeToDataRaw = findPerfDurationFirst(consoleEvents, 'ck.home.timeToData');
     const homeBootstrapRpcMs = findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc');
     const listFetchRpcMs = findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc');
     const listRecordsPrefetchRpcMs = findPerfDurationFirst(consoleEvents, 'ck.list.records.prefetch.rpc');
@@ -1205,7 +1215,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
         initialDataRequestCount: initialLoadBuckets.initialDataRequestCount,
         initialDataWindowMs: initialLoadBuckets.initialDataWindowMs,
         pageUsableMs: initialLoadBuckets.pageUsableMs,
-        homeTimeToDataMs: findPerfDuration(consoleEvents, 'ck.home.timeToData'),
+        homeTimeToDataMs: findPerfDurationFirst(consoleEvents, 'ck.home.timeToData'),
         homeBootstrapRpcMs: findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc'),
         listFetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.fetch.rpc'),
         listRecordsPrefetchRpcMs: findPerfDurationFirst(consoleEvents, 'ck.list.records.prefetch.rpc'),
@@ -1437,6 +1447,8 @@ if (require.main === module) {
 module.exports = {
   buildEntryWindow,
   extractInitialLoadNetworkBuckets,
+  findPerfDuration,
+  findPerfDurationFirst,
   isBundleResourceEntry,
   isHomeDataRequestEntry,
   summarizeRuns
