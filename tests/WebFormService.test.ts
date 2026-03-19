@@ -10,8 +10,7 @@ describe('WebFormService', () => {
     ss = new MockSpreadsheet();
     service = new WebFormService(ss as any);
 
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 
     const followupJson = JSON.stringify({
       appHeader: { logoUrl: 'https://assets.example.test/community-kitchen.png' },
@@ -156,8 +155,7 @@ describe('WebFormService', () => {
   });
 
   test('listViewMetaColumns: [] disables meta columns (no Updated column)', () => {
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 
     const followupJson = JSON.stringify({
       listViewMetaColumns: []
@@ -206,8 +204,7 @@ describe('WebFormService', () => {
       })
     };
 
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [
       [],
       [],
@@ -295,8 +292,7 @@ describe('WebFormService', () => {
   });
 
   test('emailTemplateId supports conditional cases based on record field values', () => {
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 
     const followupJson = JSON.stringify({
       pdfTemplateId: { EN: 'pdf-template-en' },
@@ -495,8 +491,7 @@ describe('WebFormService', () => {
   });
 
   test('writes change and snapshot rows to dedicated audit sheet when audit logging is enabled', () => {
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 
     const followupJson = JSON.stringify({
       auditLogging: {

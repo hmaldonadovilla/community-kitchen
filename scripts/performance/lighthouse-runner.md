@@ -11,6 +11,8 @@ Use `scenario-runner.js` alongside this script when you need the concrete initia
 - first Home-page data callback load time
 - total wall-clock time until the page is usable
 
+The scenario runner now focuses only on the initial Home-load path. It does not attempt record-open or submit flows.
+
 ## What it measures
 
 The runner invokes Lighthouse programmatically and extracts a small, focused set of metrics from the `performance` category:

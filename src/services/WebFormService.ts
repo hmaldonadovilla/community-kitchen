@@ -65,31 +65,97 @@ type BootstrapContextOptions = {
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
-  private dashboard: Dashboard;
-  private cacheManager: CacheEtagManager;
-  private definitionBuilder: DefinitionBuilder;
-  private dataSources: DataSourceService;
-  private submissions: SubmissionService;
-  private listing: ListingService;
-  private followups: FollowupService;
-  private uploads: UploadService;
-  private analytics: AnalyticsService;
+  private _dashboard?: Dashboard;
+  private _cacheManager?: CacheEtagManager;
+  private _definitionBuilder?: DefinitionBuilder;
+  private _dataSources?: DataSourceService;
+  private _submissions?: SubmissionService;
+  private _listing?: ListingService;
+  private _followups?: FollowupService;
+  private _uploads?: UploadService;
+  private _analytics?: AnalyticsService;
+  private _docProps?: GoogleAppsScript.Properties.Properties | null;
+  private _docPropsResolved: boolean;
+  private _cache?: GoogleAppsScript.Cache.Cache | null;
+  private _cacheResolved: boolean;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
-    this.dashboard = new Dashboard(ss);
-    const cache = this.resolveCache();
-    const docProps = getDocumentProperties();
-    const cachePrefix = CacheEtagManager.computeCachePrefix(docProps);
-    this.cacheManager = new CacheEtagManager(cache, docProps, cachePrefix);
-    const uploads = new UploadService(ss);
-    this.uploads = uploads;
-    this.definitionBuilder = new DefinitionBuilder(ss, this.dashboard);
-    this.dataSources = new DataSourceService(ss);
-    this.submissions = new SubmissionService(ss, uploads, this.cacheManager, docProps);
-    this.analytics = new AnalyticsService(ss, this.submissions);
-    this.listing = new ListingService(this.submissions, this.cacheManager);
-    this.followups = new FollowupService(ss, this.submissions, this.dataSources);
+    this._docPropsResolved = false;
+    this._cacheResolved = false;
+  }
+
+  private get dashboard(): Dashboard {
+    if (!this._dashboard) {
+      this._dashboard = new Dashboard(this.ss);
+    }
+    return this._dashboard;
+  }
+
+  private get docProps(): GoogleAppsScript.Properties.Properties | null {
+    if (!this._docPropsResolved) {
+      this._docProps = getDocumentProperties();
+      this._docPropsResolved = true;
+    }
+    return this._docProps ?? null;
+  }
+
+  private get cacheManager(): CacheEtagManager {
+    if (!this._cacheManager) {
+      const docProps = this.docProps;
+      const cachePrefix = CacheEtagManager.computeCachePrefix(docProps);
+      this._cacheManager = new CacheEtagManager(this.resolveCache(), docProps, cachePrefix);
+    }
+    return this._cacheManager;
+  }
+
+  private get uploads(): UploadService {
+    if (!this._uploads) {
+      this._uploads = new UploadService(this.ss);
+    }
+    return this._uploads;
+  }
+
+  private get definitionBuilder(): DefinitionBuilder {
+    if (!this._definitionBuilder) {
+      this._definitionBuilder = new DefinitionBuilder(this.ss, this.dashboard);
+    }
+    return this._definitionBuilder;
+  }
+
+  private get dataSources(): DataSourceService {
+    if (!this._dataSources) {
+      this._dataSources = new DataSourceService(this.ss);
+    }
+    return this._dataSources;
+  }
+
+  private get submissions(): SubmissionService {
+    if (!this._submissions) {
+      this._submissions = new SubmissionService(this.ss, this.uploads, this.cacheManager, this.docProps);
+    }
+    return this._submissions;
+  }
+
+  private get analytics(): AnalyticsService {
+    if (!this._analytics) {
+      this._analytics = new AnalyticsService(this.ss, this.submissions);
+    }
+    return this._analytics;
+  }
+
+  private get listing(): ListingService {
+    if (!this._listing) {
+      this._listing = new ListingService(this.submissions, this.cacheManager);
+    }
+    return this._listing;
+  }
+
+  private get followups(): FollowupService {
+    if (!this._followups) {
+      this._followups = new FollowupService(this.ss, this.submissions, this.dataSources);
+    }
+    return this._followups;
   }
 
   private resolveBundledConfig(formKey?: string): FormConfigExport | null {
@@ -2380,13 +2446,16 @@ export class WebFormService {
   }
 
   private resolveCache(): GoogleAppsScript.Cache.Cache | null {
+    if (this._cacheResolved) return this._cache ?? null;
+    this._cacheResolved = true;
     try {
-      return (typeof CacheService !== 'undefined' && (CacheService as any).getScriptCache)
+      this._cache = (typeof CacheService !== 'undefined' && (CacheService as any).getScriptCache)
         ? (CacheService as any).getScriptCache()
         : null;
     } catch (_) {
-      return null;
+      this._cache = null;
     }
+    return this._cache ?? null;
   }
 
   private previewCacheKey(token: string): string {

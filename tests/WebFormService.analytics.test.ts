@@ -10,8 +10,7 @@ describe('WebFormService analytics integration', () => {
     ss = new MockSpreadsheet();
     service = new WebFormService(ss as any);
 
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard');
-    if (!dashboardSheet) throw new Error('Dashboard not created');
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 
     const dashboardConfig = JSON.stringify({
       analytics: {

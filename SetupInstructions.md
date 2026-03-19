@@ -207,6 +207,7 @@ Use the performance scripts together so you capture both web-vitals metrics and 
    - `bundleLoadMs`: React bundle load time
    - `firstPageDataLoadMs`: first Home-page callback/XHR load time
    - `pageUsableMs`: wall-clock time until the Home page is usable
+   - the scenario runner now stops after the initial Home-load path is measured; record-open and submit flows are no longer part of this baseline script
 
    In staging-like environments it also reports app-level Home timings:
    - `serverTimingSteps`

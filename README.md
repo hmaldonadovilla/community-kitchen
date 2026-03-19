@@ -242,6 +242,7 @@ The repo includes two complementary performance runners:
     - `bundleLoadMs`
     - `firstPageDataLoadMs`
     - `pageUsableMs`
+  - stops after the Home page initial-load path is measured; it no longer attempts record-open or submit steps
   - also captures:
     - `serverTimingSteps` from the Apps Script `doGet -> renderForm -> buildHtml` path
     - app-level Home timings such as `homeTimeToDataMs`, `homeBootstrapRpcMs`, and `listFetchRpcMs` when perf instrumentation is enabled in non-production environments

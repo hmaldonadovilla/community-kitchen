@@ -955,197 +955,7 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
     frame = await waitForAppFrame(page);
     await waitForHomeReady(frame, 90000);
-
-    console.log('[scenario] open seeded record');
-    let openedViaHook = false;
-    const openViaHook = await openRecordByPerfHook(frame, createdId, 'summary', 25000).catch(() => ({ ok: false, reason: 'failed' }));
-    if (openViaHook?.ok) {
-      openedViaHook = true;
-      await frame.waitForTimeout(1200);
-    } else {
-      let targetRowIndex = -1;
-      try {
-        const sortHint = defaultSortFieldId
-          ? { fieldId: defaultSortFieldId, direction: defaultSortDirection === 'asc' ? 'asc' : 'desc' }
-          : null;
-        const sorted = await runAppsScript(frame, 'fetchSubmissionsSortedBatch', formKey, [], 50, null, false, [], sortHint);
-        const items = (((sorted || {}).list || {}).items || []);
-        targetRowIndex = items.findIndex(row => ((row || {}).id || '').toString() === createdId);
-      } catch (_) {
-        targetRowIndex = -1;
-      }
-
-      const listActionSelectors = [
-        'button:has-text("View")',
-        'button:has-text("Voir")',
-        'button:has-text("Bekijken")',
-        'button:has-text("Edit")',
-        'button:has-text("Modifier")',
-        'button:has-text("Bewerken")',
-        'button:has-text("Actions")',
-        'button:has-text("Action")',
-        'button:has-text("Acties")',
-        'table button'
-      ];
-      let resolvedTargetButton = null;
-      if (targetRowIndex >= 0) {
-        const priorityLocators = [
-          frame.locator('button:has-text("View")'),
-          frame.locator('button:has-text("Voir")'),
-          frame.locator('button:has-text("Bekijken")'),
-          frame.locator('button:has-text("Edit")'),
-          frame.locator('button:has-text("Modifier")'),
-          frame.locator('button:has-text("Bewerken")'),
-          frame.locator('table button')
-        ];
-        const started = Date.now();
-        while (!resolvedTargetButton && Date.now() - started < 25000) {
-          for (const locator of priorityLocators) {
-            const count = await locator.count().catch(() => 0);
-            if (targetRowIndex < count) {
-              resolvedTargetButton = locator.nth(targetRowIndex);
-              break;
-            }
-          }
-          if (!resolvedTargetButton) {
-            await frame.waitForTimeout(300);
-          }
-        }
-      }
-      if (!resolvedTargetButton) {
-        resolvedTargetButton = await resolveVisibleActionButton(frame, listActionSelectors, 12000, true);
-      }
-      if (!resolvedTargetButton) throw new Error('No list action button found after seeding.');
-      await clickWithOverlayRecovery(frame, resolvedTargetButton, 10000);
-      await frame.waitForTimeout(1200);
-    }
-
-    const submitSelectors = [
-      'button:has-text("Activate")',
-      'button:has-text("Activer")',
-      'button:has-text("Activeren")',
-      'button:has-text("Submit")',
-      'button:has-text("Soumettre")',
-      'button:has-text("Indienen")'
-    ];
-    const formModeSelectors = [
-      'button:has-text("Edit")',
-      'button:has-text("Modifier")',
-      'button:has-text("Bewerken")',
-      'button:has-text("Form")',
-      'button:has-text("Back to form")'
-    ];
-    const summaryModeSelectors = [
-      'button:has-text("Summary")',
-      'button:has-text("Résumé")',
-      'button:has-text("Samenvatting")'
-    ];
-    let submitBtn = await resolveVisibleActionButton(frame, submitSelectors, 8000, true);
-    if (!submitBtn) {
-      submitBtn = await resolveVisibleActionButton(frame, submitSelectors, 4000, false);
-    }
-    let switchedToForm = false;
-    if (!submitBtn || (await submitBtn.isDisabled().catch(() => false))) {
-      const formViewBtn = await resolveVisibleActionButton(frame, formModeSelectors, 6000, true);
-      if (formViewBtn) {
-        await formViewBtn.click({ timeout: 5000 });
-        switchedToForm = true;
-        await frame.waitForTimeout(800);
-        submitBtn = await resolveVisibleActionButton(frame, submitSelectors, 8000, true);
-        if (!submitBtn) {
-          submitBtn = await resolveVisibleActionButton(frame, submitSelectors, 4000, false);
-        }
-      }
-    }
-
-    console.log('[scenario] attempt submit');
-    let submitAttempted = false;
-    let submitBlockedDisabled = false;
-    let autoFilledFields = 0;
-    let actionButtonsSample = await collectActionButtons(frame).catch(() => []);
-    if (submitBtn) {
-      let disabled = await submitBtn.isDisabled().catch(() => false);
-      if (disabled) {
-        const firstPass = await autoFillEditableFields(frame, 'emptyOnly').catch(() => ({ touched: 0 }));
-        autoFilledFields += Number(firstPass?.touched || 0);
-        await frame.waitForTimeout(400);
-        submitBtn = (await resolveVisibleActionButton(frame, submitSelectors, 2000, true))
-          || (await resolveVisibleActionButton(frame, submitSelectors, 1000, false))
-          || submitBtn;
-        disabled = await submitBtn.isDisabled().catch(() => false);
-      }
-      if (disabled) {
-        if (!switchedToForm) {
-          const formViewBtn = await resolveVisibleActionButton(frame, formModeSelectors, 3000, true);
-          if (formViewBtn) {
-            await formViewBtn.click({ timeout: 5000 });
-            switchedToForm = true;
-            await frame.waitForTimeout(600);
-          }
-        }
-        const secondPass = await autoFillEditableFields(frame, 'force').catch(() => ({ touched: 0 }));
-        autoFilledFields += Number(secondPass?.touched || 0);
-        await frame.waitForTimeout(400);
-        submitBtn = (await resolveVisibleActionButton(frame, submitSelectors, 2000, true))
-          || (await resolveVisibleActionButton(frame, submitSelectors, 1000, false))
-          || submitBtn;
-        disabled = await submitBtn.isDisabled().catch(() => false);
-      }
-      if (!disabled) {
-        submitAttempted = true;
-        await submitBtn.click({ timeout: 5000 });
-        await frame.waitForTimeout(450);
-        await clickSubmitConfirmationIfPresent(frame).catch(() => false);
-        await frame.waitForTimeout(1600);
-
-        const validationFailedInSummary = hasLogEvent(consoleEvents, 'summary.submit.validationFailedNavigateForm');
-        if (validationFailedInSummary) {
-          const toFormBtn = await resolveVisibleActionButton(frame, formModeSelectors, 2500, true);
-          if (toFormBtn) {
-            await toFormBtn.click({ timeout: 5000 });
-            switchedToForm = true;
-            await frame.waitForTimeout(600);
-          }
-          const retryFill = await autoFillEditableFields(frame, 'force').catch(() => ({ touched: 0 }));
-          autoFilledFields += Number(retryFill?.touched || 0);
-          await frame.waitForTimeout(1000);
-
-          const toSummaryBtn = await resolveVisibleActionButton(frame, summaryModeSelectors, 4000, true);
-          if (toSummaryBtn) {
-            await clickWithOverlayRecovery(frame, toSummaryBtn, 5000);
-            await frame.waitForTimeout(800);
-          }
-
-          submitBtn = (await resolveVisibleActionButton(frame, submitSelectors, 6000, true))
-            || (await resolveVisibleActionButton(frame, submitSelectors, 1500, false))
-            || submitBtn;
-          const retryDisabled = submitBtn ? await submitBtn.isDisabled().catch(() => true) : true;
-          if (submitBtn && !retryDisabled) {
-            await submitBtn.click({ timeout: 5000 });
-            await frame.waitForTimeout(450);
-            await clickSubmitConfirmationIfPresent(frame).catch(() => false);
-          } else {
-            submitBlockedDisabled = true;
-          }
-        }
-
-        await frame.waitForTimeout(5000);
-      } else {
-        submitBlockedDisabled = true;
-        actionButtonsSample = await collectActionButtons(frame).catch(() => actionButtonsSample);
-      }
-    }
-
-    // Navigate back home after submit attempt to capture route-back timing.
-    console.log('[scenario] navigate back home');
-    let navBackManualMs = null;
-    const homeBtn = await waitForAnySelector(frame, ['button:has-text("Home")', 'button:has-text("Back")'], 10000);
-    if (homeBtn) {
-      const navBackStartedAt = Date.now();
-      await homeBtn.click({ timeout: 5000 });
-      await waitForHomeReady(frame, 30000);
-      navBackManualMs = Date.now() - navBackStartedAt;
-    }
+    const actionButtonsSample = await collectActionButtons(frame).catch(() => []);
 
     const homeTimeToDataRaw = findPerfDurationFirst(consoleEvents, 'ck.home.timeToData');
     const homeBootstrapRpcMs = findPerfDurationFirst(consoleEvents, 'ck.home.bootstrap.rpc');
@@ -1156,11 +966,6 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       typeof homeTimeToDataRaw === 'number' && homeTimeToDataRaw > 0
         ? homeTimeToDataRaw
         : (listFetchRpcMs ?? homeBootstrapRpcMs);
-    const submitAttemptedResolved =
-      submitAttempted ||
-      hasLogEvent(consoleEvents, 'submit.begin') ||
-      hasLogEvent(consoleEvents, 'summary.submit.fire') ||
-      hasLogEvent(consoleEvents, 'list.openView.submit.fire');
     const homeReadyPerfTs = findPerfEventTs(consoleEvents, 'ck.home.timeToData', 'first');
     const templatePrefetchStart = findReactEventPayload(consoleEvents, 'templates.prefetch.start', 'first');
     const templatePrefetchDone = findReactEventPayload(consoleEvents, 'templates.prefetch.ok', 'last');
@@ -1192,15 +997,15 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
       listFetchRpcMs,
       listRecordsPrefetchRpcMs,
       recordFetchRpcMs,
-      navOpenRecordMs: findPerfDuration(consoleEvents, 'ck.nav.openRecord'),
-      navBackToHomeMs: findPerfDuration(consoleEvents, 'ck.nav.backToHome'),
-      navBackManualMs,
-      submitPipelineMs: findPerfDuration(consoleEvents, 'ck.submit.pipeline'),
-      submitRpcMs: findPerfDuration(consoleEvents, 'ck.submit.rpc'),
-      submitFollowupRpcMs: findPerfDuration(consoleEvents, 'ck.submit.followup.rpc'),
-      submitAttempted: submitAttemptedResolved,
-      submitBlockedDisabled,
-      autoFilledFields,
+      navOpenRecordMs: null,
+      navBackToHomeMs: null,
+      navBackManualMs: null,
+      submitPipelineMs: null,
+      submitRpcMs: null,
+      submitFollowupRpcMs: null,
+      submitAttempted: false,
+      submitBlockedDisabled: false,
+      autoFilledFields: 0,
       templatePrefetchStarted: Boolean(templatePrefetchStart),
       templatePrefetchCompleted: Boolean(templatePrefetchDone),
       templatePrefetchFailed: Boolean(templatePrefetchFailed),
@@ -1212,21 +1017,10 @@ async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
         templatePrefetchStart?.payload && templatePrefetchStart.payload.view !== undefined
           ? String(templatePrefetchStart.payload.view)
           : null,
-      openedViaHook,
-      switchedToForm,
-      openedView: (() => {
-        for (let i = consoleEvents.length - 1; i >= 0; i--) {
-          const ev = consoleEvents[i];
-          const a0 = ev.args?.[0];
-          const a1 = ev.args?.[1];
-          const a2 = ev.args?.[2];
-          if (a0 === '[ReactForm][perf]' && a1 === 'ck.nav.openRecord' && a2 && a2.view) {
-            return String(a2.view);
-          }
-        }
-        return null;
-      })(),
-      submitSuccess: hasLogEvent(consoleEvents, 'submit.success')
+      openedViaHook: false,
+      switchedToForm: false,
+      openedView: null,
+      submitSuccess: false
     };
 
     return {

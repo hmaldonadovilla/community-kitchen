@@ -8,7 +8,7 @@ describe('WebFormService submitWebForm', () => {
     const service = new WebFormService(ss);
 
     // Arrange dashboard + config sheet
-    const dashboard = ss.getSheetByName('Forms Dashboard');
+    const dashboard = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     dashboard.setMockData([
       [], [], [],
       ['Test Form', 'Config: Test', 'Test Responses', 'Desc', '', '', '', '']
@@ -48,7 +48,7 @@ describe('WebFormService submitWebForm', () => {
   test('new submissions set Updated At equal to Created At', () => {
     const ss = new MockSpreadsheet() as any;
     const service = new WebFormService(ss);
-    const dashboard = ss.getSheetByName('Forms Dashboard');
+    const dashboard = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     dashboard.setMockData([
       [], [], [],
       ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', '', '', '']
