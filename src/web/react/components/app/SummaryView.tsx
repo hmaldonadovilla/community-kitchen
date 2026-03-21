@@ -4,7 +4,8 @@ import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { buildDraftPayload } from '../../app/submission';
 import { peekSummaryHtmlTemplateCache, renderSummaryHtmlTemplateApi } from '../../api';
-import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
+import { isBundledHtmlTemplateId } from '../../app/bundledHtmlClientRenderer';
+import { shouldShowSummaryLoadingCard } from '../../app/recordOpenState';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import { HtmlPreview } from './HtmlPreview';
 import { ReportLivePreview } from './ReportLivePreview';
@@ -27,6 +28,7 @@ export const SummaryView: React.FC<{
   selectedRecordId: string;
   recordLoadingId: string | null;
   currentRecord: WebFormSubmission | null;
+  prefetchedSummaryHtml?: string | null;
   onOpenFiles?: (fieldId: string) => void;
   onAction?: (actionId: string) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
@@ -41,6 +43,7 @@ export const SummaryView: React.FC<{
   selectedRecordId,
   recordLoadingId,
   currentRecord,
+  prefetchedSummaryHtml,
   onOpenFiles,
   onAction,
   onDiagnostic
@@ -68,11 +71,9 @@ export const SummaryView: React.FC<{
   );
   const seqRef = useRef(0);
 
-  useEffect(() => {
-    if (!useSummaryHtml) return;
-    if (recordLoadingId) return;
-    const seq = ++seqRef.current;
-    const draft = buildDraftPayload({
+  const draft = useMemo(() => {
+    if (!useSummaryHtml || recordLoadingId) return null;
+    const next = buildDraftPayload({
       definition,
       formKey,
       language,
@@ -87,75 +88,18 @@ export const SummaryView: React.FC<{
       pdfUrl: currentRecord?.pdfUrl || undefined
     };
     if (statusMeta.status !== undefined && statusMeta.status !== null) {
-      (draft as any).status = statusMeta.status;
+      (next as any).status = statusMeta.status;
     }
     if (statusMeta.createdAt !== undefined && statusMeta.createdAt !== null) {
-      (draft as any).createdAt = statusMeta.createdAt;
+      (next as any).createdAt = statusMeta.createdAt;
     }
     if (statusMeta.updatedAt !== undefined && statusMeta.updatedAt !== null) {
-      (draft as any).updatedAt = statusMeta.updatedAt;
+      (next as any).updatedAt = statusMeta.updatedAt;
     }
     if (statusMeta.pdfUrl !== undefined && statusMeta.pdfUrl !== null) {
-      (draft as any).pdfUrl = statusMeta.pdfUrl;
+      (next as any).pdfUrl = statusMeta.pdfUrl;
     }
-    const resolvedTemplateId = resolveTemplateIdForRecord(definition.summaryHtmlTemplateId as any, draft.values || {}, draft.language);
-    const isBundled = isBundledHtmlTemplateId(resolvedTemplateId || '');
-    if (isBundled) {
-      setSummaryHtml({ phase: 'rendering', allowScripts: true });
-      onDiagnostic?.('summary.htmlTemplate.bundle.render.start', { recordId: existingRecordId || null });
-      renderBundledHtmlTemplateClient({
-        definition,
-        payload: draft as any,
-        templateIdMap: definition.summaryHtmlTemplateId as any
-      })
-        .then(res => {
-          if (seq !== seqRef.current) return;
-          if (!res?.success || !res?.html) {
-            const msg = (res?.message || 'Failed to render summary.').toString();
-            setSummaryHtml({ phase: 'error', message: msg, allowScripts: true });
-            onDiagnostic?.('summary.htmlTemplate.bundle.render.error', { message: msg });
-            return;
-          }
-          setSummaryHtml({ phase: 'ready', html: res.html, allowScripts: true });
-          onDiagnostic?.('summary.htmlTemplate.bundle.render.ok', { htmlLength: (res.html || '').toString().length });
-        })
-        .catch(err => {
-          if (seq !== seqRef.current) return;
-          const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
-          setSummaryHtml({ phase: 'error', message: msg, allowScripts: true });
-          onDiagnostic?.('summary.htmlTemplate.bundle.render.exception', { message: msg });
-        });
-      return;
-    }
-    const cached = peekSummaryHtmlTemplateCache(draft);
-    if (cached?.success && cached?.html) {
-      setSummaryHtml({ phase: 'ready', html: cached.html, allowScripts: false });
-      onDiagnostic?.('summary.htmlTemplate.cacheHit', {
-        recordId: existingRecordId || null,
-        htmlLength: (cached.html || '').toString().length
-      });
-      return;
-    }
-    setSummaryHtml({ phase: 'rendering', allowScripts: false });
-    onDiagnostic?.('summary.htmlTemplate.render.start', { recordId: existingRecordId || null });
-    renderSummaryHtmlTemplateApi(draft)
-      .then(res => {
-        if (seq !== seqRef.current) return;
-        if (!res?.success || !res?.html) {
-          const msg = (res?.message || 'Failed to render summary.').toString();
-          setSummaryHtml({ phase: 'error', message: msg, allowScripts: false });
-          onDiagnostic?.('summary.htmlTemplate.render.error', { message: msg });
-          return;
-        }
-        setSummaryHtml({ phase: 'ready', html: res.html, allowScripts: false });
-        onDiagnostic?.('summary.htmlTemplate.render.ok', { htmlLength: (res.html || '').toString().length });
-      })
-      .catch(err => {
-        if (seq !== seqRef.current) return;
-        const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
-        setSummaryHtml({ phase: 'error', message: msg, allowScripts: false });
-        onDiagnostic?.('summary.htmlTemplate.render.exception', { message: msg });
-      });
+    return next;
   }, [
     currentRecord?.createdAt,
     currentRecord?.pdfUrl,
@@ -169,11 +113,91 @@ export const SummaryView: React.FC<{
     lastSubmissionMeta?.status,
     lastSubmissionMeta?.updatedAt,
     lineItems,
-    onDiagnostic,
     recordLoadingId,
     useSummaryHtml,
     values
   ]);
+
+  const resolvedTemplateId = useMemo(
+    () => resolveTemplateIdForRecord(definition.summaryHtmlTemplateId as any, draft?.values || {}, draft?.language || language),
+    [definition.summaryHtmlTemplateId, draft, language]
+  );
+  const isBundled = useMemo(() => isBundledHtmlTemplateId(resolvedTemplateId || ''), [resolvedTemplateId]);
+  const cachedSummary = useMemo(() => (draft ? peekSummaryHtmlTemplateCache(draft) : null), [draft]);
+
+  useEffect(() => {
+    if (!useSummaryHtml) return;
+    if (recordLoadingId) {
+      setSummaryHtml({ phase: 'idle' });
+      return;
+    }
+    if (!draft) return;
+    const seq = ++seqRef.current;
+    if (prefetchedSummaryHtml) {
+      setSummaryHtml({ phase: 'ready', html: prefetchedSummaryHtml, allowScripts: isBundled });
+      onDiagnostic?.('summary.htmlTemplate.prefetched', {
+        recordId: existingRecordId || null,
+        htmlLength: prefetchedSummaryHtml.toString().length
+      });
+      return;
+    }
+    if (cachedSummary?.success && cachedSummary?.html) {
+      onDiagnostic?.('summary.htmlTemplate.cacheHit', {
+        recordId: existingRecordId || null,
+        htmlLength: (cachedSummary.html || '').toString().length
+      });
+      return;
+    }
+    setSummaryHtml({ phase: 'rendering', allowScripts: isBundled });
+    onDiagnostic?.(isBundled ? 'summary.htmlTemplate.bundle.render.start' : 'summary.htmlTemplate.render.start', {
+      recordId: existingRecordId || null
+    });
+    renderSummaryHtmlTemplateApi(draft)
+      .then(res => {
+        if (seq !== seqRef.current) return;
+        if (!res?.success || !res?.html) {
+          const msg = (res?.message || 'Failed to render summary.').toString();
+          setSummaryHtml({ phase: 'error', message: msg, allowScripts: isBundled });
+          onDiagnostic?.(isBundled ? 'summary.htmlTemplate.bundle.render.error' : 'summary.htmlTemplate.render.error', {
+            message: msg
+          });
+          return;
+        }
+        setSummaryHtml({ phase: 'ready', html: res.html, allowScripts: isBundled });
+        onDiagnostic?.(isBundled ? 'summary.htmlTemplate.bundle.render.ok' : 'summary.htmlTemplate.render.ok', {
+          htmlLength: (res.html || '').toString().length
+        });
+      })
+      .catch(err => {
+        if (seq !== seqRef.current) return;
+        const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed to render summary.';
+        setSummaryHtml({ phase: 'error', message: msg, allowScripts: isBundled });
+        onDiagnostic?.(isBundled ? 'summary.htmlTemplate.bundle.render.exception' : 'summary.htmlTemplate.render.exception', {
+          message: msg
+        });
+      });
+  }, [
+    cachedSummary,
+    draft,
+    existingRecordId,
+    isBundled,
+    onDiagnostic,
+    prefetchedSummaryHtml,
+    recordLoadingId,
+    useSummaryHtml,
+  ]);
+
+  const resolvedHtml = summaryHtml.phase === 'ready' && summaryHtml.html ? summaryHtml.html : cachedSummary?.html || undefined;
+  const resolvedAllowScripts = summaryHtml.allowScripts ?? isBundled;
+
+  const showLoadingCard = shouldShowSummaryLoadingCard({
+    recordLoading: Boolean(recordLoadingId),
+    recordLoadError: Boolean(recordLoadError),
+    useSummaryHtml,
+    summaryPhase: summaryHtml.phase,
+    hasSummaryHtml: Boolean(resolvedHtml)
+  });
+  const showSummaryContentCard = !useSummaryHtml || Boolean(resolvedHtml) || summaryHtml.phase === 'error';
 
   return (
     <div
@@ -186,68 +210,66 @@ export const SummaryView: React.FC<{
         minHeight: 0
       }}
     >
-      {(recordLoadError || recordLoadingId) && (
+      {(recordLoadError || showLoadingCard) && (
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {recordLoadError && <div className="error">{recordLoadError}</div>}
-          {recordLoadingId && <div className="status">{tSystem('summary.loadingRecord', language, 'Loading record…')}</div>}
+          {!recordLoadError && showLoadingCard ? (
+            <div className="status">{tSystem('summary.loadingRecord', language, 'Loading record…')}</div>
+          ) : null}
         </div>
       )}
 
-      <div className="card" style={{ padding: 12 }}>
-        {useSummaryHtml ? (
-          <>
-            {summaryHtml.phase === 'rendering' ? (
-              <div className="status" style={{ marginBottom: 12 }}>
-                {tSystem('common.loading', language, 'Loading…')}
-              </div>
-            ) : null}
-            {summaryHtml.phase === 'error' ? (
-              <div className="error" style={{ marginBottom: 12 }}>
-                {summaryHtml.message || tSystem('report.failedHtml', language, 'Failed to render preview.')}
-              </div>
-            ) : null}
-            {summaryHtml.phase === 'ready' && summaryHtml.html ? (
-              <HtmlPreview
-                html={summaryHtml.html}
-                allowScripts={summaryHtml.allowScripts}
-                onOpenFiles={onOpenFiles}
-                onAction={onAction}
-                onDiagnostic={onDiagnostic}
-              />
-            ) : summaryHtml.phase === 'error' ? (
-              // Fallback: show default Summary view if template rendering fails.
-              <ReportLivePreview
-                definition={definition}
-                language={language}
-                values={values}
-                lineItems={lineItems}
-                recordMeta={{
-                  id: existingRecordId,
-                  status: currentRecord?.status || lastSubmissionMeta?.status || null,
-                  createdAt: currentRecord?.createdAt || lastSubmissionMeta?.createdAt,
-                  updatedAt: currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt,
-                  pdfUrl: currentRecord?.pdfUrl || undefined
-                }}
-              />
-            ) : null}
-          </>
-        ) : (
-          <ReportLivePreview
-            definition={definition}
-            language={language}
-            values={values}
-            lineItems={lineItems}
-            recordMeta={{
-              id: existingRecordId,
-              status: currentRecord?.status || lastSubmissionMeta?.status || null,
-              createdAt: currentRecord?.createdAt || lastSubmissionMeta?.createdAt,
-              updatedAt: currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt,
-              pdfUrl: currentRecord?.pdfUrl || undefined
-            }}
-          />
-        )}
-      </div>
+      {showSummaryContentCard ? (
+        <div className="card" style={{ padding: 12 }}>
+          {useSummaryHtml ? (
+            <>
+              {summaryHtml.phase === 'error' ? (
+                <div className="error" style={{ marginBottom: 12 }}>
+                  {summaryHtml.message || tSystem('report.failedHtml', language, 'Failed to render preview.')}
+                </div>
+              ) : null}
+              {resolvedHtml ? (
+                <HtmlPreview
+                  html={resolvedHtml}
+                  allowScripts={resolvedAllowScripts}
+                  onOpenFiles={onOpenFiles}
+                  onAction={onAction}
+                  onDiagnostic={onDiagnostic}
+                />
+              ) : summaryHtml.phase === 'error' ? (
+                // Fallback: show default Summary view if template rendering fails.
+                <ReportLivePreview
+                  definition={definition}
+                  language={language}
+                  values={values}
+                  lineItems={lineItems}
+                  recordMeta={{
+                    id: existingRecordId,
+                    status: currentRecord?.status || lastSubmissionMeta?.status || null,
+                    createdAt: currentRecord?.createdAt || lastSubmissionMeta?.createdAt,
+                    updatedAt: currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt,
+                    pdfUrl: currentRecord?.pdfUrl || undefined
+                  }}
+                />
+              ) : null}
+            </>
+          ) : (
+            <ReportLivePreview
+              definition={definition}
+              language={language}
+              values={values}
+              lineItems={lineItems}
+              recordMeta={{
+                id: existingRecordId,
+                status: currentRecord?.status || lastSubmissionMeta?.status || null,
+                createdAt: currentRecord?.createdAt || lastSubmissionMeta?.createdAt,
+                updatedAt: currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt,
+                pdfUrl: currentRecord?.pdfUrl || undefined
+              }}
+            />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 };
-

@@ -1057,6 +1057,85 @@ export class WebFormService {
     return this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
   }
 
+  public fetchSummaryRecord(
+    formKey: string,
+    language?: string | null,
+    id?: string | null,
+    rowNumber?: number | null
+  ): { success: boolean; record?: WebFormSubmission | null; html?: string; fileName?: string; message?: string } {
+    const requestedId = (id || '').toString().trim();
+    const requestedRow =
+      rowNumber !== undefined && rowNumber !== null && Number.isFinite(Number(rowNumber)) && Number(rowNumber) >= 2
+        ? Number(rowNumber)
+        : null;
+    if (!requestedId && !requestedRow) {
+      return { success: false, message: 'Record id or row number is required.' };
+    }
+
+    const { form, questions } = this.getFormContext(formKey);
+    const templateId = form.summaryHtmlTemplateId;
+    if (!templateId) {
+      return { success: false, message: 'No summary HTML template configured for this form.' };
+    }
+
+    debugLog('summary.fetchCombined.start', {
+      formKey,
+      recordId: requestedId || null,
+      rowNumber: requestedRow,
+      language: language || null
+    });
+
+    let record: WebFormSubmission | null = null;
+    if (requestedRow) {
+      record = this.listing.fetchSubmissionByRowNumber(form, questions, requestedRow);
+      if (requestedId && record?.id && record.id !== requestedId) {
+        debugLog('summary.fetchCombined.rowNumberMismatch', {
+          formKey,
+          requestedId,
+          rowNumber: requestedRow,
+          resolvedId: record.id
+        });
+        record = null;
+      }
+    }
+    if (!record && requestedId) {
+      record = this.listing.fetchSubmissionById(form, questions, requestedId);
+    }
+    if (!record) {
+      debugLog('summary.fetchCombined.notFound', {
+        formKey,
+        recordId: requestedId || null,
+        rowNumber: requestedRow
+      });
+      return { success: false, message: 'Record not found.' };
+    }
+
+    const renderLanguage = ((language || record.language || 'EN') as any).toString().trim() || 'EN';
+    const renderRecord = this.normalizeTemplateRenderRecord({ ...(record as any), language: renderLanguage }, questions, formKey);
+    const result = this.followups.renderHtmlFromHtmlTemplate({
+      form,
+      questions,
+      record: renderRecord,
+      templateIdMap: templateId,
+      namePrefix: `${form.title || 'Form'} - Summary`
+    });
+    if (!result.success || !result.html) {
+      debugLog('summary.fetchCombined.failed', {
+        formKey,
+        recordId: record.id || requestedId || null,
+        message: result.message || 'failed'
+      });
+      return { success: false, record, message: result.message || 'Failed to render summary.' };
+    }
+
+    debugLog('summary.fetchCombined.ok', {
+      formKey,
+      recordId: record.id || requestedId || null,
+      fileName: result.fileName || ''
+    });
+    return { success: true, record, html: result.html, fileName: result.fileName };
+  }
+
   public fetchSubmissionsByRowNumbers(formKey: string, rowNumbers: number[]): Record<string, WebFormSubmission> {
     const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionsByRowNumbers(form, questions, rowNumbers);
@@ -1990,6 +2069,35 @@ export class WebFormService {
       return { success: false, message: result.message || 'Failed to render summary.' };
     }
     debugLog('renderSummaryHtmlTemplate.ok', { formKey, fileName: result.fileName || '' });
+    return { success: true, html: result.html, fileName: result.fileName };
+  }
+
+  public renderInlineHtmlTemplate(
+    formObject: WebFormSubmission,
+    templateIdMap: any
+  ): { success: boolean; html?: string; fileName?: string; message?: string } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    if (!formKey) {
+      return { success: false, message: 'Form key is required.' };
+    }
+    if (!templateIdMap) {
+      return { success: false, message: 'templateIdMap is required.' };
+    }
+    const { form, questions } = this.getFormContext(formKey);
+    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    debugLog('renderInlineHtmlTemplate.start', { formKey, language: record.language });
+    const result = this.followups.renderHtmlFromHtmlTemplate({
+      form,
+      questions,
+      record,
+      templateIdMap,
+      namePrefix: `${form.title || 'Form'} - Inline`
+    });
+    if (!result.success || !result.html) {
+      debugLog('renderInlineHtmlTemplate.failed', { formKey, message: result.message || 'failed' });
+      return { success: false, message: result.message || 'Failed to render HTML.' };
+    }
+    debugLog('renderInlineHtmlTemplate.ok', { formKey, fileName: result.fileName || '' });
     return { success: true, html: result.html, fileName: result.fileName };
   }
 

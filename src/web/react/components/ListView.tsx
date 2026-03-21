@@ -2335,10 +2335,6 @@ const ListView: React.FC<ListViewProps> = ({
 
         {showLoadingStatus ? (
           <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
-        ) : !dateSearchUsesServer && uiPrefetching ? (
-          <div className="status muted" style={{ opacity: 0.9 }}>
-            {tSystem('list.loadingMore', language, 'Loading more…')}
-          </div>
         ) : effectiveUiNotice ? (
           <div className="status muted" style={{ opacity: 0.9 }} role="note">
             {effectiveUiNotice}

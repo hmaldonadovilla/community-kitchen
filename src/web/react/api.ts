@@ -4,6 +4,7 @@ import {
   FollowupActionResult,
   FormConfigExport,
   PaginatedResult,
+  TemplateIdMap,
   WebFormDefinition,
   WebFormSubmission
 } from '../../types';
@@ -139,6 +140,10 @@ export interface RenderHtmlTemplateResult {
   message?: string;
 }
 
+export interface FetchSummaryRecordResult extends RenderHtmlTemplateResult {
+  record?: WebFormSubmission | null;
+}
+
 export interface FollowupBatchResponse {
   success: boolean;
   results: Array<{ action: string; result: FollowupActionResult }>;
@@ -252,6 +257,17 @@ export const peekSummaryHtmlTemplateCache = (payload: SubmissionPayload): Render
   const hit = htmlRenderCache.get(key);
   if (!hit?.result?.success || !hit?.result?.html) return null;
   return hit.result;
+};
+
+export const seedSummaryHtmlTemplateCache = (
+  payload: SubmissionPayload,
+  result: RenderHtmlTemplateResult | null | undefined
+): void => {
+  if (!result?.success || !result?.html) return;
+  const key = buildSummaryHtmlCacheKey(payload);
+  htmlRenderInflight.delete(key);
+  htmlRenderCache.set(key, { result, cachedAtMs: Date.now() });
+  pruneHtmlRenderCache();
 };
 
 export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: string): RenderHtmlTemplateResult | null => {
@@ -547,6 +563,14 @@ export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSub
 export const fetchRecordByRowNumber = (formKey: string, rowNumber: number): Promise<WebFormSubmission | null> =>
   invokeTransport<WebFormSubmission | null>('fetchSubmissionByRowNumber', formKey, rowNumber);
 
+export const fetchSummaryRecordApi = (
+  formKey: string,
+  language: LangCode,
+  id?: string | null,
+  rowNumber?: number | null
+): Promise<FetchSummaryRecordResult> =>
+  invokeTransport<FetchSummaryRecordResult>('fetchSummaryRecord', formKey, language, id ?? null, rowNumber ?? null);
+
 export const fetchRecordsByRowNumbers = (
   formKey: string,
   rowNumbers: number[]
@@ -599,6 +623,33 @@ export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: stri
   const inflight = htmlRenderInflight.get(key);
   if (inflight) return inflight;
   const promise = invokeTransport<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId)
+    .then(res => {
+      if (res?.success && res?.html) {
+        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
+        pruneHtmlRenderCache();
+      }
+      return res;
+    })
+    .finally(() => {
+      htmlRenderInflight.delete(key);
+    });
+  htmlRenderInflight.set(key, promise);
+  return promise;
+};
+
+export const renderInlineHtmlTemplateApi = (
+  payload: SubmissionPayload,
+  templateIdMap: TemplateIdMap,
+  cacheKeySuffix?: string
+): Promise<RenderHtmlTemplateResult> => {
+  const key = `inline:${buildSummaryHtmlCacheKey(payload)}:${cacheKeySuffix || JSON.stringify(templateIdMap || null)}`;
+  const cached = htmlRenderCache.get(key);
+  if (cached?.result?.success && cached?.result?.html) {
+    return Promise.resolve(cached.result);
+  }
+  const inflight = htmlRenderInflight.get(key);
+  if (inflight) return inflight;
+  const promise = invokeTransport<RenderHtmlTemplateResult>('renderInlineHtmlTemplate', payload, templateIdMap)
     .then(res => {
       if (res?.success && res?.html) {
         htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });

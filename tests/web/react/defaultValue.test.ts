@@ -54,6 +54,42 @@ describe('defaultValue', () => {
 
     expect(lineItems.LINES[0].values.MEAL_TYPE).toBe('no');
   });
-});
 
+  it('preserves an existing mapped line-item value when the lookup is unavailable but the dependency is still set', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'LINES',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              { id: 'ING', type: 'TEXT', required: false, options: [], optionsFr: [], optionsNl: [] },
+              {
+                id: 'CAT',
+                type: 'TEXT',
+                required: false,
+                options: [],
+                optionsFr: [],
+                optionsNl: [],
+                valueMap: {
+                  dependsOn: 'ING',
+                  optionMap: {}
+                }
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const { lineItems } = applyValueMapsToForm(
+      definition,
+      {} as any,
+      { LINES: [{ id: 'r1', values: { ING: 'Green beans - frozen', CAT: 'Beans' } }] } as any,
+      { mode: 'init' } as any
+    );
+
+    expect(lineItems.LINES[0].values.CAT).toBe('Beans');
+  });
+});
 

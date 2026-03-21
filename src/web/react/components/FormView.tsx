@@ -42,6 +42,7 @@ import { resolveOverlayCloseDeletePlan } from '../features/overlays/domain/overl
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
+import { renderInlineHtmlTemplateApi } from '../api';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
@@ -117,6 +118,7 @@ import {
   seedSubgroupDefaults
 } from '../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
+import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
 import {
   collectIncompleteEntireLeftoverRowIds,
   resolveIncompleteEntireLeftoverOverlayDialogCopy
@@ -127,7 +129,6 @@ import {
   normalizeIngredientNameIfAllCaps
 } from '../app/ingredientsCreateRules';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
-import { renderBundledHtmlTemplateClient, isBundledHtmlTemplateId } from '../app/bundledHtmlClientRenderer';
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
@@ -143,7 +144,7 @@ import {
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { validateRules } from '../../rules/validation';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
-import { buildDraftPayload, validateForm, validateUploadCounts } from '../app/submission';
+import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
@@ -480,48 +481,6 @@ const areOverlayHeaderFieldsComplete = (args: {
     const val = resolveRequiredValue(field, rowValues[field.id]);
     return !isEmptyValue(val as any);
   });
-};
-
-const mergeOverlayDetailConfig = (base: any, override: any) => {
-  if (!base && !override) return undefined;
-  if (!base) return override;
-  if (!override) return base;
-  return {
-    ...base,
-    ...override,
-    header: { ...(base.header || {}), ...(override.header || {}) },
-    body: {
-      ...(base.body || {}),
-      ...(override.body || {}),
-      edit: { ...(base.body?.edit || {}), ...(override.body?.edit || {}) },
-      view: { ...(base.body?.view || {}), ...(override.body?.view || {}) }
-    },
-    rowActions: { ...(base.rowActions || {}), ...(override.rowActions || {}) }
-  };
-};
-
-const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
-  if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
-  const mergedConfig = { ...baseConfig, ...override } as any;
-  mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
-  if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
-  const baseUi = baseConfig.ui || {};
-  const overrideUi = (override as any).ui || {};
-  const mergedUi = {
-    ...baseUi,
-    ...overrideUi
-  };
-  const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
-  if (mergedOverlayDetail) {
-    (mergedUi as any).overlayDetail = mergedOverlayDetail;
-  }
-  mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
-  const baseAddOverlay = (baseConfig as any)?.addOverlay || {};
-  const overrideAddOverlay = (override as any)?.addOverlay || {};
-  if (Object.keys(baseAddOverlay).length || Object.keys(overrideAddOverlay).length) {
-    (mergedConfig as any).addOverlay = { ...baseAddOverlay, ...overrideAddOverlay };
-  }
-  return mergedConfig;
 };
 
 const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
@@ -4693,45 +4652,74 @@ const FormView: React.FC<FormViewProps> = ({
 
     const payload = buildDraftPayload({
       definition,
-      formKey: (definition.destinationTab || definition.title || 'draft').toString(),
+      formKey: resolveDraftPayloadFormKey({ formKey, definition }),
       language,
       values,
       lineItems,
       existingRecordId: recordMeta?.id
     });
-
-    if (context.type === 'line') {
-      const rawRows = Array.isArray((payload.values as any)[context.groupId]) ? ((payload.values as any)[context.groupId] as any[]) : [];
-      const filtered = rawRows.filter(row => (row as any)?.[ROW_ID_KEY] === overlayDetailSelection.rowId);
-      (payload.values as any)[context.groupId] = filtered;
-      (payload.values as any)[`${context.groupId}_json`] = JSON.stringify(filtered);
-    } else {
-      const subPath = Array.isArray((context as any).path) ? ((context as any).path as string[]) : [];
-      const rootRows = Array.isArray((payload.values as any)[context.groupId])
-        ? ((payload.values as any)[context.groupId] as any[])
-        : [];
-      const filteredParents = context.parentRowId
-        ? rootRows.filter(row => (row as any)?.[ROW_ID_KEY] === context.parentRowId)
-        : rootRows;
-      if (subPath.length === 1) {
-        const subId = subPath[0];
-        filteredParents.forEach(parentRow => {
-          const children = Array.isArray((parentRow as any)[subId]) ? (parentRow as any)[subId] : [];
-          (parentRow as any)[subId] = children.filter((child: any) => (child as any)?.[ROW_ID_KEY] === overlayDetailSelection.rowId);
-        });
-      }
-      (payload.values as any)[context.groupId] = filteredParents;
-      (payload.values as any)[`${context.groupId}_json`] = JSON.stringify(filteredParents);
-    }
-
-    const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
-    if (!resolvedTemplateId || !isBundledHtmlTemplateId(resolvedTemplateId)) {
+    const rootGroup = definition.questions.find(q => q.id === context.groupId && q.type === 'LINE_ITEM_GROUP');
+    const rootGroupCfg = (rootGroup as any)?.lineItemConfig;
+    if (!rootGroupCfg) {
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
-      setOverlayDetailHtmlError(
-        tSystem('overlay.detail.templateBundleRequired', language, 'Template must be a bundled (bundle:...) HTML template.')
-      );
+      setOverlayDetailHtmlError(tSystem('overlay.detail.templateFailed', language, 'Unable to render template.'));
+      return;
+    }
+    const rowFilters: Record<string, string> = {};
+    if (context.type === 'line') {
+      rowFilters[context.groupId] = overlayDetailSelection.rowId;
+    } else {
+      if (context.parentRowId) rowFilters[context.groupId] = context.parentRowId;
+      rowFilters[activeGroupKey] = overlayDetailSelection.rowId;
+    }
+    const groupOverridesByKey =
+      context.type === 'sub' && subgroupOverlay.subKey && subgroupOverlay.groupOverride
+        ? { [subgroupOverlay.subKey]: subgroupOverlay.groupOverride }
+        : undefined;
+    const serializedRootRows = serializeLineItemTree({
+      lineItems,
+      groupCfg: rootGroupCfg,
+      groupKey: context.groupId,
+      rowFilters,
+      groupOverridesByKey
+    });
+    (payload.values as any)[context.groupId] = serializedRootRows;
+    (payload.values as any)[`${context.groupId}_json`] = JSON.stringify(serializedRootRows);
+    (payload as any)[context.groupId] = serializedRootRows;
+    (payload as any)[`${context.groupId}_json`] = (payload.values as any)[`${context.groupId}_json`];
+
+    if (context.type === 'sub') {
+      const subPath = Array.isArray((context as any).path) ? ((context as any).path as string[]) : [];
+      const selectedParent = serializedRootRows[0] || null;
+      const selectedChildren =
+        selectedParent && subPath.length === 1 && Array.isArray((selectedParent as any)[subPath[0]])
+          ? ((selectedParent as any)[subPath[0]] as any[])
+          : [];
+      const selectedChild = selectedChildren[0] || null;
+      const nestedSubGroupId = (context.overlayDetail?.body?.subGroupId || '').toString().trim();
+      const nestedCount =
+        selectedChild && nestedSubGroupId && Array.isArray((selectedChild as any)[nestedSubGroupId])
+          ? ((selectedChild as any)[nestedSubGroupId] as any[]).length
+          : 0;
+      onDiagnostic?.('lineItems.overlayDetail.payload', {
+        groupId: context.groupId,
+        activeGroupKey,
+        rowId: overlayDetailSelection.rowId,
+        rootRows: serializedRootRows.length,
+        selectedChildren: selectedChildren.length,
+        nestedSubGroupId: nestedSubGroupId || null,
+        nestedRows: nestedCount
+      });
+    }
+
+    const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
+    if (!resolvedTemplateId) {
+      overlayDetailRenderSignatureRef.current = '';
+      setOverlayDetailHtml('');
+      setOverlayDetailHtmlLoading(false);
+      setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
       return;
     }
 
@@ -4751,15 +4739,9 @@ const FormView: React.FC<FormViewProps> = ({
     }
     overlayDetailRenderSignatureRef.current = renderSignature;
 
-	    setOverlayDetailHtmlLoading(true);
-	    setOverlayDetailHtmlError('');
-	    renderBundledHtmlTemplateClient({
-	      definition,
-	      payload,
-	      templateIdMap,
-	      buttonId: `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}`,
-	      onDiagnostic
-	    })
+    setOverlayDetailHtmlLoading(true);
+    setOverlayDetailHtmlError('');
+    renderInlineHtmlTemplateApi(payload, templateIdMap as any, `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}:${resolvedTemplateId}`)
       .then(res => {
         if (res?.success && res?.html) {
           setOverlayDetailHtml(res.html);
@@ -4804,7 +4786,9 @@ const FormView: React.FC<FormViewProps> = ({
     recordMeta,
     resolveSubgroupDefs,
     subgroupOverlay.open,
+    subgroupOverlay.groupOverride,
     subgroupOverlay.subKey,
+    tSystem,
     values
   ]);
 

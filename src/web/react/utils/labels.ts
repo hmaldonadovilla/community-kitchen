@@ -1,8 +1,29 @@
 import { LangCode, WebQuestionDefinition } from '../../types';
 
+const humanizeFallbackId = (rawId: string): string => {
+  const trimmed = (rawId || '').toString().trim();
+  if (!trimmed) return '';
+
+  const normalized = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return trimmed;
+
+  const words = normalized.split(' ').filter(Boolean);
+  const source =
+    words.length > 1 && /^[A-Z]{1,3}$/.test(words[0] || '')
+      ? words.slice(1)
+      : words;
+  const humanized = source.map(word => word.toLowerCase()).join(' ').trim();
+  if (!humanized) return trimmed;
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+};
+
 export const resolveLabel = (q: WebQuestionDefinition, language: LangCode) => {
   const key = (language || 'en').toString().toLowerCase();
-  return (q.label && (q.label as any)[key]) || (q.label && (q.label as any).en) || q.id;
+  return (q.label && (q.label as any)[key]) || (q.label && (q.label as any).en) || humanizeFallbackId(q.id || '');
 };
 
 export const resolveFieldLabel = (field: any, language: LangCode, fallback: string) => {
@@ -19,4 +40,3 @@ export const resolveFieldLabel = (field: any, language: LangCode, fallback: stri
   if (key === 'NL') return field?.labelNl || field?.labelEn || fallback;
   return field?.labelEn || fallback;
 };
-

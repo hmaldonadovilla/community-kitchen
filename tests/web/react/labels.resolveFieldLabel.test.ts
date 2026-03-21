@@ -1,4 +1,4 @@
-import { resolveFieldLabel } from '../../../src/web/react/utils/labels';
+import { resolveFieldLabel, resolveLabel } from '../../../src/web/react/utils/labels';
 
 describe('resolveFieldLabel', () => {
   test('resolves line-item field labels from labelEn/labelFr/labelNl', () => {
@@ -15,4 +15,10 @@ describe('resolveFieldLabel', () => {
   });
 });
 
+describe('resolveLabel', () => {
+  test('falls back to a humanized label when no localized label exists', () => {
+    const question = { id: 'MP_UNLOCK_FOR_EDIT' } as any;
+    expect(resolveLabel(question, 'EN')).toBe('Unlock for edit');
+  });
+});
 

@@ -175,6 +175,12 @@ export function fetchBootstrapContextWithOptions(
   return service.fetchBootstrapContext(formKey, options);
 }
 
+export function renderInlineHtmlTemplate(formObject: WebFormSubmission, templateIdMap: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderInlineHtmlTemplate(formObject, templateIdMap);
+}
+
 export function fetchHomeBootstrap(formKey: string, clientRev?: number): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -267,6 +273,12 @@ export function fetchSubmissionByRowNumber(formKey: string, rowNumber: number): 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchSubmissionByRowNumber(formKey, rowNumber);
+}
+
+export function fetchSummaryRecord(formKey: string, language?: string, id?: string, rowNumber?: number): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSummaryRecord(formKey, language, id, rowNumber);
 }
 
 export function fetchSubmissionsByRowNumbers(formKey: string, rowNumbers: number[]): any {

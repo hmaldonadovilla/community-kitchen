@@ -1053,6 +1053,17 @@ export const buildDraftPayload = (args: {
   return submission;
 };
 
+export const resolveDraftPayloadFormKey = (args: {
+  formKey?: string | null;
+  definition?: Pick<WebFormDefinition, 'title'> | null;
+}): string => {
+  const explicit = (args.formKey || '').toString().trim();
+  if (explicit) return explicit;
+  const title = (args.definition?.title || '').toString().trim();
+  if (title) return title;
+  return 'draft';
+};
+
 export const computeUrlOnlyUploadUpdates = (
   definition: WebFormDefinition,
   payloadValues: Record<string, any>

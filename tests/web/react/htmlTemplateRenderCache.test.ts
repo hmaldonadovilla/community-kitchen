@@ -105,6 +105,30 @@ describe('client HTML render caching (api.ts)', () => {
     expect(r2.html).toBe('<div>2</div>');
   });
 
+  it('uses a seeded summary HTML cache entry without an Apps Script call', async () => {
+    jest.resetModules();
+    const calls: any[] = [];
+
+    installGoogleScriptRunMock({
+      renderSummaryHtmlTemplate: (payload, onSuccess) => {
+        calls.push(payload);
+        setTimeout(() => onSuccess({ success: true, html: '<div>server</div>' }), 0);
+      }
+    });
+
+    const api = require('../../../src/web/react/api') as typeof import('../../../src/web/react/api');
+
+    const payload: any = { formKey: 'F', language: 'EN', id: 'R-seeded', values: { A: '1' } };
+    api.seedSummaryHtmlTemplateCache(payload, { success: true, html: '<div>prefetched</div>' });
+
+    const cached = api.peekSummaryHtmlTemplateCache(payload);
+    const rendered = await api.renderSummaryHtmlTemplateApi(payload);
+
+    expect(cached?.html).toBe('<div>prefetched</div>');
+    expect(rendered.html).toBe('<div>prefetched</div>');
+    expect(calls.length).toBe(0);
+  });
+
   it('caches renderHtmlTemplate (button) per record + values + buttonId', async () => {
     jest.resetModules();
     const calls: any[] = [];
@@ -130,4 +154,3 @@ describe('client HTML render caching (api.ts)', () => {
     expect(r3.html).toBe('<div>BTN2:1</div>');
   });
 });
-

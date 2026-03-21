@@ -95,12 +95,6 @@
     overflow-wrap: anywhere;
   }
 
-  .ck-category-row th {
-    font-size: var(--ck-font-label, 0.95rem);
-    font-weight: 600;
-    padding-top: 12px;
-  }
-
   .ck-ingredient-row td {
     border-bottom: 1px solid var(--border);
   }
@@ -178,20 +172,21 @@
         </button>
       </div>
 
-      <table class="ck-ingredients-table" aria-label="Ingredients by category">
+      <table class="ck-ingredients-table" aria-label="Ingredients list">
         <colgroup>
           <col class="ck-col-name" />
           <col class="ck-col-qty" />
         </colgroup>
-        <tbody>
-          <tr class="ck-category-row">
-            <th scope="row" colspan="2">
-              {{GROUP_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT)}}{{ORDER_BY(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.CAT ASC, MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING ASC)}}
-            </th>
+        <thead>
+          <tr>
+            <th scope="col">Ingredient</th>
+            <th scope="col">Quantity</th>
           </tr>
+        </thead>
+        <tbody>
           <tr class="ck-ingredient-row">
             <td class="ck-ingredient-name">
-              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}
+              {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}{{ORDER_BY(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING ASC)}}
               <span class="ck-ingredient-allergen">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "")}}</span>
             </td>
             <td class="ck-ingredient-qty">

@@ -555,6 +555,22 @@ export const resolveValueMapValue = (valueMap: ValueMapConfig, getValue: (fieldI
   return unique.join(', ');
 };
 
+const shouldPreserveExistingValueMapValue = (
+  valueMap: ValueMapConfig,
+  currentValue: FieldValue,
+  computedValue: string,
+  getValue: (fieldId: string) => FieldValue
+): boolean => {
+  if (!valueMap?.dependsOn) return false;
+  if ((computedValue || '').toString().trim()) return false;
+  if (isEmptyValue(currentValue)) return false;
+  const dependsOn = Array.isArray(valueMap.dependsOn) ? valueMap.dependsOn : [valueMap.dependsOn];
+  return dependsOn.some(dep => {
+    if (dep === undefined || dep === null) return false;
+    return !isEmptyValue(getValue(dep));
+  });
+};
+
 export const resolveDerivedValue = (config: any, getter: (fieldId: string) => FieldValue): FieldValue => {
   if (!config) return undefined;
   if (config.op === 'addDays') {
@@ -619,12 +635,15 @@ export const applyValueMapsToLineRow = (
     .filter(field => field?.valueMap || field?.derivedValue)
     .forEach(field => {
       if (field.valueMap) {
-        const computed = resolveValueMapValue(field.valueMap, fieldId => {
+        const getValue = (fieldId: string) => {
           if (fieldId === undefined || fieldId === null) return undefined;
           if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
           return topValues[fieldId];
-        });
-        nextValues[field.id] = computed;
+        };
+        const computed = resolveValueMapValue(field.valueMap, getValue);
+        if (!shouldPreserveExistingValueMapValue(field.valueMap, nextValues[field.id], computed, getValue)) {
+          nextValues[field.id] = computed;
+        }
       }
       if (field.derivedValue) {
         const applyOn = resolveDerivedApplyOn(field.derivedValue);
@@ -721,7 +740,12 @@ export const applyValueMapsToForm = (
 
   definition.questions.forEach(q => {
     if ((q as any).valueMap) {
-      values[q.id] = resolveValueMapValue((q as any).valueMap, fieldId => values[fieldId]);
+      const valueMap = (q as any).valueMap as ValueMapConfig;
+      const getValue = (fieldId: string) => values[fieldId];
+      const computed = resolveValueMapValue(valueMap, getValue);
+      if (!shouldPreserveExistingValueMapValue(valueMap, values[q.id], computed, getValue)) {
+        values[q.id] = computed;
+      }
     }
     if ((q as any).derivedValue) {
       const applyOn = resolveDerivedApplyOn((q as any).derivedValue);
@@ -836,5 +860,4 @@ export const applyValueMapsToForm = (
 
   return { values, lineItems };
 };
-
 

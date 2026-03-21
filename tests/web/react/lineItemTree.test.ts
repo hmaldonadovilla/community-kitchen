@@ -1,0 +1,64 @@
+import { serializeLineItemTree } from '../../../src/web/react/app/lineItemTree';
+import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
+import { LineItemState } from '../../../src/web/react/types';
+
+describe('serializeLineItemTree', () => {
+  it('preserves nested subgroup rows when the active subgroup uses an override config', () => {
+    const lineItems: LineItemState = {
+      ROOT: [{ id: 'meal-1', values: { MEAL_TYPE: 'Diabetic' } }],
+      [buildSubgroupKey('ROOT', 'meal-1', 'CHILD')]: [{ id: 'prep-1', values: { RECIPE: 'Garlic green beans' } }],
+      [buildSubgroupKey(buildSubgroupKey('ROOT', 'meal-1', 'CHILD'), 'prep-1', 'INGS')]: [
+        { id: 'ing-1', values: { ING: 'Green beans - frozen', QTY: 1.2, UNIT: 'bag' } },
+        { id: 'ing-2', values: { ING: 'Salt', QTY: 3, UNIT: 'Tbsp' } }
+      ]
+    } as any;
+
+    const rootConfig = {
+      subGroups: [
+        {
+          id: 'CHILD',
+          fields: [{ id: 'RECIPE' }]
+        }
+      ]
+    };
+
+    const withoutOverride = serializeLineItemTree({
+      lineItems,
+      groupCfg: rootConfig,
+      groupKey: 'ROOT',
+      rowFilters: {
+        ROOT: 'meal-1',
+        [buildSubgroupKey('ROOT', 'meal-1', 'CHILD')]: 'prep-1'
+      }
+    });
+
+    expect(withoutOverride[0]?.CHILD?.[0]?.INGS).toBeUndefined();
+
+    const withOverride = serializeLineItemTree({
+      lineItems,
+      groupCfg: rootConfig,
+      groupKey: 'ROOT',
+      rowFilters: {
+        ROOT: 'meal-1',
+        [buildSubgroupKey('ROOT', 'meal-1', 'CHILD')]: 'prep-1'
+      },
+      groupOverridesByKey: {
+        [buildSubgroupKey('ROOT', 'meal-1', 'CHILD')]: {
+          id: 'CHILD',
+          fields: [{ id: 'RECIPE' }] as any,
+          subGroups: [
+            {
+              id: 'INGS',
+              fields: [{ id: 'ING' }, { id: 'QTY' }, { id: 'UNIT' }]
+            } as any
+          ]
+        }
+      }
+    });
+
+    expect(withOverride[0]?.CHILD?.[0]?.INGS).toEqual([
+      expect.objectContaining({ ING: 'Green beans - frozen', QTY: 1.2, UNIT: 'bag' }),
+      expect.objectContaining({ ING: 'Salt', QTY: 3, UNIT: 'Tbsp' })
+    ]);
+  });
+});

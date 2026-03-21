@@ -27,11 +27,11 @@ import {
   renderDocTemplatePdfPreviewApi,
   renderMarkdownTemplateApi,
   renderHtmlTemplateApi,
-  renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
   consumePrefetchedHomeBootstrapApi,
   fetchBootstrapContextApi,
   fetchHomeBootstrapApi,
+  fetchSummaryRecordApi,
   fetchSortedBatch,
   ListSort,
   ListResponse,
@@ -40,6 +40,7 @@ import {
   fetchRecordByRowNumber,
   fetchRecordsByRowNumbers,
   getRecordVersionApi,
+  seedSummaryHtmlTemplateCache,
   resolveUserFacingErrorMessage
 } from './api';
 import FormView from './components/FormView';
@@ -69,7 +70,8 @@ import {
   resolveExistingRecordId,
   validateForm
 } from './app/submission';
-import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from './app/bundledHtmlClientRenderer';
+import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
+import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { detectDebug } from './app/utils';
@@ -650,6 +652,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const updateRecordActionInFlightRef = useRef(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
+  const [prefetchedSummaryHtml, setPrefetchedSummaryHtml] = useState<{ recordId: string; html: string } | null>(null);
   const [recordLoadingId, setRecordLoadingId] = useState<string | null>(null);
   const [recordLoadError, setRecordLoadError] = useState<string | null>(null);
   const [optionState, setOptionState] = useState<OptionState>({});
@@ -1618,6 +1621,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const fieldKey = fieldPath || fieldId;
         const autoSaveDirtyBefore = autoSaveDirtyRef.current;
         const autoSaveQueuedBefore = autoSaveQueuedRef.current;
+        if (prefetchedSummaryHtml) {
+          setPrefetchedSummaryHtml(null);
+        }
         // Clear stale dedup notice on any new user edit.
         if (dedupNotice) setDedupNotice(null);
 
@@ -1908,6 +1914,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       logEvent,
       openFieldChangeDialog,
+      prefetchedSummaryHtml,
       setErrors,
       triggerDedupDeleteOnKeyChange
     ]
@@ -3486,6 +3493,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (snapshot: WebFormSubmission) => {
       const id = snapshot?.id;
       if (!snapshot || !id) return;
+      setPrefetchedSummaryHtml(null);
       // Switching records: cancel any in-flight dedup check so stale responses can't affect the new record.
       if (dedupCheckTimerRef.current) {
         globalThis.clearTimeout(dedupCheckTimerRef.current);
@@ -3601,68 +3609,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         // ignore
       }
 
-      // Prefetch Summary HTML template (client-side cached) so Summary view is instant when users tap it.
-      // Do NOT await: this should run in parallel with any other async work.
-      if ((definition as any)?.summaryHtmlTemplateId && definition.summaryViewEnabled !== false) {
-        try {
-          const payload = buildDraftPayload({
-            definition,
-            formKey,
-            language: languageRef.current,
-            values: mapped.values,
-            lineItems: mapped.lineItems,
-            existingRecordId: id
-          });
-          if (snapshot?.status !== undefined && snapshot?.status !== null) {
-            (payload as any).status = snapshot.status;
-          }
-          if (snapshot?.createdAt !== undefined && snapshot?.createdAt !== null) {
-            (payload as any).createdAt = snapshot.createdAt;
-          }
-          if (snapshot?.updatedAt !== undefined && snapshot?.updatedAt !== null) {
-            (payload as any).updatedAt = snapshot.updatedAt;
-          }
-          if ((snapshot as any)?.pdfUrl !== undefined && (snapshot as any)?.pdfUrl !== null) {
-            (payload as any).pdfUrl = (snapshot as any).pdfUrl;
-          }
-          const resolved = resolveTemplateIdForRecord((definition as any).summaryHtmlTemplateId, payload.values || {}, payload.language);
-          if (isBundledHtmlTemplateId(resolved || '')) {
-            logEvent('summary.htmlTemplate.bundle.prefetch.start', { recordId: id });
-            void renderBundledHtmlTemplateClient({
-              definition,
-              payload: payload as any,
-              templateIdMap: (definition as any).summaryHtmlTemplateId
-            })
-              .then(res => {
-                if (res?.success && res?.html) {
-                  logEvent('summary.htmlTemplate.bundle.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
-                } else {
-                  logEvent('summary.htmlTemplate.bundle.prefetch.skip', { recordId: id, success: !!res?.success });
-                }
-              })
-              .catch(err => {
-                const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
-                logEvent('summary.htmlTemplate.bundle.prefetch.error', { recordId: id, message: msg });
-              });
-          } else {
-            logEvent('summary.htmlTemplate.prefetch.start', { recordId: id });
-            void renderSummaryHtmlTemplateApi(payload)
-              .then(res => {
-                if (res?.success && res?.html) {
-                  logEvent('summary.htmlTemplate.prefetch.ok', { recordId: id, htmlLength: (res.html || '').toString().length });
-                } else {
-                  logEvent('summary.htmlTemplate.prefetch.skip', { recordId: id, success: !!res?.success });
-                }
-              })
-              .catch(err => {
-                const msg = (err as any)?.message?.toString?.() || (err as any)?.toString?.() || 'Failed';
-                logEvent('summary.htmlTemplate.prefetch.error', { recordId: id, message: msg });
-              });
-          }
-        } catch (err: any) {
-          logEvent('summary.htmlTemplate.prefetch.exception', { recordId: id, message: err?.message || err });
-        }
-      }
     },
     [dedupPrecheckRules, definition, formKey, logEvent, upsertListCacheRow]
   );
@@ -5115,14 +5061,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (useBundled) {
           logEvent('report.htmlPreview.bundle.start', { buttonId: baseId, qIdx: qIdx ?? null });
         }
-        const res = useBundled
-          ? await renderBundledHtmlTemplateClient({
-              definition,
-              payload: draft as any,
-              templateIdMap,
-              buttonId
-            })
-          : await renderHtmlTemplateApi(draft, buttonId);
+        const res = await renderHtmlTemplateApi(draft, buttonId);
         if (seq !== reportPdfSeqRef.current) return;
         if (!res?.success || !res?.html) {
           const msg = (res?.message || 'Failed to render preview.').toString();
@@ -8144,6 +8083,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setRecordLoadError(null);
     setSelectedRecordId(row.id);
     selectedRecordIdRef.current = row.id;
+    setPrefetchedSummaryHtml(null);
     // Clear any previous snapshot immediately; we will re-apply a fresh snapshot below.
     setSelectedRecordSnapshot(null);
     const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
@@ -8169,6 +8109,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const rowNumberHint = Number((row as any).__rowNumber);
     const hintedRow = Number.isFinite(rowNumberHint) ? rowNumberHint : undefined;
     recordRowNumberRef.current = hintedRow || null;
+    const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
+    const resolvedOpenView =
+      requested === 'form'
+        ? 'form'
+        : requested === 'summary'
+          ? summaryViewEnabled
+            ? 'summary'
+            : 'form'
+          : resolveStatusAutoView(statusRaw, summaryViewEnabled).view;
+    const shouldUseCombinedSummaryFetch =
+      !sourceRecord &&
+      !shouldTriggerButton &&
+      !shouldCopy &&
+      !shouldSubmit &&
+      resolvedOpenView === 'summary' &&
+      Boolean(definition.summaryHtmlTemplateId);
 
     const triggerOpenButtonIfNeeded = () => {
       if (!shouldTriggerButton) return;
@@ -8270,7 +8226,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         updatedAt: row.updatedAt,
         status: row.status ? row.status.toString() : null
       });
+      if (shouldUseCombinedSummaryFetch) {
+        setRecordLoadingId(row.id || (hintedRow ? `row:${hintedRow}` : null));
+        setRecordLoadError(null);
+      }
       const hydrateFromInFlightPrefetch = async (): Promise<boolean> => {
+        if (shouldUseCombinedSummaryFetch) return false;
         if (!hintedRow || hintedRow < 2) return false;
         const pending = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
         if (!pending) return false;
@@ -8305,6 +8266,63 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       };
 
       void (async () => {
+        if (shouldUseCombinedSummaryFetch) {
+          const startedAt = Date.now();
+          logEvent('summary.fetchCombined.start', { recordId: row.id, rowNumberHint: hintedRow || null });
+          try {
+            const res = await fetchSummaryRecordApi(formKey, language, row.id, hintedRow || null);
+            if (selectedRecordIdRef.current !== row.id) return;
+            const snapshot = res?.record || null;
+            if (!snapshot) throw new Error((res?.message || 'Record not found.').toString());
+            applyRecordSnapshot(snapshot);
+            if (res?.success && res?.html) {
+              const draft = buildDraftPayload({
+                definition,
+                formKey,
+                language,
+                values: valuesRef.current,
+                lineItems: lineItemsRef.current,
+                existingRecordId: snapshot.id
+              });
+              (draft as any).status = snapshot.status || null;
+              (draft as any).createdAt = snapshot.createdAt || undefined;
+              (draft as any).updatedAt = snapshot.updatedAt || undefined;
+              (draft as any).pdfUrl = (snapshot as any).pdfUrl || undefined;
+              seedSummaryHtmlTemplateCache(draft, {
+                success: true,
+                html: res.html,
+                fileName: res.fileName
+              });
+              setPrefetchedSummaryHtml({ recordId: snapshot.id || row.id, html: res.html });
+              logEvent('summary.fetchCombined.ok', {
+                recordId: snapshot.id || row.id,
+                durationMs: Date.now() - startedAt,
+                htmlLength: (res.html || '').toString().length
+              });
+            } else {
+              logEvent('summary.fetchCombined.degraded', {
+                recordId: snapshot.id || row.id,
+                durationMs: Date.now() - startedAt,
+                message: res?.message || 'summaryRenderFailed'
+              });
+            }
+            return;
+          } catch (err: any) {
+            if (selectedRecordIdRef.current !== row.id) return;
+            const uiMessage = resolveUiErrorMessage(err, 'Failed to load summary.');
+            const logMessage = resolveLogMessage(err, 'Failed to load summary.');
+            setRecordLoadError(uiMessage);
+            setRecordLoadingId(null);
+            logEvent('summary.fetchCombined.error', {
+              recordId: row.id,
+              rowNumberHint: hintedRow || null,
+              durationMs: Date.now() - startedAt,
+              message: logMessage
+            });
+            return;
+          }
+        }
+
         const resolvedFromPrefetch = await hydrateFromInFlightPrefetch();
         if (resolvedFromPrefetch) return;
         const ok = await loadRecordSnapshot(row.id, hintedRow);
@@ -8324,8 +8342,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         triggerOpenButtonIfNeeded();
       })();
     }
-
-    const statusRaw = ((sourceRecord?.status || row.status || '') as any)?.toString?.() || '';
     // When Summary view is disabled, always open the Form view (closed records are read-only).
     if (shouldTriggerButton) {
       // Stay on the list view; the button action will open a preview overlay when the record snapshot is ready.
@@ -8336,21 +8352,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return;
     }
 
-    if (requested === 'form') {
-      setView('form');
-    } else if (requested === 'summary') {
-      setView(summaryViewEnabled ? 'summary' : 'form');
-    } else {
+    if (requested === 'auto') {
       const resolved = resolveStatusAutoView(statusRaw, summaryViewEnabled);
-      setView(resolved.view);
       logEvent('list.openView.autoByStatus', {
         recordId: row.id,
         source: sourceRecord ? 'cached' : 'fetched',
         status: statusRaw || null,
         statusKey: resolved.statusKey,
-        nextView: resolved.view
+        nextView: resolvedOpenView
       });
     }
+    setView(resolvedOpenView);
   };
 
   const openRecordByIdForPerf = useCallback(
@@ -8417,7 +8429,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     backToHomePerfRef.current = null;
   }, [listCache.response?.items?.length, perfMark, perfMeasure, view]);
 
-  const currentRecord = selectedRecordSnapshot || (selectedRecordId ? listCache.records[selectedRecordId] : null);
+  const currentRecord = selectedRecordSnapshot || (selectedRecordId && !recordLoadingId ? listCache.records[selectedRecordId] : null);
+  const showFormRecordLoadingPlaceholder = shouldShowRecordLoadingPlaceholder({
+    recordLoading: Boolean(recordLoadingId),
+    hasCurrentRecord: Boolean(currentRecord)
+  });
   const headerSaveIndicator = useMemo(() => {
     // Show in the Form view, and also while a background save is in-flight after navigation.
     const showForView = view === 'form' || (autoSaveEnabled && draftSave.phase === 'saving');
@@ -9272,7 +9288,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         onDiagnostic={logEvent}
       />
 
-      {view === 'form' ? (
+      {view === 'form' && showFormRecordLoadingPlaceholder ? (
+        <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {recordLoadError ? <div className="error">{recordLoadError}</div> : null}
+          <div className="status">{tSystem('summary.loadingRecord', language, 'Loading record…')}</div>
+        </div>
+      ) : null}
+
+      {view === 'form' && !showFormRecordLoadingPlaceholder ? (
         <FormView
           formKey={formKey}
           definition={definition}
@@ -9337,6 +9360,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           selectedRecordId={selectedRecordId}
           recordLoadingId={recordLoadingId}
           currentRecord={currentRecord}
+          prefetchedSummaryHtml={prefetchedSummaryHtml?.recordId === selectedRecordId ? prefetchedSummaryHtml.html : null}
           onOpenFiles={openReadOnlyFilesOverlay}
           onAction={handleCustomButton}
           onDiagnostic={logEvent}
