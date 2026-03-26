@@ -63,7 +63,7 @@ const computeAutoDesired = (args: {
   const { groupKey, anchorField, dependencyIds, getDependencyRaw, optionState, language } = args;
   const depRawVals = dependencyIds.map(depId => getDependencyRaw(depId));
   const depVals = depRawVals.map(v => toDependencyValue(v as any));
-  const valid = dependencyIds.length > 0 && depRawVals.every(isValidDependencyValue);
+  const valid = dependencyIds.length === 0 || depRawVals.every(isValidDependencyValue);
   if (!valid) return { valid: false, desired: [], depVals };
   const opts = buildOptionSetForLineField(anchorField, groupKey, optionState);
   const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
@@ -211,7 +211,6 @@ export const reconcileOverlayAutoAddModeGroups = (args: {
     if (!anchorField || anchorField.type !== 'CHOICE') return;
 
     const dependencyIds = resolveDependsOnIds(anchorField);
-    if (!dependencyIds.length) return;
 
     ensureLineOptions(q.id, anchorField);
 
@@ -299,7 +298,6 @@ export const reconcileOverlayAutoAddModeSubgroups = (args: {
       const anchorField = ((sub as any).fields || []).find((f: any) => f && f.id === (sub as any).anchorFieldId);
       if (!anchorField || anchorField.type !== 'CHOICE') return;
       const dependencyIds = resolveDependsOnIds(anchorField);
-      if (!dependencyIds.length) return;
 
       parentRows.forEach(row => {
         const subKey = buildSubgroupKey(parent.id, row.id, subId);

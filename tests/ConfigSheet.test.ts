@@ -174,6 +174,96 @@ describe('ConfigSheet', () => {
     expect((questions[0].selectionEffects as any)?.[0]?.id).toBe('leftover');
   });
 
+  test('getQuestions parses selectionEffects.setValuesFromDataSource', () => {
+    const sheet = mockSS.insertSheet('Config: SelectionEffectsDataSourceHydration');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'LEFTOVER_ID',
+        'CHOICE',
+        'Leftover',
+        'Leftover',
+        'Leftover',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "selectionEffects": [
+            {
+              "type": "setValuesFromDataSource",
+              "dataSource": { "id": "Config: Leftover Inventory", "sheetId": "abc123", "tabName": "Leftover Inventory Data" },
+              "lookupField": "LEFTOVER_ID",
+              "fieldMapping": {
+                "RECIPE": "LEFTOVER_RECIPE",
+                "PREP_QTY": "LEFTOVER_PORTIONS"
+              },
+              "clearOnNoMatch": true
+            }
+          ]
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: SelectionEffectsDataSourceHydration');
+    expect(questions.length).toBe(1);
+    expect(questions[0].selectionEffects).toEqual([
+      expect.objectContaining({
+        type: 'setValuesFromDataSource',
+        lookupField: 'LEFTOVER_ID',
+        clearOnNoMatch: true,
+        dataSource: expect.objectContaining({
+          id: 'Config: Leftover Inventory',
+          sheetId: 'abc123',
+          tabName: 'Leftover Inventory Data'
+        }),
+        fieldMapping: {
+          RECIPE: 'LEFTOVER_RECIPE',
+          PREP_QTY: 'LEFTOVER_PORTIONS'
+        }
+      })
+    ]);
+  });
+
+  test('getQuestions parses derivedValue.template', () => {
+    const sheet = mockSS.insertSheet('Config: DerivedTemplate');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'HEADER',
+        'TEXT',
+        'Header',
+        'Header',
+        'Header',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"derivedValue":{"op":"template","template":"{MEAL_TYPE} | {ORD_QTY}","when":"always"},"ui":{"hideLabel":true},"readOnly":true}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: DerivedTemplate');
+    expect(questions).toHaveLength(1);
+    expect(questions[0].derivedValue).toEqual({
+      op: 'template',
+      template: '{MEAL_TYPE} | {ORD_QTY}',
+      when: 'always'
+    });
+    expect(questions[0].readOnly).toBe(true);
+    expect(questions[0].ui).toEqual({ hideLabel: true });
+  });
+
   test('getQuestions parses group.pageSection (visual page sections in edit view)', () => {
     const sheet = mockSS.insertSheet('Config: PageSections');
     const exampleRows = [
@@ -212,7 +302,7 @@ describe('ConfigSheet', () => {
     );
   });
 
-  test('getQuestions parses line item ui controls (showItemPill, addButtonPlacement)', () => {
+  test('getQuestions parses line item ui controls (showItemPill, addButtonPlacement, rowHeaderSummaryTemplate)', () => {
     const sheet = mockSS.insertSheet('Config: LineItemUiControls');
     const exampleRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
@@ -227,7 +317,7 @@ describe('ConfigSheet', () => {
         '',
         '',
         'Active',
-        '{"fields":[{"id":"QTY","type":"NUMBER","labelEn":"Qty"}],"ui":{"mode":"progressive","showItemPill":false,"addButtonPlacement":"bottom","allowRemoveAutoRows":false,"saveDisabledRows":true}}',
+        '{"fields":[{"id":"QTY","type":"NUMBER","labelEn":"Qty"}],"ui":{"mode":"progressive","showItemPill":false,"addButtonPlacement":"bottom","allowRemoveAutoRows":false,"saveDisabledRows":true,"rowHeaderSummaryTemplate":"{QTY} portions"}}',
         '',
         '',
         ''
@@ -244,9 +334,79 @@ describe('ConfigSheet', () => {
         showItemPill: false,
         addButtonPlacement: 'bottom',
         allowRemoveAutoRows: false,
-        saveDisabledRows: true
+        saveDisabledRows: true,
+        rowHeaderSummaryTemplate: '{QTY} portions'
       })
     );
+  });
+
+  test('getQuestions parses autoIncrement.prefixByValue for partitioned ids', () => {
+    const sheet = mockSS.insertSheet('Config: AutoIncrementPrefixByValue');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":4,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"},"defaultPrefix":"LX-"}}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: AutoIncrementPrefixByValue');
+    expect(questions.length).toBe(1);
+    expect(questions[0].autoIncrement).toEqual({
+      padLength: 4,
+      prefixByValue: {
+        fieldId: 'LEFTOVER_KIND',
+        map: {
+          entireDish: 'LE-',
+          partialDish: 'LP-'
+        },
+        defaultPrefix: 'LX-'
+      }
+    });
+  });
+
+  test('getQuestions preserves autoIncrement padLength 0 for variable-width ids', () => {
+    const sheet = mockSS.insertSheet('Config: AutoIncrementZeroPad');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"prefix":"LE-","padLength":0}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: AutoIncrementZeroPad');
+    expect(questions.length).toBe(1);
+    expect(questions[0].autoIncrement).toEqual({
+      prefix: 'LE-',
+      padLength: 0
+    });
   });
 
   test('getQuestions preserves lineItemConfig.ui.closeConfirm and closeButtonLabel (openInOverlay)', () => {

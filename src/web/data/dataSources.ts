@@ -47,9 +47,11 @@ const normalizeDataSourceSignature = (config: DataSourceConfig): string => {
   const limit = Number.isFinite(Number(limitRaw)) ? Number(limitRaw) : null;
   const signature = {
     id: (config.id || 'default').toString(),
+    formKey: ((config as any).formKey || '').toString(),
     sheetId: ((config as any).sheetId || '').toString(),
     tabName: ((config as any).tabName || '').toString(),
     localeKey: ((config as any).localeKey || '').toString(),
+    statusFieldId: ((config as any).statusFieldId || '').toString(),
     mode: ((config as any).mode || '').toString(),
     ref: ((config as any).ref || '').toString(),
     projection,
@@ -296,6 +298,14 @@ export async function fetchDataSource(
 
   inflight.set(cacheKey, promise);
   return promise;
+}
+
+export function peekCachedDataSource(config: DataSourceConfig, language: LangCode): any | null {
+  const cacheKey = key(config, language);
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey) ?? null;
+  }
+  return loadPersisted(config, language);
 }
 
 /**

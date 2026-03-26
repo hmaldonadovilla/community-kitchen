@@ -17,7 +17,15 @@ import { isEmptyValue, isUnsetForStep } from '../utils/values';
 import { tSystem } from '../../systemStrings';
 import { resolveLocalizedString } from '../../i18n';
 import { buildMaybeFilePayload } from './filePayload';
-import { ROW_ID_KEY, buildLineItemDedupKey, buildSubgroupKey, formatLineItemDedupValue, normalizeLineItemDedupRules, resolveSubgroupKey } from './lineItems';
+import {
+  ROW_ID_KEY,
+  buildLineItemDedupKey,
+  buildSubgroupKey,
+  formatLineItemDedupValue,
+  normalizeLineItemDedupRules,
+  resolveSubgroupKey,
+  shouldPersistLineItemRows
+} from './lineItems';
 import { resolveParagraphUserText } from './paragraphDisclaimer';
 import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from './recipeIngredientsDirty';
 import { applyValueMapsToForm } from './valueMaps';
@@ -58,6 +66,9 @@ const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
   if (!cfg) return rawValue;
   return resolveParagraphUserText({ rawValue, config: cfg });
 };
+
+const isServerGeneratedAutoIncrementField = (field: any): boolean =>
+  !!field && field.type === 'TEXT' && !!field.autoIncrement;
 
 const normalizeStepRowFilter = (raw: any): StepRowFilterConfig | null => {
   if (!raw || typeof raw !== 'object') return null;
@@ -467,7 +478,8 @@ export const validateForm = (args: {
         if (hideField) return;
 
         const requiredByConfig = !!field.required;
-        const requireField = requiredByConfig || requireAllFields;
+        const requireField =
+          !isServerGeneratedAutoIncrementField(field) && (requiredByConfig || requireAllFields);
 
         if ((field as any).type === 'FILE_UPLOAD') {
           const fieldLabel = resolveFieldLabel(field, language, field.id);
@@ -546,7 +558,7 @@ export const validateForm = (args: {
   definition.questions.forEach(q => {
     const questionHidden = shouldHideField(q.visibility, ctx);
     const requiredByConfig = !!(q as any).required;
-    const requireField = requiredByConfig || requireAllFields;
+    const requireField = !isServerGeneratedAutoIncrementField(q) && (requiredByConfig || requireAllFields);
 
     if (q.validationRules && q.validationRules.length) {
       const errs = validateRules(q.validationRules, { ...ctx, language, phase: 'submit', isHidden: () => questionHidden });
@@ -856,6 +868,11 @@ export const buildSubmissionPayload = async (args: {
   }
 
   for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
+    if (!shouldPersistLineItemRows(q.lineItemConfig || q)) {
+      payloadValues[q.id] = [];
+      payloadValues[`${q.id}_json`] = '[]';
+      continue;
+    }
     const serializeGroupRows = async (args: {
       groupCfg: any;
       groupKey: string;
@@ -887,7 +904,7 @@ export const buildSubmissionPayload = async (args: {
 
       const fields = (groupCfg?.fields || []) as any[];
       const fileFields = fields.filter((f: any) => f?.type === 'FILE_UPLOAD');
-      const subGroups = (groupCfg?.subGroups || []) as any[];
+      const subGroups = ((groupCfg?.subGroups || []) as any[]).filter(sub => shouldPersistLineItemRows(sub));
 
       return Promise.all(
         rowsToSave.map(async row => {
@@ -1007,11 +1024,16 @@ export const buildDraftPayload = (args: {
 
   // Serialize line item groups (and sanitize any nested FILE_UPLOAD fields to URL-only strings)
   for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
+    if (!shouldPersistLineItemRows(q.lineItemConfig || q)) {
+      payloadValues[q.id] = [];
+      payloadValues[`${q.id}_json`] = '[]';
+      continue;
+    }
     const serializeGroupRows = (args: { groupCfg: any; groupKey: string; rows: LineItemRowState[] }): Record<string, any>[] => {
       const { groupCfg, groupKey, rows } = args;
       const fields = (groupCfg?.fields || []) as any[];
       const fileFields = fields.filter((f: any) => f?.type === 'FILE_UPLOAD');
-      const subGroups = (groupCfg?.subGroups || []) as any[];
+      const subGroups = ((groupCfg?.subGroups || []) as any[]).filter(sub => shouldPersistLineItemRows(sub));
 
       return rows.map(row => {
         const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };

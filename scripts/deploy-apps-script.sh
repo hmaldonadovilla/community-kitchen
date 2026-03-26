@@ -126,7 +126,7 @@ if ! cmp -s "dist/Code.js" "dist/apps-script/Code.js"; then
   exit 1
 fi
 
-if ! run_clasp login --status >/dev/null 2>&1; then
+if ! run_clasp show-authorized-user >/dev/null 2>&1; then
   echo "[deploy-apps-script] clasp is not authenticated."
   echo "[deploy-apps-script] Run: ${CLASP_CMD[*]} login --redirect-port 53682"
   exit 1

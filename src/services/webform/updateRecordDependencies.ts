@@ -180,7 +180,7 @@ const getRecordFieldValue = (record: WebFormSubmission, fieldId: string): FieldV
   return (record.values || {})[fieldId] as FieldValue;
 };
 
-const buildRecordVisibilityContext = (
+export const buildRecordVisibilityContext = (
   record: WebFormSubmission,
   questions: QuestionConfig[]
 ): { ctx: VisibilityContext; lineItems: RecordLineItemState } => {
@@ -193,7 +193,7 @@ const buildRecordVisibilityContext = (
   return { ctx, lineItems };
 };
 
-const buildRowVisibilityContext = (args: {
+export const buildRowVisibilityContext = (args: {
   row: Record<string, any>;
   groupKey: string;
   parentValues?: Record<string, any>;
@@ -255,7 +255,7 @@ const stringifyTemplateValue = (value: any): string => {
   }
 };
 
-const resolveTemplateValue = (value: any, vars: TemplateVars): any => {
+export const resolveTemplateValue = (value: any, vars: TemplateVars): any => {
   if (typeof value === 'string') {
     const exact = value.match(EXACT_TEMPLATE_TOKEN_RE);
     if (exact) {
@@ -277,13 +277,21 @@ const resolveTemplateValue = (value: any, vars: TemplateVars): any => {
   return value;
 };
 
-const buildTemplateVars = (args: {
+export const buildTemplateVars = (args: {
   sourceRecord: WebFormSubmission;
   targetFormKey: string;
   targetFormTitle?: string;
   impactedCount?: number;
+  row?: Record<string, any>;
+  parent?: Record<string, any>;
+  lineItem?: {
+    groupId: string;
+    subGroupPath?: string[];
+    index: number;
+    rowId?: string;
+  };
 }): TemplateVars => {
-  const { sourceRecord, targetFormKey, targetFormTitle, impactedCount } = args;
+  const { sourceRecord, targetFormKey, targetFormTitle, impactedCount, row, parent, lineItem } = args;
   return {
     count: impactedCount ?? 0,
     targetFormKey,
@@ -294,6 +302,14 @@ const buildTemplateVars = (args: {
       updatedAt: sourceRecord.updatedAt || '',
       status: sourceRecord.status || '',
       ...(sourceRecord.values || {})
+    },
+    row: cloneJson(row || {}),
+    parent: cloneJson(parent || {}),
+    lineItem: {
+      groupId: lineItem?.groupId || '',
+      subGroupPath: Array.isArray(lineItem?.subGroupPath) ? [...(lineItem?.subGroupPath || [])] : [],
+      index: Number.isFinite(Number(lineItem?.index)) ? Number(lineItem?.index) : 0,
+      rowId: lineItem?.rowId || ''
     }
   };
 };

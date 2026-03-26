@@ -132,6 +132,42 @@ describe('derivedValue', () => {
     expect(values.B).toBe(25);
   });
 
+  it('template composes text from field tokens when empty', () => {
+    const definition: any = {
+      questions: [
+        { id: 'MEAL_TYPE', type: 'TEXT' },
+        { id: 'ORD_QTY', type: 'NUMBER' },
+        { id: 'HEADER', type: 'TEXT', derivedValue: { op: 'template', template: '{MEAL_TYPE} | {ORD_QTY}' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(
+      definition,
+      { MEAL_TYPE: 'Diabetic', ORD_QTY: 15, HEADER: '' } as any,
+      {} as any,
+      { mode: 'change' }
+    );
+    expect(values.HEADER).toBe('Diabetic | 15');
+  });
+
+  it('template does not override a non-empty value by default', () => {
+    const definition: any = {
+      questions: [
+        { id: 'MEAL_TYPE', type: 'TEXT' },
+        { id: 'ORD_QTY', type: 'NUMBER' },
+        { id: 'HEADER', type: 'TEXT', derivedValue: { op: 'template', template: '{MEAL_TYPE} | {ORD_QTY}' } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(
+      definition,
+      { MEAL_TYPE: 'Diabetic', ORD_QTY: 15, HEADER: 'Manual' } as any,
+      {} as any,
+      { mode: 'change' }
+    );
+    expect(values.HEADER).toBe('Manual');
+  });
+
   it('copy does not apply during mode=change when applyOn=blur (prevents mid-typing updates)', () => {
     const definition: any = {
       questions: [
@@ -236,5 +272,4 @@ describe('derivedValue', () => {
     expect(updatedRow?.values?.MP_TO_COOK).toBe(7);
   });
 });
-
 

@@ -694,9 +694,96 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           min-width: 0;
         }
+        .ck-number-stepper.ck-compact-control {
+          width: auto !important;
+          min-width: auto;
+          display: inline-flex;
+          flex: 0 0 auto;
+        }
         .ck-number-stepper input[type="number"] {
           width: 100%;
           min-width: 0;
+          box-sizing: border-box;
+          appearance: textfield;
+          -moz-appearance: textfield;
+          -webkit-appearance: none;
+        }
+        .ck-number-stepper input[type="text"] {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          appearance: textfield;
+          -moz-appearance: textfield;
+          -webkit-appearance: none;
+        }
+        .ck-number-stepper input[type="number"]::-webkit-outer-spin-button,
+        .ck-number-stepper input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .ck-searchable-select.ck-compact-control {
+          width: auto !important;
+          min-width: auto;
+          max-width: none;
+          display: inline-flex;
+          flex: 0 0 auto;
+        }
+        .ck-searchable-select.ck-compact-control input,
+        .ck-searchable-select.ck-compact-control select,
+        .ck-searchable-select.ck-compact-control button {
+          font-size: var(--ck-font-control);
+        }
+        .ck-auto-width-control {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          flex: 0 0 auto;
+          min-width: 0;
+          max-width: none;
+          vertical-align: middle;
+        }
+        .ck-auto-width-measure {
+          position: absolute;
+          visibility: hidden;
+          pointer-events: none;
+          white-space: pre;
+          font: inherit;
+          font-size: var(--ck-font-control);
+          font-weight: 500;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: inherit;
+          line-height: 1;
+        }
+        .ck-auto-width-input,
+        .ck-auto-width-select {
+          min-width: 0;
+          max-width: none;
+          flex: 0 0 auto;
+          box-sizing: border-box;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          background: var(--card);
+          color: var(--text);
+          font: inherit;
+          appearance: none;
+          -webkit-appearance: none;
+          transition: width 120ms ease;
+        }
+        .ck-auto-width-input {
+          text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+        .ck-auto-width-select-wrap {
+          overflow: visible;
+        }
+        .ck-auto-width-select__chevron {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          color: var(--muted);
+          line-height: 1;
         }
 
         /* Control row: keep the main control + its action buttons (subgroup/info) on the same line when possible. */
@@ -1931,24 +2018,36 @@ export const FORM_VIEW_STYLES = `
           border-top-left-radius: 10px;
           border-top-right-radius: 10px;
         }
+        .line-item-row.ck-line-item-row--edge {
+          width: 100%;
+          max-width: 100%;
+        }
+        .line-item-row.ck-line-item-row--edge .ck-row-header {
+          margin-left: 0;
+          margin-right: 0;
+          padding-left: 0;
+          padding-right: 0;
+          border-top-left-radius: 0;
+          border-top-right-radius: 0;
+        }
         .line-item-row .ck-row-header-actions {
           display: inline-flex;
           align-items: center;
           gap: 8px;
           flex: 0 0 auto;
         }
-        .line-item-row.ck-line-item-row--leftover .ck-row-header-actions,
-        .line-item-row .ck-row-header-actions--leftover {
+        .line-item-row.ck-line-item-row--edge .ck-row-header-actions,
+        .line-item-row .ck-row-header-actions--edge {
           align-self: flex-end;
           margin-top: auto;
           align-items: flex-end;
         }
-        .line-item-row.ck-row-flow--leftover .ck-row-flow-actions {
+        .line-item-row.ck-row-flow--edge .ck-row-flow-actions {
           align-self: flex-end;
           margin-top: auto;
           align-items: flex-end;
         }
-        .line-item-row.ck-line-item-row--leftover .ck-line-item-row-separator,
+        .line-item-row.ck-line-item-row--edge .ck-line-item-row-separator,
         .line-item-row .ck-line-item-row-separator {
           margin-top: 12px;
           border-bottom: 1px solid var(--border);

@@ -93,6 +93,12 @@ export const resolveLineItemRowLimits = (cfg?: { minRows?: any; maxRows?: any })
   return { minRows, maxRows };
 };
 
+export const shouldPersistLineItemRows = (groupCfg?: any): boolean => {
+  const cfg = groupCfg?.lineItemConfig || groupCfg || {};
+  const ui = cfg?.ui || {};
+  return ui?.persistRows !== false;
+};
+
 export const isLineItemMaxRowsReached = (count: number, maxRows?: number): boolean => {
   if (maxRows === undefined || maxRows === null) return false;
   return count >= maxRows;
@@ -535,6 +541,7 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
       subGroups: (cfg.subGroups || []) as any[],
       addMode: (cfg.addMode || '').toString().trim().toLowerCase(),
       minRows: cfg.minRows,
+      persistRows: shouldPersistLineItemRows(cfg),
       anchorFieldId:
         cfg.anchorFieldId !== undefined && cfg.anchorFieldId !== null ? cfg.anchorFieldId.toString() : ''
     };
@@ -609,6 +616,10 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
         cfg.subGroups.forEach(sub => {
           const subId = resolveSubgroupKey(sub as any);
           if (!subId) return;
+          if (!shouldPersistLineItemRows(sub)) {
+            delete (values as any)[subId];
+            return;
+          }
           const childRaw = (r && (r as any)[subId]) || [];
           const childRows = parseRawRows(childRaw);
           const childKey = buildSubgroupKey(groupKey, rowId, subId);
@@ -654,7 +665,7 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
   definition.questions
     .filter(q => q.type === 'LINE_ITEM_GROUP')
     .forEach(q => {
-      const raw = recordValues?.[q.id] || recordValues?.[`${q.id}_json`];
+      const raw = shouldPersistLineItemRows(q) ? (recordValues?.[q.id] || recordValues?.[`${q.id}_json`]) : [];
       const rows = parseRawRows(raw);
 
       const cfg = resolveGroupConfig(q);
@@ -756,4 +767,3 @@ export const cascadeRemoveLineItemRows = (args: {
 
   return { lineItems: nextLineItems, removed, removedSubgroupKeys };
 };
-

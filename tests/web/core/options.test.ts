@@ -1,8 +1,12 @@
 import {
   buildOptionSet,
+  getOptionStateValue,
   loadOptionsFromDataSource,
+  mergeOptionStateValue,
   normalizeLanguage,
   optionKey,
+  optionKeysWithAliases,
+  optionParentAliases,
   toDependencyValue
 } from '../../../src/web/core/options';
 import { fetchDataSource } from '../../../src/web/data/dataSources';
@@ -25,6 +29,50 @@ describe('core options helpers', () => {
 
     it('returns id when no parent supplied', () => {
       expect(optionKey('field')).toBe('field');
+    });
+  });
+
+  describe('optionParentAliases', () => {
+    it('returns exact parent id when not dynamic', () => {
+      expect(optionParentAliases('MP_TYPE_LI')).toEqual(['MP_TYPE_LI']);
+    });
+
+    it('adds the base subgroup id for dynamic parent keys', () => {
+      expect(optionParentAliases('MP_MEALS_REQUEST::row-1::MP_TYPE_LI')).toEqual([
+        'MP_MEALS_REQUEST::row-1::MP_TYPE_LI',
+        'MP_MEALS_REQUEST::MP_TYPE_LI',
+        'MP_TYPE_LI'
+      ]);
+    });
+  });
+
+  describe('optionKeysWithAliases', () => {
+    it('builds keys for both dynamic and base parent ids', () => {
+      expect(optionKeysWithAliases('LEFTOVER_ID', 'MP_MEALS_REQUEST::row-1::MP_TYPE_LI')).toEqual([
+        'MP_MEALS_REQUEST::row-1::MP_TYPE_LI.LEFTOVER_ID',
+        'MP_MEALS_REQUEST::MP_TYPE_LI.LEFTOVER_ID',
+        'MP_TYPE_LI.LEFTOVER_ID'
+      ]);
+    });
+  });
+
+  describe('option state alias helpers', () => {
+    it('stores option state under dynamic and base keys', () => {
+      const next = mergeOptionStateValue({}, 'LEFTOVER_ID', 'MP_MEALS_REQUEST::row-1::MP_TYPE_LI', { en: ['LE-1'] });
+      expect(next).toEqual({
+        'MP_MEALS_REQUEST::row-1::MP_TYPE_LI.LEFTOVER_ID': { en: ['LE-1'] },
+        'MP_MEALS_REQUEST::MP_TYPE_LI.LEFTOVER_ID': { en: ['LE-1'] },
+        'MP_TYPE_LI.LEFTOVER_ID': { en: ['LE-1'] }
+      });
+    });
+
+    it('reads option state from alias keys', () => {
+      const state = {
+        'MP_MEALS_REQUEST::MP_TYPE_LI.LEFTOVER_ID': { en: ['LE-1', 'LE-2'] }
+      } as any;
+      expect(getOptionStateValue(state, 'LEFTOVER_ID', 'MP_MEALS_REQUEST::row-1::MP_TYPE_LI')).toEqual({
+        en: ['LE-1', 'LE-2']
+      });
     });
   });
 
@@ -101,4 +149,3 @@ describe('core options helpers', () => {
     });
   });
 });
-

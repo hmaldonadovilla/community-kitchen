@@ -106,7 +106,7 @@ const resolveDerivedWhen = (config: any): 'always' | 'empty' => {
   if (raw === 'empty') return 'empty';
   // Defaults:
   // - addDays: always (computed field)
-  // - today/timeOfDayMap/copy: empty (prefill/default behavior)
+  // - today/timeOfDayMap/copy/template: empty (prefill/default behavior)
   const op = (config?.op || '').toString();
   return op === 'addDays' || op === 'calc' ? 'always' : 'empty';
 };
@@ -618,6 +618,16 @@ export const resolveDerivedValue = (config: any, getter: (fieldId: string) => Fi
     if (!sourceId) return undefined;
     return getter(sourceId);
   }
+  if (config.op === 'template') {
+    const template = config.template !== undefined && config.template !== null ? config.template.toString() : '';
+    if (!template.trim()) return '';
+    return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match: string, fieldId: string) => {
+      const value = getter(fieldId);
+      if (value === undefined || value === null) return '';
+      if (Array.isArray(value)) return value.map(entry => (entry == null ? '' : String(entry))).join(', ');
+      return String(value);
+    });
+  }
   return undefined;
 };
 
@@ -860,4 +870,3 @@ export const applyValueMapsToForm = (
 
   return { values, lineItems };
 };
-

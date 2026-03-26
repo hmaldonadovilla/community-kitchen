@@ -205,6 +205,12 @@ export function runDailyAnalyticsRecompute(): any {
   return service.runDailyAnalyticsRecompute();
 }
 
+export function runDailyLifecycleRecompute(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.runDailyLifecycleRecompute();
+}
+
 // New endpoints (scaffolding)
 export function fetchDataSource(
   dataSourceId: string,
@@ -442,6 +448,7 @@ export function installTriggers(): void {
   const hasConfig = triggers.some(t => t.getHandlerFunction() === 'onConfigEdit');
   const hasResponses = triggers.some(t => t.getHandlerFunction() === 'onResponsesEdit');
   const hasDailyAnalytics = triggers.some(t => t.getHandlerFunction() === 'runDailyAnalyticsRecompute');
+  const hasDailyLifecycle = triggers.some(t => t.getHandlerFunction() === 'runDailyLifecycleRecompute');
   
   if (!hasConfig) {
     ScriptApp.newTrigger('onConfigEdit')
@@ -465,14 +472,16 @@ export function installTriggers(): void {
       .create();
   }
 
-  if (!hasConfig && !hasResponses && !hasDailyAnalytics) {
-    Browser.msgBox('Triggers installed! (Options + Response indexing + Daily analytics)');
-  } else if (!hasConfig && hasResponses && hasDailyAnalytics) {
-    Browser.msgBox('Trigger installed! (Options)');
-  } else if (hasConfig && !hasResponses && hasDailyAnalytics) {
-    Browser.msgBox('Trigger installed! (Response indexing)');
-  } else if (hasConfig && hasResponses && !hasDailyAnalytics) {
-    Browser.msgBox('Trigger installed! (Daily analytics)');
+  if (!hasDailyLifecycle) {
+    ScriptApp.newTrigger('runDailyLifecycleRecompute')
+      .timeBased()
+      .everyDays(1)
+      .atHour(2)
+      .create();
+  }
+
+  if (!hasConfig || !hasResponses || !hasDailyAnalytics || !hasDailyLifecycle) {
+    Browser.msgBox('Triggers installed! (Options + Response indexing + Daily analytics + Daily lifecycle)');
   } else {
     Browser.msgBox('Triggers already installed.');
   }
@@ -482,7 +491,7 @@ export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
     .addItem('Setup Forms', 'setup')
-    .addItem('Install Triggers (Options + Response indexing + Daily analytics)', 'installTriggers')
+    .addItem('Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
     .addItem('Invalidate Web App Cache', 'invalidateWebAppCache')
     .addItem('Rebuild Indexes (Data Version + Dedup)', 'rebuildIndexes')

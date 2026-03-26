@@ -115,6 +115,7 @@ export class DataSourceService {
       tabName: (args.config?.tabName || '').toString(),
       locale: (args.locale || '').toString().toUpperCase(),
       localeKey: (args.config?.localeKey || '').toString(),
+      statusFieldId: (args.config?.statusFieldId || '').toString(),
       projection: projection.map((v: any) => (v || '').toString()),
       mapping: args.config?.mapping || null,
       mode: (args.config?.mode || '').toString(),
@@ -239,13 +240,15 @@ export class DataSourceService {
         .filter(Boolean);
       return new Set(normalized);
     })();
-    const statusIdx = columns.status;
+    const statusFieldKey = normalizeHeaderToken(((config as any)?.statusFieldId || 'status').toString());
+    const statusIdx = columns[statusFieldKey];
     const filteredByStatus =
       statusAllowSet.size > 0 && statusIdx === undefined
         ? ((): any[] => {
-            debugLog('dataSources.statusFilter.missingColumn', {
+          debugLog('dataSources.statusFilter.missingColumn', {
               id: dataSourceId,
               tabName: sheet.getName(),
+              statusFieldId: statusFieldKey || 'status',
               statusAllowList: Array.from(statusAllowSet)
             });
             return filtered;

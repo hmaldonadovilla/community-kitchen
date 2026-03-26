@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import {
   computeAllowedOptions,
   buildLocalizedOptions,
+  getOptionStateValue,
+  mergeOptionStateValue,
   shouldHideField,
   matchesWhen,
   computeTotals,
@@ -117,18 +119,23 @@ import {
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from '../app/lineItems';
+
+const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
+  getOptionStateValue(optionState, field.id, parentId) || {
+    en: field.options || [],
+    fr: (field as any).optionsFr || [],
+    nl: (field as any).optionsNl || [],
+    raw: (field as any).optionsRaw
+  };
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
-import {
-  collectIncompleteEntireLeftoverRowIds,
-  resolveIncompleteEntireLeftoverOverlayDialogCopy
-} from '../app/leftoverOverlayGuard';
 import {
   isIngredientNameFieldId,
   isIngredientsManagementForm,
   normalizeIngredientNameIfAllCaps
 } from '../app/ingredientsCreateRules';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
+import { applyExclusiveLineSelection } from '../app/exclusiveLineSelection';
 import { resolveTemplateIdForRecord } from '../app/templateId';
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
@@ -811,7 +818,7 @@ const FormView: React.FC<FormViewProps> = ({
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
   const openConfirmDialogResolved = openConfirmDialog || fallbackConfirm.openConfirm;
   const showFallbackConfirmOverlay = !openConfirmDialog;
-  const leftoversAutosaveHoldRef = useRef<{ rootSubKey: string } | null>(null);
+  const subgroupOverlayAutosaveHoldRef = useRef<{ rootSubKey: string } | null>(null);
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
@@ -1274,8 +1281,8 @@ const FormView: React.FC<FormViewProps> = ({
       const parseStepFieldEntries = (
         groupId: string,
         raw: any
-      ): { allowed: Set<string> | null; renderAsLabel: Set<string> } => {
-        if (!raw) return { allowed: null, renderAsLabel: new Set() };
+      ): { allowed: Set<string> | null; renderAsLabel: Set<string>; explicit: boolean } => {
+        if (raw === undefined || raw === null) return { allowed: null, renderAsLabel: new Set(), explicit: false };
 
         const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
         const pushEntry = (v: any) => {
@@ -1304,7 +1311,7 @@ const FormView: React.FC<FormViewProps> = ({
 
         const ids = entries.map(e => e.id).filter(Boolean);
         const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
-        return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds) };
+        return { allowed: new Set(ids), renderAsLabel: new Set(roIds), explicit: true };
       };
 
       const scopedQuestions: WebQuestionDefinition[] = [];
@@ -1340,7 +1347,11 @@ const FormView: React.FC<FormViewProps> = ({
           }
         }
 
-        const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields } = parseStepFieldEntries(
+        const {
+          allowed: allowedFieldIds,
+          renderAsLabel: renderAsLabelFieldIdsFromFields,
+          explicit: hasExplicitFieldScope
+        } = parseStepFieldEntries(
           groupId,
           (t as any).fields
         );
@@ -1351,10 +1362,10 @@ const FormView: React.FC<FormViewProps> = ({
           const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
           return merged.size ? merged : null;
         })();
-        const filteredFieldsBase = allowedFieldIds
+        const filteredFieldsBase = hasExplicitFieldScope
           ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
               const fid = normalizeLineFieldId(groupId, (f as any)?.id);
-              return fid && allowedFieldIds.has(fid);
+              return fid && !!allowedFieldIds?.has(fid);
             })
           : lineCfg.fields || [];
         const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
@@ -1397,7 +1408,8 @@ const FormView: React.FC<FormViewProps> = ({
             const allowedSubFieldsRaw = subTarget?.fields;
             const {
               allowed: allowedSubFields,
-              renderAsLabel: renderAsLabelSubFieldIdsFromFields
+              renderAsLabel: renderAsLabelSubFieldIdsFromFields,
+              explicit: hasExplicitSubFieldScope
             } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
             const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
             const readOnlySubFields = (() => {
@@ -1412,10 +1424,10 @@ const FormView: React.FC<FormViewProps> = ({
             nextSub._guidedRowFilter = subTarget?.validationRows ?? subTarget?.rows;
             nextSub._expandGateFields = (sub as any).fields || [];
 
-            if (allowedSubFields && allowedSubFields.size) {
+            if (hasExplicitSubFieldScope) {
               nextSub.fields = ((sub as any).fields || []).filter((f: any) => {
                 const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                return fid && allowedSubFields.has(fid);
+                return fid && !!allowedSubFields?.has(fid);
               });
             }
             if (readOnlySubFields && readOnlySubFields.size) {
@@ -3195,9 +3207,25 @@ const FormView: React.FC<FormViewProps> = ({
       searchEnabled?: boolean;
       override?: string | null;
       disabled?: boolean;
+      className?: string;
+      style?: React.CSSProperties;
+      inputStyle?: React.CSSProperties;
       onChange: (next: string) => void;
     }) => {
-      const { fieldPath, value, options, required, placeholder: placeholderOverride, searchEnabled, override, disabled, onChange } = args;
+      const {
+        fieldPath,
+        value,
+        options,
+        required,
+        placeholder: placeholderOverride,
+        searchEnabled,
+        override,
+        disabled,
+        className,
+        style,
+        inputStyle,
+        onChange
+      } = args;
       const decision = computeChoiceControlVariant(options, required, override);
 
       const prev = choiceVariantLogRef.current[fieldPath];
@@ -3254,6 +3282,9 @@ const FormView: React.FC<FormViewProps> = ({
               disabled={!!disabled}
               placeholder={placeholder}
               emptyText={tSystem('common.noMatches', language, 'No matches.')}
+              className={className}
+              style={style}
+              inputStyle={inputStyle}
               onDiagnostic={(event, payload) => onDiagnostic?.(event, { fieldPath, ...(payload || {}) })}
               onChange={next => {
                 if (disabled) return;
@@ -3264,21 +3295,30 @@ const FormView: React.FC<FormViewProps> = ({
           );
         }
         return (
-          <select
-            value={value || ''}
-            disabled={!!disabled}
-            onChange={e => {
-              if (disabled) return;
-              onChange(e.target.value);
-            }}
-          >
-            <option value="">{placeholder}</option>
-            {options.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <div className={className} style={style}>
+            <select
+              value={value || ''}
+              disabled={!!disabled}
+              style={{
+                width: '100%',
+                minWidth: 0,
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                ...(inputStyle || {})
+              }}
+              onChange={e => {
+                if (disabled) return;
+                onChange(e.target.value);
+              }}
+            >
+              <option value="">{placeholder}</option>
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         );
       };
 
@@ -3387,10 +3427,10 @@ const FormView: React.FC<FormViewProps> = ({
     overlayStackRef.current = [];
     setSubgroupOverlay({ open: false });
     onDiagnostic?.('subgroup.overlay.close');
-    if (leftoversAutosaveHoldRef.current?.rootSubKey === closingSubKey) {
-      leftoversAutosaveHoldRef.current = null;
-      setAutoSaveHold?.(false, { reason: 'leftoversOverlay' });
-      onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'leftoversOverlay', subKey: closingSubKey });
+    if (subgroupOverlayAutosaveHoldRef.current?.rootSubKey === closingSubKey) {
+      subgroupOverlayAutosaveHoldRef.current = null;
+      setAutoSaveHold?.(false, { reason: 'subgroupOverlay' });
+      onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'subgroupOverlay', subKey: closingSubKey });
     }
   }, [onDiagnostic, setAutoSaveHold, subgroupOverlay.subKey]);
 
@@ -3408,9 +3448,6 @@ const FormView: React.FC<FormViewProps> = ({
       const isPartDishIngredientsOverlay =
         subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
       const overlayFields = (subgroupOverlay.groupOverride as any)?.fields;
-      const isLeftoversOverlay =
-        Array.isArray(overlayFields) && overlayFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
-      const isLeftoversRoot = isLeftoversOverlay && leftoversAutosaveHoldRef.current?.rootSubKey === subgroupKey;
       const rowsInOverlay = (() => {
         if (!subgroupKey) return [];
         const rowsAll = lineItemsRef.current[subgroupKey] || [];
@@ -3427,15 +3464,8 @@ const FormView: React.FC<FormViewProps> = ({
               return includeOk && !excludeMatch;
             })
           : rowsAll;
-        if (!isLeftoversOverlay) return filtered;
-        // Guard against preset "Cook" rows that are not part of the leftovers selection overlay.
-        return filtered.filter((row: any) => ((row?.values || {}) as any)?.PREP_TYPE?.toString?.().trim?.() !== 'Cook');
+        return filtered;
       })();
-      const hasPrepTypeSelected = rowsInOverlay.some((row: any) => {
-        const v = ((row?.values || {}) as any)?.PREP_TYPE;
-        return typeof v === 'string' ? v.trim().length > 0 : v !== null && v !== undefined && (!Array.isArray(v) || v.length > 0);
-      });
-      const incompleteEntireLeftoverRowIds = collectIncompleteEntireLeftoverRowIds(rowsInOverlay as any[]);
       const removeLineRowByCascade = (groupId: string, rowId: string) => {
         if (!groupId || !rowId) return;
         const prevLineItems = lineItemsRef.current || {};
@@ -3456,34 +3486,7 @@ const FormView: React.FC<FormViewProps> = ({
         }
         const cascade = cascadeRemoveLineItemRows({ lineItems: prevLineItems, roots: [{ groupId, rowId }] });
         const marked = markRecipeIngredientsDirtyForGroupKey(cascade.lineItems, groupId);
-        let nextLineItemsSeeded = marked.lineItems;
-        const parsedGroupKey = parseSubgroupKey(groupId);
-        const isLeftoversGroupKey =
-          groupId === 'MP_TYPE_LI' || (parsedGroupKey?.subGroupId || '').toString() === 'MP_TYPE_LI';
-        if (isLeftoversGroupKey) {
-          const existingRows = nextLineItemsSeeded[groupId] || [];
-          const hasNonCookRow = existingRows.some((row: any) => {
-            const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
-            return (prepType || '').toString().trim().toLowerCase() !== 'cook';
-          });
-          if (!hasNonCookRow) {
-            const rowIdPrefix = (parsedGroupKey?.subGroupId || groupId || 'MP_TYPE_LI').toString();
-            const seededRow: LineItemRowState = {
-              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
-              values: {
-                PREP_TYPE: '',
-                [ROW_SOURCE_KEY]: 'manual'
-              },
-              parentId: parsedGroupKey?.parentRowId,
-              parentGroupId: parsedGroupKey?.parentGroupKey
-            };
-            nextLineItemsSeeded = {
-              ...nextLineItemsSeeded,
-              [groupId]: [...existingRows, seededRow]
-            };
-            onDiagnostic?.('lineItems.leftovers.seedDefault', { groupKey: groupId, source: 'discardPartDish' });
-          }
-        }
+        const nextLineItemsSeeded = marked.lineItems;
         if (cascade.removedSubgroupKeys.length) {
           setSubgroupSelectors(prevSel => {
             const nextSel = { ...prevSel };
@@ -3520,137 +3523,6 @@ const FormView: React.FC<FormViewProps> = ({
       }
       if (overlayStackRef.current.length) {
         closeSubgroupOverlay();
-        return;
-      }
-      const discardLeftoversAndReturn = () => {
-        const parentGroupId = (subgroupInfo?.parentGroupId || subgroupInfo?.rootGroupId || '').toString();
-        const parentRowId = (subgroupInfo?.parentRowId || '').toString();
-        const parentGroupQuestion = definition.questions.find(q => (q?.id || '').toString() === parentGroupId);
-        const isReheatField = (parentGroupQuestion as any)?.lineItemConfig?.fields?.find(
-          (f: any) => (f?.id || '').toString().trim() === 'MP_IS_REHEAT'
-        );
-        setLineItems(prevLineItems => {
-          let nextLineItems = prevLineItems;
-          if (parentGroupId && parentRowId) {
-            const parentRows = nextLineItems[parentGroupId] || [];
-            const nextParentRows = parentRows.map((r: any) => {
-              if ((r?.id || '').toString() !== parentRowId) return r;
-              const rowValues = { ...(r?.values || {}) };
-              rowValues.MP_IS_REHEAT = 'No';
-              rowValues.LEFTOVER_INFO = 'No leftover';
-              return { ...r, values: rowValues };
-            });
-            nextLineItems = { ...nextLineItems, [parentGroupId]: nextParentRows };
-          }
-          return nextLineItems;
-        });
-        if (onSelectionEffect && parentGroupId && parentRowId && isReheatField) {
-          const parentRows = lineItemsRef.current[parentGroupId] || [];
-          const parentRow = parentRows.find((r: any) => (r?.id || '').toString() === parentRowId);
-          const rowValues = { ...(parentRow?.values || {}) } as any;
-          rowValues.MP_IS_REHEAT = 'No';
-          rowValues.LEFTOVER_INFO = 'No leftover';
-          onSelectionEffect(isReheatField as WebQuestionDefinition, 'No', {
-            contextId: buildLineContextId(parentGroupId, parentRowId, 'MP_IS_REHEAT'),
-            lineItem: { groupId: parentGroupId, rowId: parentRowId, rowValues },
-            forceContextReset: true
-          });
-        }
-        closeSubgroupOverlay();
-      };
-      if (source === 'button' && isLeftoversRoot && rowsInOverlay.length === 0) {
-        discardLeftoversAndReturn();
-        onDiagnostic?.('subgroup.overlay.close.leftovers.discard.empty', { source, subgroupKey });
-        return;
-      }
-      if (source === 'button' && isLeftoversRoot && rowsInOverlay.length > 0 && !hasPrepTypeSelected && openConfirmDialogResolved) {
-        openConfirmDialogResolved({
-          title: 'No leftover type selected',
-          message:
-            'You selected “Yes” for leftovers, but no leftover type was chosen. Do you want to go back to production and discard the leftover entry, or continue to select a leftover type?',
-          confirmLabel: 'Back to production (discard leftover)',
-          cancelLabel: 'Select leftover type',
-          dismissOnBackdrop: false,
-          showCloseButton: false,
-          kind: 'leftoversOverlayDiscard',
-          refId: `${subgroupKey}::leftoversDiscard`,
-          onConfirm: discardLeftoversAndReturn,
-          onCancel: () => {
-            // Stay in overlay so the user can select a leftover type.
-          }
-        });
-        onDiagnostic?.('subgroup.overlay.close.confirm.open', { source, kind: 'leftoversOverlayDiscard' });
-        return;
-      }
-      if (source === 'button' && isLeftoversRoot && incompleteEntireLeftoverRowIds.length > 0 && openConfirmDialogResolved) {
-        const copy = resolveIncompleteEntireLeftoverOverlayDialogCopy(language);
-        openConfirmDialogResolved({
-          title: copy.title,
-          message: copy.message,
-          confirmLabel: copy.confirmLabel,
-          cancelLabel: copy.cancelLabel,
-          showCancel: copy.showCancel,
-          showCloseButton: copy.showCloseButton,
-          dismissOnBackdrop: copy.dismissOnBackdrop,
-          kind: 'leftoversOverlayIncompleteEntireQty',
-          refId: `${subgroupKey}::leftoversIncompleteEntireQty`,
-          onConfirm: () => {
-            const prevLineItems = lineItemsRef.current || {};
-            const cascade = cascadeRemoveLineItemRows({
-              lineItems: prevLineItems,
-              roots: incompleteEntireLeftoverRowIds.map(rowId => ({ groupId: subgroupKey, rowId }))
-            });
-            if (cascade.removedSubgroupKeys.length) {
-              setSubgroupSelectors(prevSel => {
-                const nextSel = { ...prevSel };
-                cascade.removedSubgroupKeys.forEach(key => {
-                  delete (nextSel as any)[key];
-                });
-                return nextSel;
-              });
-            }
-            const mapped = applyValueMapsToForm(
-              definition,
-              (valuesRef.current || {}) as Record<string, FieldValue>,
-              cascade.lineItems,
-              { mode: 'init' }
-            );
-            valuesRef.current = mapped.values;
-            lineItemsRef.current = mapped.lineItems;
-            setValues(mapped.values);
-            setLineItems(mapped.lineItems);
-            runSelectionEffectsForAncestorRows(subgroupKey, prevLineItems, mapped.lineItems, {
-              mode: 'init',
-              topValues: mapped.values
-            });
-
-            const remainingLeftoverRows = (mapped.lineItems[subgroupKey] || []).filter((row: any) => {
-              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
-              return (prepType || '').toString().trim().toLowerCase() !== 'cook';
-            });
-
-            onDiagnostic?.('subgroup.overlay.close.leftovers.discard.incompleteEntireQty', {
-              source,
-              subgroupKey,
-              removedRows: incompleteEntireLeftoverRowIds.length,
-              remainingRows: remainingLeftoverRows.length
-            });
-
-            if (!remainingLeftoverRows.length) {
-              discardLeftoversAndReturn();
-              return;
-            }
-            closeSubgroupOverlay();
-          },
-          onCancel: () => {
-            // Stay in overlay so the user can enter a valid leftover quantity.
-          }
-        });
-        onDiagnostic?.('subgroup.overlay.close.confirm.open', {
-          source,
-          kind: 'leftoversOverlayIncompleteEntireQty',
-          rowCount: incompleteEntireLeftoverRowIds.length
-        });
         return;
       }
       const overlayCloseCtx: VisibilityContext = {
@@ -4088,13 +3960,13 @@ const FormView: React.FC<FormViewProps> = ({
       const rowFilter = options?.rowFilter || null;
       const groupOverride = options?.groupOverride;
       const groupOverrideFields = (groupOverride as any)?.fields;
-      const isLeftoversOverlay =
+      const isPrepSelectionOverlay =
         Array.isArray(groupOverrideFields) && groupOverrideFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
-      if (isLeftoversOverlay) {
-        if (!leftoversAutosaveHoldRef.current || leftoversAutosaveHoldRef.current.rootSubKey !== subKey) {
-          leftoversAutosaveHoldRef.current = { rootSubKey: subKey };
-          setAutoSaveHold?.(true, { reason: 'leftoversOverlay' });
-          onDiagnostic?.('autosave.hold.request', { hold: true, reason: 'leftoversOverlay', subKey });
+      if (isPrepSelectionOverlay) {
+        if (!subgroupOverlayAutosaveHoldRef.current || subgroupOverlayAutosaveHoldRef.current.rootSubKey !== subKey) {
+          subgroupOverlayAutosaveHoldRef.current = { rootSubKey: subKey };
+          setAutoSaveHold?.(true, { reason: 'subgroupOverlay' });
+          onDiagnostic?.('autosave.hold.request', { hold: true, reason: 'subgroupOverlay', subKey });
         }
       }
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
@@ -6751,7 +6623,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (!onSelectionEffect) return;
     runSelectionEffectsForAncestors({
       definition,
-      values,
+      values: options?.topValues || valuesRef.current,
       onSelectionEffect,
       sourceGroupKey,
       prevLineItems,
@@ -6886,6 +6758,15 @@ const FormView: React.FC<FormViewProps> = ({
       row.id === rowId ? { ...row, values: nextRowValues } : row
     );
     let updatedLineItems: LineItemState = { ...currentLineItems, [group.id]: nextRows };
+    updatedLineItems = applyExclusiveLineSelection({
+      lineItems: updatedLineItems,
+      groupKey: group.id,
+      rowId,
+      fieldId: (field?.id || '').toString(),
+      value,
+      rowValues: nextRowValues,
+      config: (field as any)?.ui?.exclusiveLineSelection
+    });
     const marked = markRecipeIngredientsDirtyForGroupKey(updatedLineItems, group.id);
     if (marked.changed) {
       updatedLineItems = marked.lineItems;
@@ -8570,7 +8451,7 @@ const FormView: React.FC<FormViewProps> = ({
     const pendingDefaults: Array<{ question: WebQuestionDefinition; value: string }> = [];
     definition.questions.forEach(q => {
       if (q.type !== 'CHOICE') return;
-      const optionSet = optionState[optionKey(q.id)] || toOptionSet(q);
+      const optionSet = getOptionStateValue(optionState, q.id) || toOptionSet(q);
       const allowed = computeAllowedOptions(
         q.optionFilter,
         optionSet,
@@ -8630,12 +8511,7 @@ const FormView: React.FC<FormViewProps> = ({
           (group.lineItemConfig?.fields || [])
             .filter(field => field.type === 'CHOICE')
             .forEach(field => {
-                    const optionSetField: OptionSet =
-                optionState[optionKey(field.id, group.id)] || {
-                        en: field.options || [],
-                        fr: (field as any).optionsFr || [],
-                        nl: (field as any).optionsNl || []
-                      };
+              const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, group.id);
                     const dependencyIds = (
                       Array.isArray(field.optionFilter?.dependsOn)
                         ? field.optionFilter?.dependsOn
@@ -8904,7 +8780,7 @@ const FormView: React.FC<FormViewProps> = ({
                   .filter(Boolean)
                   .forEach(pushEntry);
               }
-              return ids.length ? new Set(ids) : null;
+              return new Set(ids);
             })();
             if (allowedFieldIds && !allowedFieldIds.has(fieldIdRaw)) continue;
             return true;
@@ -9096,6 +8972,15 @@ const FormView: React.FC<FormViewProps> = ({
     const subAddRowOptions = { configOverride: subConfig, rowFilter: overlayRowFilter };
     const subUi = (subConfig as any)?.ui as any;
     const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
+    const subHideLabel = subUi?.hideLabel === true;
+    const subAddButtonPlacement = (
+      (subgroupOverlay.groupOverride as any)?.ui?.addButtonPlacement ||
+      subUi?.addButtonPlacement ||
+      'both'
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
     const isSubTableMode = subUiMode === 'table';
     const subAnchorFieldId =
       subConfig?.anchorFieldId !== undefined && subConfig?.anchorFieldId !== null ? subConfig.anchorFieldId.toString() : '';
@@ -9261,13 +9146,7 @@ const FormView: React.FC<FormViewProps> = ({
     const subSelectorOverlayOptions = (() => {
       if (!canUseSubSelectorOverlay || !subSelectorOverlayAnchorField) return [];
       ensureLineOptions(subKey, subSelectorOverlayAnchorField);
-      const optionSetField =
-        optionState[optionKey(subSelectorOverlayAnchorField.id, subKey)] || {
-          en: subSelectorOverlayAnchorField.options || [],
-          fr: (subSelectorOverlayAnchorField as any).optionsFr || [],
-          nl: (subSelectorOverlayAnchorField as any).optionsNl || [],
-          raw: (subSelectorOverlayAnchorField as any).optionsRaw
-        };
+      const optionSetField = resolveOptionSetForField(optionState, subSelectorOverlayAnchorField, subKey);
       const dependencyIds = (
         Array.isArray(subSelectorOverlayAnchorField.optionFilter?.dependsOn)
           ? subSelectorOverlayAnchorField.optionFilter?.dependsOn
@@ -9297,6 +9176,7 @@ const FormView: React.FC<FormViewProps> = ({
     })();
 
     const renderAddButton = () => {
+      if (subAddButtonPlacement === 'hidden') return null;
       if (!subConfig) {
         return (
           <button
@@ -9348,7 +9228,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                                 if (loaded) {
                                   opts = loaded;
-                                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                                  setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                                 }
                               }
                               if (!opts) {
@@ -9445,6 +9325,7 @@ const FormView: React.FC<FormViewProps> = ({
         ? ({
             ...(parentGroup as any),
             id: subKey,
+            ui: { ...(((parentGroup as any)?.ui || {}) as any), hideLabel: true },
             lineItemConfig: { ...(subConfig as any), fields: subConfig.fields || [], subGroups: subConfig.subGroups || [] }
           } as WebQuestionDefinition)
         : null;
@@ -9487,7 +9368,7 @@ const FormView: React.FC<FormViewProps> = ({
             </div>
             <div style={{ textAlign: 'center', padding: '0 8px', overflowWrap: 'anywhere' }}>
               {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
-              {overlayHeaderLabel ? <div style={{ textAlign: 'left' }}>{overlayHeaderLabel}</div> : null}
+              {!subHideLabel && overlayHeaderLabel ? <div style={{ textAlign: 'left' }}>{overlayHeaderLabel}</div> : null}
               <div style={srOnly}>{subLabel}</div>
             </div>
             {overlayHelperText ? (
@@ -9656,7 +9537,15 @@ const FormView: React.FC<FormViewProps> = ({
           ) : overlayRowFlow ? (
             <LineItemGroupQuestion
               key={subGroupDef.id}
-              q={subGroupDef as any}
+              q={
+                {
+                  ...(subGroupDef as any),
+                  ui: {
+                    ...(((subGroupDef as any)?.ui || {}) as any),
+                    hideLabel: true
+                  }
+                } as any
+              }
               rowFilter={overlayRowFilter}
               hideInlineSubgroups={overlayHideInlineSubgroups}
               hideToolbars
@@ -10434,7 +10323,7 @@ const FormView: React.FC<FormViewProps> = ({
                           const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                           if (loaded) {
                             opts = loaded;
-                            setOptionState(prev => ({ ...prev, [key]: loaded }));
+                            setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, detailSubKey, loaded));
                           }
                         }
                         if (!opts) {
@@ -10567,10 +10456,18 @@ const FormView: React.FC<FormViewProps> = ({
               </div>
             </div>
           ) : isSubTableMode ? (
-            <div className="ck-line-item-table__scroll">
+            <div
+              className="ck-line-item-table__scroll"
+              style={(() => {
+                const maxVisibleRowsRaw = Number((subUi as any)?.maxVisibleRows);
+                if (!Number.isFinite(maxVisibleRowsRaw) || maxVisibleRowsRaw <= 0) return undefined;
+                return { maxHeight: `${Math.max(1, Math.floor(maxVisibleRowsRaw)) * 56}px`, overflowY: 'auto' as const };
+              })()}
+            >
               <LineItemTable
                 columns={[
                   ...((() => {
+                    const hideRemoveColumn = (subUi as any)?.hideRemoveColumn === true;
                     const subColumnWidths = overlayDetailEnabled ? overlayDetailHeaderWidths : subUi?.tableColumnWidths;
                     const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined => {
                       if (!subColumnWidths || typeof subColumnWidths !== 'object' || Array.isArray(subColumnWidths)) return undefined;
@@ -10995,34 +10892,36 @@ const FormView: React.FC<FormViewProps> = ({
                                 </button>
                               )
                             });
-                            actionColumns.push({
-                              id: '__remove',
-                              label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
-                              className: 'ck-line-item-table__actions',
-                              style: resolveSubColumnStyle('__remove'),
-                              renderCell: (subRow: any) => {
-                                const subRowValues = subRow?.values || {};
-                                const subRowSource = parseRowSource((subRowValues as any)?.[ROW_SOURCE_KEY]);
-                                const hideRemoveButton = parseRowHideRemove((subRowValues as any)?.[ROW_HIDE_REMOVE_KEY]);
-                                const allowRemoveAuto = (subUi as any)?.allowRemoveAutoRows !== false;
-                                const canRemove = !hideRemoveButton && (subRowSource !== 'auto' || allowRemoveAuto);
-                                if (!canRemove) return null;
-                                return (
-                                  <button
-                                    type="button"
-                                    aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                    style={actionButtonStyle}
-                                    onClick={() => removeLineRow(subKey, subRow.id)}
-                                  >
-                                    <TrashIcon size={40} />
-                                  </button>
-                                );
-                              }
-                            });
+                            if (!hideRemoveColumn) {
+                              actionColumns.push({
+                                id: '__remove',
+                                label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
+                                className: 'ck-line-item-table__actions',
+                                style: resolveSubColumnStyle('__remove'),
+                                renderCell: (subRow: any) => {
+                                  const subRowValues = subRow?.values || {};
+                                  const subRowSource = parseRowSource((subRowValues as any)?.[ROW_SOURCE_KEY]);
+                                  const hideRemoveButton = parseRowHideRemove((subRowValues as any)?.[ROW_HIDE_REMOVE_KEY]);
+                                  const allowRemoveAuto = (subUi as any)?.allowRemoveAutoRows !== false;
+                                  const canRemove = !hideRemoveButton && (subRowSource !== 'auto' || allowRemoveAuto);
+                                  if (!canRemove) return null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                                      style={actionButtonStyle}
+                                      onClick={() => removeLineRow(subKey, subRow.id)}
+                                    >
+                                      <TrashIcon size={40} />
+                                    </button>
+                                  );
+                                }
+                              });
+                            }
                             return actionColumns;
                           })()
                         : []),
-                      ...(overlayDetailEnabled
+                      ...(overlayDetailEnabled || hideRemoveColumn
                         ? []
                         : [
                             {
@@ -11738,13 +11637,7 @@ const FormView: React.FC<FormViewProps> = ({
     const selectorOverlayOptions = (() => {
       if (!canUseSelectorOverlay || !selectorOverlayAnchorField) return [];
       ensureLineOptions(groupId, selectorOverlayAnchorField);
-      const optionSetField =
-        optionState[optionKey(selectorOverlayAnchorField.id, groupId)] || {
-          en: selectorOverlayAnchorField.options || [],
-          fr: (selectorOverlayAnchorField as any).optionsFr || [],
-          nl: (selectorOverlayAnchorField as any).optionsNl || [],
-          raw: (selectorOverlayAnchorField as any).optionsRaw
-        };
+      const optionSetField = resolveOptionSetForField(optionState, selectorOverlayAnchorField, groupId);
       const dependencyIds = (
         Array.isArray(selectorOverlayAnchorField.optionFilter?.dependsOn)
           ? selectorOverlayAnchorField.optionFilter?.dependsOn
@@ -11851,6 +11744,9 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const renderAddButton = () => {
+      if (((groupCfg?.ui as any)?.addButtonPlacement || '').toString().trim().toLowerCase() === 'hidden') {
+        return null;
+      }
       if (!groupCfg) {
         return (
           <button
@@ -11903,7 +11799,7 @@ const FormView: React.FC<FormViewProps> = ({
                 const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                 if (loaded) {
                   opts = loaded;
-                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                  setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, groupId, loaded));
                 }
               }
               if (!opts) {
@@ -12899,8 +12795,8 @@ const FormView: React.FC<FormViewProps> = ({
       const parseStepFieldEntries = (
         groupId: string,
         raw: any
-      ): { allowed: Set<string> | null; renderAsLabel: Set<string>; order: string[] } => {
-        if (!raw) return { allowed: null, renderAsLabel: new Set(), order: [] };
+      ): { allowed: Set<string> | null; renderAsLabel: Set<string>; order: string[]; explicit: boolean } => {
+        if (raw === undefined || raw === null) return { allowed: null, renderAsLabel: new Set(), order: [], explicit: false };
         const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
         const pushEntry = (v: any) => {
           if (v === undefined || v === null) return;
@@ -12927,10 +12823,15 @@ const FormView: React.FC<FormViewProps> = ({
         const ids = entries.map(e => e.id).filter(Boolean);
         const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
         const order = Array.from(new Set(ids));
-        return { allowed: ids.length ? new Set(ids) : null, renderAsLabel: new Set(roIds), order };
+        return { allowed: new Set(ids), renderAsLabel: new Set(roIds), order, explicit: true };
       };
 
-      const { allowed: allowedFieldIds, renderAsLabel: renderAsLabelFieldIdsFromFields, order: fieldOrder } = parseStepFieldEntries(
+      const {
+        allowed: allowedFieldIds,
+        renderAsLabel: renderAsLabelFieldIdsFromFields,
+        order: fieldOrder,
+        explicit: hasExplicitFieldScope
+      } = parseStepFieldEntries(
         groupQ.id,
         target.fields
       );
@@ -12942,10 +12843,10 @@ const FormView: React.FC<FormViewProps> = ({
         return merged.size ? merged : null;
       })();
 
-      const filteredFieldsBase = allowedFieldIds
+      const filteredFieldsBase = hasExplicitFieldScope
         ? (lineCfg.fields || []).filter((f: any) => {
             const fid = normalizeLineFieldId(groupQ.id, (f as any)?.id);
-            return fid && allowedFieldIds.has(fid);
+            return fid && !!allowedFieldIds?.has(fid);
           })
         : lineCfg.fields || [];
       const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
@@ -12965,6 +12866,7 @@ const FormView: React.FC<FormViewProps> = ({
         : filteredFields;
 
       const subGroupsCfgPresent = !!target.subGroups && typeof target.subGroups === 'object';
+      const hasStepDataSourceRows = Array.isArray((target as any).dataSourceRows) && ((target as any).dataSourceRows as any[]).length > 0;
       const subIncludeRaw = subGroupsCfgPresent ? (target.subGroups as any)?.include : undefined;
       const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
       const allowedSubIds = subIncludeList
@@ -12975,6 +12877,7 @@ const FormView: React.FC<FormViewProps> = ({
       const filteredSubGroups = (() => {
         const subs = (lineCfg.subGroups || []) as any[];
         if (!subs.length) return subs;
+        if (hasStepDataSourceRows && !subGroupsCfgPresent) return [];
         // In guided steps, `liftedRowFields` should not show subgroups unless explicitly configured.
         if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
         const kept = allowedSubSet
@@ -12990,7 +12893,8 @@ const FormView: React.FC<FormViewProps> = ({
           const {
             allowed: allowedSubFields,
             renderAsLabel: renderAsLabelSubFieldIdsFromFields,
-            order: subFieldOrder
+            order: subFieldOrder,
+            explicit: hasExplicitSubFieldScope
           } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
           const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
           const readOnlySubFields = (() => {
@@ -13001,10 +12905,10 @@ const FormView: React.FC<FormViewProps> = ({
           })();
 
           const baseFields: any[] = (sub as any).fields || [];
-          const nextFields = allowedSubFields && allowedSubFields.size
+          const nextFields = hasExplicitSubFieldScope
             ? baseFields.filter((f: any) => {
                 const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                return fid && allowedSubFields.has(fid);
+                return fid && !!allowedSubFields?.has(fid);
               })
             : baseFields;
           const finalFields =
@@ -13088,6 +12992,7 @@ const FormView: React.FC<FormViewProps> = ({
           q={stepGroup as any}
           rowFlow={target.rowFlow}
           rowFilter={rowFilter}
+          dataSourceRows={Array.isArray((target as any).dataSourceRows) ? ((target as any).dataSourceRows as any[]) : undefined}
           hideInlineSubgroups={hideInlineSubgroups}
           ctx={{
             definition,

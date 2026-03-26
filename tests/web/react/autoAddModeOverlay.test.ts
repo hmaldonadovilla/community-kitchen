@@ -128,6 +128,128 @@ describe('autoAddMode overlay reconciliation', () => {
     expect((res.lineItems[subKey][0] as any).values.SUB_ING).toBe('Carrot');
   });
 
+  it('reconciles subgroup auto rows from data-source-filtered options', () => {
+    const ensureLineOptions = jest.fn();
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            ui: { openInOverlay: true },
+            fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }],
+            subGroups: [
+              {
+                id: 'LEFTOVERS',
+                addMode: 'auto',
+                anchorFieldId: 'LEFTOVER_ID',
+                fields: [
+                  {
+                    id: 'LEFTOVER_ID',
+                    type: 'CHOICE',
+                    optionFilter: {
+                      dependsOn: 'MEAL_TYPE',
+                      dataSourceField: 'LEFTOVER_MEAL_TYPE'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const subKey = buildSubgroupKey('MEALS', 'meal-1', 'LEFTOVERS');
+    const res = reconcileOverlayAutoAddModeSubgroups({
+      definition,
+      values: {},
+      lineItems: {
+        MEALS: [{ id: 'meal-1', values: { MEAL_TYPE: 'Standard' } }]
+      },
+      optionState: {
+        [`${subKey}.LEFTOVER_ID`]: {
+          en: ['LE-1', 'LP-1', 'LE-2'],
+          raw: [
+            { LEFTOVER_ID: 'LE-1', LEFTOVER_MEAL_TYPE: 'Standard', __ckOptionValue: 'LE-1' },
+            { LEFTOVER_ID: 'LP-1', LEFTOVER_MEAL_TYPE: 'Standard', __ckOptionValue: 'LP-1' },
+            { LEFTOVER_ID: 'LE-2', LEFTOVER_MEAL_TYPE: 'Vegan', __ckOptionValue: 'LE-2' }
+          ]
+        }
+      },
+      language: 'EN',
+      subgroupSelectors: {},
+      ensureLineOptions
+    });
+
+    expect(res.changed).toBe(true);
+    expect(res.lineItems[subKey]).toHaveLength(2);
+    expect(res.lineItems[subKey].map((row: any) => row.values.LEFTOVER_ID)).toEqual(['LE-1', 'LP-1']);
+  });
+
+  it('reconciles subgroup auto rows from all available options when no dependency filter is configured', () => {
+    const ensureLineOptions = jest.fn();
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            ui: { openInOverlay: true },
+            fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }],
+            subGroups: [
+              {
+                id: 'LEFTOVERS',
+                addMode: 'auto',
+                anchorFieldId: 'LEFTOVER_ID',
+                fields: [
+                  {
+                    id: 'LEFTOVER_ID',
+                    type: 'CHOICE'
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const subKey = buildSubgroupKey('MEALS', 'meal-1', 'LEFTOVERS');
+    const res = reconcileOverlayAutoAddModeSubgroups({
+      definition,
+      values: {},
+      lineItems: {
+        MEALS: [{ id: 'meal-1', values: { MEAL_TYPE: 'Standard' } }]
+      },
+      optionState: {
+        [`${subKey}.LEFTOVER_ID`]: {
+          en: ['LE-1', 'LP-1', 'LE-2'],
+          raw: [
+            { LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available', __ckOptionValue: 'LE-1' },
+            { LEFTOVER_ID: 'LP-1', LEFTOVER_STATUS: 'available', __ckOptionValue: 'LP-1' },
+            { LEFTOVER_ID: 'LE-2', LEFTOVER_STATUS: 'available', __ckOptionValue: 'LE-2' }
+          ]
+        }
+      },
+      language: 'EN',
+      subgroupSelectors: {},
+      ensureLineOptions
+    });
+
+    expect(res.changed).toBe(true);
+    expect(res.lineItems[subKey]).toHaveLength(3);
+    expect(res.lineItems[subKey].map((row: any) => row.values.LEFTOVER_ID)).toEqual(['LE-1', 'LE-2', 'LP-1']);
+  });
+
   it('does not remove selection-effect auto rows while reconciling overlay auto rows', () => {
     const ensureLineOptions = jest.fn();
 

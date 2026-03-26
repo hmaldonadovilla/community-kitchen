@@ -3,9 +3,11 @@ import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
 import {
   AnalyticsSnapshot,
+  FollowupSubmitEffect,
   FormConfig,
   FormConfigExport,
   DedupRule,
+  LifecycleRule,
   QuestionConfig,
   WebFormDefinition,
   WebFormSubmission,
@@ -34,14 +36,23 @@ import { getUiEnvTag } from './webform/envTag';
 import { ServerTimingRecorder } from './webform/serverTiming';
 import {
   applyUpdateRecordDependencyMutationsToRecord,
+  buildRecordVisibilityContext,
+  buildRowVisibilityContext,
+  buildTemplateVars,
   evaluateUpdateRecordDependencyPreview
+  ,
+  resolveTemplateValue
 } from './webform/updateRecordDependencies';
+import { matchesWhenClause } from '../web/rules/visibility';
+import { normalizeToIsoDate } from './webform/followup/utils';
+import { HeaderColumns } from './webform/types';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
 const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
 const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~100KB item limit.
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
 const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
+const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
 
 type HomeBootstrapCachePayload = {
   rev: number;
@@ -333,18 +344,76 @@ export class WebFormService {
       .trim() || '__DEFAULT__';
   }
 
+  private mergeBundledSteps(formSteps: any, definitionSteps: any): any {
+    const formItems: any[] = Array.isArray(formSteps?.items) ? formSteps.items : [];
+    const definitionItems: any[] = Array.isArray(definitionSteps?.items) ? definitionSteps.items : [];
+    if (!formItems.length) return definitionSteps;
+    if (!definitionItems.length) return formSteps;
+
+    const cloneItem = (item: any) => cloneRecordValues(item as Record<string, any>);
+    const mergedItems = formItems.map(cloneItem);
+    const indexById = new Map<string, number>();
+    mergedItems.forEach((item: any, index: number) => {
+      const id = (item?.id ?? '').toString().trim();
+      if (id) indexById.set(id, index);
+    });
+
+    definitionItems.forEach((item: any) => {
+      const id = (item?.id ?? '').toString().trim();
+      if (!id || indexById.has(id)) return;
+
+      let insertIndex = mergedItems.length;
+
+      for (let i = definitionItems.indexOf(item) + 1; i < definitionItems.length; i += 1) {
+        const nextId = (definitionItems[i]?.id ?? '').toString().trim();
+        if (!nextId) continue;
+        const nextIndex = indexById.get(nextId);
+        if (nextIndex !== undefined) {
+          insertIndex = nextIndex;
+          break;
+        }
+      }
+
+      if (insertIndex === mergedItems.length) {
+        for (let i = definitionItems.indexOf(item) - 1; i >= 0; i -= 1) {
+          const previousId = (definitionItems[i]?.id ?? '').toString().trim();
+          if (!previousId) continue;
+          const previousIndex = indexById.get(previousId);
+          if (previousIndex !== undefined) {
+            insertIndex = previousIndex + 1;
+            break;
+          }
+        }
+      }
+
+      mergedItems.splice(insertIndex, 0, cloneItem(item));
+      indexById.clear();
+      mergedItems.forEach((entry: any, index: number) => {
+        const entryId = (entry?.id ?? '').toString().trim();
+        if (entryId) indexById.set(entryId, index);
+      });
+    });
+
+    return {
+      ...cloneRecordValues(definitionSteps as Record<string, any>),
+      ...cloneRecordValues(formSteps as Record<string, any>),
+      items: mergedItems
+    };
+  }
+
   private resolveEmbeddedBundledDefinition(bundled: FormConfigExport): WebFormDefinition | null {
     const raw = bundled?.definition;
     if (!raw || typeof raw !== 'object') return null;
     const hasQuestions = Array.isArray((raw as any).questions) && (raw as any).questions.length > 0;
-    const hasTitle = !!(raw as any).title;
-    const hasDestinationTab = !!(raw as any).destinationTab;
-    if (!hasQuestions && !hasTitle && !hasDestinationTab) return null;
+    if (!hasQuestions) return null;
     const normalized = cloneRecordValues(raw as WebFormDefinition);
     const formTitle = (bundled.form?.title || '').toString().trim();
     const destinationTab = (bundled.form?.destinationTab || '').toString().trim();
     if (formTitle) normalized.title = formTitle;
     if (destinationTab) normalized.destinationTab = destinationTab;
+    if (bundled.form?.steps && typeof bundled.form.steps === 'object') {
+      normalized.steps = this.mergeBundledSteps(bundled.form.steps, normalized.steps);
+    }
     return normalized;
   }
 
@@ -881,6 +950,144 @@ export class WebFormService {
     };
   }
 
+  private scriptTodayIso(): string {
+    const now = new Date();
+    try {
+      if (typeof Utilities !== 'undefined' && Utilities?.formatDate && typeof Session !== 'undefined' && Session?.getScriptTimeZone) {
+        return Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      }
+    } catch (_) {
+      // ignore
+    }
+    return normalizeToIsoDate(now) || now.toISOString().slice(0, 10);
+  }
+
+  private shiftIsoDate(iso: string, dayOffset: number): string {
+    const match = (iso || '').toString().trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return iso;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return iso;
+    const next = new Date(year, month - 1, day);
+    next.setDate(next.getDate() + dayOffset);
+    return normalizeToIsoDate(next) || iso;
+  }
+
+  private resolveLifecycleStatusColumn(form: FormConfig, rule: LifecycleRule, columns: HeaderColumns): number | undefined {
+    const explicitFieldId = (rule.statusFieldId || '').toString().trim();
+    if (explicitFieldId && columns.fields?.[explicitFieldId]) {
+      return Number(columns.fields[explicitFieldId]) || undefined;
+    }
+    const followupFieldId = (form.followupConfig?.statusFieldId || '').toString().trim();
+    if (followupFieldId && columns.fields?.[followupFieldId]) {
+      return Number(columns.fields[followupFieldId]) || undefined;
+    }
+    return Number(columns.status) || undefined;
+  }
+
+  private shouldApplyLifecycleRule(
+    rule: LifecycleRule,
+    currentStatus: any,
+    rawDateValue: any,
+    todayIso: string
+  ): boolean {
+    const targetStatus = (rule.toStatus || '').toString().trim().toLowerCase();
+    if (!targetStatus) return false;
+    const status = (currentStatus === undefined || currentStatus === null ? '' : currentStatus.toString().trim()).toLowerCase();
+    if (status === targetStatus) return false;
+    const fromStatuses = Array.isArray(rule.fromStatuses)
+      ? rule.fromStatuses.map(value => (value || '').toString().trim().toLowerCase()).filter(Boolean)
+      : [];
+    if (fromStatuses.length && !fromStatuses.includes(status)) return false;
+    const dateIso = normalizeToIsoDate(rawDateValue);
+    if (!dateIso) return false;
+    const offsetDays = Number.isFinite(Number(rule.dayOffset || 0)) ? Math.trunc(Number(rule.dayOffset || 0)) : 0;
+    const compareIso = offsetDays ? this.shiftIsoDate(todayIso, offsetDays) : todayIso;
+    if (!compareIso) return false;
+    if (rule.compare === 'onOrBeforeToday') {
+      return dateIso <= compareIso;
+    }
+    return dateIso < compareIso;
+  }
+
+  public runDailyLifecycleRecompute(): { success: boolean; updatedForms: number; updatedRecords: number; errors: string[] } {
+    const forms = this.getFormsCached();
+    const errors: string[] = [];
+    const todayIso = this.scriptTodayIso();
+    let updatedForms = 0;
+    let updatedRecords = 0;
+
+    forms.forEach(form => {
+      const formKey = (form.configSheet || form.title || '').toString().trim();
+      const rules = Array.isArray(form.lifecycle?.rules) ? form.lifecycle?.rules || [] : [];
+      if (!formKey || !rules.length) return;
+      try {
+        const { form: resolvedForm, questions } = this.getFormContextLite(formKey);
+        const { sheet, columns } = this.submissions.ensureDestination(
+          resolvedForm.destinationTab || `${resolvedForm.title} Responses`,
+          questions
+        );
+        const lastRow = sheet.getLastRow();
+        const lastColumn = Math.max(sheet.getLastColumn(), 1);
+        if (lastRow < 2 || lastColumn < 1) return;
+        const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+        let formUpdates = 0;
+
+        rules.forEach(rule => {
+          const dateCol = Number(columns.fields?.[rule.dateFieldId] || 0);
+          const statusCol = this.resolveLifecycleStatusColumn(resolvedForm, rule, columns);
+          if (!dateCol) {
+            errors.push(`${formKey}: lifecycle rule ${(rule.id || rule.type).toString()} missing date column for ${rule.dateFieldId}`);
+            return;
+          }
+          if (!statusCol) {
+            errors.push(
+              `${formKey}: lifecycle rule ${(rule.id || rule.type).toString()} missing status column` +
+              `${rule.statusFieldId ? ` for ${rule.statusFieldId}` : ''}`
+            );
+            return;
+          }
+
+          rows.forEach((rowValues, index) => {
+            if (!this.shouldApplyLifecycleRule(rule, rowValues[statusCol - 1], rowValues[dateCol - 1], todayIso)) {
+              return;
+            }
+            const rowNumber = index + 2;
+            this.submissions.writeStatus(sheet, columns, rowNumber, rule.toStatus, rule.statusFieldId);
+            rowValues[statusCol - 1] = rule.toStatus;
+            formUpdates += 1;
+          });
+        });
+
+        if (formUpdates > 0) {
+          const canonicalKey = (resolvedForm.configSheet || resolvedForm.title || formKey).toString().trim();
+          const rev = this.bumpHomeRevision(canonicalKey, 'runDailyLifecycleRecompute');
+          this.primeHomeBootstrapCache(canonicalKey, rev, 'runDailyLifecycleRecompute');
+          updatedForms += 1;
+          updatedRecords += formUpdates;
+        }
+      } catch (err: any) {
+        const message = (err?.message || err?.toString?.() || 'Unknown lifecycle recompute error').toString();
+        errors.push(`${formKey}: ${message}`);
+      }
+    });
+
+    debugLog('lifecycle.daily.recompute', {
+      forms: forms.length,
+      updatedForms,
+      updatedRecords,
+      errorCount: errors.length,
+      todayIso
+    });
+    return {
+      success: errors.length === 0,
+      updatedForms,
+      updatedRecords,
+      errors
+    };
+  }
+
   private buildBootstrap(
     formKey: string,
     def: WebFormDefinition,
@@ -1002,7 +1209,83 @@ export class WebFormService {
     limit?: number,
     pageToken?: string
   ): PaginatedResult<any> {
+    const config = typeof source === 'string' ? { id: source, projection } : (source || {});
+    const formKey = (config?.formKey || '').toString().trim();
+    if (formKey) {
+      return this.fetchFormBackedDataSource(config, locale, projection, limit, pageToken);
+    }
     return this.dataSources.fetchDataSource(source, locale, projection, limit, pageToken);
+  }
+
+  private fetchFormBackedDataSource(
+    config: any,
+    locale?: string,
+    projection?: string[],
+    limit?: number,
+    pageToken?: string
+  ): PaginatedResult<any> {
+    const formKey = (config?.formKey || '').toString().trim();
+    if (!formKey) return { items: [], nextPageToken: undefined, totalCount: 0 };
+    const { form, questions } = this.getFormContextLite(formKey);
+    const mode = ((config?.mode || '').toString().trim().toLowerCase());
+    const defaultPageSize = mode === 'options' ? 250 : 50;
+    const requestedRaw = limit ?? config?.limit ?? defaultPageSize;
+    const pageSize = Number.isFinite(Number(requestedRaw))
+      ? Math.max(1, Math.min(Number(requestedRaw), 500))
+      : defaultPageSize;
+    const configProjection = Array.isArray(config?.projection) ? config.projection : undefined;
+    const effectiveProjection = configProjection?.length ? configProjection : projection;
+    const response = this.listing.fetchSubmissions(form, questions, effectiveProjection, pageSize, pageToken);
+    const localeKey = (config?.localeKey || '').toString().trim();
+    const localeNeedle = (locale || '').toString().trim().toLowerCase();
+    const statusFieldId = ((config?.statusFieldId || 'status') || '').toString().trim();
+    const statusAllowList = Array.isArray(config?.statusAllowList)
+      ? config.statusAllowList
+      : config?.statusAllowList !== undefined && config?.statusAllowList !== null && config?.statusAllowList !== ''
+        ? [config.statusAllowList]
+        : [];
+    const statusAllowSet = new Set(
+      statusAllowList
+        .map((value: any) => (value === undefined || value === null ? '' : value.toString().trim().toLowerCase()))
+        .filter(Boolean)
+    );
+    const mapping = config?.mapping && typeof config.mapping === 'object' ? config.mapping : undefined;
+    const items = (Array.isArray(response.items) ? response.items : [])
+      .filter(item => {
+        if (!item || typeof item !== 'object') return false;
+        if (localeKey && localeNeedle) {
+          const rawLocale = (item as any)[localeKey];
+          const itemLocale = rawLocale === undefined || rawLocale === null ? '' : rawLocale.toString().trim().toLowerCase();
+          if (itemLocale && itemLocale !== localeNeedle) return false;
+        }
+        if (statusAllowSet.size > 0) {
+          const rawStatus = (item as any)[statusFieldId];
+          const itemStatus = rawStatus === undefined || rawStatus === null ? '' : rawStatus.toString().trim().toLowerCase();
+          if (!itemStatus || !statusAllowSet.has(itemStatus)) return false;
+        }
+        return true;
+      })
+      .map(item => {
+        if (!mapping) return item;
+        const next = { ...(item as Record<string, any>) };
+        Object.entries(mapping).forEach(([sourceKeyRaw, targetKeyRaw]) => {
+          const sourceKey = (sourceKeyRaw || '').toString().trim();
+          const targetKey = (targetKeyRaw || '').toString().trim();
+          if (!sourceKey || !targetKey) return;
+          if (next[targetKey] === undefined && next[sourceKey] !== undefined) {
+            next[targetKey] = next[sourceKey];
+          }
+          if (next[sourceKey] === undefined && next[targetKey] !== undefined) {
+            next[sourceKey] = next[targetKey];
+          }
+        });
+        return next;
+      });
+    return {
+      items,
+      nextPageToken: response.nextPageToken,
+      totalCount: items.length
+    };
   }
 
   public fetchSubmissions(
@@ -1161,6 +1444,38 @@ export class WebFormService {
     const dedupRules = this.resolveDedupRules(formKey, form);
     const result = this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
     if (result?.success) {
+      const skipSubmitEffectsRaw = (formObject as any).__ckSkipSubmitEffects;
+      const skipSubmitEffects =
+        skipSubmitEffectsRaw === true ||
+        skipSubmitEffectsRaw === 'true' ||
+        skipSubmitEffectsRaw === '1' ||
+        skipSubmitEffectsRaw === 1;
+      if (!skipSubmitEffects) {
+        const submitEffectsResult = this.applyFollowupSubmitEffects({
+          form,
+          questions,
+          formKey,
+          formObject,
+          saveResult: result
+        });
+        if (!submitEffectsResult.success) {
+          return {
+            success: false,
+            message: submitEffectsResult.message || result.message,
+            meta: {
+              ...(result.meta || {}),
+              submitEffects: submitEffectsResult.meta || undefined,
+              sourceSaved: true
+            }
+          };
+        }
+        if (submitEffectsResult.meta) {
+          result.meta = {
+            ...(result.meta || {}),
+            submitEffects: submitEffectsResult.meta
+          };
+        }
+      }
       this.refreshAnalyticsAndHomeBootstrap(form, questions, 'saveSubmissionWithId');
     }
     return result;
@@ -2161,6 +2476,21 @@ export class WebFormService {
     const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
 
     const values = formObject?.values && typeof formObject.values === 'object' ? { ...formObject.values } : {};
+    questions
+      .filter(q => q.type !== 'BUTTON')
+      .forEach(q => {
+        if (Object.prototype.hasOwnProperty.call(values, q.id)) return;
+        if (Object.prototype.hasOwnProperty.call(formObject || {}, q.id)) {
+          (values as any)[q.id] = (formObject as any)[q.id];
+          return;
+        }
+        if (q.type === 'LINE_ITEM_GROUP') {
+          const jsonKey = `${q.id}_json`;
+          if (Object.prototype.hasOwnProperty.call(formObject || {}, jsonKey)) {
+            (values as any)[q.id] = (formObject as any)[jsonKey];
+          }
+        }
+      });
     // Best-effort parse for LINE_ITEM_GROUP values if they were provided as JSON strings.
     questions
       .filter(q => q.type === 'LINE_ITEM_GROUP')
@@ -2229,6 +2559,367 @@ export class WebFormService {
       (payload as any).__ckClientDataVersion = Number(args.clientDataVersion);
     }
     return payload;
+  }
+
+  private applyFollowupSubmitEffects(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    formKey: string;
+    formObject: WebFormSubmission;
+    saveResult: { success: boolean; message: string; meta: any };
+  }): { success: boolean; message?: string; meta?: any } {
+    const effects = Array.isArray(args.form.followupConfig?.submitEffects) ? args.form.followupConfig?.submitEffects || [] : [];
+    if (!effects.length) {
+      return { success: true, meta: { configured: 0, executed: 0, created: 0, updated: 0 } };
+    }
+
+    const sourceRecord = this.normalizeTemplateRenderRecord(args.formObject as any, args.questions, args.formKey);
+    sourceRecord.id = args.saveResult.meta?.id || sourceRecord.id;
+    sourceRecord.createdAt = args.saveResult.meta?.createdAt || sourceRecord.createdAt;
+    sourceRecord.updatedAt = args.saveResult.meta?.updatedAt || sourceRecord.updatedAt;
+    sourceRecord.status =
+      ((args.formObject as any).__ckStatus !== undefined && (args.formObject as any).__ckStatus !== null
+        ? (args.formObject as any).__ckStatus
+        : args.formObject.status) || sourceRecord.status;
+
+    const { ctx } = buildRecordVisibilityContext(sourceRecord, args.questions);
+    const operation = (args.saveResult.meta?.operation || 'update').toString().trim().toLowerCase();
+    const touchedForms = new Map<string, { form: FormConfig; questions: QuestionConfig[] }>();
+    let executed = 0;
+    let created = 0;
+    let updated = 0;
+
+    debugLog('submitEffects.start', {
+      formKey: args.formKey,
+      recordId: sourceRecord.id || null,
+      configured: effects.length,
+      operation
+    });
+
+    try {
+      effects.forEach((effect, index) => {
+        if (!this.shouldRunFollowupSubmitEffect(effect, operation)) {
+          debugLog('submitEffects.skip.runOn', {
+            formKey: args.formKey,
+            recordId: sourceRecord.id || null,
+            effectIndex: index,
+            effectType: effect.type,
+            runOn: effect.runOn || 'both',
+            operation
+          });
+          return;
+        }
+
+        const vars = buildTemplateVars({
+          sourceRecord,
+          targetFormKey: effect.targetFormKey
+        });
+        const resolvedWhen = effect.when ? resolveTemplateValue(effect.when, vars) : undefined;
+        if (resolvedWhen && !matchesWhenClause(resolvedWhen as any, ctx, { now: new Date() })) {
+          debugLog('submitEffects.skip.when', {
+            formKey: args.formKey,
+            recordId: sourceRecord.id || null,
+            effectIndex: index,
+            effectType: effect.type,
+            targetFormKey: effect.targetFormKey
+          });
+          return;
+        }
+
+        if (effect.type === 'createRecord' || effect.type === 'updateRecord') {
+          const targetContext = this.getFormContext(effect.targetFormKey);
+          const targetDedupRules = this.resolveDedupRules(effect.targetFormKey, targetContext.form);
+          const payloads = this.buildFollowupSubmitPayloads({
+            effect,
+            sourceRecord,
+            sourceQuestions: args.questions
+          });
+          if (!payloads.length) {
+            debugLog(`submitEffects.${effect.type}.skip.empty`, {
+              formKey: args.formKey,
+              recordId: sourceRecord.id || null,
+              effectIndex: index,
+              targetFormKey: effect.targetFormKey
+            });
+            return;
+          }
+          executed += 1;
+          touchedForms.set(effect.targetFormKey, targetContext);
+          payloads.forEach((payload, payloadIndex) => {
+            if (effect.type === 'updateRecord' && !((payload as any).id || '').toString().trim()) {
+              throw new Error('Follow-up submit effect updateRecord requires a target recordId.');
+            }
+            const saveResult = this.submissions.saveSubmissionWithId(payload, targetContext.form, targetContext.questions, targetDedupRules);
+            if (!saveResult?.success) {
+              throw new Error(
+                (
+                  saveResult?.message ||
+                  (effect.type === 'updateRecord'
+                    ? 'Failed to update downstream record.'
+                    : 'Failed to create downstream record.')
+                ).toString()
+              );
+            }
+            if (effect.type === 'updateRecord') updated += 1;
+            else created += 1;
+            debugLog(`submitEffects.${effect.type}.ok`, {
+              formKey: args.formKey,
+              recordId: sourceRecord.id || null,
+              effectIndex: index,
+              payloadIndex,
+              targetFormKey: effect.targetFormKey,
+              targetRecordId: saveResult.meta?.id || null
+            });
+          });
+        }
+      });
+    } catch (err: any) {
+      const message = (err?.message || err?.toString?.() || 'Submit effects failed.').toString();
+      debugLog('submitEffects.error', {
+        formKey: args.formKey,
+        recordId: sourceRecord.id || null,
+        configured: effects.length,
+        executed,
+        created,
+        updated,
+        operation,
+        message
+      });
+      return {
+        success: false,
+        message: `Record saved, but follow-up submit effects failed: ${message}`,
+        meta: {
+          configured: effects.length,
+          executed,
+          created,
+          updated,
+          operation
+        }
+      };
+    }
+
+    touchedForms.forEach(target => {
+      this.refreshAnalyticsAndHomeBootstrap(target.form, target.questions, 'saveSubmissionWithId.submitEffects');
+    });
+
+    debugLog('submitEffects.ok', {
+      formKey: args.formKey,
+      recordId: sourceRecord.id || null,
+      configured: effects.length,
+      executed,
+      created,
+      updated,
+      operation
+    });
+
+    return {
+      success: true,
+      meta: {
+        configured: effects.length,
+        executed,
+        created,
+        updated,
+        operation
+      }
+    };
+  }
+
+  private shouldRunFollowupSubmitEffect(effect: FollowupSubmitEffect, operation: string): boolean {
+    const runOn = (effect.runOn || 'both').toString().trim().toLowerCase();
+    if (runOn === 'both') return true;
+    if (runOn === 'create') return operation === 'create';
+    if (runOn === 'update') return operation === 'update';
+    return true;
+  }
+
+  private buildFollowupSubmitPayloads(args: {
+    effect: FollowupSubmitEffect;
+    sourceRecord: WebFormSubmission;
+    sourceQuestions: QuestionConfig[];
+  }): WebFormSubmission[] {
+    const scopes = this.resolveFollowupCreateRecordScopes({
+      effect: args.effect,
+      sourceRecord: args.sourceRecord,
+      sourceQuestions: args.sourceQuestions
+    });
+
+    return scopes.map(scope => {
+      const vars = buildTemplateVars({
+        sourceRecord: args.sourceRecord,
+        targetFormKey: args.effect.targetFormKey,
+        row: scope.row,
+        parent: scope.parent,
+        lineItem: scope.lineItem
+      });
+      const resolved = resolveTemplateValue(args.effect, vars) as FollowupSubmitEffect;
+      const payloadValues = cloneRecordValues((resolved.values || {}) as Record<string, any>);
+      const payload: WebFormSubmission = {
+        formKey: resolved.targetFormKey,
+        language: args.sourceRecord.language,
+        values: payloadValues
+      };
+      const resolvedRecordId =
+        resolved.recordId === undefined || resolved.recordId === null ? '' : resolved.recordId.toString().trim();
+      if (resolvedRecordId) {
+        (payload as any).id = resolvedRecordId;
+      }
+      Object.keys(payloadValues).forEach(fieldId => {
+        (payload as any)[fieldId] = payloadValues[fieldId];
+      });
+      (payload as any).__ckSkipSubmitEffects = '1';
+      (payload as any).__ckAuditAction =
+        resolved.auditAction || `submitEffect:${resolved.type}:${args.sourceRecord.id || 'source'}`;
+      if (Object.prototype.hasOwnProperty.call(resolved, 'status')) {
+        (payload as any).__ckSaveMode = 'draft';
+        (payload as any).__ckStatus =
+          resolved.status === undefined || resolved.status === null ? '' : resolved.status.toString();
+        payload.status = resolved.status === null ? undefined : resolved.status === undefined ? undefined : resolved.status.toString();
+      }
+      return payload;
+    });
+  }
+
+  private resolveFollowupCreateRecordScopes(args: {
+    effect: FollowupSubmitEffect;
+    sourceRecord: WebFormSubmission;
+    sourceQuestions: QuestionConfig[];
+  }): Array<{
+    row?: Record<string, any>;
+    parent?: Record<string, any>;
+    lineItem: { groupId: string; subGroupPath: string[]; index: number; rowId?: string };
+  }> {
+    const iterator = args.effect.forEachLineItem;
+    if (!iterator?.groupId) {
+      return [{ lineItem: { groupId: '', subGroupPath: [], index: 1, rowId: '' } }];
+    }
+
+    const top = buildRecordVisibilityContext(args.sourceRecord, args.sourceQuestions);
+    const rows = this.collectFollowupLineItemRows({
+      recordValues: args.sourceRecord.values || {},
+      groupId: iterator.groupId,
+      subGroupPath: iterator.subGroupPath || [],
+      when: iterator.when,
+      topCtx: top.ctx
+    });
+
+    debugLog('submitEffects.createRecord.scopes', {
+      formKey: args.sourceRecord.formKey || '',
+      recordId: args.sourceRecord.id || null,
+      targetFormKey: args.effect.targetFormKey,
+      groupId: iterator.groupId,
+      subGroupPath: iterator.subGroupPath || [],
+      matchedRows: rows.length
+    });
+
+    return rows.map((row, index) => ({
+      row: row.row,
+      parent: row.parent,
+      lineItem: {
+        groupId: iterator.groupId,
+        subGroupPath: iterator.subGroupPath || [],
+        index: index + 1,
+        rowId:
+          row.rowId ||
+          `${((iterator.subGroupPath || [])[((iterator.subGroupPath || []).length - 1)] || iterator.groupId || 'row').toString()}_${index}`
+      }
+    }));
+  }
+
+  private collectFollowupLineItemRows(args: {
+    recordValues: Record<string, any>;
+    groupId: string;
+    subGroupPath: string[];
+    when?: any;
+    topCtx: ReturnType<typeof buildRecordVisibilityContext>['ctx'];
+  }): Array<{ row: Record<string, any>; parent?: Record<string, any>; rowId?: string }> {
+    const rootRows = this.parseFollowupLineItemRows(args.recordValues[args.groupId] || args.recordValues[`${args.groupId}_json`]);
+    const matches = this.collectFollowupLineItemRowsAtPath({
+      rows: rootRows,
+      path: args.subGroupPath || [],
+      parent: undefined
+    });
+    if (!args.when) {
+      return matches.map(match => ({
+        row: this.sanitizeFollowupTemplateRow(match.row),
+        parent: match.parent ? this.sanitizeFollowupTemplateRow(match.parent) : undefined,
+        rowId: this.normalizeFollowupLineItemRowId(match.row)
+      }));
+    }
+    return matches
+      .filter(match => {
+        const rowCtx = buildRowVisibilityContext({
+          row: match.row,
+          groupKey: args.groupId,
+          parentValues: match.parent,
+          topCtx: args.topCtx
+        });
+        return matchesWhenClause(args.when, rowCtx.ctx, { now: new Date() });
+      })
+      .map(match => ({
+        row: this.sanitizeFollowupTemplateRow(match.row),
+        parent: match.parent ? this.sanitizeFollowupTemplateRow(match.parent) : undefined,
+        rowId: this.normalizeFollowupLineItemRowId(match.row)
+      }));
+  }
+
+  private collectFollowupLineItemRowsAtPath(args: {
+    rows: any[];
+    path: string[];
+    parent?: Record<string, any>;
+  }): Array<{ row: Record<string, any>; parent?: Record<string, any> }> {
+    if (!Array.isArray(args.rows) || !args.rows.length) return [];
+    if (!args.path.length) {
+      return args.rows.map(row => ({ row: (row || {}) as Record<string, any>, parent: args.parent }));
+    }
+    const [nextGroupId, ...restPath] = args.path;
+    return args.rows.flatMap(rawRow => {
+      const row = (rawRow || {}) as Record<string, any>;
+      const childRows = this.parseFollowupLineItemRows(row[nextGroupId] || row[`${nextGroupId}_json`]);
+      return this.collectFollowupLineItemRowsAtPath({
+        rows: childRows,
+        path: restPath,
+        parent: row
+      });
+    });
+  }
+
+  private parseFollowupLineItemRows(raw: any): any[] {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private sanitizeFollowupTemplateRow(value: any): any {
+    if (Array.isArray(value)) {
+      return value.map(entry => this.sanitizeFollowupTemplateRow(entry));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    const out: Record<string, any> = {};
+    Object.keys(value).forEach(key => {
+      if (FOLLOWUP_LINE_ITEM_META_KEYS.has(key)) return;
+      out[key] = this.sanitizeFollowupTemplateRow((value as Record<string, any>)[key]);
+    });
+    return out;
+  }
+
+  private normalizeFollowupLineItemRowId(value: any): string {
+    if (!value || typeof value !== 'object') return '';
+    const raw = (value as Record<string, any>).__ckRowId;
+    if (raw === undefined || raw === null) return '';
+    try {
+      return raw.toString().trim();
+    } catch (_) {
+      return '';
+    }
   }
 
   private getFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {

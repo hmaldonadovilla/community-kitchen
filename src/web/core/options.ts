@@ -40,6 +40,55 @@ export const toOptionSet = (question: any): OptionSet => {
 
 export const optionKey = (id: string, parentId?: string): string => (parentId ? `${parentId}.${id}` : id);
 
+export const optionParentAliases = (parentId?: string): string[] => {
+  const raw = (parentId || '').toString().trim();
+  if (!raw) return [];
+  const aliases: string[] = [raw];
+  const dynamicParts = raw.split('::').map(part => part.trim()).filter(Boolean);
+  if (dynamicParts.length > 2) {
+    const collapsed = [dynamicParts[0], ...dynamicParts.slice(2)].filter(Boolean).join('::');
+    if (collapsed && !aliases.includes(collapsed)) aliases.push(collapsed);
+    const rootAndLeaf = [dynamicParts[0], dynamicParts[dynamicParts.length - 1]].filter(Boolean).join('::');
+    if (rootAndLeaf && !aliases.includes(rootAndLeaf)) aliases.push(rootAndLeaf);
+  }
+  if (dynamicParts.length > 1) {
+    const base = dynamicParts[dynamicParts.length - 1];
+    if (base && !aliases.includes(base)) aliases.push(base);
+  }
+  return aliases;
+};
+
+export const optionKeysWithAliases = (id: string, parentId?: string): string[] => {
+  const aliases = optionParentAliases(parentId);
+  if (!aliases.length) return [optionKey(id)];
+  return aliases.map(alias => optionKey(id, alias));
+};
+
+export const getOptionStateValue = <T,>(state: Record<string, T>, id: string, parentId?: string): T | undefined => {
+  const keys = optionKeysWithAliases(id, parentId);
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(state, key)) return state[key];
+  }
+  return undefined;
+};
+
+export const mergeOptionStateValue = <T,>(
+  prev: Record<string, T>,
+  id: string,
+  parentId: string | undefined,
+  value: T
+): Record<string, T> => {
+  const keys = optionKeysWithAliases(id, parentId);
+  let changed = false;
+  const next = { ...prev };
+  for (const key of keys) {
+    if (next[key] === value) continue;
+    next[key] = value;
+    changed = true;
+  }
+  return changed ? next : prev;
+};
+
 export const normalizeLanguage = (lang?: string): LangCode => {
   const normalized = (lang || 'EN').toString().toUpperCase();
   return (['EN', 'FR', 'NL'].includes(normalized) ? normalized : 'EN') as LangCode;

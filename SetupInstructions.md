@@ -1058,6 +1058,18 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - show the configured `lineItemConfig.ui.collapsedFields` in the **row header**
         - keep rows **always expanded** (no toggle/pill indicator)
         - hide the row body when the step only includes collapsed fields (row disclaimer shows as a footer)
+      - For a compact progressive row header that stays visible in both collapsed and expanded states, set `lineItemConfig.ui.rowHeaderSummaryTemplate`, for example `{MEAL_TYPE} | {ORD_QTY}`.
+      - For compact sentence-style line item rows, enable `lineItemConfig.ui.compactRows: true` and define:
+        - `ui.compactHeadlineRows` for the first display line
+        - `ui.compactSentenceRows` for the inline sentence/control line
+        - `ui.compactActions` for optional row actions such as opening a read-only subgroup overlay
+        - `ui.persistRows: false` when the compact rows are UI-only selector state and must not be saved back into the record
+        - compact-row actions can set `overlayLabel` separately from the button label when the overlay should not repeat the button text as a title
+        - use local hydrated fields for compact-row text when the selector already copied inventory data into the row; reserve `sourceFieldId + sourcePath` for true datasource lookups
+        - use `selectionEffects.addLineItems` with `replaceExistingByEffectId: true` when compact-row edits must immediately regenerate one downstream normalized line item
+        - when a compact row lives inside a subgroup and needs to regenerate a sibling subgroup for the same parent row, point `selectionEffects[].groupId` at the sibling subgroup id; the runtime resolves it relative to the current parent row automatically
+        - use `selectionEffects.type: "addLineItemsFromFieldPayload"` when the downstream line items should be hydrated from a serialized payload already stored on the current row
+      - Compact headline parts can read directly from a datasource-backed selector by setting `sourceFieldId`, `sourcePath`, optional `lookupField`, and optional `suffixSourcePath`. This keeps compact rows configuration-driven and avoids duplicating the same display values into hidden fields only for presentation.
       - **Row flow (steps)**: Use `rowFlow` on a step line-group target to render an output line + a single active prompt per row.
 
         ```json
@@ -1392,6 +1404,34 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - Auto-generated rows created by `addLineItemsFromDataSource` selection effects also lock the anchor field and render it as the row title when `anchorFieldId` is set (works for subgroups too).
         - Rows that are still “disabled” (collapsed fields not yet valid) are ignored for validation, so you can submit with unfinished rows.
         - If the LINE_ITEM_GROUP question is marked `required: true`, at least one enabled+valid row is still required (disabled rows don’t satisfy required).
+      - Compact selector tables:
+        - Set `ui.maxVisibleRows` to cap the visible table height before the table body scrolls.
+        - Set `ui.hideRemoveColumn: true` to hide the trailing trash/remove column when the table is being used as a selector rather than a manually managed list.
+        - On iOS-heavy flows, combine `ui.maxVisibleRows` with a compact `ui.rowHeaderSummaryTemplate` so the parent row keeps more vertical space available for the scrollable table body.
+      - Inline subgroup reveal:
+        - Set `ui.inlineSubgroupsWhenExpanded: true` when a progressive parent row should reveal its subgroup table immediately after expansion instead of showing the fallback subgroup opener pill.
+        - Combine this with `subGroups[].ui.defaultCollapsed: false` when the subgroup itself should already be open the first time the parent row expands.
+      - Exclusive selection:
+        - Set `field.ui.exclusiveLineSelection` on a line-item field when the same external item can only be active once.
+        - Use `scope: "sameSubgroupAcrossRoot"` when the exclusivity should apply across the same subgroup under different parent rows.
+        - `clearFieldIds` and `clearSubGroupIds` let you clear dependent values when the previous selection is deselected automatically.
+
+        Example:
+
+        ```json
+        {
+          "id": "LEFTOVER_SELECTED",
+          "type": "CHECKBOX",
+          "ui": {
+            "exclusiveLineSelection": {
+              "keyFieldId": "LEFTOVER_ID",
+              "scope": "sameSubgroupAcrossRoot",
+              "clearFieldIds": ["LEFTOVER_USE_QTY", "LEFTOVER_USAGE_MODE"],
+              "clearSubGroupIds": ["MP_LEFTOVER_USAGE_INGREDIENTS_LI"]
+            }
+          }
+        }
+        ```
     - Subgroups: add `subGroups` to a line-item group to render child rows under each parent row (e.g., `Ingredients` under a `Dish`). Each child entry reuses the same shape as `LineItemGroupConfig` (min/max/addMode/fields/optionFilter/selectionEffects/totals). You can define child fields inline or point to a ref sheet via `"ref": "REF:ChildTab"` (same column format as parent line-item refs). Inline values override the ref (e.g., to change labels/minRows). **Each subgroup must define a stable `id`**, and submitted payloads contain an array of parents where each parent row stores its child array under that subgroup `id`. Default mode renders inline subgroup sections with Show/Hide. Progressive mode (`ui.mode: "progressive"`) edits subgroups via a full-page overlay opened from “Open …” buttons next to triggering fields (selection effects) plus fallback “Open …” buttons for remaining subgroups.
       Example config:
 
@@ -1507,7 +1547,26 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       }
       ```
 
-      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form.
+      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form. Set `"padLength": 0` when you want variable-width ids such as `LE-1`, `LE-2`, `LE-10`.
+      When one shared table needs different id prefixes by record kind, use `prefixByValue`:
+
+      ```json
+      {
+        "autoIncrement": {
+          "padLength": 0,
+          "prefixByValue": {
+            "fieldId": "LEFTOVER_KIND",
+            "map": {
+              "entireDish": "LE-",
+              "partialDish": "LP-"
+            },
+            "defaultPrefix": "LX-"
+          }
+        }
+      }
+      ```
+
+      The backend keeps a separate counter per resolved prefix, so `LE-000001` and `LP-000001` can advance independently from the same field definition.
     - **Default values (`defaultValue`)**: To prefill a field on **new records / new rows**, add `defaultValue` in the field JSON.
       - This is only applied when the field is **missing from the payload**, so it **does not override user edits** once the field exists.
       - Works for **top-level fields** and **line-item / subgroup fields**.
@@ -1567,6 +1626,35 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         ]
       }
       ```
+
+      - **Hydrate the current row from a shared table**: Use `type: "setValuesFromDataSource"` when the selected value should copy fields from a matched external record into the current row or top-level form without creating child rows.
+
+      ```json
+      {
+        "selectionEffects": [
+          {
+            "type": "setValuesFromDataSource",
+            "dataSource": {
+              "id": "Config: Leftover Inventory",
+              "tabName": "Leftover Inventory Data"
+            },
+            "lookupField": "LEFTOVER_ID",
+            "fieldMapping": {
+              "RECIPE": "LEFTOVER_RECIPE",
+              "PREP_QTY": "LEFTOVER_PORTIONS",
+              "LEFTOVER_STATUS": "LEFTOVER_STATUS"
+            },
+            "clearOnNoMatch": true
+          }
+        ]
+      }
+      ```
+
+      Notes:
+      - `fieldMapping` keys are target form field ids; values are source row keys or dot-paths.
+      - When the effect runs inside a line-item row, the mapped values are written into that row.
+      - When it runs at the top level, the mapped values are written into top-level form values.
+      - `clearOnNoMatch: true` clears the mapped targets if the selected value no longer matches any data-source row.
 
       Example: keep a single auto row in a subgroup while a NUMBER is > 0, and clear it when the value is 0:
 
@@ -1777,6 +1865,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
               - Optional: `"applyOn": "change"` to apply on every keystroke/change.
               - Optional: `"copyMode": "allowIncrease" | "allowDecrease"` (only with `"when": "always"`) to allow operator overrides in one direction and clamp back to the source value on blur.
+            - `template`: compose a text value from other fields using `{FIELD_ID}` tokens. Defaults to `"when": "empty"` and is useful for compact readonly helper labels such as meal headers.
             - `calc`: compute numeric expressions using `{FIELD_ID}` tokens and `SUM(GROUP.FIELD)` aggregates. Defaults to `"when": "always"`.
               - Optional: `"lineItemFilters"` to filter rows included in a specific aggregate.
 
@@ -1814,6 +1903,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
             ```json
             { "derivedValue": { "op": "copy", "dependsOn": "QTY", "when": "always", "copyMode": "allowIncrease" } }
+            ```
+
+          - Example: compose a readonly text header from two fields:
+
+            ```json
+            { "derivedValue": { "op": "template", "template": "{MEAL_TYPE} | {ORD_QTY}", "when": "always" } }
             ```
 
           - Example: compute a line-item field using a subgroup sum with a filter:
@@ -2224,9 +2319,11 @@ Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX field�
 
    - `groupId`: destination line-item group ID (must exist in the same form definition).
    - `lookupField`: column from the data source used to match the selected value. Defaults to the first column or the data source `mapping.value`.
+   - `lookupSourceFieldId`: optional current-row/top-level field whose value should be used as the primary lookup token. Use this when the triggering field is a quantity/mode/checkbox but the datasource row should still be matched by a stable id such as `LEFTOVER_ID`.
    - `dataField`: column that contains a JSON array/object describing the rows to add (e.g., `Ingredients` = `[{"ING":"Carrots","QTY":"2","UNIT":"kg"}]`).
-   - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.
+  - `lineItemMapping`: map of line-item field ids → keys/paths in each JSON entry. Dot notation is supported for nested objects.
      - Prefix a path with `$row.` to copy values from the originating line-item row (the row whose fields triggered the effect). Example: `"lineItemMapping": { "ING": "ING", "QTY": "QTY", "UNIT": "UNIT", "RECIPE": "$row.RECIPE" }` copies the row’s `RECIPE` field into each generated ingredient line so you can keep track of the source dish; add that field to `aggregateBy` if you need separate buckets per recipe.
+  - `preset`: optional literal field values to merge into each generated row. For datasource-backed rows this also supports `$row.FIELD_ID` and `$source.FIELD_PATH`, which is useful when the generated row must combine current row state with values coming from the matched external record.
    - `aggregateBy`: non-numeric fields used to build a dedupe key. Identical values across these fields are merged into a single row.
    - `aggregateNumericFields`: numeric fields that should be summed when aggregation occurs. All line-item fields typed as NUMBER are automatically included.
    - `scaleNumericFields`: optional explicit list of fields whose numeric values should be multiplied by the scale factor. If omitted, it reuses `aggregateNumericFields`, then NUMBER fields.
@@ -2386,6 +2483,79 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `dedupTriggerFields` (optional): top-level field ids that trigger create-flow dedup prechecks.
    - `dedupCheckDialog` (optional): form-level non-dismissible dedup progress popup copy (`checking*`, `available*`, `duplicate*`) plus `availableAutoCloseMs` and `duplicateAutoCloseMs`.
  - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
+- `submitEffects` (optional): declarative shared-table writes that run after the source record saves.
+  - Supported types: `createRecord`, `updateRecord`
+  - Use this to create or update a downstream record in another form, for example a shared inventory row
+  - Use `recordId` when the downstream row should be updated in place on later source saves instead of creating duplicates
+  - `recordId` is required for `updateRecord`
+  - String values support `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, and `{{source.updatedAt}}`
+  - `createRecord.forEachLineItem` and `updateRecord.forEachLineItem` can write one downstream record per matched source line-item row
+  - Inside a `forEachLineItem` effect, templates can also use `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`, and `{{lineItem.index}}`
+  - `runOn` controls whether the effect runs on source create, source update, or both
+  - Exact template tokens can resolve to arrays/objects, so a top-level line-item payload can be copied directly into another form field when needed
+
+   Example:
+
+   ```json
+   {
+     "submitEffects": [
+       {
+         "type": "createRecord",
+         "targetFormKey": "Config: Leftover Inventory",
+         "runOn": "create",
+         "recordId": "leftover::{{source.id}}",
+         "status": "Available",
+         "auditAction": "mealProduction:leftoverCreate",
+         "when": {
+           "fieldId": "HAS_LEFTOVERS",
+           "equals": "Yes"
+         },
+         "values": {
+           "SOURCE_RECORD_ID": "{{source.id}}",
+           "SOURCE_FORM_KEY": "Config: Meal Production",
+           "LEFTOVER_KIND": "{{source.LEFTOVER_KIND}}",
+           "LEFTOVER_NOTES": "{{source.LEFTOVER_NOTES}}"
+         }
+       }
+     ]
+   }
+   ```
+
+   Fan-out example from source line items:
+
+   ```json
+   {
+     "submitEffects": [
+       {
+         "type": "createRecord",
+          "targetFormKey": "Config: Leftover Inventory",
+         "runOn": "both",
+         "recordId": "leftover::{{source.id}}::{{lineItem.rowId}}",
+         "status": "Available",
+         "forEachLineItem": {
+           "groupId": "MP_LEFTOVERS_LI",
+           "when": {
+             "fieldId": "LEFTOVER_SELECTED",
+             "equals": "Yes"
+           }
+         },
+         "values": {
+           "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
+           "LEFTOVER_KIND": "{{row.LEFTOVER_KIND}}",
+           "LEFTOVER_NAME": "{{row.LEFTOVER_NAME}}",
+           "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
+           "LEFTOVER_SEQ": "{{lineItem.index}}"
+         }
+       }
+     ]
+   }
+   ```
+
+   Meal Production now uses this pattern for the first leftover inventory slice:
+   - Portioning captures produced leftovers in a dedicated `MP_LEFTOVER_CAPTURE_LI` group
+   - Each row writes to `Config: Leftover Inventory` through `submitEffects.createRecord`
+   - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream inventory row stable across autosave and later edits
+   - Selected inventory leftovers can later be marked `used` through `submitEffects.updateRecord`
  - `auditLogging` (optional): writes change/snapshot rows to a separate audit sheet.
    - `enabled`: turn audit logging on/off.
    - `statuses`: only write `auditType: "change"` rows when the record status matches one of these values (case-insensitive; previous or next status).
@@ -2561,9 +2731,10 @@ Recommended steps after deploying a new bundle:
 
 - Run **Community Kitchen → Create/Update All Forms** (ensures columns exist).
 - Run **Community Kitchen → Rebuild Indexes (Data Version + Dedup)** (backfills existing rows).
-- Run **Community Kitchen → Install Triggers (Options + Response indexing)**:
+- Run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)**:
   - Installs `onEdit` triggers to keep options + `Data Version` + indexes consistent when users manually edit sheets.
   - Installs a daily time-based trigger for `runDailyAnalyticsRecompute` to reconcile analytics snapshots.
+  - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Inventory`).
 
 ### UI tips (React edit + Summary)
 

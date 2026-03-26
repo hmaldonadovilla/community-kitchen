@@ -11,8 +11,12 @@ import {
   ButtonPlacement,
   ButtonAction,
   FollowupConfig,
+  FollowupCreateRecordLineItemConfig,
+  FollowupSubmitEffect,
   FollowupStatusConfig,
   FieldDisableRule,
+  LifecycleConfig,
+  LifecycleRule,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
@@ -147,6 +151,7 @@ export class Dashboard {
       const listViewView = dashboardConfig?.listViewView;
       const listViewMetric = dashboardConfig?.listViewMetric;
       const analytics = dashboardConfig?.analytics;
+      const lifecycle = dashboardConfig?.lifecycle;
       const autoSave = dashboardConfig?.autoSave;
       const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
@@ -187,6 +192,7 @@ export class Dashboard {
           formId,
           rowIndex: dataStartRow + index,
           followupConfig,
+          lifecycle,
           templateCacheTtlSeconds,
           listViewTitle,
           listViewDefaultSort,
@@ -264,6 +270,7 @@ export class Dashboard {
     raw: any
   ): {
     followup?: FollowupConfig;
+    lifecycle?: LifecycleConfig;
     templateCacheTtlSeconds?: number;
     listViewTitle?: LocalizedString;
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
@@ -383,6 +390,17 @@ export class Dashboard {
     }
 
     const followup = this.buildFollowupConfig(parsed);
+    const lifecycleRaw =
+      parsed.lifecycle !== undefined
+        ? parsed.lifecycle
+        : parsed.lifecycleConfig !== undefined
+          ? parsed.lifecycleConfig
+          : parsed.statusLifecycle !== undefined
+            ? parsed.statusLifecycle
+            : parsed.lifecycleRules !== undefined
+              ? { rules: parsed.lifecycleRules }
+              : undefined;
+    const lifecycle = this.normalizeLifecycleConfig(lifecycleRaw);
 
     const templateCacheObj =
       parsed.templateCache !== undefined && parsed.templateCache !== null && typeof parsed.templateCache === 'object'
@@ -1273,6 +1291,7 @@ export class Dashboard {
       !listViewView &&
       !listViewMetric &&
       !analytics?.widgets?.length &&
+      !lifecycle?.rules?.length &&
       !autoSave &&
       !auditLogging &&
       summaryViewEnabled === undefined &&
@@ -1308,6 +1327,7 @@ export class Dashboard {
     }
     return {
       followup,
+      lifecycle,
       templateCacheTtlSeconds,
       listViewTitle,
       listViewDefaultSort,
@@ -2199,7 +2219,175 @@ export class Dashboard {
         config.statusTransitions = transitions;
       }
     }
+    const submitEffectsRaw =
+      source.submitEffects !== undefined
+        ? source.submitEffects
+        : source.crossFormSubmitEffects !== undefined
+          ? source.crossFormSubmitEffects
+          : source.crossFormEffects !== undefined
+            ? source.crossFormEffects
+            : source.sharedTableEffects !== undefined
+              ? source.sharedTableEffects
+              : undefined;
+    const submitEffects = this.normalizeFollowupSubmitEffects(submitEffectsRaw);
+    if (submitEffects?.length) config.submitEffects = submitEffects;
     return Object.keys(config).length ? config : undefined;
+  }
+
+  private normalizeLifecycleConfig(raw: any): LifecycleConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const rulesRaw = Array.isArray(raw.rules)
+      ? raw.rules
+      : Array.isArray(raw.transitions)
+        ? raw.transitions
+        : raw.rule !== undefined
+          ? [raw.rule]
+          : [];
+    const rules = rulesRaw
+      .map((entry: any) => this.normalizeLifecycleRule(entry))
+      .filter(Boolean) as LifecycleRule[];
+    return rules.length ? { rules } : undefined;
+  }
+
+  private normalizeLifecycleRule(raw: any): LifecycleRule | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const type = (raw.type ?? raw.kind ?? 'dateStatusTransition').toString().trim();
+    if (type !== 'dateStatusTransition') return undefined;
+    const dateFieldId = (raw.dateFieldId ?? raw.fieldId ?? raw.dateField ?? '').toString().trim();
+    const toStatus = (raw.toStatus ?? raw.status ?? raw.nextStatus ?? '').toString().trim();
+    if (!dateFieldId || !toStatus) return undefined;
+    const compareRaw = (raw.compare ?? raw.operator ?? 'beforeToday').toString().trim();
+    const compare = compareRaw === 'onOrBeforeToday' ? 'onOrBeforeToday' : 'beforeToday';
+    const statusFieldId = (raw.statusFieldId ?? raw.statusField ?? '').toString().trim();
+    const fromStatuses: string[] | undefined = Array.isArray(raw.fromStatuses)
+      ? Array.from<string>(
+          new Set(
+            raw.fromStatuses
+              .map((value: any) => (value === undefined || value === null ? '' : value.toString().trim()))
+              .filter(Boolean)
+          )
+        )
+      : undefined;
+    const dayOffsetRaw = Number(raw.dayOffset ?? raw.offsetDays ?? 0);
+    const rule: LifecycleRule = {
+      type: 'dateStatusTransition',
+      dateFieldId,
+      toStatus,
+      compare
+    };
+    const id = (raw.id ?? '').toString().trim();
+    if (id) rule.id = id;
+    if (statusFieldId) rule.statusFieldId = statusFieldId;
+    if (fromStatuses?.length) rule.fromStatuses = fromStatuses;
+    if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
+      rule.dayOffset = Math.trunc(dayOffsetRaw);
+    }
+    return rule;
+  }
+
+  private normalizeFollowupSubmitEffects(raw: any): FollowupSubmitEffect[] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const list = Array.isArray(raw) ? raw : [raw];
+    const effects = list
+      .map(entry => this.normalizeFollowupSubmitEffect(entry))
+      .filter(Boolean) as FollowupSubmitEffect[];
+    return effects.length ? effects : undefined;
+  }
+
+  private normalizeFollowupSubmitEffect(raw: any): FollowupSubmitEffect | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const typeRaw = raw.type ?? raw.kind ?? '';
+    const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';
+    if (type !== 'createRecord' && type !== 'updateRecord') return undefined;
+
+    const targetFormKeyRaw = raw.targetFormKey ?? raw.formKey ?? raw.targetForm ?? raw.form;
+    const targetFormKey = targetFormKeyRaw !== undefined && targetFormKeyRaw !== null ? targetFormKeyRaw.toString().trim() : '';
+    if (!targetFormKey) return undefined;
+
+    const effect: Partial<FollowupSubmitEffect> = {
+      type: type as 'createRecord' | 'updateRecord',
+      targetFormKey
+    };
+
+    const when = this.normalizeWhenClause(raw.when ?? raw.match ?? raw.filter);
+    if (when) effect.when = when;
+
+    const runOnRaw = raw.runOn ?? raw.whenSaved ?? raw.onSave;
+    if (runOnRaw !== undefined && runOnRaw !== null) {
+      const runOn = runOnRaw.toString().trim().toLowerCase();
+      if (runOn === 'create' || runOn === 'update' || runOn === 'both') {
+        effect.runOn = runOn;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(raw, 'recordId')) {
+      effect.recordId = (raw as any).recordId;
+    } else if (Object.prototype.hasOwnProperty.call(raw, 'id')) {
+      effect.recordId = (raw as any).id;
+    } else if (Object.prototype.hasOwnProperty.call(raw, 'targetRecordId')) {
+      effect.recordId = (raw as any).targetRecordId;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(raw, 'status')) {
+      effect.status = raw.status === null ? null : raw.status === undefined ? undefined : raw.status.toString();
+    }
+
+    const valuesRaw = raw.values ?? raw.set ?? raw.fields;
+    if (valuesRaw && typeof valuesRaw === 'object' && !Array.isArray(valuesRaw)) {
+      const values: Record<string, any> = {};
+      Object.keys(valuesRaw).forEach(fieldIdRaw => {
+        const fieldId = (fieldIdRaw || '').toString().trim();
+        if (!fieldId) return;
+        values[fieldId] = (valuesRaw as any)[fieldIdRaw];
+      });
+      if (Object.keys(values).length) effect.values = values;
+    }
+
+    const forEachLineItem = this.normalizeFollowupCreateRecordLineItem(
+      raw.forEachLineItem ?? raw.forEachRow ?? raw.rowsFrom ?? raw.lineItems
+    );
+    if (forEachLineItem) effect.forEachLineItem = forEachLineItem;
+
+    const auditActionRaw = raw.auditAction ?? raw.auditLabel;
+    if (auditActionRaw !== undefined && auditActionRaw !== null) {
+      const auditAction = auditActionRaw.toString().trim();
+      if (auditAction) effect.auditAction = auditAction;
+    }
+
+    if (type === 'updateRecord') {
+      const hasRecordId = effect.recordId !== undefined && effect.recordId !== null && effect.recordId !== '';
+      if (!hasRecordId) return undefined;
+    }
+    const hasStatus = Object.prototype.hasOwnProperty.call(effect, 'status');
+    const hasValues = !!effect.values && Object.keys(effect.values || {}).length > 0;
+    return hasStatus || hasValues ? (effect as FollowupSubmitEffect) : undefined;
+  }
+
+  private normalizeFollowupCreateRecordLineItem(raw: any): FollowupCreateRecordLineItemConfig | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const source = typeof raw === 'string' ? { groupId: raw } : raw;
+    if (!source || typeof source !== 'object') return undefined;
+
+    const groupIdRaw = source.groupId ?? source.group ?? source.lineItemGroupId ?? source.rootGroupId;
+    const groupId = groupIdRaw !== undefined && groupIdRaw !== null ? groupIdRaw.toString().trim() : '';
+    if (!groupId) return undefined;
+
+    const config: FollowupCreateRecordLineItemConfig = { groupId };
+    const subGroupPathRaw = source.subGroupPath ?? source.path ?? source.groupPath;
+    const subGroupPath = Array.isArray(subGroupPathRaw)
+      ? subGroupPathRaw
+      : subGroupPathRaw !== undefined && subGroupPathRaw !== null
+        ? subGroupPathRaw.toString().split('.')
+        : [];
+    const normalizedPath = subGroupPath
+      .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+      .filter(Boolean);
+    if (normalizedPath.length) config.subGroupPath = normalizedPath;
+
+    const when = this.normalizeWhenClause(source.when ?? source.filter ?? source.match);
+    if (when) config.when = when;
+
+    return config;
   }
 
   private normalizeListViewMetaColumns(value: any): string[] | undefined {

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  getOptionStateValue,
   loadOptionsFromDataSource,
+  mergeOptionStateValue,
   optionKey,
   normalizeLanguage,
   toOptionSet,
@@ -28,6 +30,7 @@ import {
   renderMarkdownTemplateApi,
   renderHtmlTemplateApi,
   clearHtmlRenderClientCache,
+  invalidateClientSharedDataCaches,
   consumePrefetchedHomeBootstrapApi,
   fetchBootstrapContextApi,
   fetchHomeBootstrapApi,
@@ -74,6 +77,7 @@ import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bun
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
+import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
 import { detectDebug } from './app/utils';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
@@ -3734,17 +3738,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (field: any, groupId?: string) => {
       if (!field?.dataSource) return Promise.resolve();
       const key = optionKey(field.id, groupId);
-      const existing = optionStateRef.current[key];
+      const existing = getOptionStateValue(optionStateRef.current, field.id, groupId);
       const needsTooltips = !!(existing as any)?.tooltips;
-      const existingTooltips = tooltipStateRef.current[key];
+      const existingTooltips = getOptionStateValue(tooltipStateRef.current, field.id, groupId);
       if (existing && (!needsTooltips || existingTooltips)) return Promise.resolve();
       if (preloadPromisesRef.current[key]) return preloadPromisesRef.current[key];
       const promise = loadOptionsFromDataSource(field.dataSource, language)
         .then(res => {
           if (res) {
-            setOptionState(prev => (prev[key] ? prev : { ...prev, [key]: res }));
+            setOptionState(prev => mergeOptionStateValue(prev, field.id, groupId, res));
             if (res.tooltips) {
-              setTooltipState(prev => (prev[key] ? prev : { ...prev, [key]: res.tooltips || {} }));
+              setTooltipState(prev => mergeOptionStateValue(prev, field.id, groupId, res.tooltips || {}));
             }
           }
         })
@@ -6700,7 +6704,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setView('summary');
   }, [flushAutoSaveBeforeNavigate, summaryViewEnabled]);
 
-  // When a UI flow temporarily holds autosave (e.g., leftovers overlay), persist any queued changes
+  // When a UI flow temporarily holds autosave (e.g., a subgroup overlay), persist any queued changes
   // immediately once the hold is released (user returns to the main steps UI).
   useEffect(() => {
     const prev = prevAutoSaveHoldRef.current;
@@ -7410,7 +7414,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       forceContextReset?: boolean;
     },
     effectOverrides?: Record<string, Record<string, FieldValue>>,
-    ignorePending?: boolean
+    ignorePending?: boolean,
+    snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState }
   ) {
     const fieldPath = opts?.lineItem
       ? `${opts.lineItem.groupId}__${question.id}__${opts.lineItem.rowId}`
@@ -7425,15 +7430,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return;
     }
+    const currentValues = snapshots?.values || valuesRef.current;
+    const currentLineItems = snapshots?.lineItems || lineItemsRef.current;
     runSelectionEffectsHelper({
       definition,
       question,
       value,
       language,
-      values: valuesRef.current,
-      lineItems: lineItemsRef.current,
+      values: currentValues,
+      lineItems: currentLineItems,
       setValues,
       setLineItems,
+      onLineItemsMutated: ({ sourceGroupKey, prevLineItems, nextLineItems, nextValues }) => {
+        globalThis.setTimeout(() => {
+          runSelectionEffectsForAncestors({
+            definition,
+            values: nextValues,
+            onSelectionEffect: (ancestorQuestion, ancestorValue, ancestorOpts) => {
+              runSelectionEffects(
+                ancestorQuestion,
+                ancestorValue,
+                ancestorOpts,
+                effectOverrides,
+                true,
+                { values: nextValues, lineItems: nextLineItems }
+              );
+            },
+            sourceGroupKey,
+            prevLineItems,
+            nextLineItems,
+            options: { mode: 'change', topValues: nextValues }
+          });
+        }, 0);
+      },
       logEvent,
       opts,
       effectOverrides,
@@ -7903,6 +7932,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatusLevel('success');
         }
       }
+
+      invalidateClientSharedDataCaches({ includePersistedDataSources: true });
+      logEvent('sharedData.cache.invalidated', {
+        reason: 'submit.success',
+        recordId: recordId || null,
+        submitEffectsCreated: Number((res as any)?.meta?.submitEffects?.created || 0) || 0,
+        submitEffectsUpdated: Number((res as any)?.meta?.submitEffects?.updated || 0) || 0
+      });
 
       // Refresh from saved record to surface server-side autoIncrement + follow-up changes immediately.
       if (recordId) {
@@ -8399,6 +8436,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     };
   }, [openRecordByIdForPerf, perfEnabled]);
+
+  useEffect(() => {
+    const envLower = (envTag || '').toString().trim().toLowerCase();
+    const enabled = debugEnabled || envLower === 'stage-2' || envLower === 'staging';
+    if (!enabled) return;
+    const globalAny = globalThis as any;
+    const hook = () => ({
+      values: valuesRef.current,
+      lineItems: lineItemsRef.current,
+      selectedRecordId,
+      view
+    });
+    globalAny.__CK_DEBUG_FORM_STATE__ = hook;
+    return () => {
+      try {
+        if (globalAny.__CK_DEBUG_FORM_STATE__ === hook) {
+          delete globalAny.__CK_DEBUG_FORM_STATE__;
+        }
+      } catch (_) {
+        // ignore cleanup failures
+      }
+    };
+  }, [debugEnabled, envTag, selectedRecordId, view]);
 
   useEffect(() => {
     const pending = openRecordPerfRef.current;

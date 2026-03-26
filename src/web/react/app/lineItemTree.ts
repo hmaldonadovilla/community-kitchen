@@ -1,6 +1,6 @@
 import { LineItemGroupConfigOverride } from '../../types';
 import { LineItemState } from '../types';
-import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey, shouldPersistLineItemRows } from './lineItems';
 
 const mergeOverlayDetailConfig = (base: any, override: any) => {
   if (!base && !override) return undefined;
@@ -52,6 +52,7 @@ export const serializeLineItemTree = (args: {
   groupOverridesByKey?: Record<string, LineItemGroupConfigOverride | undefined>;
 }): Record<string, any>[] => {
   const { lineItems, groupCfg, groupKey, rowFilters, groupOverridesByKey } = args;
+  if (!shouldPersistLineItemRows(groupCfg)) return [];
   const rowsAll = lineItems[groupKey] || [];
   const filterRowId = (rowFilters?.[groupKey] || '').toString().trim();
   const rows = filterRowId ? rowsAll.filter(row => row.id === filterRowId) : rowsAll;
@@ -66,6 +67,7 @@ export const serializeLineItemTree = (args: {
     subGroups.forEach(sub => {
       const subId = resolveSubgroupKey(sub as any);
       if (!subId) return;
+      if (!shouldPersistLineItemRows(sub)) return;
       const childKey = buildSubgroupKey(groupKey, row.id, subId);
       base[subId] = serializeLineItemTree({
         lineItems,

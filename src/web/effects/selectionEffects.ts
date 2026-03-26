@@ -1,4 +1,4 @@
-import { PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { DataSourceConfig, PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode, VisibilityContext } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 import { computeAllowedOptions } from '../rules/filter';
@@ -27,6 +27,7 @@ interface EffectContext {
       effectId?: string;
       hideRemoveButton?: boolean;
       preserveManualRows?: boolean;
+      replaceAllAutoRows?: boolean;
     }
   ) => void;
   deleteLineItemRows?: (
@@ -234,7 +235,9 @@ export function handleSelectionEffects(
       const mergedPreset = mergePresetOverrides(resolvedPreset as any, override);
       const effectId = normalizeEffectId(effect);
       const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
-      const replaceExistingByEffectId = !!effectId && hasMatchingDeleteEffectForAdd(targetGroupId, effectId);
+      const replaceExistingByEffectId =
+        (!!effectId && hasMatchingDeleteEffectForAdd(targetGroupId, effectId)) ||
+        ((effect as any)?.replaceExistingByEffectId === true && !!effectId);
       const meta =
         effectId || hideRemoveButton || replaceExistingByEffectId
           ? {
@@ -247,8 +250,9 @@ export function handleSelectionEffects(
       // if the preset sets a value that's not allowed by the target field's optionFilter in the current context,
       // skip creating the row entirely (prevents disallowed rows like "Salt" ingredients from appearing).
       const targetConfig = resolveTargetLineConfigForEffect(definition, targetGroupId, options?.lineItem);
+      const skipTargetOptionFilters = (effect as any)?.skipTargetOptionFilters === true;
       const allowed =
-        !targetConfig || !targetConfig.fields.length
+        skipTargetOptionFilters || !targetConfig || !targetConfig.fields.length
           ? true
           : presetPassesOptionFilters(mergedPreset as any, targetConfig.fields, {
               rowValues: options?.lineItem?.rowValues,
@@ -349,6 +353,34 @@ export function handleSelectionEffects(
         topValues: options?.topValues,
         effectOverrides: options?.effectOverrides
       });
+      return;
+    }
+    if (effect.type === 'addLineItemsFromFieldPayload') {
+      if (!targetGroupId) return;
+      populateLineItemsFromFieldPayload({
+        effect,
+        targetGroupId,
+        definition,
+        ctx,
+        debug,
+        contextId,
+        lineItem: options?.lineItem,
+        topValues: options?.topValues,
+        effectOverrides: options?.effectOverrides
+      });
+      return;
+    }
+    if (effect.type === 'setValuesFromDataSource') {
+      applyValuesFromDataSource({
+        definition,
+        effect,
+        question,
+        language,
+        ctx,
+        debug,
+        normalizedSelections,
+        lineItem: options?.lineItem
+      });
     }
   });
   if (hasExplicitContext) {
@@ -372,6 +404,56 @@ interface DataDrivenEffectParams {
   effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
+interface FieldPayloadEffectParams {
+  effect: SelectionEffect;
+  targetGroupId: string;
+  definition: WebFormDefinition;
+  ctx: EffectContext;
+  debug: boolean;
+  contextId: string;
+  lineItem?: SelectionEffectOptions['lineItem'];
+  topValues?: Record<string, any>;
+  effectOverrides?: Record<string, Record<string, PresetValue>>;
+}
+
+interface DataSourceValueMappingParams {
+  definition: WebFormDefinition;
+  effect: SelectionEffect;
+  question: WebQuestionDefinition;
+  language: LangCode;
+  ctx: EffectContext;
+  debug: boolean;
+  normalizedSelections: string[];
+  lineItem?: SelectionEffectOptions['lineItem'];
+}
+
+function buildLookupCandidates(args: {
+  normalizedSelections: string[];
+  lookupField?: string;
+  lookupSourceValue?: any;
+  lineItem?: SelectionEffectOptions['lineItem'];
+}): string[] {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: any) => {
+    const value = normalizeString(raw);
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    candidates.push(value);
+  };
+
+  push(args.lookupSourceValue);
+  (args.normalizedSelections || []).forEach(push);
+
+  const fallback =
+    args.lookupField && args.lineItem?.rowValues
+      ? (args.lineItem.rowValues as Record<string, any>)[args.lookupField]
+      : undefined;
+  push(fallback);
+
+  return candidates;
+}
+
 interface SelectionCacheEntry {
   value: string;
   entries: any[];
@@ -379,7 +461,7 @@ interface SelectionCacheEntry {
 
 interface SelectionEffectCache {
   contexts: Map<string, Map<string, SelectionCacheEntry>>;
-  token: number;
+  contextTokens: Map<string, number>;
 }
 
 const resolveSubgroupKey = (sub?: { id?: string; label?: any }): string => {
@@ -398,6 +480,7 @@ interface SelectionDiffPreview {
 const selectionEffectState = new Map<string, SelectionEffectCache>();
 const selectionEffectSelectionSignatures = new Map<string, Map<string, string>>();
 const ROW_CONTEXT_PREFIX = '$row.';
+const SOURCE_CONTEXT_PREFIX = '$source.';
 const TOP_CONTEXT_PREFIX = '$top.';
 const ROW_CONTEXT_KEY = '__ckRowContext';
 const DEFAULT_CONTEXT_ID = '__global__';
@@ -421,9 +504,24 @@ function getSelectionSignatureStateKey(question: WebQuestionDefinition): string 
 function getOrCreateCache(question: WebQuestionDefinition): SelectionEffectCache {
   const key = getStateKey(question);
   if (!selectionEffectState.has(key)) {
-    selectionEffectState.set(key, { contexts: new Map(), token: 0 });
+    selectionEffectState.set(key, { contexts: new Map(), contextTokens: new Map() });
   }
   return selectionEffectState.get(key)!;
+}
+
+function getContextTokenKey(contextId: string): string {
+  return contextId || DEFAULT_CONTEXT_ID;
+}
+
+function bumpContextToken(cache: SelectionEffectCache, contextId: string): number {
+  const key = getContextTokenKey(contextId);
+  const next = (cache.contextTokens.get(key) || 0) + 1;
+  cache.contextTokens.set(key, next);
+  return next;
+}
+
+function readContextToken(cache: SelectionEffectCache, contextId: string): number {
+  return cache.contextTokens.get(getContextTokenKey(contextId)) || 0;
 }
 
 function getContextMap(
@@ -593,6 +691,80 @@ function resolveLookupField(effect: SelectionEffect, question: WebQuestionDefini
   return undefined;
 }
 
+function mergeDataSourceConfig(base: DataSourceConfig, override?: DataSourceConfig): DataSourceConfig {
+  if (!override) return { ...base };
+  const merged: DataSourceConfig = {
+    ...base,
+    ...override
+  };
+  if (override.projection === undefined && base.projection !== undefined) merged.projection = [...base.projection];
+  if (override.statusAllowList === undefined && base.statusAllowList !== undefined) {
+    merged.statusAllowList = [...base.statusAllowList];
+  }
+  if (override.mapping === undefined && base.mapping !== undefined) merged.mapping = { ...base.mapping };
+  return merged;
+}
+
+function collectQuestionDataSources(question: any, sink: DataSourceConfig[]): void {
+  if (!question || typeof question !== 'object') return;
+  if (question.dataSource && typeof question.dataSource === 'object' && question.dataSource.id) {
+    sink.push(question.dataSource as DataSourceConfig);
+  }
+  const lineItemConfig = (question as any)?.lineItemConfig;
+  const fieldSets = [
+    Array.isArray(lineItemConfig?.fields) ? lineItemConfig.fields : [],
+    Array.isArray(lineItemConfig?.subGroups) ? lineItemConfig.subGroups : [],
+    Array.isArray((question as any)?.fields) ? (question as any).fields : []
+  ];
+  fieldSets.forEach(entries => {
+    entries.forEach((entry: any) => collectQuestionDataSources(entry, sink));
+  });
+}
+
+function findDataSourceConfigById(definition: WebFormDefinition, sourceId: string): DataSourceConfig | undefined {
+  const normalizedId = sourceId.toString().trim();
+  if (!normalizedId) return undefined;
+  const configured = (definition.dataSources || []).find(ds => (ds?.id || '').toString().trim() === normalizedId);
+  if (configured) return configured;
+  const discovered: DataSourceConfig[] = [];
+  (definition.questions || []).forEach(question => collectQuestionDataSources(question, discovered));
+  return discovered.find(ds => (ds?.id || '').toString().trim() === normalizedId);
+}
+
+function resolveEffectDataSourceConfig(
+  definition: WebFormDefinition,
+  question: WebQuestionDefinition,
+  sourceConfig?: DataSourceConfig
+): DataSourceConfig | undefined {
+  const explicit = sourceConfig || question.dataSource;
+  if (!explicit) return undefined;
+  const explicitId = (explicit.id || '').toString().trim();
+  const questionConfig =
+    question.dataSource && (question.dataSource.id || '').toString().trim() === explicitId ? question.dataSource : undefined;
+  const definitionConfig = explicitId ? findDataSourceConfigById(definition, explicitId) : undefined;
+  const mergedFromQuestion = questionConfig ? mergeDataSourceConfig(questionConfig, explicit) : explicit;
+  return definitionConfig ? mergeDataSourceConfig(definitionConfig, mergedFromQuestion) : mergedFromQuestion;
+}
+
+function rowMatchesSelection(args: {
+  row: any;
+  fieldId: string;
+  selectedValueRaw: any;
+}): boolean {
+  const fieldValue = getValueFromSourceRow(args.row, args.fieldId);
+  if (fieldValue === undefined || fieldValue === null || fieldValue === '') return false;
+  const target = normalizeLookupToken(args.selectedValueRaw);
+  const targetValue = (target.key || target.raw).toLowerCase();
+  if (!targetValue) return false;
+
+  const valuesToCheck = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
+  return valuesToCheck.some(candidateRaw => {
+    const candidate = normalizeLookupToken(candidateRaw);
+    const candidateValue = (candidate.key || candidate.raw).toLowerCase();
+    return !!candidateValue && candidateValue === targetValue;
+  });
+}
+
 function coerceItemsCollection(payload: any): any[] {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
@@ -673,16 +845,37 @@ function buildPreset(
   entry: any,
   effect: SelectionEffect,
   lineFieldIds: string[]
-): Record<string, string | number> {
+): Record<string, PresetValue> {
   const mapping = effect.lineItemMapping || {};
   const targetFields = Object.keys(mapping).length ? Object.keys(mapping) : lineFieldIds;
-  const preset: Record<string, string | number> = {};
+  const preset: Record<string, PresetValue> = {};
   targetFields.forEach(fieldId => {
     const sourcePath = mapping[fieldId] || fieldId;
     const rawValue = resolveMappingValue(entry, sourcePath);
     if (rawValue === undefined || rawValue === null || rawValue === '') return;
     preset[fieldId] = typeof rawValue === 'number' ? rawValue : rawValue.toString();
   });
+  if (effect.preset && typeof effect.preset === 'object') {
+    Object.entries(effect.preset).forEach(([fieldId, rawValue]) => {
+      if (rawValue === undefined || rawValue === null) return;
+      let resolved: PresetValue | undefined;
+      if (typeof rawValue === 'string') {
+        const normalized = rawValue.toString().trim();
+        if (normalized.startsWith(ROW_CONTEXT_PREFIX)) {
+          resolved = asPresetValue(resolveRowContextValue(entry, normalized));
+        } else if (normalized.startsWith(SOURCE_CONTEXT_PREFIX)) {
+          const sourcePath = normalized.slice(SOURCE_CONTEXT_PREFIX.length).trim();
+          resolved = asPresetValue(sourcePath ? getValueFromPath(entry, sourcePath) : undefined);
+        } else {
+          resolved = asPresetValue(rawValue);
+        }
+      } else {
+        resolved = asPresetValue(rawValue);
+      }
+      if (resolved === undefined) return;
+      preset[fieldId] = resolved;
+    });
+  }
   return preset;
 }
 
@@ -785,6 +978,136 @@ function applyScale(
   });
 }
 
+function applyValuesFromDataSource({
+  definition,
+  effect,
+  question,
+  language,
+  ctx,
+  debug,
+  normalizedSelections,
+  lineItem
+}: DataSourceValueMappingParams): void {
+  const sourceConfig = resolveEffectDataSourceConfig(definition, question, effect.dataSource);
+  const fieldMapping = effect.fieldMapping && typeof effect.fieldMapping === 'object' ? effect.fieldMapping : {};
+  if (!sourceConfig || !Object.keys(fieldMapping).length) {
+    if (debug && typeof console !== 'undefined') {
+      console.warn('[SelectionEffects] setValuesFromDataSource missing config', {
+        questionId: question.id,
+        hasDataSource: !!sourceConfig,
+        hasFieldMapping: Object.keys(fieldMapping).length > 0
+      });
+    }
+    return;
+  }
+
+  fetchDataSource(sourceConfig, language)
+    .then(res => {
+      const rows = Array.isArray((res as any)?.items)
+        ? (res as any).items
+        : Array.isArray(res)
+          ? res
+          : [];
+      if (!rows.length) {
+        if (effect.clearOnNoMatch) {
+          Object.keys(fieldMapping).forEach(fieldId => {
+            ctx.setValue?.({ fieldId, value: null, lineItem });
+          });
+        }
+        return;
+      }
+      const sampleRow = rows[0];
+      const lookupField = resolveLookupField(effect, question, sampleRow);
+      if (!lookupField) {
+        if (debug && typeof console !== 'undefined') {
+          console.warn('[SelectionEffects] setValuesFromDataSource unable to resolve lookupField', {
+            questionId: question.id,
+            effect
+          });
+        }
+        return;
+      }
+      const lookupSourceFieldId =
+        typeof effect.lookupSourceFieldId === 'string' ? effect.lookupSourceFieldId.toString().trim() : '';
+      const lookupSourceValue =
+        lookupSourceFieldId && lineItem?.rowValues
+          ? (lineItem.rowValues as Record<string, any>)[lookupSourceFieldId]
+          : undefined;
+      const lookupCandidates = buildLookupCandidates({
+        normalizedSelections,
+        lookupField,
+        lookupSourceValue,
+        lineItem
+      });
+      if (!lookupCandidates.length) {
+        if (effect.clearOnNoMatch) {
+          Object.keys(fieldMapping).forEach(fieldId => {
+            ctx.setValue?.({ fieldId, value: null, lineItem });
+          });
+        }
+        return;
+      }
+
+      let matchedRow: any = null;
+      let matchedSelectionValue = lookupCandidates[lookupCandidates.length - 1];
+      for (const candidateValueRaw of lookupCandidates) {
+        const selectedToken = normalizeLookupToken(candidateValueRaw);
+        const normalizedTarget = (selectedToken.key || selectedToken.raw).toLowerCase();
+        if (!normalizedTarget) continue;
+        const found = rows.find((candidate: any) => {
+          const candidateToken = normalizeLookupToken(candidate?.[lookupField]);
+          const candidateValue = (candidateToken.key || candidateToken.raw).toLowerCase();
+          if (!candidateValue) return false;
+          return candidateValue === normalizedTarget;
+        });
+        if (found) {
+          matchedRow = found;
+          matchedSelectionValue = candidateValueRaw;
+          break;
+        }
+      }
+      if (!matchedRow) {
+        if (effect.clearOnNoMatch) {
+          Object.keys(fieldMapping).forEach(fieldId => {
+            ctx.setValue?.({ fieldId, value: null, lineItem });
+          });
+        }
+        if (debug && typeof console !== 'undefined') {
+          console.warn('[SelectionEffects] setValuesFromDataSource no matching row', {
+            questionId: question.id,
+            selectedValue: lookupCandidates[lookupCandidates.length - 1],
+            lookupField,
+            sourceId: sourceConfig.id || null
+          });
+        }
+        return;
+      }
+
+      Object.keys(fieldMapping).forEach(fieldId => {
+        const sourceField = fieldMapping[fieldId];
+        const rawValue = getValueFromSourceRow(matchedRow, sourceField);
+        const nextValue = rawValue === undefined ? null : (rawValue as PresetValue | null);
+        ctx.setValue?.({ fieldId, value: nextValue, lineItem });
+      });
+
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] setValuesFromDataSource applied', {
+          questionId: question.id,
+          selectedValue: matchedSelectionValue,
+          lookupField,
+          fieldMapping,
+          sourceId: sourceConfig.id || null,
+          targetScope: lineItem?.groupId ? 'lineItem' : 'top'
+        });
+      }
+    })
+    .catch(err => {
+      if (debug && typeof console !== 'undefined') {
+        console.error('[SelectionEffects] setValuesFromDataSource failed', err);
+      }
+    });
+}
+
 function populateLineItemsFromDataSource({
   effect,
   targetGroupId,
@@ -800,7 +1123,7 @@ function populateLineItemsFromDataSource({
   topValues,
   effectOverrides
 }: DataDrivenEffectParams): void {
-  const sourceConfig = effect.dataSource || question.dataSource;
+  const sourceConfig = resolveEffectDataSourceConfig(definition, question, effect.dataSource);
   if (!sourceConfig) {
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] data-driven effect missing dataSource config', {
@@ -855,7 +1178,7 @@ function populateLineItemsFromDataSource({
     });
     return;
   }
-  const stateToken = ++cache.token;
+  const stateToken = bumpContextToken(cache, contextId);
 
   // When manual rows should be discarded, clear immediately so stale/manual rows
   // don't linger while the data source fetch resolves.
@@ -865,7 +1188,7 @@ function populateLineItemsFromDataSource({
 
   fetchDataSource(sourceConfig, language)
     .then(res => {
-      if (stateToken !== cache.token) {
+      if (stateToken !== readContextToken(cache, contextId)) {
         return;
       }
       const rows = Array.isArray((res as any)?.items)
@@ -894,48 +1217,112 @@ function populateLineItemsFromDataSource({
         return;
       }
       const sampleRow = rows[0];
-      const lookupField = resolveLookupField(effect, question, sampleRow);
-      if (!lookupField) {
+      const explicitLookupField =
+        effect.lookupField ||
+        question.dataSource?.mapping?.value ||
+        question.dataSource?.mapping?.id ||
+        '';
+      const matchField = effect.matchField ? effect.matchField.toString().trim() : '';
+      if (!explicitLookupField && !matchField) {
+        const entries = rows.flatMap((entryRow: any) => {
+          const payload = effect.dataField ? entryRow[effect.dataField] : entryRow;
+          return coerceItemsCollection(payload);
+        });
+        const scaledEntries = applyScale(entries, effect, lineItem, null, targetConfig.fields);
+        const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
+        contextMap.clear();
+        contextMap.set('__all__', {
+          value: '__all__',
+          entries: enrichedEntries
+        });
         if (debug && typeof console !== 'undefined') {
-          console.warn('[SelectionEffects] unable to resolve lookupField', {
+          console.info('[SelectionEffects] addLineItemsFromDataSource seeded all rows', {
             questionId: question.id,
-            effect
+            sourceId: sourceConfig.id,
+            entryCount: enrichedEntries.length
           });
         }
+        renderAggregatedRows({
+          effect,
+          targetGroupId,
+          targetConfig,
+          cache,
+          ctx,
+          debug,
+          contextId,
+          effectOverrides
+        });
         return;
       }
+      const lookupField = explicitLookupField || resolveLookupField(effect, question, sampleRow);
+      const lookupSourceFieldId =
+        typeof effect.lookupSourceFieldId === 'string' ? effect.lookupSourceFieldId.toString().trim() : '';
+      const lookupSourceValue =
+        lookupSourceFieldId && lineItem?.rowValues
+          ? (lineItem.rowValues as Record<string, any>)[lookupSourceFieldId]
+          : undefined;
       missingSelections.forEach(selectedValue => {
-        const sel = normalizeLookupToken(selectedValue);
-        const normalizedTarget = (sel.key || sel.raw).toLowerCase();
-        if (!normalizedTarget) {
-          contextMap.delete(selectedValue);
-          return;
-        }
-        const row = rows.find((candidate: any) => {
-          const cand = normalizeLookupToken(candidate?.[lookupField]);
-          const candidateValue = (cand.key || cand.raw).toLowerCase();
-          if (!candidateValue) return false;
-          return candidateValue === normalizedTarget;
+        const lookupCandidates = buildLookupCandidates({
+          normalizedSelections: [selectedValue],
+          lookupField,
+          lookupSourceValue,
+          lineItem
         });
-        if (!row) {
+        const matchedRows = matchField
+          ? lookupCandidates.flatMap(candidateValueRaw =>
+              rows.filter((candidate: any) =>
+                rowMatchesSelection({
+                  row: candidate,
+                  fieldId: matchField,
+                  selectedValueRaw: candidateValueRaw
+                })
+              )
+            )
+          : [];
+        const dedupedMatchedRows = matchField
+          ? matchedRows.filter((candidate, index) => matchedRows.indexOf(candidate) === index)
+          : [];
+        const row =
+          !matchField && lookupField
+            ? lookupCandidates.reduce<any | null>((matched, candidateValueRaw) => {
+                if (matched) return matched;
+                const sel = normalizeLookupToken(candidateValueRaw);
+                const normalizedTarget = (sel.key || sel.raw).toLowerCase();
+                if (!normalizedTarget) return null;
+                return (
+                  rows.find((candidate: any) => {
+                    const cand = normalizeLookupToken(candidate?.[lookupField]);
+                    const candidateValue = (cand.key || cand.raw).toLowerCase();
+                    if (!candidateValue) return false;
+                    return candidateValue === normalizedTarget;
+                  }) || null
+                );
+              }, null)
+            : null;
+        const matchedEntries = matchField ? dedupedMatchedRows : row ? [row] : [];
+        if (!matchedEntries.length) {
           if (debug && typeof console !== 'undefined') {
             console.warn('[SelectionEffects] no matching row for selection', {
               questionId: question.id,
               selectedValue,
-              lookupField
+              lookupField,
+              matchField: matchField || undefined
             });
           }
           contextMap.delete(selectedValue);
           return;
         }
-        const payload = effect.dataField ? row[effect.dataField] : row;
-        const entries = coerceItemsCollection(payload);
+        const entries = matchedEntries.flatMap(entryRow => {
+          const payload = effect.dataField ? entryRow[effect.dataField] : entryRow;
+          return coerceItemsCollection(payload);
+        });
         if (!entries.length) {
           if (debug && typeof console !== 'undefined') {
             console.warn('[SelectionEffects] data-driven effect produced no entries', {
               questionId: question.id,
               selectedValue,
-              dataField: effect.dataField
+              dataField: effect.dataField,
+              matchField: matchField || undefined
             });
           }
           contextMap.delete(selectedValue);
@@ -1033,6 +1420,87 @@ function populateLineItemsFromDataSource({
         console.error('[SelectionEffects] data-driven effect failed', err);
       }
     });
+}
+
+function populateLineItemsFromFieldPayload({
+  effect,
+  targetGroupId,
+  definition,
+  ctx,
+  debug,
+  contextId,
+  lineItem,
+  topValues,
+  effectOverrides
+}: FieldPayloadEffectParams): void {
+  const dataField = normalizeString(effect.dataField);
+  if (!dataField) return;
+  const targetConfig = resolveTargetLineConfigForEffect(definition, targetGroupId, lineItem);
+  if (!targetConfig || !targetConfig.fields.length) {
+    if (debug && typeof console !== 'undefined') {
+      console.warn('[SelectionEffects] field-payload effect target missing or misconfigured', {
+        effect,
+        targetGroupId
+      });
+    }
+    return;
+  }
+
+  const payloadSource = lineItem?.rowValues && Object.prototype.hasOwnProperty.call(lineItem.rowValues, dataField)
+    ? lineItem.rowValues
+    : topValues || {};
+  const payload = payloadSource ? (payloadSource as Record<string, any>)[dataField] : undefined;
+  const entries = coerceItemsCollection(payload);
+  const preserveManualRows = effect.preserveManualRows !== false;
+
+  if (!entries.length) {
+    if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
+      ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
+    }
+    if (debug && typeof console !== 'undefined') {
+      console.warn('[SelectionEffects] field-payload effect produced no entries', {
+        targetGroupId,
+        dataField
+      });
+    }
+    return;
+  }
+
+  const scaledEntries = applyScale(entries, effect, lineItem, lineItem?.rowValues, targetConfig.fields);
+  const enrichedEntries = attachRowContext(scaledEntries, lineItem?.rowValues);
+  const aggregatedPresets = aggregateEntries(enrichedEntries, effect, targetConfig.fields);
+  const override = resolveEffectOverride(effect, effectOverrides);
+  const mergedPresets = override
+    ? aggregatedPresets.map(preset => mergePresetOverrides(preset as any, override))
+    : aggregatedPresets;
+  const { numericFieldIds, nonNumericFieldIds } = resolveAggregationFields(effect, targetConfig.fields);
+  const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
+
+  if (ctx.updateAutoLineItems) {
+    ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
+      effectContextId,
+      numericTargets: numericFieldIds,
+      keyFields: nonNumericFieldIds,
+      effectId: normalizeEffectId(effect) || undefined,
+      hideRemoveButton: hideRemoveButton || undefined,
+      preserveManualRows: preserveManualRows ? undefined : false
+    });
+    return;
+  }
+
+  if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
+    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
+  }
+
+  mergedPresets.forEach(preset => {
+    ctx.addLineItemRow(targetGroupId, preset, {
+      effectContextId,
+      auto: true,
+      effectId: normalizeEffectId(effect) || undefined,
+      hideRemoveButton: hideRemoveButton || undefined
+    });
+  });
 }
 
 function resolveTargetLineConfigForEffect(
@@ -1231,6 +1699,17 @@ interface RenderParams {
   effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
+function resolveAutoRowEffectContextId(baseContextId: string, effect: SelectionEffect): string {
+  const effectId = normalizeEffectId(effect);
+  if (!effectId) return baseContextId;
+  const parts = (baseContextId || '').toString().split('::');
+  if (parts.length >= 3) {
+    parts[parts.length - 1] = effectId;
+    return parts.join('::');
+  }
+  return baseContextId ? `${baseContextId}::${effectId}` : effectId;
+}
+
 function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, effectOverrides }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
   const contextMap = getContextMap(cache, contextId);
@@ -1262,15 +1741,17 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
     : aggregatedPresets;
   const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
   const preserveManualRows = (effect as any)?.preserveManualRows !== false;
+  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
 
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
-      effectContextId: contextId,
+      effectContextId,
       numericTargets,
       keyFields: nonNumericFieldIds,
       effectId: normalizeEffectId(effect) || undefined,
       hideRemoveButton: hideRemoveButton || undefined,
-      preserveManualRows: preserveManualRows ? undefined : false
+      preserveManualRows: preserveManualRows ? undefined : false,
+      replaceAllAutoRows: effect.replaceAllAutoRows === true || undefined
     });
     return;
   }
@@ -1280,7 +1761,7 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
   }
   mergedPresets.forEach(preset => {
     ctx.addLineItemRow(targetGroupId, preset, {
-      effectContextId: contextId,
+      effectContextId,
       auto: true,
       effectId: normalizeEffectId(effect) || undefined,
       hideRemoveButton: hideRemoveButton || undefined
@@ -1298,10 +1779,10 @@ function aggregateEntries(
   entries: any[],
   effect: SelectionEffect,
   fields: any[]
-): Array<Record<string, string | number>> {
+): Array<Record<string, PresetValue>> {
   const { numericFieldIds, nonNumericFieldIds } = resolveAggregationFields(effect, fields);
   const lineFieldIds = fields.map(field => field.id);
-  const buckets = new Map<string, Record<string, string | number>>();
+  const buckets = new Map<string, Record<string, PresetValue>>();
 
   entries.forEach(entry => {
     const preset = buildPreset(entry, effect, lineFieldIds);
@@ -1351,7 +1832,7 @@ function resolveAggregationFields(
 }
 
 function buildAggregationKey(
-  preset: Record<string, string | number>,
+  preset: Record<string, PresetValue>,
   nonNumericFieldIds: string[]
 ): string {
   if (!nonNumericFieldIds.length) {

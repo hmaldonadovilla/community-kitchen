@@ -61,4 +61,31 @@ describe('serializeLineItemTree', () => {
       expect.objectContaining({ ING: 'Salt', QTY: 3, UNIT: 'Tbsp' })
     ]);
   });
+
+  it('omits transient subgroups from serialized output', () => {
+    const lineItems: LineItemState = {
+      ROOT: [{ id: 'meal-1', values: { MEAL_TYPE: 'Diabetic' } }],
+      [buildSubgroupKey('ROOT', 'meal-1', 'TRANSIENT')]: [
+        { id: 'tmp-1', values: { LEFTOVER_ID: 'LE-1', LEFTOVER_SELECTED: true } }
+      ]
+    } as any;
+
+    const rootConfig = {
+      subGroups: [
+        {
+          id: 'TRANSIENT',
+          ui: { persistRows: false },
+          fields: [{ id: 'LEFTOVER_ID' }, { id: 'LEFTOVER_SELECTED' }]
+        }
+      ]
+    };
+
+    const serialized = serializeLineItemTree({
+      lineItems,
+      groupCfg: rootConfig,
+      groupKey: 'ROOT'
+    });
+
+    expect(serialized[0]?.TRANSIENT).toBeUndefined();
+  });
 });

@@ -1,0 +1,1438 @@
+{
+  "formKey": "Config: Leftover Inventory",
+  "generatedAt": "2026-03-21T18:30:00.000Z",
+  "form": {
+    "title": "Leftover Inventory",
+    "configSheet": "Config: Leftover Inventory",
+    "destinationTab": "Leftover Inventory Data",
+    "description": "Shared leftover inventory records used across forms.",
+    "languages": [
+      "EN",
+      "FR",
+      "NL"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": true,
+    "summaryViewEnabled": true,
+    "copyCurrentRecordEnabled": false,
+    "createNewRecordEnabled": true,
+    "createRecordPresetButtonsEnabled": false,
+    "listViewTitle": {
+      "en": "Leftover inventory",
+      "fr": "Inventaire des restes",
+      "nl": "Restinventaris"
+    },
+    "listViewMetaColumns": [
+      "createdAt",
+      "updatedAt",
+      "status"
+    ],
+    "listViewDefaultSort": {
+      "fieldId": "LEFTOVER_EXP_DATE",
+      "direction": "asc"
+    },
+    "listViewPageSize": 25,
+    "listViewPaginationControlsEnabled": true,
+    "listViewHeaderSortEnabled": true,
+    "listViewRowClickEnabled": true,
+    "submitButtonLabel": {
+      "en": "Save",
+      "fr": "Save",
+      "nl": "Save"
+    },
+    "summaryButtonLabel": {
+      "en": "Summary",
+      "fr": "Summary",
+      "nl": "Summary"
+    },
+    "lifecycle": {
+      "rules": [
+        {
+          "id": "expire-leftovers",
+          "type": "dateStatusTransition",
+          "dateFieldId": "LEFTOVER_EXP_DATE",
+          "statusFieldId": "LEFTOVER_STATUS",
+          "fromStatuses": [
+            "available"
+          ],
+          "toStatus": "expired",
+          "compare": "beforeToday"
+        }
+      ]
+    }
+  },
+  "questions": [
+    {
+      "id": "LEFTOVER_ID",
+      "type": "TEXT",
+      "qEn": "Leftover ID",
+      "qFr": "Leftover ID",
+      "qNl": "Leftover ID",
+      "required": true,
+      "readOnly": true,
+      "ui": {
+        "summaryVisibility": "always"
+      },
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "autoIncrement": {
+        "padLength": 0,
+        "prefixByValue": {
+          "fieldId": "LEFTOVER_KIND",
+          "map": {
+            "Entire dish": "LE-",
+            "Part dish": "LP-"
+          },
+          "defaultPrefix": "LX-"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_STATUS",
+      "type": "CHOICE",
+      "qEn": "Leftover status",
+      "qFr": "Leftover status",
+      "qNl": "Leftover status",
+      "required": true,
+      "defaultValue": "available",
+      "readOnly": true,
+      "listView": true,
+      "options": [
+        "available",
+        "used",
+        "expired"
+      ],
+      "optionsFr": [
+        "available",
+        "used",
+        "expired"
+      ],
+      "optionsNl": [
+        "available",
+        "used",
+        "expired"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "LEFTOVER_KIND",
+      "type": "CHOICE",
+      "qEn": "Leftover type",
+      "qFr": "Leftover type",
+      "qNl": "Leftover type",
+      "required": true,
+      "listView": true,
+      "options": [
+        "Entire dish",
+        "Part dish"
+      ],
+      "optionsFr": [
+        "Plat entier",
+        "Plat partiel"
+      ],
+      "optionsNl": [
+        "Volledig gerecht",
+        "Deel gerecht"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "LEFTOVER_PREP_TYPE",
+      "type": "TEXT",
+      "qEn": "Prep type",
+      "qFr": "Prep type",
+      "qNl": "Prep type",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_MEAL_TYPE",
+      "type": "TEXT",
+      "qEn": "Meal type",
+      "qFr": "Type de repas",
+      "qNl": "Type maaltijd",
+      "required": false,
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active"
+    },
+    {
+      "id": "LEFTOVER_RECIPE",
+      "type": "CHOICE",
+      "qEn": "Recipe",
+      "qFr": "Recipe",
+      "qNl": "Recipe",
+      "required": false,
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "ui": {
+        "control": "select"
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Entire dish"
+          ]
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Entire dish"
+            ]
+          },
+          "then": {
+            "fieldId": "LEFTOVER_RECIPE",
+            "required": true
+          },
+          "message": {
+            "en": "Select the leftover recipe.",
+            "fr": "Sélectionnez la recette du reste.",
+            "nl": "Selecteer het recept van het restant."
+          }
+        }
+      ],
+      "dataSource": {
+        "id": "Recipes Data",
+        "projection": [
+          "QFTD5RD2EM",
+          "NUM_PORTIONS",
+          "DISH_TYPE",
+          "Q65ILNUSGL",
+          "REC_INST"
+        ],
+        "mode": "options",
+        "tooltipField": "REC_INST",
+        "tooltipLabel": {
+          "en": "Instructions",
+          "fr": "Instructions",
+          "nl": "Instructies"
+        },
+        "statusAllowList": [
+          "Active"
+        ]
+      }
+    },
+    {
+      "id": "LEFTOVER_INGREDIENT",
+      "type": "CHOICE",
+      "qEn": "Ingredient",
+      "qFr": "Ingrédient",
+      "qNl": "Ingrediënt",
+      "required": false,
+      "listView": true,
+      "ui": {
+        "control": "select"
+      },
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Part dish"
+          ]
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          },
+          "then": {
+            "fieldId": "LEFTOVER_INGREDIENT",
+            "required": true
+          },
+          "message": {
+            "en": "Select the leftover ingredient.",
+            "fr": "Sélectionnez l'ingrédient du reste.",
+            "nl": "Selecteer het ingrediënt van het restant."
+          }
+        }
+      ],
+      "dataSource": {
+        "id": "Ingredients Data",
+        "mode": "options",
+        "statusAllowList": [
+          "Active"
+        ],
+        "projection": [
+          "INGREDIENT_NAME",
+          "CATEGORY",
+          "DIETARY_APPLICABILITY",
+          "ALLOWED_UNIT",
+          "ALLERGEN",
+          "STATUS"
+        ]
+      }
+    },
+    {
+      "id": "LEFTOVER_CAT",
+      "type": "TEXT",
+      "qEn": "Category",
+      "qFr": "Catégorie",
+      "qNl": "Categorie",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Part dish"
+          ]
+        }
+      },
+      "valueMap": {
+        "dependsOn": "LEFTOVER_INGREDIENT",
+        "optionMapRef": {
+          "ref": "REF:Ingredients Data",
+          "keyColumn": "INGREDIENT_NAME",
+          "lookupColumn": "CATEGORY"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_ALLERGEN",
+      "type": "TEXT",
+      "qEn": "Allergen",
+      "qFr": "Allergène",
+      "qNl": "Allergeen",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Part dish"
+          ]
+        }
+      },
+      "valueMap": {
+        "dependsOn": "LEFTOVER_INGREDIENT",
+        "optionMapRef": {
+          "ref": "REF:Ingredients Data",
+          "keyColumn": "INGREDIENT_NAME",
+          "lookupColumn": "ALLERGEN"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_QTY",
+      "type": "NUMBER",
+      "qEn": "Quantity",
+      "qFr": "Quantité",
+      "qNl": "Hoeveelheid",
+      "required": false,
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Part dish"
+          ]
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          },
+          "then": {
+            "fieldId": "LEFTOVER_QTY",
+            "required": true,
+            "min": 0.01
+          },
+          "message": {
+            "en": "Enter a quantity greater than 0.",
+            "fr": "Entrez une quantité supérieure à 0.",
+            "nl": "Voer een hoeveelheid groter dan 0 in."
+          }
+        }
+      ]
+    },
+    {
+      "id": "LEFTOVER_UNIT",
+      "type": "CHOICE",
+      "qEn": "Unit",
+      "qFr": "Unité",
+      "qNl": "Eenheid",
+      "required": false,
+      "listView": true,
+      "ui": {
+        "control": "select"
+      },
+      "options": [
+        "gr",
+        "kg"
+      ],
+      "optionsFr": [
+        "gr",
+        "kg"
+      ],
+      "optionsNl": [
+        "gr",
+        "kg"
+      ],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Part dish"
+          ]
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          },
+          "then": {
+            "fieldId": "LEFTOVER_UNIT",
+            "required": true
+          },
+          "message": {
+            "en": "Select a unit.",
+            "fr": "Sélectionnez une unité.",
+            "nl": "Selecteer een eenheid."
+          }
+        }
+      ]
+    },
+    {
+      "id": "LEFTOVER_PORTIONS",
+      "type": "NUMBER",
+      "qEn": "Portions",
+      "qFr": "Portions",
+      "qNl": "Portions",
+      "required": false,
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Entire dish"
+          ]
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Entire dish"
+            ]
+          },
+          "then": {
+            "fieldId": "LEFTOVER_PORTIONS",
+            "required": true,
+            "integer": true,
+            "min": 1
+          },
+          "message": {
+            "en": "Enter a whole number greater than 0.",
+            "fr": "Entrez un nombre entier supérieur à 0.",
+            "nl": "Voer een geheel getal groter dan 0 in."
+          }
+        }
+      ]
+    },
+    {
+      "id": "LEFTOVER_EXP_DATE",
+      "type": "DATE",
+      "qEn": "Expiration date",
+      "qFr": "Expiration date",
+      "qNl": "Expiration date",
+      "required": true,
+      "listView": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "listViewSort": {
+        "direction": "asc",
+        "priority": 1
+      }
+    },
+    {
+      "id": "LEFTOVER_NOTES",
+      "type": "TEXT",
+      "qEn": "Notes",
+      "qFr": "Notes",
+      "qNl": "Notes",
+      "required": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active"
+    },
+    {
+      "id": "LEFTOVER_SOURCE_FORM_KEY",
+      "type": "TEXT",
+      "qEn": "Source form key",
+      "qFr": "Source form key",
+      "qNl": "Source form key",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_SOURCE_RECORD_ID",
+      "type": "TEXT",
+      "qEn": "Source record ID",
+      "qFr": "Source record ID",
+      "qNl": "Source record ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_SOURCE_ROW_ID",
+      "type": "TEXT",
+      "qEn": "Source row ID",
+      "qFr": "Source row ID",
+      "qNl": "Source row ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_USED_BY_FORM_KEY",
+      "type": "TEXT",
+      "qEn": "Used by form key",
+      "qFr": "Clé du formulaire utilisateur",
+      "qNl": "Gebruikt door formuliercode",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_USED_BY_RECORD_ID",
+      "type": "TEXT",
+      "qEn": "Used by record ID",
+      "qFr": "Used by record ID",
+      "qNl": "Used by record ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_INGREDIENTS_LI",
+      "type": "LINE_ITEM_GROUP",
+      "qEn": "Ingredients",
+      "qFr": "Ingredients",
+      "qNl": "Ingredients",
+      "required": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "lineItemConfig": {
+        "fields": [
+          {
+            "id": "ING",
+            "type": "CHOICE",
+            "labelEn": "Ingredient",
+            "labelFr": "Ingredient",
+            "labelNl": "Ingredient",
+            "required": true,
+            "options": [],
+            "optionsFr": [],
+            "optionsNl": [],
+            "ui": {
+              "control": "select"
+            },
+            "dataSource": {
+              "id": "Ingredients Data",
+              "mode": "options",
+              "statusAllowList": [
+                "Active"
+              ],
+              "projection": [
+                "INGREDIENT_NAME",
+                "CATEGORY",
+                "DIETARY_APPLICABILITY",
+                "ALLOWED_UNIT",
+                "ALLERGEN",
+                "STATUS"
+              ]
+            }
+          },
+          {
+            "id": "CAT",
+            "type": "TEXT",
+            "labelEn": "Category",
+            "labelFr": "Category",
+            "labelNl": "Category",
+            "required": false,
+            "readOnly": true,
+            "valueMap": {
+              "dependsOn": "ING",
+              "optionMapRef": {
+                "ref": "REF:Ingredients Data",
+                "keyColumn": "INGREDIENT_NAME",
+                "lookupColumn": "CATEGORY"
+              }
+            }
+          },
+          {
+            "id": "ALLERGEN",
+            "type": "TEXT",
+            "labelEn": "Allergen",
+            "labelFr": "Allergen",
+            "labelNl": "Allergen",
+            "required": false,
+            "readOnly": true,
+            "valueMap": {
+              "dependsOn": "ING",
+              "optionMapRef": {
+                "ref": "REF:Ingredients Data",
+                "keyColumn": "INGREDIENT_NAME",
+                "lookupColumn": "ALLERGEN"
+              }
+            }
+          },
+          {
+            "id": "QTY",
+            "type": "NUMBER",
+            "labelEn": "Quantity",
+            "labelFr": "Quantity",
+            "labelNl": "Quantity",
+            "required": false,
+            "options": [],
+            "optionsFr": [],
+            "optionsNl": []
+          },
+          {
+            "id": "UNIT",
+            "type": "CHOICE",
+            "labelEn": "Unit",
+            "labelFr": "Unit",
+            "labelNl": "Unit",
+            "required": false,
+            "options": [],
+            "optionsFr": [],
+            "optionsNl": [],
+            "ui": {
+              "control": "select"
+            },
+            "optionFilter": {
+              "dependsOn": "ING",
+              "optionMapRef": {
+                "ref": "REF:Ingredients Data",
+                "keyColumn": "INGREDIENT_NAME",
+                "lookupColumn": "ALLOWED_UNIT"
+              }
+            }
+          }
+        ],
+        "ui": {
+          "mode": "table",
+          "tableColumns": [
+            "ING",
+            "QTY",
+            "UNIT"
+          ]
+        }
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "LEFTOVER_KIND",
+          "equals": [
+            "Entire dish"
+          ]
+        }
+      }
+    }
+  ],
+  "dedupRules": [
+    {
+      "id": "uniqueLeftoverSourceRow",
+      "scope": "form",
+      "keys": [
+        "LEFTOVER_SOURCE_RECORD_ID",
+        "LEFTOVER_SOURCE_ROW_ID"
+      ],
+      "matchMode": "exact",
+      "onConflict": "reject",
+      "message": {
+        "en": "This leftover already exists for the source record.",
+        "fr": "Ce reste existe déjà pour l'enregistrement source.",
+        "nl": "Dit restitem bestaat al voor het bronrecord."
+      }
+    }
+  ],
+  "definition": {
+    "questions": [
+      {
+        "id": "LEFTOVER_ID",
+        "type": "TEXT",
+        "qEn": "Leftover ID",
+        "qFr": "Leftover ID",
+        "qNl": "Leftover ID",
+        "required": true,
+        "readOnly": true,
+        "ui": {
+          "summaryVisibility": "always"
+        },
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "autoIncrement": {
+          "padLength": 0,
+          "prefixByValue": {
+            "fieldId": "LEFTOVER_KIND",
+            "map": {
+              "Entire dish": "LE-",
+              "Part dish": "LP-"
+            },
+            "defaultPrefix": "LX-"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_STATUS",
+        "type": "CHOICE",
+        "qEn": "Leftover status",
+        "qFr": "Leftover status",
+        "qNl": "Leftover status",
+        "required": true,
+        "defaultValue": "available",
+        "readOnly": true,
+        "listView": true,
+        "options": [
+          "available",
+          "used",
+          "expired"
+        ],
+        "optionsFr": [
+          "available",
+          "used",
+          "expired"
+        ],
+        "optionsNl": [
+          "available",
+          "used",
+          "expired"
+        ],
+        "status": "Active"
+      },
+      {
+        "id": "LEFTOVER_KIND",
+        "type": "CHOICE",
+        "qEn": "Leftover type",
+        "qFr": "Leftover type",
+        "qNl": "Leftover type",
+        "required": true,
+        "listView": true,
+        "options": [
+          "Entire dish",
+          "Part dish"
+        ],
+        "optionsFr": [
+          "Plat entier",
+          "Plat partiel"
+        ],
+        "optionsNl": [
+          "Volledig gerecht",
+          "Deel gerecht"
+        ],
+        "status": "Active"
+      },
+      {
+        "id": "LEFTOVER_PREP_TYPE",
+        "type": "TEXT",
+        "qEn": "Prep type",
+        "qFr": "Prep type",
+        "qNl": "Prep type",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_MEAL_TYPE",
+        "type": "TEXT",
+        "qEn": "Meal type",
+        "qFr": "Type de repas",
+        "qNl": "Type maaltijd",
+        "required": false,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "LEFTOVER_RECIPE",
+        "type": "CHOICE",
+        "qEn": "Recipe",
+        "qFr": "Recipe",
+        "qNl": "Recipe",
+        "required": false,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "ui": {
+          "control": "select"
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Entire dish"
+            ]
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "LEFTOVER_KIND",
+              "equals": [
+                "Entire dish"
+              ]
+            },
+            "then": {
+              "fieldId": "LEFTOVER_RECIPE",
+              "required": true
+            },
+            "message": {
+              "en": "Select the leftover recipe.",
+              "fr": "Sélectionnez la recette du reste.",
+              "nl": "Selecteer het recept van het restant."
+            }
+          }
+        ],
+        "dataSource": {
+          "id": "Recipes Data",
+          "projection": [
+            "QFTD5RD2EM",
+            "NUM_PORTIONS",
+            "DISH_TYPE",
+            "Q65ILNUSGL",
+            "REC_INST"
+          ],
+          "mode": "options",
+          "tooltipField": "REC_INST",
+          "tooltipLabel": {
+            "en": "Instructions",
+            "fr": "Instructions",
+            "nl": "Instructies"
+          },
+          "statusAllowList": [
+            "Active"
+          ]
+        }
+      },
+      {
+        "id": "LEFTOVER_INGREDIENT",
+        "type": "CHOICE",
+        "qEn": "Ingredient",
+        "qFr": "Ingrédient",
+        "qNl": "Ingrediënt",
+        "required": false,
+        "listView": true,
+        "ui": {
+          "control": "select"
+        },
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "LEFTOVER_KIND",
+              "equals": [
+                "Part dish"
+              ]
+            },
+            "then": {
+              "fieldId": "LEFTOVER_INGREDIENT",
+              "required": true
+            },
+            "message": {
+              "en": "Select the leftover ingredient.",
+              "fr": "Sélectionnez l'ingrédient du reste.",
+              "nl": "Selecteer het ingrediënt van het restant."
+            }
+          }
+        ],
+        "dataSource": {
+          "id": "Ingredients Data",
+          "mode": "options",
+          "statusAllowList": [
+            "Active"
+          ],
+        "projection": [
+          "INGREDIENT_NAME",
+          "CATEGORY",
+          "DIETARY_APPLICABILITY",
+          "ALLOWED_UNIT",
+          "ALLERGEN",
+          "STATUS"
+        ]
+      }
+    },
+      {
+        "id": "LEFTOVER_CAT",
+        "type": "TEXT",
+        "qEn": "Category",
+        "qFr": "Catégorie",
+        "qNl": "Categorie",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          }
+        },
+        "valueMap": {
+          "dependsOn": "LEFTOVER_INGREDIENT",
+          "optionMapRef": {
+            "ref": "REF:Ingredients Data",
+            "keyColumn": "INGREDIENT_NAME",
+            "lookupColumn": "CATEGORY"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_ALLERGEN",
+        "type": "TEXT",
+        "qEn": "Allergen",
+        "qFr": "Allergène",
+        "qNl": "Allergeen",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          }
+        },
+        "valueMap": {
+          "dependsOn": "LEFTOVER_INGREDIENT",
+          "optionMapRef": {
+            "ref": "REF:Ingredients Data",
+            "keyColumn": "INGREDIENT_NAME",
+            "lookupColumn": "ALLERGEN"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_QTY",
+        "type": "NUMBER",
+        "qEn": "Quantity",
+        "qFr": "Quantité",
+        "qNl": "Hoeveelheid",
+        "required": false,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "LEFTOVER_KIND",
+              "equals": [
+                "Part dish"
+              ]
+            },
+            "then": {
+              "fieldId": "LEFTOVER_QTY",
+              "required": true,
+              "min": 0.01
+            },
+            "message": {
+              "en": "Enter a quantity greater than 0.",
+              "fr": "Entrez une quantité supérieure à 0.",
+              "nl": "Voer een hoeveelheid groter dan 0 in."
+            }
+          }
+        ]
+      },
+      {
+        "id": "LEFTOVER_UNIT",
+        "type": "CHOICE",
+        "qEn": "Unit",
+        "qFr": "Unité",
+        "qNl": "Eenheid",
+        "required": false,
+        "listView": true,
+        "ui": {
+          "control": "select"
+        },
+        "options": [
+          "gr",
+          "kg"
+        ],
+        "optionsFr": [
+          "gr",
+          "kg"
+        ],
+        "optionsNl": [
+          "gr",
+          "kg"
+        ],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Part dish"
+            ]
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "LEFTOVER_KIND",
+              "equals": [
+                "Part dish"
+              ]
+            },
+            "then": {
+              "fieldId": "LEFTOVER_UNIT",
+              "required": true
+            },
+            "message": {
+              "en": "Select a unit.",
+              "fr": "Sélectionnez une unité.",
+              "nl": "Selecteer een eenheid."
+            }
+          }
+        ]
+      },
+      {
+        "id": "LEFTOVER_PORTIONS",
+        "type": "NUMBER",
+        "qEn": "Portions",
+        "qFr": "Portions",
+        "qNl": "Portions",
+        "required": false,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Entire dish"
+            ]
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "LEFTOVER_KIND",
+              "equals": [
+                "Entire dish"
+              ]
+            },
+            "then": {
+              "fieldId": "LEFTOVER_PORTIONS",
+              "required": true,
+              "integer": true,
+              "min": 1
+            },
+            "message": {
+              "en": "Enter a whole number greater than 0.",
+              "fr": "Entrez un nombre entier supérieur à 0.",
+              "nl": "Voer een geheel getal groter dan 0 in."
+            }
+          }
+        ]
+      },
+      {
+        "id": "LEFTOVER_EXP_DATE",
+        "type": "DATE",
+        "qEn": "Expiration date",
+        "qFr": "Expiration date",
+        "qNl": "Expiration date",
+        "required": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "listViewSort": {
+          "direction": "asc",
+          "priority": 1
+        }
+      },
+      {
+        "id": "LEFTOVER_NOTES",
+        "type": "TEXT",
+        "qEn": "Notes",
+        "qFr": "Notes",
+        "qNl": "Notes",
+        "required": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "LEFTOVER_SOURCE_FORM_KEY",
+        "type": "TEXT",
+        "qEn": "Source form key",
+        "qFr": "Source form key",
+        "qNl": "Source form key",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_SOURCE_RECORD_ID",
+        "type": "TEXT",
+        "qEn": "Source record ID",
+        "qFr": "Source record ID",
+        "qNl": "Source record ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_SOURCE_ROW_ID",
+        "type": "TEXT",
+        "qEn": "Source row ID",
+        "qFr": "Source row ID",
+        "qNl": "Source row ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_USED_BY_FORM_KEY",
+        "type": "TEXT",
+        "qEn": "Used by form key",
+        "qFr": "Clé du formulaire utilisateur",
+        "qNl": "Gebruikt door formuliercode",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_USED_BY_RECORD_ID",
+        "type": "TEXT",
+        "qEn": "Used by record ID",
+        "qFr": "Used by record ID",
+        "qNl": "Used by record ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_INGREDIENTS_LI",
+        "type": "LINE_ITEM_GROUP",
+        "qEn": "Ingredients",
+        "qFr": "Ingredients",
+        "qNl": "Ingredients",
+        "required": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "lineItemConfig": {
+          "fields": [
+            {
+              "id": "ING",
+              "type": "CHOICE",
+              "labelEn": "Ingredient",
+              "labelFr": "Ingredient",
+              "labelNl": "Ingredient",
+              "required": true,
+              "options": [],
+              "optionsFr": [],
+              "optionsNl": [],
+              "ui": {
+                "control": "select"
+              },
+              "dataSource": {
+                "id": "Ingredients Data",
+                "mode": "options",
+                "statusAllowList": [
+                  "Active"
+                ],
+              "projection": [
+                "INGREDIENT_NAME",
+                "CATEGORY",
+                "DIETARY_APPLICABILITY",
+                "ALLOWED_UNIT",
+                "ALLERGEN",
+                "STATUS"
+              ]
+              }
+            },
+            {
+              "id": "CAT",
+              "type": "TEXT",
+              "labelEn": "Category",
+              "labelFr": "Category",
+              "labelNl": "Category",
+              "required": false,
+              "readOnly": true,
+              "valueMap": {
+                "dependsOn": "ING",
+                "optionMapRef": {
+                  "ref": "REF:Ingredients Data",
+                  "keyColumn": "INGREDIENT_NAME",
+                  "lookupColumn": "CATEGORY"
+                }
+              }
+            },
+            {
+              "id": "ALLERGEN",
+              "type": "TEXT",
+              "labelEn": "Allergen",
+              "labelFr": "Allergen",
+              "labelNl": "Allergen",
+              "required": false,
+              "readOnly": true,
+              "valueMap": {
+                "dependsOn": "ING",
+                "optionMapRef": {
+                  "ref": "REF:Ingredients Data",
+                  "keyColumn": "INGREDIENT_NAME",
+                  "lookupColumn": "ALLERGEN"
+                }
+              }
+            },
+            {
+              "id": "QTY",
+              "type": "NUMBER",
+              "labelEn": "Quantity",
+              "labelFr": "Quantity",
+              "labelNl": "Quantity",
+              "required": false,
+              "options": [],
+              "optionsFr": [],
+              "optionsNl": []
+            },
+            {
+              "id": "UNIT",
+              "type": "CHOICE",
+              "labelEn": "Unit",
+              "labelFr": "Unit",
+              "labelNl": "Unit",
+              "required": false,
+              "options": [],
+              "optionsFr": [],
+              "optionsNl": [],
+              "ui": {
+                "control": "select"
+              },
+              "optionFilter": {
+                "dependsOn": "ING",
+                "optionMapRef": {
+                  "ref": "REF:Ingredients Data",
+                  "keyColumn": "INGREDIENT_NAME",
+                  "lookupColumn": "ALLOWED_UNIT"
+                }
+              }
+            }
+          ],
+          "ui": {
+            "mode": "table",
+            "tableColumns": [
+              "ING",
+              "QTY",
+              "UNIT"
+            ]
+          }
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "LEFTOVER_KIND",
+            "equals": [
+              "Entire dish"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "validationErrors": []
+}

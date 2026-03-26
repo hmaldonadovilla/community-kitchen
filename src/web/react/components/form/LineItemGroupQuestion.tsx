@@ -2,6 +2,8 @@ import React from 'react';
 import {
   computeAllowedOptions,
   buildLocalizedOptions,
+  getOptionStateValue,
+  mergeOptionStateValue,
   shouldHideField,
   matchesWhen,
   matchesWhenClause,
@@ -14,6 +16,7 @@ import {
 } from '../../../core';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
+import { fetchDataSource, peekCachedDataSource } from '../../../data/dataSources';
 import {
   FieldValue,
   LangCode,
@@ -67,12 +70,35 @@ import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
+import { AutoWidthInput } from './AutoWidthInput';
+import { AutoWidthSelect } from './AutoWidthSelect';
 import { PairedRowGrid } from './PairedRowGrid';
-import { applyValueMapsToLineRow, resolveValueMapValue } from './valueMaps';
+import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
+import { computeChoiceControlVariant } from './choiceControls';
+import {
+  collectComputedSelectionEffectInitTargets,
+  collectSelectionEffectInitTargets,
+  collectSubgroupSeedInitTargets
+} from './selectionEffectInit';
+
+const getByPath = (root: any, path: string): any => {
+  if (!root || !path) return undefined;
+  return path.split('.').reduce((acc: any, segment: string) => {
+    if (acc === undefined || acc === null || typeof acc !== 'object') return undefined;
+    if (acc[segment] !== undefined) return acc[segment];
+    const normalized = segment.toLowerCase();
+    const fallbackKey = Object.keys(acc).find(key => key.toLowerCase() === normalized);
+    return fallbackKey ? acc[fallbackKey] : undefined;
+  }, root);
+};
 import {
   ROW_HIDE_REMOVE_KEY,
+  ROW_ID_KEY,
+  ROW_PARENT_GROUP_ID_KEY,
+  ROW_PARENT_ROW_ID_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY,
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
   cascadeRemoveLineItemRows,
@@ -85,6 +111,7 @@ import {
   resolveSubgroupKey
 } from '../../app/lineItems';
 import { applyValueMapsToForm } from '../../app/valueMaps';
+import { deriveCompactLineItemLayout, shouldRenderCompactLineItemRow } from '../../app/compactLineItemLayout';
 import {
   resolveRowFlowActionPlan,
   resolveRowFlowFieldTarget,
@@ -105,10 +132,18 @@ const listRowActionButtonBaseStyle: React.CSSProperties = {
   minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
   maxWidth: '100%'
 };
-const withListRowActionButtonStyle = (
+  const withListRowActionButtonStyle = (
   disabled?: boolean,
   overrides?: React.CSSProperties
 ): React.CSSProperties => withDisabled({ ...listRowActionButtonBaseStyle, ...(overrides || {}) }, disabled);
+
+const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
+  getOptionStateValue(optionState, field.id, parentId) || {
+    en: field.options || [],
+    fr: (field as any).optionsFr || [],
+    nl: (field as any).optionsNl || [],
+    raw: (field as any).optionsRaw
+  };
 
 export interface ErrorIndex {
   rowErrors: Set<string>;
@@ -134,6 +169,9 @@ export interface ChoiceControlArgs {
   searchEnabled?: boolean;
   override?: string | null;
   disabled?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  inputStyle?: React.CSSProperties;
   onChange: (next: string) => void;
 }
 
@@ -216,7 +254,8 @@ export interface LineItemGroupQuestionCtx {
   runSelectionEffectsForAncestors?: (
     groupKey: string,
     prevLineItems: LineItemState,
-    nextLineItems: LineItemState
+    nextLineItems: LineItemState,
+    options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
   ) => void;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
@@ -282,6 +321,12 @@ export const LineItemGroupQuestion: React.FC<{
    */
   rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
   /**
+   * Optional step-scoped datasource-backed row renderers.
+   * These rows are virtual UI rows: they render from datasource entries and synchronize into a
+   * real output subgroup (for example MP_TYPE_LI), but they are not themselves persisted as form data.
+   */
+  dataSourceRows?: any[];
+  /**
    * When true, hide the inline subgroup editor sections and rely on subgroup "open" pills/overlays instead.
    */
   hideInlineSubgroups?: boolean;
@@ -289,7 +334,7 @@ export const LineItemGroupQuestion: React.FC<{
    * When true, suppress the top/bottom add/selector toolbars (used by overlay headers).
    */
   hideToolbars?: boolean;
-}> = ({ q, ctx, rowFlow, rowFilter, hideInlineSubgroups, hideToolbars }) => {
+}> = ({ q, ctx, rowFlow, rowFilter, dataSourceRows, hideInlineSubgroups, hideToolbars }) => {
   const {
     definition,
     language,
@@ -315,6 +360,7 @@ export const LineItemGroupQuestion: React.FC<{
     openLineItemGroupOverlay,
     addLineItemRowManual,
     removeLineRow,
+    runSelectionEffectsForAncestors,
     handleLineFieldChange,
     collapsedGroups,
     toggleGroupCollapsed,
@@ -481,6 +527,763 @@ export const LineItemGroupQuestion: React.FC<{
     return map;
   }, [activeFieldMeta.path, activeFieldMeta.type, lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
 
+  const stepDataSourceRows = React.useMemo(
+    () => (Array.isArray(dataSourceRows) ? dataSourceRows.filter(Boolean) : []),
+    [dataSourceRows]
+  );
+  const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
+  const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
+  const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
+
+  React.useEffect(() => {
+    stepDataSourceDraftsRef.current = stepDataSourceDrafts;
+  }, [stepDataSourceDrafts]);
+
+  React.useEffect(() => {
+    if (!stepDataSourceRows.length) return;
+    let cancelled = false;
+    const configs = stepDataSourceRows
+      .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
+      .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
+    if (!configs.length) return;
+
+    const missingConfigs = configs.filter(config => !peekCachedDataSource(config, language));
+    if (!missingConfigs.length) return;
+
+    Promise.all(missingConfigs.map(config => fetchDataSource(config, language).catch(() => null))).then(() => {
+      if (cancelled) return;
+      setStepDataSourceRefreshTick(prev => prev + 1);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language, stepDataSourceRows]);
+
+  const resolveVirtualRowWhenContext = React.useCallback(
+    (args: {
+      rowValues: Record<string, FieldValue>;
+      parentValues?: Record<string, FieldValue>;
+    }): VisibilityContext => ({
+      getValue: (fieldId: string) => {
+        if (Object.prototype.hasOwnProperty.call(args.rowValues || {}, fieldId)) return (args.rowValues as any)[fieldId];
+        if (args.parentValues && Object.prototype.hasOwnProperty.call(args.parentValues, fieldId)) return (args.parentValues as any)[fieldId];
+        return resolveTopValue(fieldId);
+      },
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    }),
+    [lineItems]
+  );
+
+  const validateVirtualFieldRules = React.useCallback(
+    (
+      field: any,
+      rowValues: Record<string, FieldValue>,
+      parentValues?: Record<string, FieldValue>
+    ): string[] => {
+      const rules = Array.isArray(field?.validationRules)
+        ? (field.validationRules as ValidationRule[]).filter(rule => rule?.then?.fieldId === field?.id)
+        : [];
+      if (!rules.length) return [];
+      const ctx = {
+        ...resolveVirtualRowWhenContext({ rowValues, parentValues }),
+        language,
+        phase: 'submit',
+        isHidden: () => false
+      } as any;
+      return validateRules(rules, ctx)
+        .map(issue => (issue?.message || '').toString().trim())
+        .filter(Boolean);
+    },
+    [language, resolveVirtualRowWhenContext]
+  );
+
+  const resolveVirtualPresetValue = React.useCallback(
+    (
+      raw: any,
+      args: {
+        rowValues: Record<string, FieldValue>;
+        parentValues?: Record<string, FieldValue>;
+        sourceRow?: Record<string, any>;
+      }
+    ): FieldValue | undefined => {
+      if (Array.isArray(raw)) {
+        return raw
+          .map(entry => resolveVirtualPresetValue(entry, args))
+          .filter(entry => entry !== undefined) as unknown as FieldValue;
+      }
+      if (raw && typeof raw === 'object') {
+        const nextObject: Record<string, any> = {};
+        Object.entries(raw).forEach(([key, value]) => {
+          const resolved = resolveVirtualPresetValue(value, args);
+          if (resolved === undefined) return;
+          nextObject[key] = resolved;
+        });
+        return nextObject as FieldValue;
+      }
+      if (typeof raw !== 'string') return raw as FieldValue;
+      const token = raw.toString().trim();
+      if (token.startsWith('$row.')) {
+        const fieldId = token.slice(5).trim();
+        return fieldId ? ((args.rowValues as any)[fieldId] as FieldValue) : undefined;
+      }
+      if (token.startsWith('$parent.')) {
+        const fieldId = token.slice(8).trim();
+        return fieldId && args.parentValues ? ((args.parentValues as any)[fieldId] as FieldValue) : undefined;
+      }
+      if (token.startsWith('$top.')) {
+        const fieldId = token.slice(5).trim();
+        return fieldId ? resolveTopValue(fieldId) : undefined;
+      }
+      if (token.startsWith('$source.')) {
+        const fieldId = token.slice(8).trim();
+        return fieldId ? (getByPath(args.sourceRow, fieldId) as FieldValue | undefined) : undefined;
+      }
+      return raw as FieldValue;
+    },
+    [resolveTopValue]
+  );
+
+  const resolveVirtualPresetNode = React.useCallback(
+    (
+      raw: any,
+      args: {
+        rowValues: Record<string, FieldValue>;
+        parentValues?: Record<string, FieldValue>;
+        sourceRow?: Record<string, any>;
+      }
+    ): any => {
+      if (Array.isArray(raw)) {
+        return raw
+          .map(entry => resolveVirtualPresetNode(entry, args))
+          .filter(entry => entry !== undefined);
+      }
+      if (raw && typeof raw === 'object') {
+        const next: Record<string, any> = {};
+        Object.entries(raw).forEach(([key, value]) => {
+          const resolved = resolveVirtualPresetNode(value, args);
+          if (resolved === undefined) return;
+          next[key] = resolved;
+        });
+        return next;
+      }
+      return resolveVirtualPresetValue(raw, args);
+    },
+    [resolveVirtualPresetValue]
+  );
+
+  const resolveVirtualPreset = React.useCallback(
+    (
+      preset: Record<string, any> | undefined,
+      args: {
+        rowValues: Record<string, FieldValue>;
+        parentValues?: Record<string, FieldValue>;
+        sourceRow?: Record<string, any>;
+      }
+    ): Record<string, FieldValue> => {
+      if (!preset || typeof preset !== 'object') return {};
+      const next: Record<string, FieldValue> = {};
+      Object.entries(preset).forEach(([key, raw]) => {
+        const value = resolveVirtualPresetNode(raw, args);
+        if (value === undefined) return;
+        next[key] = value;
+      });
+      return next;
+    },
+    [resolveVirtualPresetNode]
+  );
+
+  const resolveStepDataSourceRowsForParent = React.useCallback(
+    (config: any, parentRow: LineItemRowState): any[] => {
+      if (!config?.dataSource || typeof config.dataSource !== 'object') return [];
+      const cached = peekCachedDataSource(config.dataSource, language);
+      const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
+      if (!items.length) return [];
+      const sourceMatchFieldId = (config?.sourceMatchFieldId || '').toString().trim();
+      const parentMatchFieldId = (config?.parentMatchFieldId || '').toString().trim();
+      const parentMatchValue = parentMatchFieldId ? (parentRow.values as any)?.[parentMatchFieldId] : undefined;
+      return items.filter((item: any) => {
+        if (!sourceMatchFieldId || !parentMatchFieldId) return true;
+        return `${item?.[sourceMatchFieldId] ?? ''}` === `${parentMatchValue ?? ''}`;
+      });
+    },
+    [language, stepDataSourceRefreshTick]
+  );
+
+  const resolveDataSourceOutputGroup = React.useCallback(
+    (config: any, parentRowId: string): { key: string; subConfig: any | null } | null => {
+      const outputGroupId = (config?.outputGroupId || '').toString().trim();
+      if (!outputGroupId) return null;
+      const subConfig = ((q.lineItemConfig?.subGroups || []) as any[]).find(
+        candidate => resolveSubgroupKey(candidate as any) === outputGroupId
+      );
+      return { key: buildSubgroupKey(q.id, parentRowId, outputGroupId), subConfig: subConfig || null };
+    },
+    [q.id, q.lineItemConfig?.subGroups]
+  );
+
+  const buildStepDataSourceDraftKey = React.useCallback(
+    (config: any, parentRowId: string, sourceKey: string): string => {
+      const configId = `${config?.id || 'datasourceRows'}`.trim();
+      return `${q.id}::${configId}::${parentRowId}::${sourceKey}`;
+    },
+    [q.id]
+  );
+
+  const buildVirtualDataSourceRowValues = React.useCallback(
+    (args: {
+      config: any;
+      sourceRow: Record<string, any>;
+      outputRow?: LineItemRowState | null;
+      draftValues?: Record<string, FieldValue> | null;
+    }): Record<string, FieldValue> => {
+      const sourceFieldMapping = args.config?.sourceFieldMapping && typeof args.config.sourceFieldMapping === 'object'
+        ? (args.config.sourceFieldMapping as Record<string, string>)
+        : {};
+      const next: Record<string, FieldValue> = {};
+      Object.entries(sourceFieldMapping).forEach(([targetFieldId, sourceFieldId]) => {
+        next[targetFieldId] = (args.sourceRow as any)?.[sourceFieldId];
+      });
+      if (args.outputRow?.values) {
+        Object.entries(args.outputRow.values).forEach(([key, value]) => {
+          if (value === undefined) return;
+          next[key] = value as FieldValue;
+        });
+      }
+      if (args.draftValues) {
+        Object.entries(args.draftValues).forEach(([key, value]) => {
+          if (value === undefined) return;
+          next[key] = value as FieldValue;
+        });
+      }
+      const selectedFieldId = (args.config?.selectedFieldId || '').toString().trim();
+      if (selectedFieldId) {
+        if (args.draftValues && Object.prototype.hasOwnProperty.call(args.draftValues, selectedFieldId)) {
+          next[selectedFieldId] = Boolean((args.draftValues as any)[selectedFieldId]);
+        } else {
+          next[selectedFieldId] = Boolean(args.outputRow);
+        }
+      }
+      return next;
+    },
+    []
+  );
+
+  function coerceNestedLineItemPresetRows(payload: any): Record<string, FieldValue>[] {
+    if (!payload) return [];
+    if (Array.isArray(payload)) {
+      return payload.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
+    }
+    if (typeof payload === 'string') {
+      const trimmed = payload.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
+        }
+        if (parsed && typeof parsed === 'object') {
+          return [parsed as Record<string, FieldValue>];
+        }
+      } catch (_) {
+        return [];
+      }
+      return [];
+    }
+    if (typeof payload === 'object') {
+      return [payload as Record<string, FieldValue>];
+    }
+    return [];
+  }
+
+  function stripAutoRowMetadata(values: Record<string, FieldValue> | undefined): Record<string, FieldValue> {
+    if (!values || typeof values !== 'object') return {};
+    const next: Record<string, FieldValue> = {};
+    Object.entries(values).forEach(([key, value]) => {
+      if (
+        key === ROW_ID_KEY ||
+        key === ROW_SOURCE_KEY ||
+        key === ROW_HIDE_REMOVE_KEY ||
+        key === ROW_PARENT_GROUP_ID_KEY ||
+        key === ROW_PARENT_ROW_ID_KEY ||
+        key === ROW_SELECTION_EFFECT_ID_KEY
+      ) {
+        return;
+      }
+      next[key] = value;
+    });
+    return next;
+  }
+
+  function childRowsMatchEntries(
+    rows: LineItemRowState[],
+    entries: Record<string, FieldValue>[]
+  ): boolean {
+    if (rows.length !== entries.length) return false;
+    return rows.every((row, index) => {
+      const expected = stripAutoRowMetadata(entries[index]);
+      const actual = stripAutoRowMetadata((row?.values || {}) as Record<string, FieldValue>);
+      const expectedKeys = Object.keys(expected);
+      const actualKeys = Object.keys(actual);
+      if (expectedKeys.length !== actualKeys.length) return false;
+      return expectedKeys.every(key => {
+        const left = expected[key];
+        const right = actual[key];
+        if (Array.isArray(left) || Array.isArray(right)) {
+          try {
+            return JSON.stringify(left) === JSON.stringify(right);
+          } catch (_) {
+            return false;
+          }
+        }
+        return left === right;
+      });
+    });
+  }
+
+  function fieldByIdSafe(fields: any, fieldId: string): any | null {
+    if (!Array.isArray(fields) || !fieldId) return null;
+    return fields.find((field: any) => `${field?.id || ''}`.trim() === fieldId) || null;
+  }
+
+  const syncStepDataSourceOutputRow = React.useCallback(
+    (args: {
+      config: any;
+      parentRow: LineItemRowState;
+      sourceRow: Record<string, any>;
+      patch: Record<string, FieldValue>;
+    }) => {
+      const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
+      if (!output) return;
+      const keyFieldId = (args.config?.rowKeyFieldId || '').toString().trim();
+      if (!keyFieldId) return;
+      const sourceKey = `${(args.sourceRow as any)?.[keyFieldId] ?? ''}`.trim();
+      if (!sourceKey) return;
+      const selectedFieldId = (args.config?.selectedFieldId || '').toString().trim();
+      const quantityFieldId = (args.config?.quantityFieldId || '').toString().trim();
+      const modeFieldId = (args.config?.modeFieldId || '').toString().trim();
+      const exclusiveSelectionKeyFieldId = (
+        args.config?.exclusiveSelection?.keyFieldId ||
+        args.config?.outputKeyFieldId ||
+        keyFieldId
+      )
+        .toString()
+        .trim();
+      const sameRootScope = ((args.config?.exclusiveSelection?.scope || '').toString().trim().toLowerCase() === 'sameroot');
+      const sourceFieldMapping = args.config?.sourceFieldMapping && typeof args.config.sourceFieldMapping === 'object'
+        ? (args.config.sourceFieldMapping as Record<string, string>)
+        : {};
+      const outputKeyFieldId = (args.config?.outputKeyFieldId || keyFieldId).toString().trim();
+      const defaultModeValue = (args.config?.defaultModeValue ?? '').toString().trim();
+      const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey);
+
+      setLineItems(prev => {
+        const outputRows = prev[output.key] || [];
+        const existingOutputRow = outputRows.find(row => `${(row.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
+        const currentDraft = stepDataSourceDraftsRef.current[draftKey] || null;
+        const currentRowValues = buildVirtualDataSourceRowValues({
+          config: { ...args.config, sourceFieldMapping },
+          sourceRow: args.sourceRow,
+          outputRow: existingOutputRow,
+          draftValues: currentDraft
+        });
+        const nextRowValues: Record<string, FieldValue> = { ...currentRowValues, ...args.patch };
+
+        if (selectedFieldId && args.patch[selectedFieldId] === true) {
+          if (quantityFieldId && isEmptyValue(nextRowValues[quantityFieldId])) {
+            const defaults = Array.isArray(args.config?.quantityDefaultRules) ? (args.config.quantityDefaultRules as any[]) : [];
+            const matchedDefault = defaults.find(rule =>
+              !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                rowValues: nextRowValues,
+                parentValues: args.parentRow.values as Record<string, FieldValue>
+              }))
+            );
+            if (matchedDefault) {
+              const resolved = resolveVirtualPresetValue(matchedDefault.value, {
+                rowValues: nextRowValues,
+                parentValues: args.parentRow.values as Record<string, FieldValue>
+              });
+              if (resolved !== undefined) nextRowValues[quantityFieldId] = resolved;
+            }
+          }
+          if (modeFieldId && isEmptyValue(nextRowValues[modeFieldId]) && defaultModeValue) {
+            nextRowValues[modeFieldId] = defaultModeValue;
+          }
+        }
+
+        const shouldSelect = selectedFieldId ? nextRowValues[selectedFieldId] === true : true;
+        const quantityValue = quantityFieldId ? Number(nextRowValues[quantityFieldId]) : undefined;
+        const hasPositiveQty =
+          quantityFieldId ? Number.isFinite(quantityValue) && !Number.isNaN(quantityValue) && Number(quantityValue) > 0 : true;
+
+        let nextState: LineItemState = prev;
+        const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
+        const removeMatchingRows = (groupKey: string, matchValue: string): void => {
+          const rows = nextState[groupKey] || [];
+          const filtered = rows.filter(row => {
+            const matches = `${(row.values as any)?.[exclusiveSelectionKeyFieldId] ?? ''}` === matchValue;
+            if (matches) {
+              deleteRoots.push({ groupId: groupKey, rowId: row.id });
+            }
+            return !matches;
+          });
+          if (filtered.length === rows.length) return;
+          if (nextState === prev) nextState = { ...prev };
+          nextState[groupKey] = filtered;
+        };
+
+        if (sameRootScope) {
+          Object.keys(prev).forEach(groupKey => {
+            if (!groupKey.startsWith(`${q.id}::`) || !groupKey.endsWith(`::${(args.config?.outputGroupId || '').toString().trim()}`)) return;
+            removeMatchingRows(groupKey, sourceKey);
+          });
+        } else {
+          removeMatchingRows(output.key, sourceKey);
+        }
+
+        if (deleteRoots.length) {
+          const cascade = cascadeRemoveLineItemRows({ lineItems: nextState, roots: deleteRoots });
+          nextState = cascade.lineItems;
+        }
+
+        setStepDataSourceDrafts(prevDrafts => {
+          const nextDrafts = { ...prevDrafts };
+          if (!shouldSelect) {
+            delete nextDrafts[draftKey];
+            return nextDrafts;
+          }
+          const nextDraft: Record<string, FieldValue> = {};
+          if (selectedFieldId) nextDraft[selectedFieldId] = true;
+          if (quantityFieldId && nextRowValues[quantityFieldId] !== undefined) {
+            nextDraft[quantityFieldId] = nextRowValues[quantityFieldId];
+          }
+          if (modeFieldId && nextRowValues[modeFieldId] !== undefined && nextRowValues[modeFieldId] !== null && `${nextRowValues[modeFieldId]}` !== '') {
+            nextDraft[modeFieldId] = nextRowValues[modeFieldId];
+          }
+          nextDrafts[draftKey] = nextDraft;
+          return nextDrafts;
+        });
+
+        const quantityField = quantityFieldId ? fieldByIdSafe(args.config?.fields, quantityFieldId) : null;
+        const modeField = modeFieldId ? fieldByIdSafe(args.config?.fields, modeFieldId) : null;
+        const hasValidationErrors =
+          (quantityField ? validateVirtualFieldRules(quantityField, nextRowValues, args.parentRow.values as Record<string, FieldValue>).length > 0 : false) ||
+          (modeField ? validateVirtualFieldRules(modeField, nextRowValues, args.parentRow.values as Record<string, FieldValue>).length > 0 : false);
+
+        const matchedRule = Array.isArray(args.config?.outputRules)
+          ? (args.config.outputRules as any[]).find(rule =>
+              matchesWhenClause(rule?.when as any, resolveVirtualRowWhenContext({
+                rowValues: nextRowValues,
+                parentValues: args.parentRow.values as Record<string, FieldValue>
+              }))
+            )
+          : null;
+
+        if (shouldSelect && hasPositiveQty && !hasValidationErrors && matchedRule) {
+          const preset = resolveVirtualPreset(matchedRule.preset as any, {
+            rowValues: nextRowValues,
+            parentValues: args.parentRow.values as Record<string, FieldValue>,
+            sourceRow: args.sourceRow
+          });
+          const rowId = existingOutputRow?.id || `${(args.config?.outputGroupId || 'row').toString().trim()}_${Math.random().toString(16).slice(2)}`;
+          const outputGroupConfig = (output.subConfig || resolveRowFlowGroupConfig(output.key)?.config) as any;
+          const normalizedEffectId = `${matchedRule?.id || ''}`.trim();
+          const nextOutputRow: LineItemRowState = {
+            id: rowId,
+            values: {
+              ...(existingOutputRow?.values || {}),
+              ...(quantityFieldId ? { [quantityFieldId]: nextRowValues[quantityFieldId] } : {}),
+              ...(modeFieldId ? { [modeFieldId]: nextRowValues[modeFieldId] } : {}),
+              ...preset,
+              [ROW_ID_KEY]: rowId,
+              [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO,
+              [ROW_PARENT_GROUP_ID_KEY]: q.id,
+              [ROW_PARENT_ROW_ID_KEY]: args.parentRow.id,
+              ...(matchedRule?.hideRemoveButton === true ? { [ROW_HIDE_REMOVE_KEY]: true } : {}),
+              ...(normalizedEffectId ? { [ROW_SELECTION_EFFECT_ID_KEY]: normalizedEffectId } : {}),
+              [outputKeyFieldId]: sourceKey
+            },
+            parentId: args.parentRow.id,
+            parentGroupId: q.id
+          };
+          const rows = nextState[output.key] || [];
+          if (nextState === prev) nextState = { ...prev };
+          const nextOutputValues = { ...(nextOutputRow.values || {}) } as Record<string, FieldValue>;
+          const outputSubGroups = Array.isArray(outputGroupConfig?.subGroups) ? (outputGroupConfig.subGroups as any[]) : [];
+          outputSubGroups.forEach(subGroup => {
+            const subGroupId = resolveSubgroupKey(subGroup as any);
+            if (!subGroupId) return;
+            const nestedPayload = nextOutputValues[subGroupId];
+            if (nestedPayload === undefined) return;
+            delete nextOutputValues[subGroupId];
+            const childEntries = coerceNestedLineItemPresetRows(nestedPayload);
+            const childKey = buildSubgroupKey(output.key, rowId, subGroupId);
+            const childRows = childEntries.map(entry => {
+              const childRowId = `${subGroupId}_${Math.random().toString(16).slice(2)}`;
+              const childValues: Record<string, FieldValue> = {
+                ...(entry || {}),
+                [ROW_ID_KEY]: childRowId,
+                [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO,
+                [ROW_HIDE_REMOVE_KEY]: true,
+                [ROW_PARENT_GROUP_ID_KEY]: output.key,
+                [ROW_PARENT_ROW_ID_KEY]: rowId
+              };
+              return {
+                id: childRowId,
+                values: childValues,
+                parentId: rowId,
+                parentGroupId: output.key,
+                autoGenerated: true
+              } as LineItemRowState;
+            });
+            nextState[childKey] = childRows;
+          });
+          nextState[output.key] = [
+            { ...nextOutputRow, values: nextOutputValues },
+            ...rows.filter(row => row.id !== rowId)
+          ];
+        }
+
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState, {
+          mode: 'change'
+        });
+        setValues(nextValues);
+        runSelectionEffectsForAncestors?.(output.key, prev, recomputed, {
+          mode: 'change',
+          topValues: nextValues
+        });
+        return recomputed;
+      });
+    },
+    [
+      buildVirtualDataSourceRowValues,
+      buildStepDataSourceDraftKey,
+      definition,
+      q.id,
+      resolveDataSourceOutputGroup,
+      resolveTopValue,
+      resolveVirtualPreset,
+      resolveVirtualPresetValue,
+      resolveVirtualRowWhenContext,
+      runSelectionEffectsForAncestors,
+      setValues,
+      validateVirtualFieldRules,
+      values
+    ]
+  );
+
+  const stepDataSourceNormalizationSignatureRef = React.useRef<string>('');
+
+  React.useEffect(() => {
+    if (!stepDataSourceRows.length || !parentRows.length) {
+      stepDataSourceNormalizationSignatureRef.current = '';
+      return;
+    }
+    const pending: Array<{
+      outputKey: string;
+      outputRowId: string;
+      outputValues: Record<string, FieldValue>;
+      subGroupId: string;
+      entries: Record<string, FieldValue>[];
+    }> = [];
+
+    parentRows.forEach(parentRow => {
+      stepDataSourceRows.forEach(config => {
+        const output = resolveDataSourceOutputGroup(config, parentRow.id);
+        if (!output) return;
+        const outputRows = lineItems[output.key] || [];
+        const outputKeyFieldId = (config?.outputKeyFieldId || config?.rowKeyFieldId || '').toString().trim();
+        if (!outputKeyFieldId) return;
+        const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
+        const sourceRows = resolveStepDataSourceRowsForParent(config, parentRow);
+        sourceRows.forEach((sourceRow: Record<string, any>) => {
+          const sourceKey = `${sourceRow?.[(config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
+          if (!sourceKey) return;
+          const existingOutputRow =
+            outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
+          if (!existingOutputRow) return;
+          const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
+          const virtualValues = buildVirtualDataSourceRowValues({
+            config,
+            sourceRow,
+            outputRow: existingOutputRow,
+            draftValues: stepDataSourceDrafts[draftKey] || null
+          });
+          const quantityValue = quantityFieldId ? Number(virtualValues[quantityFieldId]) : undefined;
+          const hasPositiveQty =
+            quantityFieldId ? Number.isFinite(quantityValue) && !Number.isNaN(quantityValue) && Number(quantityValue) > 0 : true;
+          if (!hasPositiveQty) return;
+          const matchedRule = Array.isArray(config?.outputRules)
+            ? (config.outputRules as any[]).find(rule =>
+                matchesWhenClause(rule?.when as any, resolveVirtualRowWhenContext({
+                  rowValues: virtualValues,
+                  parentValues: parentRow.values as Record<string, FieldValue>
+                }))
+              )
+            : null;
+          if (!matchedRule) return;
+          const preset = resolveVirtualPreset(matchedRule.preset as any, {
+            rowValues: virtualValues,
+            parentValues: parentRow.values as Record<string, FieldValue>,
+            sourceRow
+          });
+          const outputGroupConfig = (output.subConfig || resolveRowFlowGroupConfig(output.key)?.config) as any;
+          const outputSubGroups = Array.isArray(outputGroupConfig?.subGroups) ? (outputGroupConfig.subGroups as any[]) : [];
+          const normalizedEffectId = `${matchedRule?.id || ''}`.trim();
+          const normalizedOutputValues: Record<string, FieldValue> = {
+            ...(existingOutputRow.values || {}),
+            ...(quantityFieldId ? { [quantityFieldId]: virtualValues[quantityFieldId] } : {}),
+            ...preset,
+            [ROW_ID_KEY]: existingOutputRow.id,
+            [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO,
+            [ROW_PARENT_GROUP_ID_KEY]: q.id,
+            [ROW_PARENT_ROW_ID_KEY]: parentRow.id,
+            ...(matchedRule?.hideRemoveButton === true ? { [ROW_HIDE_REMOVE_KEY]: true } : {}),
+            ...(normalizedEffectId ? { [ROW_SELECTION_EFFECT_ID_KEY]: normalizedEffectId } : {}),
+            [outputKeyFieldId]: sourceKey
+          };
+          outputSubGroups.forEach(subGroup => {
+            const subGroupId = resolveSubgroupKey(subGroup as any);
+            if (!subGroupId) return;
+            const nestedPayload = normalizedOutputValues[subGroupId];
+            if (nestedPayload === undefined) return;
+            const childEntries = coerceNestedLineItemPresetRows(nestedPayload);
+            if (!childEntries.length) return;
+            const childKey = buildSubgroupKey(output.key, existingOutputRow.id, subGroupId);
+            const childRows = lineItems[childKey] || [];
+            const needsRowHydration =
+              !normalizedEffectId ||
+              `${(existingOutputRow.values as any)?.[ROW_SELECTION_EFFECT_ID_KEY] ?? ''}` !== normalizedEffectId;
+            if (childRows.length > 0 && !needsRowHydration && childRowsMatchEntries(childRows, childEntries)) return;
+            pending.push({
+              outputKey: output.key,
+              outputRowId: existingOutputRow.id,
+              outputValues: normalizedOutputValues,
+              subGroupId,
+              entries: childEntries
+            });
+          });
+        });
+      });
+    });
+
+    const signature = pending
+      .map(entry => `${entry.outputKey}::${entry.outputRowId}::${entry.subGroupId}::${entry.entries.length}`)
+      .sort()
+      .join('|');
+    if (!signature) {
+      stepDataSourceNormalizationSignatureRef.current = '';
+      return;
+    }
+    if (stepDataSourceNormalizationSignatureRef.current === signature) return;
+    stepDataSourceNormalizationSignatureRef.current = signature;
+    setLineItems(prev => {
+      let nextState = prev;
+      pending.forEach(entry => {
+        const outputRows = nextState[entry.outputKey] || [];
+        const outputIndex = outputRows.findIndex(row => row.id === entry.outputRowId);
+        if (outputIndex >= 0) {
+          if (nextState === prev) nextState = { ...prev };
+          const nextOutputRows = [...outputRows];
+          const nextOutputValues = { ...(entry.outputValues || {}) };
+          delete (nextOutputValues as any)[entry.subGroupId];
+          nextOutputRows[outputIndex] = {
+            ...nextOutputRows[outputIndex],
+            values: {
+              ...(nextOutputRows[outputIndex]?.values || {}),
+              ...nextOutputValues
+            }
+          };
+          nextState[entry.outputKey] = nextOutputRows;
+        }
+        const childKey = buildSubgroupKey(entry.outputKey, entry.outputRowId, entry.subGroupId);
+        const childRows = entry.entries.map(payload => {
+          const childRowId = `${entry.subGroupId}_${Math.random().toString(16).slice(2)}`;
+          return {
+            id: childRowId,
+            values: {
+              ...(payload || {}),
+              [ROW_ID_KEY]: childRowId,
+              [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO,
+              [ROW_HIDE_REMOVE_KEY]: true,
+              [ROW_PARENT_GROUP_ID_KEY]: entry.outputKey,
+              [ROW_PARENT_ROW_ID_KEY]: entry.outputRowId
+            },
+            parentId: entry.outputRowId,
+            parentGroupId: entry.outputKey,
+            autoGenerated: true
+          } as LineItemRowState;
+        });
+        if (nextState === prev) nextState = { ...prev };
+        nextState[childKey] = childRows;
+      });
+      return nextState;
+    });
+  }, [
+    buildStepDataSourceDraftKey,
+    buildVirtualDataSourceRowValues,
+    coerceNestedLineItemPresetRows,
+    lineItems,
+    parentRows,
+    resolveDataSourceOutputGroup,
+    resolveStepDataSourceRowsForParent,
+    resolveVirtualPreset,
+    resolveVirtualRowWhenContext,
+    stepDataSourceDrafts,
+    stepDataSourceRows
+  ]);
+
+  const coerceDataSourceItemsCollection = React.useCallback((payload: any): any[] => {
+    if (Array.isArray(payload)) return payload.filter(Boolean);
+    if (typeof payload === 'string') {
+      const trimmed = payload.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
+  }, []);
+
+  const mapDataSourceActionEntries = React.useCallback((entries: any[], action: any): Record<string, any>[] => {
+    const mapping = action?.lineItemMapping && typeof action.lineItemMapping === 'object'
+      ? (action.lineItemMapping as Record<string, string>)
+      : {};
+    const mapped = entries
+      .map(entry => {
+        const next: Record<string, any> = {};
+        Object.entries(mapping).forEach(([targetFieldId, sourceFieldId]) => {
+          next[targetFieldId] = entry?.[sourceFieldId];
+        });
+        return next;
+      })
+      .filter(entry => Object.values(entry).some(value => !isEmptyValue(value as any)));
+    const aggregateBy = Array.isArray(action?.aggregateBy) ? (action.aggregateBy as string[]) : [];
+    const aggregateNumericFields = Array.isArray(action?.aggregateNumericFields)
+      ? (action.aggregateNumericFields as string[])
+      : [];
+    if (!aggregateBy.length || !aggregateNumericFields.length) return mapped;
+    const grouped = new Map<string, Record<string, any>>();
+    mapped.forEach(entry => {
+      const key = aggregateBy.map(fieldId => `${entry[fieldId] ?? ''}`).join('::');
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, { ...entry });
+        return;
+      }
+      aggregateNumericFields.forEach(fieldId => {
+        const current = Number(existing[fieldId] ?? 0);
+        const next = Number(entry[fieldId] ?? 0);
+        existing[fieldId] = Number.isFinite(current + next) ? current + next : existing[fieldId];
+      });
+    });
+    return Array.from(grouped.values());
+  }, []);
+
   function resolveRowFlowGroupConfig(groupKey: string): { groupId: string; config: any } | null {
     if (!groupKey) return null;
     const baseParsed = parseSubgroupKey(q.id);
@@ -493,11 +1296,13 @@ export const LineItemGroupQuestion: React.FC<{
       baseRootId === q.id && q.lineItemConfig
         ? q.lineItemConfig
         : rootQuestion?.lineItemConfig;
-    if (!rootConfig) return null;
+    const fallbackRootConfig = rootQuestion?.lineItemConfig;
+    if (!rootConfig && !fallbackRootConfig) return null;
 
-    const resolveFromRoot = (path: string[]): any | null => {
-      if (!path.length) return rootConfig;
-      let current: any = rootConfig;
+    const resolveFromConfig = (config: any, path: string[]): any | null => {
+      if (!config) return null;
+      if (!path.length) return config;
+      let current: any = config;
       for (let i = 0; i < path.length; i += 1) {
         const subId = path[i];
         const next = (current?.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
@@ -507,8 +1312,11 @@ export const LineItemGroupQuestion: React.FC<{
       return current;
     };
 
+    const resolveFromRoot = (path: string[]): any | null =>
+      resolveFromConfig(rootConfig, path) || resolveFromConfig(fallbackRootConfig, path);
+
     if (groupKey === baseRootId) {
-      return { groupId: baseRootId, config: rootConfig };
+      return { groupId: baseRootId, config: rootConfig || fallbackRootConfig };
     }
 
     const parsed = parseSubgroupKey(groupKey);
@@ -575,13 +1383,7 @@ export const LineItemGroupQuestion: React.FC<{
 
       if (field?.type === 'CHOICE' || field?.type === 'CHECKBOX') {
         ensureLineOptions(targetGroupKey, field);
-        const optionSetField: OptionSet =
-          optionState[optionKey(field.id, targetGroupKey)] || {
-            en: field.options || [],
-            fr: (field as any).optionsFr || [],
-            nl: (field as any).optionsNl || [],
-            raw: (field as any).optionsRaw
-          };
+        const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, targetGroupKey);
         const localized = buildLocalizedOptions(optionSetField, optionSetField.en || [], language, {
           sort: optionSortFor(field)
         });
@@ -955,73 +1757,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             changed = true;
           }
 
-          const isLeftoversGroupKey = (groupKey: string): boolean => {
-            const key = (groupKey || '').toString().trim();
-            if (!key) return false;
-            if (key === 'MP_TYPE_LI') return true;
-            const parsed = parseSubgroupKey(key);
-            return (parsed?.subGroupId || '').toString() === 'MP_TYPE_LI';
-          };
-          const leftoversGroupKey = isLeftoversGroupKey(q.id)
-            ? q.id
-            : deleteRoots.map(root => root.groupId).find(groupKey => isLeftoversGroupKey(groupKey)) || '';
-          const isClearLeftoversAction = (plan.action.id || '').toString().trim() === 'clearLeftovers';
-          const resetsLeftoverChoice = setEffects.some(effect => {
-            if (effect.groupKey !== q.id || effect.rowId !== row.id) return false;
-            return (effect.fieldId || '').toString().trim() === 'MP_IS_REHEAT';
-          });
-          if (leftoversGroupKey && resetsLeftoverChoice) {
-            const rowsBeforeReset = (next[leftoversGroupKey] || []) as LineItemRowState[];
-            const rowsAfterReset = rowsBeforeReset.filter(row => {
-              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
-              return (prepType || '').toString().trim().toLowerCase() === 'cook';
-            });
-            if (rowsAfterReset.length !== rowsBeforeReset.length) {
-              next = {
-                ...next,
-                [leftoversGroupKey]: rowsAfterReset
-              };
-              changed = true;
-              onDiagnostic?.('lineItems.leftovers.reset.purge', {
-                groupId: q.id,
-                rowId: row.id,
-                targetKey: leftoversGroupKey,
-                removedCount: rowsBeforeReset.length - rowsAfterReset.length
-              });
-            }
-          }
-          if (leftoversGroupKey && !isClearLeftoversAction && !resetsLeftoverChoice) {
-            const existingRows = (next[leftoversGroupKey] || []) as LineItemRowState[];
-            const hasNonCookRow = existingRows.some(row => {
-              const prepType = ((row?.values || {}) as any)?.PREP_TYPE;
-              return (prepType || '').toString().trim().toLowerCase() !== 'cook';
-            });
-            if (!hasNonCookRow) {
-              const parsedLeftovers = parseSubgroupKey(leftoversGroupKey);
-              const rowIdPrefix = (parsedLeftovers?.subGroupId || leftoversGroupKey || 'MP_TYPE_LI').toString();
-              const seededRow: LineItemRowState = {
-                id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
-                values: {
-                  PREP_TYPE: '',
-                  [ROW_SOURCE_KEY]: 'manual'
-                },
-                parentId: parsedLeftovers?.parentRowId,
-                parentGroupId: parsedLeftovers?.parentGroupKey
-              };
-              next = {
-                ...next,
-                [leftoversGroupKey]: [...existingRows, seededRow]
-              };
-              changed = true;
-              onDiagnostic?.('lineItems.leftovers.seedDefault', {
-                groupId: q.id,
-                rowId: row.id,
-                targetKey: leftoversGroupKey,
-                source: 'rowFlow.deleteRow'
-              });
-            }
-          }
-
           if (!changed) return prev;
           const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
             mode: 'init'
@@ -1031,7 +1766,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           setEffects.forEach(effect => touchedKeys.add(effect.groupKey));
           deleteEffects.forEach(effect => touchedKeys.add(effect.groupKey));
           touchedKeys.forEach(groupKey => {
-            ctx.runSelectionEffectsForAncestors?.(groupKey, prev, recomputed);
+            ctx.runSelectionEffectsForAncestors?.(groupKey, prev, recomputed, {
+              mode: 'init',
+              topValues: nextValues
+            });
           });
           return recomputed;
         });
@@ -1252,13 +1990,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       if (!anchorField || anchorField.type !== 'CHOICE') return;
 
       ensureLineOptions(targetInfo.groupId, anchorField);
-      const optionSetField: OptionSet =
-        optionState[optionKey(anchorField.id, targetInfo.groupId)] || {
-          en: anchorField.options || [],
-          fr: (anchorField as any).optionsFr || [],
-          nl: (anchorField as any).optionsNl || [],
-          raw: (anchorField as any).optionsRaw
-        };
+      const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, targetInfo.groupId);
       const dependencyIds = (
         Array.isArray(anchorField.optionFilter?.dependsOn)
           ? anchorField.optionFilter?.dependsOn
@@ -1439,7 +2171,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     const { groupKey, anchorField, dependencyIds, getDependencyRaw } = args;
     const depRawVals = dependencyIds.map(depId => getDependencyRaw(depId));
     const depVals = depRawVals.map(v => toDependencyValue(v as any));
-    const valid = dependencyIds.length > 0 && depRawVals.every(isValidDependencyValue);
+    const valid = dependencyIds.length === 0 || depRawVals.every(isValidDependencyValue);
     if (!valid) return { valid: false, desired: [], depVals };
     const opts = buildOptionSetForLineField(anchorField, groupKey);
     const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
@@ -1571,7 +2303,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     return { rows: combinedSorted, changed, contextId, desiredCount: desired.length };
   };
 
-  // Auto addMode: when dependsOn fields are valid, auto-create one row per allowed anchor option.
+  // Auto addMode: when dependency fields are valid, or when there is no dependency filter,
+  // auto-create one row per allowed anchor option.
   React.useEffect(() => {
     if (submitting) return;
     const cfg = q.lineItemConfig;
@@ -1579,7 +2312,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     const anchorField = (cfg.fields || []).find(f => f.id === cfg.anchorFieldId);
     if (!anchorField || anchorField.type !== 'CHOICE') return;
     const dependencyIds = resolveDependsOnIds(anchorField);
-    if (!dependencyIds.length) return;
 
     // Ensure anchor options are loaded so allowed values can be computed.
     ensureLineOptions(q.id, anchorField);
@@ -1660,7 +2392,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       const anchorField = ((sub as any).fields || []).find((f: any) => f.id === (sub as any).anchorFieldId);
       if (!anchorField || anchorField.type !== 'CHOICE') return;
       const dependencyIds = resolveDependsOnIds(anchorField);
-      if (!dependencyIds.length) return;
 
       parentRows.forEach(row => {
         const subKey = buildSubgroupKey(q.id, row.id, subId);
@@ -1729,6 +2460,47 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     setLineItems,
     setValues
   ]);
+
+  const initializedSelectionEffectsRef = React.useRef<Set<string>>(new Set());
+  const initSourceQuestion = React.useMemo(
+    () => definition.questions.find(entry => entry.id === q.id) || q,
+    [definition, q]
+  );
+
+  React.useEffect(() => {
+    if (submitting) return;
+    const targets = [
+      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems),
+      ...collectSubgroupSeedInitTargets(initSourceQuestion, lineItems),
+      ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, values as Record<string, FieldValue>)
+    ];
+    if (!targets.length) {
+      initializedSelectionEffectsRef.current.clear();
+      return;
+    }
+
+    const nextKeys = new Set<string>();
+    targets.forEach(target => {
+      nextKeys.add(target.signature);
+      if (initializedSelectionEffectsRef.current.has(target.signature)) return;
+
+      initializedSelectionEffectsRef.current.add(target.signature);
+      onDiagnostic?.('selectionEffects.initRowValue', {
+        groupId: target.groupKey,
+        rowId: target.rowId || null,
+        fieldId: target.field.id
+      });
+      const initField =
+        target.field && typeof target.field === 'object' && target.field.readOnly === true
+          ? { ...target.field, readOnly: false }
+          : target.field;
+      handleLineFieldChange(target.group as any, target.rowId, initField, target.rawValue as any);
+    });
+
+    initializedSelectionEffectsRef.current.forEach(signature => {
+      if (!nextKeys.has(signature)) initializedSelectionEffectsRef.current.delete(signature);
+    });
+  }, [submitting, initSourceQuestion, lineItems, handleLineFieldChange, onDiagnostic]);
 
   // Autofill subgroup anchor choice when there is exactly 1 allowed option (avoid extra tap).
   // This covers cases where subgroup rows already exist (e.g., seeded minRows/defaults) and the anchor is still empty.
@@ -1916,7 +2688,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                     if (loaded) {
                       opts = loaded;
-                      setOptionState(prev => ({ ...prev, [key]: loaded }));
+                      setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, q.id, loaded));
                     }
                   }
                   if (!opts) {
@@ -2476,6 +3248,19 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
         }, [attentionRowId, q.id, setCollapsedRows, onDiagnostic]);
 
         if (isTableMode && !rowFlowEnabled) {
+          const maxVisibleRowsRaw = Number((liUi as any)?.maxVisibleRows);
+          const tableScrollStyle =
+            Number.isFinite(maxVisibleRowsRaw) && maxVisibleRowsRaw > 0
+              ? ({
+                  maxHeight: `${Math.max(1, Math.floor(maxVisibleRowsRaw)) * 56}px`,
+                  overflowY: 'auto' as const,
+                  overflowX: 'auto' as const,
+                  WebkitOverflowScrolling: 'touch' as const,
+                  overscrollBehavior: 'contain' as const,
+                  touchAction: 'pan-x pan-y' as const
+                })
+              : undefined;
+          const hideRemoveColumn = (liUi as any)?.hideRemoveColumn === true;
           const messageFields = messageFieldsAll;
           const anchorFieldId =
             q.lineItemConfig?.anchorFieldId !== undefined && q.lineItemConfig?.anchorFieldId !== null
@@ -2488,14 +3273,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             if (!anchorFieldId || !anchorField) return '';
             const rawVal = row.values?.[anchorFieldId];
             if (anchorField.type === 'CHOICE') {
-              ensureLineOptions(q.id, anchorField);
-              const optionSetField: OptionSet =
-                optionState[optionKey(anchorField.id, q.id)] || {
-                  en: anchorField.options || [],
-                  fr: (anchorField as any).optionsFr || [],
-                  nl: (anchorField as any).optionsNl || [],
-                  raw: (anchorField as any).optionsRaw
-                };
+            ensureLineOptions(q.id, anchorField);
+            const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, q.id);
               const dependencyIds = (
                 Array.isArray(anchorField.optionFilter?.dependsOn)
                   ? anchorField.optionFilter?.dependsOn
@@ -2611,13 +3390,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             }
 
             ensureLineOptions(q.id, field);
-            const optionSetField: OptionSet =
-              optionState[optionKey(field.id, q.id)] || {
-                en: field.options || [],
-                fr: (field as any).optionsFr || [],
-                nl: (field as any).optionsNl || [],
-                raw: (field as any).optionsRaw
-              };
+            const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
             const dependencyIds = (
               Array.isArray(field.optionFilter?.dependsOn)
                 ? field.optionFilter?.dependsOn
@@ -3179,7 +3952,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               style: resolveTableColumnStyle(field.id),
               renderCell: (row: any, rowIdx: number) => renderTableField(field, row, rowIdx)
             })),
-            { ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }
+            ...(hideRemoveColumn ? [] : [{ ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }])
           ];
           const tableTotalsById = new Map(tableTotals.map(total => [total.key.toString(), total]));
           const totalLabelColumnId = (() => {
@@ -3266,7 +4039,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   </div>
                 </div>
               ) : null}
-              <div className="ck-line-item-table__scroll">
+              <div className="ck-line-item-table__scroll" style={tableScrollStyle}>
                 <LineItemTable
                   columns={tableColumns}
                   rows={parentRows}
@@ -3452,8 +4225,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               </div>
             ) : null}
             {parentRows.map((row, rowIdx) => {
-              const isLeftoverGroup = q.id === 'MP_TYPE_LI';
-              const isLastLeftoverRow = isLeftoverGroup && rowIdx === parentRows.length - 1;
+              const useEdgeToEdgeRowChrome = q.id === 'MP_TYPE_LI' || (q as any)?.ui?.edgeToEdgeRows === true;
+              const isLastEdgeToEdgeRow = useEdgeToEdgeRowChrome && rowIdx === parentRows.length - 1;
               const groupCtx: VisibilityContext = {
                 getValue: fid => resolveTopValue(fid),
                 getLineValue: (_rowId, fid) => row.values[fid],
@@ -3554,13 +4327,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   );
 
                   ensureLineOptions(groupKey, field);
-                  const optionSetField: OptionSet =
-                    optionState[optionKey(field.id, groupKey)] || {
-                      en: field.options || [],
-                      fr: (field as any).optionsFr || [],
-                      nl: (field as any).optionsNl || [],
-                      raw: (field as any).optionsRaw
-                    };
+                  const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, groupKey);
                   const dependencyIds = (
                     Array.isArray(field.optionFilter?.dependsOn)
                       ? field.optionFilter?.dependsOn
@@ -3869,13 +4636,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       : null;
                     if (!anchorField || anchorField.type !== 'CHOICE') return null;
                     ensureLineOptions(targetInfo.groupId, anchorField);
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(anchorField.id, targetInfo.groupId)] || {
-                        en: anchorField.options || [],
-                        fr: (anchorField as any).optionsFr || [],
-                        nl: (anchorField as any).optionsNl || [],
-                        raw: (anchorField as any).optionsRaw
-                      };
+                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, targetInfo.groupId);
                     const depIds = (
                       Array.isArray(anchorField.optionFilter?.dependsOn)
                         ? anchorField.optionFilter?.dependsOn
@@ -4158,14 +4919,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 return (
                   <div
                     key={row.id}
-                    className={`line-item-row ck-row-flow${isLeftoverGroup ? ' ck-row-flow--leftover' : ''}`}
+                    className={`line-item-row ck-row-flow${useEdgeToEdgeRowChrome ? ' ck-row-flow--edge' : ''}`}
                     data-row-anchor={`${q.id}__${row.id}`}
                     style={{
                       background: 'transparent',
                       border: 'none',
                       width: '100%',
-                      padding: isLeftoverGroup ? '12px 0' : 0,
-                      marginBottom: isLeftoverGroup ? 0 : 14
+                      padding: useEdgeToEdgeRowChrome ? '12px 0' : 0,
+                      marginBottom: useEdgeToEdgeRowChrome ? 0 : 14
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -4177,12 +4938,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       </div>
                       {outputActionsLayout === 'inline' && outputActionsEnd.length ? (
                         <div
-                          className={isLeftoverGroup ? 'ck-row-flow-actions ck-row-flow-actions--leftover' : 'ck-row-flow-actions'}
+                          className={useEdgeToEdgeRowChrome ? 'ck-row-flow-actions ck-row-flow-actions--edge' : 'ck-row-flow-actions'}
                           style={{
                             display: 'flex',
                             gap: 8,
                             flexShrink: 0,
-                            ...(isLeftoverGroup ? { alignSelf: 'stretch', alignItems: 'flex-end' } : {})
+                            ...(useEdgeToEdgeRowChrome ? { alignSelf: 'stretch', alignItems: 'flex-end' } : {})
                           }}
                         >
                           {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
@@ -4206,7 +4967,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         ))}
                       </div>
                     ) : null}
-                    {isLeftoverGroup && !isLastLeftoverRow ? (
+                    {useEdgeToEdgeRowChrome && !isLastEdgeToEdgeRow ? (
                       <div
                         className="ck-line-item-row-separator"
                         aria-hidden="true"
@@ -4894,7 +5655,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   : new Set<string>();
               const hasFieldTriggeredSubgroup = fieldTriggeredSubgroupIdSet.size > 0;
               const fallbackSubIds =
-                !rowCollapsed && subIds.length ? subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)) : [];
+                !rowCollapsed && subIds.length
+                  ? (ui?.inlineSubgroupsWhenExpanded === true
+                      ? []
+                      : subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)))
+                  : [];
 
               const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
               const renderSubgroupOpenStack = (
@@ -5172,12 +5937,128 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
                 : true;
               const showTitleControl = !!titleField && !titleHidden;
+              const resolveCompactHeaderDisplayText = React.useCallback(
+                (field: any): string => {
+                  const displayRowValues = (rowVisibilityValues || row.values || {}) as Record<string, FieldValue>;
+                  const rawValue = displayRowValues[field.id];
+                  if (field.type === 'CHOICE') {
+                    ensureLineOptions(q.id, field);
+                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
+                    const dependencyIds = (
+                      Array.isArray(field.optionFilter?.dependsOn)
+                        ? field.optionFilter?.dependsOn
+                        : [field.optionFilter?.dependsOn || '']
+                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                    const allowedField = computeAllowedOptions(
+                      field.optionFilter,
+                      optionSetField,
+                      dependencyIds.map((dep: string) => toDependencyValue(displayRowValues[dep] ?? values[dep]))
+                    );
+                    const choiceVal = Array.isArray(rawValue) && rawValue.length ? (rawValue as string[])[0] : (rawValue as string);
+                    const allowedWithCurrent =
+                      choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                        ? [...allowedField, choiceVal]
+                        : allowedField;
+                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
+                    const selectedOpt = optsField.find(opt => opt.value === choiceVal);
+                    return resolveLineItemTableReadOnlyDisplay({
+                      baseValue: selectedOpt?.label || choiceVal,
+                      field,
+                      rowValues: displayRowValues,
+                      language
+                    });
+                  }
+                  return resolveLineItemTableReadOnlyDisplay({
+                    baseValue: rawValue,
+                    field,
+                    rowValues: displayRowValues,
+                    language
+                  });
+                },
+                [ensureLineOptions, language, optionState, q.id, row.values, rowVisibilityValues, values]
+              );
+              const rowHeaderSummaryTemplateRaw =
+                (ui as any)?.rowHeaderSummaryTemplate ??
+                (ui as any)?.row_header_summary_template ??
+                (ui as any)?.headerSummaryTemplate ??
+                (ui as any)?.header_summary_template;
+              const rowHeaderSummaryTemplate =
+                rowHeaderSummaryTemplateRaw !== undefined && rowHeaderSummaryTemplateRaw !== null
+                  ? rowHeaderSummaryTemplateRaw.toString().trim()
+                  : '';
+              const explicitRowHeaderSummaryText = (() => {
+                if (!rowHeaderSummaryTemplate) return '';
+                const displayRowValues = (rowVisibilityValues || row.values || {}) as Record<string, FieldValue>;
+                return rowHeaderSummaryTemplate
+                  .replace(/\{([^}]+)\}/g, (_match: string, rawFieldId: string) => {
+                    const fieldId = rawFieldId.toString().trim();
+                    if (!fieldId) return '';
+                    const field = allFields.find(f => f.id === fieldId) as any;
+                    if (field) return resolveCompactHeaderDisplayText(field);
+                    const rawValue = displayRowValues[fieldId];
+                    if (rawValue === undefined || rawValue === null) return '';
+                    if (Array.isArray(rawValue)) return rawValue.map(v => (v == null ? '' : String(v))).filter(Boolean).join(', ');
+                    return String(rawValue);
+                  })
+                  .replace(/\s+/g, ' ')
+                  .trim();
+              })();
+              const compactHeaderSummaryText = (() => {
+                if (guidedCollapsedFieldsInHeader || !isProgressive || !rowCollapsed) return '';
+                const compactFields = (collapsedFieldConfigs || [])
+                  .filter((cfg: any) => cfg && cfg.showLabel === false)
+                  .map((cfg: any) => {
+                    const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
+                    return fid ? (allFields.find(f => f.id === fid) as any) : null;
+                  })
+                  .filter(Boolean)
+                  .filter((field: any) => !shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id }));
+                if (!compactFields.length) return '';
+
+                return compactFields
+                  .map((field: any) => resolveCompactHeaderDisplayText(field))
+                  .map((text: string) => text.trim())
+                  .filter((text: string) => !!text && text !== '—')
+                  .join(' | ');
+              })();
+              const guidedCompactHeaderSummaryFieldIdSet = new Set<string>(
+                guidedCollapsedFieldsInHeader && isProgressive
+                  ? (collapsedFieldConfigs || [])
+                      .filter((cfg: any) => cfg && cfg.showLabel === false)
+                      .map((cfg: any) => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
+                      .filter(Boolean)
+                  : []
+              );
+              const guidedCompactHeaderSummaryFields =
+                guidedCompactHeaderSummaryFieldIdSet.size > 0
+                  ? (Array.from(guidedCompactHeaderSummaryFieldIdSet) as string[])
+                      .map(fid => allFields.find(f => f.id === fid) as any)
+                      .filter(Boolean)
+                      .filter((field: any) => !shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id }))
+                  : [];
+              const guidedCompactHeaderSummaryText =
+                guidedCollapsedFieldsInHeader && isProgressive && guidedCompactHeaderSummaryFields.length
+                  ? guidedCompactHeaderSummaryFields
+                      .map((field: any) => resolveCompactHeaderDisplayText(field))
+                      .map((text: string) => text.trim())
+                      .filter((text: string) => !!text && text !== '—')
+                      .join(' | ')
+                  : '';
+              const hasExplicitRowHeaderSummary = !!explicitRowHeaderSummaryText;
+              const renderGuidedCompactSummaryOnly =
+                hasExplicitRowHeaderSummary || (guidedCollapsedFieldsInHeader && !!guidedCompactHeaderSummaryText);
               const showAnchorTitleAsHeaderTitle =
-                guidedCollapsedFieldsInHeader && isProgressive && showTitleControl && anchorHasValue && wantsAnchorTitle;
+                guidedCollapsedFieldsInHeader &&
+                isProgressive &&
+                !hasExplicitRowHeaderSummary &&
+                !guidedCompactHeaderSummaryText &&
+                showTitleControl &&
+                anchorHasValue &&
+                wantsAnchorTitle;
               const showAnchorTitleAsBodyTitle = !isProgressive && anchorHasValue && (anchorAsTitle || rowSource === 'auto');
               // Guided steps UX: when collapsed fields are rendered in the row header, don't render the special "title control"
               // separately. Instead, we keep all collapsed fields in the header grid so they can appear side-by-side.
-              const showTitleControlInHeader = showTitleControl && !guidedCollapsedFieldsInHeader;
+              const showTitleControlInHeader = showTitleControl && !guidedCollapsedFieldsInHeader && !hasExplicitRowHeaderSummary;
               const isAnchorTitle = wantsAnchorTitle && !!titleField && titleField.id === anchorFieldId;
               const titleLocked = isAnchorTitle && lockAnchor;
 
@@ -5459,18 +6340,45 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     // In guided-header mode we may show the anchor as a standalone row title. Don't also render it in the grid.
                     if (showAnchorTitleAsHeaderTitle && fid === anchorFieldId) return false;
                     if (showTitleControlInHeader && fid === titleFieldId) return false;
+                    if (guidedCompactHeaderSummaryFieldIdSet.has(fid)) return false;
                     return true;
                   })
                 : [];
-              const headerCollapsedFieldsToRender = guidedCollapsedFieldsInHeader ? headerCollapsedFieldsBase.slice(0, 3) : [];
+              const guidedCollapsedFieldIdSet = new Set<string>(
+                guidedCollapsedFieldsInHeader
+                  ? (collapsedFieldConfigs || [])
+                      .map((cfg: any) => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
+                      .filter(Boolean)
+                  : []
+              );
+              const headerCollapsedFieldsToRender =
+                guidedCollapsedFieldsInHeader && !guidedCompactHeaderSummaryText && !hasExplicitRowHeaderSummary
+                  ? headerCollapsedFieldsBase.slice(0, 3)
+                  : [];
               const headerCollapsedFieldIdSet = new Set<string>(
                 headerCollapsedFieldsToRender
                   .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
                   .filter(Boolean)
               );
+              const compactHeaderSummaryFieldIdSet = new Set<string>(
+                !guidedCollapsedFieldsInHeader && isProgressive && rowCollapsed
+                  ? (collapsedFieldConfigs || [])
+                      .filter((cfg: any) => cfg && cfg.showLabel === false)
+                      .map((cfg: any) => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
+                      .filter(Boolean)
+                  : []
+              );
               const bodyFieldsToRenderBase =
                 guidedCollapsedFieldsInHeader
-                  ? (fieldsToRender || []).filter((f: any) => !headerCollapsedFieldIdSet.has((f?.id || '').toString()))
+                  ? (fieldsToRender || []).filter((f: any) => {
+                      const fid = (f?.id || '').toString();
+                      if (headerCollapsedFieldIdSet.has(fid)) return false;
+                      if (guidedCollapsedFieldIdSet.has(fid)) return false;
+                      if (guidedCompactHeaderSummaryFieldIdSet.has(fid)) return false;
+                      return true;
+                    })
+                  : !guidedCollapsedFieldsInHeader && isProgressive && rowCollapsed && compactHeaderSummaryFieldIdSet.size
+                    ? (fieldsToRender || []).filter((f: any) => !compactHeaderSummaryFieldIdSet.has((f?.id || '').toString()))
                   : fieldsToRender;
               const canHoistSingleBodyFieldIntoHeader =
                 guidedCollapsedFieldsInHeader &&
@@ -5498,13 +6406,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 opts?: { forceHideLabel?: boolean; showLabel?: boolean; forceStackedLabel?: boolean; inGrid?: boolean }
               ) => {
                 ensureLineOptions(q.id, field);
-                const optionSetField: OptionSet =
-                  optionState[optionKey(field.id, q.id)] || {
-                    en: field.options || [],
-                    fr: (field as any).optionsFr || [],
-                    nl: (field as any).optionsNl || [],
-                    raw: (field as any).optionsRaw
-                  };
+                const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
                 const dependencyIds = (
                   Array.isArray(field.optionFilter?.dependsOn)
                     ? field.optionFilter?.dependsOn
@@ -6176,7 +7078,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     });
                     setValues(nextValues);
                     setLineItems(recomputed);
-                    ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed);
+                    ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed, {
+                      mode: 'init',
+                      topValues: nextValues
+                    });
                     if (!hasResetValue) {
                       ctx.suppressOverlayOpenAction?.(fieldPath);
                     }
@@ -6853,22 +7758,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   }
                 }
               };
+              const isGuidedInlineRow = guidedCollapsedFieldsInHeader && isProgressive;
               return (
                 <div
                   key={row.id}
-                  className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}${isLeftoverGroup ? ' ck-line-item-row--leftover' : ''}`}
+                  className={`line-item-row${rowLocked ? ' ck-row-disabled' : ''}${useEdgeToEdgeRowChrome ? ' ck-line-item-row--edge' : ''}`}
                   data-row-anchor={`${q.id}__${row.id}`}
                   data-anchor-field-id={anchorFieldId || undefined}
                   data-anchor-has-value={anchorHasValue ? 'true' : undefined}
                   data-row-disabled={rowLocked ? 'true' : undefined}
                   style={{
-                    ...(isLeftoverGroup
+                    ...(useEdgeToEdgeRowChrome || isGuidedInlineRow
                       ? {
                           background: 'transparent',
                           padding: '12px 0',
                           borderRadius: 0,
                           border: 'none',
-                          borderBottom: isLastLeftoverRow ? 'none' : '1px solid var(--border)',
+                          borderBottom: isLastEdgeToEdgeRow ? 'none' : '1px solid var(--border)',
                           marginBottom: 0
                         }
                       : {
@@ -6879,15 +7785,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           marginBottom: 10
                         }),
                     opacity: rowLocked ? 0.86 : 1,
-                    outline: rowHasError ? '2px solid var(--danger)' : undefined,
-                    outlineOffset: rowHasError ? 2 : undefined
+                    outline: rowHasError && !useEdgeToEdgeRowChrome ? '2px solid var(--danger)' : undefined,
+                    outlineOffset: rowHasError && !useEdgeToEdgeRowChrome ? 2 : undefined
                   }}
                 >
                   {showRowHeader ? (
                     <div className="ck-row-header">
                       <div style={{ minWidth: 0, flex: 1 }}>
                         {/* Row numbering intentionally hidden in all UI modes (requested by product). */}
-                        {showTitleControlInHeader && titleField ? (
+                        {!renderGuidedCompactSummaryOnly && showTitleControlInHeader && titleField ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               {(() => {
@@ -7137,12 +8043,42 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             </div>
                           </div>
                         ) : null}
-                        {guidedCollapsedFieldsInHeader && showAnchorTitleAsHeaderTitle ? (
+                        {explicitRowHeaderSummaryText ? (
+                          <div style={{ marginBottom: rowDisclaimerText ? 6 : 0 }}>
+                            <div
+                              className="ck-row-title"
+                              style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {explicitRowHeaderSummaryText}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!explicitRowHeaderSummaryText && !guidedCollapsedFieldsInHeader && compactHeaderSummaryText ? (
+                          <div style={{ marginBottom: rowDisclaimerText ? 6 : 0 }}>
+                            <div
+                              className="ck-row-title"
+                              style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {compactHeaderSummaryText}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!explicitRowHeaderSummaryText && guidedCompactHeaderSummaryText ? (
+                          <div style={{ marginBottom: rowDisclaimerText ? 6 : 0 }}>
+                            <div
+                              className="ck-row-title"
+                              style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {guidedCompactHeaderSummaryText}
+                            </div>
+                          </div>
+                        ) : null}
+                        {guidedCollapsedFieldsInHeader && !renderGuidedCompactSummaryOnly && showAnchorTitleAsHeaderTitle ? (
                           <div style={{ marginBottom: 8 }}>
                             <div className="ck-row-title">{anchorTitleLabel || '—'}</div>
                           </div>
                         ) : null}
-                        {guidedCollapsedFieldsInHeader && headerFieldsToRender.length ? (
+                        {guidedCollapsedFieldsInHeader && !renderGuidedCompactSummaryOnly && headerFieldsToRender.length ? (
                           <div
                             className="ck-row-header-collapsed-fields"
                             style={{
@@ -7204,7 +8140,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         ) : null}
                       </div>
                       {canRemoveRow || rowTogglePill ? (
-                        <div className={`ck-row-header-actions${isLeftoverGroup ? ' ck-row-header-actions--leftover' : ''}`}>
+                        <div className={`ck-row-header-actions${useEdgeToEdgeRowChrome ? ' ck-row-header-actions--edge' : ''}`}>
                           {rowTogglePill}
                           {canRemoveRow ? (
                             <button
@@ -7240,13 +8176,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       opts?: { showLabel?: boolean; forceStackedLabel?: boolean; inGrid?: boolean }
                     ) => {
                     ensureLineOptions(q.id, field);
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(field.id, q.id)] || {
-                        en: field.options || [],
-                        fr: (field as any).optionsFr || [],
-                        nl: (field as any).optionsNl || [],
-                        raw: (field as any).optionsRaw
-                      };
+                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
                     const dependencyIds = (
                       Array.isArray(field.optionFilter?.dependsOn)
                         ? field.optionFilter?.dependsOn
@@ -7427,7 +8357,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           });
                           setValues(nextValues);
                           setLineItems(recomputed);
-                          ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed);
+                          ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed, {
+                            mode: 'init',
+                            topValues: nextValues
+                          });
                           if (!hasResetValue) {
                             ctx.suppressOverlayOpenAction?.(fieldPath);
                           }
@@ -8167,6 +9100,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     }
 
                     const visibleExpandedFields = bodyFieldsToRender.filter(field => {
+                      if (guidedCollapsedFieldsInHeader && guidedCompactHeaderSummaryFieldIdSet.has((field?.id || '').toString())) {
+                        return false;
+                      }
                       const hide = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
                       return !hide;
                     });
@@ -8231,7 +9167,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       </button>
                     ) : null}
                   </div>
-                  {isLeftoverGroup && !isLastLeftoverRow ? (
+                  {useEdgeToEdgeRowChrome && !isLastEdgeToEdgeRow ? (
                     <div
                       className="ck-line-item-row-separator"
                       aria-hidden="true"
@@ -8244,7 +9180,693 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       }}
                     />
                   ) : null}
-                  {!hideInlineSubgroups && !isProgressive && (q.lineItemConfig?.subGroups || []).map(sub => {
+                  {!hideInlineSubgroups && !rowCollapsed && stepDataSourceRows.length ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+                      {stepDataSourceRows.map((config: any, configIndex: number) => {
+                        const sourceRows = resolveStepDataSourceRowsForParent(config, row);
+                        if (!sourceRows.length) return null;
+                        const output = resolveDataSourceOutputGroup(config, row.id);
+                        const outputRows = output ? lineItems[output.key] || [] : [];
+                        const fields = Array.isArray(config?.fields) ? (config.fields as any[]) : [];
+                        const fieldById = new Map<string, any>();
+                        fields.forEach(field => {
+                          const id = field?.id ? field.id.toString() : '';
+                          if (id) fieldById.set(id, field);
+                        });
+                        const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
+                        const compactHeadlineRows = Array.isArray(uiCfg.compactHeadlineRows) ? (uiCfg.compactHeadlineRows as any[]) : [];
+                        const compactSentenceRows = Array.isArray(uiCfg.compactSentenceRows) ? (uiCfg.compactSentenceRows as any[]) : [];
+                        const compactActionRules = Array.isArray(uiCfg.compactActions) ? (uiCfg.compactActions as any[]) : [];
+                        const selectedFieldId = (config?.selectedFieldId || '').toString().trim();
+                        const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
+                        const modeFieldId = (config?.modeFieldId || '').toString().trim();
+                        const outputKeyFieldId = (config?.outputKeyFieldId || config?.rowKeyFieldId || '').toString().trim();
+                        const listScrollStyle =
+                          Number.isFinite(Number(uiCfg?.maxVisibleRows)) && Number(uiCfg.maxVisibleRows) > 0
+                            ? ({
+                                maxHeight: `${Math.max(1, Math.floor(Number(uiCfg.maxVisibleRows))) * 132}px`,
+                                overflowY: 'auto' as const,
+                                overflowX: 'hidden' as const,
+                                WebkitOverflowScrolling: 'touch' as const,
+                                overscrollBehavior: 'contain' as const,
+                                touchAction: 'pan-y' as const
+                              })
+                            : undefined;
+
+                        const resolveVirtualValue = (virtualValues: Record<string, FieldValue>, fieldId: string): FieldValue | undefined => {
+                          if (Object.prototype.hasOwnProperty.call(virtualValues, fieldId)) return virtualValues[fieldId];
+                          if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values as any)[fieldId];
+                          return resolveTopValue(fieldId);
+                        };
+
+                        const resolveVirtualDisplay = (virtualValues: Record<string, FieldValue>, field: any): string => {
+                          if (!field) return '';
+                          const raw = resolveVirtualValue(virtualValues, field.id);
+                          if (raw === undefined || raw === null || raw === '') return '';
+                          if (field.type === 'DATE') return toDateInputValue(raw);
+                          if (field.type === 'CHOICE' || field.type === 'CHECKBOX') {
+                            const optionSet = toOptionSet(field);
+                            const options = buildLocalizedOptions(optionSet, optionSet.en || [], language, {
+                              sort: optionSortFor(field)
+                            });
+                            const rawList = Array.isArray(raw) ? raw : [raw];
+                            return rawList
+                              .map(value => `${value ?? ''}`)
+                              .filter(Boolean)
+                              .map(value => options.find(option => option.value === value)?.label || value)
+                              .join(', ');
+                          }
+                          return `${raw}`;
+                        };
+
+                        const renderHeadlinePart = (
+                          part: any,
+                          virtualValues: Record<string, FieldValue>,
+                          sourceRow: Record<string, any>
+                        ): React.ReactNode => {
+                          if (!part || typeof part !== 'object') return null;
+                          if (((part.type || '').toString() || 'field') === 'text') {
+                            const text = resolveLocalizedString(part.text, language, '');
+                            return text ? <span key={`text:${text}`}>{text}</span> : null;
+                          }
+                          const fieldId = (part.fieldId || '').toString().trim();
+                          const sourcePath = (part.sourcePath || '').toString().trim();
+                          if (!fieldId && !sourcePath) return null;
+                          const field = fieldId ? fieldById.get(fieldId) : null;
+                          const display = (() => {
+                            if (sourcePath) {
+                              const raw = getByPath(sourceRow, sourcePath);
+                              if (raw !== undefined && raw !== null && `${raw}`.trim() !== '') return `${raw}`.trim();
+                            }
+                            if (!fieldId) return '';
+                            return field
+                              ? resolveVirtualDisplay(virtualValues, field)
+                              : `${resolveVirtualValue(virtualValues, fieldId) ?? ''}`.trim();
+                          })();
+                          const suffix = (() => {
+                            if (part.suffixFieldId) {
+                              const suffixField = fieldById.get((part.suffixFieldId || '').toString().trim());
+                              return suffixField ? resolveVirtualDisplay(virtualValues, suffixField) : `${resolveVirtualValue(virtualValues, part.suffixFieldId) ?? ''}`.trim();
+                            }
+                            if (part.suffixSourcePath) {
+                              return `${sourceRow?.[(part.suffixSourcePath || '').toString().trim()] ?? ''}`.trim();
+                            }
+                            return '';
+                          })();
+                          const combined = [display, suffix].filter(Boolean).join(' ');
+                          const keyId = fieldId || sourcePath || 'headline';
+                          return combined ? <span key={`field:${keyId}`}>{combined}</span> : null;
+                        };
+
+                        const renderActionNodes = (
+                          virtualValues: Record<string, FieldValue>,
+                          sourceRow: Record<string, any>,
+                          sourceKey: string
+                        ): React.ReactNode => {
+                          if (!compactActionRules.length) return null;
+                          const actionRule = compactActionRules.find(rule =>
+                            !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                              rowValues: virtualValues,
+                              parentValues: row.values as Record<string, FieldValue>
+                            }))
+                          );
+                          const actions = Array.isArray(actionRule?.actions) ? (actionRule.actions as any[]) : [];
+                          if (!actions.length) return null;
+                          const nodes = actions
+                            .map((action: any, actionIndex: number) => {
+                              if (!action || action.type !== 'openSubgroupOverlay') return null;
+                              if (action.showWhen && !matchesWhenClause(action.showWhen as any, resolveVirtualRowWhenContext({
+                                rowValues: virtualValues,
+                                parentValues: row.values as Record<string, FieldValue>
+                              }))) {
+                                return null;
+                              }
+                              const buttonLabel = resolveLocalizedString(action.label, language, '').trim();
+                              if (!buttonLabel) return null;
+                              const tone = ((action.tone || 'secondary').toString().trim().toLowerCase() === 'primary') ? 'primary' : 'secondary';
+                              return (
+                                <button
+                                  key={`action:${sourceKey}:${actionIndex}`}
+                                  type="button"
+                                  style={{
+                                    ...(tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary),
+                                    minHeight: 36,
+                                    padding: '6px 12px',
+                                    whiteSpace: 'nowrap',
+                                    flex: '0 0 auto'
+                                  }}
+                                  onClick={() => {
+                                    const sourcePath = (action.sourcePath || '').toString().trim();
+                                    const targetSubGroupId = (action.subGroupId || '').toString().trim();
+                                    const overlayKey = `__guidedDataSourceRows__::${config.id || configIndex}::${row.id}::${sourceKey}::${targetSubGroupId || 'overlay'}`;
+                                    const sourceEntries = mapDataSourceActionEntries(
+                                      coerceDataSourceItemsCollection(sourcePath ? sourceRow?.[sourcePath] : []),
+                                      action
+                                    );
+                                    if (!sourceEntries.length) {
+                                      const emptyMessage = resolveLocalizedString(action.emptyMessage, language, '').trim();
+                                      if (emptyMessage) openInfoOverlay(buttonLabel, emptyMessage);
+                                      return;
+                                    }
+                                    const fieldsOverride = Array.isArray(action?.groupOverride?.fields)
+                                      ? action.groupOverride.fields
+                                      : [];
+                                    const groupOverride: LineItemGroupConfigOverride = {
+                                      ...(action.groupOverride || {}),
+                                      fields: fieldsOverride.length
+                                        ? fieldsOverride.map((field: any) => ({ ...field, readOnly: true }))
+                                        : undefined,
+                                      ui: {
+                                        ...((action.groupOverride as any)?.ui || {}),
+                                        addButtonPlacement: 'hidden',
+                                        hideRemoveColumn: true,
+                                        allowRemoveAutoRows: false,
+                                        showItemPill: false
+                                      }
+                                    };
+                                    setLineItems(prev => ({
+                                      ...prev,
+                                      [overlayKey]: sourceEntries.map((entry, entryIndex) => ({
+                                        id: `${overlayKey}::${entryIndex}`,
+                                        values: {
+                                          ...entry,
+                                          [ROW_HIDE_REMOVE_KEY]: true,
+                                          [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO
+                                        },
+                                        autoGenerated: true
+                                      }))
+                                    }));
+                                    const overlayGroup: WebQuestionDefinition = {
+                                      id: overlayKey,
+                                      type: 'LINE_ITEM_GROUP',
+                                      label: { en: '', fr: '', nl: '' },
+                                      lineItemConfig: {
+                                        fields: Array.isArray(groupOverride.fields) ? groupOverride.fields : [],
+                                        subGroups: [],
+                                        ui: groupOverride.ui || {}
+                                      } as any
+                                    } as WebQuestionDefinition;
+                                    const contextHeaderFieldId = (action.contextHeaderFieldId || '').toString().trim();
+                                    const contextHeader = contextHeaderFieldId
+                                      ? `${resolveVirtualValue(virtualValues, contextHeaderFieldId) ?? ''}`.trim()
+                                      : '';
+                                    openLineItemGroupOverlay(overlayGroup, {
+                                      source: 'user',
+                                      hideInlineSubgroups: true,
+                                      hideCloseButton: false,
+                                      closeButtonLabel: resolveLocalizedString(
+                                        action.closeButtonLabel,
+                                        language,
+                                        tSystem('actions.back', language, 'Back')
+                                      ).trim(),
+                                      label: resolveLocalizedString(action.overlayLabel, language, '').trim() || undefined,
+                                      contextHeader: contextHeader || undefined
+                                    });
+                                  }}
+                                >
+                                  {buttonLabel}
+                                </button>
+                              );
+                            })
+                            .filter(Boolean);
+                          if (!nodes.length) return null;
+                          return <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 8 }}>{nodes}</div>;
+                        };
+
+                        return (
+                          <div key={`ds:${config.id || configIndex}`} style={listScrollStyle}>
+                            {sourceRows.map((sourceRow: any, sourceIndex: number) => {
+                              const sourceKey = `${sourceRow?.[(config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
+                              if (!sourceKey) return null;
+                              const existingOutputRow =
+                                outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
+                              const draftKey = buildStepDataSourceDraftKey(config, row.id, sourceKey);
+                              const virtualValues = buildVirtualDataSourceRowValues({
+                                config,
+                                sourceRow,
+                                outputRow: existingOutputRow,
+                                draftValues: stepDataSourceDrafts[draftKey] || null
+                              });
+                              const headlineRule = compactHeadlineRows.find(rule =>
+                                !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                                  rowValues: virtualValues,
+                                  parentValues: row.values as Record<string, FieldValue>
+                                }))
+                              );
+                              const headlineNodes = Array.isArray(headlineRule?.parts)
+                                ? headlineRule.parts
+                                    .map((part: any) => renderHeadlinePart(part, virtualValues, sourceRow))
+                                    .filter(Boolean)
+                                : [];
+                              const sentenceRule = compactSentenceRows.find(rule =>
+                                !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                                  rowValues: virtualValues,
+                                  parentValues: row.values as Record<string, FieldValue>
+                                }))
+                              );
+                              const sentenceParts = Array.isArray(sentenceRule?.parts) ? (sentenceRule.parts as any[]) : [];
+                              const isSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
+                              const sentenceFieldErrors = Array.from(
+                                new Set(
+                                  sentenceParts
+                                    .map((part: any) => {
+                                      const fieldId = (part?.fieldId || '').toString().trim();
+                                      if (!fieldId) return null;
+                                      const field = fieldById.get(fieldId);
+                                      if (!field) return null;
+                                      const errors = validateVirtualFieldRules(
+                                        field,
+                                        virtualValues,
+                                        row.values as Record<string, FieldValue>
+                                      );
+                                      return errors[0] || null;
+                                    })
+                                    .filter(Boolean) as string[]
+                                )
+                              );
+                              const buildSelectionTogglePatch = (checked: boolean): Record<string, any> => {
+                                const patch: Record<string, any> = { [selectedFieldId]: checked };
+                                if (!checked) return patch;
+                                const nextVirtualValues = {
+                                  ...virtualValues,
+                                  [selectedFieldId]: true
+                                } as Record<string, any>;
+                                const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
+                                if (quantityFieldId) {
+                                  const quantityField = fieldById.get(quantityFieldId);
+                                  const currentQty = nextVirtualValues[quantityFieldId];
+                                  const qtyIsEmpty =
+                                    currentQty === undefined ||
+                                    currentQty === null ||
+                                    `${currentQty}`.trim() === '';
+                                  if (quantityField && qtyIsEmpty) {
+                                    const quantityRules = Array.isArray((quantityField as any)?.validationRules)
+                                      ? ((quantityField as any).validationRules as any[])
+                                      : [];
+                                    const ctx = resolveVirtualRowWhenContext({
+                                      rowValues: nextVirtualValues,
+                                      parentValues: row.values as Record<string, FieldValue>
+                                    });
+                                    const maxFieldId = quantityRules.reduce<string>((matched, rule) => {
+                                      if (matched) return matched;
+                                      const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+                                      if (!thenCfg) return '';
+                                      const targetFieldId = (thenCfg.fieldId || quantityField.id || '').toString().trim();
+                                      if (targetFieldId !== `${quantityField.id || ''}`.trim()) return '';
+                                      const candidateMaxFieldId = (thenCfg.maxFieldId || '').toString().trim();
+                                      if (!candidateMaxFieldId) return '';
+                                      if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) return '';
+                                      return candidateMaxFieldId;
+                                    }, '');
+                                    const maxValue = maxFieldId ? nextVirtualValues[maxFieldId] : undefined;
+                                    if (maxValue !== undefined && maxValue !== null && `${maxValue}`.trim() !== '') {
+                                      patch[quantityFieldId] = `${maxValue}`;
+                                      nextVirtualValues[quantityFieldId] = `${maxValue}`;
+                                    }
+                                  }
+                                }
+                                const modeFieldId = (config?.modeFieldId || '').toString().trim();
+                                const defaultModeValue = (config?.defaultModeValue || '').toString().trim();
+                                if (modeFieldId && defaultModeValue) {
+                                  const currentMode = nextVirtualValues[modeFieldId];
+                                  const modeIsEmpty =
+                                    currentMode === undefined ||
+                                    currentMode === null ||
+                                    `${currentMode}`.trim() === '';
+                                  if (modeIsEmpty) {
+                                    patch[modeFieldId] = defaultModeValue;
+                                  }
+                                }
+                                return patch;
+                              };
+                              const actionNodes = renderActionNodes(virtualValues, sourceRow, sourceKey);
+                              return (
+                                <div
+                                  key={`ds-row:${sourceKey}`}
+                                  style={{
+                                    padding: '12px 0',
+                                    borderBottom:
+                                      sourceIndex < sourceRows.length - 1 ? '1px solid var(--border)' : undefined
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, flex: 1 }}>
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'flex-start',
+                                          justifyContent: 'space-between',
+                                          flexWrap: 'wrap',
+                                          gap: 8
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            gap: 10,
+                                            flex: '1 1 280px',
+                                            minWidth: 0
+                                          }}
+                                        >
+                                          {selectedFieldId ? (
+                                            <label
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                minHeight: 32,
+                                                minWidth: 32,
+                                                paddingRight: 0,
+                                                flex: '0 0 auto',
+                                                paddingTop: 2
+                                              }}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={event =>
+                                                  syncStepDataSourceOutputRow({
+                                                    config,
+                                                    parentRow: row,
+                                                    sourceRow,
+                                                    patch: buildSelectionTogglePatch(event.target.checked)
+                                                  })
+                                                }
+                                                style={{
+                                                  width: 32,
+                                                  height: 32,
+                                                  margin: 0,
+                                                  accentColor: 'var(--accent)'
+                                                }}
+                                              />
+                                            </label>
+                                          ) : null}
+                                          <div
+                                            style={{
+                                              fontSize: 'calc(var(--ck-font-control) * 1.16)',
+                                              lineHeight: 1.35,
+                                              overflowWrap: 'anywhere',
+                                              flex: '1 1 280px',
+                                              minWidth: 0
+                                            }}
+                                          >
+                                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{headlineNodes}</span>
+                                          </div>
+                                        </div>
+                                        {actionNodes}
+                                      </div>
+                                      {sentenceParts.length && isSelected ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: sentenceFieldErrors.length ? 6 : 0, minWidth: 0 }}>
+                                          <div
+                                            style={{
+                                              display: 'flex',
+                                              flexWrap: 'nowrap',
+                                              alignItems: 'center',
+                                              columnGap: 6,
+                                              rowGap: 6,
+                                              minWidth: 0,
+                                              lineHeight: 1.35,
+                                              overflowX: 'auto'
+                                            }}
+                                          >
+                                            {sentenceParts.map((part: any, partIndex: number) => {
+                                            if (!part || typeof part !== 'object') return null;
+                                            const partType = ((part.type || '').toString() || (part.fieldId ? 'field' : 'text')).toLowerCase();
+                                            if (partType === 'text') {
+                                              const text = resolveLocalizedString(part.text, language, '');
+                                              return text ? (
+                                                <span
+                                                  key={`text:${sourceKey}:${partIndex}`}
+                                                  style={{
+                                                    color: 'var(--muted)',
+                                                    fontWeight: 600,
+                                                    fontSize: 'var(--ck-font-control)',
+                                                    whiteSpace: 'nowrap',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    minHeight: 40
+                                                  }}
+                                                >
+                                                  {text}
+                                                </span>
+                                              ) : null;
+                                            }
+                                            const fieldId = (part.fieldId || '').toString().trim();
+                                            if (!fieldId) return null;
+                                            const field = fieldById.get(fieldId);
+                                            if (!field) return null;
+                                            if (field.type === 'NUMBER') {
+                                              const rawValue = virtualValues[fieldId];
+                                              const valueText =
+                                                rawValue === undefined || rawValue === null ? '' : rawValue.toString();
+                                              const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.2;
+                                              const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 48;
+                                              const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 132;
+                                              const suffixText = part.suffix
+                                                ? resolveLocalizedString(part.suffix, language, '')
+                                                : part.suffixFieldId
+                                                  ? resolveVirtualDisplay(virtualValues, fieldById.get(part.suffixFieldId))
+                                                  : '';
+                                              const allowsIntegerOnly =
+                                                Array.isArray((field as any)?.validationRules) &&
+                                                (field as any).validationRules.some((rule: any) => {
+                                                  const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+                                                  if (!thenCfg) return false;
+                                                  const targetFieldId = (thenCfg.fieldId || field.id || '').toString().trim();
+                                                  if (targetFieldId !== `${field.id || ''}`.trim()) return false;
+                                                  if (thenCfg.integer !== true) return false;
+                                                  if (!rule?.when) return true;
+                                                  return matchesWhenClause(
+                                                    rule.when as any,
+                                                    resolveVirtualRowWhenContext({
+                                                      rowValues: virtualValues,
+                                                      parentValues: row.values as Record<string, FieldValue>
+                                                    })
+                                                  );
+                                                });
+                                              const sanitizeNumericValue = (raw: string): string => {
+                                                const text = (raw || '').toString();
+                                                if (!text.trim()) return '';
+                                                if (allowsIntegerOnly) return text.replace(/[^\d]/g, '');
+                                                let seenSeparator = false;
+                                                let sanitized = '';
+                                                for (const char of text) {
+                                                  if (/\d/.test(char)) {
+                                                    sanitized += char;
+                                                    continue;
+                                                  }
+                                                  if ((char === '.' || char === ',') && !seenSeparator) {
+                                                    sanitized += char;
+                                                    seenSeparator = true;
+                                                  }
+                                                }
+                                                return sanitized;
+                                              };
+                                              return (
+                                                <span
+                                                  key={`field:${sourceKey}:${fieldId}`}
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 6,
+                                                    flex: '0 0 auto',
+                                                    whiteSpace: 'nowrap',
+                                                    minWidth: 0,
+                                                    flexWrap: 'nowrap'
+                                                  }}
+                                                  data-compact-cluster="true"
+                                                >
+                                                  <AutoWidthInput
+                                                    className="ck-compact-control ck-compact-control--number"
+                                                    value={valueText}
+                                                    disabled={isLineFieldInteractionBlocked(field)}
+                                                    readOnly={false}
+                                                    inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
+                                                    pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                                                    ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                                    selectAllOnFocus
+                                                    sanitize={sanitizeNumericValue}
+                                                    minWidth={minWidth}
+                                                    maxWidth={maxWidth}
+                                                    extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
+                                                    onChange={next =>
+                                                      syncStepDataSourceOutputRow({
+                                                        config,
+                                                        parentRow: row,
+                                                        sourceRow,
+                                                        patch: {
+                                                          ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                                          [fieldId]: next === '' ? null : next
+                                                        }
+                                                      })
+                                                    }
+                                                    style={{ flex: '0 0 auto' }}
+                                                    inputStyle={{
+                                                      boxSizing: 'border-box',
+                                                      minHeight: 34,
+                                                      paddingInlineStart: 8,
+                                                      paddingInlineEnd: 8,
+                                                      textAlign: 'center',
+                                                      fontVariantNumeric: 'tabular-nums',
+                                                      fontSize: 'var(--ck-font-control)',
+                                                      fontWeight: 500,
+                                                      lineHeight: 1
+                                                    }}
+                                                  />
+                                                  {suffixText ? (
+                                                    <span
+                                                      style={{
+                                                        fontSize: 'var(--ck-font-control)',
+                                                        whiteSpace: 'nowrap',
+                                                        flex: '0 0 auto',
+                                                        marginInlineStart: 0
+                                                      }}
+                                                    >
+                                                      {suffixText}
+                                                    </span>
+                                                  ) : null}
+                                                </span>
+                                              );
+                                            }
+                                            if (field.type === 'CHOICE') {
+                                              const rawValue = virtualValues[fieldId];
+                                              const valueText =
+                                                Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
+                                              const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
+                                                sort: optionSortFor(field)
+                                              }).map(option => ({
+                                                value: option.value,
+                                                label: option.label,
+                                                tooltip: option.tooltip,
+                                                searchText: option.searchText
+                                              }));
+                                              const controlDecision = computeChoiceControlVariant(
+                                                options.map(option => ({ value: option.value, label: option.label })),
+                                                !!field.required,
+                                                ((field as any)?.ui?.control || '').toString()
+                                              );
+                                              const selectedLabel =
+                                                options.find(option => option.value === valueText)?.label ||
+                                                resolveLocalizedString((part as any)?.placeholder, language, '') ||
+                                                tSystem('common.selectPlaceholder', language, 'Select…');
+                                              const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.8;
+                                              const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 76;
+                                              const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 156;
+                                              if (controlDecision.variant === 'segmented') {
+                                                return (
+                                                  <span
+                                                    key={`field:${sourceKey}:${fieldId}`}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
+                                                    data-compact-cluster="true"
+                                                  >
+                                                    <div
+                                                      className="ck-choice-control ck-segmented"
+                                                      role="radiogroup"
+                                                      aria-label={resolveFieldLabel(field, language, field.id)}
+                                                      style={{ width: 'auto', maxWidth: 'none', flex: '0 0 auto' }}
+                                                    >
+                                                      {options.map(option => {
+                                                        const active = valueText === option.value;
+                                                        return (
+                                                          <button
+                                                            key={option.value}
+                                                            type="button"
+                                                            className={active ? 'active' : undefined}
+                                                            role="radio"
+                                                            aria-checked={active}
+                                                            title={option.label}
+                                                            disabled={isLineFieldInputDisabled(field)}
+                                                            onClick={() =>
+                                                              syncStepDataSourceOutputRow({
+                                                                config,
+                                                                parentRow: row,
+                                                                sourceRow,
+                                                                patch: {
+                                                                  ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                                                  [fieldId]: option.value
+                                                                }
+                                                              })
+                                                            }
+                                                            style={{
+                                                              flex: '0 0 auto',
+                                                              minWidth: 'unset',
+                                                              whiteSpace: 'nowrap'
+                                                            }}
+                                                          >
+                                                            {option.label}
+                                                          </button>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                  </span>
+                                                );
+                                              }
+                                              return (
+                                                <span
+                                                  key={`field:${sourceKey}:${fieldId}`}
+                                                  style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
+                                                  data-compact-cluster="true"
+                                                >
+                                                  <AutoWidthSelect
+                                                    value={valueText}
+                                                    options={options.map(option => ({
+                                                      value: option.value,
+                                                      label: option.label
+                                                    }))}
+                                                    disabled={isLineFieldInputDisabled(field)}
+                                                    ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                                    className="ck-compact-control ck-compact-control--choice"
+                                                    minWidth={minWidth}
+                                                    maxWidth={maxWidth}
+                                                    extraWidth={Math.max(30, Math.ceil(paddingChars * 7))}
+                                                    placeholder={selectedLabel}
+                                                    style={{ flex: '0 0 auto' }}
+                                                    selectStyle={{
+                                                      boxSizing: 'border-box',
+                                                      minHeight: 34,
+                                                      paddingInlineStart: 12,
+                                                      paddingInlineEnd: 28,
+                                                      fontSize: 'var(--ck-font-control)',
+                                                      fontWeight: 500,
+                                                      lineHeight: 1
+                                                    }}
+                                                    onChange={next =>
+                                                      syncStepDataSourceOutputRow({
+                                                        config,
+                                                        parentRow: row,
+                                                        sourceRow,
+                                                        patch: {
+                                                          ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                                          [fieldId]: next
+                                                        }
+                                                      })
+                                                    }
+                                                  />
+                                                </span>
+                                              );
+                                            }
+                                            return null;
+                                          })}
+                                          </div>
+                                          {sentenceFieldErrors.length ? (
+                                            <div className="error" style={{ marginTop: 2 }}>
+                                              {sentenceFieldErrors[0]}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {!hideInlineSubgroups && (!isProgressive || !rowCollapsed) && (q.lineItemConfig?.subGroups || []).map(sub => {
                     const subLabelResolved = resolveLocalizedString(
                       sub.label,
                       language,
@@ -8256,9 +9878,21 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const subId = sub.id || subLabelResolved;
                     if (!subId) return null;
                     const subKey = buildSubgroupKey(q.id, row.id, subId);
-                    const collapsed = collapsedSubgroups[subKey] ?? true;
+                    const collapsed =
+                      collapsedSubgroups[subKey] ?? ((sub as any)?.ui?.defaultCollapsed !== undefined ? !!(sub as any)?.ui?.defaultCollapsed : true);
                     const subRows = lineItems[subKey] || [];
-                    const orderedSubRows = [...subRows];
+                    const orderedSubRows = [...subRows].filter(subRow => {
+                      const hideRowsWithoutAnchor = (sub as any)?.ui?.hideRowsWithoutAnchor === true;
+                      const anchorFieldId =
+                        (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
+                          ? (sub as any).anchorFieldId.toString()
+                          : '';
+                      return shouldRenderCompactLineItemRow({
+                        rowValues: (subRow as any)?.values as Record<string, any> | undefined,
+                        anchorFieldId,
+                        hideRowsWithoutAnchor
+                      });
+                    });
                     const subTotals = computeTotals({ config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows }, language);
                     const subSelectorCfg = sub.sectionSelector;
                     const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
@@ -8415,7 +10049,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                                 if (loaded) {
                                   opts = loaded;
-                                  setOptionState(prev => ({ ...prev, [key]: loaded }));
+                                  setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                                 }
                               }
                               if (!opts) {
@@ -8519,7 +10153,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
                               if (loaded) {
                                 opts = loaded;
-                                setOptionState(prev => ({ ...prev, [key]: loaded }));
+                                setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                               }
                             }
                             if (!opts) {
@@ -8564,6 +10198,31 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const subCount = orderedSubRows.length;
                     const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
                     const isSubTableMode = subUiMode === 'table';
+                    const subMaxVisibleRowsRaw = Number((subUi as any)?.maxVisibleRows);
+                    const subTableScrollStyle =
+                      Number.isFinite(subMaxVisibleRowsRaw) && subMaxVisibleRowsRaw > 0
+                        ? ({
+                            maxHeight: `${Math.max(1, Math.floor(subMaxVisibleRowsRaw)) * 56}px`,
+                            overflowY: 'auto' as const,
+                            overflowX: 'auto' as const,
+                            WebkitOverflowScrolling: 'touch' as const,
+                            overscrollBehavior: 'contain' as const,
+                            touchAction: 'pan-x pan-y' as const
+                          })
+                        : undefined;
+                    const subListScrollStyle =
+                      Number.isFinite(subMaxVisibleRowsRaw) && subMaxVisibleRowsRaw > 0
+                        ? ({
+                            maxHeight: `${Math.max(1, Math.floor(subMaxVisibleRowsRaw)) * ((subUi as any)?.compactRows === true ? 132 : 108)}px`,
+                            overflowY: 'auto' as const,
+                            overflowX: 'hidden' as const,
+                            WebkitOverflowScrolling: 'touch' as const,
+                            overscrollBehavior: 'contain' as const,
+                            touchAction: 'pan-y' as const
+                          })
+                        : undefined;
+                    const subHideRemoveColumn = (subUi as any)?.hideRemoveColumn === true;
+                    const inlineSubgroupChromeHidden = ui?.inlineSubgroupsWhenExpanded === true;
                     const subAnchorFieldId =
                       sub.anchorFieldId !== undefined && sub.anchorFieldId !== null ? sub.anchorFieldId.toString() : '';
                     const subHideUntilAnchor = (subUi as any)?.tableHideUntilAnchor !== false;
@@ -8583,14 +10242,24 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       });
                     };
                     return (
-                      <div key={subKey} className="card" style={{ marginTop: 12, background: 'var(--card)' }}>
+                      <div
+                        key={subKey}
+                        className={inlineSubgroupChromeHidden ? '' : 'card'}
+                        style={
+                          inlineSubgroupChromeHidden
+                            ? { marginTop: 8, background: 'transparent' }
+                            : { marginTop: 12, background: 'var(--card)' }
+                        }
+                      >
                         <div
                           className="subgroup-header"
-                          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+                          style={{ display: 'flex', flexDirection: 'column', gap: inlineSubgroupChromeHidden ? 0 : 6 }}
                         >
-                          <div style={{ textAlign: 'center', fontWeight: 600 }}>
-                            {subLabelResolved || subId}
-                          </div>
+                          {!inlineSubgroupChromeHidden ? (
+                            <div style={{ textAlign: 'center', fontWeight: 600 }}>
+                              {subLabelResolved || subId}
+                            </div>
+                          ) : null}
                           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
                               {(() => {
@@ -8660,31 +10329,33 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 );
                               })()}
                             </div>
-                            <div style={{ marginLeft: 'auto' }}>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setCollapsedSubgroups(prev => ({
-                                    ...prev,
-                                    [subKey]: !(prev[subKey] ?? true)
-                                  }))
-                                }
-                                aria-expanded={!collapsed}
-                                aria-controls={`${subKey}-body`}
-                                style={buttonStyles.secondary}
-                              >
-                                {collapsed
-                                  ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                  : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                              </button>
-                            </div>
+                            {!inlineSubgroupChromeHidden ? (
+                              <div style={{ marginLeft: 'auto' }}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCollapsedSubgroups(prev => ({
+                                      ...prev,
+                                      [subKey]: !(prev[subKey] ?? true)
+                                    }))
+                                  }
+                                  aria-expanded={!collapsed}
+                                  aria-controls={`${subKey}-body`}
+                                  style={buttonStyles.secondary}
+                                >
+                                  {collapsed
+                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         {collapsed ? null : (
                         <div id={`${subKey}-body`}>
-                        <div style={{ marginTop: 8 }}>
+                        <div style={isSubTableMode ? { marginTop: 8 } : { marginTop: 8, ...(subListScrollStyle || {}) }}>
                         {isSubTableMode ? (
-                          <div className="ck-line-item-table__scroll">
+                          <div className="ck-line-item-table__scroll" style={subTableScrollStyle}>
                             <LineItemTable
                               columns={[
                                 ...((() => {
@@ -8732,13 +10403,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     }
 
                                     ensureLineOptions(subKey, field);
-                                    const optionSetField: OptionSet =
-                                      optionState[optionKey(field.id, subKey)] || {
-                                        en: field.options || [],
-                                        fr: (field as any).optionsFr || [],
-                                        nl: (field as any).optionsNl || [],
-                                        raw: (field as any).optionsRaw
-                                      };
+                                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
                                     const dependencyIds = (
                                       Array.isArray(field.optionFilter?.dependsOn)
                                         ? field.optionFilter?.dependsOn
@@ -8801,6 +10466,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     }
 
                                     if (field.type === 'CHECKBOX') {
+                                      const hasAnyOption =
+                                        !!((optionSetField.en && optionSetField.en.length) ||
+                                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
+                                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
+                                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
                                       const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
                                       const allowedWithSelected = selected.reduce((acc, val) => {
                                         if (val && !acc.includes(val)) acc.push(val);
@@ -8808,9 +10478,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       }, [...allowedField]);
                                       const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
                                       if (renderAsLabel) {
-                                        const labels = selected
-                                          .map(val => optsField.find(opt => opt.value === val)?.label || val)
-                                          .filter(Boolean);
+                                        const labels = isConsentCheckbox
+                                          ? [
+                                              subRow.values[field.id]
+                                                ? tSystem('common.yes', language, 'Yes')
+                                                : tSystem('common.no', language, 'No')
+                                            ]
+                                          : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
                                         return (
                                           <div className="ck-line-item-table__value" data-field-path={fieldPath}>
                                             {resolveLineItemTableReadOnlyDisplay({
@@ -8819,6 +10493,27 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                               rowValues: (subRow.values || {}) as Record<string, FieldValue>,
                                               language
                                             })}
+                                          </div>
+                                        );
+                                      }
+                                      if (isConsentCheckbox) {
+                                        return (
+                                          <div className="ck-line-item-table__control ck-line-item-table__control--consent" data-field-path={fieldPath}>
+                                            <label className="inline">
+                                              <input
+                                                type="checkbox"
+                                                className="ck-line-item-table__consent-checkbox"
+                                                checked={!!subRow.values[field.id]}
+                                                aria-label={resolveFieldLabel(field, language, field.id)}
+                                                disabled={isLineFieldInputDisabled(field)}
+                                                onChange={e => {
+                                                  if (isLineFieldInputDisabled(field)) return;
+                                                  handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
+                                                }}
+                                              />
+                                              <span style={srOnly}>{resolveFieldLabel(field, language, field.id)}</span>
+                                            </label>
+                                            {renderErrors()}
                                           </div>
                                         );
                                       }
@@ -9063,30 +10758,34 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       style: resolveSubColumnStyle(field.id),
                                       renderCell: (subRow: any) => renderSubTableField(field, subRow)
                                     })),
-                                    {
-                                      id: '__remove',
-                                      label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
-                                      className: 'ck-line-item-table__actions',
-                                      style: resolveSubColumnStyle('__remove'),
-                                      renderCell: (subRow: any) => {
-                                        const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
-                                        const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
-                                        const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
-                                        const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
-                                        if (!canRemoveSubRow) return null;
-                                        return (
-                                          <button
-                                            type="button"
-                                            className="ck-line-item-table__remove-button"
-                                            onClick={() => removeLineRow(subKey, subRow.id)}
-                                            aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                            title={tSystem('lineItems.remove', language, 'Remove')}
-                                          >
-                                            <TrashIcon size={40} />
-                                          </button>
-                                        );
-                                      }
-                                    }
+                                    ...(subHideRemoveColumn
+                                      ? []
+                                      : [
+                                          {
+                                            id: '__remove',
+                                            label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
+                                            className: 'ck-line-item-table__actions',
+                                            style: resolveSubColumnStyle('__remove'),
+                                            renderCell: (subRow: any) => {
+                                              const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
+                                              const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
+                                              const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
+                                              const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
+                                              if (!canRemoveSubRow) return null;
+                                              return (
+                                                <button
+                                                  type="button"
+                                                  className="ck-line-item-table__remove-button"
+                                                  onClick={() => removeLineRow(subKey, subRow.id)}
+                                                  aria-label={tSystem('lineItems.remove', language, 'Remove')}
+                                                  title={tSystem('lineItems.remove', language, 'Remove')}
+                                                >
+                                                  <TrashIcon size={40} />
+                                                </button>
+                                              );
+                                            }
+                                          }
+                                        ])
                                   ];
                                 })())
                               ]}
@@ -9113,6 +10812,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
                           const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
                           const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
+                          const useCompactSubRows = (subUi as any)?.compactRows === true;
                           return (
                             <div
                               key={subRow.id}
@@ -9120,10 +10820,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               data-row-anchor={`${subKey}__${subRow.id}`}
                               style={{
                                 background: 'transparent',
-                                padding: 12,
-                                borderRadius: 10,
-                                border: '1px solid var(--border)',
-                                marginBottom: 10
+                                padding: useCompactSubRows ? '10px 0' : 12,
+                                borderRadius: useCompactSubRows ? 0 : 10,
+                                border: useCompactSubRows ? 'none' : '1px solid var(--border)',
+                                borderBottom:
+                                  useCompactSubRows && subIdx < orderedSubRows.length - 1 ? '1px solid var(--border)' : undefined,
+                                marginBottom: useCompactSubRows ? 0 : 10
                               }}
                             >
                               {!subRow.autoGenerated && (
@@ -9136,13 +10838,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               {(() => {
                                 const renderSubField = (field: any, opts?: { inGrid?: boolean }) => {
                                 ensureLineOptions(subKey, field);
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(field.id, subKey)] || {
-                                    en: field.options || [],
-                                    fr: (field as any).optionsFr || [],
-                                    nl: (field as any).optionsNl || [],
-                                    raw: (field as any).optionsRaw
-                                  };
+                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
                                 const dependencyIds = (
                                   Array.isArray(field.optionFilter?.dependsOn)
                                     ? field.optionFilter?.dependsOn
@@ -9678,6 +11374,1252 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   return !hideField;
                                 });
 
+                                const compactLayout = useCompactSubRows ? deriveCompactLineItemLayout(visibleFields) : null;
+                                const allFieldById = new Map<string, any>(
+                                  ((sub.fields || []) as any[]).map(field => [field.id.toString(), field] as const)
+                                );
+                                const visibleFieldById = new Map<string, any>(
+                                  visibleFields.map(field => [field.id.toString(), field] as const)
+                                );
+
+                                const resolveCompactFieldValue = (fieldId: string): any => {
+                                  if (Object.prototype.hasOwnProperty.call(subRow.values || {}, fieldId)) return (subRow.values || {})[fieldId];
+                                  if (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId)) return (row.values || {})[fieldId];
+                                  return values[fieldId];
+                                };
+                                const compactMappedValueCache = new Map<string, any>();
+                                const normalizeCompactLookupValue = (value: any): string => {
+                                  if (value === undefined || value === null) return '';
+                                  if (Array.isArray(value)) {
+                                    const firstNonEmpty = value.find(entry => entry !== undefined && entry !== null && `${entry}`.trim() !== '');
+                                    return firstNonEmpty === undefined || firstNonEmpty === null ? '' : `${firstNonEmpty}`.trim().toLowerCase();
+                                  }
+                                  return `${value}`.trim().toLowerCase();
+                                };
+                                const getCompactSourceValue = (sourceRow: any, sourceField: any): any => {
+                                  if (!sourceRow || sourceField === undefined || sourceField === null) return undefined;
+                                  const path = `${sourceField}`.trim();
+                                  if (!path) return undefined;
+                                  const resolveSegment = (acc: any, segment: string) => {
+                                    if (acc === undefined || acc === null || typeof acc !== 'object') return undefined;
+                                    if (acc?.[segment] !== undefined) return acc[segment];
+                                    const normalized = segment.toLowerCase();
+                                    const fallbackKey = Object.keys(acc).find(key => key.toLowerCase() === normalized);
+                                    return fallbackKey ? acc[fallbackKey] : undefined;
+                                  };
+                                  const resolveFromCandidate = (candidate: any): any => {
+                                    if (!candidate) return undefined;
+                                    if (!path.includes('.')) return resolveSegment(candidate, path);
+                                    return path.split('.').reduce((acc: any, segment: string) => resolveSegment(acc, segment), candidate);
+                                  };
+                                  const directValue = resolveFromCandidate(sourceRow);
+                                  if (directValue !== undefined) return directValue;
+                                  if (sourceRow && typeof sourceRow === 'object' && sourceRow.values && typeof sourceRow.values === 'object') {
+                                    return resolveFromCandidate(sourceRow.values);
+                                  }
+                                  return undefined;
+                                };
+                                const resolveCompactMappedValue = (fieldId: string): any => {
+                                  if (compactMappedValueCache.has(fieldId)) return compactMappedValueCache.get(fieldId);
+                                  const localValue = resolveCompactFieldValue(fieldId);
+                                  if (localValue !== undefined && localValue !== null && `${localValue}` !== '') {
+                                    compactMappedValueCache.set(fieldId, localValue);
+                                    return localValue;
+                                  }
+                                  for (const candidateField of allFieldById.values()) {
+                                    const effects = Array.isArray((candidateField as any)?.selectionEffects)
+                                      ? ((candidateField as any).selectionEffects as any[])
+                                      : [];
+                                    if (!effects.length) continue;
+                                    const matchedEffect = effects.find(effect => {
+                                      if (!effect || effect.type !== 'setValuesFromDataSource') return false;
+                                      const mapping = effect.fieldMapping && typeof effect.fieldMapping === 'object' ? effect.fieldMapping : {};
+                                      return Object.prototype.hasOwnProperty.call(mapping, fieldId);
+                                    });
+                                    if (!matchedEffect) continue;
+                                    const mapping = matchedEffect.fieldMapping && typeof matchedEffect.fieldMapping === 'object'
+                                      ? matchedEffect.fieldMapping
+                                      : {};
+                                    const sourcePath = mapping[fieldId];
+                                    if (!sourcePath) continue;
+                                    const selectedValue = resolveCompactFieldValue(candidateField.id);
+                                    const normalizedSelected = normalizeCompactLookupValue(selectedValue);
+                                    if (!normalizedSelected) continue;
+                                    ensureLineOptions(subKey, candidateField);
+                                    const optionSet = resolveOptionSetForField(optionState, candidateField, subKey) as any;
+                                    const cachedDataSource = (candidateField as any)?.dataSource
+                                      ? peekCachedDataSource((candidateField as any).dataSource, language)
+                                      : null;
+                                    const rawRows = Array.isArray(optionSet?.raw)
+                                      ? optionSet.raw
+                                      : Array.isArray((cachedDataSource as any)?.items)
+                                        ? (cachedDataSource as any).items
+                                        : Array.isArray(cachedDataSource)
+                                          ? cachedDataSource
+                                          : [];
+                                    if (!rawRows.length) continue;
+                                    const lookupField = `${matchedEffect.lookupField || candidateField.id}`.trim();
+                                    if (!lookupField) continue;
+                                    const matchedRow = rawRows.find((sourceRow: any) => {
+                                      const candidateValue =
+                                        getCompactSourceValue(sourceRow, lookupField) ??
+                                        getCompactSourceValue(sourceRow, '__ckOptionValue');
+                                      return normalizeCompactLookupValue(candidateValue) === normalizedSelected;
+                                    });
+                                    if (!matchedRow) continue;
+                                    const mappedValue = getCompactSourceValue(matchedRow, sourcePath);
+                                    if (mappedValue !== undefined && mappedValue !== null && `${mappedValue}` !== '') {
+                                      compactMappedValueCache.set(fieldId, mappedValue);
+                                      return mappedValue;
+                                    }
+                                  }
+                                  compactMappedValueCache.set(fieldId, localValue);
+                                  return localValue;
+                                };
+                                const resolveCompactSourceRows = (sourceField: any): any[] => {
+                                  if (!sourceField) return [];
+                                  ensureLineOptions(subKey, sourceField);
+                                  const optionSet = resolveOptionSetForField(optionState, sourceField, subKey) as any;
+                                  if (Array.isArray(optionSet?.raw) && optionSet.raw.length) return optionSet.raw;
+                                  const cachedDataSource = (sourceField as any)?.dataSource
+                                    ? peekCachedDataSource((sourceField as any).dataSource, language)
+                                    : null;
+                                  if (Array.isArray((cachedDataSource as any)?.items)) return (cachedDataSource as any).items;
+                                  if (Array.isArray(cachedDataSource)) return cachedDataSource;
+                                  return [];
+                                };
+                                const resolveCompactSourceRow = (
+                                  sourceField: any,
+                                  opts?: { lookupField?: string; selectedValue?: any }
+                                ): any | null => {
+                                  if (!sourceField) return null;
+                                  const selectedValue =
+                                    opts && Object.prototype.hasOwnProperty.call(opts, 'selectedValue')
+                                      ? opts.selectedValue
+                                      : resolveCompactFieldValue(sourceField.id);
+                                  const normalizedSelected = normalizeCompactLookupValue(selectedValue);
+                                  if (!normalizedSelected) return null;
+                                  const rawRows = resolveCompactSourceRows(sourceField);
+                                  if (!rawRows.length) return null;
+                                  const lookupField = `${opts?.lookupField || sourceField.id}`.trim();
+                                  if (!lookupField) return null;
+                                  return (
+                                    rawRows.find((sourceRow: any) => {
+                                      const candidateValue =
+                                        getCompactSourceValue(sourceRow, lookupField) ??
+                                        getCompactSourceValue(sourceRow, '__ckOptionValue');
+                                      return normalizeCompactLookupValue(candidateValue) === normalizedSelected;
+                                    }) || null
+                                  );
+                                };
+                                const resolveCompactValueMapFallback = (field: any): any => {
+                                  const valueMap = field?.valueMap;
+                                  if (!valueMap || typeof valueMap !== 'object') return undefined;
+                                  const optionMapRef = (valueMap as any).optionMapRef;
+                                  if (!optionMapRef || typeof optionMapRef !== 'object') return undefined;
+                                  const dependsOnRaw = (valueMap as any).dependsOn;
+                                  const dependsOn = Array.isArray(dependsOnRaw)
+                                    ? `${dependsOnRaw[0] || ''}`.trim()
+                                    : `${dependsOnRaw || ''}`.trim();
+                                  if (!dependsOn) return undefined;
+                                  const sourceField = allFieldById.get(dependsOn);
+                                  if (!sourceField) return undefined;
+                                  const lookupField = `${(optionMapRef as any).keyColumn || sourceField.id || ''}`.trim();
+                                  const lookupColumn = `${(optionMapRef as any).lookupColumn || ''}`.trim();
+                                  if (!lookupField || !lookupColumn) return undefined;
+                                  const sourceRow = resolveCompactSourceRow(sourceField, { lookupField });
+                                  if (!sourceRow) return undefined;
+                                  return getCompactSourceValue(sourceRow, lookupColumn);
+                                };
+
+                                const resolveCompactDisplay = (field: any): React.ReactNode => {
+                                  if (!field) return null;
+                                  switch (field.type) {
+                                    case 'CHOICE': {
+                                      const rawVal = resolveCompactMappedValue(field.id);
+                                      const choiceVal =
+                                        Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                                      const selected = optsFieldForCompact(field).find(opt => opt.value === choiceVal);
+                                      return selected?.label || choiceVal || null;
+                                    }
+                                    case 'CHECKBOX': {
+                                      const hasAnyOption =
+                                        !!((resolveOptionSetForField(optionState, field, subKey).en || []).length ||
+                                          (((resolveOptionSetForField(optionState, field, subKey) as any).fr || []).length) ||
+                                          (((resolveOptionSetForField(optionState, field, subKey) as any).nl || []).length));
+                                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
+                                      if (isConsentCheckbox) {
+                                        return subRow.values[field.id]
+                                          ? tSystem('common.yes', language, 'Yes')
+                                          : tSystem('common.no', language, 'No');
+                                      }
+                                      const rawVal = resolveCompactMappedValue(field.id);
+                                      const selected = Array.isArray(rawVal) ? (rawVal as string[]) : [];
+                                      const localized = optsFieldForCompact(field);
+                                      const labels = selected
+                                        .map(val => localized.find(opt => opt.value === val)?.label || val)
+                                        .filter(Boolean);
+                                      return labels.length ? labels.join(', ') : null;
+                                    }
+                                    default: {
+                                      const mapped = field.valueMap
+                                        ? resolveValueMapValue(
+                                            field.valueMap,
+                                            (fid: string) => {
+                                              return resolveCompactMappedValue(fid);
+                                            },
+                                            { language, targetOptions: toOptionSet(field) }
+                                          )
+                                        : undefined;
+                                      const derived =
+                                        !field.valueMap && field.derivedValue
+                                          ? resolveDerivedValue(field.derivedValue, (fid: string) => {
+                                              return resolveCompactMappedValue(fid);
+                                            })
+                                          : undefined;
+                                      const fieldValueRaw =
+                                        field.valueMap
+                                          ? (mapped !== undefined && mapped !== null && mapped !== ''
+                                              ? mapped
+                                              : resolveCompactValueMapFallback(field))
+                                          : derived !== undefined && derived !== null && derived !== ''
+                                            ? derived
+                                            : resolveCompactMappedValue(field.id);
+                                      const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
+                                      if (field.type === 'NUMBER') {
+                                        return fieldValue === undefined || fieldValue === null || fieldValue === '' ? null : `${fieldValue}`;
+                                      }
+                                      return fieldValue || null;
+                                    }
+                                  }
+                                };
+
+                                function optsFieldForCompact(field: any) {
+                                  ensureLineOptions(subKey, field);
+                                  const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
+                                  const dependencyIds = (
+                                    Array.isArray(field.optionFilter?.dependsOn)
+                                      ? field.optionFilter?.dependsOn
+                                      : [field.optionFilter?.dependsOn || '']
+                                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                                  const allowedField = computeAllowedOptions(
+                                    field.optionFilter,
+                                    optionSetField,
+                                    dependencyIds.map((dep: string) => {
+                                      const selectorFallback =
+                                        subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
+                                      return toDependencyValue(subRow.values[dep] ?? values[dep] ?? row.values[dep] ?? selectorFallback);
+                                    })
+                                  );
+                                  const currentVal = subRow.values[field.id];
+                                  const allowedWithCurrent =
+                                    currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
+                                      ? [...allowedField, currentVal]
+                                      : allowedField;
+                                  const selectedSub = Array.isArray(subRow.values[field.id])
+                                    ? (subRow.values[field.id] as string[])
+                                    : null;
+                                  const allowedWithSelection =
+                                    selectedSub && selectedSub.length
+                                      ? selectedSub.reduce((acc, val) => {
+                                          if (val && !acc.includes(val)) acc.push(val);
+                                          return acc;
+                                        }, [...allowedWithCurrent])
+                                      : allowedWithCurrent;
+                                  return buildLocalizedOptions(optionSetField, allowedWithSelection, language, {
+                                    sort: optionSortFor(field)
+                                  });
+                                }
+
+                                const renderCompactControlField = (
+                                  field: any,
+                                  opts?: { compactInline?: boolean }
+                                ): React.ReactNode => {
+                                  if (!field) return null;
+                                  const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                                  const labelText = resolveFieldLabel(field, language, field.id);
+                                  const attachedDisplayIds = compactLayout?.attachedDisplayFieldIdsByControl[field.id] || [];
+                                  const attachedDisplay = attachedDisplayIds
+                                    .map(fid => resolveCompactDisplay(visibleFieldById.get(fid)))
+                                    .filter(Boolean)
+                                    .join(' ');
+                                  const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                  const helperText = helperCfg.text;
+                                  const supportsPlaceholder =
+                                    field.type === 'TEXT' || field.type === 'PARAGRAPH' || field.type === 'NUMBER';
+                                  const effectivePlacement =
+                                    helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
+                                  const helperId =
+                                    helperText && effectivePlacement === 'belowLabel'
+                                      ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                                      : undefined;
+                                  const helperNode =
+                                    helperText && effectivePlacement === 'belowLabel' ? (
+                                      <div id={helperId} className="ck-field-helper">
+                                        {helperText}
+                                      </div>
+                                    ) : null;
+                                  const placeholder = helperText && effectivePlacement === 'placeholder' ? helperText : undefined;
+
+                                  let controlNode: React.ReactNode = null;
+                                  const isCompactInline = !!opts?.compactInline;
+                                  const compactControlWidth =
+                                    field.type === 'CHOICE'
+                                      ? 132
+                                      : field.type === 'NUMBER'
+                                        ? 92
+                                        : undefined;
+                                  switch (field.type) {
+                                    case 'CHOICE': {
+                                      const rawVal = subRow.values[field.id];
+                                      const choiceVal =
+                                        Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
+                                      controlNode = renderChoiceControl({
+                                        fieldPath,
+                                        value: choiceVal || '',
+                                        options: optsFieldForCompact(field),
+                                        required: !!field.required,
+                                        searchEnabled:
+                                          (field as any)?.ui?.choiceSearchEnabled ??
+                                          (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),
+                                        override: (field as any)?.ui?.control,
+                                        disabled: isLineFieldInputDisabled(field),
+                                        onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
+                                      });
+                                      break;
+                                    }
+                                    case 'NUMBER': {
+                                      const fieldValue = (subRow.values[field.id] as any) ?? '';
+                                      const numberText =
+                                        fieldValue === undefined || fieldValue === null ? '' : fieldValue.toString();
+                                      controlNode = (
+                                        <NumberStepper
+                                          value={numberText}
+                                          disabled={isLineFieldInteractionBlocked(field)}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
+                                          ariaLabel={labelText}
+                                          ariaDescribedBy={helperId}
+                                          placeholder={placeholder}
+                                          onInvalidInput={({ value }) => {
+                                            const numericOnlyMessage = tSystem(
+                                              'validation.numberOnly',
+                                              language,
+                                              'Only numbers are allowed in this field.'
+                                            );
+                                            setErrors(prev => {
+                                              const next = { ...prev };
+                                              const existing = next[fieldPath];
+                                              if (existing && existing !== numericOnlyMessage) return prev;
+                                              if (existing === numericOnlyMessage) return prev;
+                                              next[fieldPath] = numericOnlyMessage;
+                                              return next;
+                                            });
+                                            onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, value });
+                                          }}
+                                          onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                        />
+                                      );
+                                      break;
+                                    }
+                                    case 'DATE': {
+                                      controlNode = (
+                                        <DateInput
+                                          value={toDateInputValue((subRow.values[field.id] as any) ?? '')}
+                                          language={language}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
+                                          ariaLabel={labelText}
+                                          ariaDescribedBy={helperId}
+                                          onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                        />
+                                      );
+                                      break;
+                                    }
+                                    case 'PARAGRAPH': {
+                                      controlNode = (
+                                        <textarea
+                                          className="ck-paragraph-input"
+                                          value={(subRow.values[field.id] as any) ?? ''}
+                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
+                                          rows={(field as any)?.ui?.paragraphRows || 3}
+                                          placeholder={placeholder}
+                                          aria-describedby={helperId}
+                                        />
+                                      );
+                                      break;
+                                    }
+                                    default: {
+                                      controlNode = (
+                                        <input
+                                          type="text"
+                                          value={(subRow.values[field.id] as any) ?? ''}
+                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
+                                          placeholder={placeholder}
+                                          aria-describedby={helperId}
+                                        />
+                                      );
+                                    }
+                                  }
+
+                                  return (
+                                    <div
+                                      key={field.id}
+                                      data-field-path={fieldPath}
+                                      data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                                      style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: isCompactInline ? 2 : 4,
+                                        minWidth: 0
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          flexWrap: 'wrap',
+                                          minWidth: 0,
+                                          rowGap: isCompactInline ? 4 : 8
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            color: 'var(--muted)',
+                                            fontWeight: 600,
+                                            whiteSpace: 'nowrap',
+                                            lineHeight: 1.25
+                                          }}
+                                        >
+                                          {labelText}
+                                        </span>
+                                        <div
+                                          style={{
+                                            minWidth: compactControlWidth,
+                                            maxWidth: compactControlWidth,
+                                            flex: compactControlWidth ? '0 0 auto' : '0 1 auto'
+                                          }}
+                                        >
+                                          {controlNode}
+                                        </div>
+                                        {attachedDisplay ? (
+                                          <span style={{ whiteSpace: 'nowrap' }}>{attachedDisplay}</span>
+                                        ) : null}
+                                      </div>
+                                      {helperNode}
+                                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
+                                      {renderWarnings(fieldPath)}
+                                    </div>
+                                  );
+                                };
+
+                                if (useCompactSubRows && compactLayout) {
+                                  const primaryDisplay = compactLayout.primaryFieldId
+                                    ? resolveCompactDisplay(visibleFieldById.get(compactLayout.primaryFieldId))
+                                    : null;
+                                  const derivedMetaDisplays = compactLayout.metaFieldIds
+                                    .map(fid => resolveCompactDisplay(visibleFieldById.get(fid)))
+                                    .filter(Boolean);
+                                  const metaDisplays = derivedMetaDisplays;
+                                  const combinedHeadline =
+                                    primaryDisplay && metaDisplays.length
+                                      ? `${primaryDisplay} | ${metaDisplays.join(' • ')}`
+                                      : primaryDisplay || metaDisplays.join(' • ');
+                                  const compactHeadlineRows = Array.isArray((sub as any)?.ui?.compactHeadlineRows)
+                                    ? ((sub as any).ui.compactHeadlineRows as any[])
+                                    : [];
+                                  const compactSentenceRows = Array.isArray((sub as any)?.ui?.compactSentenceRows)
+                                    ? ((sub as any).ui.compactSentenceRows as any[])
+                                    : [];
+                                  const compactActionRules = Array.isArray((sub as any)?.ui?.compactActions)
+                                    ? ((sub as any).ui.compactActions as any[])
+                                    : [];
+                                  const compactRowCtx: VisibilityContext = {
+                                    getValue: fid => {
+                                      return resolveCompactMappedValue(fid);
+                                    },
+                                    getLineItems: groupId => lineItems?.[groupId] || [],
+                                    getLineItemKeys: () => Object.keys(lineItems || {})
+                                  };
+                                  const pickCompactRule = (rules: any[]): any | null =>
+                                    rules.find(rule => {
+                                      if (!rule || typeof rule !== 'object') return false;
+                                      if (!(rule as any).when) return true;
+                                      return matchesWhenClause((rule as any).when, compactRowCtx);
+                                    }) || null;
+                                  const resolveCompactControlWidth = (
+                                    controlType: 'number' | 'choice',
+                                    valueText: string,
+                                    opts?: { minWidth?: number; maxWidth?: number; paddingChars?: number }
+                                  ): number => {
+                                    const normalizedText = (valueText || '').trim();
+                                    const textLength = Math.max(normalizedText.length, 1);
+                                    const paddingChars = Number.isFinite(Number(opts?.paddingChars))
+                                      ? Number(opts?.paddingChars)
+                                      : controlType === 'choice'
+                                        ? 3.5
+                                        : 1.6;
+                                    const minWidth = Number.isFinite(Number(opts?.minWidth))
+                                      ? Number(opts?.minWidth)
+                                      : controlType === 'choice'
+                                        ? 96
+                                        : 36;
+                                    const maxWidth = Number.isFinite(Number(opts?.maxWidth))
+                                      ? Number(opts?.maxWidth)
+                                      : controlType === 'choice'
+                                        ? 144
+                                        : 88;
+                                    const widthPx =
+                                      controlType === 'choice'
+                                        ? 28 + (textLength + paddingChars) * 10
+                                        : 18 + (textLength + paddingChars) * 12;
+                                    return Math.max(minWidth, Math.min(maxWidth, widthPx));
+                                  };
+                                  const coerceCompactItemsCollection = (payload: any): any[] => {
+                                    if (!payload) return [];
+                                    if (Array.isArray(payload)) return payload;
+                                    if (typeof payload === 'string') {
+                                      const trimmed = payload.trim();
+                                      if (!trimmed) return [];
+                                      try {
+                                        const parsed = JSON.parse(trimmed);
+                                        if (Array.isArray(parsed)) return parsed;
+                                        if (parsed && typeof parsed === 'object') return [parsed];
+                                      } catch (_) {
+                                        return [];
+                                      }
+                                      return [];
+                                    }
+                                    if (typeof payload === 'object') return [payload];
+                                    return [];
+                                  };
+                                  const mapCompactActionEntries = (entries: any[], action: any): Record<string, any>[] => {
+                                    const rawMapping =
+                                      action && typeof action.lineItemMapping === 'object' && action.lineItemMapping
+                                        ? (action.lineItemMapping as Record<string, string>)
+                                        : {};
+                                    const mapped = entries
+                                      .map(entry => {
+                                        if (!entry || typeof entry !== 'object') return null;
+                                        if (!Object.keys(rawMapping).length) return { ...entry };
+                                        const next: Record<string, any> = {};
+                                        Object.entries(rawMapping).forEach(([targetId, sourceId]) => {
+                                          if (!targetId || !sourceId) return;
+                                          const rawValue = getCompactSourceValue(entry, sourceId);
+                                          if (rawValue === undefined) return;
+                                          next[targetId] = rawValue;
+                                        });
+                                        return next;
+                                      })
+                                      .filter(Boolean) as Record<string, any>[];
+                                    const aggregateBy = Array.isArray(action?.aggregateBy)
+                                      ? action.aggregateBy.map((key: any) => `${key || ''}`.trim()).filter(Boolean) as string[]
+                                      : [];
+                                    const aggregateNumericFields = Array.isArray(action?.aggregateNumericFields)
+                                      ? action.aggregateNumericFields.map((key: any) => `${key || ''}`.trim()).filter(Boolean) as string[]
+                                      : [];
+                                    if (!aggregateBy.length || !mapped.length) return mapped;
+                                    const buckets = new Map<string, Record<string, any>>();
+                                    mapped.forEach(entry => {
+                                      const bucketKey = aggregateBy.map(key => `${entry[key] ?? ''}`).join('||');
+                                      if (!buckets.has(bucketKey)) {
+                                        buckets.set(bucketKey, { ...entry });
+                                        return;
+                                      }
+                                      const existing = buckets.get(bucketKey)!;
+                                      aggregateNumericFields.forEach(fieldId => {
+                                        const current = Number(existing[fieldId]);
+                                        const next = Number(entry[fieldId]);
+                                        if (!Number.isFinite(next)) return;
+                                        existing[fieldId] = Number.isFinite(current) ? current + next : next;
+                                      });
+                                    });
+                                    return Array.from(buckets.values());
+                                  };
+                                  const renderCompactNumberControl = (
+                                    field: any,
+                                    opts?: {
+                                      suffixText?: string;
+                                      minWidth?: number;
+                                      maxWidth?: number;
+                                      paddingChars?: number;
+                                      inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+                                      selectAllOnFocus?: boolean;
+                                    }
+                                  ): React.ReactNode => {
+                                    const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                                    const fieldText = ((((subRow.values[field.id] as any) ?? '') || '').toString() || '').trim();
+                                    const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
+                                    const placeholder =
+                                      helperCfg.text && helperCfg.placement === 'placeholder' ? helperCfg.text : undefined;
+                                    const allowsIntegerOnly =
+                                      Array.isArray(field?.validationRules) &&
+                                      field.validationRules.some((rule: any) => rule?.then?.integer === true);
+                                    const sanitizeNumericValue = (raw: string): string => {
+                                      const text = (raw || '').toString();
+                                      if (!text.trim()) return '';
+                                      if (allowsIntegerOnly) return text.replace(/[^\d]/g, '');
+                                      let seenSeparator = false;
+                                      let sanitized = '';
+                                      for (const char of text) {
+                                        if (/\d/.test(char)) {
+                                          sanitized += char;
+                                          continue;
+                                        }
+                                        if ((char === '.' || char === ',') && !seenSeparator) {
+                                          sanitized += char;
+                                          seenSeparator = true;
+                                        }
+                                      }
+                                      return sanitized;
+                                    };
+                                    return (
+                                      <div
+                                        data-field-path={fieldPath}
+                                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                          fontSize: 'var(--ck-font-control)',
+                                          minWidth: 0,
+                                          flexShrink: 0,
+                                          whiteSpace: 'nowrap',
+                                          verticalAlign: 'middle'
+                                        }}
+                                      >
+                                        <AutoWidthInput
+                                          className="ck-compact-control ck-compact-control--number"
+                                          value={((subRow.values[field.id] as any) ?? '').toString()}
+                                          disabled={isLineFieldInteractionBlocked(field)}
+                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
+                                          inputMode={opts?.inputMode || 'numeric'}
+                                          pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                                          selectAllOnFocus={opts?.selectAllOnFocus !== false}
+                                          ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                          placeholder={placeholder}
+                                          sanitize={sanitizeNumericValue}
+                                          minWidth={Number.isFinite(opts?.minWidth) ? opts?.minWidth : 42}
+                                          maxWidth={Number.isFinite(opts?.maxWidth) ? opts?.maxWidth : 88}
+                                          extraWidth={Number.isFinite(opts?.paddingChars)
+                                            ? Math.max(16, Math.ceil(opts!.paddingChars! * 6))
+                                            : 20}
+                                          style={{
+                                            flex: '0 0 auto',
+                                            marginInlineEnd: 0
+                                          }}
+                                          inputStyle={{
+                                            boxSizing: 'border-box',
+                                            minHeight: 34,
+                                            height: 34,
+                                            paddingInlineStart: 8,
+                                            paddingInlineEnd: 8,
+                                            textAlign: 'center',
+                                            fontVariantNumeric: 'tabular-nums',
+                                            fontSize: 'var(--ck-font-control)',
+                                            fontWeight: 500,
+                                            lineHeight: 1,
+                                            appearance: 'textfield',
+                                            MozAppearance: 'textfield',
+                                            WebkitAppearance: 'none'
+                                          }}
+                                          onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                        />
+                                        {opts?.suffixText ? <span style={{ whiteSpace: 'nowrap' }}>{opts.suffixText}</span> : null}
+                                      </div>
+                                    );
+                                  };
+                                  const renderCompactChoiceControl = (
+                                    field: any,
+                                    opts?: { minWidth?: number; maxWidth?: number; paddingChars?: number }
+                                  ): React.ReactNode => {
+                                    const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                                    const currentValue =
+                                      (Array.isArray(subRow.values[field.id]) && (subRow.values[field.id] as string[]).length
+                                        ? (subRow.values[field.id] as string[])[0]
+                                        : (subRow.values[field.id] as string)) || '';
+                                    const optionSet = optsFieldForCompact(field);
+                                    return (
+                                      <div
+                                        data-field-path={fieldPath}
+                                        data-has-error={errors[fieldPath] ? 'true' : undefined}
+                                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                          fontSize: 'var(--ck-font-control)',
+                                          minWidth: 0,
+                                          flexShrink: 0,
+                                          whiteSpace: 'nowrap',
+                                          verticalAlign: 'middle'
+                                        }}
+                                      >
+                                        <AutoWidthSelect
+                                          value={currentValue}
+                                          options={optionSet}
+                                          disabled={isLineFieldInputDisabled(field)}
+                                          ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                          className="ck-compact-control ck-compact-control--choice"
+                                          minWidth={Number.isFinite(opts?.minWidth) ? opts?.minWidth : 72}
+                                          maxWidth={Number.isFinite(opts?.maxWidth) ? opts?.maxWidth : 140}
+                                          extraWidth={Number.isFinite(opts?.paddingChars)
+                                            ? Math.max(28, Math.ceil(opts!.paddingChars! * 6))
+                                            : 34}
+                                          placeholder="Select…"
+                                          style={{
+                                            flex: '0 0 auto',
+                                            marginInlineEnd: 0
+                                          }}
+                                          selectStyle={{
+                                            boxSizing: 'border-box',
+                                            minHeight: 34,
+                                            height: 34,
+                                            paddingInlineStart: 12,
+                                            paddingInlineEnd: 28,
+                                            fontSize: 'var(--ck-font-control)',
+                                            fontWeight: 500,
+                                            lineHeight: 1
+                                          }}
+                                          onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
+                                        />
+                                      </div>
+                                    );
+                                  };
+                                  const renderCompactHeadlineFromConfig = (): React.ReactNode => {
+                                    if (!compactHeadlineRows.length) return null;
+                                    const matchedRule = pickCompactRule(compactHeadlineRows);
+                                    if (!matchedRule || !Array.isArray((matchedRule as any).parts)) return null;
+                                    const nodes = (matchedRule as any).parts
+                                      .map((part: any, idx: number) => {
+                                        if (!part || typeof part !== 'object') return null;
+                                        if (part.type === 'text' || (!part.type && part.text !== undefined)) {
+                                          const textValue = resolveLocalizedString(part.text, language, '');
+                                          if (!textValue) return null;
+                                          return <span key={`headline:text:${idx}`}>{textValue}</span>;
+                                        }
+                                        if (part.type === 'primary') {
+                                          if (!primaryDisplay) return null;
+                                          return (
+                                            <span key={`headline:primary:${idx}`} style={{ fontWeight: 600 }}>
+                                              {primaryDisplay}
+                                            </span>
+                                          );
+                                        }
+                                        if (part.type === 'meta') {
+                                          if (!metaDisplays.length) return null;
+                                          return (
+                                            <span key={`headline:meta:${idx}`} style={{ color: 'var(--muted)' }}>
+                                              {metaDisplays.join(' • ')}
+                                            </span>
+                                          );
+                                        }
+                                        const fieldId = typeof part.fieldId === 'string' ? part.fieldId.trim() : '';
+                                        const sourceFieldId =
+                                          typeof (part as any).sourceFieldId === 'string'
+                                            ? (part as any).sourceFieldId.trim()
+                                            : '';
+                                        const sourceField = sourceFieldId ? allFieldById.get(sourceFieldId) : null;
+                                        const sourceRow = sourceField
+                                          ? resolveCompactSourceRow(sourceField, {
+                                              lookupField:
+                                                typeof (part as any).lookupField === 'string'
+                                                  ? (part as any).lookupField.trim()
+                                                  : undefined
+                                            })
+                                          : null;
+                                        const field = fieldId ? allFieldById.get(fieldId) : null;
+                                        const displayText = (() => {
+                                          const sourcePath =
+                                            typeof (part as any).sourcePath === 'string' ? (part as any).sourcePath.trim() : '';
+                                          if (sourcePath) {
+                                            const localRaw = resolveCompactMappedValue(sourcePath);
+                                            if (localRaw !== undefined && localRaw !== null && localRaw !== '') {
+                                              return `${localRaw}`;
+                                            }
+                                          }
+                                          if (sourceRow && sourcePath) {
+                                            const raw = getCompactSourceValue(sourceRow, sourcePath);
+                                            return raw === undefined || raw === null || raw === '' ? '' : `${raw}`;
+                                          }
+                                          if (!field) return '';
+                                          return (resolveCompactDisplay(field) || '').toString();
+                                        })();
+                                        const suffixText = (() => {
+                                          if (part.suffix !== undefined) {
+                                            return resolveLocalizedString(part.suffix, language, '');
+                                          }
+                                          const suffixSourcePath =
+                                            typeof (part as any).suffixSourcePath === 'string'
+                                              ? (part as any).suffixSourcePath.trim()
+                                              : '';
+                                          if (suffixSourcePath) {
+                                            const localRaw = resolveCompactMappedValue(suffixSourcePath);
+                                            if (localRaw !== undefined && localRaw !== null && localRaw !== '') {
+                                              return `${localRaw}`;
+                                            }
+                                          }
+                                          if (sourceRow && suffixSourcePath) {
+                                            const raw = getCompactSourceValue(sourceRow, suffixSourcePath);
+                                            return raw === undefined || raw === null || raw === '' ? '' : `${raw}`;
+                                          }
+                                          const suffixFieldId =
+                                            typeof part.suffixFieldId === 'string' ? part.suffixFieldId.trim() : '';
+                                          if (!suffixFieldId) return '';
+                                          const suffixField = allFieldById.get(suffixFieldId);
+                                          return resolveCompactDisplay(suffixField) || (((subRow.values[suffixFieldId] as any) ?? '') || '').toString();
+                                        })();
+                                        const combinedText = [displayText, suffixText].filter(Boolean).join(' ');
+                                        if (!combinedText) return null;
+                                        const sourceKey = [sourceFieldId, (part as any).sourcePath || '', (part as any).suffixSourcePath || '']
+                                          .filter(Boolean)
+                                          .join(':');
+                                        return <span key={`headline:field:${fieldId || sourceKey || idx}:${idx}`}>{combinedText}</span>;
+                                      })
+                                      .filter(Boolean);
+                                    if (!nodes.length) return null;
+                                    return nodes;
+                                  };
+                                  const renderCompactActionsFromConfig = (): React.ReactNode => {
+                                    if (!compactActionRules.length) return null;
+                                    const matchedRule = pickCompactRule(compactActionRules);
+                                    const actions = Array.isArray((matchedRule as any)?.actions) ? ((matchedRule as any).actions as any[]) : [];
+                                    if (!actions.length) return null;
+                                    const nodes = actions
+                                      .map((action: any, idx: number) => {
+                                        if (!action || typeof action !== 'object' || action.type !== 'openSubgroupOverlay') return null;
+                                        if ((action as any).showWhen && !matchesWhenClause((action as any).showWhen, compactRowCtx)) return null;
+                                        const subGroupId = ((action as any).subGroupId || '').toString().trim();
+                                        if (!subGroupId) return null;
+                                        const normalizedCompactRowId =
+                                          typeof subRow.id === 'string'
+                                            ? (subRow.id.split('::').pop() || subRow.id)
+                                            : subRow.id;
+                                        const targetKey = buildSubgroupKey(subKey, normalizedCompactRowId, subGroupId);
+                                        const targetRows = lineItems[targetKey] || [];
+                                        const targetConfig = Array.isArray((sub as any)?.subGroups)
+                                          ? ((sub as any).subGroups as any[]).find(
+                                              (candidate: any) => resolveSubgroupKey(candidate as any) === subGroupId
+                                            ) || null
+                                          : null;
+                                        const readOnly = (action as any).readOnly === true;
+                                        const groupOverrideFromConfig = (action as any).groupOverride as LineItemGroupConfigOverride | undefined;
+                                        const groupOverride: LineItemGroupConfigOverride | undefined =
+                                          targetConfig || groupOverrideFromConfig
+                                            ? {
+                                                ...(groupOverrideFromConfig || {}),
+                                                fields:
+                                                  readOnly && Array.isArray(targetConfig?.fields)
+                                                    ? targetConfig.fields.map((field: any) => ({ ...field, readOnly: true }))
+                                                    : groupOverrideFromConfig?.fields,
+                                                ui: {
+                                                  ...((targetConfig as any)?.ui || {}),
+                                                  ...((groupOverrideFromConfig as any)?.ui || {}),
+                                                  addButtonPlacement:
+                                                    (((groupOverrideFromConfig as any)?.ui || {}) as any)?.addButtonPlacement || 'hidden'
+                                                }
+                                              }
+                                            : undefined;
+                                        const buttonLabel = resolveLocalizedString((action as any).label, language, '').trim();
+                                        if (!buttonLabel) return null;
+                                        const overlayLabel = resolveLocalizedString((action as any).overlayLabel, language, '').trim();
+                                        const closeButtonLabel = resolveLocalizedString(
+                                          (action as any).closeButtonLabel,
+                                          language,
+                                          tSystem('actions.back', language, 'Back')
+                                        ).trim();
+                                        const emptyMessage = resolveLocalizedString((action as any).emptyMessage, language, '').trim();
+                                        const contextHeaderFieldId = ((action as any).contextHeaderFieldId || '').toString().trim();
+                                        const contextHeader =
+                                          (contextHeaderFieldId && resolveCompactDisplay(allFieldById.get(contextHeaderFieldId))) ||
+                                          primaryDisplay ||
+                                          combinedHeadline ||
+                                          '';
+                                        const sourceFieldId = ((action as any).sourceFieldId || '').toString().trim();
+                                        const sourcePath = ((action as any).sourcePath || '').toString().trim();
+                                        const tone = ((action as any).tone || 'secondary').toString() === 'primary' ? 'primary' : 'secondary';
+                                        return (
+                                          <button
+                                            key={`compact-action:${subGroupId}:${idx}`}
+                                            type="button"
+                                            style={{
+                                              ...(tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary),
+                                              minHeight: 36,
+                                              padding: '6px 12px',
+                                              whiteSpace: 'nowrap',
+                                              flex: '0 0 auto'
+                                            }}
+                                            onClick={() => {
+                                              if (sourcePath) {
+                                                const sourceField = sourceFieldId ? allFieldById.get(sourceFieldId) : null;
+                                                const sourceRow =
+                                                  sourceField && sourceFieldId
+                                                    ? resolveCompactSourceRow(sourceField, {
+                                                        lookupField:
+                                                          typeof (action as any).lookupField === 'string'
+                                                            ? (action as any).lookupField.trim()
+                                                            : undefined
+                                                      })
+                                                    : null;
+                                                const localEntries = coerceCompactItemsCollection(
+                                                  resolveCompactMappedValue(sourcePath)
+                                                );
+                                                const sourceEntriesRaw = sourceRow
+                                                  ? coerceCompactItemsCollection(getCompactSourceValue(sourceRow, sourcePath))
+                                                  : [];
+                                                const sourceEntries = mapCompactActionEntries(
+                                                  localEntries.length ? localEntries : sourceEntriesRaw,
+                                                  action
+                                                );
+                                                if (sourceEntries.length) {
+                                                  setLineItems(prev => ({ ...prev, [targetKey]: [] }));
+                                                  globalThis.setTimeout(() => {
+                                                    sourceEntries.forEach(entry => {
+                                                      addLineItemRowManual(targetKey, entry, { configOverride: groupOverride });
+                                                    });
+                                                    globalThis.setTimeout(() => {
+                                                      openSubgroupOverlay(targetKey, {
+                                                        source: 'user',
+                                                        groupOverride,
+                                                        hideInlineSubgroups: true,
+                                                        closeButtonLabel,
+                                                        label: overlayLabel || undefined,
+                                                        contextHeader
+                                                      });
+                                                    }, 0);
+                                                  }, 0);
+                                                  return;
+                                                }
+                                              }
+                                              if (!targetRows.length && emptyMessage) {
+                                                openInfoOverlay(buttonLabel, emptyMessage);
+                                                return;
+                                              }
+                                              openSubgroupOverlay(targetKey, {
+                                                source: 'user',
+                                                groupOverride,
+                                                hideInlineSubgroups: true,
+                                                closeButtonLabel,
+                                                label: overlayLabel || undefined,
+                                                contextHeader
+                                              });
+                                            }}
+                                          >
+                                            {buttonLabel}
+                                          </button>
+                                        );
+                                      })
+                                      .filter(Boolean);
+                                    if (!nodes.length) return null;
+                                    return nodes;
+                                  };
+                                  const renderCompactSentenceFromConfig = (): React.ReactNode => {
+                                    if (!compactSentenceRows.length) return null;
+                                    const matchedRule = pickCompactRule(compactSentenceRows);
+                                    const parts = Array.isArray((matchedRule as any)?.parts) ? ((matchedRule as any).parts as any[]) : [];
+                                    if (!parts.length) return null;
+                                    const feedbackFieldPaths = new Set<string>();
+
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            flexWrap: 'nowrap',
+                                            alignItems: 'center',
+                                            columnGap: 8,
+                                            rowGap: 8,
+                                            minWidth: 0,
+                                            lineHeight: 1.35,
+                                            overflowX: 'auto'
+                                          }}
+                                        >
+                                          {parts.map((part, idx) => {
+                                            if (!part || typeof part !== 'object') return null;
+                                            const partType = ((part as any).type || ((part as any).fieldId ? 'field' : 'text')).toString();
+                                            if (partType === 'text') {
+                                              const label = resolveLocalizedString((part as any).text, language, '');
+                                              if (!label) return null;
+                                              return (
+                                                <span
+                                                  key={`text:${idx}`}
+                                                  style={{
+                                                    color: 'var(--muted)',
+                                                    fontWeight: 600,
+                                                    fontSize: 'var(--ck-font-control)',
+                                                    whiteSpace: 'nowrap',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    minHeight: 40,
+                                                    flex: '0 0 auto'
+                                                  }}
+                                                >
+                                                  {label}
+                                                </span>
+                                              );
+                                            }
+                                            const fieldId = ((part as any).fieldId || '').toString().trim();
+                                            if (!fieldId) return null;
+                                            const field = allFieldById.get(fieldId);
+                                            if (!field) return null;
+                                            feedbackFieldPaths.add(`${subKey}__${field.id}__${subRow.id}`);
+                                            const suffixText = ((): string => {
+                                              const localizedSuffix = resolveLocalizedString((part as any).suffix, language, '');
+                                              if (localizedSuffix) return localizedSuffix;
+                                              const suffixFieldId = ((part as any).suffixFieldId || '').toString().trim();
+                                              if (!suffixFieldId) return '';
+                                              const suffixField = allFieldById.get(suffixFieldId);
+                                              return resolveCompactDisplay(suffixField) || (((subRow.values[suffixFieldId] as any) ?? '') || '').toString();
+                                            })();
+                                            const minWidth = Number((part as any).minWidth);
+                                            const maxWidth = Number((part as any).maxWidth);
+                                            const paddingChars = Number((part as any).paddingChars);
+                                            if (field.type === 'NUMBER') {
+                                              return (
+                                                <React.Fragment key={`field:${fieldId}:${idx}`}>
+                                                  {renderCompactNumberControl(field, {
+                                                    suffixText,
+                                                    minWidth: Number.isFinite(minWidth) ? minWidth : undefined,
+                                                    maxWidth: Number.isFinite(maxWidth) ? maxWidth : undefined,
+                                                    paddingChars: Number.isFinite(paddingChars) ? paddingChars : undefined,
+                                                    inputMode:
+                                                      Array.isArray(field?.validationRules) &&
+                                                      field.validationRules.some(
+                                                        (rule: any) => rule?.then?.integer === true
+                                                      )
+                                                        ? 'numeric'
+                                                        : 'decimal',
+                                                    selectAllOnFocus: true
+                                                  })}
+                                                </React.Fragment>
+                                              );
+                                            }
+                                            if (field.type === 'CHOICE') {
+                                              return (
+                                                <React.Fragment key={`field:${fieldId}:${idx}`}>
+                                                  {renderCompactChoiceControl(field, {
+                                                    minWidth: Number.isFinite(minWidth) ? minWidth : undefined,
+                                                    maxWidth: Number.isFinite(maxWidth) ? maxWidth : undefined,
+                                                    paddingChars: Number.isFinite(paddingChars) ? paddingChars : undefined
+                                                  })}
+                                                </React.Fragment>
+                                              );
+                                            }
+                                            const displayText = resolveCompactDisplay(field) || '';
+                                            if (!displayText && !suffixText) return null;
+                                            return (
+                                              <span
+                                                key={`field:${fieldId}:${idx}`}
+                                                style={{
+                                                  whiteSpace: 'nowrap',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  minHeight: 40,
+                                                  flex: '0 0 auto'
+                                                }}
+                                              >
+                                                {[displayText, suffixText].filter(Boolean).join(' ')}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        {Array.from(feedbackFieldPaths).map(fieldPath => (
+                                          <React.Fragment key={`feedback:${fieldPath}`}>
+                                            {errors[fieldPath] ? <div className="error">{errors[fieldPath]}</div> : null}
+                                            {renderWarnings(fieldPath)}
+                                          </React.Fragment>
+                                        ))}
+                                      </div>
+                                    );
+                                  };
+                                  const compactSentenceNode = renderCompactSentenceFromConfig();
+                                  const compactActionNodes = renderCompactActionsFromConfig();
+                                  const leadingFields = compactLayout.leadingFieldIds
+                                    .map(fid => visibleFieldById.get(fid))
+                                    .filter((field): field is any => !!field);
+                                  const inlineCheckboxField =
+                                    leadingFields.length === 1 && leadingFields[0]?.type === 'CHECKBOX'
+                                      ? leadingFields[0]
+                                      : null;
+                                  const inlineCheckboxFieldPath = inlineCheckboxField
+                                    ? `${subKey}__${inlineCheckboxField.id}__${subRow.id}`
+                                    : '';
+                                  const isSentenceVisible = inlineCheckboxField
+                                    ? !!subRow.values[inlineCheckboxField.id]
+                                    : true;
+                                  const controlLayoutStyle: React.CSSProperties = compactSentenceNode
+                                    ? {
+                                        display: 'flex',
+                                        flexWrap: 'nowrap',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        rowGap: 8,
+                                        minWidth: 0,
+                                        overflowX: 'auto'
+                                      }
+                                    : {
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 8,
+                                        minWidth: 0
+                                      };
+
+                                  return (
+                                    <div
+                                      className="ck-compact-line-item-row"
+                                      style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 8,
+                                        alignItems: 'start'
+                                      }}
+                                    >
+                                      {compactLayout.leadingFieldIds.length && !inlineCheckboxField ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 15 }}>
+                                          {compactLayout.leadingFieldIds.map(fid => {
+                                            const field = visibleFieldById.get(fid);
+                                            const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
+                                            return (
+                                              <label
+                                                key={fid}
+                                                style={{
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center',
+                                                  minHeight: 32,
+                                                  minWidth: 32
+                                                }}
+                                                data-field-path={fieldPath}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!!subRow.values[field.id]}
+                                                  disabled={isLineFieldInputDisabled(field)}
+                                                  onChange={e => {
+                                                    if (isLineFieldInputDisabled(field)) return;
+                                                    handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
+                                                  }}
+                                                  style={{
+                                                    width: 32,
+                                                    height: 32,
+                                                    margin: 0,
+                                                    flex: '0 0 auto',
+                                                    accentColor: 'var(--accent)'
+                                                  }}
+                                                />
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+                                        {(combinedHeadline || compactHeadlineRows.length) ? (
+                                          <div
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'flex-start',
+                                              justifyContent: 'space-between',
+                                              flexWrap: 'wrap',
+                                              gap: 8,
+                                              minWidth: 0
+                                            }}
+                                          >
+                                            <div
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'flex-start',
+                                                gap: 10,
+                                                flex: '1 1 280px',
+                                                minWidth: 0
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  fontSize: 'calc(var(--ck-font-control) * 1.16)',
+                                                  lineHeight: 1.35,
+                                                  overflowWrap: 'anywhere',
+                                                  flex: '1 1 280px',
+                                                  minWidth: 0
+                                                }}
+                                              >
+                                                {inlineCheckboxField ? (
+                                                  <label
+                                                    style={{
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center',
+                                                      minHeight: 32,
+                                                      minWidth: 32,
+                                                      flex: '0 0 auto',
+                                                      paddingTop: 2
+                                                    }}
+                                                    data-field-path={inlineCheckboxFieldPath}
+                                                  >
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={!!subRow.values[inlineCheckboxField.id]}
+                                                      disabled={isLineFieldInputDisabled(inlineCheckboxField)}
+                                                      onChange={e => {
+                                                        if (isLineFieldInputDisabled(inlineCheckboxField)) return;
+                                                        handleLineFieldChange(
+                                                          targetGroup,
+                                                          subRow.id,
+                                                          inlineCheckboxField,
+                                                          e.target.checked
+                                                        );
+                                                      }}
+                                                      style={{
+                                                        width: 32,
+                                                        height: 32,
+                                                        margin: 0,
+                                                        flex: '0 0 auto',
+                                                        accentColor: 'var(--accent)'
+                                                      }}
+                                                    />
+                                                  </label>
+                                                ) : null}
+                                                {renderCompactHeadlineFromConfig() || (
+                                                  <>
+                                                    {primaryDisplay ? (
+                                                      <span style={{ fontWeight: 600 }}>{primaryDisplay}</span>
+                                                    ) : null}
+                                                    {primaryDisplay && metaDisplays.length ? (
+                                                      <span style={{ color: 'var(--muted)', fontSize: 'calc(var(--ck-font-control) * 1.16)' }}>
+                                                        {` | ${metaDisplays.join(' • ')}`}
+                                                      </span>
+                                                    ) : null}
+                                                    {!primaryDisplay && metaDisplays.length ? (
+                                                      <span style={{ color: 'var(--muted)', fontSize: 'calc(var(--ck-font-control) * 1.16)' }}>
+                                                        {metaDisplays.join(' • ')}
+                                                      </span>
+                                                    ) : null}
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                            {compactActionNodes ? (
+                                              <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 8 }}>{compactActionNodes}</div>
+                                            ) : null}
+                                          </div>
+                                        ) : null}
+                                        {isSentenceVisible ? compactSentenceNode : null}
+                                        {isSentenceVisible && !compactSentenceNode && compactLayout.inlineFieldIds.length ? (
+                                          <div style={controlLayoutStyle}>
+                                            {compactLayout.inlineFieldIds.map(fid =>
+                                              renderCompactControlField(visibleFieldById.get(fid), {
+                                                compactInline: false
+                                              })
+                                            )}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <GroupedPairedFields
                                     contextPrefix={`sub:${q.id}:${subId}`}
@@ -9723,7 +12665,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               ) : null}
                             </div>
                           );
-                        }))} 
+                        }))}
                         {(() => {
                           const subUi = (sub as any).ui as any;
                           const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
@@ -9841,24 +12783,26 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   </div>
                                 ) : null}
                               </div>
-                              <div style={{ marginLeft: 'auto'}}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCollapsedSubgroups(prev => ({
-                                      ...prev,
-                                      [subKey]: !(prev[subKey] ?? true)
-                                    }))
-                                  }
-                                  style={buttonStyles.secondary}
-                                  aria-expanded={!collapsed}
-                                  aria-controls={`${subKey}-body`}
-                                >
-                                  {collapsed
-                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                                </button>
-                              </div>
+                              {!inlineSubgroupChromeHidden ? (
+                                <div style={{ marginLeft: 'auto'}}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCollapsedSubgroups(prev => ({
+                                        ...prev,
+                                        [subKey]: !(prev[subKey] ?? true)
+                                      }))
+                                    }
+                                    style={buttonStyles.secondary}
+                                    aria-expanded={!collapsed}
+                                    aria-controls={`${subKey}-body`}
+                                  >
+                                    {collapsed
+                                      ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
+                                      : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                         </div>
                           );

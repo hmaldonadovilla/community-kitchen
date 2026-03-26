@@ -16,6 +16,7 @@ const isLikelyDataSourceConfig = (value: any): value is DataSourceConfig => {
     'sheetId' in value ||
     'tabName' in value ||
     'localeKey' in value ||
+    'statusFieldId' in value ||
     'statusAllowList' in value ||
     'limit' in value ||
     'mapping' in value ||
@@ -36,6 +37,7 @@ const signatureForDedupe = (cfg: DataSourceConfig): string => {
     sheetId: ((cfg as any).sheetId || '').toString(),
     tabName: ((cfg as any).tabName || '').toString(),
     localeKey: ((cfg as any).localeKey || '').toString(),
+    statusFieldId: ((cfg as any).statusFieldId || '').toString(),
     mode: ((cfg as any).mode || '').toString(),
     ref: ((cfg as any).ref || '').toString(),
     projection,
@@ -86,4 +88,3 @@ export const collectDataSourceConfigsForPrefetch = (definition: WebFormDefinitio
   visit(definition, 0);
   return out;
 };
-

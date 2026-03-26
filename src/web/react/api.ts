@@ -12,6 +12,7 @@ import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
 import { isGlobalPerfInstrumentationEnabled } from './perfInstrumentation';
+import { clearFetchDataSourceCache } from '../data/dataSources';
 
 declare const google: any;
 
@@ -286,6 +287,16 @@ export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: stri
 export const clearHtmlRenderClientCache = (): void => {
   htmlRenderCache.clear();
   htmlRenderInflight.clear();
+};
+
+export const invalidateClientSharedDataCaches = (opts?: {
+  includePersistedDataSources?: boolean;
+  includeHtmlRenderCache?: boolean;
+}): void => {
+  clearFetchDataSourceCache({ includePersisted: opts?.includePersistedDataSources !== false });
+  if (opts?.includeHtmlRenderCache) {
+    clearHtmlRenderClientCache();
+  }
 };
 
 export interface PrefetchTemplatesResult {

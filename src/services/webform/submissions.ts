@@ -313,9 +313,20 @@ export class SubmissionService {
       if (q.type === 'TEXT' && q.autoIncrement) {
         const currentVal = (formObject as any)[q.id];
         if (!currentVal) {
-          const generated = this.generateAutoIncrementValue(form.configSheet, q.id, q.autoIncrement);
-          if (generated) {
-            (formObject as any)[q.id] = generated;
+          const existingAutoIncrementValue = (() => {
+            if (existingRowIdx < 0) return '';
+            const colIdx = columns.fields[q.id];
+            if (!colIdx || !existingRowValues) return '';
+            const raw = existingRowValues[colIdx - 1];
+            return raw === undefined || raw === null ? '' : raw.toString();
+          })();
+          if (existingAutoIncrementValue) {
+            (formObject as any)[q.id] = existingAutoIncrementValue;
+          } else {
+            const generated = this.generateAutoIncrementValue(form.configSheet, q.id, q.autoIncrement, formObject);
+            if (generated) {
+              (formObject as any)[q.id] = generated;
+            }
           }
         }
       }
@@ -483,7 +494,8 @@ export class SubmissionService {
       createdAt: createdAtVal instanceof Date ? createdAtVal.toISOString() : createdAtVal,
       updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : updatedAtVal,
       dataVersion: nextVersion,
-      rowNumber: destinationRowNumber
+      rowNumber: destinationRowNumber,
+      operation: existingRowIdx >= 0 ? 'update' : 'create'
     };
 
     let newEtag = this.cacheManager.bumpSheetEtag(
@@ -1717,9 +1729,11 @@ export class SubmissionService {
   private generateAutoIncrementValue(
     formKey: string,
     fieldId: string,
-    config?: AutoIncrementConfig
+    config?: AutoIncrementConfig,
+    formObject?: Record<string, any>
   ): string | undefined {
-    const key = this.getAutoIncrementPropertyKey(formKey, fieldId, config?.propertyKey);
+    const resolvedPrefix = this.resolveAutoIncrementPrefix(config, formObject);
+    const key = this.getAutoIncrementPropertyKey(formKey, fieldId, config?.propertyKey, resolvedPrefix.propertyKeySuffix);
     let current = this.autoIncrementState[key] || 0;
     if (this.docProps) {
       try {
@@ -1733,9 +1747,13 @@ export class SubmissionService {
       }
     }
     const next = current + 1;
-    const padLength = Math.max(1, Math.min(20, config?.padLength || 6));
-    const prefix = config?.prefix || '';
-    const formatted = `${prefix}${next.toString().padStart(padLength, '0')}`;
+    const rawPadLength = config?.padLength;
+    const padLength =
+      rawPadLength === undefined || rawPadLength === null
+        ? 6
+        : Math.max(0, Math.min(20, Number.isFinite(Number(rawPadLength)) ? Number(rawPadLength) : 6));
+    const prefix = resolvedPrefix.prefix;
+    const formatted = `${prefix}${padLength > 0 ? next.toString().padStart(padLength, '0') : next.toString()}`;
     this.autoIncrementState[key] = next;
     if (this.docProps) {
       try {
@@ -1747,8 +1765,38 @@ export class SubmissionService {
     return formatted;
   }
 
-  private getAutoIncrementPropertyKey(formKey: string, fieldId: string, override?: string): string {
-    const base = (override && override.trim()) || `${formKey || ''}::${fieldId}`;
+  private resolveAutoIncrementPrefix(
+    config?: AutoIncrementConfig,
+    formObject?: Record<string, any>
+  ): { prefix: string; propertyKeySuffix?: string } {
+    const fallbackPrefix = config?.prefix || '';
+    const prefixByValue = config?.prefixByValue;
+    if (!prefixByValue?.fieldId || !prefixByValue.map || !formObject) {
+      return { prefix: fallbackPrefix };
+    }
+
+    const rawValue =
+      (formObject as any)[prefixByValue.fieldId] ??
+      ((formObject as any).values && (formObject as any).values[prefixByValue.fieldId]);
+    const normalizedValue = rawValue === undefined || rawValue === null ? '' : rawValue.toString().trim();
+    const mappedPrefix =
+      (normalizedValue && Object.prototype.hasOwnProperty.call(prefixByValue.map, normalizedValue)
+        ? prefixByValue.map[normalizedValue]
+        : undefined) ?? prefixByValue.defaultPrefix;
+
+    if (!mappedPrefix) {
+      return { prefix: fallbackPrefix };
+    }
+
+    return {
+      prefix: mappedPrefix,
+      propertyKeySuffix: mappedPrefix
+    };
+  }
+
+  private getAutoIncrementPropertyKey(formKey: string, fieldId: string, override?: string, suffix?: string): string {
+    const baseRaw = (override && override.trim()) || `${formKey || ''}::${fieldId}`;
+    const base = suffix ? `${baseRaw}::${suffix}` : baseRaw;
     return `${AUTO_INCREMENT_PROPERTY_PREFIX}${this.cacheManager.digestKey(base)}`;
   }
 

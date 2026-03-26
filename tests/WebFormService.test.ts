@@ -119,6 +119,46 @@ describe('WebFormService', () => {
     expect(res.analyticsRev).toBe(0);
   });
 
+  test('fetchDataSource can read records from another form via formKey', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Inventory Form', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfigSheet = ss.insertSheet('Config: Inventory');
+    (inventoryConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const fetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissions').mockReturnValue({
+      items: [
+        { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' },
+        { id: 'rec-2', LEFTOVER_ID: 'LE-2', LEFTOVER_STATUS: 'used' }
+      ],
+      totalCount: 2
+    });
+
+    const res = service.fetchDataSource({
+      id: 'Leftover Inventory Data',
+      formKey: 'Config: Inventory',
+      projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
+      statusFieldId: 'LEFTOVER_STATUS',
+      statusAllowList: ['available']
+    } as any, 'EN');
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(res.items).toEqual([
+      { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' }
+    ]);
+  });
+
   test('submitWebForm appends rows with line item JSON and file url', () => {
     const result = service.submitWebForm({
       formKey: 'Config: Delivery',
@@ -376,6 +416,648 @@ describe('WebFormService', () => {
     expect(mealCol).toBeGreaterThanOrEqual(0);
     expect(values[1][mealCol]).toBe('MP-AA000001');
     expect(values[2][mealCol]).toBe('MP-AA000002');
+  });
+
+  test('auto increment can partition prefixes by another field value', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const configSheet = ss.insertSheet('Config: Inventory');
+    const configRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":6,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"},"defaultPrefix":"LX-"}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(configRows);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'entireDish'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'partialDish'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'entireDish'
+    } as any);
+
+    const sheet = ss.getSheetByName('Inventory Data');
+    const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
+    const header = values[0];
+    const idCol = header.findIndex((c: string) => /\[LEFTOVER_ID\]\s*$/.test((c || '').toString().trim()));
+    expect(idCol).toBeGreaterThanOrEqual(0);
+    expect(values[1][idCol]).toBe('LE-000001');
+    expect(values[2][idCol]).toBe('LP-000001');
+    expect(values[3][idCol]).toBe('LE-000002');
+  });
+
+  test('auto increment supports padLength 0 for variable-width ids', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const configSheet = ss.insertSheet('Config: Inventory');
+    const configRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":0,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"}}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(configRows);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'entireDish'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'entireDish'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_KIND: 'partialDish'
+    } as any);
+
+    const sheet = ss.getSheetByName('Inventory Data');
+    const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
+    const header = values[0];
+    const idCol = header.findIndex((c: string) => /\[LEFTOVER_ID\]\s*$/.test((c || '').toString().trim()));
+    expect(idCol).toBeGreaterThanOrEqual(0);
+    expect(values[1][idCol]).toBe('LE-1');
+    expect(values[2][idCol]).toBe('LE-2');
+    expect(values[3][idCol]).toBe('LP-1');
+  });
+
+  test('saveSubmissionWithId applies follow-up submitEffects createRecord on source create only', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Inventory',
+          runOn: 'create',
+          status: 'Available',
+          values: {
+            SOURCE_RECORD_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.Q1}}',
+            LEFTOVER_KIND: 'entireDish'
+          }
+        }
+      ]
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfig = ss.insertSheet('Config: Inventory');
+    const inventoryRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":6,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"}}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (inventoryConfig as any).setMockData(inventoryRows);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+    expect(created.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 1,
+        operation: 'create'
+      })
+    );
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: created.meta.id,
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(updated.success).toBe(true);
+    expect(updated.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 0,
+        created: 0,
+        operation: 'update'
+      })
+    );
+
+    const inventorySheet = ss.getSheetByName('Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    expect(inventorySheet!.getLastRow()).toBe(2);
+    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const sourceIdCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
+    const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
+    const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
+    const statusCol = header.findIndex((value: string) => value.toLowerCase() === 'status');
+    expect(sourceIdCol).toBeGreaterThanOrEqual(0);
+    expect(sourceNameCol).toBeGreaterThanOrEqual(0);
+    expect(leftoverIdCol).toBeGreaterThanOrEqual(0);
+    expect(statusCol).toBeGreaterThanOrEqual(0);
+    expect((inventoryValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
+    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice');
+    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-000001');
+    expect((inventoryValues[1][statusCol] || '').toString()).toBe('Available');
+  });
+
+  test('saveSubmissionWithId can create downstream records from source line-item rows', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Inventory',
+          runOn: 'create',
+          status: 'Available',
+          forEachLineItem: {
+            groupId: 'Q2',
+            when: {
+              fieldId: 'LI2',
+              greaterThan: 0
+            }
+          },
+          values: {
+            SOURCE_RECORD_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.Q1}}',
+            LEFTOVER_KIND: 'entireDish',
+            LEFTOVER_NAME: '{{row.LI1}}',
+            LEFTOVER_QTY: '{{row.LI2}}',
+            LEFTOVER_SEQ: '{{lineItem.index}}',
+            LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}'
+          }
+        }
+      ]
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfig = ss.insertSheet('Config: Inventory');
+    const inventoryRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_NAME', 'TEXT', 'Leftover name', 'Leftover name', 'Leftover name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Leftover qty', 'Leftover qty', 'Leftover qty', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SEQ', 'TEXT', 'Leftover sequence', 'Leftover sequence', 'Leftover sequence', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":0,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"}}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (inventoryConfig as any).setMockData(inventoryRows);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([
+        { LI1: 'Soup', LI2: 2 },
+        { LI1: 'Salad', LI2: 3 },
+        { LI1: 'Waste', LI2: 0 }
+      ]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    expect(created.success).toBe(true);
+    expect(created.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 2,
+        operation: 'create'
+      })
+    );
+
+    const inventorySheet = ss.getSheetByName('Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    expect(inventorySheet!.getLastRow()).toBe(3);
+    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const sourceIdCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
+    const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
+    const leftoverNameCol = header.findIndex((value: string) => /\[LEFTOVER_NAME\]\s*$/.test(value));
+    const leftoverQtyCol = header.findIndex((value: string) => /\[LEFTOVER_QTY\]\s*$/.test(value));
+    const leftoverSeqCol = header.findIndex((value: string) => /\[LEFTOVER_SEQ\]\s*$/.test(value));
+    const leftoverSourceRowIdCol = header.findIndex((value: string) => /\[LEFTOVER_SOURCE_ROW_ID\]\s*$/.test(value));
+    const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
+    expect((inventoryValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
+    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice');
+    expect((inventoryValues[1][leftoverNameCol] || '').toString()).toBe('Soup');
+    expect(Number(inventoryValues[1][leftoverQtyCol] || 0)).toBe(2);
+    expect((inventoryValues[1][leftoverSeqCol] || '').toString()).toBe('1');
+    expect((inventoryValues[1][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_0');
+    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
+    expect((inventoryValues[2][leftoverNameCol] || '').toString()).toBe('Salad');
+    expect(Number(inventoryValues[2][leftoverQtyCol] || 0)).toBe(3);
+    expect((inventoryValues[2][leftoverSeqCol] || '').toString()).toBe('2');
+    expect((inventoryValues[2][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_1');
+    expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
+    expect(inventoryValues.map((row: any[]) => (row[leftoverNameCol] || '').toString())).not.toContain('Waste');
+  });
+
+  test('saveSubmissionWithId can upsert downstream records by deterministic submit-effect record id', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Inventory',
+          runOn: 'both',
+          recordId: 'leftover::{{source.id}}::{{lineItem.rowId}}',
+          status: 'Available',
+          forEachLineItem: {
+            groupId: 'Q2',
+            when: {
+              fieldId: 'LI2',
+              greaterThan: 0
+            }
+          },
+          values: {
+            SOURCE_RECORD_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.Q1}}',
+            LEFTOVER_KIND: 'entireDish',
+            LEFTOVER_NAME: '{{row.LI1}}',
+            LEFTOVER_QTY: '{{row.LI2}}',
+            LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}'
+          }
+        }
+      ]
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfig = ss.insertSheet('Config: Inventory');
+    const inventoryRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_NAME', 'TEXT', 'Leftover name', 'Leftover name', 'Leftover name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Leftover qty', 'Leftover qty', 'Leftover qty', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":0,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"entireDish":"LE-","partialDish":"LP-"}}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (inventoryConfig as any).setMockData(inventoryRows);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([
+        { LI1: 'Soup', LI2: 2 },
+        { LI1: 'Salad', LI2: 3 }
+      ]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: created.meta.id,
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([
+        { __ckRowId: 'Q2_0', LI1: 'Soup', LI2: 4 },
+        { __ckRowId: 'Q2_1', LI1: 'Salad', LI2: 5 }
+      ]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(updated.success).toBe(true);
+    expect(updated.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 2,
+        operation: 'update'
+      })
+    );
+
+    const inventorySheet = ss.getSheetByName('Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    expect(inventorySheet!.getLastRow()).toBe(3);
+    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
+    const leftoverQtyCol = header.findIndex((value: string) => /\[LEFTOVER_QTY\]\s*$/.test(value));
+    const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
+    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice Updated');
+    expect(Number(inventoryValues[1][leftoverQtyCol] || 0)).toBe(4);
+    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
+    expect(Number(inventoryValues[2][leftoverQtyCol] || 0)).toBe(5);
+    expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
+  });
+
+  test('saveSubmissionWithId can update downstream records from source line-item rows', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const inventoryConfig = ss.insertSheet('Config: Inventory');
+    const inventoryRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_USED_BY_RECORD_ID', 'TEXT', 'Used by record id', 'Used by record id', 'Used by record id', false, '', '', '', 'Active', '', '', '', '', '']
+    ];
+    (inventoryConfig as any).setMockData(inventoryRows);
+
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'updateRecord',
+          targetFormKey: 'Config: Inventory',
+          runOn: 'update',
+          recordId: '{{row.TARGET_RECORD_ID}}',
+          status: 'used',
+          forEachLineItem: {
+            groupId: 'Q2',
+            when: {
+              fieldId: 'TARGET_RECORD_ID',
+              notEmpty: true
+            }
+          },
+          values: {
+            LEFTOVER_STATUS: 'used',
+            LEFTOVER_USED_BY_RECORD_ID: '{{source.id}}'
+          }
+        }
+      ]
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const seededTarget = service.saveSubmissionWithId({
+      formKey: 'Config: Inventory',
+      language: 'EN',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_USED_BY_RECORD_ID: ''
+    } as any);
+    expect(seededTarget.success).toBe(true);
+    const targetRecordId = (seededTarget.meta?.id || '').toString();
+    expect(targetRecordId).toBeTruthy();
+
+    const createdSource = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DEL-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(createdSource.success).toBe(true);
+
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DEL-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([{ TARGET_RECORD_ID: targetRecordId }]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(updated.success).toBe(true);
+    expect(updated.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 0,
+        updated: 1,
+        operation: 'update'
+      })
+    );
+
+    const inventorySheet = ss.getSheetByName('Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const statusCol = header.findIndex((value: string) => /\[LEFTOVER_STATUS\]\s*$/.test(value));
+    const usedByCol = header.findIndex((value: string) => /\[LEFTOVER_USED_BY_RECORD_ID\]\s*$/.test(value));
+    expect((inventoryValues[1][statusCol] || '').toString()).toBe('used');
+    expect((inventoryValues[1][usedByCol] || '').toString()).toBe('REC-DEL-1');
+  });
+
+  test('runDailyLifecycleRecompute applies config-driven date status transitions', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-03-21T01:30:00+01:00'));
+    try {
+      const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+      const lifecycleJson = JSON.stringify({
+        lifecycle: {
+          rules: [
+            {
+              id: 'expire-leftovers',
+              type: 'dateStatusTransition',
+              dateFieldId: 'LEFTOVER_EXP_DATE',
+              statusFieldId: 'LEFTOVER_STATUS',
+              fromStatuses: ['available'],
+              toStatus: 'expired',
+              compare: 'beforeToday'
+            }
+          ]
+        }
+      });
+      const dashboardData = [
+        [],
+        [],
+        ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+        ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', lifecycleJson]
+      ];
+      (dashboardSheet as any).setMockData(dashboardData);
+
+      const inventoryConfig = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
+      const inventoryRows = [
+        ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+        ['LEFTOVER_STATUS', 'CHOICE', 'Leftover status', 'Leftover status', 'Leftover status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', '', ''],
+        ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', '', 'Active', '', '', '', '', ''],
+        ['LEFTOVER_NAME', 'TEXT', 'Name', 'Name', 'Name', false, '', '', '', 'Active', '', '', '', '', '']
+      ];
+      (inventoryConfig as any).setMockData(inventoryRows);
+
+      const expired = service.saveSubmissionWithId({
+        formKey: 'Config: Leftover Inventory',
+        language: 'EN',
+        LEFTOVER_STATUS: 'available',
+        LEFTOVER_EXP_DATE: '2026-03-20',
+        LEFTOVER_NAME: 'Soup'
+      } as any);
+      expect(expired.success).toBe(true);
+
+      const stillAvailable = service.saveSubmissionWithId({
+        formKey: 'Config: Leftover Inventory',
+        language: 'EN',
+        LEFTOVER_STATUS: 'available',
+        LEFTOVER_EXP_DATE: '2026-03-21',
+        LEFTOVER_NAME: 'Stew'
+      } as any);
+      expect(stillAvailable.success).toBe(true);
+
+      const result = service.runDailyLifecycleRecompute();
+      expect(result.success).toBe(true);
+      expect(result.updatedForms).toBe(1);
+      expect(result.updatedRecords).toBe(1);
+      expect(result.errors).toEqual([]);
+
+      const inventorySheet = ss.getSheetByName('Leftover Inventory Data');
+      expect(inventorySheet).toBeDefined();
+      const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+      const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+      const statusCol = header.findIndex((value: string) => /\[LEFTOVER_STATUS\]\s*$/.test(value));
+      const expCol = header.findIndex((value: string) => /\[LEFTOVER_EXP_DATE\]\s*$/.test(value));
+      expect((inventoryValues[1][expCol] || '').toString()).toContain('2026');
+      expect((inventoryValues[1][statusCol] || '').toString()).toBe('expired');
+      expect((inventoryValues[2][statusCol] || '').toString()).toBe('available');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('saveSubmissionWithId ignores __ckRecreateFromRecordId and updates the same record id', () => {

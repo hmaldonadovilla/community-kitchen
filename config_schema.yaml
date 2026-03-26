@@ -169,8 +169,26 @@ components:
               type: string
             padLength:
               type: integer
+              description: |
+                Width for zero-padding the numeric counter.
+                Use `0` for variable-width ids like `LE-1`, `LE-2`, `LE-10`.
             propertyKey:
               type: string
+            prefixByValue:
+              type: object
+              properties:
+                fieldId:
+                  type: string
+                  description: Field id whose saved value determines the generated prefix.
+                map:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Mapping of source field value -> generated prefix.
+                defaultPrefix:
+                  type: string
+                  description: Fallback prefix when the field value does not match the map.
+              required: [fieldId, map]
           description: Auto-generated ID metadata for TEXT fields.
       required: [id, type, qEn, qFr, qNl, required, status]
 
@@ -680,6 +698,58 @@ components:
             Use this when a target row owns derived child rows that become invalid after the parent value is cleared.
       required: [type, groupId, values]
 
+    FollowupSubmitEffect:
+      oneOf:
+        - $ref: '#/components/schemas/FollowupCreateRecordEffect'
+
+    FollowupCreateRecordEffect:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [createRecord]
+        targetFormKey:
+          type: string
+          description: Destination form key (dashboard config sheet name or title).
+        runOn:
+          type: string
+          enum: [create, update, both]
+          description: |
+            Controls whether the effect runs only on source record creation, only on source update,
+            or on both save paths. Defaults to `both`.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition evaluated against the saved source record before creating the target record.
+        status:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: Optional destination status written through the target form's follow-up status handling.
+        auditAction:
+          type: string
+          description: Optional audit action label written on the downstream save.
+        values:
+          type: object
+          additionalProperties:
+            oneOf:
+              - $ref: '#/components/schemas/DefaultValue'
+              - type: object
+              - type: array
+              - type: 'null'
+          description: |
+            Destination field values by question id.
+
+            String values support source templates such as:
+            - `{{source.FIELD_ID}}`
+            - `{{source.id}}`
+            - `{{source.status}}`
+            - `{{source.createdAt}}`
+            - `{{source.updatedAt}}`
+
+            Exact template tokens may resolve to arrays/objects, which allows copying a top-level
+            `LINE_ITEM_GROUP` payload into another form field.
+      required: [type, targetFormKey]
+
     ButtonConfirmConfig:
       type: object
       properties:
@@ -1149,6 +1219,16 @@ components:
           type: boolean
           description: |
             When true, render the field value as a read-only label in the edit view.
+        runSelectionEffectsOnInit:
+          type: boolean
+          description: |
+            Controls whether this field's `selectionEffects` are replayed while opening or hydrating an existing record.
+
+            - `true` (default): replay init-time selection effects when the field already has a value
+            - `false`: skip init replay, but still run the same selection effects during normal user edits
+
+            Use this for derived or synchronization fields whose init-time replay would otherwise clear/rebuild
+            dependent rows and create loops while opening a record.
         readOnlyAppendFieldId:
           type: string
           description: |
@@ -1222,6 +1302,13 @@ components:
           description: |
             Optional field-driven overlay open actions. When configured, the field can render as a button
             (after `when` matches) to open a line-item group overlay with optional row filters + UI overrides.
+        exclusiveLineSelection:
+          $ref: '#/components/schemas/ExclusiveLineSelectionConfig'
+          description: |
+            Optional line-item checkbox/radio-style exclusivity rule.
+
+            When the field becomes active/true, the UI can automatically clear matching selections in sibling rows,
+            including rows inside the same subgroup across different parent rows.
 
     ParagraphDisclaimerConfig:
       type: object
@@ -1418,6 +1505,50 @@ components:
             - When `true`, always use the searchable control for CHOICE selects
             - When `false`, always use the native select (no search)
             - When omitted, the UI enables search automatically only for large option sets
+        compactHeadlineRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompactRowRuleConfig'
+          description: |
+            Optional compact headline layouts for `compactRows` renderers.
+            The first matching rule wins and renders the first line of each row.
+        persistRows:
+          type: boolean
+          description: |
+            When `false`, this line item group is treated as transient UI state:
+            its rows are not persisted in draft/final payloads and are not reloaded from existing record values.
+
+            Use this for datasource-backed selector rows whose authoritative saved output is generated elsewhere
+            (for example, selectors that immediately normalize into another subgroup such as `MP_TYPE_LI`).
+            Default: true.
+        compactSentenceRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompactRowRuleConfig'
+          description: |
+            Optional compact sentence layouts for `compactRows` renderers.
+            The first matching rule wins and renders the sentence-style control line for each row.
+        hideRowsWithoutAnchor:
+          type: boolean
+          description: |
+            When `true`, compact rows whose anchor field value is empty are hidden instead of rendering as blank rows.
+            Useful for inventory-backed or selector-driven compact subgroups where only anchored rows should be visible.
+        compactActions:
+          type: array
+          items:
+            type: object
+            properties:
+              when:
+                $ref: '#/components/schemas/WhenClause'
+              actions:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompactRowActionConfig'
+            required: [actions]
+            additionalProperties: false
+          description: |
+            Optional compact-row actions rendered beside the compact headline.
+            This is useful for reusable sentence-row actions such as opening a read-only subgroup overlay.
         showItemPill:
           type: boolean
           description: |
@@ -1468,6 +1599,28 @@ components:
         defaultCollapsed:
           type: boolean
           description: Default collapsed state for each row. When omitted and mode=progressive, defaults to true.
+        hideRemoveColumn:
+          type: boolean
+          description: |
+            When true, hide the trailing remove/trash action column for this line-item group table.
+            Row-level remove behavior still exists internally; this only changes the rendered table UI.
+        maxVisibleRows:
+          type: integer
+          minimum: 1
+          description: |
+            Optional maximum number of visible table rows before the table body becomes scrollable.
+            Useful for embedded selector tables where vertical space should stay bounded.
+        rowHeaderSummaryTemplate:
+          type: string
+          description: |
+            Optional single-line summary rendered in the row header for progressive line item rows.
+            Use `{FIELD_ID}` placeholders to compose a compact label such as `{MEAL_TYPE} | {ORD_QTY}`.
+            This is useful when the row body should focus on subgroups or table content only.
+        inlineSubgroupsWhenExpanded:
+          type: boolean
+          description: |
+            In progressive mode, keep subgroups inline once the parent row is expanded
+            instead of rendering fallback "Tap to open" subgroup pills.
         rowDisclaimer:
           $ref: '#/components/schemas/RowDisclaimerConfig'
           description: |
@@ -1492,6 +1645,34 @@ components:
           $ref: '#/components/schemas/LineItemOverlayDetailBodyConfig'
         rowActions:
           $ref: '#/components/schemas/LineItemOverlayDetailRowActionsConfig'
+      additionalProperties: false
+
+    ExclusiveLineSelectionConfig:
+      type: object
+      required: [keyFieldId]
+      properties:
+        keyFieldId:
+          type: string
+          description: |
+            Field id used to match conflicting rows. When two active rows share the same key value,
+            older selections are cleared.
+        scope:
+          type: string
+          enum: [sameGroup, sameSubgroupAcrossRoot]
+          description: |
+            Defines where exclusivity is enforced.
+            - `sameGroup`: only sibling rows in the same line-item group
+            - `sameSubgroupAcrossRoot`: subgroup rows with the same subgroup path across different parent rows
+        clearFieldIds:
+          type: array
+          items:
+            type: string
+          description: Optional sibling field ids to clear when a conflicting row is deselected.
+        clearSubGroupIds:
+          type: array
+          items:
+            type: string
+          description: Optional child subgroup ids to clear when a conflicting row is deselected.
       additionalProperties: false
 
     LineItemOverlayDetailHeaderConfig:
@@ -1582,6 +1763,133 @@ components:
           type: string
           enum: [header, body, hidden]
           description: Where the Edit action is rendered (defaults to header).
+      additionalProperties: false
+
+    CompactRowPartConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [text, field, primary, meta]
+        text:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        fieldId:
+          type: string
+        sourceFieldId:
+          type: string
+          description: |
+            Optional field id that provides the selected source row for this compact part.
+            This is useful when the compact line should read directly from a data-source-backed selector row
+            instead of relying on intermediary hidden fields.
+        lookupField:
+          type: string
+          description: |
+            Optional column used to match the selected source row when `sourceFieldId` is set.
+            Defaults to the source field id.
+        sourcePath:
+          type: string
+          description: |
+            Optional source-row field/path to render for this compact part when `sourceFieldId` is set.
+        suffix:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        suffixFieldId:
+          type: string
+        suffixSourcePath:
+          type: string
+          description: |
+            Optional source-row field/path appended after the main value when `sourceFieldId` is set.
+        minWidth:
+          type: number
+        maxWidth:
+          type: number
+        paddingChars:
+          type: number
+      additionalProperties: false
+
+    CompactRowRuleConfig:
+      type: object
+      properties:
+        when:
+          $ref: '#/components/schemas/WhenClause'
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompactRowPartConfig'
+      required: [parts]
+      additionalProperties: false
+
+    CompactRowActionConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [openSubgroupOverlay]
+        label:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        overlayLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional overlay title for the action.
+            Use this when the button label should stay visible but the opened overlay should use a different title
+            or no title at all.
+        subGroupId:
+          type: string
+        showWhen:
+          $ref: '#/components/schemas/WhenClause'
+        tone:
+          type: string
+          enum: [primary, secondary]
+        readOnly:
+          type: boolean
+        closeButtonLabel:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        emptyMessage:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        contextHeaderFieldId:
+          type: string
+        groupOverride:
+          $ref: '#/components/schemas/LineItemGroupConfigOverride'
+        sourceFieldId:
+          type: string
+          description: |
+            Optional field id that provides the selected source row for this action.
+            When present, the action can hydrate its overlay content directly from the datasource-backed source row.
+        lookupField:
+          type: string
+          description: |
+            Optional source-row column used to match the selected value when `sourceFieldId` is set.
+            Defaults to the source field id.
+        sourcePath:
+          type: string
+          description: |
+            Optional source-row field/path containing a line-item collection payload to use when the target subgroup is empty.
+        lineItemMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Optional target-field to source-field mapping applied when hydrating subgroup rows from `sourcePath`.
+        aggregateBy:
+          type: array
+          items:
+            type: string
+        aggregateNumericFields:
+          type: array
+          items:
+            type: string
+      required: [type, label, subGroupId]
       additionalProperties: false
 
     LineItemOverlayRowFilter:
@@ -2104,6 +2412,36 @@ components:
               description: Informational flag to mark the field as system-managed/hidden in UI.
           description: Copy a field value from another field (typically for NUMBER defaults).
         - type: object
+          required: [op, template]
+          properties:
+            op:
+              type: string
+              enum: [template]
+              description: Compose a text value from other fields using `{FIELD_ID}` tokens.
+            template:
+              type: string
+              description: |
+                Text template using `{FIELD_ID}` tokens.
+                Example: "{MEAL_TYPE} | {ORD_QTY}".
+            applyOn:
+              type: string
+              enum: [change, blur]
+              description: |
+                When to apply the derived value during editing.
+                - change: default for template
+                - blur: apply only after the user leaves the input
+            when:
+              type: string
+              enum: [always, empty]
+              description: |
+                When to apply the derived value.
+                - empty: default for template (behaves like a default; allows user overrides)
+                - always: recompute on every change
+            hidden:
+              type: boolean
+              description: Informational flag to mark the field as system-managed/hidden in UI.
+          description: Compose a readonly/helper text field from other field values.
+        - type: object
           required: [op, expression]
           properties:
             op:
@@ -2217,6 +2555,12 @@ components:
         localeKey:
           type: string
           description: Optional column used to scope localized rows.
+        statusFieldId:
+          type: string
+          description: |
+            Optional field id / column key used for `statusAllowList`.
+
+            Defaults to `status` when omitted.
         statusAllowList:
           oneOf:
             - type: string
@@ -2225,9 +2569,9 @@ components:
               items:
                 type: string
           description: |
-            Optional allow-list for **record-like** data sources that include a `status` column.
+            Optional allow-list for **record-like** data sources that include a status column.
 
-            When set, only rows whose `status` value matches one of these strings (case-insensitive) are returned.
+            When set, only rows whose `statusFieldId` value matches one of these strings (case-insensitive) are returned.
         limit:
           type: integer
           description: Optional max rows to read (default 50; hard cap 200).
@@ -2473,6 +2817,24 @@ components:
             - `reOpened`: value written when explicitly re-opening a closed record.
             - `onPdf`, `onEmail`, `onClose`: values written when follow-up actions complete.
             - Values can be localized objects (per language).
+        submitEffects:
+          type: array
+          description: |
+            Optional declarative shared-table writes that run after the source record saves.
+
+            Current supported type:
+            - `createRecord`
+
+            Notes:
+            - String values may reference `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`,
+              `{{source.createdAt}}`, and `{{source.updatedAt}}`.
+            - Set `recordId` for idempotent downstream writes when the same source row should update
+              an existing shared-table record instead of creating duplicates.
+            - `forEachLineItem` can create one downstream record per matched source line-item row.
+            - Inside `forEachLineItem`, templates may also reference `{{row.FIELD_ID}}`,
+              `{{parent.FIELD_ID}}`, and `{{lineItem.index}}`.
+          items:
+            $ref: '#/components/schemas/FollowupSubmitEffect'
         listViewMetaColumns:
           deprecated: true
           type: array
@@ -4013,6 +4375,72 @@ components:
         onClose:
           $ref: '#/components/schemas/LocalizedString'
 
+    FollowupSubmitEffect:
+      type: object
+      description: Declarative shared-table write that runs after the source record saves.
+      properties:
+        type:
+          type: string
+          enum: [createRecord, updateRecord]
+        targetFormKey:
+          type: string
+          description: Destination form key (dashboard config sheet name or title).
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition evaluated against the saved source record.
+        runOn:
+          type: string
+          enum: [create, update, both]
+          description: Whether the effect runs on source create, source update, or both.
+        recordId:
+          nullable: true
+          description: |
+            Deterministic downstream record id. Supports the same template values as `values`.
+            - Optional for `createRecord`
+            - Required for `updateRecord`
+            Use this when repeated source saves should update the same downstream record instead of
+            creating duplicates, or when a specific shared-table record must be updated in place.
+        status:
+          type: string
+          nullable: true
+          description: Optional target status written through the destination form's status handling.
+        values:
+          type: object
+          additionalProperties: true
+          description: |
+            Top-level destination field values. Supports template strings such as
+            `{{source.FIELD_ID}}`, `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`,
+            and `{{lineItem.index}}`.
+        forEachLineItem:
+          $ref: '#/components/schemas/FollowupCreateRecordLineItemConfig'
+          description: Optional line-item iterator that writes one downstream record per matched source row.
+        auditAction:
+          type: string
+          description: Optional audit action label written on the downstream save.
+      required: [type, targetFormKey]
+
+    FollowupCreateRecordLineItemConfig:
+      type: object
+      description: Selects which source line-item rows should fan out into downstream records.
+      properties:
+        groupId:
+          type: string
+          description: Root line-item group id on the source form.
+        subGroupPath:
+          oneOf:
+            - type: string
+              description: Dot-delimited nested subgroup path.
+            - type: array
+              items:
+                type: string
+          description: Optional nested subgroup path relative to `groupId`.
+        when:
+          $ref: '#/components/schemas/WhenClause'
+          description: |
+            Optional condition evaluated against each candidate line-item row.
+            Row fields are checked first, then the immediate parent row, then the top-level source record.
+      required: [groupId]
+
     ListViewColumnConfig:
       oneOf:
         - $ref: '#/components/schemas/ListViewFieldColumnConfig'
@@ -4704,6 +5132,54 @@ components:
         - Daily reconciliation: `runDailyAnalyticsRecompute` recomputes all forms.
         - Results are persisted in a hidden per-form analytics sheet.
 
+    LifecycleDateStatusTransitionRule:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Optional stable rule id for diagnostics.
+        type:
+          type: string
+          enum: [dateStatusTransition]
+        dateFieldId:
+          type: string
+          description: Field id containing the date used by the transition comparison.
+        statusFieldId:
+          type: string
+          description: |
+            Optional field id used to read/write the business status.
+            When omitted, the form follow-up status field or record meta Status column is used.
+        fromStatuses:
+          type: array
+          items:
+            type: string
+          description: Optional eligible source statuses (case-insensitive).
+        toStatus:
+          type: string
+          description: Destination status written when the rule matches.
+        compare:
+          type: string
+          enum: [beforeToday, onOrBeforeToday]
+          default: beforeToday
+        dayOffset:
+          type: integer
+          description: Optional day offset applied before comparison.
+      required: [type, dateFieldId, toStatus]
+
+    LifecycleConfig:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LifecycleDateStatusTransitionRule'
+      description: |
+        Generic date-driven lifecycle automation evaluated by the daily Apps Script trigger.
+
+        Typical use:
+        - mark leftovers `expired` when `LEFTOVER_EXP_DATE < today`
+        - later reuse for other stock/inventory status rollovers
+
 
     DedupRule:
       type: object
@@ -4808,12 +5284,14 @@ components:
             When set, auto-created rows will be tagged with `__ckSelectionEffectId = id` so rules can reference the originating effect.
         type:
           type: string
-          enum: [addLineItems, addLineItemsFromDataSource, deleteLineItems, setValue]
+          enum: [addLineItems, addLineItemsFromDataSource, addLineItemsFromFieldPayload, deleteLineItems, setValue, setValuesFromDataSource]
           description: |
             Effect type. `addLineItems` inserts rows with static presets.
             `addLineItemsFromDataSource` hydrates rows by looking up the selected value inside a data source row (supports JSON columns).
+            `addLineItemsFromFieldPayload` hydrates rows from a serialized payload already present on the current row/top-level form.
             `deleteLineItems` deletes previously-created child rows (typically the inverse of an `addLineItems` rule).
             `setValue` updates a field value in the current row (when triggered inside a line item) or at the top level.
+            `setValuesFromDataSource` copies one or more fields from a matched external record into the current row or top-level form.
 
             **Option filter enforcement:** When an effect creates rows (either via `preset` or via a data source),
             the target line-item/subgroup field `optionFilter` rules are treated as allowlists. Any generated row
@@ -4821,7 +5299,10 @@ components:
             in the current context is skipped (useful for filtering out disallowed ingredient rows like “Salt”).
         groupId:
           type: string
-          description: Target LINE_ITEM_GROUP id where rows are added/removed (required for add/delete effects).
+          description: |
+            Target LINE_ITEM_GROUP id where rows are added/removed (required for add/delete effects).
+            When the effect runs inside a subgroup row, a subgroup id here resolves relative to the same parent row first,
+            so sibling subgroup regeneration can stay configuration-driven.
         fieldId:
           type: string
           description: Target field id for `setValue` effects (uses the current row when triggered inside line items).
@@ -4838,6 +5319,13 @@ components:
             Value to set for `setValue` effects. Supports reference strings:
             - `$row.FIELD_ID`: copy from the originating line-item row (when the effect is triggered inside a line item)
             - `$top.FIELD_ID`: copy from the top-level record values
+        fieldMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            For `type=setValuesFromDataSource`, maps target field ids to source row keys/paths.
+            Example: `{ "RECIPE": "LEFTOVER_RECIPE", "PREP_QTY": "LEFTOVER_PORTIONS" }`.
         targetPath:
           oneOf:
             - type: string
@@ -4865,6 +5353,7 @@ components:
             Supports reference strings:
             - `$row.FIELD_ID`: copy from the originating line-item row (when the effect is triggered inside a line item)
             - `$top.FIELD_ID`: copy from the top-level record values
+            - `$source.FIELD_PATH`: for `type=addLineItemsFromDataSource`, copy from the matched datasource row
         triggerValues:
           type: array
           items:
@@ -4875,6 +5364,14 @@ components:
           description: |
             When true, rows created by this effect will hide the UI "Remove" action.
             (Useful for child rows that should be managed exclusively by selection effects.)
+        replaceExistingByEffectId:
+          type: boolean
+          description: |
+            When true, `type=addLineItems` updates the existing auto row created by the same `selectionEffects.id`
+            for the current parent row instead of appending duplicates.
+
+            This is useful for compact sentence rows where multiple field changes should immediately regenerate
+            a single downstream line item.
         targetEffectId:
           type: string
           description: |
@@ -4885,10 +5382,26 @@ components:
           description: Optional override for data-driven effects. Defaults to the question's own `dataSource`.
         lookupField:
           type: string
-          description: Column/field used to match the selected value when `type=addLineItemsFromDataSource`.
+          description: Column/field used to match the selected value when `type=addLineItemsFromDataSource` or `type=setValuesFromDataSource`.
+        lookupSourceFieldId:
+          type: string
+          description: |
+            Optional current-row/top-level field whose value should be used as the primary lookup token for
+            `type=addLineItemsFromDataSource` and `type=setValuesFromDataSource`.
+
+            Use this when the triggering field value is not the same as the datasource key. For example, a
+            quantity or mode change can still regenerate rows using the current row's inventory id.
+        matchField:
+          type: string
+          description: |
+            For `type=addLineItemsFromDataSource`, optionally match and fan out *all* data-source rows whose
+            `matchField` value equals the current selection. Useful for inventory-style selectors where one meal type
+            should hydrate multiple available item rows.
         dataField:
           type: string
-          description: Column/field that contains the serialized payload (typically JSON) used to create the line item rows.
+          description: |
+            Column/field that contains the serialized payload (typically JSON) used to create the line item rows.
+            Required for `type=addLineItemsFromFieldPayload`.
         lineItemMapping:
           type: object
           additionalProperties:
@@ -4921,8 +5434,13 @@ components:
         preserveManualRows:
           type: boolean
           description: |
-            When false, data-driven effects (`type=addLineItemsFromDataSource`) will delete existing manual rows
+            When false, data-driven effects (`type=addLineItemsFromDataSource` and `type=addLineItemsFromFieldPayload`) will delete existing manual rows
             in the target group when refreshing auto-generated rows. Defaults to true (preserve manual rows).
+        clearOnNoMatch:
+          type: boolean
+          description: |
+            For `type=setValuesFromDataSource`, when true the mapped target fields are cleared if the selected value
+            no longer matches any row in the configured data source.
 
     VisibilityCondition:
       type: object
@@ -5487,6 +6005,9 @@ components:
         analytics:
           $ref: '#/components/schemas/AnalyticsConfig'
           description: Trigger-based analytics config (dashboard-level).
+        lifecycle:
+          $ref: '#/components/schemas/LifecycleConfig'
+          description: Config-driven daily lifecycle automation (dashboard-level).
         languages:
           type: array
           items:

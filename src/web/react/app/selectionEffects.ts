@@ -23,6 +23,7 @@ type SelectionEffectOpts = {
   lineItem?: { groupId: string; rowId: string; rowValues: any };
   contextId?: string;
   forceContextReset?: boolean;
+  effectTrail?: string[];
 };
 
 const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
@@ -64,12 +65,32 @@ export const runSelectionEffects = (args: {
   lineItems: LineItemState;
   setValues: (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => void;
   setLineItems: (next: LineItemState | ((prev: LineItemState) => LineItemState)) => void;
+  onLineItemsMutated?: (args: {
+    sourceGroupKey: string;
+    prevLineItems: LineItemState;
+    nextLineItems: LineItemState;
+    nextValues: Record<string, FieldValue>;
+  }) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
   onRowAppended?: (args: { anchor: string; targetKey: string; rowId: string; source?: { groupId: string; rowId: string } }) => void;
   opts?: SelectionEffectOpts;
   effectOverrides?: Record<string, Record<string, FieldValue>>;
 }) => {
-  const { definition, question, value, language, values, lineItems, setValues, setLineItems, logEvent, onRowAppended, opts, effectOverrides } = args;
+  const {
+    definition,
+    question,
+    value,
+    language,
+    values,
+    lineItems,
+    setValues,
+    setLineItems,
+    onLineItemsMutated,
+    logEvent,
+    onRowAppended,
+    opts,
+    effectOverrides
+  } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
   let latestValuesSnapshot: Record<string, FieldValue> = values;
   const emittedLogKeys = new Set<string>();
@@ -147,6 +168,15 @@ export const runSelectionEffects = (args: {
       // same subgroup path -> current subgroup key
       if (!relativePath.length && pathSegments.length && matchesCurrentPrefix) return lineItemCtx.groupId;
       if (targetId === parsed.subGroupId) return lineItemCtx.groupId;
+      const parentCfg = resolveGroupConfigForKey(parsed.parentGroupKey).group;
+      const siblingMatch = parentCfg?.subGroups?.find((sub: any) => {
+        const key = resolveSubgroupKey(sub as any);
+        return key === targetId;
+      });
+      if (siblingMatch) {
+        const key = resolveSubgroupKey(siblingMatch as any) || targetId;
+        return buildSubgroupKey(parsed.parentGroupKey, parsed.parentRowId, key);
+      }
       const currentCfg = resolveGroupConfigForKey(lineItemCtx.groupId).group;
       const subMatch = currentCfg?.subGroups?.find((sub: any) => {
         const key = resolveSubgroupKey(sub as any);
@@ -178,6 +208,86 @@ export const runSelectionEffects = (args: {
     const rowId = (opts?.lineItem?.rowId || '').toString().trim();
     if (!groupId || !rowId) return undefined;
     return buildLineContextId(groupId, rowId, question.id);
+  };
+
+  const buildEffectTrailToken = (params: {
+    fieldId: string;
+    value: FieldValue;
+    groupId?: string;
+    rowId?: string;
+  }): string => {
+    const groupId = (params.groupId || '').toString().trim() || '__top__';
+    const rowId = (params.rowId || '').toString().trim() || '__record__';
+    const fieldId = (params.fieldId || '').toString().trim();
+    let valueKey = '';
+    try {
+      valueKey = JSON.stringify(params.value ?? null);
+    } catch (_) {
+      valueKey = `${params.value ?? ''}`;
+    }
+    return `${groupId}::${rowId}::${fieldId}::${valueKey}`;
+  };
+
+  const resolveQuestionForField = (fieldId: string, groupKey?: string): WebQuestionDefinition | undefined => {
+    const normalizedFieldId = (fieldId || '').toString().trim();
+    if (!normalizedFieldId) return undefined;
+    if (!groupKey) {
+      return definition.questions.find(q => q.id === normalizedFieldId);
+    }
+    const resolvedGroup = resolveGroupConfigForKey(groupKey).group as any;
+    if (!resolvedGroup || !Array.isArray(resolvedGroup.fields)) return undefined;
+    return resolvedGroup.fields.find((field: any) => field?.id === normalizedFieldId) as WebQuestionDefinition | undefined;
+  };
+
+  const scheduleChainedSelectionEffects = (params: {
+    fieldId: string;
+    value: FieldValue;
+    groupId?: string;
+    rowId?: string;
+    nextValues: Record<string, FieldValue>;
+    nextLineItems: LineItemState;
+  }) => {
+    const questionForField = resolveQuestionForField(params.fieldId, params.groupId);
+    if (!questionForField?.selectionEffects?.length) return;
+    const token = buildEffectTrailToken({
+      fieldId: params.fieldId,
+      value: params.value,
+      groupId: params.groupId,
+      rowId: params.rowId
+    });
+    const existingTrail = opts?.effectTrail || [];
+    if (existingTrail.includes(token)) return;
+    globalThis.setTimeout(() => {
+      const nextRowValues =
+        params.groupId && params.rowId
+          ? (((params.nextLineItems[params.groupId] || []).find(row => row.id === params.rowId)?.values || {}) as Record<string, FieldValue>)
+          : undefined;
+      runSelectionEffects({
+        definition,
+        question: questionForField,
+        value:
+          params.groupId && params.rowId
+            ? (nextRowValues?.[params.fieldId] as FieldValue)
+            : (params.nextValues[params.fieldId] as FieldValue),
+        language,
+        values: params.nextValues,
+        lineItems: params.nextLineItems,
+        setValues,
+        setLineItems,
+        onLineItemsMutated,
+        logEvent,
+        onRowAppended,
+        effectOverrides,
+        opts: {
+          lineItem:
+            params.groupId && params.rowId
+              ? { groupId: params.groupId, rowId: params.rowId, rowValues: nextRowValues || {} }
+              : undefined,
+          forceContextReset: true,
+          effectTrail: [...existingTrail, token]
+        }
+      });
+    }, 0);
   };
 
   const resolvedContextId = resolveEffectContextId();
@@ -307,6 +417,12 @@ export const runSelectionEffects = (args: {
               const nextLineItems = { ...prev, [targetKey]: nextRows };
               const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
               setValuesIfChanged(nextValues);
+              onLineItemsMutated?.({
+                sourceGroupKey: targetKey,
+                prevLineItems: prev,
+                nextLineItems: recomputed,
+                nextValues
+              });
               return recomputed;
             }
           }
@@ -349,6 +465,12 @@ export const runSelectionEffects = (args: {
           // Selection effects should only create what they explicitly preset; otherwise it produces "phantom" empty rows.
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
           setValuesIfChanged(nextValues);
+          onLineItemsMutated?.({
+            sourceGroupKey: targetKey,
+            prevLineItems: prev,
+            nextLineItems: recomputed,
+            nextValues
+          });
           if (appended) {
             const anchor = `${targetKey}__${newRow.id}`;
             onRowAppended?.({
@@ -371,6 +493,7 @@ export const runSelectionEffects = (args: {
           effectId?: string;
           hideRemoveButton?: boolean;
           preserveManualRows?: boolean;
+          replaceAllAutoRows?: boolean;
         }
       ) => {
         setLineItems(prev => {
@@ -378,6 +501,7 @@ export const runSelectionEffects = (args: {
           const rows = prev[targetKey] || [];
           const keyFields = (meta.keyFields || []).map(k => k.toString());
           const preserveManualRows = meta.preserveManualRows !== false;
+          const replaceAllAutoRows = meta.replaceAllAutoRows === true;
           const buildKey = (obj: Record<string, any>): string => {
             if (!keyFields.length) return '';
             return keyFields
@@ -391,15 +515,40 @@ export const runSelectionEffects = (args: {
           };
 
           const nextAutoKeys = new Set(keyFields.length ? presets.map(p => buildKey(p as any)).filter(Boolean) : []);
+          const reusableAutoRowsByKey = new Map<string, LineItemRowState[]>();
+          const reusableAutoRowsByIndex: LineItemRowState[] = [];
+
+          rows.forEach(row => {
+            const source = parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]);
+            const isExplicitAuto = source === 'auto' || row.autoGenerated === true;
+            if (!isExplicitAuto) return;
+            if (row.effectContextId !== meta.effectContextId) return;
+            const key = buildKey((row.values || {}) as Record<string, any>);
+            if (key) {
+              const bucket = reusableAutoRowsByKey.get(key) || [];
+              bucket.push(row);
+              reusableAutoRowsByKey.set(key, bucket);
+              return;
+            }
+            reusableAutoRowsByIndex.push(row);
+          });
 
           let removedManualCount = 0;
           let removedUnmarkedCount = 0;
+          let removedAutoOtherContextCount = 0;
           const keepRows = rows.filter(r => {
-            // Keep rows from other effect contexts.
-            if (r.effectContextId && r.effectContextId !== meta.effectContextId) return true;
-
             const source = parseRowSource((r.values as any)?.[ROW_SOURCE_KEY]);
             const isExplicitAuto = source === 'auto' || r.autoGenerated === true;
+
+            if (replaceAllAutoRows && isExplicitAuto) {
+              if (r.effectContextId && r.effectContextId !== meta.effectContextId) {
+                removedAutoOtherContextCount += 1;
+              }
+              return false;
+            }
+
+            // Keep rows from other effect contexts unless the caller explicitly owns the full auto set.
+            if (r.effectContextId && r.effectContextId !== meta.effectContextId) return true;
 
             // When manual rows should be discarded, drop anything that's not explicitly "other effect context".
             // This treats legacy/unmarked rows as manual for safety.
@@ -429,7 +578,12 @@ export const runSelectionEffects = (args: {
 
           // Rebuild auto rows for this context from scratch so recipe changes fully replace them
           const rowIdPrefix = resolveRowIdPrefix(targetKey);
+          let reusableIndex = 0;
           const rebuiltAuto: LineItemRowState[] = presets.map(preset => {
+            const presetKey = buildKey(preset as any);
+            const reusableRow = presetKey
+              ? (reusableAutoRowsByKey.get(presetKey) || []).shift()
+              : reusableAutoRowsByIndex[reusableIndex++];
             const values: Record<string, FieldValue> = { ...preset };
             meta.numericTargets.forEach(fid => {
               if ((preset as any)[fid] !== undefined) {
@@ -446,7 +600,7 @@ export const runSelectionEffects = (args: {
               values[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
             }
             return {
-              id: `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
+              id: reusableRow?.id || `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
               values,
               parentId: opts?.lineItem?.rowId,
               parentGroupId: opts?.lineItem?.groupId,
@@ -458,7 +612,13 @@ export const runSelectionEffects = (args: {
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValuesIfChanged(nextValues);
-          if (removedManualCount || removedUnmarkedCount) {
+          onLineItemsMutated?.({
+            sourceGroupKey: targetKey,
+            prevLineItems: prev,
+            nextLineItems: recomputed,
+            nextValues
+          });
+          if (removedManualCount || removedUnmarkedCount || removedAutoOtherContextCount) {
             logEventOnce(
               `selectionEffects.updateAutoLineItems.manualCleared::${targetKey}::${meta.effectContextId}`,
               'selectionEffects.updateAutoLineItems.manualCleared',
@@ -467,6 +627,7 @@ export const runSelectionEffects = (args: {
                 targetKey,
                 removedManualCount,
                 removedUnmarkedCount,
+                removedAutoOtherContextCount,
                 effectContextId: meta.effectContextId
               }
             );
@@ -518,6 +679,12 @@ export const runSelectionEffects = (args: {
           const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(cascade.lineItems);
           setValuesIfChanged(nextValues);
+          onLineItemsMutated?.({
+            sourceGroupKey: targetKey,
+            prevLineItems: prev,
+            nextLineItems: recomputed,
+            nextValues
+          });
           logEventOnce(
             `selectionEffects.deleteLineItems::${targetKey}::${effectId || ''}::${parentGroupId || ''}::${parentRowId || ''}`,
             'selectionEffects.deleteLineItems',
@@ -542,17 +709,33 @@ export const runSelectionEffects = (args: {
             const idx = rows.findIndex(r => r.id === target.rowId);
             if (idx < 0) return prev;
             const baseRow = rows[idx];
+            if (areFieldValuesEqual((baseRow.values || {})[fieldId], value as FieldValue)) return prev;
             const nextRowValues = { ...(baseRow.values || {}), [fieldId]: value as FieldValue };
             const nextRows = [...rows];
             nextRows[idx] = { ...baseRow, values: nextRowValues };
             const nextLineItems = { ...prev, [groupKey]: nextRows };
             const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
             setValuesIfChanged(nextValues);
+            onLineItemsMutated?.({
+              sourceGroupKey: groupKey,
+              prevLineItems: prev,
+              nextLineItems: recomputed,
+              nextValues
+            });
+            scheduleChainedSelectionEffects({
+              fieldId,
+              value: value as FieldValue,
+              groupId: groupKey,
+              rowId: target.rowId,
+              nextValues,
+              nextLineItems: recomputed
+            });
             return recomputed;
           });
           return;
         }
         setValues(prev => {
+          if (areFieldValuesEqual(prev[fieldId], value as FieldValue)) return prev;
           const nextValues = { ...prev, [fieldId]: value as FieldValue };
           const { values: appliedValues, lineItems: recomputed } = applyValueMapsWithBlurDerivedForValues(
             nextValues,
@@ -560,6 +743,12 @@ export const runSelectionEffects = (args: {
             [fieldId]
           );
           setLineItems(recomputed);
+          scheduleChainedSelectionEffects({
+            fieldId,
+            value: value as FieldValue,
+            nextValues: appliedValues,
+            nextLineItems: recomputed
+          });
           return appliedValues;
         });
       },
@@ -588,6 +777,12 @@ export const runSelectionEffects = (args: {
           }
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
           setValuesIfChanged(nextValues);
+          onLineItemsMutated?.({
+            sourceGroupKey: targetKey,
+            prevLineItems: prev,
+            nextLineItems: recomputed,
+            nextValues
+          });
           return recomputed;
         });
         logEventOnce(`lineItems.cleared::${groupId}::${contextId || ''}`, 'lineItems.cleared', { groupId });

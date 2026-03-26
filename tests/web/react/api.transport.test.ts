@@ -2,8 +2,16 @@ import {
   configureBackendTransport,
   consumePrefetchedHomeBootstrapApi,
   fetchBootstrapContextApi,
+  invalidateClientSharedDataCaches,
+  peekSummaryHtmlTemplateCache,
+  seedSummaryHtmlTemplateCache,
   type BackendTransport
 } from '../../../src/web/react/api';
+import { clearFetchDataSourceCache } from '../../../src/web/data/dataSources';
+
+jest.mock('../../../src/web/data/dataSources', () => ({
+  clearFetchDataSourceCache: jest.fn()
+}));
 
 describe('react api transport', () => {
   afterEach(() => {
@@ -45,5 +53,22 @@ describe('react api transport', () => {
     await expect(first).resolves.toMatchObject({ rev: 7, notModified: false });
     expect(second).toBeNull();
     expect((globalThis as any).__CK_HOME_BOOTSTRAP_PREFETCH__.used).toBe(true);
+  });
+
+  test('invalidates shared data caches and optionally clears html render cache', () => {
+    const payload: any = {
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'R-1',
+      values: { NAME: 'Soup' }
+    };
+    seedSummaryHtmlTemplateCache(payload, { success: true, html: '<div>cached</div>' });
+
+    expect(peekSummaryHtmlTemplateCache(payload)?.html).toBe('<div>cached</div>');
+
+    invalidateClientSharedDataCaches({ includePersistedDataSources: true, includeHtmlRenderCache: true });
+
+    expect(clearFetchDataSourceCache).toHaveBeenCalledWith({ includePersisted: true });
+    expect(peekSummaryHtmlTemplateCache(payload)).toBeNull();
   });
 });

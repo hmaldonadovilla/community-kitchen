@@ -1,11 +1,11 @@
 import {
-  collectIncompleteEntireLeftoverRowIds,
-  resolveIncompleteEntireLeftoverOverlayDialogCopy
-} from '../../../src/web/react/app/leftoverOverlayGuard';
+  collectIncompleteRowsByTypeAndQuantity,
+  resolveIncompleteOverlayRowDialogCopy
+} from '../../../src/web/react/app/incompleteOverlayRowGuard';
 
-describe('leftoverOverlayGuard', () => {
+describe('incompleteOverlayRowGuard', () => {
   it('collects only entire-dish rows with missing or invalid quantities', () => {
-    const rowIds = collectIncompleteEntireLeftoverRowIds([
+    const rowIds = collectIncompleteRowsByTypeAndQuantity([
       { id: 'a', values: { PREP_TYPE: 'Entire dish', PREP_QTY: '' } },
       { id: 'b', values: { PREP_TYPE: 'Entire dish', PREP_QTY: 0 } },
       { id: 'c', values: { PREP_TYPE: 'Entire dish', PREP_QTY: -1 } },
@@ -16,20 +16,20 @@ describe('leftoverOverlayGuard', () => {
   });
 
   it('supports custom field mapping and minimum quantity', () => {
-    const rowIds = collectIncompleteEntireLeftoverRowIds(
+    const rowIds = collectIncompleteRowsByTypeAndQuantity(
       [
         { id: 'a', values: { TYPE: 'FULL', QTY: '1' } },
         { id: 'b', values: { TYPE: 'FULL', QTY: '0' } },
         { id: 'c', values: { TYPE: 'FULL', QTY: '' } }
       ] as any,
-      { prepTypeFieldId: 'TYPE', prepTypeValue: 'FULL', quantityFieldId: 'QTY', minQuantity: 1 }
+      { typeFieldId: 'TYPE', typeValue: 'FULL', quantityFieldId: 'QTY', minQuantity: 1 }
     );
 
     expect(rowIds).toEqual(['b', 'c']);
   });
 
   it('resolves stable default dialog copy', () => {
-    const copy = resolveIncompleteEntireLeftoverOverlayDialogCopy('EN');
+    const copy = resolveIncompleteOverlayRowDialogCopy('EN');
     expect(copy.title).toBe('Missing Entire leftover number of portions.');
     expect(copy.confirmLabel).toBe('Discard incomplete leftover record.');
     expect(copy.cancelLabel).toBe('Continue editing');

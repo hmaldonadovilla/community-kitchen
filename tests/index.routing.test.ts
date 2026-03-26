@@ -31,8 +31,9 @@ describe('index routing', () => {
     expect((args[1] as any).admin).toBe('true');
   });
 
-  it('installs daily analytics trigger alongside existing onEdit triggers', () => {
+  it('installs daily analytics and lifecycle triggers alongside existing onEdit triggers', () => {
     const created: string[] = [];
+    const scheduledHours: Record<string, number> = {};
     const previousScriptApp = (global as any).ScriptApp;
     const previousBrowser = (global as any).Browser;
 
@@ -46,8 +47,11 @@ describe('index routing', () => {
         }),
         timeBased: () => ({
           everyDays: () => ({
-            atHour: () => ({
-              create: () => created.push(handler)
+            atHour: (hour: number) => ({
+              create: () => {
+                created.push(handler);
+                scheduledHours[handler] = hour;
+              }
             })
           })
         })
@@ -60,7 +64,11 @@ describe('index routing', () => {
 
     try {
       installTriggers();
-      expect(created).toEqual(expect.arrayContaining(['onConfigEdit', 'onResponsesEdit', 'runDailyAnalyticsRecompute']));
+      expect(created).toEqual(
+        expect.arrayContaining(['onConfigEdit', 'onResponsesEdit', 'runDailyAnalyticsRecompute', 'runDailyLifecycleRecompute'])
+      );
+      expect(scheduledHours.runDailyAnalyticsRecompute).toBe(23);
+      expect(scheduledHours.runDailyLifecycleRecompute).toBe(2);
     } finally {
       (global as any).ScriptApp = previousScriptApp;
       (global as any).Browser = previousBrowser;

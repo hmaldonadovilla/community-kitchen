@@ -175,4 +175,87 @@ describe('selectionEffects when', () => {
     expect(cookRows[0].id).toBe('cook_1');
     expect(cookRows[0].values.PREP_QTY).toBe(6);
   });
+
+  it('upserts line-item sync rows when replaceExistingByEffectId is explicit', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'LEFTOVER_USE_QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' }, required: false }],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                label: { en: 'Prep', fr: 'Prep', nl: 'Prep' },
+                fields: [
+                  { id: 'PREP_QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' }, required: false },
+                  { id: 'PREP_TYPE', type: 'CHOICE', label: { en: 'Type', fr: 'Type', nl: 'Type' }, required: false }
+                ]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = {};
+    const subKey = buildSubgroupKey('MP_MEALS_REQUEST', 'p1', 'MP_TYPE_LI');
+    let lineItems: Record<string, any> = {
+      MP_MEALS_REQUEST: [{ id: 'p1', values: { LEFTOVER_USE_QTY: 4 } }],
+      [subKey]: [
+        {
+          id: 'leftover_1',
+          values: {
+            PREP_TYPE: 'Entire dish',
+            PREP_QTY: 2,
+            [ROW_SELECTION_EFFECT_ID_KEY]: 'sync_leftover',
+            [ROW_PARENT_GROUP_ID_KEY]: 'MP_MEALS_REQUEST',
+            [ROW_PARENT_ROW_ID_KEY]: 'p1'
+          }
+        }
+      ]
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+    const question = {
+      id: 'LEFTOVER_USE_QTY',
+      selectionEffects: [
+        {
+          id: 'sync_leftover',
+          type: 'addLineItems',
+          groupId: 'MP_TYPE_LI',
+          replaceExistingByEffectId: true,
+          preset: { PREP_QTY: '$row.LEFTOVER_USE_QTY', PREP_TYPE: 'Entire dish' }
+        }
+      ]
+    } as any;
+
+    runSelectionEffects({
+      definition,
+      question,
+      value: 4,
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: { lineItem: { groupId: 'MP_MEALS_REQUEST', rowId: 'p1', rowValues: { LEFTOVER_USE_QTY: 4 } } }
+    });
+
+    const rows = lineItems[subKey] || [];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('leftover_1');
+    expect(rows[0].values.PREP_QTY).toBe(4);
+    expect(rows[0].values.PREP_TYPE).toBe('Entire dish');
+  });
 });

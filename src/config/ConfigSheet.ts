@@ -1675,7 +1675,14 @@ export class ConfigSheet {
     rawEffects.forEach((effect: any) => {
       if (!effect) return;
       const type = (effect.type || 'addLineItems').toString();
-      if (type !== 'addLineItems' && type !== 'addLineItemsFromDataSource' && type !== 'deleteLineItems' && type !== 'setValue') {
+      if (
+        type !== 'addLineItems' &&
+        type !== 'addLineItemsFromDataSource' &&
+        type !== 'addLineItemsFromFieldPayload' &&
+        type !== 'deleteLineItems' &&
+        type !== 'setValue' &&
+        type !== 'setValuesFromDataSource'
+      ) {
         return;
       }
       const normalized: SelectionEffect = {
@@ -1685,7 +1692,7 @@ export class ConfigSheet {
         const groupId = effect.groupId.toString().trim();
         if (groupId) normalized.groupId = groupId;
       }
-      if (type !== 'setValue' && !normalized.groupId) return;
+      if (type !== 'setValue' && type !== 'setValuesFromDataSource' && !normalized.groupId) return;
       {
         const targetPathRaw =
           effect.targetPath !== undefined
@@ -1733,6 +1740,9 @@ export class ConfigSheet {
       if (effect.hideRemoveButton !== undefined) {
         normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
       }
+      if (effect.replaceExistingByEffectId !== undefined) {
+        normalized.replaceExistingByEffectId = Boolean(effect.replaceExistingByEffectId);
+      }
       if (type === 'setValue') {
         const fieldIdCandidate = effect.fieldId ?? effect.targetFieldId ?? effect.fieldRef;
         const fieldId = fieldIdCandidate !== undefined && fieldIdCandidate !== null ? fieldIdCandidate.toString().trim() : '';
@@ -1743,6 +1753,41 @@ export class ConfigSheet {
           if (value !== undefined || effect.value === null) {
             normalized.value = value as PresetValue | null;
           }
+        }
+      }
+      if (type === 'setValuesFromDataSource') {
+        const dsCandidate = this.extractDataSourceCandidate(effect) || this.extractDataSourceCandidate(effect.dataSource);
+        if (dsCandidate) {
+          const config = this.buildDataSourceConfig(dsCandidate);
+          if (config) {
+            normalized.dataSource = config;
+          }
+        } else if (effect.dataSourceId) {
+          normalized.dataSource = { id: effect.dataSourceId.toString() };
+        }
+        if (effect.lookupField) {
+          normalized.lookupField = effect.lookupField.toString();
+        }
+        if (effect.clearOnNoMatch !== undefined) {
+          normalized.clearOnNoMatch = Boolean(effect.clearOnNoMatch);
+        }
+        if (effect.fieldMapping && typeof effect.fieldMapping === 'object') {
+          const mapping: Record<string, string> = {};
+          Object.keys(effect.fieldMapping).forEach(key => {
+            const value = effect.fieldMapping[key];
+            if (value !== undefined && value !== null) {
+              const targetFieldId = key.toString().trim();
+              const sourceFieldId = value.toString().trim();
+              if (!targetFieldId || !sourceFieldId) return;
+              mapping[targetFieldId] = sourceFieldId;
+            }
+          });
+          if (Object.keys(mapping).length) {
+            normalized.fieldMapping = mapping;
+          }
+        }
+        if (!normalized.dataSource || !normalized.lookupField || !normalized.fieldMapping || !Object.keys(normalized.fieldMapping).length) {
+          return;
         }
       }
       {
@@ -1782,18 +1827,21 @@ export class ConfigSheet {
         });
         if (Object.keys(preset).length) normalized.preset = preset;
       }
-      if (type === 'addLineItemsFromDataSource') {
+      if (type === 'addLineItemsFromDataSource' || type === 'addLineItemsFromFieldPayload') {
         const dsCandidate = this.extractDataSourceCandidate(effect) || this.extractDataSourceCandidate(effect.dataSource);
-        if (dsCandidate) {
+        if (type === 'addLineItemsFromDataSource' && dsCandidate) {
           const config = this.buildDataSourceConfig(dsCandidate);
           if (config) {
             normalized.dataSource = config;
           }
-        } else if (effect.dataSourceId) {
+        } else if (type === 'addLineItemsFromDataSource' && effect.dataSourceId) {
           normalized.dataSource = { id: effect.dataSourceId.toString() };
         }
         if (effect.lookupField) {
           normalized.lookupField = effect.lookupField.toString();
+        }
+        if (effect.matchField) {
+          normalized.matchField = effect.matchField.toString();
         }
         if (effect.dataField) {
           normalized.dataField = effect.dataField.toString();
@@ -1836,6 +1884,12 @@ export class ConfigSheet {
             .map((fieldId: any) => (fieldId !== undefined && fieldId !== null ? fieldId.toString() : ''))
             .filter(Boolean);
           if (scaleFields.length) normalized.scaleNumericFields = scaleFields;
+        }
+        if (type === 'addLineItemsFromDataSource' && !normalized.dataSource) {
+          return;
+        }
+        if (type === 'addLineItemsFromFieldPayload' && !normalized.dataField) {
+          return;
         }
       }
       effects.push(normalized);
@@ -1885,9 +1939,44 @@ export class ConfigSheet {
     if (source.prefix) config.prefix = source.prefix.toString();
     if (source.padLength !== undefined) {
       const pad = Number(source.padLength);
-      if (Number.isFinite(pad) && pad > 0) config.padLength = pad;
+      if (Number.isFinite(pad) && pad >= 0) config.padLength = pad;
     }
     if (source.propertyKey) config.propertyKey = source.propertyKey.toString();
+    const prefixByValueSource = source.prefixByValue;
+    if (prefixByValueSource && typeof prefixByValueSource === 'object') {
+      const fieldIdRaw =
+        prefixByValueSource.fieldId ??
+        prefixByValueSource.dependsOn ??
+        prefixByValueSource.sourceFieldId ??
+        prefixByValueSource.keyFieldId;
+      const fieldId = fieldIdRaw !== undefined && fieldIdRaw !== null ? fieldIdRaw.toString().trim() : '';
+      const mapRaw = prefixByValueSource.map ?? prefixByValueSource.prefixMap ?? prefixByValueSource.valueMap;
+      if (fieldId && mapRaw && typeof mapRaw === 'object' && !Array.isArray(mapRaw)) {
+        const map: Record<string, string> = {};
+        Object.keys(mapRaw).forEach(rawKey => {
+          const key = (rawKey || '').toString().trim();
+          if (!key) return;
+          const prefixValue = (mapRaw as any)[rawKey];
+          if (prefixValue === undefined || prefixValue === null) return;
+          const normalized = prefixValue.toString();
+          if (!normalized) return;
+          map[key] = normalized;
+        });
+        if (Object.keys(map).length) {
+          config.prefixByValue = {
+            fieldId,
+            map
+          };
+          const defaultPrefixRaw = prefixByValueSource.defaultPrefix ?? prefixByValueSource.fallbackPrefix;
+          if (defaultPrefixRaw !== undefined && defaultPrefixRaw !== null) {
+            const defaultPrefix = defaultPrefixRaw.toString();
+            if (defaultPrefix) {
+              config.prefixByValue.defaultPrefix = defaultPrefix;
+            }
+          }
+        }
+      }
+    }
     return Object.keys(config).length ? config : undefined;
   }
 
@@ -2762,6 +2851,15 @@ export class ConfigSheet {
 
     const defaultCollapsed =
       rawUi.defaultCollapsed !== undefined && rawUi.defaultCollapsed !== null ? !!rawUi.defaultCollapsed : undefined;
+    const rowHeaderSummaryTemplateRaw =
+      rawUi.rowHeaderSummaryTemplate ??
+      rawUi.row_header_summary_template ??
+      rawUi.headerSummaryTemplate ??
+      rawUi.header_summary_template;
+    const rowHeaderSummaryTemplate =
+      rowHeaderSummaryTemplateRaw !== undefined && rowHeaderSummaryTemplateRaw !== null
+        ? rowHeaderSummaryTemplateRaw.toString().trim()
+        : '';
 
     const rowDisclaimer = this.normalizeRowDisclaimer(rawUi.rowDisclaimer ?? rawUi.row_disclaimer ?? rawUi.disclaimer);
     const overlayDetail = rawUi.overlayDetail ?? rawUi.overlay_detail ?? rawUi.overlayDetailLayout ?? rawUi.overlay_detail_layout;
@@ -2917,6 +3015,7 @@ export class ConfigSheet {
     if (collapsedFields && collapsedFields.length) cfg.collapsedFields = collapsedFields;
     if (expandGate) cfg.expandGate = expandGate;
     if (defaultCollapsed !== undefined) cfg.defaultCollapsed = defaultCollapsed;
+    if (rowHeaderSummaryTemplate) (cfg as any).rowHeaderSummaryTemplate = rowHeaderSummaryTemplate;
     if (rowDisclaimer) (cfg as any).rowDisclaimer = rowDisclaimer;
     if (tableColumns.length) (cfg as any).tableColumns = tableColumns;
     if (tableColumnWidths) (cfg as any).tableColumnWidths = tableColumnWidths;
@@ -3509,6 +3608,18 @@ export class ConfigSheet {
       if (copyMode === 'replace' || copyMode === 'allowincrease' || copyMode === 'allowdecrease') {
         cfg.copyMode = copyMode === 'allowincrease' ? 'allowIncrease' : copyMode === 'allowdecrease' ? 'allowDecrease' : 'replace';
       }
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
+    if (op === 'template') {
+      const templateRaw = raw.template ?? raw.text ?? raw.value;
+      const template = templateRaw !== undefined && templateRaw !== null ? templateRaw.toString() : '';
+      if (!template.trim()) return undefined;
+      const cfg: any = { op: 'template', template };
+      const applyOnRaw = raw.applyOn !== undefined && raw.applyOn !== null ? raw.applyOn.toString().trim().toLowerCase() : '';
+      if (applyOnRaw === 'change' || applyOnRaw === 'blur') cfg.applyOn = applyOnRaw;
       if (when) cfg.when = when;
       if (hidden !== undefined) cfg.hidden = hidden;
       return cfg as DerivedValueConfig;

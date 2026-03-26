@@ -71,6 +71,26 @@ describe('web dataSources persistence', () => {
     expect(keys[0]).not.toBe(keys[1]);
   });
 
+  it('persists different form-backed configs under different localStorage keys', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    installGoogleScriptRunMock(cfg => ({ items: [{ id: cfg?.formKey || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    await fetchDataSource({ id: 'Shared Inventory', formKey: 'Config: Leftover Inventory' } as any, 'EN', {
+      forceRefresh: true
+    });
+    await fetchDataSource({ id: 'Shared Inventory', formKey: 'Config: Pantry Inventory' } as any, 'EN', {
+      forceRefresh: true
+    });
+
+    const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
+    expect(keys.length).toBe(2);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
   it('clears persisted dataSource entries on clearFetchDataSourceCache()', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };

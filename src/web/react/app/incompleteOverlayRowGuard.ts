@@ -1,19 +1,19 @@
 import { resolveLocalizedString } from '../../i18n';
 import type { FieldValue, LangCode } from '../../types';
 
-type LeftoverRowLike = {
+type OverlayRowLike = {
   id?: string;
   values?: Record<string, FieldValue>;
 };
 
-type IncompleteEntireLeftoverOptions = {
-  prepTypeFieldId?: string;
-  prepTypeValue?: string;
+type IncompleteRowGuardOptions = {
+  typeFieldId?: string;
+  typeValue?: string;
   quantityFieldId?: string;
   minQuantity?: number;
 };
 
-export type IncompleteEntireLeftoverOverlayDialogCopy = {
+export type IncompleteOverlayDialogCopy = {
   title: string;
   message: string;
   confirmLabel: string;
@@ -23,8 +23,8 @@ export type IncompleteEntireLeftoverOverlayDialogCopy = {
   dismissOnBackdrop: boolean;
 };
 
-const DEFAULT_PREP_TYPE_FIELD_ID = 'PREP_TYPE';
-const DEFAULT_PREP_TYPE_VALUE = 'Entire dish';
+const DEFAULT_TYPE_FIELD_ID = 'PREP_TYPE';
+const DEFAULT_TYPE_VALUE = 'Entire dish';
 const DEFAULT_QUANTITY_FIELD_ID = 'PREP_QTY';
 const DEFAULT_MIN_QUANTITY = 0;
 
@@ -46,12 +46,12 @@ const normalizeNumber = (raw: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const collectIncompleteEntireLeftoverRowIds = (
-  rows: LeftoverRowLike[],
-  options?: IncompleteEntireLeftoverOptions
+export const collectIncompleteRowsByTypeAndQuantity = (
+  rows: OverlayRowLike[],
+  options?: IncompleteRowGuardOptions
 ): string[] => {
-  const prepTypeFieldId = normalizeString(options?.prepTypeFieldId || DEFAULT_PREP_TYPE_FIELD_ID);
-  const prepTypeValue = normalizeString(options?.prepTypeValue || DEFAULT_PREP_TYPE_VALUE).toLowerCase();
+  const typeFieldId = normalizeString(options?.typeFieldId || DEFAULT_TYPE_FIELD_ID);
+  const typeValue = normalizeString(options?.typeValue || DEFAULT_TYPE_VALUE).toLowerCase();
   const quantityFieldId = normalizeString(options?.quantityFieldId || DEFAULT_QUANTITY_FIELD_ID);
   const minQuantityRaw = normalizeNumber(options?.minQuantity);
   const minQuantity = minQuantityRaw === null ? DEFAULT_MIN_QUANTITY : minQuantityRaw;
@@ -62,8 +62,8 @@ export const collectIncompleteEntireLeftoverRowIds = (
     const rowId = normalizeString((row as any)?.id);
     if (!rowId || seen.has(rowId)) return;
     const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
-    const prepType = normalizeString((rowValues as any)[prepTypeFieldId]).toLowerCase();
-    if (!prepType || prepType !== prepTypeValue) return;
+    const rowType = normalizeString((rowValues as any)[typeFieldId]).toLowerCase();
+    if (!rowType || rowType !== typeValue) return;
     const quantity = normalizeNumber((rowValues as any)[quantityFieldId]);
     if (quantity !== null && quantity >= minQuantity) return;
     seen.add(rowId);
@@ -73,9 +73,9 @@ export const collectIncompleteEntireLeftoverRowIds = (
   return out;
 };
 
-export const resolveIncompleteEntireLeftoverOverlayDialogCopy = (
+export const resolveIncompleteOverlayRowDialogCopy = (
   language: LangCode
-): IncompleteEntireLeftoverOverlayDialogCopy => {
+): IncompleteOverlayDialogCopy => {
   return {
     title: resolveLocalizedString(
       {

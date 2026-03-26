@@ -6,8 +6,12 @@ export { computeTotals, isEmptyRow } from '../lineItems';
 export { handleSelectionEffects, SelectionEffectOptions } from '../effects/selectionEffects';
 export { fetchDataSource, resolveQuestionOptionsFromSource } from '../data/dataSources';
 export {
+  getOptionStateValue,
+  mergeOptionStateValue,
   normalizeLanguage,
   optionKey,
+  optionKeysWithAliases,
+  optionParentAliases,
   toOptionSet,
   toDependencyValue,
   buildOptionSet,

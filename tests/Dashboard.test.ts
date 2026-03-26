@@ -65,6 +65,62 @@ describe('Dashboard', () => {
     expect(forms[0].followupConfig?.statusTransitions?.onPdf).toBe('PDF ready');
   });
 
+  test('getForms parses follow-up submitEffects for cross-form record creation', () => {
+    const followupConfig = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Leftover Inventory',
+          runOn: 'create',
+          status: 'Available',
+          forEachLineItem: {
+            groupId: 'MEALS',
+            subGroupPath: ['LEFTOVERS'],
+            when: {
+              fieldId: 'LEFTOVER_KIND',
+              equals: 'partialDish'
+            }
+          },
+          values: {
+            SOURCE_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.MEAL_NAME}}',
+            LEFTOVER_NAME: '{{row.LEFTOVER_NAME}}'
+          }
+        }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', followupConfig]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].followupConfig?.submitEffects).toEqual([
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Leftover Inventory',
+          runOn: 'create',
+          status: 'Available',
+          forEachLineItem: {
+            groupId: 'MEALS',
+            subGroupPath: ['LEFTOVERS'],
+            when: {
+              fieldId: 'LEFTOVER_KIND',
+              equals: 'partialDish'
+            }
+          },
+          values: {
+            SOURCE_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.MEAL_NAME}}',
+            LEFTOVER_NAME: '{{row.LEFTOVER_NAME}}'
+          }
+        }
+      ]);
+  });
+
   test('getForms parses list view meta columns from dashboard config', () => {
     const configJson = JSON.stringify({
       listViewMetaColumns: ['createdAt', 'status', 'pdfUrl']
@@ -550,6 +606,9 @@ describe('Dashboard', () => {
                 kind: 'lineGroup',
                 id: 'MP_MEALS_REQUEST',
                 groupOverride: {
+                  ui: {
+                    rowHeaderSummaryTemplate: '{MEAL_TYPE} | {ORD_QTY}'
+                  },
                   totals: [{ type: 'sum', fieldId: 'ORD_QTY' }]
                 }
               }
@@ -571,7 +630,10 @@ describe('Dashboard', () => {
     const step = (forms[0].steps as any)?.items?.[0];
     const target = step?.include?.[0];
     expect(target?.kind).toBe('lineGroup');
-    expect(target?.groupOverride).toEqual({ totals: [{ type: 'sum', fieldId: 'ORD_QTY' }] });
+    expect(target?.groupOverride).toEqual({
+      ui: { rowHeaderSummaryTemplate: '{MEAL_TYPE} | {ORD_QTY}' },
+      totals: [{ type: 'sum', fieldId: 'ORD_QTY' }]
+    });
   });
 
   test('getForms preserves guided steps lineGroup/subGroup field entries with renderAsLabel', () => {
@@ -738,6 +800,92 @@ describe('Dashboard', () => {
     const dashboard = new Dashboard(mockSS as any);
     const forms = dashboard.getForms();
     expect(forms[0].submitButtonLabel).toEqual({ en: 'Send' });
+  });
+
+  test('getForms parses submitEffects updateRecord from dashboard config', () => {
+    const configJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'updateRecord',
+          targetFormKey: 'Config: Leftover Inventory',
+          runOn: 'update',
+          recordId: '{{row.LEFTOVER_RECORD_ID}}',
+          forEachLineItem: {
+            groupId: 'MP_MEALS_REQUEST',
+            subGroupPath: ['MP_TYPE_LI']
+          },
+          status: 'used',
+          values: {
+            LEFTOVER_USED_BY_RECORD_ID: '{{source.id}}'
+          }
+        }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].followupConfig?.submitEffects).toEqual([
+      {
+        type: 'updateRecord',
+        targetFormKey: 'Config: Leftover Inventory',
+        runOn: 'update',
+        recordId: '{{row.LEFTOVER_RECORD_ID}}',
+        forEachLineItem: {
+          groupId: 'MP_MEALS_REQUEST',
+          subGroupPath: ['MP_TYPE_LI']
+        },
+        status: 'used',
+        values: {
+          LEFTOVER_USED_BY_RECORD_ID: '{{source.id}}'
+        }
+      }
+    ]);
+  });
+
+  test('getForms parses lifecycle rules from dashboard config', () => {
+    const configJson = JSON.stringify({
+      lifecycle: {
+        rules: [
+          {
+            id: 'expire-leftovers',
+            type: 'dateStatusTransition',
+            dateFieldId: 'LEFTOVER_EXP_DATE',
+            statusFieldId: 'LEFTOVER_STATUS',
+            fromStatuses: ['available'],
+            toStatus: 'expired',
+            compare: 'beforeToday'
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].lifecycle).toEqual({
+      rules: [
+        {
+          id: 'expire-leftovers',
+          type: 'dateStatusTransition',
+          dateFieldId: 'LEFTOVER_EXP_DATE',
+          statusFieldId: 'LEFTOVER_STATUS',
+          fromStatuses: ['available'],
+          toStatus: 'expired',
+          compare: 'beforeToday'
+        }
+      ]
+    });
   });
 
   test('getForms parses submitValidation.hideSubmitTopErrorMessage from dashboard config', () => {

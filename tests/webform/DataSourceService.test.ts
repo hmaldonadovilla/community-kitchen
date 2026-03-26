@@ -96,6 +96,30 @@ describe('DataSourceService', () => {
     expect((res.items[0] as any).Name).toBe('Alpha');
   });
 
+  test('filters by statusAllowList using a configured statusFieldId', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Leftover Inventory Data');
+    sheet.setMockData([
+      ['LEFTOVER_ID', 'LEFTOVER_STATUS', 'LEFTOVER_RECIPE'],
+      ['LE-1', 'available', 'Soup'],
+      ['LE-2', 'used', 'Stew']
+    ]);
+
+    const service = new DataSourceService(ss);
+    const res = service.fetchDataSource(
+      {
+        id: 'Leftover Inventory Data',
+        projection: ['LEFTOVER_ID', 'LEFTOVER_RECIPE'],
+        statusFieldId: 'LEFTOVER_STATUS',
+        statusAllowList: ['available']
+      } as any,
+      'EN'
+    );
+
+    expect(res.items.length).toBe(1);
+    expect((res.items[0] as any).LEFTOVER_ID).toBe('LE-1');
+  });
+
   test('reuses short-lived shared fetch cache across service instances', () => {
     const ss = new MockSpreadsheet() as any;
     const sheet = ss.insertSheet('Source');

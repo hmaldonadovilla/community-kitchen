@@ -15,9 +15,12 @@ export const SearchableSelect: React.FC<{
   disabled?: boolean;
   placeholder?: string;
   emptyText?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  inputStyle?: React.CSSProperties;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onChange: (nextValue: string) => void;
-}> = ({ value, options, disabled, placeholder, emptyText, onDiagnostic, onChange }) => {
+}> = ({ value, options, disabled, placeholder, emptyText, className, style, inputStyle, onDiagnostic, onChange }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -122,7 +125,11 @@ export const SearchableSelect: React.FC<{
   }, [open, recomputeMenuLayout]);
 
   return (
-    <div ref={rootRef} className={`ck-searchable-select${disabled ? ' ck-searchable-select--disabled' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`ck-searchable-select${disabled ? ' ck-searchable-select--disabled' : ''}${className ? ` ${className}` : ''}`}
+      style={style}
+    >
       <input
         ref={inputRef}
         type="text"
@@ -133,6 +140,7 @@ export const SearchableSelect: React.FC<{
         aria-expanded={open ? 'true' : 'false'}
         aria-autocomplete="list"
         aria-haspopup="listbox"
+        style={inputStyle}
         onFocus={() => {
           if (disabled) return;
           setEditing(true);

@@ -330,6 +330,125 @@ export interface UpdateRecordDependencyGuardConfig {
   mutations: UpdateRecordDependencyMutation[];
 }
 
+export interface FollowupCreateRecordEffect {
+  /**
+   * Create a new record in another form after the source record is saved.
+   */
+  type: 'createRecord';
+  /**
+   * Destination form key (dashboard config sheet name or title).
+   */
+  targetFormKey: string;
+  /**
+   * Optional condition evaluated against the saved source record.
+   */
+  when?: WhenClause;
+  /**
+   * When to run this effect relative to the source save operation.
+   * - create: only when the source record is first created
+   * - update: only when the source record is updated
+   * - both: always (default)
+   */
+  runOn?: 'create' | 'update' | 'both';
+  /**
+   * Optional deterministic downstream record id.
+   *
+   * When provided, repeated executions update the same downstream record instead of
+   * creating duplicates. Supports the same template tokens as `values`.
+   */
+  recordId?: DefaultValue | null;
+  /**
+   * Optional target status written through the destination form's status handling.
+   */
+  status?: string | null;
+  /**
+   * Top-level destination field values. Supports `{{source.FIELD_ID}}` templates.
+   * Exact template tokens may also resolve to arrays/objects, which allows copying
+   * line-item payloads into target LINE_ITEM_GROUP fields.
+   */
+  values?: Record<string, DefaultValue | null>;
+  /**
+   * Optional line-item iterator. When configured, the effect creates one downstream
+   * record per matched source line-item row instead of a single downstream record
+   * per source submission.
+   */
+  forEachLineItem?: FollowupCreateRecordLineItemConfig;
+  /**
+   * Optional audit action label used on the downstream write.
+   */
+  auditAction?: string;
+}
+
+export interface FollowupUpdateRecordEffect {
+  /**
+   * Update an existing record in another form after the source record is saved.
+   */
+  type: 'updateRecord';
+  /**
+   * Destination form key (dashboard config sheet name or title).
+   */
+  targetFormKey: string;
+  /**
+   * Optional condition evaluated against the saved source record.
+   */
+  when?: WhenClause;
+  /**
+   * When to run this effect relative to the source save operation.
+   * - create: only when the source record is first created
+   * - update: only when the source record is updated
+   * - both: always (default)
+   */
+  runOn?: 'create' | 'update' | 'both';
+  /**
+   * Deterministic downstream record id to update.
+   *
+   * Supports the same template tokens as `values`, including
+   * `{{source.FIELD_ID}}`, `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`,
+   * and `{{lineItem.rowId}}` when used with `forEachLineItem`.
+   */
+  recordId: DefaultValue;
+  /**
+   * Optional target status written through the destination form's status handling.
+   */
+  status?: string | null;
+  /**
+   * Top-level destination field values to overwrite on the target record.
+   */
+  values?: Record<string, DefaultValue | null>;
+  /**
+   * Optional line-item iterator. When configured, the effect updates one downstream
+   * record per matched source line-item row instead of a single downstream record
+   * per source submission.
+   */
+  forEachLineItem?: FollowupCreateRecordLineItemConfig;
+  /**
+   * Optional audit action label used on the downstream write.
+   */
+  auditAction?: string;
+}
+
+export type FollowupSubmitEffect = FollowupCreateRecordEffect | FollowupUpdateRecordEffect;
+
+export interface FollowupCreateRecordLineItemConfig {
+  /**
+   * Root line-item group id on the source form.
+   */
+  groupId: string;
+  /**
+   * Optional nested subgroup path relative to `groupId`.
+   * Example: `["MP_TYPE_LI", "MP_INGREDIENTS_LI"]`.
+   */
+  subGroupPath?: string[];
+  /**
+   * Optional condition evaluated against each candidate row.
+   *
+   * Row fields are checked first, then the immediate parent row, then the top-level
+   * source record. Template values can reference `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`,
+   * and `{{lineItem.index}}`.
+   */
+  when?: WhenClause;
+}
+
 export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
 
 export type SystemActionGateDialogTrigger = 'onAttempt' | 'onEnable';
@@ -722,6 +841,16 @@ export interface QuestionUiConfig {
    */
   renderAsLabel?: boolean;
   /**
+   * When false, do not replay this field's `selectionEffects` during record-open/init hydration.
+   *
+   * This is useful for derived or synchronization fields whose normal on-change effects should run
+   * during editing, but whose init-time replay would otherwise clear/rebuild dependent rows and
+   * create feedback loops while opening an existing record.
+   *
+   * Default: true.
+   */
+  runSelectionEffectsOnInit?: boolean;
+  /**
    * Optional sibling field id to append in parentheses when this field is rendered as a read-only value
    * inside line-item table cells (including overlay table editors).
    *
@@ -785,6 +914,38 @@ export interface QuestionUiConfig {
    * to open a line-item group overlay with optional row filters + UI overrides.
    */
   overlayOpenActions?: LineItemOverlayOpenActionConfig[];
+  /**
+   * Optional exclusivity rule for line-item fields.
+   *
+   * When the current row sets this field to an "active" value (typically `true` for CHECKBOX),
+   * matching rows in the configured scope are automatically cleared.
+   *
+   * Intended for reusable picker scenarios where one shared item may only be selected once
+   * across sibling rows (for example, assigning a shared leftover to only one meal).
+   */
+  exclusiveLineSelection?: ExclusiveLineSelectionConfig;
+}
+
+export interface ExclusiveLineSelectionConfig {
+  /**
+   * Field id whose value identifies the shared item being selected.
+   * Rows with the same key are considered duplicates for exclusivity purposes.
+   */
+  keyFieldId: string;
+  /**
+   * Scope to scan for duplicates.
+   * - sameGroup: rows inside the current line-item group key only
+   * - sameSubgroupAcrossRoot: rows in the same subgroup id across all parent rows of the same root group
+   */
+  scope?: 'sameGroup' | 'sameSubgroupAcrossRoot';
+  /**
+   * Additional field ids to clear on conflicting rows when they are deselected.
+   */
+  clearFieldIds?: string[];
+  /**
+   * Child subgroup ids to clear on conflicting rows when they are deselected.
+   */
+  clearSubGroupIds?: string[];
 }
 
 export interface ParagraphDisclaimerConfig {
@@ -1413,6 +1574,28 @@ export interface DerivedValueCopyConfig {
   hidden?: boolean;
 }
 
+export interface DerivedValueTemplateConfig {
+  op: 'template';
+  /**
+   * Text template using `{FIELD_ID}` tokens.
+   * Example: "{MEAL_TYPE} | {ORD_QTY}".
+   */
+  template: string;
+  /**
+   * When to apply the derived value:
+   * - empty: default for template (behaves like a default; allows user overrides)
+   * - always: recompute on every change
+   */
+  when?: DerivedValueWhen;
+  /**
+   * Control when the derived value is applied during editing.
+   * - change: apply on every onChange (default for template)
+   * - blur: apply only after the user leaves the input
+   */
+  applyOn?: 'change' | 'blur';
+  hidden?: boolean;
+}
+
 export interface DerivedValueCalcFilterConfig {
   /**
    * Reference to the aggregate in the expression (e.g., "MP_TYPE_LI.PREP_QTY").
@@ -1464,12 +1647,18 @@ export type DerivedValueConfig =
   | DerivedValueTodayConfig
   | DerivedValueTimeOfDayMapConfig
   | DerivedValueCopyConfig
+  | DerivedValueTemplateConfig
   | DerivedValueCalcConfig;
 
 export interface AutoIncrementConfig {
   prefix?: string;
   padLength?: number;
   propertyKey?: string;
+  prefixByValue?: {
+    fieldId: string;
+    map: Record<string, string>;
+    defaultPrefix?: string;
+  };
 }
 
 export interface LineItemCollapsedFieldConfig {
@@ -1481,7 +1670,75 @@ export interface LineItemCollapsedFieldConfig {
   showLabel?: boolean;
 }
 
+export interface CompactRowPartConfig {
+  type?: 'text' | 'field' | 'primary' | 'meta';
+  text?: LocalizedString | string;
+  fieldId?: string;
+  sourceFieldId?: string;
+  lookupField?: string;
+  sourcePath?: string;
+  suffix?: LocalizedString | string;
+  suffixFieldId?: string;
+  suffixSourcePath?: string;
+  minWidth?: number;
+  maxWidth?: number;
+  paddingChars?: number;
+}
+
+export interface CompactRowRuleConfig {
+  when?: WhenClause;
+  parts: CompactRowPartConfig[];
+}
+
+export interface CompactRowActionConfig {
+  type: 'openSubgroupOverlay';
+  label: LocalizedString | string;
+  overlayLabel?: LocalizedString | string;
+  subGroupId: string;
+  showWhen?: WhenClause;
+  tone?: 'primary' | 'secondary';
+  readOnly?: boolean;
+  closeButtonLabel?: LocalizedString | string;
+  emptyMessage?: LocalizedString | string;
+  contextHeaderFieldId?: string;
+  groupOverride?: LineItemGroupConfigOverride;
+  sourceFieldId?: string;
+  lookupField?: string;
+  sourcePath?: string;
+  lineItemMapping?: Record<string, string>;
+  aggregateBy?: string[];
+  aggregateNumericFields?: string[];
+}
+
 export interface LineItemGroupUiConfig {
+  /**
+   * When false, this line item group is treated as transient UI state and is not persisted into
+   * the record payload on save/draft save, nor reloaded from existing record values.
+   *
+   * Use this for datasource-backed selector rows whose authoritative persisted output lives in a
+   * different group (for example generated `MP_TYPE_LI` rows).
+   *
+   * Default: true.
+   */
+  persistRows?: boolean;
+  /**
+   * Optional compact headline layouts for `compactRows` renderers.
+   * The first matching rule wins.
+   */
+  compactHeadlineRows?: CompactRowRuleConfig[];
+  /**
+   * Optional compact sentence layouts for `compactRows` renderers.
+   * The first matching rule wins.
+   */
+  compactSentenceRows?: CompactRowRuleConfig[];
+  /**
+   * Optional compact-row actions rendered alongside the headline for `compactRows` renderers.
+   * The first matching rule wins.
+   */
+  compactActions?: Array<{
+    when?: WhenClause;
+    actions: CompactRowActionConfig[];
+  }>;
   /**
    * Optional UI mode for rendering this line item group.
    * - undefined: default/table-like editor (existing behavior)
@@ -1500,6 +1757,29 @@ export interface LineItemGroupUiConfig {
    * Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
    */
   tableColumnWidths?: Record<string, string | number>;
+  /**
+   * When true, omit the trailing Remove column from table renderers.
+   * This is useful for read-mostly selector tables where rows should stay stable
+   * and removal is not part of the intended workflow.
+   */
+  hideRemoveColumn?: boolean;
+  /**
+   * Optional maximum number of visible table rows before the table body becomes scrollable.
+   * This keeps dense selector lists compact inside guided steps.
+   */
+  maxVisibleRows?: number;
+  /**
+   * Optional row-header summary template for progressive rows.
+   *
+   * Use `{FIELD_ID}` placeholders to compose a single compact header line
+   * from parent-row values, for example `{MEAL_TYPE} | {ORD_QTY}`.
+   */
+  rowHeaderSummaryTemplate?: string;
+  /**
+   * When true in progressive mode, subgroups stay inline once the parent row is expanded
+   * instead of showing the fallback "Tap to open" subgroup pills.
+   */
+  inlineSubgroupsWhenExpanded?: boolean;
   /**
    * Controls how non-match option warnings are shown in the table legend.
    *
@@ -1925,13 +2205,25 @@ export interface SelectionEffect {
    * so you can reference the originating effect in visibility/validation/disclaimer rules.
    */
   id?: string;
-  type: 'addLineItems' | 'addLineItemsFromDataSource' | 'deleteLineItems' | 'setValue';
+  type:
+    | 'addLineItems'
+    | 'addLineItemsFromDataSource'
+    | 'addLineItemsFromFieldPayload'
+    | 'deleteLineItems'
+    | 'setValue'
+    | 'setValuesFromDataSource';
   // target line item group (legacy or immediate subgroup id); required for add/delete effects
   groupId?: string;
   // target field id for setValue effects (uses current row context when triggered inside line items)
   fieldId?: string;
   // value to set for setValue effects (supports $row./$top. references; null clears)
   value?: PresetValue | null;
+  /**
+   * For `type: "setValuesFromDataSource"`, maps target field ids to source row keys.
+   * The effect copies values from the matched external record into either the current line-item row
+   * or the top-level form when no line-item context exists.
+   */
+  fieldMapping?: Record<string, string>;
   /**
    * Optional subgroup path target for nested line item groups.
    * - String uses dot notation: "SUB1.SUB2"
@@ -1942,7 +2234,12 @@ export interface SelectionEffect {
    * Optional conditional gate for the effect (evaluated against the current row/top-level values).
    */
   when?: WhenClause;
-  preset?: Record<string, PresetValue>; // preset field values for simple addLineItems (supports $row./$top. references)
+  /**
+   * Preset field values for generated rows.
+   * - `addLineItems`: supports literals plus `$row.FIELD_ID` / `$top.FIELD_ID`
+   * - `addLineItemsFromDataSource`: also supports literals plus `$row.FIELD_ID` / `$source.FIELD_PATH`
+   */
+  preset?: Record<string, PresetValue>;
   triggerValues?: string[]; // which choice/checkbox values trigger this effect (defaults to any)
   /**
    * When true, rows created by this effect should not show the UI "Remove" action.
@@ -1950,12 +2247,33 @@ export interface SelectionEffect {
    */
   hideRemoveButton?: boolean;
   /**
+   * When true, rebuilding rows for this effect will discard every existing auto-generated row
+   * in the target group, even if that row originated from another effect context.
+   *
+   * Useful for datasource-backed seeding effects that should fully replace stale auto rows on reload.
+   */
+  replaceAllAutoRows?: boolean;
+  /**
+   * When true, `type: "addLineItems"` will update the existing auto row created by the same effect
+   * for the current parent row instead of appending duplicates.
+   *
+   * Useful when multiple fields in a compact row must immediately regenerate a single downstream line item.
+   */
+  replaceExistingByEffectId?: boolean;
+  /**
    * For `type: "deleteLineItems"`, optionally specify which `SelectionEffect.id` to delete rows for.
    * If omitted, the effect's own `id` is used.
    */
   targetEffectId?: string;
   dataSource?: DataSourceConfig; // optional override source for data-driven effects
   lookupField?: string; // column/field used to match the selected value
+  lookupSourceFieldId?: string; // current row/top-level field whose value should drive the data-source lookup
+  /**
+   * For `type: "addLineItemsFromDataSource"`, optionally match all data-source rows whose field value
+   * equals the current selection (or the fallback lookup field value in sibling checkbox flows).
+   * This is useful when one selected value should fan out into multiple line-item rows.
+   */
+  matchField?: string;
   dataField?: string; // column/field that contains serialized row payloads (e.g., JSON array)
   lineItemMapping?: Record<string, string>; // map of line item field id -> source field key
   clearGroupBeforeAdd?: boolean; // when true (default) clear existing rows before populating
@@ -1964,6 +2282,10 @@ export interface SelectionEffect {
   rowMultiplierFieldId?: string; // originating line-item field id whose numeric value scales results
   dataSourceMultiplierField?: string; // column/field in the data source describing the default quantity
   scaleNumericFields?: string[]; // override list of mapped numeric fields to scale (defaults to aggregateNumericFields)
+  /**
+   * For `type: "setValuesFromDataSource"`, when true clear mapped target fields if no data-source row matches.
+   */
+  clearOnNoMatch?: boolean;
   /**
    * When false, data-driven effects will remove existing manual rows in the target group when refreshing
    * auto-generated rows (useful when changing a parent selector would otherwise discard edits silently).
@@ -2058,6 +2380,57 @@ export interface FollowupConfig {
   emailBcc?: EmailRecipientEntry[];
   statusFieldId?: string;
   statusTransitions?: FollowupStatusConfig;
+  submitEffects?: FollowupSubmitEffect[];
+}
+
+export interface LifecycleDateStatusTransitionRule {
+  /**
+   * Optional stable rule id for diagnostics.
+   */
+  id?: string;
+  /**
+   * Generic date-driven status transition rule evaluated by the daily lifecycle trigger.
+   */
+  type: 'dateStatusTransition';
+  /**
+   * Field id containing the date used for the transition comparison.
+   */
+  dateFieldId: string;
+  /**
+   * Optional field id used to read/write the business status.
+   * When omitted, the form follow-up status field (if configured) or the record meta Status column is used.
+   */
+  statusFieldId?: string;
+  /**
+   * Optional list of statuses that are eligible for transition.
+   * Comparisons are case-insensitive.
+   */
+  fromStatuses?: string[];
+  /**
+   * Destination status written when the rule matches.
+   */
+  toStatus: string;
+  /**
+   * Date comparison used against the script-local current date.
+   *
+   * - `beforeToday`: transition when `dateFieldId < today`
+   * - `onOrBeforeToday`: transition when `dateFieldId <= today`
+   */
+  compare?: 'beforeToday' | 'onOrBeforeToday';
+  /**
+   * Optional day offset applied before comparison.
+   * Example: `1` with `beforeToday` means "before tomorrow".
+   */
+  dayOffset?: number;
+}
+
+export type LifecycleRule = LifecycleDateStatusTransitionRule;
+
+export interface LifecycleConfig {
+  /**
+   * Config-driven lifecycle rules evaluated by the daily lifecycle trigger.
+   */
+  rules?: LifecycleRule[];
 }
 
 export interface AutoSaveConfig {
@@ -2156,11 +2529,17 @@ export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
   mode?: 'options' | 'prefill' | 'list';
+  formKey?: string; // optional form key when sourcing from another form's submissions
   sheetId?: string; // optional sheet id when sourcing from another file
   tabName?: string; // tab name for the source table
   localeKey?: string; // optional column used to scope localized rows
   /**
-   * Optional allow-list filter for record-like sources that include a `status` column.
+   * Optional field id / column key used together with `statusAllowList`.
+   * Defaults to `status` when omitted.
+   */
+  statusFieldId?: string;
+  /**
+   * Optional allow-list filter for record-like sources that include a status column.
    * When set, only rows whose status value matches one of these strings (case-insensitive) are returned.
    */
   statusAllowList?: string[];
@@ -2331,6 +2710,10 @@ export interface FormConfig {
   appUrl?: string;
   rowIndex: number;
   followupConfig?: FollowupConfig;
+  /**
+   * Optional config-driven lifecycle automation, evaluated by the daily lifecycle trigger.
+   */
+  lifecycle?: LifecycleConfig;
   /**
    * CacheService TTL (seconds) for cached HTML/Markdown templates for this form.
    *
@@ -3974,6 +4357,14 @@ export interface RecordMetadata {
   updatedAt?: string;
   dataVersion?: number;
   rowNumber?: number;
+  operation?: 'create' | 'update';
+  submitEffects?: {
+    configured?: number;
+    executed?: number;
+    created?: number;
+    operation?: 'create' | 'update' | string;
+  };
+  sourceSaved?: boolean;
 }
 
 export interface PaginatedResult<T> {
