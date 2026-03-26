@@ -23,6 +23,7 @@ description: Development Rules
 - Run typescript lint verification to ensure the new feature is compliant with the typescript lint rules. Fix errors and avoid generating new warnings.
 - Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
 - Run `npm run build` to ensure the application can be compiled successfully.
+- Before stating a new feature, create a solution design, and implementation pland and split the work into logical slices that can be tracked, bring value, can be tested and make sense to be commited individually.
 
 ## Deployment flow (staging only, mandatory)
 
@@ -55,6 +56,10 @@ description: Development Rules
 - Keep state local by default. Promote state upward only when multiple siblings need it. Avoid global state for transient UI concerns.
 - Tests: unit test domain logic; integration test service layers; keep UI tests focused on user flows.
 - Every new module should have a clear owner and a doc comment explaining responsibility and boundaries.
+
+## Miscellaneous
+
+- When the user request that you commit changes to the repository, always use Conventional Commits format.
 
 ## UI Hygiene & Typography Contract – Authoritative Reset
 
