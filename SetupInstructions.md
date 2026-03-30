@@ -2555,7 +2555,76 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Portioning captures produced leftovers in a dedicated `MP_LEFTOVER_CAPTURE_LI` group
    - Each row writes to `Config: Leftover Inventory` through `submitEffects.createRecord`
    - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream inventory row stable across autosave and later edits
-   - Selected inventory leftovers can later be marked `used` through `submitEffects.updateRecord`
+   - Final inventory usage updates can still be handled through `submitEffects.updateRecord`, but active leftover selection is now expected to use the dedicated reservation ledger flow instead of a status-only toggle
+
+   Reservation-backed inventory lifecycle:
+   - Add aggregate reserved fields such as `LEFTOVER_RESERVED_QTY` / `LEFTOVER_RESERVED_PORTIONS` on the shared inventory form
+   - Add a dedicated internal form such as `Config: Inventory Reservation Ledger` to track `active`, `released`, and `consumed` reservations per source row
+   - Keep the UI read path on the inventory datasource only; do not query the ledger just to render availability
+   - Write reservation changes through one atomic server endpoint so the response can return the fresh authoritative availability snapshot after every mutation
+   - Optional: define `reservation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change
+   - Optional source-form cleanup hooks:
+     - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted
+     - `lifecycle.rules[]` with `type: "releaseStaleReservations"` releases active reservations for stale unfinished source records from the daily `2am` lifecycle trigger
+
+   Example:
+
+   ```json
+   {
+     "reservationLifecycle": {
+       "ledgerFormKey": "Config: Inventory Reservation Ledger",
+       "releaseOnDelete": true
+     },
+     "lifecycle": {
+       "rules": [
+         {
+           "id": "releaseStaleReservations",
+           "type": "releaseStaleReservations",
+           "dateFieldId": "MP_PREP_DATE",
+           "compare": "beforeToday",
+           "ledgerFormKey": "Config: Inventory Reservation Ledger",
+           "releaseWhenSourceMissing": true
+         }
+       ]
+     }
+   }
+   ```
+
+   Example conflict dialog copy:
+
+   ```json
+   {
+     "reservation": {
+       "enabled": true,
+       "ledgerFormKey": "Config: Inventory Reservation Ledger",
+       "allowedStatuses": ["available"],
+       "conflictDialog": {
+         "title": {
+           "en": "Availability changed"
+         },
+         "message": {
+           "en": "{itemLabel} was updated by another user. {availableWithUnit} are available now. Do you want to use the available amount or cancel this change?"
+         },
+         "confirmLabel": {
+           "en": "Use available amount"
+         },
+         "cancelLabel": {
+           "en": "Cancel action"
+         },
+         "showCancel": true
+       }
+     }
+   }
+   ```
+
+   Supported placeholders in `reservation.conflictDialog.message`:
+   - `{itemLabel}`
+   - `{itemId}`
+   - `{available}`
+   - `{unit}`
+   - `{availableWithUnit}`
+   - `{requested}`
+   - `{current}`
  - `auditLogging` (optional): writes change/snapshot rows to a separate audit sheet.
    - `enabled`: turn audit logging on/off.
    - `statuses`: only write `auditType: "change"` rows when the record status matches one of these values (case-insensitive; previous or next status).

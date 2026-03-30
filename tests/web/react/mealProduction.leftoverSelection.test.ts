@@ -79,6 +79,7 @@ describe('meal production leftover selection config', () => {
     expect(config?.sourceFieldMapping?.LEFTOVER_RECORD_ID).toBeUndefined();
     expect(config?.parentMatchFieldId).toBeUndefined();
     expect(config?.sourceMatchFieldId).toBeUndefined();
+    expect(config?.exclusiveSelection).toBeUndefined();
 
     expect(config?.outputRules).toEqual(
       expect.arrayContaining([
@@ -158,14 +159,28 @@ describe('meal production leftover selection config', () => {
     expect(partHeadline?.parts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sourcePath: 'LEFTOVER_INGREDIENT' }),
-        expect.objectContaining({ sourcePath: 'LEFTOVER_QTY' })
+        expect.objectContaining({ fieldId: 'LEFTOVER_QTY_AVAILABLE' })
       ])
     );
     expect(entireHeadline?.parts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sourcePath: 'LEFTOVER_RECIPE' }),
-        expect.objectContaining({ sourcePath: 'LEFTOVER_PORTIONS' })
+        expect.objectContaining({ fieldId: 'LEFTOVER_PORTIONS_AVAILABLE' })
       ])
+    );
+    expect(config?.availability).toEqual(
+      expect.objectContaining({
+        targetQuantityFieldId: 'LEFTOVER_QTY_AVAILABLE',
+        targetMaxQuantityFieldId: 'LEFTOVER_QTY_MAX',
+        targetPortionsFieldId: 'LEFTOVER_PORTIONS_AVAILABLE',
+        targetMaxPortionsFieldId: 'LEFTOVER_PORTIONS_MAX'
+      })
+    );
+    expect(config?.reservation).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        ledgerFormKey: 'Config: Inventory Reservation Ledger'
+      })
     );
   });
 });

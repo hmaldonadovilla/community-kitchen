@@ -486,6 +486,46 @@
       ]
     },
     {
+      "id": "LEFTOVER_RESERVED_QTY",
+      "type": "NUMBER",
+      "qEn": "Reserved quantity",
+      "qFr": "Quantité réservée",
+      "qNl": "Gereserveerde hoeveelheid",
+      "required": false,
+      "readOnly": true,
+      "defaultValue": 0,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
+      "id": "LEFTOVER_RESERVED_PORTIONS",
+      "type": "NUMBER",
+      "qEn": "Reserved portions",
+      "qFr": "Portions réservées",
+      "qNl": "Gereserveerde porties",
+      "required": false,
+      "readOnly": true,
+      "defaultValue": 0,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
       "id": "LEFTOVER_EXP_DATE",
       "type": "DATE",
       "qEn": "Expiration date",
@@ -1179,6 +1219,46 @@
             }
           }
         ]
+      },
+      {
+        "id": "LEFTOVER_RESERVED_QTY",
+        "type": "NUMBER",
+        "qEn": "Reserved quantity",
+        "qFr": "Quantité réservée",
+        "qNl": "Gereserveerde hoeveelheid",
+        "required": false,
+        "readOnly": true,
+        "defaultValue": 0,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_RESERVED_PORTIONS",
+        "type": "NUMBER",
+        "qEn": "Reserved portions",
+        "qFr": "Portions réservées",
+        "qNl": "Gereserveerde porties",
+        "required": false,
+        "readOnly": true,
+        "defaultValue": 0,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
       },
       {
         "id": "LEFTOVER_EXP_DATE",

@@ -5,6 +5,8 @@ import {
   invalidateClientSharedDataCaches,
   peekSummaryHtmlTemplateCache,
   seedSummaryHtmlTemplateCache,
+  upsertInventoryReservationApi,
+  reconcileInventoryReservationsApi,
   type BackendTransport
 } from '../../../src/web/react/api';
 import { clearFetchDataSourceCache } from '../../../src/web/data/dataSources';
@@ -70,5 +72,36 @@ describe('react api transport', () => {
 
     expect(clearFetchDataSourceCache).toHaveBeenCalledWith({ includePersisted: true });
     expect(peekSummaryHtmlTemplateCache(payload)).toBeNull();
+  });
+
+  test('routes inventory reservation upsert through the backend transport', async () => {
+    const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
+    configureBackendTransport({ invoke });
+
+    const payload: any = {
+      resourceFormKey: 'Config: Leftover Inventory',
+      resourceRecordId: 'leftover-1',
+      quantity: 3,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'meal-1'
+    };
+
+    await upsertInventoryReservationApi(payload);
+
+    expect(invoke).toHaveBeenCalledWith('upsertInventoryReservation', payload);
+  });
+
+  test('routes inventory reservation reconciliation through the backend transport', async () => {
+    const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
+    configureBackendTransport({ invoke });
+
+    const payload: any = {
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'meal-1'
+    };
+
+    await reconcileInventoryReservationsApi(payload);
+
+    expect(invoke).toHaveBeenCalledWith('reconcileInventoryReservations', payload);
   });
 });

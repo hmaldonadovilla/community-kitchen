@@ -8387,6 +8387,8 @@ const FormView: React.FC<FormViewProps> = ({
             key={q.id}
             q={q}
             ctx={{
+              formKey,
+              recordId: recordMeta?.id || null,
               definition,
               language,
               values,
@@ -9551,6 +9553,8 @@ const FormView: React.FC<FormViewProps> = ({
               hideToolbars
               rowFlow={overlayRowFlow}
               ctx={{
+                formKey,
+                recordId: recordMeta?.id || null,
                 definition,
                 language,
                 values: { ...values, ...ancestorValues },
@@ -10396,6 +10400,8 @@ const FormView: React.FC<FormViewProps> = ({
                           key={detailGroupDef.id}
                           q={detailGroupDef as any}
                           ctx={{
+                              formKey,
+                              recordId: recordMeta?.id || null,
                               definition,
                               language,
                               values: detailContextValues,
@@ -12390,6 +12396,8 @@ const FormView: React.FC<FormViewProps> = ({
                             key={subGroupDef.id}
                             q={subGroupDef as any}
                             ctx={{
+                              formKey,
+                              recordId: recordMeta?.id || null,
                               definition,
                               language,
                               values: detailContextValues,
@@ -12459,6 +12467,8 @@ const FormView: React.FC<FormViewProps> = ({
                 hideToolbars
                 rowFlow={lineItemGroupOverlay.rowFlow}
                 ctx={{
+                  formKey,
+                  recordId: recordMeta?.id || null,
                   definition,
                   language,
                   values,
@@ -12995,6 +13005,8 @@ const FormView: React.FC<FormViewProps> = ({
           dataSourceRows={Array.isArray((target as any).dataSourceRows) ? ((target as any).dataSourceRows as any[]) : undefined}
           hideInlineSubgroups={hideInlineSubgroups}
           ctx={{
+            formKey,
+            recordId: recordMeta?.id || null,
             definition,
             language,
             values,

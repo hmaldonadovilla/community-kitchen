@@ -1,7 +1,12 @@
 import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
-import { WebFormDefinition, WebFormSubmission } from './types';
+import {
+  InventoryReservationMutationRequest,
+  InventoryReservationReconciliationRequest,
+  WebFormDefinition,
+  WebFormSubmission
+} from './types';
 import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
 import { renderReactBundle } from './services/webform/bundles';
 import { getUiEnvTag } from './services/webform/envTag';
@@ -222,6 +227,18 @@ export function fetchDataSource(
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchDataSource(dataSourceId, locale, projection, limit, pageToken);
+}
+
+export function upsertInventoryReservation(request: InventoryReservationMutationRequest): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.upsertInventoryReservation(request);
+}
+
+export function reconcileInventoryReservations(request: InventoryReservationReconciliationRequest): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.reconcileInventoryReservations(request);
 }
 
 export function fetchSubmissions(

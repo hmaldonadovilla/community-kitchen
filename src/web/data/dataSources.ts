@@ -14,10 +14,12 @@ declare const google: {
 type CacheKey = string;
 const cache: Map<CacheKey, any> = new Map();
 const inflight: Map<CacheKey, Promise<any>> = new Map();
+export const DATA_SOURCE_CACHE_CLEARED_EVENT = 'ck:datasourcecachecleared';
 const RUNNER_RETRY_DELAY = 150;
 const RUNNER_MAX_ATTEMPTS = 20;
 const OPTIONS_AUTO_PAGE_MAX_PAGES = 80;
 const OPTIONS_AUTO_PAGE_MAX_ITEMS = 20000;
+const DEFAULT_PERSIST_MAX_AGE_MS = 5 * 60 * 1000;
 
 // Optional lightweight persistence for stable data sources. This is intentionally
 // conservative: only used when localStorage is available and JSON parsing succeeds.
@@ -68,13 +70,99 @@ const getPersistKey = (config: DataSourceConfig, lang: LangCode): string => {
   return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.${sig}`;
 };
 
+const getPersistKeyPrefix = (config: DataSourceConfig, lang: LangCode): string => {
+  const idPart = encodeURIComponent((config?.id || 'default').toString());
+  const langPart = (lang || 'EN').toString().toUpperCase();
+  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.`;
+};
+
+const resolvePersistMaxAgeMs = (config: DataSourceConfig): number => {
+  const explicitMs = Number((config as any)?.persistMaxAgeMs);
+  if (Number.isFinite(explicitMs) && explicitMs >= 0) return explicitMs;
+  const explicitMinutes = Number((config as any)?.persistMaxAgeMinutes);
+  if (Number.isFinite(explicitMinutes) && explicitMinutes >= 0) return explicitMinutes * 60 * 1000;
+  return DEFAULT_PERSIST_MAX_AGE_MS;
+};
+
+const parsePersistEnvelope = (
+  raw: string
+): { savedAtMs: number | null; response: any | null; legacy: boolean } | null => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const savedAtMs = Number((parsed as any).savedAtMs);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'response')) {
+      return {
+        savedAtMs: Number.isFinite(savedAtMs) ? savedAtMs : null,
+        response: (parsed as any).response ?? null,
+        legacy: false
+      };
+    }
+    return {
+      savedAtMs: null,
+      response: parsed,
+      legacy: true
+    };
+  } catch (_) {
+    return null;
+  }
+};
+
+const prunePersistedSiblingKeys = (
+  storage: Storage,
+  prefix: string,
+  keepKey?: string
+): void => {
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const candidate = storage.key(i);
+    if (!candidate) continue;
+    if (!candidate.startsWith(prefix)) continue;
+    if (keepKey && candidate === keepKey) continue;
+    keysToRemove.push(candidate);
+  }
+  keysToRemove.forEach(candidate => {
+    try {
+      storage.removeItem(candidate);
+    } catch (_) {
+      // ignore
+    }
+  });
+};
+
 const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null => {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(getPersistKey(config, language));
+    const targetKey = getPersistKey(config, language);
+    const prefix = getPersistKeyPrefix(config, language);
+    prunePersistedSiblingKeys(window.localStorage, prefix, targetKey);
+    const raw = window.localStorage.getItem(targetKey);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    const parsed = parsePersistEnvelope(raw);
+    if (!parsed) return null;
+    const maxAgeMs = resolvePersistMaxAgeMs(config);
+    if (
+      parsed.savedAtMs !== null &&
+      Number.isFinite(maxAgeMs) &&
+      maxAgeMs >= 0 &&
+      Date.now() - parsed.savedAtMs > maxAgeMs
+    ) {
+      try {
+        window.localStorage.removeItem(targetKey);
+      } catch (_) {
+        // ignore
+      }
+      return null;
+    }
+    if (parsed.legacy) {
+      try {
+        window.localStorage.removeItem(targetKey);
+      } catch (_) {
+        // ignore
+      }
+      return null;
+    }
+    return parsed.response && typeof parsed.response === 'object' ? parsed.response : null;
   } catch (_) {
     return null;
   }
@@ -83,7 +171,16 @@ const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null
 const savePersisted = (config: DataSourceConfig, language: LangCode, value: any): void => {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    window.localStorage.setItem(getPersistKey(config, language), JSON.stringify(value));
+    const targetKey = getPersistKey(config, language);
+    const prefix = getPersistKeyPrefix(config, language);
+    prunePersistedSiblingKeys(window.localStorage, prefix, targetKey);
+    window.localStorage.setItem(
+      targetKey,
+      JSON.stringify({
+        savedAtMs: Date.now(),
+        response: value
+      })
+    );
   } catch (_) {
     // Ignore quota / private-mode errors; in-memory cache still works.
   }
@@ -308,6 +405,33 @@ export function peekCachedDataSource(config: DataSourceConfig, language: LangCod
   return loadPersisted(config, language);
 }
 
+export function mutateCachedDataSource(
+  config: DataSourceConfig,
+  language: LangCode,
+  mutateItems: (items: any[]) => any[]
+): any | null {
+  const cacheKey = key(config, language);
+  const current = cache.has(cacheKey) ? cache.get(cacheKey) : loadPersisted(config, language);
+  if (!current) return null;
+  if (typeof mutateItems !== 'function') return current;
+
+  const cloneItems = (items: any[]): any[] => items.map(item => (item && typeof item === 'object' ? { ...item } : item));
+
+  let next: any = current;
+  if (Array.isArray(current)) {
+    next = mutateItems(cloneItems(current));
+  } else if (current && typeof current === 'object' && Array.isArray((current as any).items)) {
+    next = {
+      ...(current as any),
+      items: mutateItems(cloneItems((current as any).items))
+    };
+  }
+
+  cache.set(cacheKey, next);
+  savePersisted(config, language, next);
+  return next;
+}
+
 /**
  * Clear the in-memory client cache for fetchDataSource().
  *
@@ -319,23 +443,36 @@ export function peekCachedDataSource(config: DataSourceConfig, language: LangCod
 export function clearFetchDataSourceCache(opts?: { includePersisted?: boolean }): void {
   cache.clear();
   inflight.clear();
-  if (opts?.includePersisted === false) return;
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    const keys: string[] = [];
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const k = window.localStorage.key(i);
-      if (k) keys.push(k);
-    }
-    keys.forEach(k => {
-      if (k.startsWith('ck.ds.')) {
-        try {
-          window.localStorage.removeItem(k);
-        } catch (_) {
-          // ignore
+  if (opts?.includePersisted !== false) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const keys: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+          const k = window.localStorage.key(i);
+          if (k) keys.push(k);
         }
+        keys.forEach(k => {
+          if (k.startsWith('ck.ds.')) {
+            try {
+              window.localStorage.removeItem(k);
+            } catch (_) {
+              // ignore
+            }
+          }
+        });
       }
-    });
+    } catch (_) {
+      // ignore
+    }
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(
+        new CustomEvent(DATA_SOURCE_CACHE_CLEARED_EVENT, {
+          detail: { includePersisted: opts?.includePersisted !== false }
+        })
+      );
+    }
   } catch (_) {
     // ignore
   }

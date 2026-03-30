@@ -449,6 +449,88 @@ export interface FollowupCreateRecordLineItemConfig {
   when?: WhenClause;
 }
 
+export interface InventoryReservationMutationRequest {
+  resourceFormKey: string;
+  resourceRecordId: string;
+  resourceItemId?: string;
+  resourceKind?: string;
+  quantity: number | string;
+  unit?: string;
+  sourceFormKey: string;
+  sourceRecordId: string;
+  sourceParentGroupId?: string;
+  sourceParentRowId?: string;
+  sourceOutputGroupId?: string;
+  sourceOutputRowId?: string;
+  ledgerFormKey?: string;
+  quantityFieldId?: string;
+  reservedQuantityFieldId?: string;
+  statusFieldId?: string;
+  unitFieldId?: string;
+  allowedStatuses?: string[];
+}
+
+export interface InventoryAvailabilitySnapshot {
+  resourceFormKey: string;
+  resourceRecordId: string;
+  resourceItemId?: string;
+  resourceKind?: string;
+  quantityFieldId: string;
+  reservedQuantityFieldId: string;
+  statusFieldId?: string;
+  unitFieldId?: string;
+  remainingQuantity: number;
+  reservedQuantity: number;
+  freeQuantity: number;
+  currentReservationQuantity: number;
+  currentRecordReservedQuantity: number;
+  unit?: string;
+  status?: string;
+}
+
+export interface InventoryReservationMutationResult {
+  success: boolean;
+  message: string;
+  reservationId?: string;
+  conflict?: boolean;
+  released?: boolean;
+  availability?: InventoryAvailabilitySnapshot;
+}
+
+export interface InventoryReservationReconciliationRequest {
+  sourceFormKey: string;
+  sourceRecordId: string;
+  ledgerFormKey?: string;
+  mode?: 'consume' | 'release';
+  /**
+   * Controls post-mutation cache work for touched forms.
+   * - `full`: recompute analytics and warm home bootstrap cache
+   * - `revisionOnly`: bump the home revision without warming caches
+   * - `none`: skip all post-mutation cache work
+   */
+  refreshMode?: 'full' | 'revisionOnly' | 'none';
+}
+
+export interface InventoryReservationReconciliationResult {
+  success: boolean;
+  message: string;
+  reconciledReservations?: number;
+  touchedInventoryRecords?: number;
+  availability?: InventoryAvailabilitySnapshot[];
+}
+
+export interface ReservationReleaseOnDeleteConfig {
+  /**
+   * Enable/disable automatic release of active reservations when this source record is deleted.
+   */
+  enabled?: boolean;
+  /**
+   * Optional override for the reservation ledger form.
+   * Defaults to `Config: Inventory Reservation Ledger`.
+   */
+  ledgerFormKey?: string;
+}
+
 export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
 
 export type SystemActionGateDialogTrigger = 'onAttempt' | 'onEnable';
@@ -2424,13 +2506,70 @@ export interface LifecycleDateStatusTransitionRule {
   dayOffset?: number;
 }
 
-export type LifecycleRule = LifecycleDateStatusTransitionRule;
+export interface LifecycleReleaseStaleReservationsRule {
+  /**
+   * Optional stable rule id for diagnostics.
+   */
+  id?: string;
+  /**
+   * Release active reservations for source records whose date is stale relative to the script-local current date.
+   */
+  type: 'releaseStaleReservations';
+  /**
+   * Field id containing the source-record date used for stale detection.
+   */
+  dateFieldId: string;
+  /**
+   * Optional field id used to read the source-record business status.
+   * When omitted, the form follow-up status field (if configured) or the record meta Status column is used.
+   */
+  statusFieldId?: string;
+  /**
+   * Optional list of statuses eligible for release.
+   * Comparisons are case-insensitive.
+   */
+  fromStatuses?: string[];
+  /**
+   * Date comparison used against the script-local current date.
+   *
+   * - `beforeToday`: release when `dateFieldId < today`
+   * - `onOrBeforeToday`: release when `dateFieldId <= today`
+   */
+  compare?: 'beforeToday' | 'onOrBeforeToday';
+  /**
+   * Optional day offset applied before comparison.
+   */
+  dayOffset?: number;
+  /**
+   * Optional override for the reservation ledger form.
+   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
+   * `Config: Inventory Reservation Ledger`.
+   */
+  ledgerFormKey?: string;
+  /**
+   * When true (default), also release reservations when the source record can no longer be found.
+   */
+  releaseWhenSourceMissing?: boolean;
+}
+
+export type LifecycleRule = LifecycleDateStatusTransitionRule | LifecycleReleaseStaleReservationsRule;
 
 export interface LifecycleConfig {
   /**
    * Config-driven lifecycle rules evaluated by the daily lifecycle trigger.
    */
   rules?: LifecycleRule[];
+}
+
+export interface ReservationLifecycleConfig {
+  /**
+   * Optional default ledger form key used by release hooks for this source form.
+   */
+  ledgerFormKey?: string;
+  /**
+   * Automatically release active reservations when this source record is deleted.
+   */
+  releaseOnDelete?: boolean | ReservationReleaseOnDeleteConfig;
 }
 
 export interface AutoSaveConfig {
@@ -2714,6 +2853,10 @@ export interface FormConfig {
    * Optional config-driven lifecycle automation, evaluated by the daily lifecycle trigger.
    */
   lifecycle?: LifecycleConfig;
+  /**
+   * Optional reservation lifecycle hooks for source forms that own inventory reservations.
+   */
+  reservationLifecycle?: ReservationLifecycleConfig;
   /**
    * CacheService TTL (seconds) for cached HTML/Markdown templates for this form.
    *
@@ -4358,6 +4501,12 @@ export interface RecordMetadata {
   dataVersion?: number;
   rowNumber?: number;
   operation?: 'create' | 'update';
+  reservationRelease?: {
+    success?: boolean;
+    sourceRecordId?: string;
+    releasedReservations?: number;
+    touchedInventoryRecords?: number;
+  };
   submitEffects?: {
     configured?: number;
     executed?: number;

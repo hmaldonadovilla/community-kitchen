@@ -17,6 +17,7 @@ import {
   FieldDisableRule,
   LifecycleConfig,
   LifecycleRule,
+  ReservationLifecycleConfig,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
@@ -152,6 +153,7 @@ export class Dashboard {
       const listViewMetric = dashboardConfig?.listViewMetric;
       const analytics = dashboardConfig?.analytics;
       const lifecycle = dashboardConfig?.lifecycle;
+      const reservationLifecycle = dashboardConfig?.reservationLifecycle;
       const autoSave = dashboardConfig?.autoSave;
       const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
@@ -193,6 +195,7 @@ export class Dashboard {
           rowIndex: dataStartRow + index,
           followupConfig,
           lifecycle,
+          reservationLifecycle,
           templateCacheTtlSeconds,
           listViewTitle,
           listViewDefaultSort,
@@ -271,6 +274,7 @@ export class Dashboard {
   ): {
     followup?: FollowupConfig;
     lifecycle?: LifecycleConfig;
+    reservationLifecycle?: ReservationLifecycleConfig;
     templateCacheTtlSeconds?: number;
     listViewTitle?: LocalizedString;
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
@@ -401,6 +405,15 @@ export class Dashboard {
               ? { rules: parsed.lifecycleRules }
               : undefined;
     const lifecycle = this.normalizeLifecycleConfig(lifecycleRaw);
+    const reservationLifecycleRaw =
+      parsed.reservationLifecycle !== undefined
+        ? parsed.reservationLifecycle
+        : parsed.inventoryReservationLifecycle !== undefined
+          ? parsed.inventoryReservationLifecycle
+          : parsed.reservationRelease !== undefined
+            ? parsed.reservationRelease
+            : undefined;
+    const reservationLifecycle = this.normalizeReservationLifecycleConfig(reservationLifecycleRaw);
 
     const templateCacheObj =
       parsed.templateCache !== undefined && parsed.templateCache !== null && typeof parsed.templateCache === 'object'
@@ -1273,6 +1286,7 @@ export class Dashboard {
     if (
       !followup &&
       templateCacheTtlSeconds === undefined &&
+      !reservationLifecycle &&
       !listViewTitle &&
       !listViewDefaultSort &&
       listViewPageSize === undefined &&
@@ -1328,6 +1342,7 @@ export class Dashboard {
     return {
       followup,
       lifecycle,
+      reservationLifecycle,
       templateCacheTtlSeconds,
       listViewTitle,
       listViewDefaultSort,
@@ -1378,6 +1393,32 @@ export class Dashboard {
       steps,
       dedupDeleteOnKeyChange
     };
+  }
+
+  private normalizeReservationLifecycleConfig(raw: any): ReservationLifecycleConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const config: ReservationLifecycleConfig = {};
+    const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
+    if (ledgerFormKey) config.ledgerFormKey = ledgerFormKey;
+
+    const releaseOnDeleteRaw =
+      raw.releaseOnDelete !== undefined
+        ? raw.releaseOnDelete
+        : raw.releaseReservationsOnDelete !== undefined
+          ? raw.releaseReservationsOnDelete
+          : raw.deleteRelease !== undefined
+            ? raw.deleteRelease
+            : undefined;
+    if (typeof releaseOnDeleteRaw === 'boolean') {
+      config.releaseOnDelete = releaseOnDeleteRaw;
+    } else if (releaseOnDeleteRaw && typeof releaseOnDeleteRaw === 'object') {
+      const entry: any = {};
+      if (releaseOnDeleteRaw.enabled !== undefined) entry.enabled = Boolean(releaseOnDeleteRaw.enabled);
+      const releaseLedgerFormKey = (releaseOnDeleteRaw.ledgerFormKey ?? '').toString().trim();
+      if (releaseLedgerFormKey) entry.ledgerFormKey = releaseLedgerFormKey;
+      if (Object.keys(entry).length) config.releaseOnDelete = entry;
+    }
+    return Object.keys(config).length ? config : undefined;
   }
 
   private normalizeActionBars(value: any): ActionBarsConfig | undefined {
@@ -2252,10 +2293,11 @@ export class Dashboard {
   private normalizeLifecycleRule(raw: any): LifecycleRule | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const type = (raw.type ?? raw.kind ?? 'dateStatusTransition').toString().trim();
-    if (type !== 'dateStatusTransition') return undefined;
+    if (type !== 'dateStatusTransition' && type !== 'releaseStaleReservations') return undefined;
     const dateFieldId = (raw.dateFieldId ?? raw.fieldId ?? raw.dateField ?? '').toString().trim();
     const toStatus = (raw.toStatus ?? raw.status ?? raw.nextStatus ?? '').toString().trim();
-    if (!dateFieldId || !toStatus) return undefined;
+    if (!dateFieldId) return undefined;
+    if (type === 'dateStatusTransition' && !toStatus) return undefined;
     const compareRaw = (raw.compare ?? raw.operator ?? 'beforeToday').toString().trim();
     const compare = compareRaw === 'onOrBeforeToday' ? 'onOrBeforeToday' : 'beforeToday';
     const statusFieldId = (raw.statusFieldId ?? raw.statusField ?? '').toString().trim();
@@ -2269,18 +2311,34 @@ export class Dashboard {
         )
       : undefined;
     const dayOffsetRaw = Number(raw.dayOffset ?? raw.offsetDays ?? 0);
-    const rule: LifecycleRule = {
-      type: 'dateStatusTransition',
-      dateFieldId,
-      toStatus,
-      compare
-    };
+    const rule: LifecycleRule =
+      type === 'releaseStaleReservations'
+        ? {
+            type: 'releaseStaleReservations',
+            dateFieldId,
+            compare
+          }
+        : {
+            type: 'dateStatusTransition',
+            dateFieldId,
+            toStatus,
+            compare
+          };
     const id = (raw.id ?? '').toString().trim();
     if (id) rule.id = id;
     if (statusFieldId) rule.statusFieldId = statusFieldId;
     if (fromStatuses?.length) rule.fromStatuses = fromStatuses;
     if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
       rule.dayOffset = Math.trunc(dayOffsetRaw);
+    }
+    if (type === 'releaseStaleReservations') {
+      const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
+      if (ledgerFormKey) {
+        (rule as any).ledgerFormKey = ledgerFormKey;
+      }
+      if (raw.releaseWhenSourceMissing !== undefined) {
+        (rule as any).releaseWhenSourceMissing = Boolean(raw.releaseWhenSourceMissing);
+      }
     }
     return rule;
   }

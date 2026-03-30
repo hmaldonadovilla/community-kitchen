@@ -16,7 +16,12 @@ import {
 } from '../../../core';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
-import { fetchDataSource, peekCachedDataSource } from '../../../data/dataSources';
+import {
+  DATA_SOURCE_CACHE_CLEARED_EVENT,
+  fetchDataSource,
+  mutateCachedDataSource,
+  peekCachedDataSource
+} from '../../../data/dataSources';
 import {
   FieldValue,
   LangCode,
@@ -31,7 +36,7 @@ import {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
-import type { OverlayCloseConfirmLike } from '../../../../types';
+import type { InventoryAvailabilitySnapshot, OverlayCloseConfirmLike } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
@@ -73,6 +78,19 @@ import { NumberStepper } from './NumberStepper';
 import { AutoWidthInput } from './AutoWidthInput';
 import { AutoWidthSelect } from './AutoWidthSelect';
 import { PairedRowGrid } from './PairedRowGrid';
+import {
+  computeAvailableFromAggregate,
+  ensureEditableMaxIncludesCurrentValue,
+  computeOptimisticFreeQuantity,
+  computeOptimisticRowMaxQuantity,
+  sanitizeNumericDraft,
+  toFiniteNumberValue
+} from './quantityConstraints';
+import {
+  buildReservationConflictDialogCopy,
+  computeReservationConflictUsableQuantity
+} from './reservationConflictDialog';
+import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
 import { computeChoiceControlVariant } from './choiceControls';
@@ -176,6 +194,8 @@ export interface ChoiceControlArgs {
 }
 
 export interface LineItemGroupQuestionCtx {
+  formKey?: string;
+  recordId?: string | null;
   definition: WebFormDefinition;
   language: LangCode;
   values: Record<string, FieldValue>;
@@ -336,6 +356,8 @@ export const LineItemGroupQuestion: React.FC<{
   hideToolbars?: boolean;
 }> = ({ q, ctx, rowFlow, rowFilter, dataSourceRows, hideInlineSubgroups, hideToolbars }) => {
   const {
+    formKey,
+    recordId,
     definition,
     language,
     values,
@@ -376,6 +398,7 @@ export const LineItemGroupQuestion: React.FC<{
     incrementDrag,
     decrementDrag,
     uploadAnnouncements,
+    openConfirmDialog,
     handleLineFileInputChange,
     handleLineFileDrop,
     removeLineFile,
@@ -534,29 +557,129 @@ export const LineItemGroupQuestion: React.FC<{
   const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
   const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
+  const stepDataSourceRecordIdRef = React.useRef<string>('');
+  const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
+  const reservationSyncCounterRef = React.useRef(0);
 
   React.useEffect(() => {
     stepDataSourceDraftsRef.current = stepDataSourceDrafts;
   }, [stepDataSourceDrafts]);
 
   React.useEffect(() => {
+    return () => {
+      Object.values(reservationDebounceTimersRef.current).forEach(timer => {
+        clearTimeout(timer);
+      });
+      reservationDebounceTimersRef.current = {};
+    };
+  }, []);
+
+  const toFiniteNumber = React.useCallback((value: any): number => toFiniteNumberValue(value), []);
+
+  const updateStepDataSourceAvailability = React.useCallback(
+    (config: any, availability: InventoryAvailabilitySnapshot | null | undefined): void => {
+      if (!config?.dataSource || !availability) return;
+      mutateCachedDataSource(config.dataSource, language, items =>
+        items.map(item => {
+          if (!item || typeof item !== 'object') return item;
+          const matchesRecord = `${item.id ?? ''}`.trim() === `${availability.resourceRecordId || ''}`.trim();
+          const matchesItem =
+            !availability.resourceItemId ||
+            `${item.LEFTOVER_ID ?? item.id ?? ''}`.trim() === `${availability.resourceItemId}`.trim();
+          if (!matchesRecord || !matchesItem) return item;
+          return {
+            ...item,
+            ...(availability.statusFieldId ? { [availability.statusFieldId]: availability.status || item?.[availability.statusFieldId] } : {}),
+            ...(availability.reservedQuantityFieldId
+              ? { [availability.reservedQuantityFieldId]: availability.reservedQuantity }
+              : {}),
+            __ckCurrentRecordReservedQuantity: availability.currentRecordReservedQuantity,
+            __ckFreeQuantity: availability.freeQuantity
+          };
+        })
+      );
+      setStepDataSourceRefreshTick(prev => prev + 1);
+    },
+    [language]
+  );
+
+  React.useEffect(() => {
     if (!stepDataSourceRows.length) return;
+    const normalizedRecordId = `${recordId || ''}`.trim();
+    const recordChanged = stepDataSourceRecordIdRef.current !== normalizedRecordId;
+    stepDataSourceRecordIdRef.current = normalizedRecordId;
+    if (recordChanged) {
+      const timerKeys = Object.keys(reservationDebounceTimersRef.current);
+      if (timerKeys.length) {
+        timerKeys.forEach(key => {
+          const timer = reservationDebounceTimersRef.current[key];
+          if (timer) clearTimeout(timer);
+          delete reservationDebounceTimersRef.current[key];
+        });
+      }
+      reservationRequestVersionRef.current = {};
+      if (Object.keys(stepDataSourceDraftsRef.current).length) {
+        stepDataSourceDraftsRef.current = {};
+        setStepDataSourceDrafts({});
+      }
+    }
     let cancelled = false;
-    const configs = stepDataSourceRows
-      .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
-      .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
-    if (!configs.length) return;
+    const configEntries = stepDataSourceRows
+      .map(candidate => {
+        if (!candidate || typeof candidate !== 'object') return null;
+        const dataSource = (candidate as any).dataSource;
+        if (!dataSource || typeof dataSource !== 'object') return null;
+        const shouldForceRefresh =
+          recordChanged ||
+          (candidate as any).forceRefreshOnMount === true ||
+          Boolean((candidate as any).availability) ||
+          Boolean((candidate as any).reservationBehavior);
+        return { dataSource, shouldForceRefresh };
+      })
+      .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
+    if (!configEntries.length) return;
 
-    const missingConfigs = configs.filter(config => !peekCachedDataSource(config, language));
-    if (!missingConfigs.length) return;
+    const pendingFetches = configEntries
+      .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
+      .map(({ dataSource, shouldForceRefresh }) =>
+        fetchDataSource(dataSource, language, shouldForceRefresh ? { forceRefresh: true } : undefined).catch(() => null)
+      );
+    if (!pendingFetches.length) return;
 
-    Promise.all(missingConfigs.map(config => fetchDataSource(config, language).catch(() => null))).then(() => {
+    Promise.all(pendingFetches).then(() => {
       if (cancelled) return;
       setStepDataSourceRefreshTick(prev => prev + 1);
     });
 
     return () => {
       cancelled = true;
+    };
+  }, [language, recordId, stepDataSourceRows]);
+
+  React.useEffect(() => {
+    if (!stepDataSourceRows.length) return;
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    let cancelled = false;
+
+    const handleCacheCleared = () => {
+      const configs = stepDataSourceRows
+        .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
+        .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
+      if (!configs.length) {
+        setStepDataSourceRefreshTick(prev => prev + 1);
+        return;
+      }
+      Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null))).then(() => {
+        if (cancelled) return;
+        setStepDataSourceRefreshTick(prev => prev + 1);
+      });
+    };
+
+    window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
     };
   }, [language, stepDataSourceRows]);
 
@@ -731,12 +854,56 @@ export const LineItemGroupQuestion: React.FC<{
     [q.id]
   );
 
+  const resolveCurrentRecordReservationStateForSource = React.useCallback(
+    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } => {
+      const outputGroupId = `${config?.outputGroupId || ''}`.trim();
+      const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
+      const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
+      const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
+      if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !sourceKey) {
+        return { totalReservedQuantity: 0, currentRowQuantity: 0 };
+      }
+
+      let totalReservedQuantity = 0;
+      let currentRowQuantity = 0;
+
+      parentRows.forEach(parentRow => {
+        const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
+        const draftValues = stepDataSourceDraftsRef.current[draftKey] || null;
+        let quantity = 0;
+
+        if (draftValues) {
+          const selected =
+            !selectedFieldId ||
+            !Object.prototype.hasOwnProperty.call(draftValues, selectedFieldId) ||
+            draftValues[selectedFieldId] === true;
+          quantity = selected ? toFiniteNumberValue(draftValues[quantityFieldId]) : 0;
+        } else {
+          const output = resolveDataSourceOutputGroup(config, parentRow.id);
+          const outputRows = output ? lineItems[output.key] || [] : [];
+          const existingOutputRow =
+            outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
+          quantity = existingOutputRow ? toFiniteNumberValue((existingOutputRow.values as any)?.[quantityFieldId]) : 0;
+        }
+
+        totalReservedQuantity += quantity;
+        if (parentRow.id === currentParentRowId) {
+          currentRowQuantity = quantity;
+        }
+      });
+
+      return { totalReservedQuantity, currentRowQuantity };
+    },
+    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, resolveDataSourceOutputGroup]
+  );
+
   const buildVirtualDataSourceRowValues = React.useCallback(
     (args: {
       config: any;
       sourceRow: Record<string, any>;
       outputRow?: LineItemRowState | null;
       draftValues?: Record<string, FieldValue> | null;
+      parentRowId?: string;
     }): Record<string, FieldValue> => {
       const sourceFieldMapping = args.config?.sourceFieldMapping && typeof args.config.sourceFieldMapping === 'object'
         ? (args.config.sourceFieldMapping as Record<string, string>)
@@ -758,6 +925,7 @@ export const LineItemGroupQuestion: React.FC<{
         });
       }
       const selectedFieldId = (args.config?.selectedFieldId || '').toString().trim();
+      const quantityFieldId = (args.config?.quantityFieldId || '').toString().trim();
       if (selectedFieldId) {
         if (args.draftValues && Object.prototype.hasOwnProperty.call(args.draftValues, selectedFieldId)) {
           next[selectedFieldId] = Boolean((args.draftValues as any)[selectedFieldId]);
@@ -765,9 +933,161 @@ export const LineItemGroupQuestion: React.FC<{
           next[selectedFieldId] = Boolean(args.outputRow);
         }
       }
+      const availabilityConfig = args.config?.availability && typeof args.config.availability === 'object'
+        ? args.config.availability
+        : null;
+      if (availabilityConfig) {
+        const sourceKeyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
+        const sourceKey = sourceKeyFieldId ? `${(args.sourceRow as any)?.[sourceKeyFieldId] ?? ''}`.trim() : '';
+        const localReservationState = sourceKey
+          ? resolveCurrentRecordReservationStateForSource(args.config, sourceKey, args.parentRowId)
+          : { totalReservedQuantity: 0, currentRowQuantity: 0 };
+        const localCurrentRecordReservedQuantity = localReservationState.totalReservedQuantity;
+        const serverCurrentRecordReservedQuantity = toFiniteNumberValue(
+          (args.sourceRow as any)?.__ckCurrentRecordReservedQuantity
+        );
+        const currentRowQuantity = Math.max(
+          localReservationState.currentRowQuantity,
+          toFiniteNumberValue(next[`${args.config?.quantityFieldId || ''}`.trim()])
+        );
+        const sourceQuantityFieldId = `${availabilityConfig.sourceQuantityFieldId || ''}`.trim();
+        const sourceReservedQuantityFieldId = `${availabilityConfig.sourceReservedQuantityFieldId || ''}`.trim();
+        const targetQuantityFieldId = `${availabilityConfig.targetQuantityFieldId || ''}`.trim();
+        const targetMaxQuantityFieldId = `${availabilityConfig.targetMaxQuantityFieldId || ''}`.trim();
+        const resolvedQuantityMaxFieldId = targetMaxQuantityFieldId || targetQuantityFieldId;
+        const resolvedQuantityDisplayFieldId = targetMaxQuantityFieldId ? targetQuantityFieldId : '';
+        if (sourceQuantityFieldId && resolvedQuantityMaxFieldId) {
+          next[resolvedQuantityMaxFieldId] = computeOptimisticRowMaxQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+            reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity,
+            currentRowQuantity
+          });
+        }
+        if (sourceQuantityFieldId && resolvedQuantityDisplayFieldId) {
+          next[resolvedQuantityDisplayFieldId] = computeOptimisticFreeQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+            reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity
+          });
+        }
+        const sourcePortionsFieldId = `${availabilityConfig.sourcePortionsFieldId || ''}`.trim();
+        const sourceReservedPortionsFieldId = `${availabilityConfig.sourceReservedPortionsFieldId || ''}`.trim();
+        const targetPortionsFieldId = `${availabilityConfig.targetPortionsFieldId || ''}`.trim();
+        const targetMaxPortionsFieldId = `${availabilityConfig.targetMaxPortionsFieldId || ''}`.trim();
+        const resolvedPortionsMaxFieldId = targetMaxPortionsFieldId || targetPortionsFieldId;
+        const resolvedPortionsDisplayFieldId = targetMaxPortionsFieldId ? targetPortionsFieldId : '';
+        if (sourcePortionsFieldId && resolvedPortionsMaxFieldId) {
+          next[resolvedPortionsMaxFieldId] = computeOptimisticRowMaxQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+            reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity,
+            currentRowQuantity
+          });
+        }
+        if (sourcePortionsFieldId && resolvedPortionsDisplayFieldId) {
+          next[resolvedPortionsDisplayFieldId] = computeOptimisticFreeQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+            reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity
+          });
+        }
+        const targetFreeQuantityFieldId = `${availabilityConfig.targetFreeQuantityFieldId || ''}`.trim();
+        if (sourceQuantityFieldId && targetFreeQuantityFieldId) {
+          next[targetFreeQuantityFieldId] = computeOptimisticFreeQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+            reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity
+          });
+        }
+        const targetFreePortionsFieldId = `${availabilityConfig.targetFreePortionsFieldId || ''}`.trim();
+        if (sourcePortionsFieldId && targetFreePortionsFieldId) {
+          next[targetFreePortionsFieldId] = computeOptimisticFreeQuantity({
+            remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+            reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
+            serverCurrentRecordReservedQuantity,
+            localCurrentRecordReservedQuantity
+          });
+        }
+        if (quantityFieldId) {
+          const currentQuantity = next[quantityFieldId];
+          if (resolvedQuantityMaxFieldId) {
+            next[resolvedQuantityMaxFieldId] = ensureEditableMaxIncludesCurrentValue(
+              next[resolvedQuantityMaxFieldId],
+              currentQuantity
+            );
+          }
+          if (resolvedPortionsMaxFieldId) {
+            next[resolvedPortionsMaxFieldId] = ensureEditableMaxIncludesCurrentValue(
+              next[resolvedPortionsMaxFieldId],
+              currentQuantity
+            );
+          }
+        }
+      }
       return next;
     },
-    []
+    [resolveCurrentRecordReservationStateForSource]
+  );
+
+  const updateStepDataSourceAvailabilityOptimistically = React.useCallback(
+    (
+      config: any,
+      args: {
+        sourceRow: Record<string, any>;
+        sourceKey: string;
+        parentRowId: string;
+      }
+    ): void => {
+      const availabilityConfig = config?.availability && typeof config.availability === 'object'
+        ? config.availability
+        : null;
+      const dataSourceConfig = config?.dataSource;
+      if (!availabilityConfig || !dataSourceConfig || !args.sourceKey) return;
+
+      const localReservationState = resolveCurrentRecordReservationStateForSource(config, args.sourceKey, args.parentRowId);
+      const serverCurrentRecordReservedQuantity = Math.max(
+        0,
+        toFiniteNumberValue((args.sourceRow as any)?.__ckCurrentRecordReservedQuantity)
+      );
+      const sourceKind = `${(args.sourceRow as any)?.LEFTOVER_KIND || ''}`.trim();
+      const usePortions = sourceKind === 'Entire dish';
+      const sourceRemainingFieldId = usePortions
+        ? `${availabilityConfig.sourcePortionsFieldId || ''}`.trim()
+        : `${availabilityConfig.sourceQuantityFieldId || ''}`.trim();
+      const sourceReservedFieldId = usePortions
+        ? `${availabilityConfig.sourceReservedPortionsFieldId || ''}`.trim()
+        : `${availabilityConfig.sourceReservedQuantityFieldId || ''}`.trim();
+      if (!sourceRemainingFieldId || !sourceReservedFieldId) return;
+
+      const remainingQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceRemainingFieldId]);
+      const currentReservedQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceReservedFieldId]);
+      const reservedByOthers = Math.max(0, currentReservedQuantity - serverCurrentRecordReservedQuantity);
+      const nextReservedQuantity = Math.max(0, reservedByOthers + localReservationState.totalReservedQuantity);
+      const nextFreeQuantity = computeAvailableFromAggregate(remainingQuantity, nextReservedQuantity);
+
+      mutateCachedDataSource(dataSourceConfig, language, items =>
+        items.map(item => {
+          if (!item || typeof item !== 'object') return item;
+          const matchesRecord = `${item.id ?? ''}`.trim() === `${args.sourceRow?.id ?? ''}`.trim();
+          const matchesItem = `${item.LEFTOVER_ID ?? item.id ?? ''}`.trim() === args.sourceKey;
+          if (!matchesRecord || !matchesItem) return item;
+          return {
+            ...item,
+            [sourceReservedFieldId]: nextReservedQuantity,
+            __ckCurrentRecordReservedQuantity: localReservationState.totalReservedQuantity,
+            __ckFreeQuantity: nextFreeQuantity
+          };
+        })
+      );
+      setStepDataSourceRefreshTick(prev => prev + 1);
+    },
+    [language, resolveCurrentRecordReservationStateForSource]
   );
 
   function coerceNestedLineItemPresetRows(payload: any): Record<string, FieldValue>[] {
@@ -847,6 +1167,54 @@ export const LineItemGroupQuestion: React.FC<{
     return fields.find((field: any) => `${field?.id || ''}`.trim() === fieldId) || null;
   }
 
+  const resolveVirtualMaxFieldId = React.useCallback(
+    (
+      field: any,
+      rowValues: Record<string, FieldValue>,
+      parentValues: Record<string, FieldValue>
+    ): string => {
+      const rules = Array.isArray(field?.validationRules) ? (field.validationRules as any[]) : [];
+      const fieldId = `${field?.id || ''}`.trim();
+      if (!fieldId) return '';
+      const ctx = resolveVirtualRowWhenContext({ rowValues, parentValues });
+      return rules.reduce<string>((matched, rule) => {
+        if (matched) return matched;
+        const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+        if (!thenCfg) return '';
+        const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
+        if (targetFieldId !== fieldId) return '';
+        const candidateMaxFieldId = (thenCfg.maxFieldId || '').toString().trim();
+        if (!candidateMaxFieldId) return '';
+        if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) return '';
+        return candidateMaxFieldId;
+      }, '');
+    },
+    [resolveVirtualRowWhenContext]
+  );
+
+  const allowsVirtualIntegerOnly = React.useCallback(
+    (
+      field: any,
+      rowValues: Record<string, FieldValue>,
+      parentValues: Record<string, FieldValue>
+    ): boolean => {
+      const rules = Array.isArray(field?.validationRules) ? (field.validationRules as any[]) : [];
+      const fieldId = `${field?.id || ''}`.trim();
+      if (!fieldId) return false;
+      const ctx = resolveVirtualRowWhenContext({ rowValues, parentValues });
+      return rules.some((rule: any) => {
+        const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+        if (!thenCfg) return false;
+        const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
+        if (targetFieldId !== fieldId) return false;
+        if (thenCfg.integer !== true) return false;
+        if (!rule?.when) return true;
+        return matchesWhenClause(rule.when as any, ctx);
+      });
+    },
+    [resolveVirtualRowWhenContext]
+  );
+
   const syncStepDataSourceOutputRow = React.useCallback(
     (args: {
       config: any;
@@ -886,7 +1254,8 @@ export const LineItemGroupQuestion: React.FC<{
           config: { ...args.config, sourceFieldMapping },
           sourceRow: args.sourceRow,
           outputRow: existingOutputRow,
-          draftValues: currentDraft
+          draftValues: currentDraft,
+          parentRowId: args.parentRow.id
         });
         const nextRowValues: Record<string, FieldValue> = { ...currentRowValues, ...args.patch };
 
@@ -1064,12 +1433,267 @@ export const LineItemGroupQuestion: React.FC<{
       resolveDataSourceOutputGroup,
       resolveTopValue,
       resolveVirtualPreset,
+      resolveVirtualMaxFieldId,
       resolveVirtualPresetValue,
       resolveVirtualRowWhenContext,
       runSelectionEffectsForAncestors,
       setValues,
       validateVirtualFieldRules,
       values
+    ]
+  );
+
+  const syncStepDataSourceOutputRowWithReservation = React.useCallback(
+    (
+      args: {
+        config: any;
+        parentRow: LineItemRowState;
+        sourceRow: Record<string, any>;
+        patch: Record<string, FieldValue>;
+      },
+      options?: { skipReservation?: boolean }
+    ) => {
+      syncStepDataSourceOutputRow(args);
+
+      if (options?.skipReservation) return;
+
+      const reservationConfig = args.config?.reservation && typeof args.config.reservation === 'object'
+        ? args.config.reservation
+        : null;
+      if (!reservationConfig || reservationConfig.enabled === false) return;
+      const sourceFormKey = `${formKey || ''}`.trim();
+      const sourceRecordId = `${recordId || ''}`.trim();
+      const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig.resourceFormKey || ''}`.trim();
+      const resourceRecordId = `${args.sourceRow?.id || ''}`.trim();
+      if (!sourceFormKey || !sourceRecordId || !resourceFormKey || !resourceRecordId) return;
+
+      const keyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
+      const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
+      const outputKeyFieldId = `${args.config?.outputKeyFieldId || keyFieldId}`.trim();
+      const selectedFieldId = `${args.config?.selectedFieldId || ''}`.trim();
+      const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+      const modeFieldId = `${args.config?.modeFieldId || ''}`.trim();
+      if (!quantityFieldId || !keyFieldId || !output || !outputKeyFieldId) return;
+      const sourceKey = `${args.sourceRow?.[keyFieldId] ?? ''}`.trim();
+      if (!sourceKey) return;
+      const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey);
+      const patchTouchesReservation =
+        Object.prototype.hasOwnProperty.call(args.patch, selectedFieldId) ||
+        Object.prototype.hasOwnProperty.call(args.patch, quantityFieldId);
+      if (!patchTouchesReservation) return;
+
+      updateStepDataSourceAvailabilityOptimistically(args.config, {
+        sourceRow: args.sourceRow,
+        sourceKey,
+        parentRowId: args.parentRow.id
+      });
+
+      const outputRows = lineItems[output.key] || [];
+      const existingOutputRow =
+        outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
+      const virtualValues = buildVirtualDataSourceRowValues({
+        config: args.config,
+        sourceRow: args.sourceRow,
+        outputRow: existingOutputRow,
+        draftValues: stepDataSourceDraftsRef.current[draftKey] || null,
+        parentRowId: args.parentRow.id
+      });
+      const nextVirtualValues = { ...virtualValues, ...args.patch } as Record<string, FieldValue>;
+      const selected = selectedFieldId ? nextVirtualValues[selectedFieldId] === true : true;
+      const quantity = selected ? toFiniteNumber(nextVirtualValues[quantityFieldId]) : 0;
+      const debounceMs = Number.isFinite(Number(reservationConfig.debounceMs))
+        ? Number(reservationConfig.debounceMs)
+        : 250;
+      const timerKey = `${q.id}::${args.parentRow.id}::${sourceKey}`;
+      const previousTimer = reservationDebounceTimersRef.current[timerKey];
+      if (previousTimer) {
+        clearTimeout(previousTimer);
+        delete reservationDebounceTimersRef.current[timerKey];
+      }
+
+      const runReservationSync = async () => {
+        const requestVersion = (reservationSyncCounterRef.current += 1);
+        reservationRequestVersionRef.current[timerKey] = requestVersion;
+        onDiagnostic?.('inventory.reservation.request', {
+          groupId: q.id,
+          parentRowId: args.parentRow.id,
+          resourceRecordId,
+          resourceItemId: sourceKey,
+          quantity
+        });
+        try {
+          const result = await upsertInventoryReservationApi({
+            resourceFormKey,
+            resourceRecordId,
+            resourceItemId: sourceKey,
+            resourceKind: `${args.sourceRow?.LEFTOVER_KIND || ''}`.trim() || undefined,
+            quantity,
+            unit: `${args.sourceRow?.LEFTOVER_UNIT || ''}`.trim() || undefined,
+            sourceFormKey,
+            sourceRecordId,
+            sourceParentGroupId: q.id,
+            sourceParentRowId: args.parentRow.id,
+            sourceOutputGroupId: `${args.config?.outputGroupId || ''}`.trim() || undefined,
+            ledgerFormKey: `${reservationConfig.ledgerFormKey || ''}`.trim() || undefined,
+            allowedStatuses: Array.isArray(reservationConfig.allowedStatuses) ? reservationConfig.allowedStatuses : undefined
+          });
+          if (reservationRequestVersionRef.current[timerKey] !== requestVersion) return;
+          updateStepDataSourceAvailability(args.config, result.availability);
+          onDiagnostic?.('inventory.reservation.response', {
+            groupId: q.id,
+            parentRowId: args.parentRow.id,
+            resourceRecordId,
+            resourceItemId: sourceKey,
+            success: result.success,
+            conflict: result.conflict === true,
+            released: result.released === true,
+            freeQuantity: result.availability?.freeQuantity
+          });
+          if (!result.success) {
+            const message = resolveUserFacingErrorMessage(result, result.message || 'Reservation failed.');
+            if (message) {
+              onDiagnostic?.('inventory.reservation.rejected', {
+                groupId: q.id,
+                parentRowId: args.parentRow.id,
+                resourceRecordId,
+                resourceItemId: sourceKey,
+                message
+              });
+              const rollbackQty = Math.max(0, toFiniteNumber(result.availability?.currentReservationQuantity));
+              const usableQty = computeReservationConflictUsableQuantity(result.availability);
+              const rollbackPatch: Record<string, FieldValue> = {
+                ...(selectedFieldId ? { [selectedFieldId]: rollbackQty > 0 } : {}),
+                [quantityFieldId]: rollbackQty > 0 ? `${rollbackQty}` : null
+              };
+              if (modeFieldId && rollbackQty <= 0) {
+                rollbackPatch[modeFieldId] = null;
+              }
+              const resolvedPatch: Record<string, FieldValue> = {
+                ...(selectedFieldId ? { [selectedFieldId]: usableQty > 0 } : {}),
+                [quantityFieldId]: usableQty > 0 ? `${usableQty}` : null
+              };
+              if (modeFieldId && usableQty <= 0) {
+                resolvedPatch[modeFieldId] = null;
+              }
+
+              const conflictDialog = buildReservationConflictDialogCopy({
+                language,
+                dialog:
+                  reservationConfig?.conflictDialog && typeof reservationConfig.conflictDialog === 'object'
+                    ? reservationConfig.conflictDialog
+                    : null,
+                availability: result.availability,
+                sourceRow: args.sourceRow,
+                requestedQuantity: quantity,
+                fallbackTitle: tSystem('common.notice', language, 'Notice'),
+                fallbackMessage: tSystem(
+                  'inventory.reservationConflict',
+                  language,
+                  'This leftover was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?'
+                ),
+                fallbackConfirmLabel: tSystem(
+                  'inventory.useAvailable',
+                  language,
+                  'Use available amount'
+                ),
+                fallbackCancelLabel: tSystem(
+                  'inventory.cancelAction',
+                  language,
+                  'Cancel action'
+                )
+              });
+
+              if (result.conflict === true && openConfirmDialog) {
+                openConfirmDialog({
+                  title: conflictDialog.title,
+                  message: conflictDialog.message,
+                  confirmLabel: conflictDialog.confirmLabel,
+                  cancelLabel: conflictDialog.cancelLabel,
+                  showCancel: conflictDialog.showCancel,
+                  showCloseButton: conflictDialog.showCloseButton,
+                  dismissOnBackdrop: conflictDialog.dismissOnBackdrop,
+                  primaryAction: conflictDialog.primaryAction,
+                  kind: 'inventoryReservationConflict',
+                  refId: `${q.id}::${args.parentRow.id}::${sourceKey}`,
+                  onConfirm: () => {
+                    syncStepDataSourceOutputRowWithReservation(
+                      {
+                        ...args,
+                        patch: resolvedPatch
+                      },
+                      { skipReservation: Math.abs(usableQty - rollbackQty) < 1e-9 }
+                    );
+                  },
+                  onCancel: () => {
+                    syncStepDataSourceOutputRowWithReservation(
+                      {
+                        ...args,
+                        patch: rollbackPatch
+                      },
+                      { skipReservation: true }
+                    );
+                  }
+                });
+                return;
+              }
+
+              syncStepDataSourceOutputRow(
+                {
+                  ...args,
+                  patch: rollbackPatch
+                }
+              );
+              openConfirmDialog?.({
+                title: tSystem('common.notice', language, 'Notice'),
+                message,
+                confirmLabel: tSystem('common.ok', language, 'OK'),
+                cancelLabel: tSystem('common.cancel', language, 'Cancel'),
+                showCancel: false,
+                showCloseButton: true,
+                dismissOnBackdrop: true,
+                kind: 'inventoryReservationRejected',
+                refId: `${q.id}::${args.parentRow.id}::${sourceKey}`,
+                onConfirm: () => {},
+                onCancel: () => {}
+              });
+            }
+          }
+        } catch (error) {
+          if (reservationRequestVersionRef.current[timerKey] !== requestVersion) return;
+          onDiagnostic?.('inventory.reservation.error', {
+            groupId: q.id,
+            parentRowId: args.parentRow.id,
+            resourceRecordId,
+            resourceItemId: sourceKey,
+            message: (error as any)?.message || String(error || '')
+          });
+        }
+      };
+
+      if (quantity <= 0) {
+        void runReservationSync();
+        return;
+      }
+
+      reservationDebounceTimersRef.current[timerKey] = setTimeout(() => {
+        delete reservationDebounceTimersRef.current[timerKey];
+        void runReservationSync();
+      }, Math.max(0, debounceMs));
+    },
+    [
+      buildStepDataSourceDraftKey,
+      buildVirtualDataSourceRowValues,
+      formKey,
+      lineItems,
+      onDiagnostic,
+      q.id,
+      recordId,
+      resolveDataSourceOutputGroup,
+      syncStepDataSourceOutputRow,
+      toFiniteNumber,
+      updateStepDataSourceAvailability
+      ,
+      updateStepDataSourceAvailabilityOptimistically
     ]
   );
 
@@ -1108,7 +1732,8 @@ export const LineItemGroupQuestion: React.FC<{
             config,
             sourceRow,
             outputRow: existingOutputRow,
-            draftValues: stepDataSourceDrafts[draftKey] || null
+            draftValues: stepDataSourceDrafts[draftKey] || null,
+            parentRowId: parentRow.id
           });
           const quantityValue = quantityFieldId ? Number(virtualValues[quantityFieldId]) : undefined;
           const hasPositiveQty =
@@ -9405,7 +10030,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 config,
                                 sourceRow,
                                 outputRow: existingOutputRow,
-                                draftValues: stepDataSourceDrafts[draftKey] || null
+                                draftValues: stepDataSourceDrafts[draftKey] || null,
+                                parentRowId: row.id
                               });
                               const headlineRule = compactHeadlineRows.find(rule =>
                                 !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
@@ -9460,24 +10086,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     currentQty === null ||
                                     `${currentQty}`.trim() === '';
                                   if (quantityField && qtyIsEmpty) {
-                                    const quantityRules = Array.isArray((quantityField as any)?.validationRules)
-                                      ? ((quantityField as any).validationRules as any[])
-                                      : [];
-                                    const ctx = resolveVirtualRowWhenContext({
-                                      rowValues: nextVirtualValues,
-                                      parentValues: row.values as Record<string, FieldValue>
-                                    });
-                                    const maxFieldId = quantityRules.reduce<string>((matched, rule) => {
-                                      if (matched) return matched;
-                                      const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
-                                      if (!thenCfg) return '';
-                                      const targetFieldId = (thenCfg.fieldId || quantityField.id || '').toString().trim();
-                                      if (targetFieldId !== `${quantityField.id || ''}`.trim()) return '';
-                                      const candidateMaxFieldId = (thenCfg.maxFieldId || '').toString().trim();
-                                      if (!candidateMaxFieldId) return '';
-                                      if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) return '';
-                                      return candidateMaxFieldId;
-                                    }, '');
+                                    const maxFieldId = resolveVirtualMaxFieldId(
+                                      quantityField,
+                                      nextVirtualValues,
+                                      row.values as Record<string, FieldValue>
+                                    );
                                     const maxValue = maxFieldId ? nextVirtualValues[maxFieldId] : undefined;
                                     if (maxValue !== undefined && maxValue !== null && `${maxValue}`.trim() !== '') {
                                       patch[quantityFieldId] = `${maxValue}`;
@@ -9546,7 +10159,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                 type="checkbox"
                                                 checked={isSelected}
                                                 onChange={event =>
-                                                  syncStepDataSourceOutputRow({
+                                                  syncStepDataSourceOutputRowWithReservation({
                                                     config,
                                                     parentRow: row,
                                                     sourceRow,
@@ -9628,41 +10241,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                 : part.suffixFieldId
                                                   ? resolveVirtualDisplay(virtualValues, fieldById.get(part.suffixFieldId))
                                                   : '';
-                                              const allowsIntegerOnly =
-                                                Array.isArray((field as any)?.validationRules) &&
-                                                (field as any).validationRules.some((rule: any) => {
-                                                  const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
-                                                  if (!thenCfg) return false;
-                                                  const targetFieldId = (thenCfg.fieldId || field.id || '').toString().trim();
-                                                  if (targetFieldId !== `${field.id || ''}`.trim()) return false;
-                                                  if (thenCfg.integer !== true) return false;
-                                                  if (!rule?.when) return true;
-                                                  return matchesWhenClause(
-                                                    rule.when as any,
-                                                    resolveVirtualRowWhenContext({
-                                                      rowValues: virtualValues,
-                                                      parentValues: row.values as Record<string, FieldValue>
-                                                    })
-                                                  );
+                                              const allowsIntegerOnly = allowsVirtualIntegerOnly(
+                                                field,
+                                                virtualValues,
+                                                row.values as Record<string, FieldValue>
+                                              );
+                                              const maxFieldId = resolveVirtualMaxFieldId(
+                                                field,
+                                                virtualValues,
+                                                row.values as Record<string, FieldValue>
+                                              );
+                                              const maxValue =
+                                                maxFieldId && maxFieldId in virtualValues
+                                                  ? toFiniteNumber(virtualValues[maxFieldId])
+                                                  : null;
+                                              const sanitizeNumericValue = (raw: string): string =>
+                                                sanitizeNumericDraft(raw, {
+                                                  integerOnly: allowsIntegerOnly,
+                                                  maxValue
                                                 });
-                                              const sanitizeNumericValue = (raw: string): string => {
-                                                const text = (raw || '').toString();
-                                                if (!text.trim()) return '';
-                                                if (allowsIntegerOnly) return text.replace(/[^\d]/g, '');
-                                                let seenSeparator = false;
-                                                let sanitized = '';
-                                                for (const char of text) {
-                                                  if (/\d/.test(char)) {
-                                                    sanitized += char;
-                                                    continue;
-                                                  }
-                                                  if ((char === '.' || char === ',') && !seenSeparator) {
-                                                    sanitized += char;
-                                                    seenSeparator = true;
-                                                  }
-                                                }
-                                                return sanitized;
-                                              };
                                               return (
                                                 <span
                                                   key={`field:${sourceKey}:${fieldId}`}
@@ -9690,17 +10287,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                     minWidth={minWidth}
                                                     maxWidth={maxWidth}
                                                     extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
-                                                    onChange={next =>
-                                                      syncStepDataSourceOutputRow({
+                                                    onChange={next => {
+                                                      const nextValue = next === '' ? null : next;
+                                                      const currentValue =
+                                                        virtualValues[fieldId] === undefined || virtualValues[fieldId] === null
+                                                          ? null
+                                                          : `${virtualValues[fieldId]}`;
+                                                      const normalizedNext =
+                                                        nextValue === null || nextValue === undefined ? null : `${nextValue}`;
+                                                      if (normalizedNext === currentValue) return;
+                                                      syncStepDataSourceOutputRowWithReservation({
                                                         config,
                                                         parentRow: row,
                                                         sourceRow,
                                                         patch: {
                                                           ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                          [fieldId]: next === '' ? null : next
+                                                          [fieldId]: nextValue
                                                         }
-                                                      })
-                                                    }
+                                                      });
+                                                    }}
                                                     style={{ flex: '0 0 auto' }}
                                                     inputStyle={{
                                                       boxSizing: 'border-box',
@@ -9778,7 +10383,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                             title={option.label}
                                                             disabled={isLineFieldInputDisabled(field)}
                                                             onClick={() =>
-                                                              syncStepDataSourceOutputRow({
+                                                              syncStepDataSourceOutputRowWithReservation({
                                                                 config,
                                                                 parentRow: row,
                                                                 sourceRow,
@@ -9832,7 +10437,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                       lineHeight: 1
                                                     }}
                                                     onChange={next =>
-                                                      syncStepDataSourceOutputRow({
+                                                      syncStepDataSourceOutputRowWithReservation({
                                                         config,
                                                         parentRow: row,
                                                         sourceRow,

@@ -504,11 +504,34 @@ const buildHomeListLocalCacheKey = (formKey: string, listView: any, cacheVersion
   return `${HOME_LIST_LOCAL_CACHE_PREFIX}::${version}::${key}::${viewSig}`;
 };
 
+const pruneHomeListLocalCacheFamily = (storage: Storage, key: string): void => {
+  if (!key || !key.startsWith(`${HOME_LIST_LOCAL_CACHE_PREFIX}::`)) return;
+  const separatorIndex = key.indexOf('::', HOME_LIST_LOCAL_CACHE_PREFIX.length + 2);
+  if (separatorIndex < 0) return;
+  const familySuffix = key.slice(separatorIndex);
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const candidate = storage.key(i);
+    if (!candidate || candidate === key) continue;
+    if (!candidate.startsWith(`${HOME_LIST_LOCAL_CACHE_PREFIX}::`)) continue;
+    if (!candidate.endsWith(familySuffix)) continue;
+    keysToRemove.push(candidate);
+  }
+  keysToRemove.forEach(candidate => {
+    try {
+      storage.removeItem(candidate);
+    } catch (_) {
+      // ignore
+    }
+  });
+};
+
 const readHomeListLocalCache = (key: string): HomeListLocalCacheEntry | null => {
   if (!key) return null;
   const storage = resolveLocalStorageSafely();
   if (!storage) return null;
   try {
+    pruneHomeListLocalCacheFamily(storage, key);
     const raw = storage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as HomeListLocalCachePayload;
@@ -538,6 +561,7 @@ const writeHomeListLocalCache = (key: string, response: ListResponse, homeRev?: 
   const storage = resolveLocalStorageSafely();
   if (!storage) return;
   try {
+    pruneHomeListLocalCacheFamily(storage, key);
     const payload: HomeListLocalCachePayload = {
       savedAtMs: Date.now(),
       response: {
@@ -549,6 +573,18 @@ const writeHomeListLocalCache = (key: string, response: ListResponse, homeRev?: 
     storage.setItem(key, JSON.stringify(payload));
   } catch (_) {
     // ignore storage errors (quota/private mode)
+  }
+};
+
+const clearHomeListLocalCache = (key: string): void => {
+  if (!key) return;
+  const storage = resolveLocalStorageSafely();
+  if (!storage) return;
+  try {
+    pruneHomeListLocalCacheFamily(storage, key);
+    storage.removeItem(key);
+  } catch (_) {
+    // ignore storage errors
   }
 };
 
@@ -1309,6 +1345,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setDraftSave({ phase: 'idle' });
         pendingDeletedRecordIdsRef.current.push(existingRecordId);
         setPendingDeletedRecordApplyTick(tick => tick + 1);
+        const normalizedValues = normalizeRecordValues(definition, valuesRef.current as any);
+        const rebuiltLineItems = buildInitialLineItems(definition, normalizedValues);
+        const remappedState = applyValueMapsToForm(definition, normalizedValues, rebuiltLineItems, { mode: 'init' });
+        valuesRef.current = remappedState.values;
+        lineItemsRef.current = remappedState.lineItems;
+        lastAutoSaveSeenRef.current = { values: remappedState.values, lineItems: remappedState.lineItems };
+        setValues(remappedState.values);
+        setLineItems(remappedState.lineItems);
+        setErrors({});
+        setValidationWarnings({ top: [], byField: {} });
+        setValidationAttempted(false);
+        setValidationNoticeHidden(false);
+        try {
+          invalidateClientSharedDataCaches({
+            includePersistedDataSources: true,
+            includeHtmlRenderCache: true
+          });
+          clearHomeListLocalCache(homeListLocalCacheKey);
+          setOptionState({});
+          setTooltipState({});
+          optionStateRef.current = {};
+          tooltipStateRef.current = {};
+          preloadPromisesRef.current = {};
+          logEvent('cache.client.clear', {
+            scope: 'dedupDeleteOnKeyChange',
+            recordId: existingRecordId,
+            optionsCleared: true
+          });
+        } catch (cacheErr: any) {
+          logEvent('cache.client.clear.error', {
+            scope: 'dedupDeleteOnKeyChange',
+            recordId: existingRecordId,
+            message: cacheErr?.message || cacheErr?.toString?.() || 'unknown'
+          });
+        }
 
         logEvent('dedupDeleteOnKeyChange.delete.success', {
           source,
@@ -1387,7 +1458,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!fid) return false;
         return Boolean(dedupTriggerFieldIdsRef.current[fid] || dedupTriggerFieldIdsRef.current[fid.toLowerCase()]);
       });
-      const shouldRunFieldDedup = dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate);
+      const shouldRunFieldDedup =
+        !isTopDedupKeyChange && (dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate));
 
       if (shouldRunFieldDedup) {
         const signature = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
@@ -1446,6 +1518,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
           }
         }
+      } else if (isTopDedupKeyChange && hasDedupKeyUpdate) {
+        logEvent('dedup.fieldChange.check.skipped', {
+          source: 'fieldChangeDialog',
+          fieldId: pending.fieldId,
+          reason: 'dedupDeleteOnKeyChange'
+        });
       }
 
       setValues(mapped.values);
@@ -3724,7 +3802,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       clearFetchDataSourceCache();
       clearBundledHtmlClientCaches();
       clearHtmlRenderClientCache();
-      logEvent('cache.client.clear', { scope: 'refresh' });
+      setOptionState({});
+      setTooltipState({});
+      optionStateRef.current = {};
+      tooltipStateRef.current = {};
+      preloadPromisesRef.current = {};
+      logEvent('cache.client.clear', { scope: 'refresh', optionsCleared: true });
     } catch (err: any) {
       logEvent('cache.client.clear.error', { message: err?.message || err?.toString?.() || 'unknown' });
     }

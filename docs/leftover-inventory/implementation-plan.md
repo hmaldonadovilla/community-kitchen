@@ -6,6 +6,12 @@ The immediate business goal is to make leftovers faster and safer to use in Meal
 
 This design is grounded in the current codebase as of 2026-03-21, including the cross-form mutation foundation introduced in commit `c87f61c1c54c07760f5bec2be22c8d9f95a44e5a`.
 
+This plan is the top-level implementation guide.
+
+Detailed design for the reservation-aware inventory lifecycle now lives in:
+
+- `docs/leftover-inventory/design/reservation-lifecycle-design.md`
+
 ## Executive recommendation
 
 The recommended solution is:
@@ -121,26 +127,65 @@ That means:
 
 ### 3. Inventory status lifecycle during selection
 
-Inventory status must support a temporary reservation state in addition to the final operational states.
+Inventory status no longer carries reservation semantics.
 
 Required states:
 
 - `available`
-- `selected`
 - `used`
 - `expired`
 
 State rules:
 
-- when a leftover item is selected in a Meal Production record, its inventory status becomes `selected`
-- when it is deselected before submit, its inventory status becomes `available`
-- when the Meal Production record is submitted with that leftover still selected and the full available quantity is consumed, its inventory status becomes `used`
-- when the Meal Production record is submitted with that leftover still selected but only part of the available quantity is consumed, its inventory status returns to `available` and its remaining available quantity is reduced by the amount used in Meal Production
+- selecting a leftover does not change `LEFTOVER_STATUS`
+- quantity reservations are modeled through the reservation ledger plus aggregate reserved fields on the inventory record
+- when the Meal Production record is submitted and the full remaining quantity is consumed, the inventory status becomes `used`
+- when the Meal Production record is submitted and only part of the remaining quantity is consumed, the inventory status stays `available` and its remaining quantity is reduced in place
 - when the expiration date is passed, its inventory status becomes `expired`
 
-This reservation behavior is required so that a leftover cannot be selected by another user in another Meal Production record while it is already being used.
+This is required because a single leftover item may be partially reserved by multiple rows and multiple records at the same time.
 
-The generic platform feature behind this should not be named for leftovers. It should be a reusable external-record reservation or status-transition capability driven from configuration.
+The generic platform feature behind this should therefore be a reusable quantity-reservation capability, not a leftover-specific status toggle.
+
+### 3a. Reservation is quantity-based, not item-based
+
+Reservation must be tracked as a quantity, not as a whole-item lock.
+
+This is now an authoritative rule.
+
+What this means:
+
+- the same leftover item may be selected under multiple Meal Production dish rows in the same record
+- the same leftover item may also be selected by multiple Meal Production records at the same time
+- this is allowed only while the item still has free quantity available after subtracting active reservations
+
+Examples:
+
+- if `LE-12` has `10` portions remaining, one Meal Production dish may reserve `3` portions and another dish may reserve `2` portions
+- after that, `5` portions remain free
+- those remaining `5` portions may still be reserved by another dish in the same record or by a different Meal Production record
+
+This rule applies to both leftover kinds:
+
+- `entireDish` uses portions as the reservable quantity
+- `partialDish` uses quantity plus unit as the reservable quantity
+
+The reservation model must therefore support:
+
+- multiple active reservations against the same inventory record
+- immediate recalculation of free quantity after each reservation change
+- reconciliation on final submit so reserved quantity becomes either consumed quantity or released quantity
+
+Selection in the `Leftover` step must not reserve the entire item by status alone.
+
+Instead:
+
+- status expresses whether the item is operationally usable
+- reservation quantity expresses how much of the item is currently held by active records
+
+The design implication is that inventory status and reservation state must be separated.
+
+The detailed design in `docs/leftover-inventory/design/reservation-lifecycle-design.md` defines the quantity-based reservation model that must be used for implementation.
 
 ### 4. `Production` step must remain intact
 
@@ -330,6 +375,7 @@ The list is filtered to leftovers whose status is currently usable:
 
 - `available`
 - and not expired
+- and whose free quantity is greater than `0`
 
 Optionally, if the same Meal Production record already owns the reservation, its own `selected` rows may also be shown so the user can continue editing them.
 
@@ -339,9 +385,35 @@ For each selected item:
 - `entireDish` leftovers require the user to choose `reheat` or `combine`
 - `partialDish` leftovers only require selection and quantity
 - selection immediately regenerates the corresponding `MP_TYPE_LI` rows
-- selection immediately reserves the inventory item by moving it to `selected`
-- deselection immediately removes the generated `MP_TYPE_LI` rows and returns the inventory item to `available`
+- selection immediately reserves only the chosen quantity
+- deselection immediately removes the generated `MP_TYPE_LI` rows and releases the reserved quantity
 - the quantity entered in Meal Production represents the amount to consume from the currently available quantity, not a duplicated standalone leftover quantity
+
+Reservation rules:
+
+- selecting a leftover row does not reserve the full leftover item
+- reservation happens only when the row has enough information to define a valid reservation
+- for `entireDish`, a valid reservation requires:
+  - selected item id
+  - usage mode
+  - quantity to use
+- for `partialDish`, a valid reservation requires:
+  - selected item id
+  - quantity to use
+- changing the quantity updates the reservation delta on the server
+- changing usage mode on `entireDish` keeps the same reservation quantity but regenerates the corresponding `MP_TYPE_LI` normalization
+- deselecting the row releases the reservation quantity entirely
+
+Server-side free quantity must be defined as:
+
+- `remaining quantity - sum(active reservations across all records except the current reservation row being edited)`
+
+The UI may show the user:
+
+- the current free quantity
+- the quantity already reserved by the current record when applicable
+
+but the source of truth for availability must remain server-side.
 
 Normalization rules into `MP_TYPE_LI`:
 
@@ -378,6 +450,13 @@ On Meal Production submission:
 - partially consumed leftover inventory items return to `available` with their remaining quantity updated in place
 - the Meal Production record stores the normalized internal rows needed by the current summary and report logic
 - the inventory table remains the source of truth for the leftover record itself
+
+When reservations are in use, the submit behavior becomes:
+
+- active reservation quantity belonging to the submitting Meal Production record is reconciled into actual consumption
+- if the submitted usage equals the item's remaining quantity, the item becomes fully consumed
+- if the submitted usage is lower than the remaining quantity, only that quantity is deducted from the inventory record and the residual quantity remains available
+- all active reservation rows belonging to the submitted record must be closed as part of final reconciliation
 
 Consumption rules:
 
@@ -419,6 +498,8 @@ Recommended top-level fields:
 - `LEFTOVER_QTY`
 - `LEFTOVER_UNIT`
 - `LEFTOVER_PORTIONS`
+- `LEFTOVER_RESERVED_QTY`
+- `LEFTOVER_RESERVED_PORTIONS`
 - `LEFTOVER_EXP_DATE`
 - `LEFTOVER_SOURCE_FORM_KEY`
 - `LEFTOVER_SOURCE_RECORD_ID`
@@ -449,6 +530,42 @@ Quantity semantics:
 - `entireDish` uses `LEFTOVER_PORTIONS` as the remaining available quantity
 - `partialDish` uses `LEFTOVER_QTY` + `LEFTOVER_UNIT` as the remaining available quantity
 - when partial consumption happens, the remaining quantity is written back to these same fields on the inventory record
+- `LEFTOVER_RESERVED_PORTIONS` and `LEFTOVER_RESERVED_QTY` track the total active reserved quantity currently held by open Meal Production records
+
+### Reservation ledger
+
+To support quantity-based reservations across multiple records and multiple dish rows, the implementation should introduce a reusable reservation ledger instead of overloading the inventory record alone.
+
+Recommended new form:
+
+- `Config: Inventory Reservation Ledger`
+
+Recommended top-level fields:
+
+- `RESERVATION_ID`
+- `RESOURCE_FORM_KEY`
+- `RESOURCE_RECORD_ID`
+- `RESOURCE_ITEM_ID`
+- `RESOURCE_KIND`
+- `RESERVED_QTY`
+- `RESERVED_UNIT`
+- `STATUS`
+- `SOURCE_FORM_KEY`
+- `SOURCE_RECORD_ID`
+- `SOURCE_PARENT_GROUP_ID`
+- `SOURCE_PARENT_ROW_ID`
+- `SOURCE_OUTPUT_GROUP_ID`
+- `SOURCE_OUTPUT_ROW_ID`
+- `CREATED_AT`
+- `UPDATED_AT`
+
+Recommended enums:
+
+- `STATUS`: `active`, `released`, `consumed`
+
+This ledger is the authoritative row-level reservation model.
+
+The aggregate fields on the inventory record exist only to make availability queries fast and easy to configure.
 
 ### ID strategy
 

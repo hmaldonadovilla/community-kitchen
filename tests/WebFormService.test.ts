@@ -79,6 +79,63 @@ describe('WebFormService', () => {
     (distributorSheet as any).setMockData(distributorRows);
   });
 
+  const setupInventoryReservationForms = () => {
+    const inventoryFormKey = 'Config: Test Leftover Inventory';
+    const ledgerFormKey = 'Config: Test Inventory Reservation Ledger';
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfig = ss.getSheetByName(inventoryFormKey) || ss.insertSheet(inventoryFormKey);
+    const inventoryRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['LEFTOVER_STATUS', 'CHOICE', 'Leftover status', 'Leftover status', 'Leftover status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', 'TRUE', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Leftover kind', 'Leftover kind', 'Leftover kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RESERVED_QTY', 'NUMBER', 'Reserved quantity', 'Reserved quantity', 'Reserved quantity', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RESERVED_PORTIONS', 'NUMBER', 'Reserved portions', 'Reserved portions', 'Reserved portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_USED_BY_FORM_KEY', 'TEXT', 'Used by form key', 'Used by form key', 'Used by form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_USED_BY_RECORD_ID', 'TEXT', 'Used by record ID', 'Used by record ID', 'Used by record ID', false, '', '', '', 'Active', '', '', '', '', '']
+    ];
+    (inventoryConfig as any).setMockData(inventoryRows);
+
+    const ledgerConfig = ss.getSheetByName(ledgerFormKey) || ss.insertSheet(ledgerFormKey);
+    const ledgerRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['RESERVATION_ID', 'TEXT', 'Reservation ID', 'Reservation ID', 'Reservation ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_FORM_KEY', 'TEXT', 'Resource form key', 'Resource form key', 'Resource form key', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_RECORD_ID', 'TEXT', 'Resource record ID', 'Resource record ID', 'Resource record ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_ITEM_ID', 'TEXT', 'Resource item ID', 'Resource item ID', 'Resource item ID', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_KIND', 'TEXT', 'Resource kind', 'Resource kind', 'Resource kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_QTY_FIELD_ID', 'TEXT', 'Resource quantity field ID', 'Resource quantity field ID', 'Resource quantity field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_RESERVED_QTY_FIELD_ID', 'TEXT', 'Resource reserved quantity field ID', 'Resource reserved quantity field ID', 'Resource reserved quantity field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_STATUS_FIELD_ID', 'TEXT', 'Resource status field ID', 'Resource status field ID', 'Resource status field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_UNIT_FIELD_ID', 'TEXT', 'Resource unit field ID', 'Resource unit field ID', 'Resource unit field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESERVED_QTY', 'NUMBER', 'Reserved quantity', 'Reserved quantity', 'Reserved quantity', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESERVED_UNIT', 'TEXT', 'Reserved unit', 'Reserved unit', 'Reserved unit', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['STATUS', 'CHOICE', 'Status', 'Status', 'Status', true, 'active,released,consumed', 'active,released,consumed', 'active,released,consumed', 'Active', '', '', '', 'TRUE', ''],
+      ['SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record ID', 'Source record ID', 'Source record ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['SOURCE_PARENT_GROUP_ID', 'TEXT', 'Source parent group ID', 'Source parent group ID', 'Source parent group ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_PARENT_ROW_ID', 'TEXT', 'Source parent row ID', 'Source parent row ID', 'Source parent row ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_OUTPUT_GROUP_ID', 'TEXT', 'Source output group ID', 'Source output group ID', 'Source output group ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_OUTPUT_ROW_ID', 'TEXT', 'Source output row ID', 'Source output row ID', 'Source output row ID', false, '', '', '', 'Active', '', '', '', '', '']
+    ];
+    (ledgerConfig as any).setMockData(ledgerRows);
+
+    return { inventoryFormKey, ledgerFormKey };
+  };
+
   afterEach(() => {
     jest.restoreAllMocks();
     (global as any).GmailApp.sendEmail.mockClear();
@@ -1104,6 +1161,226 @@ describe('WebFormService', () => {
     expect((values[1][q1Col] || '').toString()).toBe('Bob');
   });
 
+  test('upsertInventoryReservation creates an active ledger row and updates reserved aggregate', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const result = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-1',
+      resourceKind: 'Entire dish',
+      quantity: 3,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      ledgerFormKey
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.availability?.reservedQuantity).toBe(3);
+    expect(result.availability?.freeQuantity).toBe(7);
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (result.reservationId || '').toString());
+    expect(reservation).not.toBeNull();
+    expect((reservation?.values as any)?.STATUS).toBe('active');
+    expect((reservation?.values as any)?.RESERVED_QTY).toBe(3);
+  });
+
+  test('upsertInventoryReservation rejects over-reservation and returns fresh availability', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-2',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const first = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-2',
+      resourceKind: 'Entire dish',
+      quantity: 7,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      ledgerFormKey
+    });
+    expect(first.success).toBe(true);
+
+    const second = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-2',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-2',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-2',
+      ledgerFormKey
+    });
+    expect(second.success).toBe(false);
+    expect(second.conflict).toBe(true);
+    expect(second.availability?.reservedQuantity).toBe(7);
+    expect(second.availability?.freeQuantity).toBe(3);
+  });
+
+  test('upsertInventoryReservation releases a reservation when quantity becomes zero', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LP-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Part dish',
+      LEFTOVER_QTY: 250,
+      LEFTOVER_UNIT: 'gr',
+      LEFTOVER_RESERVED_QTY: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LP-1',
+      resourceKind: 'Part dish',
+      quantity: 125,
+      unit: 'gr',
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-3',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-3',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const released = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LP-1',
+      resourceKind: 'Part dish',
+      quantity: 0,
+      unit: 'gr',
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-3',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-3',
+      ledgerFormKey
+    });
+    expect(released.success).toBe(true);
+    expect(released.released).toBe(true);
+    expect(released.availability?.reservedQuantity).toBe(0);
+    expect(released.availability?.freeQuantity).toBe(250);
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_QTY).toBe(0);
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('released');
+  });
+
+  test('reconcileInventoryReservations consumes reserved quantity and closes active ledger rows', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-3',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0,
+      LEFTOVER_USED_BY_FORM_KEY: '',
+      LEFTOVER_USED_BY_RECORD_ID: ''
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-3',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-4',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-4',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const reconciled = service.reconcileInventoryReservations({
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-4',
+      ledgerFormKey
+    });
+    expect(reconciled.success).toBe(true);
+    expect(reconciled.reconciledReservations).toBe(1);
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
+    expect((updatedInventory?.values as any)?.LEFTOVER_USED_BY_FORM_KEY).toBe('Config: Delivery');
+    expect((updatedInventory?.values as any)?.LEFTOVER_USED_BY_RECORD_ID).toBe('REC-4');
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('releaseInventoryReservations releases reserved quantity without consuming inventory', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-REL',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-REL',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-REL',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-REL',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const released = service.releaseInventoryReservations({
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-REL',
+      ledgerFormKey
+    });
+    expect(released.success).toBe(true);
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(10);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('released');
+  });
+
   test('saveSubmissionWithId can delete an existing record immediately for dedup delete-on-key-change flow', () => {
     const initial = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
@@ -1130,6 +1407,182 @@ describe('WebFormService', () => {
     const sheet = ss.getSheetByName('Deliveries');
     expect(sheet).toBeDefined();
     expect(sheet!.getLastRow()).toBe(1);
+  });
+
+  test('saveSubmissionWithId releases active reservations when delete-only flow removes the source record', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      dedupDeleteOnKeyChange: true,
+      reservationLifecycle: {
+        ledgerFormKey,
+        releaseOnDelete: true
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    const source = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DELETE-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(source.success).toBe(true);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-DEL',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-DEL',
+      resourceKind: 'Entire dish',
+      quantity: 3,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-DELETE-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-DELETE',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const refreshSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
+    const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
+    refreshSpy.mockClear();
+    bumpSpy.mockClear();
+
+    const deleted = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DELETE-1',
+      __ckDeleteRecordId: 'REC-DELETE-1',
+      __ckSaveMode: 'draft'
+    } as any);
+    expect(deleted.success).toBe(true);
+    expect((deleted.meta as any)?.reservationRelease?.releasedReservations).toBe(1);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ configSheet: 'Config: Delivery' }),
+      expect.any(Array),
+      'saveSubmissionWithId'
+    );
+    const bumpReasons = bumpSpy.mock.calls.map((call: any[]) => call[1]);
+    expect(bumpReasons.filter((reason: string) => reason === 'inventoryReservation.reconcile')).toHaveLength(2);
+    expect(bumpReasons.filter((reason: string) => reason === 'saveSubmissionWithId')).toHaveLength(1);
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('released');
+  });
+
+  test('runDailyLifecycleRecompute releases stale active reservations for configured source forms', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const sourceFormKey = 'Config: Source Reservations';
+    const lifecycleJson = JSON.stringify({
+      reservationLifecycle: {
+        ledgerFormKey,
+        releaseOnDelete: true
+      },
+      lifecycle: {
+        rules: [
+          {
+            id: 'releaseStaleReservations',
+            type: 'releaseStaleReservations',
+            dateFieldId: 'SRC_DATE',
+            compare: 'beforeToday',
+            ledgerFormKey
+          }
+        ]
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Source Reservations', sourceFormKey, 'Source Reservation Data', 'Desc', '', '', '', lifecycleJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    const sourceConfig = ss.getSheetByName(sourceFormKey) || ss.insertSheet(sourceFormKey);
+    (sourceConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SRC_DATE', 'DATE', 'Source date', 'Source date', 'Source date', true, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const source = service.saveSubmissionWithId({
+      formKey: sourceFormKey,
+      language: 'EN',
+      id: 'SRC-1',
+      SRC_DATE: '2026-03-28',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(source.success).toBe(true);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-STALE',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 9,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-STALE',
+      resourceKind: 'Entire dish',
+      quantity: 5,
+      sourceFormKey,
+      sourceRecordId: 'SRC-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-STALE',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const todaySpy = jest.spyOn(service as any, 'scriptTodayIso').mockReturnValue('2026-03-29');
+    const primeSpy = jest.spyOn(service as any, 'primeHomeBootstrapCache');
+    try {
+      const result = service.runDailyLifecycleRecompute();
+      expect(result.success).toBe(true);
+      expect(primeSpy).toHaveBeenCalledTimes(1);
+      expect(primeSpy).toHaveBeenCalledWith(sourceFormKey, expect.any(Number), 'runDailyLifecycleRecompute');
+      const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+      expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(9);
+      expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+      const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+      expect((reservation?.values as any)?.STATUS).toBe('released');
+    } finally {
+      todaySpy.mockRestore();
+    }
   });
 
   test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {

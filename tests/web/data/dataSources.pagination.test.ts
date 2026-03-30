@@ -77,9 +77,9 @@ describe('web dataSources pagination', () => {
     const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
     expect(keys.length).toBe(1);
     const persisted = JSON.parse(localStorage.getItem(keys[0]) || '{}');
-    expect(persisted.items).toEqual(['A', 'B', 'C', 'D']);
-    expect(persisted.nextPageToken).toBeUndefined();
-    expect(persisted.totalCount).toBe(4);
+    expect(persisted.response?.items).toEqual(['A', 'B', 'C', 'D']);
+    expect(persisted.response?.nextPageToken).toBeUndefined();
+    expect(persisted.response?.totalCount).toBe(4);
   });
 
   it('does not auto-page non-options mode responses', async () => {
@@ -97,8 +97,7 @@ describe('web dataSources pagination', () => {
     const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
     expect(keys.length).toBe(1);
     const persisted = JSON.parse(localStorage.getItem(keys[0]) || '{}');
-    expect(persisted.items).toEqual(['A', 'B']);
-    expect(persisted.nextPageToken).toBe('p2');
+    expect(persisted.response?.items).toEqual(['A', 'B']);
+    expect(persisted.response?.nextPageToken).toBe('p2');
   });
 });
-

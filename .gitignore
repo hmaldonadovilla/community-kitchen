@@ -17,6 +17,7 @@ perf-results/
 .clasp.staging.json
 .clasp.prod.json
 .clasp.stage-2.json
+.sfdx/
 
 .vscode/
 # Snyk Security Extension - AI Rules (auto-generated)

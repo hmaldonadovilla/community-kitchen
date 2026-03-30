@@ -7,6 +7,11 @@ import {
   FormConfig,
   FormConfigExport,
   DedupRule,
+  InventoryAvailabilitySnapshot,
+  InventoryReservationMutationRequest,
+  InventoryReservationMutationResult,
+  InventoryReservationReconciliationRequest,
+  InventoryReservationReconciliationResult,
   LifecycleRule,
   QuestionConfig,
   WebFormDefinition,
@@ -992,10 +997,7 @@ export class WebFormService {
     rawDateValue: any,
     todayIso: string
   ): boolean {
-    const targetStatus = (rule.toStatus || '').toString().trim().toLowerCase();
-    if (!targetStatus) return false;
     const status = (currentStatus === undefined || currentStatus === null ? '' : currentStatus.toString().trim()).toLowerCase();
-    if (status === targetStatus) return false;
     const fromStatuses = Array.isArray(rule.fromStatuses)
       ? rule.fromStatuses.map(value => (value || '').toString().trim().toLowerCase()).filter(Boolean)
       : [];
@@ -1034,7 +1036,93 @@ export class WebFormService {
         const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
         let formUpdates = 0;
 
+        const activeReservationRowsByLedger = new Map<string, WebFormSubmission[]>();
+        const releasedSourceRecords = new Set<string>();
+
         rules.forEach(rule => {
+          if (rule.type === 'releaseStaleReservations') {
+            const ledgerFormKey =
+              (rule.ledgerFormKey || form.reservationLifecycle?.ledgerFormKey || 'Config: Inventory Reservation Ledger')
+                .toString()
+                .trim();
+            const ledgerKey = ledgerFormKey || 'Config: Inventory Reservation Ledger';
+            const activeReservations = (() => {
+              if (activeReservationRowsByLedger.has(ledgerKey)) {
+                return activeReservationRowsByLedger.get(ledgerKey) || [];
+              }
+              const ledgerContext = this.getFormContextLite(ledgerKey);
+              const rows = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
+                this.isActiveReservationRecord(record) &&
+                this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === formKey
+              );
+              activeReservationRowsByLedger.set(ledgerKey, rows);
+              return rows;
+            })();
+            if (!activeReservations.length) return;
+
+            const sourceRowIndexById = new Map<string, number>();
+            const recordIdCol = Number(columns.recordId || 0);
+            if (recordIdCol > 0) {
+              rows.forEach((rowValues, index) => {
+                const sourceRecordId = (rowValues[recordIdCol - 1] || '').toString().trim();
+                if (sourceRecordId) sourceRowIndexById.set(sourceRecordId, index);
+              });
+            }
+            const groupedBySource = new Map<string, WebFormSubmission[]>();
+            activeReservations.forEach(record => {
+              const sourceRecordId = this.readRecordFieldString(record, 'SOURCE_RECORD_ID');
+              if (!sourceRecordId) return;
+              const list = groupedBySource.get(sourceRecordId) || [];
+              list.push(record);
+              groupedBySource.set(sourceRecordId, list);
+            });
+
+            groupedBySource.forEach((reservationRows, sourceRecordId) => {
+              const releaseKey = `${ledgerKey}::${sourceRecordId}`;
+              if (releasedSourceRecords.has(releaseKey)) return;
+              const sourceRowIndex = sourceRowIndexById.get(sourceRecordId);
+              if (sourceRowIndex === undefined) {
+                if (rule.releaseWhenSourceMissing === false) return;
+                const releaseResult = this.releaseInventoryReservations({
+                  sourceFormKey: formKey,
+                  sourceRecordId,
+                  ledgerFormKey: ledgerKey,
+                  refreshMode: 'revisionOnly'
+                });
+                if (!releaseResult.success) {
+                  errors.push(`${formKey}: stale release failed for missing source ${sourceRecordId}: ${releaseResult.message}`);
+                  return;
+                }
+                releasedSourceRecords.add(releaseKey);
+                updatedRecords += Number(releaseResult.reconciledReservations || 0);
+                return;
+              }
+              const statusCol = this.resolveLifecycleStatusColumn(resolvedForm, rule, columns);
+              const currentStatus = statusCol ? rows[sourceRowIndex][statusCol - 1] : undefined;
+              const dateCol = Number(columns.fields?.[rule.dateFieldId] || 0);
+              if (!dateCol) {
+                errors.push(`${formKey}: lifecycle rule ${(rule.id || rule.type).toString()} missing date column for ${rule.dateFieldId}`);
+                return;
+              }
+              const rawDateValue = rows[sourceRowIndex][dateCol - 1];
+              if (!this.shouldApplyLifecycleRule(rule, currentStatus, rawDateValue, todayIso)) {
+                return;
+              }
+              const releaseResult = this.releaseInventoryReservations({
+                sourceFormKey: formKey,
+                sourceRecordId,
+                ledgerFormKey: ledgerKey,
+                refreshMode: 'revisionOnly'
+              });
+              if (!releaseResult.success) {
+                errors.push(`${formKey}: stale release failed for ${sourceRecordId}: ${releaseResult.message}`);
+                return;
+              }
+              releasedSourceRecords.add(releaseKey);
+              updatedRecords += Number(releaseResult.reconciledReservations || 0);
+            });
+            return;
+          }
           const dateCol = Number(columns.fields?.[rule.dateFieldId] || 0);
           const statusCol = this.resolveLifecycleStatusColumn(resolvedForm, rule, columns);
           if (!dateCol) {
@@ -1053,6 +1141,13 @@ export class WebFormService {
             if (!this.shouldApplyLifecycleRule(rule, rowValues[statusCol - 1], rowValues[dateCol - 1], todayIso)) {
               return;
             }
+            const targetStatus = (rule.toStatus || '').toString().trim().toLowerCase();
+            const normalizedStatus = (rowValues[statusCol - 1] === undefined || rowValues[statusCol - 1] === null
+              ? ''
+              : rowValues[statusCol - 1].toString().trim()).toLowerCase();
+            if (!targetStatus || normalizedStatus === targetStatus) {
+              return;
+            }
             const rowNumber = index + 2;
             this.submissions.writeStatus(sheet, columns, rowNumber, rule.toStatus, rule.statusFieldId);
             rowValues[statusCol - 1] = rule.toStatus;
@@ -1060,7 +1155,7 @@ export class WebFormService {
           });
         });
 
-        if (formUpdates > 0) {
+        if (formUpdates > 0 || releasedSourceRecords.size > 0) {
           const canonicalKey = (resolvedForm.configSheet || resolvedForm.title || formKey).toString().trim();
           const rev = this.bumpHomeRevision(canonicalKey, 'runDailyLifecycleRecompute');
           this.primeHomeBootstrapCache(canonicalKey, rev, 'runDailyLifecycleRecompute');
@@ -1419,6 +1514,393 @@ export class WebFormService {
     return { success: true, record, html: result.html, fileName: result.fileName };
   }
 
+  public upsertInventoryReservation(
+    request: InventoryReservationMutationRequest
+  ): InventoryReservationMutationResult {
+    const resourceFormKey = (request?.resourceFormKey || '').toString().trim();
+    const resourceRecordId = (request?.resourceRecordId || '').toString().trim();
+    const sourceFormKey = (request?.sourceFormKey || '').toString().trim();
+    const sourceRecordId = (request?.sourceRecordId || '').toString().trim();
+    if (!resourceFormKey || !resourceRecordId || !sourceFormKey || !sourceRecordId) {
+      return {
+        success: false,
+        message: 'resourceFormKey, resourceRecordId, sourceFormKey, and sourceRecordId are required.'
+      };
+    }
+
+    return this.withDocumentTransactionLock('inventoryReservation.upsert', () => {
+      const ledgerFormKey = (request?.ledgerFormKey || 'Config: Inventory Reservation Ledger').toString().trim();
+      const inventoryRecord = this.fetchSubmissionById(resourceFormKey, resourceRecordId);
+      if (!inventoryRecord) {
+        return {
+          success: false,
+          message: `Inventory record not found: ${resourceFormKey} / ${resourceRecordId}.`
+        };
+      }
+
+      const fieldIds = this.resolveReservationFieldIds({
+        resourceKind: request.resourceKind || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_KIND'),
+        quantityFieldId: request.quantityFieldId,
+        reservedQuantityFieldId: request.reservedQuantityFieldId,
+        statusFieldId: request.statusFieldId,
+        unitFieldId: request.unitFieldId
+      });
+
+      const requestedQty = this.normalizeReservationQuantity(request.quantity);
+      if (requestedQty === null) {
+        return {
+          success: false,
+          message: 'Reservation quantity must be numeric.'
+        };
+      }
+
+      const ledgerContext = this.getFormContextLite(ledgerFormKey);
+      const activeReservations = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
+        this.isActiveReservationRecord(record) &&
+        this.readRecordFieldString(record, 'RESOURCE_FORM_KEY') === resourceFormKey &&
+        this.readRecordFieldString(record, 'RESOURCE_RECORD_ID') === resourceRecordId
+      );
+
+      const reservationId = this.buildInventoryReservationId({
+        resourceFormKey,
+        resourceRecordId,
+        resourceItemId: request.resourceItemId || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_ID'),
+        sourceFormKey,
+        sourceRecordId,
+        sourceParentGroupId: request.sourceParentGroupId,
+        sourceParentRowId: request.sourceParentRowId
+      });
+      const currentReservation =
+        activeReservations.find(record => (record.id || '').toString().trim() === reservationId) || null;
+      const currentReservationQty = currentReservation ? this.readNumericRecordField(currentReservation, 'RESERVED_QTY') : 0;
+      const reservedByOthers = activeReservations
+        .filter(record => (record.id || '').toString().trim() !== reservationId)
+        .reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+      const currentRecordReservedQty = activeReservations
+        .filter(record => this.readRecordFieldString(record, 'RESOURCE_FORM_KEY') === resourceFormKey)
+        .filter(record => this.readRecordFieldString(record, 'RESOURCE_RECORD_ID') === resourceRecordId)
+        .filter(record => this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === sourceFormKey)
+        .filter(record => this.readRecordFieldString(record, 'SOURCE_RECORD_ID') === sourceRecordId)
+        .reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+
+      const remainingQuantity = this.readNumericRecordField(inventoryRecord, fieldIds.quantityFieldId);
+      const inventoryStatus = fieldIds.statusFieldId ? this.readRecordFieldString(inventoryRecord, fieldIds.statusFieldId) : '';
+      const allowedStatuses = (Array.isArray(request.allowedStatuses) && request.allowedStatuses.length
+        ? request.allowedStatuses
+        : ['available']
+      )
+        .map(value => (value || '').toString().trim().toLowerCase())
+        .filter(Boolean);
+      if (requestedQty > 0 && allowedStatuses.length > 0) {
+        const normalizedStatus = (inventoryStatus || '').toString().trim().toLowerCase();
+        if (!normalizedStatus || !allowedStatuses.includes(normalizedStatus)) {
+          return {
+            success: false,
+            conflict: true,
+            message: `This inventory item is not available for reservation (${inventoryStatus || 'unknown status'}).`,
+            reservationId,
+            availability: this.buildInventoryAvailabilitySnapshot({
+              inventoryRecord,
+              fieldIds,
+              resourceFormKey,
+              resourceRecordId,
+              resourceItemId: request.resourceItemId || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_ID'),
+              resourceKind: request.resourceKind || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_KIND'),
+              reservedQuantity: reservedByOthers + currentReservationQty,
+              currentReservationQuantity: currentReservationQty,
+              currentRecordReservedQuantity: currentRecordReservedQty
+            })
+          };
+        }
+      }
+
+      const maxAllowedQuantity = Math.max(0, remainingQuantity - reservedByOthers);
+      if (requestedQty > 0 && requestedQty > maxAllowedQuantity + 1e-9) {
+        return {
+          success: false,
+          conflict: true,
+          message: `Only ${this.formatReservationQuantity(maxAllowedQuantity)} ${this.readRecordFieldString(inventoryRecord, fieldIds.unitFieldId) || ''}`.trim(),
+          reservationId,
+          availability: this.buildInventoryAvailabilitySnapshot({
+            inventoryRecord,
+            fieldIds,
+            resourceFormKey,
+            resourceRecordId,
+            resourceItemId: request.resourceItemId || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_ID'),
+            resourceKind: request.resourceKind || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_KIND'),
+            reservedQuantity: reservedByOthers + currentReservationQty,
+            currentReservationQuantity: currentReservationQty,
+            currentRecordReservedQuantity: currentRecordReservedQty
+          })
+        };
+      }
+
+      const touchedForms = new Map<string, { form: FormConfig; questions: QuestionConfig[] }>();
+      const ledgerValues: Record<string, any> = {
+        RESERVATION_ID: reservationId,
+        RESOURCE_FORM_KEY: resourceFormKey,
+        RESOURCE_RECORD_ID: resourceRecordId,
+        RESOURCE_ITEM_ID: request.resourceItemId || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_ID'),
+        RESOURCE_KIND: request.resourceKind || this.readRecordFieldString(inventoryRecord, 'LEFTOVER_KIND'),
+        RESOURCE_QTY_FIELD_ID: fieldIds.quantityFieldId,
+        RESOURCE_RESERVED_QTY_FIELD_ID: fieldIds.reservedQuantityFieldId,
+        RESOURCE_STATUS_FIELD_ID: fieldIds.statusFieldId || '',
+        RESOURCE_UNIT_FIELD_ID: fieldIds.unitFieldId || '',
+        RESERVED_QTY: requestedQty > 0 ? this.formatReservationQuantity(requestedQty) : 0,
+        RESERVED_UNIT: request.unit || this.readRecordFieldString(inventoryRecord, fieldIds.unitFieldId),
+        STATUS: requestedQty > 0 ? 'active' : 'released',
+        SOURCE_FORM_KEY: sourceFormKey,
+        SOURCE_RECORD_ID: sourceRecordId,
+        SOURCE_PARENT_GROUP_ID: (request.sourceParentGroupId || '').toString(),
+        SOURCE_PARENT_ROW_ID: (request.sourceParentRowId || '').toString(),
+        SOURCE_OUTPUT_GROUP_ID: (request.sourceOutputGroupId || '').toString(),
+        SOURCE_OUTPUT_ROW_ID: (request.sourceOutputRowId || '').toString()
+      };
+
+      if (requestedQty > 0 || currentReservation) {
+        const saveResult = this.saveInternalRecord({
+          context: ledgerContext,
+          recordId: reservationId,
+          language: currentReservation?.language || 'EN',
+          status: requestedQty > 0 ? 'active' : 'released',
+          values: ledgerValues,
+          auditAction: requestedQty > 0 ? 'inventoryReservation:upsert' : 'inventoryReservation:release'
+        });
+        if (!saveResult.success) {
+          return {
+            success: false,
+            message: saveResult.message || 'Failed to save reservation ledger row.'
+          };
+        }
+        touchedForms.set(ledgerFormKey, ledgerContext);
+      }
+
+      const nextReservedQuantity = reservedByOthers + Math.max(0, requestedQty);
+      const inventoryContext = this.getFormContextLite(resourceFormKey);
+      const nextInventoryValues = cloneRecordValues(inventoryRecord.values || {});
+      nextInventoryValues[fieldIds.reservedQuantityFieldId] = this.formatReservationQuantity(nextReservedQuantity);
+      if (fieldIds.statusFieldId && !this.readRecordFieldString(inventoryRecord, fieldIds.statusFieldId)) {
+        nextInventoryValues[fieldIds.statusFieldId] = 'available';
+      }
+      const inventorySaveResult = this.saveInternalRecord({
+        context: inventoryContext,
+        recordId: resourceRecordId,
+        language: inventoryRecord.language || 'EN',
+        status: fieldIds.statusFieldId ? (nextInventoryValues[fieldIds.statusFieldId] || inventoryRecord.status || '').toString() : inventoryRecord.status,
+        values: nextInventoryValues,
+        auditAction: 'inventoryReservation:updateAggregate'
+      });
+      if (!inventorySaveResult.success) {
+        return {
+          success: false,
+          message: inventorySaveResult.message || 'Failed to update inventory aggregate reservation.'
+        };
+      }
+      touchedForms.set(resourceFormKey, inventoryContext);
+
+      touchedForms.forEach(target => {
+        this.refreshAnalyticsAndHomeBootstrap(target.form, target.questions, 'inventoryReservation.upsert');
+      });
+
+      const currentRecordReservedNext = currentRecordReservedQty - currentReservationQty + Math.max(0, requestedQty);
+      const refreshedInventory =
+        this.fetchSubmissionById(resourceFormKey, resourceRecordId) ||
+        ({ ...inventoryRecord, values: nextInventoryValues } as WebFormSubmission);
+      const availability = this.buildInventoryAvailabilitySnapshot({
+        inventoryRecord: refreshedInventory,
+        fieldIds,
+        resourceFormKey,
+        resourceRecordId,
+        resourceItemId: request.resourceItemId || this.readRecordFieldString(refreshedInventory, 'LEFTOVER_ID'),
+        resourceKind: request.resourceKind || this.readRecordFieldString(refreshedInventory, 'LEFTOVER_KIND'),
+        reservedQuantity: nextReservedQuantity,
+        currentReservationQuantity: Math.max(0, requestedQty),
+        currentRecordReservedQuantity: Math.max(0, currentRecordReservedNext)
+      });
+
+      debugLog('inventoryReservation.upsert.ok', {
+        resourceFormKey,
+        resourceRecordId,
+        reservationId,
+        requestedQty,
+        released: requestedQty <= 0,
+        freeQuantity: availability.freeQuantity
+      });
+
+      return {
+        success: true,
+        message: requestedQty > 0 ? 'Reservation updated.' : 'Reservation released.',
+        reservationId,
+        released: requestedQty <= 0,
+        availability
+      };
+    });
+  }
+
+  public reconcileInventoryReservations(
+    request: InventoryReservationReconciliationRequest
+  ): InventoryReservationReconciliationResult {
+    return this.finalizeInventoryReservations({ ...request, mode: request?.mode || 'consume' });
+  }
+
+  public releaseInventoryReservations(
+    request: InventoryReservationReconciliationRequest
+  ): InventoryReservationReconciliationResult {
+    return this.finalizeInventoryReservations({ ...request, mode: 'release' });
+  }
+
+  private finalizeInventoryReservations(
+    request: InventoryReservationReconciliationRequest
+  ): InventoryReservationReconciliationResult {
+    const sourceFormKey = (request?.sourceFormKey || '').toString().trim();
+    const sourceRecordId = (request?.sourceRecordId || '').toString().trim();
+    if (!sourceFormKey || !sourceRecordId) {
+      return {
+        success: false,
+        message: 'sourceFormKey and sourceRecordId are required.'
+      };
+    }
+    const mode = request?.mode === 'release' ? 'release' : 'consume';
+    const refreshMode = (
+      request?.refreshMode === 'revisionOnly' || request?.refreshMode === 'none'
+        ? request.refreshMode
+        : 'full'
+    ) as 'full' | 'revisionOnly' | 'none';
+
+    return this.withDocumentTransactionLock('inventoryReservation.reconcile', () => {
+      const ledgerFormKey = (request?.ledgerFormKey || 'Config: Inventory Reservation Ledger').toString().trim();
+      const ledgerContext = this.getFormContextLite(ledgerFormKey);
+      const activeReservations = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
+        this.isActiveReservationRecord(record) &&
+        this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === sourceFormKey &&
+        this.readRecordFieldString(record, 'SOURCE_RECORD_ID') === sourceRecordId
+      );
+
+      if (!activeReservations.length) {
+        return {
+          success: true,
+          message: 'No active reservations found.',
+          reconciledReservations: 0,
+          touchedInventoryRecords: 0,
+          availability: []
+        };
+      }
+
+      const touchedForms = new Map<string, { form: FormConfig; questions: QuestionConfig[] }>();
+      touchedForms.set(ledgerFormKey, ledgerContext);
+
+      const grouped = new Map<string, WebFormSubmission[]>();
+      activeReservations.forEach(record => {
+        const resourceFormKey = this.readRecordFieldString(record, 'RESOURCE_FORM_KEY');
+        const resourceRecordId = this.readRecordFieldString(record, 'RESOURCE_RECORD_ID');
+        const key = `${resourceFormKey}::${resourceRecordId}`;
+        const list = grouped.get(key) || [];
+        list.push(record);
+        grouped.set(key, list);
+      });
+
+      const availability: InventoryAvailabilitySnapshot[] = [];
+      grouped.forEach((rows, key) => {
+        const [resourceFormKey, resourceRecordId] = key.split('::');
+        const inventoryRecord = this.fetchSubmissionById(resourceFormKey, resourceRecordId);
+        if (!inventoryRecord) {
+          throw new Error(`Inventory record not found during reconciliation: ${resourceFormKey} / ${resourceRecordId}.`);
+        }
+        const first = rows[0];
+        const fieldIds = this.resolveReservationFieldIds({
+          resourceKind: this.readRecordFieldString(first, 'RESOURCE_KIND'),
+          quantityFieldId: this.readRecordFieldString(first, 'RESOURCE_QTY_FIELD_ID'),
+          reservedQuantityFieldId: this.readRecordFieldString(first, 'RESOURCE_RESERVED_QTY_FIELD_ID'),
+          statusFieldId: this.readRecordFieldString(first, 'RESOURCE_STATUS_FIELD_ID'),
+          unitFieldId: this.readRecordFieldString(first, 'RESOURCE_UNIT_FIELD_ID')
+        });
+        const consumedQuantity = rows.reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+        const remainingQuantity = this.readNumericRecordField(inventoryRecord, fieldIds.quantityFieldId);
+        const reservedQuantity = this.readNumericRecordField(inventoryRecord, fieldIds.reservedQuantityFieldId);
+        if (mode === 'consume' && consumedQuantity > remainingQuantity + 1e-9) {
+          throw new Error(
+            `Reservation reconciliation exceeds remaining quantity for ${resourceFormKey} / ${resourceRecordId}.`
+          );
+        }
+        const nextRemainingQuantity = mode === 'consume' ? Math.max(0, remainingQuantity - consumedQuantity) : remainingQuantity;
+        const nextReservedQuantity = Math.max(0, reservedQuantity - consumedQuantity);
+        const nextInventoryValues = cloneRecordValues(inventoryRecord.values || {});
+        nextInventoryValues[fieldIds.quantityFieldId] = this.formatReservationQuantity(nextRemainingQuantity);
+        nextInventoryValues[fieldIds.reservedQuantityFieldId] = this.formatReservationQuantity(nextReservedQuantity);
+        if (fieldIds.statusFieldId && mode === 'consume') {
+          nextInventoryValues[fieldIds.statusFieldId] = nextRemainingQuantity > 0 ? 'available' : 'used';
+        }
+        if (mode === 'consume' && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_FORM_KEY')) {
+          nextInventoryValues.LEFTOVER_USED_BY_FORM_KEY = sourceFormKey;
+        }
+        if (mode === 'consume' && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_RECORD_ID')) {
+          nextInventoryValues.LEFTOVER_USED_BY_RECORD_ID = sourceRecordId;
+        }
+        const inventoryContext = this.getFormContextLite(resourceFormKey);
+        const inventorySaveResult = this.saveInternalRecord({
+          context: inventoryContext,
+          recordId: resourceRecordId,
+          language: inventoryRecord.language || 'EN',
+          status: fieldIds.statusFieldId ? (nextInventoryValues[fieldIds.statusFieldId] || '').toString() : inventoryRecord.status,
+          values: nextInventoryValues,
+          auditAction: 'inventoryReservation:reconcile'
+        });
+        if (!inventorySaveResult.success) {
+          throw new Error(inventorySaveResult.message || 'Failed to reconcile inventory reservation.');
+        }
+        touchedForms.set(resourceFormKey, inventoryContext);
+        availability.push(
+          this.buildInventoryAvailabilitySnapshot({
+            inventoryRecord: { ...inventoryRecord, values: nextInventoryValues } as WebFormSubmission,
+            fieldIds,
+            resourceFormKey,
+            resourceRecordId,
+            resourceItemId: this.readRecordFieldString(first, 'RESOURCE_ITEM_ID'),
+            resourceKind: this.readRecordFieldString(first, 'RESOURCE_KIND'),
+            reservedQuantity: nextReservedQuantity,
+            currentReservationQuantity: 0,
+            currentRecordReservedQuantity: 0
+          })
+        );
+
+        rows.forEach(record => {
+          const nextReservationValues = cloneRecordValues(record.values || {});
+          nextReservationValues.STATUS = mode === 'release' ? 'released' : 'consumed';
+          const saveResult = this.saveInternalRecord({
+            context: ledgerContext,
+            recordId: (record.id || '').toString().trim(),
+            language: record.language || 'EN',
+            status: mode === 'release' ? 'released' : 'consumed',
+            values: nextReservationValues,
+            auditAction: mode === 'release' ? 'inventoryReservation:release' : 'inventoryReservation:consume'
+          });
+          if (!saveResult.success) {
+            throw new Error(saveResult.message || 'Failed to close reservation ledger row.');
+          }
+        });
+      });
+
+      touchedForms.forEach(target => {
+        this.refreshMutationCaches(target.form, target.questions, 'inventoryReservation.reconcile', refreshMode);
+      });
+
+      debugLog('inventoryReservation.reconcile.ok', {
+        sourceFormKey,
+        sourceRecordId,
+        reconciledReservations: activeReservations.length,
+        touchedInventoryRecords: grouped.size
+      });
+
+      return {
+        success: true,
+        message: mode === 'release' ? 'Inventory reservations released.' : 'Inventory reservations reconciled.',
+        reconciledReservations: activeReservations.length,
+        touchedInventoryRecords: grouped.size,
+        availability
+      };
+    });
+  }
+
   public fetchSubmissionsByRowNumbers(formKey: string, rowNumbers: number[]): Record<string, WebFormSubmission> {
     const { form, questions } = this.getFormContextLite(formKey);
     return this.listing.fetchSubmissionsByRowNumbers(form, questions, rowNumbers);
@@ -1444,6 +1926,45 @@ export class WebFormService {
     const dedupRules = this.resolveDedupRules(formKey, form);
     const result = this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
     if (result?.success) {
+      const deleteRecordId = ((formObject as any).__ckDeleteRecordId || '').toString().trim();
+      const releaseOnDeleteConfig = form.reservationLifecycle?.releaseOnDelete;
+      const releaseOnDeleteEnabled =
+        releaseOnDeleteConfig === true ||
+        (releaseOnDeleteConfig && typeof releaseOnDeleteConfig === 'object' && releaseOnDeleteConfig.enabled !== false);
+      if (deleteRecordId && releaseOnDeleteEnabled) {
+        const ledgerFormKey =
+          (typeof releaseOnDeleteConfig === 'object' ? releaseOnDeleteConfig.ledgerFormKey : '') ||
+          form.reservationLifecycle?.ledgerFormKey ||
+          'Config: Inventory Reservation Ledger';
+        const releaseResult = this.releaseInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: deleteRecordId,
+          ledgerFormKey,
+          refreshMode: 'revisionOnly'
+        });
+        if (!releaseResult.success) {
+          return {
+            success: false,
+            message: releaseResult.message || 'Record deleted but failed to release active reservations.',
+            meta: {
+              ...(result.meta || {}),
+              reservationRelease: {
+                success: false,
+                sourceRecordId: deleteRecordId
+              }
+            }
+          };
+        }
+        result.meta = {
+          ...(result.meta || {}),
+          reservationRelease: {
+            success: true,
+            sourceRecordId: deleteRecordId,
+            releasedReservations: Number(releaseResult.reconciledReservations || 0) || 0,
+            touchedInventoryRecords: Number(releaseResult.touchedInventoryRecords || 0) || 0
+          }
+        };
+      }
       const skipSubmitEffectsRaw = (formObject as any).__ckSkipSubmitEffects;
       const skipSubmitEffects =
         skipSubmitEffectsRaw === true ||
@@ -1782,6 +2303,22 @@ export class WebFormService {
     }
     const rev = this.bumpHomeRevision(canonicalKey, reason);
     this.primeHomeBootstrapCache(canonicalKey, rev, reason);
+  }
+
+  private refreshMutationCaches(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    reason: string,
+    mode: 'full' | 'revisionOnly' | 'none' = 'full'
+  ): void {
+    if (mode === 'none') return;
+    if (mode === 'full') {
+      this.refreshAnalyticsAndHomeBootstrap(form, questions, reason);
+      return;
+    }
+    const canonicalKey = (form.configSheet || form.title || '').toString().trim();
+    if (!canonicalKey) return;
+    this.bumpHomeRevision(canonicalKey, reason);
   }
 
   /**
@@ -2529,6 +3066,178 @@ export class WebFormService {
     return rows
       .map(rowValues => this.submissions.buildSubmissionRecord(form.configSheet || form.title, questions, columns, rowValues))
       .filter((record): record is WebFormSubmission => !!record);
+  }
+
+  private withDocumentTransactionLock<T>(label: string, fn: () => T): T {
+    const lock = (() => {
+      try {
+        return typeof LockService !== 'undefined' && (LockService as any).getDocumentLock
+          ? (LockService as any).getDocumentLock()
+          : null;
+      } catch (_) {
+        return null;
+      }
+    })();
+    let hasLock = false;
+    try {
+      if (lock && typeof lock.tryLock === 'function') {
+        hasLock = !!lock.tryLock(8000);
+      }
+      return fn();
+    } finally {
+      if (lock && hasLock) {
+        try {
+          lock.releaseLock();
+        } catch (err: any) {
+          debugLog('inventoryReservation.lock.release.error', {
+            label,
+            message: err?.message || err?.toString?.() || 'unknown'
+          });
+        }
+      }
+    }
+  }
+
+  private resolveReservationFieldIds(args: {
+    resourceKind?: string;
+    quantityFieldId?: string;
+    reservedQuantityFieldId?: string;
+    statusFieldId?: string;
+    unitFieldId?: string;
+  }): { quantityFieldId: string; reservedQuantityFieldId: string; statusFieldId?: string; unitFieldId?: string } {
+    const kind = (args.resourceKind || '').toString().trim().toLowerCase();
+    const isPartDish = kind.includes('part');
+    const quantityFieldId = (args.quantityFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_QTY' : 'LEFTOVER_PORTIONS');
+    const reservedQuantityFieldId =
+      (args.reservedQuantityFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_RESERVED_QTY' : 'LEFTOVER_RESERVED_PORTIONS');
+    const statusFieldId = (args.statusFieldId || '').toString().trim() || 'LEFTOVER_STATUS';
+    const unitFieldId = (args.unitFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_UNIT' : '');
+    return { quantityFieldId, reservedQuantityFieldId, statusFieldId, unitFieldId };
+  }
+
+  private normalizeReservationQuantity(value: any): number | null {
+    if (value === undefined || value === null || value === '') return 0;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return parsed;
+  }
+
+  private formatReservationQuantity(value: number): number | string {
+    if (!Number.isFinite(value)) return 0;
+    const rounded = Math.round(value * 1000) / 1000;
+    return Number.isInteger(rounded) ? rounded : rounded.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  private readRecordField(record: WebFormSubmission | Record<string, any> | null | undefined, fieldId?: string): any {
+    const key = (fieldId || '').toString().trim();
+    if (!record || !key) return undefined;
+    if ((record as any).values && Object.prototype.hasOwnProperty.call((record as any).values, key)) {
+      return (record as any).values[key];
+    }
+    return (record as any)[key];
+  }
+
+  private readRecordFieldString(record: WebFormSubmission | Record<string, any> | null | undefined, fieldId?: string): string {
+    const value = this.readRecordField(record, fieldId);
+    return value === undefined || value === null ? '' : value.toString().trim();
+  }
+
+  private readNumericRecordField(record: WebFormSubmission | Record<string, any> | null | undefined, fieldId?: string): number {
+    const value = this.readRecordField(record, fieldId);
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private isActiveReservationRecord(record: WebFormSubmission | null | undefined): boolean {
+    return this.readRecordFieldString(record || undefined, 'STATUS').toLowerCase() === 'active';
+  }
+
+  private buildInventoryReservationId(args: {
+    resourceFormKey: string;
+    resourceRecordId: string;
+    resourceItemId?: string;
+    sourceFormKey: string;
+    sourceRecordId: string;
+    sourceParentGroupId?: string;
+    sourceParentRowId?: string;
+  }): string {
+    const raw = [
+      args.resourceFormKey,
+      args.resourceRecordId,
+      args.resourceItemId || '',
+      args.sourceFormKey,
+      args.sourceRecordId,
+      args.sourceParentGroupId || '',
+      args.sourceParentRowId || ''
+    ]
+      .map(value => (value || '').toString().trim())
+      .join('::');
+    const digest = this.cacheManager.digestKey(raw).replace(/[^a-zA-Z0-9:_-]/g, '_');
+    return `reservation::${digest}`;
+  }
+
+  private saveInternalRecord(args: {
+    context: { form: FormConfig; questions: QuestionConfig[] };
+    recordId: string;
+    language: string;
+    values: Record<string, any>;
+    auditAction: string;
+    status?: string;
+  }): { success: boolean; message: string; meta: any } {
+    const formKey = (args.context.form.configSheet || args.context.form.title || '').toString().trim();
+    const dedupRules = this.resolveDedupRules(formKey, args.context.form);
+    const languageRaw = (args.language || 'EN').toString().trim().toUpperCase();
+    const language = (languageRaw === 'FR' || languageRaw === 'NL' ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+    const payload: WebFormSubmission = {
+      formKey,
+      language,
+      id: args.recordId,
+      values: cloneRecordValues(args.values || {})
+    };
+    Object.keys(payload.values || {}).forEach(fieldId => {
+      (payload as any)[fieldId] = (payload.values as any)[fieldId];
+    });
+    (payload as any).__ckSkipSubmitEffects = '1';
+    (payload as any).__ckAllowClosedUpdate = '1';
+    (payload as any).__ckSaveMode = 'draft';
+    (payload as any).__ckAuditAction = args.auditAction;
+    if (args.status !== undefined) {
+      (payload as any).__ckStatus = args.status;
+      payload.status = args.status;
+    }
+    return this.submissions.saveSubmissionWithId(payload, args.context.form, args.context.questions, dedupRules);
+  }
+
+  private buildInventoryAvailabilitySnapshot(args: {
+    inventoryRecord: WebFormSubmission;
+    fieldIds: { quantityFieldId: string; reservedQuantityFieldId: string; statusFieldId?: string; unitFieldId?: string };
+    resourceFormKey: string;
+    resourceRecordId: string;
+    resourceItemId?: string;
+    resourceKind?: string;
+    reservedQuantity: number;
+    currentReservationQuantity: number;
+    currentRecordReservedQuantity: number;
+  }): InventoryAvailabilitySnapshot {
+    const remainingQuantity = this.readNumericRecordField(args.inventoryRecord, args.fieldIds.quantityFieldId);
+    const reservedQuantity = Math.max(0, args.reservedQuantity);
+    return {
+      resourceFormKey: args.resourceFormKey,
+      resourceRecordId: args.resourceRecordId,
+      resourceItemId: args.resourceItemId,
+      resourceKind: args.resourceKind,
+      quantityFieldId: args.fieldIds.quantityFieldId,
+      reservedQuantityFieldId: args.fieldIds.reservedQuantityFieldId,
+      statusFieldId: args.fieldIds.statusFieldId,
+      unitFieldId: args.fieldIds.unitFieldId,
+      remainingQuantity,
+      reservedQuantity,
+      freeQuantity: Math.max(0, remainingQuantity - reservedQuantity),
+      currentReservationQuantity: Math.max(0, args.currentReservationQuantity),
+      currentRecordReservedQuantity: Math.max(0, args.currentRecordReservedQuantity),
+      unit: this.readRecordFieldString(args.inventoryRecord, args.fieldIds.unitFieldId),
+      status: this.readRecordFieldString(args.inventoryRecord, args.fieldIds.statusFieldId)
+    };
   }
 
   private buildDependencyMutationSavePayload(args: {

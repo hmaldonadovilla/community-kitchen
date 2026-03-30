@@ -3,6 +3,10 @@ import {
   DataSourceConfig,
   FollowupActionResult,
   FormConfigExport,
+  InventoryReservationMutationRequest,
+  InventoryReservationMutationResult,
+  InventoryReservationReconciliationRequest,
+  InventoryReservationReconciliationResult,
   PaginatedResult,
   TemplateIdMap,
   WebFormDefinition,
@@ -593,6 +597,16 @@ export const getRecordVersionApi = (formKey: string, recordId: string, rowNumber
 
 export const fetchDataSourceApi = (req: DataSourceRequest): Promise<DataSourceResponse> =>
   invokeTransport<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);
+
+export const upsertInventoryReservationApi = (
+  request: InventoryReservationMutationRequest
+): Promise<InventoryReservationMutationResult> =>
+  invokeTransport<InventoryReservationMutationResult>('upsertInventoryReservation', request);
+
+export const reconcileInventoryReservationsApi = (
+  request: InventoryReservationReconciliationRequest
+): Promise<InventoryReservationReconciliationResult> =>
+  invokeTransport<InventoryReservationReconciliationResult>('reconcileInventoryReservations', request);
 
 export const triggerFollowup = (
   formKey: string,

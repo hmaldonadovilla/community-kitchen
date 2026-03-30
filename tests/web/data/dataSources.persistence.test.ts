@@ -55,7 +55,7 @@ describe('web dataSources persistence', () => {
     delete (globalThis as any).window;
   });
 
-  it('persists different projections under different localStorage keys', async () => {
+  it('prunes older persisted variants for the same datasource id and language', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };
     installGoogleScriptRunMock(cfg => ({ items: [{ projection: cfg?.projection || null }] }));
@@ -67,11 +67,11 @@ describe('web dataSources persistence', () => {
     await fetchDataSource({ id: 'Distributor Data', projection: ['B'] } as any, 'EN', { forceRefresh: true });
 
     const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
-    expect(keys.length).toBe(2);
-    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys.length).toBe(1);
+    expect(localStorage.getItem(keys[0]!) || '').toContain('"projection":["B"]');
   });
 
-  it('persists different form-backed configs under different localStorage keys', async () => {
+  it('prunes older persisted form-backed variants for the same datasource id and language', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };
     installGoogleScriptRunMock(cfg => ({ items: [{ id: cfg?.formKey || null }] }));
@@ -87,8 +87,8 @@ describe('web dataSources persistence', () => {
     });
 
     const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
-    expect(keys.length).toBe(2);
-    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys.length).toBe(1);
+    expect(localStorage.getItem(keys[0]!) || '').toContain('Config: Pantry Inventory');
   });
 
   it('clears persisted dataSource entries on clearFetchDataSourceCache()', async () => {
@@ -119,5 +119,44 @@ describe('web dataSources persistence', () => {
 
     expect(res.requested).toBe(1);
     expect(tracker.getCallCount()).toBe(1);
+  });
+
+  it('expires persisted datasource entries after the configured max age', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(cfg => ({ items: [{ id: cfg?.id || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const staleSavedAtMs = Date.now() - 10 * 60 * 1000;
+    localStorage.setItem(
+      'ck.ds.Leftover%20Inventory%20Data.EN.v2.test',
+      JSON.stringify({
+        savedAtMs: staleSavedAtMs,
+        response: { items: [{ id: 'stale' }] }
+      })
+    );
+
+    const result = await fetchDataSource({ id: 'Leftover Inventory Data', persistMaxAgeMinutes: 1 } as any, 'EN');
+
+    expect(tracker.getCallCount()).toBe(1);
+    expect(result?.items?.[0]?.id).toBe('Leftover Inventory Data');
+  });
+
+  it('drops legacy persisted datasource payloads without envelope metadata', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(cfg => ({ items: [{ id: cfg?.id || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    localStorage.setItem('ck.ds.Recipes%20Data.EN.v2.test', JSON.stringify({ items: [{ id: 'legacy' }] }));
+
+    const result = await fetchDataSource({ id: 'Recipes Data' } as any, 'EN');
+
+    expect(tracker.getCallCount()).toBe(1);
+    expect(result?.items?.[0]?.id).toBe('Recipes Data');
   });
 });

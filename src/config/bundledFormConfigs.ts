@@ -7731,6 +7731,311 @@ export const BUNDLED_FORM_CONFIGS = [
     "validationErrors": []
   },
   {
+    "formKey": "Config: Inventory Reservation Ledger",
+    "generatedAt": "2026-03-26T09:00:00.000Z",
+    "form": {
+      "title": "Inventory Reservation Ledger",
+      "configSheet": "Config: Inventory Reservation Ledger",
+      "destinationTab": "Inventory Reservation Ledger Data",
+      "description": "Internal reservation ledger used to track quantity-based inventory reservations across records.",
+      "languages": [
+        "EN",
+        "FR",
+        "NL"
+      ],
+      "defaultLanguage": "EN",
+      "languageSelectorEnabled": false,
+      "summaryViewEnabled": false,
+      "copyCurrentRecordEnabled": false,
+      "createNewRecordEnabled": false,
+      "createRecordPresetButtonsEnabled": false,
+      "listViewTitle": {
+        "en": "Inventory reservation ledger",
+        "fr": "Grand livre des réservations d'inventaire",
+        "nl": "Inventarisreserveringslogboek"
+      },
+      "listViewMetaColumns": [
+        "createdAt",
+        "updatedAt",
+        "status"
+      ],
+      "listViewPageSize": 25,
+      "listViewPaginationControlsEnabled": true,
+      "listViewHeaderSortEnabled": true,
+      "listViewRowClickEnabled": true,
+      "submitButtonLabel": {
+        "en": "Save",
+        "fr": "Save",
+        "nl": "Save"
+      },
+      "summaryButtonLabel": {
+        "en": "Summary",
+        "fr": "Summary",
+        "nl": "Summary"
+      }
+    },
+    "questions": [
+      {
+        "id": "RESERVATION_ID",
+        "type": "TEXT",
+        "qEn": "Reservation ID",
+        "qFr": "Reservation ID",
+        "qNl": "Reservation ID",
+        "required": true,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_FORM_KEY",
+        "type": "TEXT",
+        "qEn": "Resource form key",
+        "qFr": "Clé de formulaire de ressource",
+        "qNl": "Resource form key",
+        "required": true,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_RECORD_ID",
+        "type": "TEXT",
+        "qEn": "Resource record ID",
+        "qFr": "ID d'enregistrement de ressource",
+        "qNl": "Resource record ID",
+        "required": true,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_ITEM_ID",
+        "type": "TEXT",
+        "qEn": "Resource item ID",
+        "qFr": "ID d'élément de ressource",
+        "qNl": "Resource item ID",
+        "required": false,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_KIND",
+        "type": "TEXT",
+        "qEn": "Resource kind",
+        "qFr": "Type de ressource",
+        "qNl": "Resource kind",
+        "required": false,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_QTY_FIELD_ID",
+        "type": "TEXT",
+        "qEn": "Resource quantity field ID",
+        "qFr": "ID du champ quantité de ressource",
+        "qNl": "Resource quantity field ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_RESERVED_QTY_FIELD_ID",
+        "type": "TEXT",
+        "qEn": "Resource reserved quantity field ID",
+        "qFr": "ID du champ quantité réservée de ressource",
+        "qNl": "Resource reserved quantity field ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_STATUS_FIELD_ID",
+        "type": "TEXT",
+        "qEn": "Resource status field ID",
+        "qFr": "ID du champ statut de ressource",
+        "qNl": "Resource status field ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESOURCE_UNIT_FIELD_ID",
+        "type": "TEXT",
+        "qEn": "Resource unit field ID",
+        "qFr": "ID du champ unité de ressource",
+        "qNl": "Resource unit field ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESERVED_QTY",
+        "type": "NUMBER",
+        "qEn": "Reserved quantity",
+        "qFr": "Quantité réservée",
+        "qNl": "Gereserveerde hoeveelheid",
+        "required": false,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RESERVED_UNIT",
+        "type": "TEXT",
+        "qEn": "Reserved unit",
+        "qFr": "Unité réservée",
+        "qNl": "Gereserveerde eenheid",
+        "required": false,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "STATUS",
+        "type": "CHOICE",
+        "qEn": "Reservation status",
+        "qFr": "Statut de réservation",
+        "qNl": "Reserveringsstatus",
+        "required": true,
+        "readOnly": true,
+        "defaultValue": "active",
+        "listView": true,
+        "options": [
+          "active",
+          "released",
+          "consumed"
+        ],
+        "optionsFr": [
+          "active",
+          "released",
+          "consumed"
+        ],
+        "optionsNl": [
+          "active",
+          "released",
+          "consumed"
+        ],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_FORM_KEY",
+        "type": "TEXT",
+        "qEn": "Source form key",
+        "qFr": "Clé du formulaire source",
+        "qNl": "Source form key",
+        "required": true,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_RECORD_ID",
+        "type": "TEXT",
+        "qEn": "Source record ID",
+        "qFr": "ID d'enregistrement source",
+        "qNl": "Source record ID",
+        "required": true,
+        "readOnly": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_PARENT_GROUP_ID",
+        "type": "TEXT",
+        "qEn": "Source parent group ID",
+        "qFr": "ID du groupe parent source",
+        "qNl": "Source parent group ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_PARENT_ROW_ID",
+        "type": "TEXT",
+        "qEn": "Source parent row ID",
+        "qFr": "ID de ligne parent source",
+        "qNl": "Source parent row ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_OUTPUT_GROUP_ID",
+        "type": "TEXT",
+        "qEn": "Source output group ID",
+        "qFr": "ID du groupe de sortie source",
+        "qNl": "Source output group ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "SOURCE_OUTPUT_ROW_ID",
+        "type": "TEXT",
+        "qEn": "Source output row ID",
+        "qFr": "ID de ligne de sortie source",
+        "qNl": "Source output row ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      }
+    ],
+    "dedupRules": []
+  },
+  {
     "formKey": "Config: Leftover Inventory",
     "generatedAt": "2026-03-21T18:30:00.000Z",
     "form": {
@@ -8216,6 +8521,46 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         ]
+      },
+      {
+        "id": "LEFTOVER_RESERVED_QTY",
+        "type": "NUMBER",
+        "qEn": "Reserved quantity",
+        "qFr": "Quantité réservée",
+        "qNl": "Gereserveerde hoeveelheid",
+        "required": false,
+        "readOnly": true,
+        "defaultValue": 0,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
+        "id": "LEFTOVER_RESERVED_PORTIONS",
+        "type": "NUMBER",
+        "qEn": "Reserved portions",
+        "qFr": "Portions réservées",
+        "qNl": "Gereserveerde porties",
+        "required": false,
+        "readOnly": true,
+        "defaultValue": 0,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
       },
       {
         "id": "LEFTOVER_EXP_DATE",
@@ -8913,6 +9258,46 @@ export const BUNDLED_FORM_CONFIGS = [
           ]
         },
         {
+          "id": "LEFTOVER_RESERVED_QTY",
+          "type": "NUMBER",
+          "qEn": "Reserved quantity",
+          "qFr": "Quantité réservée",
+          "qNl": "Gereserveerde hoeveelheid",
+          "required": false,
+          "readOnly": true,
+          "defaultValue": 0,
+          "options": [],
+          "optionsFr": [],
+          "optionsNl": [],
+          "status": "Active",
+          "visibility": {
+            "showWhen": {
+              "fieldId": "NEVER_SHOW",
+              "equals": "1"
+            }
+          }
+        },
+        {
+          "id": "LEFTOVER_RESERVED_PORTIONS",
+          "type": "NUMBER",
+          "qEn": "Reserved portions",
+          "qFr": "Portions réservées",
+          "qNl": "Gereserveerde porties",
+          "required": false,
+          "readOnly": true,
+          "defaultValue": 0,
+          "options": [],
+          "optionsFr": [],
+          "optionsNl": [],
+          "status": "Active",
+          "visibility": {
+            "showWhen": {
+              "fieldId": "NEVER_SHOW",
+              "equals": "1"
+            }
+          }
+        },
+        {
           "id": "LEFTOVER_EXP_DATE",
           "type": "DATE",
           "qEn": "Expiration date",
@@ -9523,6 +9908,22 @@ export const BUNDLED_FORM_CONFIGS = [
         "debounceMs": 2000,
         "status": "In progress"
       },
+      "reservationLifecycle": {
+        "ledgerFormKey": "Config: Inventory Reservation Ledger",
+        "releaseOnDelete": true
+      },
+      "lifecycle": {
+        "rules": [
+          {
+            "id": "releaseStaleInventoryReservations",
+            "type": "releaseStaleReservations",
+            "dateFieldId": "MP_PREP_DATE",
+            "compare": "beforeToday",
+            "ledgerFormKey": "Config: Inventory Reservation Ledger",
+            "releaseWhenSourceMissing": true
+          }
+        ]
+      },
       "dedupDeleteOnKeyChange": true,
       "summaryHtmlTemplateId": {
         "EN": "bundle:meal_production.summary.html",
@@ -9937,7 +10338,9 @@ export const BUNDLED_FORM_CONFIGS = [
                         "LEFTOVER_CAT",
                         "LEFTOVER_ALLERGEN",
                         "LEFTOVER_PORTIONS",
+                        "LEFTOVER_RESERVED_PORTIONS",
                         "LEFTOVER_QTY",
+                        "LEFTOVER_RESERVED_QTY",
                         "LEFTOVER_UNIT",
                         "LEFTOVER_INGREDIENTS_LI",
                         "LEFTOVER_EXP_DATE"
@@ -9959,16 +10362,56 @@ export const BUNDLED_FORM_CONFIGS = [
                     "quantityFieldId": "LEFTOVER_USE_QTY",
                     "modeFieldId": "LEFTOVER_USAGE_MODE",
                     "defaultModeValue": "Reheat",
-                    "exclusiveSelection": {
-                      "scope": "sameRoot",
-                      "keyFieldId": "LEFTOVER_ID"
-                    },
                     "sourceFieldMapping": {
                       "LEFTOVER_ID": "LEFTOVER_ID",
                       "LEFTOVER_KIND": "LEFTOVER_KIND",
                       "LEFTOVER_PORTIONS_AVAILABLE": "LEFTOVER_PORTIONS",
                       "LEFTOVER_QTY_AVAILABLE": "LEFTOVER_QTY",
                       "LEFTOVER_UNIT": "LEFTOVER_UNIT"
+                    },
+                    "availability": {
+                      "sourceQuantityFieldId": "LEFTOVER_QTY",
+                      "sourceReservedQuantityFieldId": "LEFTOVER_RESERVED_QTY",
+                      "targetQuantityFieldId": "LEFTOVER_QTY_AVAILABLE",
+                      "targetMaxQuantityFieldId": "LEFTOVER_QTY_MAX",
+                      "sourcePortionsFieldId": "LEFTOVER_PORTIONS",
+                      "sourceReservedPortionsFieldId": "LEFTOVER_RESERVED_PORTIONS",
+                      "targetPortionsFieldId": "LEFTOVER_PORTIONS_AVAILABLE",
+                      "targetMaxPortionsFieldId": "LEFTOVER_PORTIONS_MAX"
+                    },
+                    "reservation": {
+                      "enabled": true,
+                      "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                      "allowedStatuses": [
+                        "available"
+                      ],
+                      "debounceMs": 300,
+                      "conflictDialog": {
+                        "title": {
+                          "en": "Availability changed",
+                          "fr": "Disponibilité modifiée",
+                          "nl": "Beschikbaarheid gewijzigd"
+                        },
+                        "message": {
+                          "en": "{itemLabel} was updated by another user. {availableWithUnit} are available now. Do you want to use the available amount or cancel this change?",
+                          "fr": "{itemLabel} a été mis à jour par un autre utilisateur. {availableWithUnit} sont maintenant disponibles. Voulez-vous utiliser la quantité disponible ou annuler cette modification ?",
+                          "nl": "{itemLabel} werd bijgewerkt door een andere gebruiker. {availableWithUnit} zijn nu beschikbaar. Wil je de beschikbare hoeveelheid gebruiken of deze wijziging annuleren?"
+                        },
+                        "confirmLabel": {
+                          "en": "Use available amount",
+                          "fr": "Utiliser la quantité disponible",
+                          "nl": "Gebruik beschikbare hoeveelheid"
+                        },
+                        "cancelLabel": {
+                          "en": "Cancel action",
+                          "fr": "Annuler l’action",
+                          "nl": "Actie annuleren"
+                        },
+                        "showCancel": true,
+                        "showCloseButton": false,
+                        "dismissOnBackdrop": false,
+                        "primaryAction": "confirm"
+                      }
                     },
                     "outputRules": [
                       {
@@ -10238,6 +10681,34 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
+                        "id": "LEFTOVER_PORTIONS_MAX",
+                        "type": "NUMBER",
+                        "labelEn": "Max portions",
+                        "labelFr": "Portions max",
+                        "labelNl": "Max porties",
+                        "readOnly": true,
+                        "visibility": {
+                          "showWhen": {
+                            "fieldId": "NEVER_SHOW",
+                            "equals": "1"
+                          }
+                        }
+                      },
+                      {
+                        "id": "LEFTOVER_QTY_MAX",
+                        "type": "NUMBER",
+                        "labelEn": "Max quantity",
+                        "labelFr": "Quantité max",
+                        "labelNl": "Max hoeveelheid",
+                        "readOnly": true,
+                        "visibility": {
+                          "showWhen": {
+                            "fieldId": "NEVER_SHOW",
+                            "equals": "1"
+                          }
+                        }
+                      },
+                      {
                         "id": "LEFTOVER_UNIT",
                         "type": "TEXT",
                         "labelEn": "Unit",
@@ -10305,7 +10776,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "then": {
                               "fieldId": "LEFTOVER_USE_QTY",
                               "integer": true,
-                              "maxFieldId": "LEFTOVER_PORTIONS_AVAILABLE"
+                              "maxFieldId": "LEFTOVER_PORTIONS_MAX"
                             },
                             "message": {
                               "en": "Use a whole number up to the available portions.",
@@ -10328,7 +10799,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             "then": {
                               "fieldId": "LEFTOVER_USE_QTY",
-                              "maxFieldId": "LEFTOVER_QTY_AVAILABLE"
+                              "maxFieldId": "LEFTOVER_QTY_MAX"
                             },
                             "message": {
                               "en": "Use a quantity up to the available amount.",
@@ -10488,7 +10959,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "text": " • "
                             },
                             {
-                              "sourcePath": "LEFTOVER_QTY"
+                              "fieldId": "LEFTOVER_QTY_AVAILABLE"
                             },
                             {
                               "type": "text",
@@ -10528,7 +10999,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "text": " • "
                             },
                             {
-                              "sourcePath": "LEFTOVER_PORTIONS"
+                              "fieldId": "LEFTOVER_PORTIONS_AVAILABLE"
                             },
                             {
                               "type": "text",
@@ -17765,7 +18236,9 @@ export const BUNDLED_FORM_CONFIGS = [
                         "LEFTOVER_CAT",
                         "LEFTOVER_ALLERGEN",
                         "LEFTOVER_PORTIONS",
+                        "LEFTOVER_RESERVED_PORTIONS",
                         "LEFTOVER_QTY",
+                        "LEFTOVER_RESERVED_QTY",
                         "LEFTOVER_UNIT",
                         "LEFTOVER_INGREDIENTS_LI",
                         "LEFTOVER_EXP_DATE"
@@ -17787,16 +18260,30 @@ export const BUNDLED_FORM_CONFIGS = [
                     "quantityFieldId": "LEFTOVER_USE_QTY",
                     "modeFieldId": "LEFTOVER_USAGE_MODE",
                     "defaultModeValue": "Reheat",
-                    "exclusiveSelection": {
-                      "scope": "sameRoot",
-                      "keyFieldId": "LEFTOVER_ID"
-                    },
                     "sourceFieldMapping": {
                       "LEFTOVER_ID": "LEFTOVER_ID",
                       "LEFTOVER_KIND": "LEFTOVER_KIND",
                       "LEFTOVER_PORTIONS_AVAILABLE": "LEFTOVER_PORTIONS",
                       "LEFTOVER_QTY_AVAILABLE": "LEFTOVER_QTY",
                       "LEFTOVER_UNIT": "LEFTOVER_UNIT"
+                    },
+                    "availability": {
+                      "sourceQuantityFieldId": "LEFTOVER_QTY",
+                      "sourceReservedQuantityFieldId": "LEFTOVER_RESERVED_QTY",
+                      "targetQuantityFieldId": "LEFTOVER_QTY_AVAILABLE",
+                      "targetMaxQuantityFieldId": "LEFTOVER_QTY_MAX",
+                      "sourcePortionsFieldId": "LEFTOVER_PORTIONS",
+                      "sourceReservedPortionsFieldId": "LEFTOVER_RESERVED_PORTIONS",
+                      "targetPortionsFieldId": "LEFTOVER_PORTIONS_AVAILABLE",
+                      "targetMaxPortionsFieldId": "LEFTOVER_PORTIONS_MAX"
+                    },
+                    "reservation": {
+                      "enabled": true,
+                      "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                      "allowedStatuses": [
+                        "available"
+                      ],
+                      "debounceMs": 300
                     },
                     "outputRules": [
                       {
@@ -18066,6 +18553,34 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
+                        "id": "LEFTOVER_PORTIONS_MAX",
+                        "type": "NUMBER",
+                        "labelEn": "Max portions",
+                        "labelFr": "Portions max",
+                        "labelNl": "Max porties",
+                        "readOnly": true,
+                        "visibility": {
+                          "showWhen": {
+                            "fieldId": "NEVER_SHOW",
+                            "equals": "1"
+                          }
+                        }
+                      },
+                      {
+                        "id": "LEFTOVER_QTY_MAX",
+                        "type": "NUMBER",
+                        "labelEn": "Max quantity",
+                        "labelFr": "Quantité max",
+                        "labelNl": "Max hoeveelheid",
+                        "readOnly": true,
+                        "visibility": {
+                          "showWhen": {
+                            "fieldId": "NEVER_SHOW",
+                            "equals": "1"
+                          }
+                        }
+                      },
+                      {
                         "id": "LEFTOVER_UNIT",
                         "type": "TEXT",
                         "labelEn": "Unit",
@@ -18133,7 +18648,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             "then": {
                               "fieldId": "LEFTOVER_USE_QTY",
                               "integer": true,
-                              "maxFieldId": "LEFTOVER_PORTIONS_AVAILABLE"
+                              "maxFieldId": "LEFTOVER_PORTIONS_MAX"
                             },
                             "message": {
                               "en": "Use a whole number up to the available portions.",
@@ -18156,7 +18671,7 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             "then": {
                               "fieldId": "LEFTOVER_USE_QTY",
-                              "maxFieldId": "LEFTOVER_QTY_AVAILABLE"
+                              "maxFieldId": "LEFTOVER_QTY_MAX"
                             },
                             "message": {
                               "en": "Use a quantity up to the available amount.",
@@ -18316,7 +18831,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "text": " • "
                             },
                             {
-                              "sourcePath": "LEFTOVER_QTY"
+                              "fieldId": "LEFTOVER_QTY_AVAILABLE"
                             },
                             {
                               "type": "text",
@@ -18356,7 +18871,7 @@ export const BUNDLED_FORM_CONFIGS = [
                               "text": " • "
                             },
                             {
-                              "sourcePath": "LEFTOVER_PORTIONS"
+                              "fieldId": "LEFTOVER_PORTIONS_AVAILABLE"
                             },
                             {
                               "type": "text",
