@@ -30,6 +30,7 @@ import {
   ListViewSearchConfig,
   ListViewViewConfig,
   LocalizedString,
+  SubmissionAfterSubmitConfig,
   SystemActionGateDialogConfig,
   SubmitValidationConfig,
   StepsConfig
@@ -175,6 +176,7 @@ export class Dashboard {
       const submissionConfirmationTitle = dashboardConfig?.submissionConfirmationTitle;
       const submissionConfirmationConfirmLabel = dashboardConfig?.submissionConfirmationConfirmLabel;
       const submissionConfirmationCancelLabel = dashboardConfig?.submissionConfirmationCancelLabel;
+      const submissionAfterSubmit = dashboardConfig?.submissionAfterSubmit;
       const dedupDialog = dashboardConfig?.dedupDialog;
       const submitButtonLabel = dashboardConfig?.submitButtonLabel;
       const summaryButtonLabel = dashboardConfig?.summaryButtonLabel;
@@ -237,6 +239,7 @@ export class Dashboard {
           submissionConfirmationTitle,
           submissionConfirmationConfirmLabel,
           submissionConfirmationCancelLabel,
+          submissionAfterSubmit,
           dedupDialog,
           submitButtonLabel,
           summaryButtonLabel,
@@ -315,6 +318,7 @@ export class Dashboard {
     submissionConfirmationTitle?: LocalizedString;
     submissionConfirmationConfirmLabel?: LocalizedString;
     submissionConfirmationCancelLabel?: LocalizedString;
+    submissionAfterSubmit?: SubmissionAfterSubmitConfig;
     dedupDialog?: DedupDialogConfig;
     submitButtonLabel?: LocalizedString;
     summaryButtonLabel?: LocalizedString;
@@ -1191,6 +1195,65 @@ export class Dashboard {
               ? (submissionObj.cancelLabel ?? submissionObj.cancelButtonLabel)
               : undefined;
     const submissionConfirmationCancelLabel = normalizeLocalized(submissionCancelLabelRaw);
+    const normalizeSystemDialogConfigLocal = (raw: any): SystemActionGateDialogConfig | undefined => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: Record<string, any> = {};
+      const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
+      const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
+      const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
+      const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
+      if (title) out.title = title;
+      if (message) out.message = message;
+      if (confirmLabel) out.confirmLabel = confirmLabel;
+      if (cancelLabel) out.cancelLabel = cancelLabel;
+      if ((raw as any).primaryAction === 'confirm' || (raw as any).primaryAction === 'cancel') {
+        out.primaryAction = (raw as any).primaryAction;
+      }
+      if ((raw as any).showCancel !== undefined) out.showCancel = Boolean((raw as any).showCancel);
+      if ((raw as any).showConfirm !== undefined) out.showConfirm = Boolean((raw as any).showConfirm);
+      if ((raw as any).showCloseButton !== undefined) out.showCloseButton = Boolean((raw as any).showCloseButton);
+      if ((raw as any).dismissOnBackdrop !== undefined) out.dismissOnBackdrop = Boolean((raw as any).dismissOnBackdrop);
+      return Object.keys(out).length ? (out as SystemActionGateDialogConfig) : undefined;
+    };
+
+    const submissionAfterSubmitRaw =
+      parsed.submissionAfterSubmit !== undefined
+        ? parsed.submissionAfterSubmit
+        : parsed.submitAfterSubmit !== undefined
+          ? parsed.submitAfterSubmit
+          : submissionObj && submissionObj.afterSubmit !== undefined
+            ? submissionObj.afterSubmit
+            : undefined;
+    const submissionAfterSubmitObj =
+      submissionAfterSubmitRaw && typeof submissionAfterSubmitRaw === 'object' ? (submissionAfterSubmitRaw as any) : undefined;
+    const normalizeStringArray = (raw: any): string[] | undefined => {
+      const entries = Array.isArray(raw) ? raw : raw !== undefined && raw !== null ? [raw] : [];
+      const normalized = entries
+        .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      return normalized.length ? normalized : undefined;
+    };
+    const submissionAfterSubmit =
+      submissionAfterSubmitObj &&
+      (submissionAfterSubmitObj.preActions !== undefined ||
+        submissionAfterSubmitObj.backgroundActions !== undefined ||
+        submissionAfterSubmitObj.navigateTo !== undefined ||
+        submissionAfterSubmitObj.feedbackDialog !== undefined)
+        ? (() => {
+            const out: Record<string, any> = {};
+            const preActions = normalizeStringArray(submissionAfterSubmitObj.preActions);
+            const backgroundActions = normalizeStringArray(submissionAfterSubmitObj.backgroundActions);
+            const navigateTo = (normalizeString(submissionAfterSubmitObj.navigateTo) || '').toLowerCase();
+            const feedbackDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.feedbackDialog);
+            if (preActions?.length) out.preActions = preActions;
+            if (backgroundActions?.length) out.backgroundActions = backgroundActions;
+            if (navigateTo === 'auto' || navigateTo === 'form' || navigateTo === 'summary' || navigateTo === 'list') {
+              out.navigateTo = navigateTo;
+            }
+            if (feedbackDialog) out.feedbackDialog = feedbackDialog;
+            return Object.keys(out).length ? out : undefined;
+          })()
+        : undefined;
 
     const dedupDialogRaw =
       parsed.dedupDialog !== undefined
@@ -1383,6 +1446,7 @@ export class Dashboard {
       submissionConfirmationTitle,
       submissionConfirmationConfirmLabel,
       submissionConfirmationCancelLabel,
+      submissionAfterSubmit,
       dedupDialog,
       submitButtonLabel,
       summaryButtonLabel,
@@ -1413,6 +1477,27 @@ export class Dashboard {
         out[key.toLowerCase()] = trimmed;
       });
       return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
+
+    const normalizeSystemDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: Record<string, any> = {};
+      const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
+      const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
+      const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
+      const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
+      if (title) out.title = title;
+      if (message) out.message = message;
+      if (confirmLabel) out.confirmLabel = confirmLabel;
+      if (cancelLabel) out.cancelLabel = cancelLabel;
+      if ((raw as any).primaryAction === 'confirm' || (raw as any).primaryAction === 'cancel') {
+        out.primaryAction = (raw as any).primaryAction;
+      }
+      if ((raw as any).showCancel !== undefined) out.showCancel = Boolean((raw as any).showCancel);
+      if ((raw as any).showConfirm !== undefined) out.showConfirm = Boolean((raw as any).showConfirm);
+      if ((raw as any).showCloseButton !== undefined) out.showCloseButton = Boolean((raw as any).showCloseButton);
+      if ((raw as any).dismissOnBackdrop !== undefined) out.dismissOnBackdrop = Boolean((raw as any).dismissOnBackdrop);
+      return Object.keys(out).length ? (out as SystemActionGateDialogConfig) : undefined;
     };
     const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
     if (ledgerFormKey) config.ledgerFormKey = ledgerFormKey;
@@ -1872,6 +1957,26 @@ export class Dashboard {
       return out;
     };
 
+    const normalizeDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: Record<string, any> = {};
+      const title = normalizeLocalized((raw as any).title);
+      const message = normalizeLocalized((raw as any).message);
+      const confirmLabel = normalizeLocalized((raw as any).confirmLabel);
+      const cancelLabel = normalizeLocalized((raw as any).cancelLabel);
+      if (title !== undefined) out.title = title;
+      if (message !== undefined) out.message = message;
+      if (confirmLabel !== undefined) out.confirmLabel = confirmLabel;
+      if (cancelLabel !== undefined) out.cancelLabel = cancelLabel;
+      if ((raw as any).primaryAction === 'cancel' || (raw as any).primaryAction === 'confirm') {
+        out.primaryAction = (raw as any).primaryAction;
+      }
+      if ((raw as any).showCancel !== undefined) out.showCancel = Boolean((raw as any).showCancel);
+      if ((raw as any).showCloseButton !== undefined) out.showCloseButton = Boolean((raw as any).showCloseButton);
+      if ((raw as any).dismissOnBackdrop !== undefined) out.dismissOnBackdrop = Boolean((raw as any).dismissOnBackdrop);
+      return Object.keys(out).length ? (out as SystemActionGateDialogConfig) : undefined;
+    };
+
     const normalizeTarget = (raw: any): any => {
       if (!raw) return null;
       // Allow compact string as a question id
@@ -2054,6 +2159,36 @@ export class Dashboard {
         if (backLabel) nav.backLabel = backLabel;
         if ((navRaw as any).showBackButton !== undefined && (navRaw as any).showBackButton !== null) {
           nav.showBackButton = Boolean((navRaw as any).showBackButton);
+        }
+        const milestoneActionRaw = (navRaw as any).milestoneAction;
+        if (milestoneActionRaw && typeof milestoneActionRaw === 'object') {
+          const typeRaw = normalizeString((milestoneActionRaw as any).type).toLowerCase();
+          const actionsRaw = Array.isArray((milestoneActionRaw as any).actions)
+            ? (milestoneActionRaw as any).actions
+            : (milestoneActionRaw as any).actions !== undefined
+              ? [(milestoneActionRaw as any).actions]
+              : [];
+          const actions = actionsRaw.map((entry: any) => normalizeString(entry)).filter(Boolean);
+          if ((typeRaw === 'followupbatch' || typeRaw === 'followup' || typeRaw === 'batch') && actions.length) {
+            const milestoneAction: any = {
+              type: 'followupBatch',
+              actions
+            };
+            if ((milestoneActionRaw as any).ensureRecordId !== undefined) {
+              milestoneAction.ensureRecordId = Boolean((milestoneActionRaw as any).ensureRecordId);
+            }
+            if ((milestoneActionRaw as any).runInBackground !== undefined) {
+              milestoneAction.runInBackground = Boolean((milestoneActionRaw as any).runInBackground);
+            }
+            if ((milestoneActionRaw as any).advanceAfterStart !== undefined) {
+              milestoneAction.advanceAfterStart = Boolean((milestoneActionRaw as any).advanceAfterStart);
+            }
+            const confirmationDialog = normalizeDialogConfig((milestoneActionRaw as any).confirmationDialog);
+            if (confirmationDialog) milestoneAction.confirmationDialog = confirmationDialog;
+            const feedbackDialog = normalizeDialogConfig((milestoneActionRaw as any).feedbackDialog);
+            if (feedbackDialog) milestoneAction.feedbackDialog = feedbackDialog;
+            nav.milestoneAction = milestoneAction;
+          }
         }
         if (Object.keys(nav).length) step.navigation = nav;
       }

@@ -921,11 +921,45 @@ export interface OpenUrlFieldButtonConfig {
    * Can be a question id or a meta field like `pdfUrl`.
    */
   fieldId: string;
+  /**
+   * When true, keep the button visible but disabled until the target field resolves to a non-empty URL.
+   *
+   * Useful for buttons that depend on background follow-up actions, such as PDF generation.
+   */
+  disableWhenValueMissing?: boolean;
   placements?: ButtonPlacement[];
   /**
    * Optional tone override for inline button rendering in the form view.
    */
   tone?: ButtonTone;
+}
+
+export interface SubmissionAfterSubmitConfig {
+  /**
+   * Follow-up action ids that must complete before the client navigates away from the submit flow.
+   *
+   * Typical use: `["CLOSE_RECORD"]` so final reconciliation and status changes happen before
+   * Summary/List views are shown.
+   */
+  preActions?: string[];
+  /**
+   * Follow-up action ids that may continue after the user has already been redirected to the
+   * next screen.
+   *
+   * Typical use: `["CREATE_PDF", "SEND_EMAIL"]`.
+   */
+  backgroundActions?: string[];
+  /**
+   * Where the client should navigate immediately after `preActions` succeed.
+   *
+   * Default: `auto`
+   */
+  navigateTo?: 'auto' | 'form' | 'summary' | 'list';
+  /**
+   * Optional acknowledgement dialog shown after the user has been redirected and the background
+   * actions have started successfully.
+   */
+  feedbackDialog?: SystemActionGateDialogConfig;
 }
 
 export type ButtonConfig =
@@ -3175,6 +3209,14 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   submissionConfirmationCancelLabel?: LocalizedString;
+  /**
+   * Optional submit-time follow-up orchestration.
+   *
+   * Use this when some follow-up actions must complete before navigation (for example,
+   * `CLOSE_RECORD`) while slower actions (such as PDF/email) continue in the background after
+   * the user is redirected.
+   */
+  submissionAfterSubmit?: SubmissionAfterSubmitConfig;
 
   /**
    * Optional duplicate-detection dialog copy overrides (dashboard-level).
@@ -3355,6 +3397,48 @@ export interface StepNavigationConfig {
    * Optional per-step toggle to hide/show the Back button (defaults to the global setting).
    */
   showBackButton?: boolean;
+  /**
+   * Optional step-scoped action triggered by the primary submit/next button after the current step validates.
+   *
+   * Use this for milestone-style guided steps that need to run server-backed side effects
+   * (for example, generating PDFs/emails) before advancing to the next step.
+   */
+  milestoneAction?: StepMilestoneActionConfig;
+}
+
+export interface StepMilestoneActionConfig {
+  /**
+   * Generic step milestone action. Currently supports follow-up action batches.
+   */
+  type: 'followupBatch';
+  /**
+   * Follow-up action ids to trigger for the current record.
+   */
+  actions: string[];
+  /**
+   * When true, ensure a persisted draft record id exists before triggering the batch.
+   * Default: true
+   */
+  ensureRecordId?: boolean;
+  /**
+   * When true, do not block the user on follow-up completion; continue the UI flow immediately
+   * and reconcile record/cache state when the server responds.
+   * Default: false
+   */
+  runInBackground?: boolean;
+  /**
+   * When true, automatically advance to the next guided step after the action starts successfully.
+   * Default: true
+   */
+  advanceAfterStart?: boolean;
+  /**
+   * Optional confirmation dialog shown before the action starts.
+   */
+  confirmationDialog?: SystemActionGateDialogConfig;
+  /**
+   * Optional acknowledgement dialog shown after the action has started.
+   */
+  feedbackDialog?: SystemActionGateDialogConfig;
 }
 
 export interface StepRowFilterConfig {
@@ -3987,6 +4071,7 @@ export interface WebFormDefinition {
    * When omitted, the UI falls back to localized system strings (e.g. "Cancel").
    */
   submissionConfirmationCancelLabel?: LocalizedString;
+  submissionAfterSubmit?: SubmissionAfterSubmitConfig;
 
   /**
    * Optional duplicate-detection dialog copy overrides.

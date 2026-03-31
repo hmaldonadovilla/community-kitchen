@@ -14,6 +14,7 @@ import {
   LangCode,
   LocalizedString,
   SelectionEffect,
+  StepMilestoneActionConfig,
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
@@ -36,6 +37,7 @@ import {
   fetchHomeBootstrapApi,
   fetchSummaryRecordApi,
   fetchSortedBatch,
+  FollowupBatchResponse,
   ListSort,
   ListResponse,
   ListItem,
@@ -4772,9 +4774,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         // Use a stable "button reference" that includes the question index.
         // This avoids ambiguity if multiple BUTTON fields accidentally share the same id.
         const id = encodeButtonRef(q.id, idx);
-        return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any };
+        const disabled =
+          action === 'openUrlField' && cfg.disableWhenValueMissing === true ? !resolveOpenUrlFieldHref((cfg.fieldId || '').toString()) : false;
+        return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any, disabled };
       })
-      .filter((b): b is { id: string; label: string; placements: any[]; action: any } => !!b);
+      .filter((b): b is { id: string; label: string; placements: any[]; action: any; disabled: boolean } => !!b);
   }, [
     definition.createRecordPresetButtonsEnabled,
     definition.questions,
@@ -4782,6 +4786,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     language,
     lastSubmissionMeta,
     lineItems,
+    resolveOpenUrlFieldHref,
     selectedRecordId,
     selectedRecordSnapshot,
     values,
@@ -5320,6 +5325,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate, view]
   );
 
+  function resolveOpenUrlFieldHref(fieldIdRaw: string): string {
+    const fieldId = (fieldIdRaw || '').toString().trim();
+    if (!fieldId) return '';
+
+    const splitUrlList = (raw: string): string[] => {
+      const trimmed = (raw || '').toString().trim();
+      if (!trimmed) return [];
+      const commaParts = trimmed
+        .split(',')
+        .map(p => p.trim())
+        .filter(Boolean);
+      if (commaParts.length > 1) return commaParts;
+      const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+      if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+      return [trimmed];
+    };
+
+    const recordId =
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '';
+    const current = selectedRecordSnapshotRef.current || null;
+    const raw = (() => {
+      if (fieldId === 'pdfUrl') return (current as any)?.pdfUrl || '';
+      if (fieldId === 'id') return recordId;
+      const v = (valuesRef.current as any)?.[fieldId];
+      if (v === undefined || v === null) return '';
+      if (typeof v === 'string') return v;
+      if (Array.isArray(v)) return v.join(' ');
+      if (typeof v === 'object' && typeof (v as any).url === 'string') return (v as any).url;
+      try {
+        return v.toString();
+      } catch (_) {
+        return '';
+      }
+    })();
+
+    const urls = splitUrlList(raw).filter(u => /^https?:\/\//i.test(u));
+    return urls[0] || '';
+  }
+
   const handleCustomButton = useCallback(
     (buttonId: string) => {
       const parsedRef = parseButtonRef(buttonId || '');
@@ -5355,46 +5403,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const fieldId = (cfg?.fieldId || '').toString().trim();
         if (!fieldId) return;
 
-        const splitUrlList = (raw: string): string[] => {
-          const trimmed = (raw || '').toString().trim();
-          if (!trimmed) return [];
-          const commaParts = trimmed
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean);
-          if (commaParts.length > 1) return commaParts;
-          const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
-          if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
-          return [trimmed];
-        };
-
         const recordId =
           resolveExistingRecordId({
             selectedRecordId: selectedRecordIdRef.current,
             selectedRecordSnapshot: selectedRecordSnapshotRef.current,
             lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
           }) || '';
-        const current = selectedRecordSnapshotRef.current || null;
-        const raw = (() => {
-          // Support meta url fields like pdfUrl.
-          if (fieldId === 'pdfUrl') return (current as any)?.pdfUrl || '';
-          if (fieldId === 'id') return recordId;
-          const v = (valuesRef.current as any)?.[fieldId];
-          if (v === undefined || v === null) return '';
-          if (typeof v === 'string') return v;
-          if (Array.isArray(v)) return v.join(' ');
-          if (typeof v === 'object' && typeof (v as any).url === 'string') return (v as any).url;
-          try {
-            return v.toString();
-          } catch (_) {
-            return '';
-          }
-        })();
-
-        const href = (() => {
-          const urls = splitUrlList(raw).filter(u => /^https?:\/\//i.test(u));
-          return urls[0] || '';
-        })();
+        const href = resolveOpenUrlFieldHref(fieldId);
         if (!href) {
           setStatus(tSystem('actions.missingLink', languageRef.current, 'No link found.'));
           setStatusLevel('error');
@@ -5653,6 +5668,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       perfMark,
       perfMeasure,
       resolveLabel,
+      resolveOpenUrlFieldHref,
       upsertListCacheRow,
       updateRecordBusy
     ]
@@ -5771,17 +5787,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ),
     [definition.submissionConfirmationTitle, language]
   );
-  const submitConfirmMessage = useMemo(
-    () => {
-      const base = resolveLocalizedString(
-        definition.submissionConfirmationMessage,
-        language,
-        tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
-      );
+  const resolveDialogTemplate = useCallback(
+    (rawValue: LocalizedString | string | undefined, fallback: string): string => {
+      const base = resolveLocalizedString(rawValue, language, fallback);
       if (!base) return base;
-      // Fast path: no placeholders to expand.
       if (base.indexOf('{') < 0) return base;
-
       const vars: Record<string, string> = {};
 
       // Include meta fields (best-effort) in case you want to reference them in the dialog.
@@ -5834,9 +5844,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
     },
     [
-      definition.questions,
-      definition.submissionConfirmationMessage,
       language,
+      definition.questions,
       lastSubmissionMeta?.createdAt,
       lastSubmissionMeta?.status,
       lastSubmissionMeta?.updatedAt,
@@ -5844,6 +5853,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       selectedRecordId,
       values
     ]
+  );
+  const submitConfirmMessage = useMemo(
+    () =>
+      resolveDialogTemplate(
+        definition.submissionConfirmationMessage,
+        tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
+      ),
+    [definition.submissionConfirmationMessage, language, resolveDialogTemplate]
   );
 
   useEffect(() => {
@@ -7092,6 +7109,273 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition, formKey, logEvent, submit, upsertListCacheRow]
   );
 
+  const applyFollowupBatchResults = useCallback(
+    (args: { recordId: string; actions: string[]; batch: FollowupBatchResponse; reason: string }) => {
+      const followupErrors: string[] = [];
+      const byAction = new Map<string, any>();
+      const entries = Array.isArray(args.batch?.results) ? args.batch.results : [];
+      entries.forEach(entry => {
+        const key = (entry?.action || '').toString().trim().toUpperCase();
+        if (key) byAction.set(key, entry?.result || null);
+      });
+
+      for (const action of args.actions) {
+        const result = byAction.get(action) || null;
+        if (!result?.success) {
+          const msg = (result?.message || result?.status || 'Failed').toString();
+          followupErrors.push(`${action}: ${msg}`);
+          logEvent('followup.batch.error', { action, recordId: args.recordId, message: msg, reason: args.reason });
+          continue;
+        }
+        upsertListCacheRow({
+          recordId: args.recordId,
+          updatedAt: (result.updatedAt || '').toString() || undefined,
+          status: (result.status || null) as any,
+          pdfUrl: (result.pdfUrl || '').toString() || undefined
+        });
+        logEvent('followup.batch.success', {
+          action,
+          recordId: args.recordId,
+          status: result.status || null,
+          reason: args.reason
+        });
+        setLastSubmissionMeta(prev => ({
+          ...(prev || { id: args.recordId }),
+          updatedAt: result.updatedAt || prev?.updatedAt,
+          status: result.status || prev?.status || null
+        }));
+        setSelectedRecordSnapshot(prev =>
+          prev
+            ? {
+                ...prev,
+                updatedAt: result.updatedAt || prev.updatedAt,
+                status: result.status || prev.status,
+                pdfUrl: result.pdfUrl || prev.pdfUrl
+              }
+            : prev
+        );
+      }
+
+      return { followupErrors, byAction };
+    },
+    [logEvent, upsertListCacheRow]
+  );
+
+  const refreshAfterFollowupBatch = useCallback(
+    async (args: { recordId: string; reason: string }) => {
+      invalidateClientSharedDataCaches({ includePersistedDataSources: true });
+      logEvent('sharedData.cache.invalidated', {
+        reason: args.reason,
+        recordId: args.recordId
+      });
+      try {
+        await loadRecordSnapshot(args.recordId);
+      } catch (err: any) {
+        logEvent('followup.batch.refresh.error', {
+          recordId: args.recordId,
+          reason: args.reason,
+          message: err?.message || err || 'unknown'
+        });
+      }
+    },
+    [loadRecordSnapshot, logEvent]
+  );
+
+  const openConfiguredConfirmDialog = useCallback(
+    (args: {
+      dialog: any;
+      kind: string;
+      refId: string;
+      defaultTitle?: string;
+      defaultConfirmLabel?: string;
+      defaultCancelLabel?: string;
+    }): Promise<boolean> =>
+      new Promise(resolve => {
+        customConfirm.openConfirm({
+          title: resolveLocalizedString(
+            args.dialog?.title,
+            languageRef.current,
+            args.defaultTitle || tSystem('common.notice', languageRef.current, 'Notice')
+          ),
+          message: resolveDialogTemplate(args.dialog?.message, ''),
+          confirmLabel: resolveLocalizedString(
+            args.dialog?.confirmLabel,
+            languageRef.current,
+            args.defaultConfirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm')
+          ),
+          cancelLabel: resolveLocalizedString(
+            args.dialog?.cancelLabel,
+            languageRef.current,
+            args.defaultCancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel')
+          ),
+          primaryAction: args.dialog?.primaryAction,
+          showCancel: args.dialog?.showCancel,
+          showCloseButton: args.dialog?.showCloseButton,
+          dismissOnBackdrop: args.dialog?.dismissOnBackdrop,
+          kind: args.kind,
+          refId: args.refId,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false)
+        });
+      }),
+    [customConfirm, resolveDialogTemplate]
+  );
+
+  const handleGuidedStepMilestone = useCallback(
+    async (args: {
+      stepId: string;
+      action: StepMilestoneActionConfig;
+      nextStepId?: string;
+    }): Promise<{ success: boolean; advanceToNext?: boolean; message?: string }> => {
+      if (!args.action || args.action.type !== 'followupBatch') {
+        return { success: false, message: 'Unsupported step action.' };
+      }
+      const actions = Array.isArray(args.action.actions)
+        ? args.action.actions.map((entry: string) => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      if (!actions.length) {
+        return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
+      }
+
+      const reason = `guidedStepMilestone:${args.stepId || 'step'}`;
+      if (args.action.confirmationDialog) {
+        const confirmed = await openConfiguredConfirmDialog({
+          dialog: args.action.confirmationDialog,
+          kind: 'guidedStepMilestone',
+          refId: args.stepId
+        });
+        if (!confirmed) {
+          logEvent('guidedStep.milestone.confirm.cancel', {
+            stepId: args.stepId,
+            nextStepId: args.nextStepId || null
+          });
+          return { success: false, advanceToNext: false, message: 'cancelled' };
+        }
+      }
+      const existingRecordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+
+      const waitResult = await flushAutoSaveBeforeNavigate(reason);
+      logEvent('guidedStep.milestone.flush', {
+        stepId: args.stepId,
+        recordId: existingRecordId || null,
+        flushed: waitResult
+      });
+
+      let recordId = existingRecordId;
+      if (!recordId || args.action.ensureRecordId !== false) {
+        const ensured = await ensureDraftRecordId({ reason });
+        if (!ensured.success || !ensured.recordId) {
+          const message = (ensured.message || 'Could not prepare the record.').toString();
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent('guidedStep.milestone.ensureRecordId.failed', {
+            stepId: args.stepId,
+            message
+          });
+          return { success: false, message };
+        }
+        recordId = ensured.recordId;
+      }
+
+      const runBatch = async (): Promise<{ success: boolean; message?: string }> => {
+        try {
+          logEvent('guidedStep.milestone.followup.begin', {
+            stepId: args.stepId,
+            recordId,
+            actions,
+            runInBackground: args.action.runInBackground === true,
+            nextStepId: args.nextStepId || null
+          });
+          const batch = await triggerFollowupBatch(formKey, recordId, actions);
+          const { followupErrors } = applyFollowupBatchResults({
+            recordId,
+            actions,
+            batch,
+            reason
+          });
+          await refreshAfterFollowupBatch({ recordId, reason });
+          if (followupErrors.length) {
+            const message = followupErrors.join(' · ');
+            setStatus(message);
+            setStatusLevel('error');
+            return { success: false, message };
+          }
+          logEvent('guidedStep.milestone.followup.done', {
+            stepId: args.stepId,
+            recordId,
+            actionsCount: actions.length
+          });
+          return { success: true };
+        } catch (err: any) {
+          const uiMessage = resolveUiErrorMessage(err, 'Failed to run follow-up actions.');
+          const logMessage = resolveLogMessage(err, 'Failed to run follow-up actions.');
+          if (uiMessage) {
+            setStatus(uiMessage);
+            setStatusLevel('error');
+          }
+          logEvent('guidedStep.milestone.followup.exception', {
+            stepId: args.stepId,
+            recordId,
+            message: logMessage
+          });
+          return { success: false, message: uiMessage || logMessage };
+        }
+      };
+
+      if (args.action.runInBackground === true) {
+        void runBatch();
+        const feedbackDialog = args.action.feedbackDialog;
+        if (feedbackDialog) {
+          void openConfiguredConfirmDialog({
+            dialog: {
+              ...feedbackDialog,
+              showCancel: feedbackDialog.showCancel ?? false,
+              confirmLabel: feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
+            },
+            kind: 'guidedStepMilestone',
+            refId: args.stepId
+          });
+        }
+        return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
+      }
+
+      const outcome = await runBatch();
+      if (outcome.success && args.action.feedbackDialog) {
+        const feedbackDialog = args.action.feedbackDialog;
+        void openConfiguredConfirmDialog({
+          dialog: {
+            ...feedbackDialog,
+            showCancel: feedbackDialog.showCancel ?? false,
+            confirmLabel: feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
+          },
+          kind: 'guidedStepMilestone',
+          refId: args.stepId
+        });
+      }
+      return {
+        success: outcome.success,
+        advanceToNext: outcome.success && args.action.advanceAfterStart !== false,
+        message: outcome.message
+      };
+    },
+    [
+      applyFollowupBatchResults,
+      ensureDraftRecordId,
+      flushAutoSaveBeforeNavigate,
+      formKey,
+      logEvent,
+      openConfiguredConfirmDialog,
+      refreshAfterFollowupBatch,
+      resolveLogMessage,
+      resolveUiErrorMessage
+    ]
+  );
+
   const uploadFieldUrls = useCallback(
     async (args: {
       scope: 'top' | 'line';
@@ -7960,85 +8244,81 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordRowNumberRef.current = rn;
       }
 
-      // Run follow-up actions automatically (and close the record) now that the Follow-up view is removed.
-      const followupCfg = (definition as any)?.followup || null;
-      if (recordId) {
-        const actions: string[] = [];
-        if (followupCfg?.pdfTemplateId) actions.push('CREATE_PDF');
-        if (followupCfg?.emailTemplateId && followupCfg?.emailRecipients) actions.push('SEND_EMAIL');
-        // Always close on submit (per UX requirement).
-        actions.push('CLOSE_RECORD');
-
-        const followupErrors: string[] = [];
-        const byAction = new Map<string, any>();
-        try {
-          setStatus('Running follow-up…');
-          setStatusLevel('info');
-          logEvent('followup.auto.batch.begin', { recordId, actions });
-          const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
-          const followupRpcEndMark = `ck.submit.followup.rpc.end.${Date.now()}`;
-          perfMark(followupRpcStartMark);
-          const batch = await triggerFollowupBatch(formKey, recordId, actions);
-          perfMark(followupRpcEndMark);
-          perfMeasure('ck.submit.followup.rpc', followupRpcStartMark, followupRpcEndMark, {
-            formKey,
-            recordId,
-            actionsCount: actions.length
-          });
-          const entries = Array.isArray(batch?.results) ? batch.results : [];
-          entries.forEach(entry => {
-            const key = (entry?.action || '').toString().trim().toUpperCase();
-            if (key) byAction.set(key, entry?.result || null);
-          });
-
-          for (const action of actions) {
-            const result = byAction.get(action) || null;
-            if (!result?.success) {
-              const msg = (result?.message || result?.status || 'Failed').toString();
-              followupErrors.push(`${action}: ${msg}`);
-              logEvent('followup.auto.error', { action, recordId, message: msg });
-              continue;
-            }
-            upsertListCacheRow({
-              recordId,
-              updatedAt: (result.updatedAt || '').toString() || undefined,
-              status: (result.status || null) as any,
-              pdfUrl: (result.pdfUrl || '').toString() || undefined
-            });
-            logEvent('followup.auto.success', { action, recordId, status: result.status || null });
-            setLastSubmissionMeta(prev => ({
-              ...(prev || { id: recordId }),
-              updatedAt: result.updatedAt || prev?.updatedAt,
-              status: result.status || prev?.status || null
-            }));
-            setSelectedRecordSnapshot(prev =>
-              prev
-                ? {
-                    ...prev,
-                    updatedAt: result.updatedAt || prev.updatedAt,
-                    status: result.status || prev.status,
-                    pdfUrl: result.pdfUrl || prev.pdfUrl
-                  }
-                : prev
-            );
-          }
-          logEvent('followup.auto.batch.done', {
-            recordId,
-            actionsCount: actions.length,
-            errorCount: followupErrors.length
-          });
-        } catch (err: any) {
-          const uiMessage = resolveUiErrorMessage(err, 'Failed');
-          const logMessage = resolveLogMessage(err, 'Failed');
-          followupErrors.push(`BATCH: ${uiMessage || 'Failed'}`);
-          logEvent('followup.auto.batch.exception', { recordId, message: logMessage });
+      const runFollowupBatchForSubmit = async (args: { actions: string[]; reason: string; refresh: boolean }) => {
+        const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
+        const followupRpcEndMark = `ck.submit.followup.rpc.end.${Date.now()}`;
+        perfMark(followupRpcStartMark);
+        const batch = await triggerFollowupBatch(formKey, recordId, args.actions);
+        perfMark(followupRpcEndMark);
+        perfMeasure('ck.submit.followup.rpc', followupRpcStartMark, followupRpcEndMark, {
+          formKey,
+          recordId,
+          actionsCount: args.actions.length
+        });
+        const outcome = applyFollowupBatchResults({
+          recordId,
+          actions: args.actions,
+          batch,
+          reason: args.reason
+        });
+        if (args.refresh) {
+          await refreshAfterFollowupBatch({ recordId, reason: args.reason });
         }
+        return outcome;
+      };
 
-        if (followupErrors.length) {
-          setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
-          setStatusLevel('error');
-        } else {
-          const reconciliation = byAction.get('CLOSE_RECORD')?.reservationReconciliation || null;
+      const followupCfg = (definition as any)?.followup || null;
+      const configuredAfterSubmit = definition.submissionAfterSubmit;
+      const configuredPreActions = Array.isArray(configuredAfterSubmit?.preActions)
+        ? configuredAfterSubmit.preActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const configuredBackgroundActions = Array.isArray(configuredAfterSubmit?.backgroundActions)
+        ? configuredAfterSubmit.backgroundActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const fallbackActions: string[] = [];
+      if (followupCfg?.pdfTemplateId) fallbackActions.push('CREATE_PDF');
+      if (followupCfg?.emailTemplateId && followupCfg?.emailRecipients) fallbackActions.push('SEND_EMAIL');
+      fallbackActions.push('CLOSE_RECORD');
+
+      let followupErrors: string[] = [];
+      let closeResultByAction = new Map<string, any>();
+      let handledSubmitNavigation = false;
+
+      if (recordId) {
+        if (configuredAfterSubmit && (configuredPreActions.length || configuredBackgroundActions.length)) {
+          handledSubmitNavigation = true;
+          if (configuredPreActions.length) {
+            try {
+              setStatus('Finalizing submission…');
+              setStatusLevel('info');
+              logEvent('submit.afterSubmit.pre.begin', { recordId, actions: configuredPreActions });
+              const outcome = await runFollowupBatchForSubmit({
+                actions: configuredPreActions,
+                reason: 'submit.afterSubmit.pre',
+                refresh: true
+              });
+              followupErrors = outcome.followupErrors;
+              closeResultByAction = outcome.byAction;
+              logEvent('submit.afterSubmit.pre.done', {
+                recordId,
+                actionsCount: configuredPreActions.length,
+                errorCount: followupErrors.length
+              });
+            } catch (err: any) {
+              const uiMessage = resolveUiErrorMessage(err, 'Failed');
+              const logMessage = resolveLogMessage(err, 'Failed');
+              followupErrors = [uiMessage || 'Failed'];
+              logEvent('submit.afterSubmit.pre.exception', { recordId, message: logMessage });
+            }
+          }
+
+          if (followupErrors.length) {
+            setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
+            setStatusLevel('error');
+            return;
+          }
+
+          const reconciliation = closeResultByAction.get('CLOSE_RECORD')?.reservationReconciliation || null;
           const consumedReservations = Number(reconciliation?.consumedReservations || 0) || 0;
           const releasedReservations = Number(reconciliation?.releasedReservations || 0) || 0;
           const baseMessage = tSystem('actions.submittedClosed', language, 'Submitted and closed.');
@@ -8055,26 +8335,125 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
           setStatus(statusMessage);
           setStatusLevel('success');
+
+          const navigateTarget = (() => {
+            const raw = (configuredAfterSubmit.navigateTo || 'auto').toString().trim().toLowerCase();
+            if (raw === 'form' || raw === 'summary' || raw === 'list') return raw as 'form' | 'summary' | 'list';
+            return summaryViewEnabled ? 'summary' : 'form';
+          })();
+          setView(navigateTarget);
+
+          if (configuredBackgroundActions.length) {
+            logEvent('submit.afterSubmit.background.begin', {
+              recordId,
+              actions: configuredBackgroundActions,
+              navigateTarget
+            });
+            void (async () => {
+              try {
+                const outcome = await runFollowupBatchForSubmit({
+                  actions: configuredBackgroundActions,
+                  reason: 'submit.afterSubmit.background',
+                  refresh: false
+                });
+                if (outcome.followupErrors.length) {
+                  setStatus(`Submitted, but follow-up had issues: ${outcome.followupErrors.join(' · ')}`);
+                  setStatusLevel('error');
+                }
+                logEvent('submit.afterSubmit.background.done', {
+                  recordId,
+                  actionsCount: configuredBackgroundActions.length,
+                  errorCount: outcome.followupErrors.length
+                });
+              } catch (err: any) {
+                const uiMessage = resolveUiErrorMessage(err, 'Failed');
+                const logMessage = resolveLogMessage(err, 'Failed');
+                setStatus(`Submitted, but follow-up had issues: ${uiMessage || 'Failed'}`);
+                setStatusLevel('error');
+                logEvent('submit.afterSubmit.background.exception', { recordId, message: logMessage });
+              }
+            })();
+
+            if (configuredAfterSubmit.feedbackDialog) {
+              void openConfiguredConfirmDialog({
+                dialog: {
+                  ...configuredAfterSubmit.feedbackDialog,
+                  showCancel: configuredAfterSubmit.feedbackDialog.showCancel ?? false,
+                  confirmLabel: configuredAfterSubmit.feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
+                },
+                kind: 'submitAfterSubmit',
+                refId: recordId
+              });
+            }
+          }
+        } else {
+          try {
+            setStatus('Running follow-up…');
+            setStatusLevel('info');
+            logEvent('followup.auto.batch.begin', { recordId, actions: fallbackActions });
+            const outcome = await runFollowupBatchForSubmit({
+              actions: fallbackActions,
+              reason: 'submit.legacyAutoFollowup',
+              refresh: true
+            });
+            followupErrors = outcome.followupErrors;
+            closeResultByAction = outcome.byAction;
+            logEvent('followup.auto.batch.done', {
+              recordId,
+              actionsCount: fallbackActions.length,
+              errorCount: followupErrors.length
+            });
+          } catch (err: any) {
+            const uiMessage = resolveUiErrorMessage(err, 'Failed');
+            const logMessage = resolveLogMessage(err, 'Failed');
+            followupErrors.push(`BATCH: ${uiMessage || 'Failed'}`);
+            logEvent('followup.auto.batch.exception', { recordId, message: logMessage });
+          }
+
+          if (followupErrors.length) {
+            setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
+            setStatusLevel('error');
+          } else {
+            const reconciliation = closeResultByAction.get('CLOSE_RECORD')?.reservationReconciliation || null;
+            const consumedReservations = Number(reconciliation?.consumedReservations || 0) || 0;
+            const releasedReservations = Number(reconciliation?.releasedReservations || 0) || 0;
+            const baseMessage = tSystem('actions.submittedClosed', language, 'Submitted and closed.');
+            const feedbackConfig =
+              typeof definition?.reservationLifecycle?.reconcileOnFinalSubmit === 'object'
+                ? definition.reservationLifecycle.reconcileOnFinalSubmit.feedback
+                : undefined;
+            const statusMessage = buildReservationReconciliationFeedback({
+              language,
+              feedback: feedbackConfig,
+              baseMessage,
+              consumedReservations,
+              releasedReservations
+            });
+            setStatus(statusMessage);
+            setStatusLevel('success');
+          }
         }
       }
 
-      invalidateClientSharedDataCaches({ includePersistedDataSources: true });
-      logEvent('sharedData.cache.invalidated', {
-        reason: 'submit.success',
-        recordId: recordId || null,
-        submitEffectsCreated: Number((res as any)?.meta?.submitEffects?.created || 0) || 0,
-        submitEffectsUpdated: Number((res as any)?.meta?.submitEffects?.updated || 0) || 0
-      });
+      if (!handledSubmitNavigation) {
+        invalidateClientSharedDataCaches({ includePersistedDataSources: true });
+        logEvent('sharedData.cache.invalidated', {
+          reason: 'submit.success',
+          recordId: recordId || null,
+          submitEffectsCreated: Number((res as any)?.meta?.submitEffects?.created || 0) || 0,
+          submitEffectsUpdated: Number((res as any)?.meta?.submitEffects?.updated || 0) || 0
+        });
 
-      // Refresh from saved record to surface server-side autoIncrement + follow-up changes immediately.
-      if (recordId) {
-        try {
-          await loadRecordSnapshot(recordId);
-        } catch (err: any) {
-          logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId });
+        // Refresh from saved record to surface server-side autoIncrement + follow-up changes immediately.
+        if (recordId) {
+          try {
+            await loadRecordSnapshot(recordId);
+          } catch (err: any) {
+            logEvent('submit.fetchRecord.error', { message: err?.message || err, recordId });
+          }
         }
+        setView(summaryViewEnabled ? 'summary' : 'form');
       }
-      setView(summaryViewEnabled ? 'summary' : 'form');
     } catch (err: any) {
       const uiMessage = resolveUiErrorMessage(err, 'Submit failed');
       const logMessage = resolveLogMessage(err, 'Submit failed');
@@ -9525,6 +9904,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onDiagnostic={logEvent}
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
+          onGuidedStepMilestone={handleGuidedStepMilestone}
           dedupNavigationBlocked={dedupNavigationBlocked}
           guidedForwardNavigationBlocked={submitDisabledByGate}
           openConfirmDialog={customConfirm.openConfirm}

@@ -1095,6 +1095,11 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
+        - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
+          - ensure a persisted draft record id exists (`ensureRecordId`)
+          - run the batch in background (`runInBackground`)
+          - auto-advance to the next step after the batch starts (`advanceAfterStart`)
+          - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
       - Read-only labels in steps:
         - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
         - Line item + subgroup step targets support **step-scoped label rendering** in two equivalent ways:
@@ -1142,6 +1147,24 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       {
         "submissionConfirmationConfirmLabel": { "en": "Yes, submit" },
         "submissionConfirmationCancelLabel": { "en": "Not yet" }
+      }
+      ```
+    - Need **submit-time background follow-up**? Configure `submissionAfterSubmit` so some actions complete before navigation and others continue after redirect. Example:
+      ```json
+      {
+        "submissionAfterSubmit": {
+          "preActions": ["CLOSE_RECORD"],
+          "backgroundActions": ["CREATE_PDF", "SEND_EMAIL"],
+          "navigateTo": "summary",
+          "feedbackDialog": {
+            "title": { "en": "Background actions started" },
+            "message": { "en": "PDF creation and email delivery are running in the background." },
+            "confirmLabel": { "en": "OK" },
+            "showCancel": false,
+            "showCloseButton": false,
+            "dismissOnBackdrop": false
+          }
+        }
       }
       ```
 
@@ -2805,6 +2828,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 - **Update the current record** (`action: "updateRecord"`): draft-save specific top-level fields and/or status changes on the current record, optionally show a confirmation dialog, optionally navigate to another view, and optionally run a reusable `dependencyGuard` against another form before saving.
 - **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
+  - Set `disableWhenValueMissing: true` to keep the button visible but disabled until the URL exists.
 
 Visibility:
 

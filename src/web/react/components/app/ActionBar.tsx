@@ -17,7 +17,13 @@ import type { View } from '../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 
-type CustomButton = { id: string; label: string; action: ButtonAction; placements: ButtonPlacement[] };
+type CustomButton = {
+  id: string;
+  label: string;
+  action: ButtonAction;
+  placements: ButtonPlacement[];
+  disabled?: boolean;
+};
 
 const normalizeActionToken = (value: string): string =>
   (value || '')
@@ -582,7 +588,7 @@ export const ActionBar: React.FC<{
               key={btn.id}
               type="button"
               className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-              disabled={disabled || !onCustomButton}
+              disabled={disabled || btn.disabled || !onCustomButton}
               onClick={() => {
                 setMenu(null);
                 onCustomButton?.(btn.id);
@@ -632,7 +638,7 @@ export const ActionBar: React.FC<{
 	                  key={btn.id}
 	                  type="button"
 	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
-	                  disabled={disabled || !onCustomButton}
+	                  disabled={disabled || btn.disabled || !onCustomButton}
 	                  onClick={() => {
 	                    setMenu(null);
 	                    onCustomButton?.(btn.id);
@@ -706,7 +712,7 @@ export const ActionBar: React.FC<{
 	                  key={btn.id}
 	                  type="button"
 	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
-	                  disabled={disabled || !onCustomButton}
+	                  disabled={disabled || btn.disabled || !onCustomButton}
 	                  onClick={() => {
 	                    setMenu(null);
 	                    onCustomButton?.(btn.id);
@@ -890,7 +896,7 @@ export const ActionBar: React.FC<{
 	                        type="button"
 	                        className={`ck-bottom-item${primary ? ' ck-bottom-item--primary' : ''}`}
 	                        onClick={() => onCustomButton?.(btn.id)}
-	                        disabled={disabled || !onCustomButton}
+	                        disabled={disabled || btn.disabled || !onCustomButton}
 	                      >
                         <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
                         <span className="ck-bottom-label">{btn.label}</span>

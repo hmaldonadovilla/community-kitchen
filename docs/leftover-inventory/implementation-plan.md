@@ -937,47 +937,45 @@ Implemented foundations:
 - `Production` is restored and consumes the normalized `MP_TYPE_LI` rows
 - the read-only ingredients overlay is sourced from inventory
 - conflict dialogs and submit-time reconciliation feedback are configurable
+- `6. Leftovers` now exists as a real guided step in staging with:
+  - one required per-meal leftover portions field on `MP_MEALS_REQUEST`
+  - explicit `0` support when no leftovers exist
+  - a separate partial-leftovers section
+  - staged cross-form creation of new leftover inventory rows on final close
+- guided-step milestone follow-up is now generic and configurable:
+  - `navigation.milestoneAction` can ensure a draft record id exists
+  - configured follow-up batches can run in background
+  - milestone steps can show configurable confirmation and acknowledgement dialogs
+  - `5. Portioning` now uses this path to start PDF/email work before advancing to `6. Leftovers`
 
-The reservation platform is no longer the main blocker. The remaining work is the end-of-flow capture step and the user experience around milestone and submit follow-up actions.
+The reservation platform and the generic milestone or post-submit follow-up UX are no longer the main blockers. The remaining work is now concentrated on hardening and validating the full post-production flow end to end, especially the creation of new leftover inventory records from `6. Leftovers`.
 
 ## Remaining implementation backlog
 
-### Must build next
-
-1. Add the real `6. Leftovers` step
-
-- one required entire-dish leftover quantity field per meal row
-- explicit `0` required when no leftovers exist
-- separate partial-leftover row section
-- final creation of new leftover inventory records from this step
-
-2. Generalize guided-step background follow-up UX
-
-- keep `5. Portioning` as a milestone action, not final submission
-- run configured follow-up actions immediately after Portioning completion
-- show a configurable dialog explaining that background actions are running
-- advance the user to `6. Leftovers` without waiting for PDF or email completion
-
-3. Generalize post-submit background follow-up UX
-
-- after final submit, process inventory reconciliation before or in parallel with follow-up actions
-- send the user immediately to the appropriate screen, typically summary or home
-- show a configurable dialog explaining that background actions such as PDF generation and email are still running
-- disable UI actions that depend on asynchronous results, such as the PDF-preview action, until the required result exists
-
 ### Must complete for end-to-end feature closure
 
-1. Create new leftover inventory records from `6. Leftovers`
+1. Validate and harden new leftover inventory record creation from `6. Leftovers`
 
-- entire-dish rows create `LE-*` records
-- partial rows create `LP-*` records
+- entire-dish rows must create `LE-*` records
+- partial rows must create `LP-*` records
 - preserve source traceability back to the Meal Production record and meal row
+- dedicated service coverage now exists for final-close creation of:
+  - entire-dish leftovers from cooked `MP_MEALS_REQUEST` rows
+  - partial leftovers from `MP_LEFTOVER_CAPTURE_LI`
+- still confirm end-to-end behavior live on staging
 
-2. Wire Portioning milestone and final submit into the new step flow
+2. Harden Portioning milestone and final submit into the new step flow
 
-- `5. Portioning` completion should open `6. Leftovers`
+- `5. Portioning` completion should open `6. Leftovers` after the milestone follow-up batch is started
 - final record close happens only after `6. Leftovers`
+- milestone follow-up should reconcile record/cache state cleanly when background actions finish
 - inventory consumption must already be safe before or during the background follow-up path
+- generic background follow-up support is now implemented, including:
+  - configurable milestone dialogs
+  - configurable submit-time background follow-up dialogs
+  - immediate redirect after final submit
+  - disabled `openUrlField` actions while required URLs are missing
+- the remaining work is live end-to-end verification of this flow on staging
 
 3. Add end-to-end regression coverage for the full post-production flow
 
@@ -1009,16 +1007,14 @@ The reservation platform is no longer the main blocker. The remaining work is th
 
 ## Recommended implementation sequence
 
-1. add the real `6. Leftovers` step and its data model
-2. add generic guided-step background follow-up support for `5. Portioning`
-3. add generic post-submit background follow-up support and disabled pending-result actions
-4. create new leftover inventory records from `6. Leftovers`
-5. validate the full flow end to end on staging:
+1. validate and harden new leftover inventory record creation from `6. Leftovers`
+2. validate the full flow end to end on staging:
    - select from `2. Leftover bank`
    - run Portioning milestone follow-up
    - complete `6. Leftovers`
    - final submit
    - verify summary, PDF, email, and pending-result behavior
+3. add broader end-to-end regression coverage for the full post-production flow
 
 ## Final recommendation
 

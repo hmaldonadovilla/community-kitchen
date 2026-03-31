@@ -46,6 +46,7 @@ import {
   ParagraphDisclaimerConfig,
   QuestionGroupConfig,
   SummaryVisibility,
+  StepMilestoneActionConfig,
   StepRowFilterConfig,
   WhenClause,
   ValidationRule,
@@ -193,6 +194,7 @@ export {
   SelectionEffect,
   FieldChangeDialogTarget,
   PresetValue,
+  StepMilestoneActionConfig,
   StepRowFilterConfig,
   WhenClause,
   WebFormSubmission

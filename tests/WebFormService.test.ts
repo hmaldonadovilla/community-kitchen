@@ -947,6 +947,265 @@ describe('WebFormService', () => {
     expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
   });
 
+  test('saveSubmissionWithId can create produced entire-dish and partial leftovers on final close', () => {
+    const mealProductionFormKey = 'Config: Test Meal Production Leftovers';
+    const inventoryFormKey = 'Config: Produced Leftover Inventory';
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          id: 'captureProducedEntireDishLeftovers',
+          type: 'createRecord',
+          targetFormKey: inventoryFormKey,
+          runOn: 'both',
+          recordId: 'leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}',
+          when: {
+            fieldId: 'status',
+            equals: ['Closed']
+          },
+          status: 'available',
+          forEachLineItem: {
+            groupId: 'MP_MEALS_REQUEST',
+            subGroupPath: ['MP_TYPE_LI'],
+            when: {
+              all: [
+                { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+                { fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE', greaterThan: 0 }
+              ]
+            }
+          },
+          values: {
+            LEFTOVER_STATUS: 'available',
+            LEFTOVER_KIND: 'Entire dish',
+            LEFTOVER_PREP_TYPE: 'Entire dish',
+            LEFTOVER_MEAL_TYPE: '{{parent.MEAL_TYPE}}',
+            LEFTOVER_RECIPE: '{{row.RECIPE}}',
+            LEFTOVER_PORTIONS: '{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}',
+            LEFTOVER_EXP_DATE: '{{source.MP_EXP_DATE}}',
+            LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
+            LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
+            LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
+            LEFTOVER_INGREDIENTS_LI: '{{row.MP_INGREDIENTS_LI}}'
+          }
+        },
+        {
+          id: 'captureProducedLeftovers',
+          type: 'createRecord',
+          targetFormKey: inventoryFormKey,
+          runOn: 'both',
+          recordId: 'leftover::{{source.id}}::partial::{{lineItem.rowId}}',
+          when: {
+            fieldId: 'status',
+            equals: ['Closed']
+          },
+          status: 'available',
+          forEachLineItem: {
+            groupId: 'MP_LEFTOVER_CAPTURE_LI',
+            when: {
+              fieldId: 'LEFTOVER_INGREDIENT',
+              notEmpty: true
+            }
+          },
+          values: {
+            LEFTOVER_STATUS: 'available',
+            LEFTOVER_KIND: 'Part dish',
+            LEFTOVER_PREP_TYPE: 'Part dish',
+            LEFTOVER_INGREDIENT: '{{row.LEFTOVER_INGREDIENT}}',
+            LEFTOVER_CAT: '{{row.LEFTOVER_CAT}}',
+            LEFTOVER_ALLERGEN: '{{row.LEFTOVER_ALLERGEN}}',
+            LEFTOVER_QTY: '{{row.LEFTOVER_QTY}}',
+            LEFTOVER_UNIT: '{{row.LEFTOVER_UNIT}}',
+            LEFTOVER_EXP_DATE: '{{source.MP_EXP_DATE}}',
+            LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
+            LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
+            LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}'
+          }
+        }
+      ]
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Meal Production', mealProductionFormKey, 'Test Meal Production Leftovers Data', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Produced Leftover Inventory Data', 'Desc', '', '', '', '']
+    ]);
+
+    const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
+    (mealProductionConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_EXP_DATE', 'DATE', 'Expiration Date', 'Expiration Date', 'Expiration Date', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['MP_MEALS_REQUEST', 'LINE_ITEM_GROUP', 'Meals request', 'Meals request', 'Meals request', false, '', '', '', 'Active', 'REF:LineItems_MP_MEALS_REQUEST', '', '', '', ''],
+      ['MP_LEFTOVER_CAPTURE_LI', 'LINE_ITEM_GROUP', 'Partial leftovers', 'Partial leftovers', 'Partial leftovers', false, '', '', '', 'Active', 'REF:LineItems_MP_LEFTOVER_CAPTURE_LI', '', '', '', '']
+    ]);
+
+    const mealsRequestSheet = ss.insertSheet('LineItems_MP_MEALS_REQUEST');
+    (mealsRequestSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', ''],
+      ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', '']
+    ]);
+
+    const partialLeftoversSheet = ss.insertSheet('LineItems_MP_LEFTOVER_CAPTURE_LI');
+    (partialLeftoversSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['LEFTOVER_INGREDIENT', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
+      ['LEFTOVER_CAT', 'TEXT', 'Category', 'Category', 'Category', false, '', '', ''],
+      ['LEFTOVER_ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
+      ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '']
+    ]);
+
+    const inventoryConfig = ss.insertSheet(inventoryFormKey);
+    (inventoryConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_STATUS', 'CHOICE', 'Status', 'Status', 'Status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'Entire dish,Part dish', 'Entire dish,Part dish', 'Entire dish,Part dish', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PREP_TYPE', 'TEXT', 'Prep type', 'Prep type', 'Prep type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RECIPE', 'TEXT', 'Recipe', 'Recipe', 'Recipe', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENT', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_CAT', 'TEXT', 'Category', 'Category', 'Category', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENTS_LI', 'TEXT', 'Ingredients', 'Ingredients', 'Ingredients', false, '', '', '', 'Active', '', '', '', '', ''],
+      [
+        'LEFTOVER_ID',
+        'TEXT',
+        'Leftover ID',
+        'Leftover ID',
+        'Leftover ID',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"autoIncrement":{"padLength":0,"prefixByValue":{"fieldId":"LEFTOVER_KIND","map":{"Entire dish":"LE-","Part dish":"LP-"}}}}',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ]);
+
+    const mealRows = [
+      {
+        __ckRowId: 'MEAL-1',
+        MEAL_TYPE: 'Diabetic',
+        MP_LEFTOVER_PORTIONS_CAPTURE: 2,
+        MP_TYPE_LI: [
+          {
+            __ckRowId: 'COOK-1',
+            PREP_TYPE: 'Cook',
+            RECIPE: 'Curry & fish',
+            MP_INGREDIENTS_LI: [{ ING: 'Salt', QTY: 1, UNIT: 'kg' }]
+          }
+        ]
+      },
+      {
+        __ckRowId: 'MEAL-2',
+        MEAL_TYPE: 'Standard',
+        MP_LEFTOVER_PORTIONS_CAPTURE: 0,
+        MP_TYPE_LI: [
+          {
+            __ckRowId: 'COOK-2',
+            PREP_TYPE: 'Cook',
+            RECIPE: 'Rice curry'
+          }
+        ]
+      }
+    ];
+    const partialRows = [
+      {
+        __ckRowId: 'PART-1',
+        LEFTOVER_INGREDIENT: 'Chicken wings',
+        LEFTOVER_CAT: 'Animal protein Halal',
+        LEFTOVER_ALLERGEN: 'None',
+        LEFTOVER_QTY: 250,
+        LEFTOVER_UNIT: 'gr'
+      },
+      {
+        __ckRowId: 'PART-2',
+        LEFTOVER_INGREDIENT: '',
+        LEFTOVER_QTY: 0,
+        LEFTOVER_UNIT: 'gr'
+      }
+    ];
+
+    const closed = service.saveSubmissionWithId({
+      formKey: mealProductionFormKey,
+      language: 'EN',
+      id: 'MP-CLOSE-1',
+      MP_EXP_DATE: '2026-04-02',
+      MP_MEALS_REQUEST_json: JSON.stringify(mealRows),
+      MP_LEFTOVER_CAPTURE_LI_json: JSON.stringify(partialRows),
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Closed'
+    } as any);
+
+    expect(closed.success).toBe(true);
+    expect(closed.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 2,
+        executed: 2,
+        created: 2,
+        operation: 'create'
+      })
+    );
+
+    const inventorySheet = ss.getSheets().find((sheet: any) => sheet.getName() === 'Produced Leftover Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    expect(inventorySheet!.getLastRow()).toBe(3);
+
+    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const rowObjects = inventoryValues.slice(1).map((row: any[]) =>
+      Object.fromEntries(header.map((key: string, index: number) => [key.replace(/^.*\[(.+)\]\s*$/, '$1'), row[index]]))
+    );
+
+    const entireDish = rowObjects.find((entry: any) => (entry.LEFTOVER_KIND || '').toString() === 'Entire dish');
+    const partialDish = rowObjects.find((entry: any) => (entry.LEFTOVER_KIND || '').toString() === 'Part dish');
+
+    expect(entireDish).toBeDefined();
+    const entireDishRow = entireDish as any;
+    expect(entireDishRow.LEFTOVER_STATUS).toBe('available');
+    expect(entireDishRow.LEFTOVER_PREP_TYPE).toBe('Entire dish');
+    expect(entireDishRow.LEFTOVER_MEAL_TYPE).toBe('Diabetic');
+    expect(entireDishRow.LEFTOVER_RECIPE).toBe('Curry & fish');
+    expect(Number(entireDishRow.LEFTOVER_PORTIONS || 0)).toBe(2);
+    expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
+    expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);
+    expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getDate()).toBe(2);
+    expect(entireDishRow.LEFTOVER_SOURCE_FORM_KEY).toBe(mealProductionFormKey);
+    expect(entireDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');
+    expect(entireDishRow.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
+    expect((entireDishRow.LEFTOVER_INGREDIENTS_LI || '').toString()).toBeTruthy();
+    expect((entireDishRow.LEFTOVER_ID || '').toString()).toBe('LE-1');
+
+    expect(partialDish).toBeDefined();
+    const partialDishRow = partialDish as any;
+    expect(partialDishRow.LEFTOVER_STATUS).toBe('available');
+    expect(partialDishRow.LEFTOVER_PREP_TYPE).toBe('Part dish');
+    expect(partialDishRow.LEFTOVER_INGREDIENT).toBe('Chicken wings');
+    expect(partialDishRow.LEFTOVER_CAT).toBe('Animal protein Halal');
+    expect(partialDishRow.LEFTOVER_ALLERGEN).toBe('None');
+    expect(Number(partialDishRow.LEFTOVER_QTY || 0)).toBe(250);
+    expect(partialDishRow.LEFTOVER_UNIT).toBe('gr');
+    expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
+    expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);
+    expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getDate()).toBe(2);
+    expect(partialDishRow.LEFTOVER_SOURCE_FORM_KEY).toBe(mealProductionFormKey);
+    expect(partialDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');
+    expect(partialDishRow.LEFTOVER_SOURCE_ROW_ID).toBe('PART-1');
+    expect((partialDishRow.LEFTOVER_ID || '').toString()).toBe('LP-1');
+  });
+
   test('saveSubmissionWithId can update downstream records from source line-item rows', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const inventoryConfig = ss.insertSheet('Config: Inventory');

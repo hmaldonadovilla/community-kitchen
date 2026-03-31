@@ -577,6 +577,11 @@ components:
               description: |
                 Field id containing the URL.
                 Can be a question id or a meta field like `pdfUrl`.
+            disableWhenValueMissing:
+              type: boolean
+              description: |
+                When true, keep the button visible but disabled until the target field resolves to
+                a non-empty URL. Useful for background-generated assets such as PDFs.
             placements:
               type: array
               items:
@@ -2723,6 +2728,14 @@ components:
             Optional localized label for the **negative (cancel)** button in the submission confirmation dialog.
 
             When omitted, the UI falls back to localized system strings (e.g. "Cancel").
+        submissionAfterSubmit:
+          $ref: '#/components/schemas/SubmissionAfterSubmitConfig'
+          description: |
+            Optional split submit-time follow-up orchestration.
+
+            Use this when some follow-up actions must complete before navigation (for example
+            `CLOSE_RECORD`) while slower actions (such as PDF generation or email) continue in the
+            background after the user has already been redirected.
         dedupDialog:
           $ref: '#/components/schemas/DedupDialogConfig'
           description: |
@@ -3253,6 +3266,71 @@ components:
         showBackButton:
           type: boolean
           description: Optional per-step toggle to hide/show the Back button (defaults to the global setting).
+        milestoneAction:
+          $ref: '#/components/schemas/StepMilestoneActionConfig'
+          description: Optional step-scoped action triggered by the primary button after the current step validates.
+      additionalProperties: false
+
+    StepMilestoneActionConfig:
+      type: object
+      required: [type, actions]
+      description: |
+        Generic milestone action for guided steps. Use this when a non-final step must run
+        configured follow-up actions (for example PDF/email generation) before the user moves on.
+        The action can ensure a draft record id exists, optionally run in background, optionally
+        auto-advance to the next step, and show configurable dialogs before/after start.
+      properties:
+        type:
+          type: string
+          enum: [followupBatch]
+        actions:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: Follow-up action ids to trigger for the current record.
+        ensureRecordId:
+          type: boolean
+          description: When true, ensure a persisted draft record id exists before triggering the action batch. Default true.
+        runInBackground:
+          type: boolean
+          description: When true, the UI continues immediately and follow-up results reconcile later. Default false.
+        advanceAfterStart:
+          type: boolean
+          description: When true, automatically advance to the next guided step after the action starts successfully. Default true.
+        confirmationDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: Optional confirmation dialog shown before the action starts.
+        feedbackDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: Optional acknowledgement dialog shown after the action has started.
+      additionalProperties: false
+
+    SubmissionAfterSubmitConfig:
+      type: object
+      properties:
+        preActions:
+          type: array
+          items:
+            type: string
+          description: |
+            Follow-up actions that must complete before the client navigates away from the submit flow.
+            Typical example: `["CLOSE_RECORD"]`.
+        backgroundActions:
+          type: array
+          items:
+            type: string
+          description: |
+            Follow-up actions that may continue after the user has already been redirected.
+            Typical example: `["CREATE_PDF", "SEND_EMAIL"]`.
+        navigateTo:
+          type: string
+          enum: [auto, form, summary, list]
+          description: |
+            Where the client should navigate immediately after `preActions` succeed.
+        feedbackDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: Optional acknowledgement dialog shown after background actions have started.
       additionalProperties: false
 
     StepRowFilterConfig:
@@ -6286,6 +6364,8 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         submissionConfirmationCancelLabel:
           $ref: '#/components/schemas/LocalizedString'
+        submissionAfterSubmit:
+          $ref: '#/components/schemas/SubmissionAfterSubmitConfig'
         dedupDialog:
           $ref: '#/components/schemas/DedupDialogConfig'
         submitButtonLabel:

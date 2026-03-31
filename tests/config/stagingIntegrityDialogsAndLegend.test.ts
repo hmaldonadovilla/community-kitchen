@@ -164,6 +164,69 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(future?.button?.includeToday).toBe(true);
     };
 
+    const assertGuidedStepLayout = (root: any, questions: any[]) => {
+      const items = Array.isArray(root?.steps?.items) ? root.steps.items : [];
+      const leftoverBank = items.find((entry: any) => entry?.id === 'leftoverForm');
+      const portioning = items.find((entry: any) => entry?.id === 'portioning');
+      const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
+
+      expect(leftoverBank?.label?.en).toBe('Leftover bank');
+      expect(portioning?.label?.en).toBe('Portioning');
+      expect(leftovers?.label?.en).toBe('Leftovers');
+      expect(portioning?.navigation?.submitLabel?.en).toBe('Complete portioning');
+      expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
+      expect(portioning?.navigation?.milestoneAction?.actions).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
+      expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(true);
+      expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
+      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Background actions started');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
+      expect(root?.submissionAfterSubmit?.preActions).toEqual(['CLOSE_RECORD']);
+      expect(root?.submissionAfterSubmit?.backgroundActions).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
+      expect(root?.submissionAfterSubmit?.navigateTo).toBe('summary');
+      expect(root?.submissionAfterSubmit?.feedbackDialog?.title?.en).toBe('Background actions started');
+
+      const portioningQuestionIds = new Set((portioning?.include || []).map((entry: any) => entry?.id).filter(Boolean));
+      expect(portioningQuestionIds.has('MP_HAS_LEFTOVERS_PRODUCED')).toBe(false);
+      expect(portioningQuestionIds.has('MP_LEFTOVER_CAPTURE_LI')).toBe(false);
+
+      const leftoversInclude = Array.isArray(leftovers?.include) ? leftovers.include : [];
+      const leftoversQuestionIds = new Set(leftoversInclude.map((entry: any) => entry?.id).filter(Boolean));
+      expect(leftoversQuestionIds.has('MP_HAS_LEFTOVERS_PRODUCED')).toBe(false);
+      expect(leftoversQuestionIds.has('MP_LEFTOVER_CAPTURE_LI')).toBe(true);
+
+      const leftoversMeals = leftoversInclude.find((entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST');
+      expect(leftoversMeals?.presentation).toBe('liftedRowFields');
+      expect((leftoversMeals?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual([
+        'MEAL_TYPE',
+        'MP_LEFTOVER_PORTIONS_CAPTURE'
+      ]);
+
+      const partialLeftovers = findQuestion(questions || [], 'MP_LEFTOVER_CAPTURE_LI');
+      expect(partialLeftovers?.qEn).toBe('Partial leftovers');
+      expect(partialLeftovers?.visibility).toBeUndefined();
+
+      const pdfPreview = findQuestion(questions || [], 'PDF_PREVIEW');
+      expect(pdfPreview?.button?.disableWhenValueMissing).toBe(true);
+
+      const meals = findQuestion(questions || [], 'MP_MEALS_REQUEST');
+      const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
+      const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
+      expect(leftoverPortionsField?.defaultValue).toBe(0);
+
+      const followupEffects = Array.isArray(root?.followupConfig?.submitEffects)
+        ? root.followupConfig.submitEffects
+        : Array.isArray(root?.followup?.submitEffects)
+          ? root.followup.submitEffects
+          : [];
+      const entireDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedEntireDishLeftovers');
+      expect(entireDishEffect?.type).toBe('createRecord');
+      expect(entireDishEffect?.forEachLineItem?.groupId).toBe('MP_MEALS_REQUEST');
+      expect(entireDishEffect?.forEachLineItem?.subGroupPath).toEqual(['MP_TYPE_LI']);
+    };
+
     assertMainHomeDialog(cfg.form);
     assertMainHomeDialog(cfg.definition);
     assertChangeDialogs(cfg.questions);
@@ -176,6 +239,8 @@ describe('staging integrity dialogs and list legend config', () => {
     assertMealProductionLegend(cfg.definition);
     assertSearchPresets(cfg.questions);
     assertSearchPresets(cfg.definition?.questions || []);
+    assertGuidedStepLayout(cfg.form, cfg.questions);
+    assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
   });
 
   test('ingredients management uses field-based home leave guard dialog', () => {

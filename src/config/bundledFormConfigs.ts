@@ -9625,11 +9625,58 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "submitEffects": [
           {
+            "id": "captureProducedEntireDishLeftovers",
+            "type": "createRecord",
+            "targetFormKey": "Config: Leftover Inventory",
+            "runOn": "both",
+            "recordId": "leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}",
+            "when": {
+              "fieldId": "status",
+              "equals": [
+                "Closed"
+              ]
+            },
+            "status": "available",
+            "forEachLineItem": {
+              "groupId": "MP_MEALS_REQUEST",
+              "subGroupPath": [
+                "MP_TYPE_LI"
+              ],
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "PREP_TYPE",
+                    "equals": [
+                      "Cook"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                    "greaterThan": 0
+                  }
+                ]
+              }
+            },
+            "values": {
+              "LEFTOVER_STATUS": "available",
+              "LEFTOVER_KIND": "Entire dish",
+              "LEFTOVER_PREP_TYPE": "Entire dish",
+              "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
+              "LEFTOVER_RECIPE": "{{row.RECIPE}}",
+              "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
+              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
+              "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
+              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_INGREDIENTS_LI}}"
+            }
+          },
+          {
             "id": "captureProducedLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
             "runOn": "both",
-            "recordId": "leftover::{{source.id}}::{{lineItem.rowId}}",
+            "recordId": "leftover::{{source.id}}::partial::{{lineItem.rowId}}",
             "when": {
               "fieldId": "status",
               "equals": [
@@ -9640,28 +9687,23 @@ export const BUNDLED_FORM_CONFIGS = [
             "forEachLineItem": {
               "groupId": "MP_LEFTOVER_CAPTURE_LI",
               "when": {
-                "fieldId": "LEFTOVER_KIND",
+                "fieldId": "LEFTOVER_INGREDIENT",
                 "notEmpty": true
               }
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "{{row.LEFTOVER_KIND}}",
-              "LEFTOVER_PREP_TYPE": "{{row.LEFTOVER_KIND}}",
-              "LEFTOVER_MEAL_TYPE": "{{row.LEFTOVER_MEAL_TYPE}}",
-              "LEFTOVER_RECIPE": "{{row.LEFTOVER_RECIPE}}",
+              "LEFTOVER_KIND": "Part dish",
+              "LEFTOVER_PREP_TYPE": "Part dish",
               "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
               "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
               "LEFTOVER_ALLERGEN": "{{row.LEFTOVER_ALLERGEN}}",
-              "LEFTOVER_PORTIONS": "{{row.LEFTOVER_PORTIONS}}",
               "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
               "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
-              "LEFTOVER_EXP_DATE": "{{row.LEFTOVER_EXP_DATE}}",
-              "LEFTOVER_NOTES": "{{row.LEFTOVER_NOTES}}",
+              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
-              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
-              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_LEFTOVER_INGREDIENTS_LI}}"
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}"
             }
           }
         ]
@@ -9883,6 +9925,36 @@ export const BUNDLED_FORM_CONFIGS = [
         "enabled": true,
         "debounceMs": 2000,
         "status": "In progress"
+      },
+      "submissionAfterSubmit": {
+        "preActions": [
+          "CLOSE_RECORD"
+        ],
+        "backgroundActions": [
+          "CREATE_PDF",
+          "SEND_EMAIL"
+        ],
+        "navigateTo": "summary",
+        "feedbackDialog": {
+          "title": {
+            "en": "Background actions started",
+            "fr": "Actions en arrière-plan démarrées",
+            "nl": "Achtergrondacties gestart"
+          },
+          "message": {
+            "en": "The meal production report has been submitted. PDF creation and email delivery are running in the background. You can already review the summary while these actions finish.",
+            "fr": "Le rapport de production des repas a été soumis. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan. Vous pouvez déjà consulter le résumé pendant que ces actions se terminent.",
+            "nl": "Het maaltijdproductierapport is ingediend. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond. Je kunt de samenvatting al bekijken terwijl deze acties worden voltooid."
+          },
+          "confirmLabel": {
+            "en": "OK",
+            "fr": "OK",
+            "nl": "OK"
+          },
+          "showCancel": false,
+          "showCloseButton": false,
+          "dismissOnBackdrop": false
+        }
       },
       "reservationLifecycle": {
         "ledgerFormKey": "Config: Inventory Reservation Ledger",
@@ -11229,9 +11301,9 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             ],
             "label": {
-              "en": "Leftover",
-              "fr": "Restes",
-              "nl": "Restanten"
+              "en": "Leftover bank",
+              "fr": "Banque de restes",
+              "nl": "Restantenbank"
             },
             "navigation": {
               "autoAdvance": "off"
@@ -11805,14 +11877,6 @@ export const BUNDLED_FORM_CONFIGS = [
               },
               {
                 "kind": "question",
-                "id": "MP_HAS_LEFTOVERS_PRODUCED"
-              },
-              {
-                "kind": "question",
-                "id": "MP_LEFTOVER_CAPTURE_LI"
-              },
-              {
-                "kind": "question",
                 "id": "MP_NOTES"
               },
               {
@@ -11829,10 +11893,133 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Portionnement",
               "nl": "Portionering"
             },
+            "navigation": {
+              "submitLabel": {
+                "en": "Complete portioning",
+                "fr": "Terminer le portionnement",
+                "nl": "Portionering afronden"
+              },
+              "milestoneAction": {
+                "type": "followupBatch",
+                "actions": [
+                  "CREATE_PDF",
+                  "SEND_EMAIL"
+                ],
+                "ensureRecordId": true,
+                "runInBackground": true,
+                "advanceAfterStart": true,
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Please confirm",
+                    "fr": "Veuillez confirmer",
+                    "nl": "Gelieve te bevestigen"
+                  },
+                  "message": {
+                    "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules.",
+                    "fr": "Ce rapport confirme que le {MP_SERVICE} pour {MP_DISTRIBUTOR} a été produit par {MP_COOK_NAME} le {MP_PREP_DATE}, conformément à la procédure de production de repas et aux règles d'hygiène.",
+                    "nl": "Dit rapport bevestigt dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} is uitgevoerd door {MP_COOK_NAME} op {MP_PREP_DATE}, conform de procedure voor het maken van maaltijden en de hygiëneregels."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirmed",
+                    "fr": "Oui, c'est confirmé",
+                    "nl": "Ja, bevestigd"
+                  },
+                  "cancelLabel": {
+                    "en": "No, continue editing",
+                    "fr": "Non, continuer la modification",
+                    "nl": "Nee, verder bewerken"
+                  }
+                },
+                "feedbackDialog": {
+                  "title": {
+                    "en": "Background actions started",
+                    "fr": "Actions en arrière-plan démarrées",
+                    "nl": "Achtergrondacties gestart"
+                  },
+                  "message": {
+                    "en": "The meal production summary is being prepared. PDF creation and email delivery are running in the background while you continue with leftover registration.",
+                    "fr": "Le récapitulatif de production des repas est en cours de préparation. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan pendant que vous continuez l'enregistrement des restes.",
+                    "nl": "De samenvatting van de maaltijdproductie wordt voorbereid. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond terwijl je doorgaat met het registreren van restanten."
+                  },
+                  "confirmLabel": {
+                    "en": "OK",
+                    "fr": "OK",
+                    "nl": "OK"
+                  },
+                  "showCancel": false,
+                  "showCloseButton": false,
+                  "dismissOnBackdrop": false
+                }
+              }
+            },
             "helpText": {
-              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions. If there are leftovers not shipped to the client, add them to inventory here.",
-              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées. S'il reste des portions non livrées au client, ajoutez-les ici à l'inventaire.",
-              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren. Als er restanten zijn die niet naar de klant zijn verzonden, voeg ze hier toe aan de inventaris."
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
+            }
+          },
+          {
+            "id": "leftovers",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
+            "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "lineGroup",
+                "id": "MP_MEALS_REQUEST",
+                "presentation": "liftedRowFields",
+                "fields": [
+                  {
+                    "id": "MEAL_TYPE",
+                    "renderAsLabel": true
+                  },
+                  "MP_LEFTOVER_PORTIONS_CAPTURE"
+                ],
+                "readOnlyFields": [
+                  "MEAL_TYPE"
+                ],
+                "rows": {
+                  "includeWhen": {
+                    "fieldId": "ORD_QTY",
+                    "greaterThan": 0
+                  }
+                },
+                "collapsedFieldsInHeader": true,
+                "displayMode": "inline"
+              },
+              {
+                "kind": "question",
+                "id": "MP_LEFTOVER_CAPTURE_LI"
+              }
+            ],
+            "label": {
+              "en": "Leftovers",
+              "fr": "Restes",
+              "nl": "Restanten"
+            },
+            "helpText": {
+              "en": "Enter leftover portions for each meal type and use 0 when there are none. Add any partial leftovers below before you complete the meal production report.",
+              "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
+              "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
             }
           }
         ],
@@ -12383,23 +12570,15 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "MP_LEFTOVER_CAPTURE_LI",
         "type": "LINE_ITEM_GROUP",
-        "qEn": "Produced leftovers",
-        "qFr": "Restes produits",
-        "qNl": "Geproduceerde restanten",
+        "qEn": "Partial leftovers",
+        "qFr": "Restes partiels",
+        "qNl": "Gedeeltelijke restanten",
         "required": false,
         "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
-        "visibility": {
-          "showWhen": {
-            "fieldId": "MP_HAS_LEFTOVERS_PRODUCED",
-            "equals": [
-              "Yes"
-            ]
-          }
-        },
         "ui": {
           "hideLabel": false
         },
@@ -12407,21 +12586,17 @@ export const BUNDLED_FORM_CONFIGS = [
           "ui": {
             "mode": "table",
             "tableColumns": [
-              "LEFTOVER_MEAL_TYPE",
-              "LEFTOVER_KIND",
-              "LEFTOVER_RECIPE",
-              "LEFTOVER_PORTIONS",
-              "LEFTOVER_EXP_DATE"
+              "LEFTOVER_INGREDIENT",
+              "LEFTOVER_QTY",
+              "LEFTOVER_UNIT"
             ],
             "tableColumnWidths": {
-              "LEFTOVER_MEAL_TYPE": "22%",
-              "LEFTOVER_KIND": "18%",
-              "LEFTOVER_RECIPE": "28%",
-              "LEFTOVER_PORTIONS": "16%",
-              "LEFTOVER_EXP_DATE": "16%",
+              "LEFTOVER_INGREDIENT": "50%",
+              "LEFTOVER_QTY": "25%",
+              "LEFTOVER_UNIT": "25%",
               "__remove": "44px"
             },
-            "openInOverlay": true,
+            "openInOverlay": false,
             "closeButtonLabel": {
               "en": "Back",
               "fr": "Retour",
@@ -12475,11 +12650,11 @@ export const BUNDLED_FORM_CONFIGS = [
           "maxRows": 50,
           "addMode": "inline",
           "addButtonLabel": {
-            "en": "Add leftover",
-            "fr": "Ajouter un reste",
-            "nl": "Restant toevoegen"
+            "en": "Add partial leftover",
+            "fr": "Ajouter un reste partiel",
+            "nl": "Gedeeltelijk restant toevoegen"
           },
-          "anchorFieldId": "LEFTOVER_MEAL_TYPE",
+          "anchorFieldId": "LEFTOVER_INGREDIENT",
           "fields": [
             {
               "id": "LEFTOVER_MEAL_TYPE",
@@ -12555,9 +12730,17 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelFr": "Type",
               "labelNl": "Type",
               "required": true,
-              "defaultValue": "Entire dish",
+              "defaultValue": "Part dish",
               "ui": {
                 "control": "select"
+              },
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
               },
               "options": [
                 "Entire dish",
@@ -12709,7 +12892,15 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Expiration date",
               "labelFr": "Date d'expiration",
               "labelNl": "Vervaldatum",
-              "required": true
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              }
             },
             {
               "id": "LEFTOVER_NOTES",
@@ -12717,7 +12908,157 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelEn": "Notes",
               "labelFr": "Notes",
               "labelNl": "Notities",
-              "required": false
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "LEFTOVER_INGREDIENT",
+              "type": "CHOICE",
+              "labelEn": "Ingredient",
+              "labelFr": "Ingrédient",
+              "labelNl": "Ingrediënt",
+              "required": true,
+              "ui": {
+                "control": "select"
+              },
+              "dataSource": {
+                "id": "Ingredients Data",
+                "mode": "options",
+                "statusAllowList": [
+                  "Active"
+                ],
+                "projection": [
+                  "INGREDIENT_NAME",
+                  "CATEGORY",
+                  "DIETARY_APPLICABILITY",
+                  "ALLOWED_UNIT",
+                  "ALLERGEN",
+                  "STATUS"
+                ]
+              }
+            },
+            {
+              "id": "LEFTOVER_CAT",
+              "type": "TEXT",
+              "labelEn": "Category",
+              "labelFr": "Catégorie",
+              "labelNl": "Categorie",
+              "required": false,
+              "readOnly": true,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "valueMap": {
+                "dependsOn": "LEFTOVER_INGREDIENT",
+                "optionMapRef": {
+                  "ref": "REF:Ingredients Data",
+                  "keyColumn": "INGREDIENT_NAME",
+                  "lookupColumn": "CATEGORY"
+                }
+              }
+            },
+            {
+              "id": "LEFTOVER_ALLERGEN",
+              "type": "TEXT",
+              "labelEn": "Allergen",
+              "labelFr": "Allergène",
+              "labelNl": "Allergeen",
+              "required": false,
+              "readOnly": true,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "valueMap": {
+                "dependsOn": "LEFTOVER_INGREDIENT",
+                "optionMapRef": {
+                  "ref": "REF:Ingredients Data",
+                  "keyColumn": "INGREDIENT_NAME",
+                  "lookupColumn": "ALLERGEN"
+                }
+              }
+            },
+            {
+              "id": "LEFTOVER_QTY",
+              "type": "NUMBER",
+              "labelEn": "Quantity",
+              "labelFr": "Quantité",
+              "labelNl": "Hoeveelheid",
+              "required": false,
+              "validationRules": [
+                {
+                  "when": {
+                    "fieldId": "LEFTOVER_INGREDIENT",
+                    "notEmpty": true
+                  },
+                  "then": {
+                    "fieldId": "LEFTOVER_QTY",
+                    "required": true,
+                    "min": 0.01
+                  },
+                  "message": {
+                    "en": "Enter a quantity greater than 0.",
+                    "fr": "Entrez une quantité supérieure à 0.",
+                    "nl": "Voer een hoeveelheid groter dan 0 in."
+                  }
+                }
+              ]
+            },
+            {
+              "id": "LEFTOVER_UNIT",
+              "type": "CHOICE",
+              "labelEn": "Unit",
+              "labelFr": "Unité",
+              "labelNl": "Eenheid",
+              "required": false,
+              "ui": {
+                "control": "select"
+              },
+              "options": [
+                "gr",
+                "kg"
+              ],
+              "optionsFr": [
+                "gr",
+                "kg"
+              ],
+              "optionsNl": [
+                "gr",
+                "kg"
+              ],
+              "validationRules": [
+                {
+                  "when": {
+                    "fieldId": "LEFTOVER_INGREDIENT",
+                    "notEmpty": true
+                  },
+                  "then": {
+                    "fieldId": "LEFTOVER_UNIT",
+                    "required": true
+                  },
+                  "message": {
+                    "en": "Select a unit.",
+                    "fr": "Sélectionnez une unité.",
+                    "nl": "Selecteer een eenheid."
+                  }
+                }
+              ]
             }
           ],
           "subGroups": [
@@ -12866,7 +13207,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "LEFTOVER_VAL",
           "MP_COOK_TEMP",
           "TEMP_EVD",
-          "FINAL_QTY"
+          "FINAL_QTY",
+          "MP_LEFTOVER_PORTIONS_CAPTURE"
         ],
         "optionsFr": [
           "CHOICE",
@@ -12886,7 +13228,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "Leftover",
           "All pots ≥63°C: Confirm",
           "Add photo",
-          "Delivered Portions"
+          "Delivered Portions",
+          "Leftover portions"
         ],
         "optionsRaw": [
           {
@@ -13024,6 +13367,23 @@ export const BUNDLED_FORM_CONFIGS = [
             "List View?": "",
             "Edit Options": "",
             "__ckOptionValue": "FINAL_QTY"
+          },
+          {
+            "ID": "MP_LEFTOVER_PORTIONS_CAPTURE",
+            "Type": "NUMBER",
+            "Label EN": "Leftover portions",
+            "Label FR": "Portions restantes",
+            "Label NL": "Resterende porties",
+            "Required?": false,
+            "Options (EN)": "",
+            "Options (FR)": "",
+            "Options (NL)": "",
+            "Config (JSON/REF)": "{\n  \"defaultValue\": 0,\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+            "Option Filter (JSON)": "",
+            "Validation Rules (JSON)": "",
+            "List View?": "",
+            "Edit Options": "",
+            "__ckOptionValue": "MP_LEFTOVER_PORTIONS_CAPTURE"
           }
         ],
         "status": "Active",
@@ -13591,6 +13951,52 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 }
               ]
+            },
+            {
+              "id": "MP_LEFTOVER_PORTIONS_CAPTURE",
+              "type": "NUMBER",
+              "labelEn": "Leftover portions",
+              "labelFr": "Portions restantes",
+              "labelNl": "Resterende porties",
+              "required": false,
+              "defaultValue": 0,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "leftovers"
+                  ]
+                }
+              },
+              "validationRules": [
+                {
+                  "when": {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  },
+                  "then": {
+                    "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                    "required": true,
+                    "integer": true,
+                    "min": 0
+                  },
+                  "message": {
+                    "en": "Enter 0 or more leftover portions.",
+                    "fr": "Entrez 0 portion restante ou plus.",
+                    "nl": "Voer 0 of meer resterende porties in."
+                  }
+                }
+              ],
+              "ui": {
+                "helperText": {
+                  "en": "Enter 0 when there are no leftovers for this meal type.",
+                  "fr": "Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.",
+                  "nl": "Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype."
+                },
+                "helperPlacement": "belowLabel"
+              }
             }
           ],
           "subGroups": [
@@ -14327,6 +14733,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "button": {
           "action": "openUrlField",
           "fieldId": "pdfUrl",
+          "disableWhenValueMissing": true,
           "placements": [
             "summaryBar"
           ]
@@ -15126,23 +15533,15 @@ export const BUNDLED_FORM_CONFIGS = [
         {
           "id": "MP_LEFTOVER_CAPTURE_LI",
           "type": "LINE_ITEM_GROUP",
-          "qEn": "Produced leftovers",
-          "qFr": "Restes produits",
-          "qNl": "Geproduceerde restanten",
+          "qEn": "Partial leftovers",
+          "qFr": "Restes partiels",
+          "qNl": "Gedeeltelijke restanten",
           "required": false,
           "listView": false,
           "options": [],
           "optionsFr": [],
           "optionsNl": [],
           "status": "Active",
-          "visibility": {
-            "showWhen": {
-              "fieldId": "MP_HAS_LEFTOVERS_PRODUCED",
-              "equals": [
-                "Yes"
-              ]
-            }
-          },
           "ui": {
             "hideLabel": false
           },
@@ -15150,21 +15549,17 @@ export const BUNDLED_FORM_CONFIGS = [
             "ui": {
               "mode": "table",
               "tableColumns": [
-                "LEFTOVER_MEAL_TYPE",
-                "LEFTOVER_KIND",
-                "LEFTOVER_RECIPE",
-                "LEFTOVER_PORTIONS",
-                "LEFTOVER_EXP_DATE"
+                "LEFTOVER_INGREDIENT",
+                "LEFTOVER_QTY",
+                "LEFTOVER_UNIT"
               ],
               "tableColumnWidths": {
-                "LEFTOVER_MEAL_TYPE": "22%",
-                "LEFTOVER_KIND": "18%",
-                "LEFTOVER_RECIPE": "28%",
-                "LEFTOVER_PORTIONS": "16%",
-                "LEFTOVER_EXP_DATE": "16%",
+                "LEFTOVER_INGREDIENT": "50%",
+                "LEFTOVER_QTY": "25%",
+                "LEFTOVER_UNIT": "25%",
                 "__remove": "44px"
               },
-              "openInOverlay": true,
+              "openInOverlay": false,
               "closeButtonLabel": {
                 "en": "Back",
                 "fr": "Retour",
@@ -15218,11 +15613,11 @@ export const BUNDLED_FORM_CONFIGS = [
             "maxRows": 50,
             "addMode": "inline",
             "addButtonLabel": {
-              "en": "Add leftover",
-              "fr": "Ajouter un reste",
-              "nl": "Restant toevoegen"
+              "en": "Add partial leftover",
+              "fr": "Ajouter un reste partiel",
+              "nl": "Gedeeltelijk restant toevoegen"
             },
-            "anchorFieldId": "LEFTOVER_MEAL_TYPE",
+            "anchorFieldId": "LEFTOVER_INGREDIENT",
             "fields": [
               {
                 "id": "LEFTOVER_MEAL_TYPE",
@@ -15298,9 +15693,17 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelFr": "Type",
                 "labelNl": "Type",
                 "required": true,
-                "defaultValue": "Entire dish",
+                "defaultValue": "Part dish",
                 "ui": {
                   "control": "select"
+                },
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
                 },
                 "options": [
                   "Entire dish",
@@ -15452,7 +15855,15 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Expiration date",
                 "labelFr": "Date d'expiration",
                 "labelNl": "Vervaldatum",
-                "required": true
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                }
               },
               {
                 "id": "LEFTOVER_NOTES",
@@ -15460,7 +15871,157 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelEn": "Notes",
                 "labelFr": "Notes",
                 "labelNl": "Notities",
-                "required": false
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                }
+              },
+              {
+                "id": "LEFTOVER_INGREDIENT",
+                "type": "CHOICE",
+                "labelEn": "Ingredient",
+                "labelFr": "Ingrédient",
+                "labelNl": "Ingrediënt",
+                "required": true,
+                "ui": {
+                  "control": "select"
+                },
+                "dataSource": {
+                  "id": "Ingredients Data",
+                  "mode": "options",
+                  "statusAllowList": [
+                    "Active"
+                  ],
+                  "projection": [
+                    "INGREDIENT_NAME",
+                    "CATEGORY",
+                    "DIETARY_APPLICABILITY",
+                    "ALLOWED_UNIT",
+                    "ALLERGEN",
+                    "STATUS"
+                  ]
+                }
+              },
+              {
+                "id": "LEFTOVER_CAT",
+                "type": "TEXT",
+                "labelEn": "Category",
+                "labelFr": "Catégorie",
+                "labelNl": "Categorie",
+                "required": false,
+                "readOnly": true,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "valueMap": {
+                  "dependsOn": "LEFTOVER_INGREDIENT",
+                  "optionMapRef": {
+                    "ref": "REF:Ingredients Data",
+                    "keyColumn": "INGREDIENT_NAME",
+                    "lookupColumn": "CATEGORY"
+                  }
+                }
+              },
+              {
+                "id": "LEFTOVER_ALLERGEN",
+                "type": "TEXT",
+                "labelEn": "Allergen",
+                "labelFr": "Allergène",
+                "labelNl": "Allergeen",
+                "required": false,
+                "readOnly": true,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "valueMap": {
+                  "dependsOn": "LEFTOVER_INGREDIENT",
+                  "optionMapRef": {
+                    "ref": "REF:Ingredients Data",
+                    "keyColumn": "INGREDIENT_NAME",
+                    "lookupColumn": "ALLERGEN"
+                  }
+                }
+              },
+              {
+                "id": "LEFTOVER_QTY",
+                "type": "NUMBER",
+                "labelEn": "Quantity",
+                "labelFr": "Quantité",
+                "labelNl": "Hoeveelheid",
+                "required": false,
+                "validationRules": [
+                  {
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    },
+                    "then": {
+                      "fieldId": "LEFTOVER_QTY",
+                      "required": true,
+                      "min": 0.01
+                    },
+                    "message": {
+                      "en": "Enter a quantity greater than 0.",
+                      "fr": "Entrez une quantité supérieure à 0.",
+                      "nl": "Voer een hoeveelheid groter dan 0 in."
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "LEFTOVER_UNIT",
+                "type": "CHOICE",
+                "labelEn": "Unit",
+                "labelFr": "Unité",
+                "labelNl": "Eenheid",
+                "required": false,
+                "ui": {
+                  "control": "select"
+                },
+                "options": [
+                  "gr",
+                  "kg"
+                ],
+                "optionsFr": [
+                  "gr",
+                  "kg"
+                ],
+                "optionsNl": [
+                  "gr",
+                  "kg"
+                ],
+                "validationRules": [
+                  {
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    },
+                    "then": {
+                      "fieldId": "LEFTOVER_UNIT",
+                      "required": true
+                    },
+                    "message": {
+                      "en": "Select a unit.",
+                      "fr": "Sélectionnez une unité.",
+                      "nl": "Selecteer een eenheid."
+                    }
+                  }
+                ]
               }
             ],
             "subGroups": [
@@ -15743,7 +16304,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "MP_TO_COOK",
             "MP_COOK_TEMP",
             "TEMP_EVD",
-            "FINAL_QTY"
+            "FINAL_QTY",
+            "MP_LEFTOVER_PORTIONS_CAPTURE"
           ],
           "optionsFr": [
             "CHOICE",
@@ -15759,7 +16321,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "To Cook",
             "All pots ≥63°C: Confirm",
             "Add photo",
-            "Delivered Portions"
+            "Delivered Portions",
+            "Leftover portions"
           ],
           "optionsRaw": [
             {
@@ -15863,6 +16426,23 @@ export const BUNDLED_FORM_CONFIGS = [
               "List View?": "",
               "Edit Options": "",
               "__ckOptionValue": "FINAL_QTY"
+            },
+            {
+              "ID": "MP_LEFTOVER_PORTIONS_CAPTURE",
+              "Type": "NUMBER",
+              "Label EN": "Leftover portions",
+              "Label FR": "Portions restantes",
+              "Label NL": "Resterende porties",
+              "Required?": false,
+              "Options (EN)": "",
+              "Options (FR)": "",
+              "Options (NL)": "",
+              "Config (JSON/REF)": "{\n  \"defaultValue\": 0,\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+              "Option Filter (JSON)": "",
+              "Validation Rules (JSON)": "",
+              "List View?": "",
+              "Edit Options": "",
+              "__ckOptionValue": "MP_LEFTOVER_PORTIONS_CAPTURE"
             }
           ],
           "status": "Active",
@@ -16393,6 +16973,52 @@ export const BUNDLED_FORM_CONFIGS = [
                     }
                   }
                 ]
+              },
+              {
+                "id": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                "type": "NUMBER",
+                "labelEn": "Leftover portions",
+                "labelFr": "Portions restantes",
+                "labelNl": "Resterende porties",
+                "required": false,
+                "defaultValue": 0,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  }
+                },
+                "validationRules": [
+                  {
+                    "when": {
+                      "fieldId": "__ckStep",
+                      "equals": [
+                        "leftovers"
+                      ]
+                    },
+                    "then": {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "required": true,
+                      "integer": true,
+                      "min": 0
+                    },
+                    "message": {
+                      "en": "Enter 0 or more leftover portions.",
+                      "fr": "Entrez 0 portion restante ou plus.",
+                      "nl": "Voer 0 of meer resterende porties in."
+                    }
+                  }
+                ],
+                "ui": {
+                  "helperText": {
+                    "en": "Enter 0 when there are no leftovers for this meal type.",
+                    "fr": "Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.",
+                    "nl": "Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype."
+                  },
+                  "helperPlacement": "belowLabel"
+                }
               }
             ],
             "subGroups": [
@@ -17129,6 +17755,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "button": {
             "action": "openUrlField",
             "fieldId": "pdfUrl",
+            "disableWhenValueMissing": true,
             "placements": [
               "summaryBar"
             ]
@@ -17767,11 +18394,58 @@ export const BUNDLED_FORM_CONFIGS = [
         },
         "submitEffects": [
           {
+            "id": "captureProducedEntireDishLeftovers",
+            "type": "createRecord",
+            "targetFormKey": "Config: Leftover Inventory",
+            "runOn": "both",
+            "recordId": "leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}",
+            "when": {
+              "fieldId": "status",
+              "equals": [
+                "Closed"
+              ]
+            },
+            "status": "available",
+            "forEachLineItem": {
+              "groupId": "MP_MEALS_REQUEST",
+              "subGroupPath": [
+                "MP_TYPE_LI"
+              ],
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "PREP_TYPE",
+                    "equals": [
+                      "Cook"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                    "greaterThan": 0
+                  }
+                ]
+              }
+            },
+            "values": {
+              "LEFTOVER_STATUS": "available",
+              "LEFTOVER_KIND": "Entire dish",
+              "LEFTOVER_PREP_TYPE": "Entire dish",
+              "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
+              "LEFTOVER_RECIPE": "{{row.RECIPE}}",
+              "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
+              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
+              "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
+              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_INGREDIENTS_LI}}"
+            }
+          },
+          {
             "id": "captureProducedLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
             "runOn": "both",
-            "recordId": "leftover::{{source.id}}::{{lineItem.rowId}}",
+            "recordId": "leftover::{{source.id}}::partial::{{lineItem.rowId}}",
             "when": {
               "fieldId": "status",
               "equals": [
@@ -17782,28 +18456,23 @@ export const BUNDLED_FORM_CONFIGS = [
             "forEachLineItem": {
               "groupId": "MP_LEFTOVER_CAPTURE_LI",
               "when": {
-                "fieldId": "LEFTOVER_KIND",
+                "fieldId": "LEFTOVER_INGREDIENT",
                 "notEmpty": true
               }
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "{{row.LEFTOVER_KIND}}",
-              "LEFTOVER_PREP_TYPE": "{{row.LEFTOVER_KIND}}",
-              "LEFTOVER_MEAL_TYPE": "{{row.LEFTOVER_MEAL_TYPE}}",
-              "LEFTOVER_RECIPE": "{{row.LEFTOVER_RECIPE}}",
+              "LEFTOVER_KIND": "Part dish",
+              "LEFTOVER_PREP_TYPE": "Part dish",
               "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
               "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
               "LEFTOVER_ALLERGEN": "{{row.LEFTOVER_ALLERGEN}}",
-              "LEFTOVER_PORTIONS": "{{row.LEFTOVER_PORTIONS}}",
               "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
               "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
-              "LEFTOVER_EXP_DATE": "{{row.LEFTOVER_EXP_DATE}}",
-              "LEFTOVER_NOTES": "{{row.LEFTOVER_NOTES}}",
+              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
-              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
-              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_LEFTOVER_INGREDIENTS_LI}}"
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}"
             }
           },
           {
@@ -17852,6 +18521,36 @@ export const BUNDLED_FORM_CONFIGS = [
         "enabled": true,
         "debounceMs": 2000,
         "status": "In progress"
+      },
+      "submissionAfterSubmit": {
+        "preActions": [
+          "CLOSE_RECORD"
+        ],
+        "backgroundActions": [
+          "CREATE_PDF",
+          "SEND_EMAIL"
+        ],
+        "navigateTo": "summary",
+        "feedbackDialog": {
+          "title": {
+            "en": "Background actions started",
+            "fr": "Actions en arrière-plan démarrées",
+            "nl": "Achtergrondacties gestart"
+          },
+          "message": {
+            "en": "The meal production report has been submitted. PDF creation and email delivery are running in the background. You can already review the summary while these actions finish.",
+            "fr": "Le rapport de production des repas a été soumis. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan. Vous pouvez déjà consulter le résumé pendant que ces actions se terminent.",
+            "nl": "Het maaltijdproductierapport is ingediend. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond. Je kunt de samenvatting al bekijken terwijl deze acties worden voltooid."
+          },
+          "confirmLabel": {
+            "en": "OK",
+            "fr": "OK",
+            "nl": "OK"
+          },
+          "showCancel": false,
+          "showCloseButton": false,
+          "dismissOnBackdrop": false
+        }
       },
       "dedupDeleteOnKeyChange": true,
       "summaryHtmlTemplateId": {
@@ -19101,9 +19800,9 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             ],
             "label": {
-              "en": "Leftover",
-              "fr": "Restes",
-              "nl": "Restanten"
+              "en": "Leftover bank",
+              "fr": "Banque de restes",
+              "nl": "Restantenbank"
             },
             "navigation": {
               "autoAdvance": "off"
@@ -19677,14 +20376,6 @@ export const BUNDLED_FORM_CONFIGS = [
               },
               {
                 "kind": "question",
-                "id": "MP_HAS_LEFTOVERS_PRODUCED"
-              },
-              {
-                "kind": "question",
-                "id": "MP_LEFTOVER_CAPTURE_LI"
-              },
-              {
-                "kind": "question",
                 "id": "MP_NOTES"
               },
               {
@@ -19701,10 +20392,133 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Portionnement",
               "nl": "Portionering"
             },
+            "navigation": {
+              "submitLabel": {
+                "en": "Complete portioning",
+                "fr": "Terminer le portionnement",
+                "nl": "Portionering afronden"
+              },
+              "milestoneAction": {
+                "type": "followupBatch",
+                "actions": [
+                  "CREATE_PDF",
+                  "SEND_EMAIL"
+                ],
+                "ensureRecordId": true,
+                "runInBackground": true,
+                "advanceAfterStart": true,
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Please confirm",
+                    "fr": "Veuillez confirmer",
+                    "nl": "Gelieve te bevestigen"
+                  },
+                  "message": {
+                    "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules.",
+                    "fr": "Ce rapport confirme que le {MP_SERVICE} pour {MP_DISTRIBUTOR} a été produit par {MP_COOK_NAME} le {MP_PREP_DATE}, conformément à la procédure de production de repas et aux règles d'hygiène.",
+                    "nl": "Dit rapport bevestigt dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} is uitgevoerd door {MP_COOK_NAME} op {MP_PREP_DATE}, conform de procedure voor het maken van maaltijden en de hygiëneregels."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirmed",
+                    "fr": "Oui, c'est confirmé",
+                    "nl": "Ja, bevestigd"
+                  },
+                  "cancelLabel": {
+                    "en": "No, continue editing",
+                    "fr": "Non, continuer la modification",
+                    "nl": "Nee, verder bewerken"
+                  }
+                },
+                "feedbackDialog": {
+                  "title": {
+                    "en": "Background actions started",
+                    "fr": "Actions en arrière-plan démarrées",
+                    "nl": "Achtergrondacties gestart"
+                  },
+                  "message": {
+                    "en": "The meal production summary is being prepared. PDF creation and email delivery are running in the background while you continue with leftover registration.",
+                    "fr": "Le récapitulatif de production des repas est en cours de préparation. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan pendant que vous continuez l'enregistrement des restes.",
+                    "nl": "De samenvatting van de maaltijdproductie wordt voorbereid. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond terwijl je doorgaat met het registreren van restanten."
+                  },
+                  "confirmLabel": {
+                    "en": "OK",
+                    "fr": "OK",
+                    "nl": "OK"
+                  },
+                  "showCancel": false,
+                  "showCloseButton": false,
+                  "dismissOnBackdrop": false
+                }
+              }
+            },
             "helpText": {
-              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions. If there are leftovers not shipped to the client, add them to inventory here.",
-              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées. S'il reste des portions non livrées au client, ajoutez-les ici à l'inventaire.",
-              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren. Als er restanten zijn die niet naar de klant zijn verzonden, voeg ze hier toe aan de inventaris."
+              "en": "Update the number of portions delivered to reflect reality. You must deliver at least the ordered number of portions.",
+              "fr": "Mettez à jour le nombre de portions livrées pour refléter la réalité. Vous devez livrer au moins le nombre de portions demandées.",
+              "nl": "Werk het aantal geleverde porties bij zodat het de werkelijkheid weerspiegelt. Je moet minstens het gevraagde aantal porties leveren."
+            }
+          },
+          {
+            "id": "leftovers",
+            "contextHeader": {
+              "parts": [
+                "MP_DISTRIBUTOR",
+                "MP_SERVICE",
+                "MP_PREP_DATE"
+              ]
+            },
+            "include": [
+              {
+                "kind": "question",
+                "id": "MP_DISTRIBUTOR",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_SERVICE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "question",
+                "id": "MP_PREP_DATE",
+                "renderAsLabel": true
+              },
+              {
+                "kind": "lineGroup",
+                "id": "MP_MEALS_REQUEST",
+                "presentation": "liftedRowFields",
+                "fields": [
+                  {
+                    "id": "MEAL_TYPE",
+                    "renderAsLabel": true
+                  },
+                  "MP_LEFTOVER_PORTIONS_CAPTURE"
+                ],
+                "readOnlyFields": [
+                  "MEAL_TYPE"
+                ],
+                "rows": {
+                  "includeWhen": {
+                    "fieldId": "ORD_QTY",
+                    "greaterThan": 0
+                  }
+                },
+                "collapsedFieldsInHeader": true,
+                "displayMode": "inline"
+              },
+              {
+                "kind": "question",
+                "id": "MP_LEFTOVER_CAPTURE_LI"
+              }
+            ],
+            "label": {
+              "en": "Leftovers",
+              "fr": "Restes",
+              "nl": "Restanten"
+            },
+            "helpText": {
+              "en": "Enter leftover portions for each meal type and use 0 when there are none. Add any partial leftovers below before you complete the meal production report.",
+              "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
+              "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
             }
           }
         ],

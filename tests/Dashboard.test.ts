@@ -674,6 +674,118 @@ describe('Dashboard', () => {
     expect(target?.subGroups?.include?.[0]?.fields).toEqual([{ id: 'ING', renderAsLabel: true }, 'UNIT']);
   });
 
+  test('getForms parses guided step milestone action config', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'portioning',
+            include: ['Q1'],
+            navigation: {
+              submitLabel: { EN: 'Complete portioning' },
+              milestoneAction: {
+                type: 'followupBatch',
+                actions: ['CREATE_PDF', 'SEND_EMAIL'],
+                ensureRecordId: true,
+                runInBackground: true,
+                advanceAfterStart: true,
+                confirmationDialog: {
+                  title: { EN: 'Please confirm' },
+                  message: { EN: 'Confirm milestone.' },
+                  confirmLabel: { EN: 'Continue' },
+                  cancelLabel: { EN: 'Cancel' }
+                },
+                feedbackDialog: {
+                  title: { EN: 'Background actions started' },
+                  message: { EN: 'You can continue.' },
+                  confirmLabel: { EN: 'OK' },
+                  showCancel: false,
+                  showCloseButton: true,
+                  dismissOnBackdrop: true
+                }
+              }
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const step = (forms[0].steps as any)?.items?.[0];
+    expect(step?.navigation?.submitLabel).toEqual({ en: 'Complete portioning' });
+    expect(step?.navigation?.milestoneAction).toEqual({
+      type: 'followupBatch',
+      actions: ['CREATE_PDF', 'SEND_EMAIL'],
+      ensureRecordId: true,
+      runInBackground: true,
+      advanceAfterStart: true,
+      confirmationDialog: {
+        title: { en: 'Please confirm' },
+        message: { en: 'Confirm milestone.' },
+        confirmLabel: { en: 'Continue' },
+        cancelLabel: { en: 'Cancel' }
+      },
+      feedbackDialog: {
+        title: { en: 'Background actions started' },
+        message: { en: 'You can continue.' },
+        confirmLabel: { en: 'OK' },
+        showCancel: false,
+        showCloseButton: true,
+        dismissOnBackdrop: true
+      }
+    });
+  });
+
+  test('getForms parses submit-time background follow-up config', () => {
+    const configJson = JSON.stringify({
+      submission: {
+        afterSubmit: {
+          preActions: ['CLOSE_RECORD'],
+          backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+          navigateTo: 'summary',
+          feedbackDialog: {
+            title: { EN: 'Background actions started' },
+            message: { EN: 'Background processing is running.' },
+            confirmLabel: { EN: 'OK' },
+            showCancel: false,
+            showCloseButton: false,
+            dismissOnBackdrop: false
+          }
+        }
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].submissionAfterSubmit).toEqual({
+      preActions: ['CLOSE_RECORD'],
+      backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+      navigateTo: 'summary',
+      feedbackDialog: {
+        title: { en: 'Background actions started' },
+        message: { en: 'Background processing is running.' },
+        confirmLabel: { en: 'OK' },
+        showCancel: false,
+        showCloseButton: false,
+        dismissOnBackdrop: false
+      }
+    });
+  });
+
   test('getForms parses list view advanced search config from dashboard config (listView.search)', () => {
     const configJson = JSON.stringify({
       listView: { search: { mode: 'advanced', fields: ['Q1', 'status'] } }

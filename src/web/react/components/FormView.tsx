@@ -25,6 +25,7 @@ import {
   QuestionGroupConfig,
   RowFlowConfig,
   RowFlowOutputSegmentConfig,
+  StepMilestoneActionConfig,
   VisibilityContext,
   WebFormDefinition,
   WebQuestionDefinition
@@ -643,6 +644,11 @@ interface FormViewProps {
     backLabel: string;
     stepSubmitLabel?: string | LocalizedString;
   } | null) => void;
+  onGuidedStepMilestone?: (args: {
+    stepId: string;
+    action: StepMilestoneActionConfig;
+    nextStepId?: string;
+  }) => Promise<{ success: boolean; advanceToNext?: boolean; message?: string }>;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   /**
@@ -696,6 +702,7 @@ const FormView: React.FC<FormViewProps> = ({
   onDiagnostic,
   onFormValidityChange,
   onGuidedUiChange,
+  onGuidedStepMilestone,
   dedupNavigationBlocked,
   openConfirmDialog,
   setAutoSaveHold,
@@ -1929,6 +1936,35 @@ const FormView: React.FC<FormViewProps> = ({
         }
 
         const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+        const milestoneAction = stepCfg?.navigation?.milestoneAction;
+        if (milestoneAction && onGuidedStepMilestone) {
+          onDiagnostic?.('steps.step.milestone.begin', {
+            stepId: activeGuidedStepId,
+            type: milestoneAction?.type || null,
+            actionCount: Array.isArray(milestoneAction?.actions) ? milestoneAction.actions.length : 0,
+            nextStepId: nextId || null
+          });
+          void onGuidedStepMilestone({
+            stepId: activeGuidedStepId || '',
+            action: milestoneAction,
+            nextStepId: nextId || undefined
+          }).then(result => {
+            if (!result?.success) {
+              onDiagnostic?.('steps.step.milestone.failed', {
+                stepId: activeGuidedStepId,
+                message: result?.message || null
+              });
+              return;
+            }
+            const shouldAdvance = result?.advanceToNext !== false && (milestoneAction?.advanceAfterStart ?? true) !== false;
+            if (nextId && shouldAdvance) {
+              setErrors({});
+              onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'milestoneAction' });
+              selectGuidedStep(nextId, 'user');
+            }
+          });
+          return;
+        }
         if (nextId) {
           setErrors({});
           onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
@@ -1979,6 +2015,7 @@ const FormView: React.FC<FormViewProps> = ({
     lineItems,
     onDiagnostic,
     onSubmit,
+    onGuidedStepMilestone,
     selectGuidedStep,
     summarySubmitIntentRef,
     submitActionRef,
