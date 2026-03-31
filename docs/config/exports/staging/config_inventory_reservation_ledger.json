@@ -299,6 +299,19 @@
       "optionsFr": [],
       "optionsNl": [],
       "status": "Active"
+    },
+    {
+      "id": "SOURCE_OUTPUT_KEY_FIELD_ID",
+      "type": "TEXT",
+      "qEn": "Source output key field ID",
+      "qFr": "ID du champ clé de sortie source",
+      "qNl": "Source output key field ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active"
     }
   ],
   "dedupRules": []

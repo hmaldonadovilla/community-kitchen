@@ -649,6 +649,11 @@ interface FormViewProps {
    * Optional hook to temporarily hold autosave (e.g., while the user completes a multi-step overlay flow).
    */
   setAutoSaveHold?: (hold: boolean, meta?: { reason?: string }) => void;
+  /**
+   * Optional generic hook for interactions that require a persisted record id
+   * before calling the server.
+   */
+  ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -693,7 +698,8 @@ const FormView: React.FC<FormViewProps> = ({
   onGuidedUiChange,
   dedupNavigationBlocked,
   openConfirmDialog,
-  setAutoSaveHold
+  setAutoSaveHold,
+  ensureRecordId
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -8439,7 +8445,8 @@ const FormView: React.FC<FormViewProps> = ({
               openConfirmDialog: openConfirmDialogResolved,
               isOverlayOpenActionSuppressed,
               suppressOverlayOpenAction,
-              runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
+              runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+              ensureRecordId
             }}
           />
         );
@@ -9607,6 +9614,7 @@ const FormView: React.FC<FormViewProps> = ({
                 isOverlayOpenActionSuppressed,
                 suppressOverlayOpenAction,
                 runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                ensureRecordId,
                 closeOverlay: closeSubgroupOverlay
               }}
             />
@@ -10452,7 +10460,8 @@ const FormView: React.FC<FormViewProps> = ({
                             openConfirmDialog: openConfirmDialogResolved,
                             isOverlayOpenActionSuppressed,
                             suppressOverlayOpenAction,
-                            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
+                            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                            ensureRecordId
                           }}
                         />
                       </div>
@@ -12449,6 +12458,7 @@ const FormView: React.FC<FormViewProps> = ({
                               isOverlayOpenActionSuppressed,
                               suppressOverlayOpenAction,
                               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                              ensureRecordId,
                               closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                             }}
                           />
@@ -12520,6 +12530,7 @@ const FormView: React.FC<FormViewProps> = ({
                   isOverlayOpenActionSuppressed,
                   suppressOverlayOpenAction,
                   runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                  ensureRecordId,
                   closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                 }}
               />
@@ -13057,7 +13068,8 @@ const FormView: React.FC<FormViewProps> = ({
             openConfirmDialog: openConfirmDialogResolved,
             isOverlayOpenActionSuppressed,
             suppressOverlayOpenAction,
-            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows
+            runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+            ensureRecordId
           }}
         />
       );

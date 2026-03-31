@@ -8031,6 +8031,19 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active"
+      },
+      {
+        "id": "SOURCE_OUTPUT_KEY_FIELD_ID",
+        "type": "TEXT",
+        "qEn": "Source output key field ID",
+        "qFr": "ID du champ clé de sortie source",
+        "qNl": "Source output key field ID",
+        "required": false,
+        "readOnly": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
       }
     ],
     "dedupRules": []
@@ -9650,43 +9663,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
               "LEFTOVER_INGREDIENTS_LI": "{{row.MP_LEFTOVER_INGREDIENTS_LI}}"
             }
-          },
-          {
-            "id": "markUsedLeftovers",
-            "type": "updateRecord",
-            "targetFormKey": "Config: Leftover Inventory",
-            "runOn": "both",
-            "when": {
-              "fieldId": "status",
-              "equals": [
-                "Closed"
-              ]
-            },
-            "recordId": "{{row.LEFTOVER_RECORD_ID}}",
-            "status": "used",
-            "forEachLineItem": {
-              "groupId": "MP_MEALS_REQUEST",
-              "subGroupPath": [
-                "MP_TYPE_LI"
-              ],
-              "when": {
-                "all": [
-                  {
-                    "fieldId": "LEFTOVER_ID",
-                    "notEmpty": true
-                  },
-                  {
-                    "fieldId": "LEFTOVER_RECORD_ID",
-                    "notEmpty": true
-                  }
-                ]
-              }
-            },
-            "values": {
-              "LEFTOVER_STATUS": "used",
-              "LEFTOVER_USED_BY_FORM_KEY": "Config: Meal Production",
-              "LEFTOVER_USED_BY_RECORD_ID": "{{source.id}}"
-            }
           }
         ]
       },
@@ -9910,7 +9886,42 @@ export const BUNDLED_FORM_CONFIGS = [
       },
       "reservationLifecycle": {
         "ledgerFormKey": "Config: Inventory Reservation Ledger",
-        "releaseOnDelete": true
+        "releaseOnDelete": true,
+        "reconcileOnFinalSubmit": {
+          "enabled": true,
+          "statuses": [
+            "Closed"
+          ],
+          "ledgerFormKey": "Config: Inventory Reservation Ledger",
+          "refreshMode": "full",
+          "feedback": {
+            "message": {
+              "en": "{baseMessage} {reconciliationSummary}.",
+              "fr": "{baseMessage} {reconciliationSummary}.",
+              "nl": "{baseMessage} {reconciliationSummary}."
+            },
+            "consumedSummarySingular": {
+              "en": "{count} leftover reservation consumed",
+              "fr": "{count} réservation de reste consommée",
+              "nl": "{count} reservering van restvoorraad verbruikt"
+            },
+            "consumedSummaryPlural": {
+              "en": "{count} leftover reservations consumed",
+              "fr": "{count} réservations de restes consommées",
+              "nl": "{count} reserveringen van restvoorraad verbruikt"
+            },
+            "releasedSummarySingular": {
+              "en": "{count} stale leftover reservation released",
+              "fr": "{count} réservation de reste libérée",
+              "nl": "{count} verouderde reservering van restvoorraad vrijgegeven"
+            },
+            "releasedSummaryPlural": {
+              "en": "{count} stale leftover reservations released",
+              "fr": "{count} réservations de restes libérées",
+              "nl": "{count} verouderde reserveringen van restvoorraad vrijgegeven"
+            }
+          }
+        }
       },
       "lifecycle": {
         "rules": [

@@ -2565,6 +2565,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Optional: define `reservation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change
    - Optional source-form cleanup hooks:
      - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted
+     - `reservationLifecycle.reconcileOnFinalSubmit` consumes/releases active reservations in one batched closeout when the source record reaches its final status
      - `lifecycle.rules[]` with `type: "releaseStaleReservations"` releases active reservations for stale unfinished source records from the daily `2am` lifecycle trigger
 
    Example:
@@ -2573,7 +2574,12 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    {
      "reservationLifecycle": {
        "ledgerFormKey": "Config: Inventory Reservation Ledger",
-       "releaseOnDelete": true
+       "releaseOnDelete": true,
+       "reconcileOnFinalSubmit": {
+         "enabled": true,
+         "statuses": ["Closed"],
+         "refreshMode": "full"
+       }
      },
      "lifecycle": {
        "rules": [
@@ -2620,6 +2626,49 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    Supported placeholders in `reservation.conflictDialog.message`:
    - `{itemLabel}`
    - `{itemId}`
+   - `{available}`
+   - `{unit}`
+   - `{availableWithUnit}`
+   - `{requested}`
+   - `{current}`
+
+   Example submit reconciliation feedback:
+
+   ```json
+   {
+     "reservationLifecycle": {
+       "reconcileOnFinalSubmit": {
+         "enabled": true,
+         "feedback": {
+           "message": {
+             "en": "{baseMessage} {reconciliationSummary}."
+           },
+           "consumedSummarySingular": {
+             "en": "{count} leftover reservation consumed"
+           },
+           "consumedSummaryPlural": {
+             "en": "{count} leftover reservations consumed"
+           },
+           "releasedSummarySingular": {
+             "en": "{count} stale leftover reservation released"
+           },
+           "releasedSummaryPlural": {
+             "en": "{count} stale leftover reservations released"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Supported placeholders in `reservationLifecycle.reconcileOnFinalSubmit.feedback.message`:
+   - `{baseMessage}`
+   - `{reconciliationSummary}`
+   - `{consumedReservations}`
+   - `{releasedReservations}`
+
+   Supported placeholders in the summary fragments:
+   - `{count}`
    - `{available}`
    - `{unit}`
    - `{availableWithUnit}`

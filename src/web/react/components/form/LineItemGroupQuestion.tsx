@@ -277,6 +277,7 @@ export interface LineItemGroupQuestionCtx {
     nextLineItems: LineItemState,
     options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
   ) => void;
+  ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
   collapsedGroups: Record<string, boolean>;
@@ -383,6 +384,7 @@ export const LineItemGroupQuestion: React.FC<{
     addLineItemRowManual,
     removeLineRow,
     runSelectionEffectsForAncestors,
+    ensureRecordId,
     handleLineFieldChange,
     collapsedGroups,
     toggleGroupCollapsed,
@@ -1462,10 +1464,9 @@ export const LineItemGroupQuestion: React.FC<{
         : null;
       if (!reservationConfig || reservationConfig.enabled === false) return;
       const sourceFormKey = `${formKey || ''}`.trim();
-      const sourceRecordId = `${recordId || ''}`.trim();
       const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig.resourceFormKey || ''}`.trim();
       const resourceRecordId = `${args.sourceRow?.id || ''}`.trim();
-      if (!sourceFormKey || !sourceRecordId || !resourceFormKey || !resourceRecordId) return;
+      if (!sourceFormKey || !resourceFormKey || !resourceRecordId) return;
 
       const keyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
       const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
@@ -1512,6 +1513,25 @@ export const LineItemGroupQuestion: React.FC<{
       }
 
       const runReservationSync = async () => {
+        let sourceRecordId = `${recordId || ''}`.trim();
+        if (!sourceRecordId && ensureRecordId) {
+          const ensured = await ensureRecordId({
+            reason: 'inventoryReservation',
+            fieldPath: `${q.id}.${quantityFieldId || selectedFieldId || sourceKey}`
+          });
+          sourceRecordId = `${ensured?.recordId || ''}`.trim();
+          if (!ensured?.success || !sourceRecordId) {
+            onDiagnostic?.('inventory.reservation.ensureRecordFailed', {
+              groupId: q.id,
+              parentRowId: args.parentRow.id,
+              resourceRecordId,
+              resourceItemId: sourceKey,
+              message: ensured?.message || null
+            });
+            return;
+          }
+        }
+        if (!sourceRecordId) return;
         const requestVersion = (reservationSyncCounterRef.current += 1);
         reservationRequestVersionRef.current[timerKey] = requestVersion;
         onDiagnostic?.('inventory.reservation.request', {
@@ -1534,6 +1554,7 @@ export const LineItemGroupQuestion: React.FC<{
             sourceParentGroupId: q.id,
             sourceParentRowId: args.parentRow.id,
             sourceOutputGroupId: `${args.config?.outputGroupId || ''}`.trim() || undefined,
+            sourceOutputKeyFieldId: `${args.config?.outputKeyFieldId || ''}`.trim() || undefined,
             ledgerFormKey: `${reservationConfig.ledgerFormKey || ''}`.trim() || undefined,
             allowedStatuses: Array.isArray(reservationConfig.allowedStatuses) ? reservationConfig.allowedStatuses : undefined
           });
@@ -1683,6 +1704,7 @@ export const LineItemGroupQuestion: React.FC<{
     [
       buildStepDataSourceDraftKey,
       buildVirtualDataSourceRowValues,
+      ensureRecordId,
       formKey,
       lineItems,
       onDiagnostic,

@@ -462,6 +462,7 @@ export interface InventoryReservationMutationRequest {
   sourceParentRowId?: string;
   sourceOutputGroupId?: string;
   sourceOutputRowId?: string;
+  sourceOutputKeyFieldId?: string;
   ledgerFormKey?: string;
   quantityFieldId?: string;
   reservedQuantityFieldId?: string;
@@ -515,6 +516,8 @@ export interface InventoryReservationReconciliationResult {
   success: boolean;
   message: string;
   reconciledReservations?: number;
+  consumedReservations?: number;
+  releasedReservations?: number;
   touchedInventoryRecords?: number;
   availability?: InventoryAvailabilitySnapshot[];
 }
@@ -529,6 +532,72 @@ export interface ReservationReleaseOnDeleteConfig {
    * Defaults to `Config: Inventory Reservation Ledger`.
    */
   ledgerFormKey?: string;
+}
+
+export interface ReservationReconcileOnFinalSubmitConfig {
+  /**
+   * Enable/disable automatic reconciliation of active reservations when the source record reaches a final submit status.
+   */
+  enabled?: boolean;
+  /**
+   * Optional explicit status values that should trigger reconciliation.
+   * Matching is case-insensitive.
+   * When omitted, the form falls back to `followupConfig.statusTransitions.onClose`, then `Closed`.
+   */
+  statuses?: string[];
+  /**
+   * Optional override for the reservation ledger form.
+   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
+   * `Config: Inventory Reservation Ledger`.
+   */
+  ledgerFormKey?: string;
+  /**
+   * Controls cache work after reconciliation.
+   * Defaults to `full`.
+   */
+  refreshMode?: 'full' | 'revisionOnly' | 'none';
+  /**
+   * Optional user-facing feedback shown after final reconciliation succeeds.
+   * When omitted, the client falls back to a concise built-in summary.
+   */
+  feedback?: ReservationReconciliationFeedbackConfig;
+}
+
+export interface ReservationReconciliationFeedbackConfig {
+  /**
+   * Full status message template shown after submit.
+   *
+   * Supported placeholders:
+   * - `{baseMessage}`
+   * - `{reconciliationSummary}`
+   * - `{consumedReservations}`
+   * - `{releasedReservations}`
+   */
+  message?: LocalizedString | string;
+  /**
+   * Summary fragment used when exactly one reservation is consumed.
+   * Supported placeholders:
+   * - `{count}`
+   */
+  consumedSummarySingular?: LocalizedString | string;
+  /**
+   * Summary fragment used when multiple reservations are consumed.
+   * Supported placeholders:
+   * - `{count}`
+   */
+  consumedSummaryPlural?: LocalizedString | string;
+  /**
+   * Summary fragment used when exactly one reservation is released.
+   * Supported placeholders:
+   * - `{count}`
+   */
+  releasedSummarySingular?: LocalizedString | string;
+  /**
+   * Summary fragment used when multiple reservations are released.
+   * Supported placeholders:
+   * - `{count}`
+   */
+  releasedSummaryPlural?: LocalizedString | string;
 }
 
 export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
@@ -2570,6 +2639,10 @@ export interface ReservationLifecycleConfig {
    * Automatically release active reservations when this source record is deleted.
    */
   releaseOnDelete?: boolean | ReservationReleaseOnDeleteConfig;
+  /**
+   * Automatically reconcile active reservations when this source record reaches a final submit status.
+   */
+  reconcileOnFinalSubmit?: boolean | ReservationReconcileOnFinalSubmitConfig;
 }
 
 export interface AutoSaveConfig {
@@ -3810,6 +3883,10 @@ export interface WebFormDefinition {
    */
   autoSave?: AutoSaveConfig;
   /**
+   * Optional reservation lifecycle hooks for source forms that own inventory reservations.
+   */
+  reservationLifecycle?: ReservationLifecycleConfig;
+  /**
    * Enable/disable the Summary view in the React web app.
    * When false, list-row clicks always open the Form view
    * (records matching `statusTransitions.onClose` are read-only).
@@ -4504,6 +4581,14 @@ export interface RecordMetadata {
   reservationRelease?: {
     success?: boolean;
     sourceRecordId?: string;
+    releasedReservations?: number;
+    touchedInventoryRecords?: number;
+  };
+  reservationReconciliation?: {
+    success?: boolean;
+    sourceRecordId?: string;
+    reconciledReservations?: number;
+    consumedReservations?: number;
     releasedReservations?: number;
     touchedInventoryRecords?: number;
   };

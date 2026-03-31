@@ -1398,6 +1398,22 @@ export class Dashboard {
   private normalizeReservationLifecycleConfig(raw: any): ReservationLifecycleConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const config: ReservationLifecycleConfig = {};
+    const normalizeLocalized = (value: any): LocalizedString | undefined => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof value !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(value).forEach(([key, rawVal]) => {
+        if (typeof rawVal !== 'string') return;
+        const trimmed = rawVal.trim();
+        if (!trimmed) return;
+        out[key.toLowerCase()] = trimmed;
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
     const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
     if (ledgerFormKey) config.ledgerFormKey = ledgerFormKey;
 
@@ -1417,6 +1433,47 @@ export class Dashboard {
       const releaseLedgerFormKey = (releaseOnDeleteRaw.ledgerFormKey ?? '').toString().trim();
       if (releaseLedgerFormKey) entry.ledgerFormKey = releaseLedgerFormKey;
       if (Object.keys(entry).length) config.releaseOnDelete = entry;
+    }
+
+    const reconcileOnFinalSubmitRaw =
+      raw.reconcileOnFinalSubmit !== undefined
+        ? raw.reconcileOnFinalSubmit
+        : raw.finalSubmitReconcile !== undefined
+          ? raw.finalSubmitReconcile
+          : raw.reconcileReservationsOnFinalSubmit !== undefined
+            ? raw.reconcileReservationsOnFinalSubmit
+            : undefined;
+    if (typeof reconcileOnFinalSubmitRaw === 'boolean') {
+      config.reconcileOnFinalSubmit = reconcileOnFinalSubmitRaw;
+    } else if (reconcileOnFinalSubmitRaw && typeof reconcileOnFinalSubmitRaw === 'object') {
+      const entry: any = {};
+      if (reconcileOnFinalSubmitRaw.enabled !== undefined) entry.enabled = Boolean(reconcileOnFinalSubmitRaw.enabled);
+      const statuses = Array.isArray(reconcileOnFinalSubmitRaw.statuses)
+        ? reconcileOnFinalSubmitRaw.statuses.map((value: any) => (value || '').toString().trim()).filter(Boolean)
+        : [];
+      if (statuses.length) entry.statuses = statuses;
+      const reconcileLedgerFormKey = (reconcileOnFinalSubmitRaw.ledgerFormKey ?? '').toString().trim();
+      if (reconcileLedgerFormKey) entry.ledgerFormKey = reconcileLedgerFormKey;
+      const refreshMode = (reconcileOnFinalSubmitRaw.refreshMode || '').toString().trim();
+      if (refreshMode === 'full' || refreshMode === 'revisionOnly' || refreshMode === 'none') {
+        entry.refreshMode = refreshMode;
+      }
+      const feedbackRaw = reconcileOnFinalSubmitRaw.feedback;
+      if (feedbackRaw && typeof feedbackRaw === 'object') {
+        const feedback: any = {};
+        const message = normalizeLocalized(feedbackRaw.message);
+        if (message) feedback.message = message;
+        const consumedSummarySingular = normalizeLocalized(feedbackRaw.consumedSummarySingular);
+        if (consumedSummarySingular) feedback.consumedSummarySingular = consumedSummarySingular;
+        const consumedSummaryPlural = normalizeLocalized(feedbackRaw.consumedSummaryPlural);
+        if (consumedSummaryPlural) feedback.consumedSummaryPlural = consumedSummaryPlural;
+        const releasedSummarySingular = normalizeLocalized(feedbackRaw.releasedSummarySingular);
+        if (releasedSummarySingular) feedback.releasedSummarySingular = releasedSummarySingular;
+        const releasedSummaryPlural = normalizeLocalized(feedbackRaw.releasedSummaryPlural);
+        if (releasedSummaryPlural) feedback.releasedSummaryPlural = releasedSummaryPlural;
+        if (Object.keys(feedback).length) entry.feedback = feedback;
+      }
+      if (Object.keys(entry).length) config.reconcileOnFinalSubmit = entry;
     }
     return Object.keys(config).length ? config : undefined;
   }

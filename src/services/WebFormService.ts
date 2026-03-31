@@ -1654,7 +1654,8 @@ export class WebFormService {
         SOURCE_PARENT_GROUP_ID: (request.sourceParentGroupId || '').toString(),
         SOURCE_PARENT_ROW_ID: (request.sourceParentRowId || '').toString(),
         SOURCE_OUTPUT_GROUP_ID: (request.sourceOutputGroupId || '').toString(),
-        SOURCE_OUTPUT_ROW_ID: (request.sourceOutputRowId || '').toString()
+        SOURCE_OUTPUT_ROW_ID: (request.sourceOutputRowId || '').toString(),
+        SOURCE_OUTPUT_KEY_FIELD_ID: (request.sourceOutputKeyFieldId || '').toString()
       };
 
       if (requestedQty > 0 || currentReservation) {
@@ -1770,6 +1771,7 @@ export class WebFormService {
     return this.withDocumentTransactionLock('inventoryReservation.reconcile', () => {
       const ledgerFormKey = (request?.ledgerFormKey || 'Config: Inventory Reservation Ledger').toString().trim();
       const ledgerContext = this.getFormContextLite(ledgerFormKey);
+      const sourceRecord = this.fetchSubmissionById(sourceFormKey, sourceRecordId);
       const activeReservations = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
         this.isActiveReservationRecord(record) &&
         this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === sourceFormKey &&
@@ -1781,6 +1783,8 @@ export class WebFormService {
           success: true,
           message: 'No active reservations found.',
           reconciledReservations: 0,
+          consumedReservations: 0,
+          releasedReservations: 0,
           touchedInventoryRecords: 0,
           availability: []
         };
@@ -1789,23 +1793,34 @@ export class WebFormService {
       const touchedForms = new Map<string, { form: FormConfig; questions: QuestionConfig[] }>();
       touchedForms.set(ledgerFormKey, ledgerContext);
 
-      const grouped = new Map<string, WebFormSubmission[]>();
+      const grouped = new Map<
+        string,
+        {
+          consume: WebFormSubmission[];
+          release: WebFormSubmission[];
+        }
+      >();
       activeReservations.forEach(record => {
         const resourceFormKey = this.readRecordFieldString(record, 'RESOURCE_FORM_KEY');
         const resourceRecordId = this.readRecordFieldString(record, 'RESOURCE_RECORD_ID');
+        const rowMode =
+          mode === 'release' || !this.shouldConsumeActiveReservationRecord(sourceRecord, record) ? 'release' : 'consume';
         const key = `${resourceFormKey}::${resourceRecordId}`;
-        const list = grouped.get(key) || [];
-        list.push(record);
-        grouped.set(key, list);
+        const entry = grouped.get(key) || { consume: [], release: [] };
+        entry[rowMode].push(record);
+        grouped.set(key, entry);
       });
 
       const availability: InventoryAvailabilitySnapshot[] = [];
-      grouped.forEach((rows, key) => {
+      let consumedReservations = 0;
+      let releasedReservations = 0;
+      grouped.forEach((rowsByMode, key) => {
         const [resourceFormKey, resourceRecordId] = key.split('::');
         const inventoryRecord = this.fetchSubmissionById(resourceFormKey, resourceRecordId);
         if (!inventoryRecord) {
           throw new Error(`Inventory record not found during reconciliation: ${resourceFormKey} / ${resourceRecordId}.`);
         }
+        const rows = [...rowsByMode.consume, ...rowsByMode.release];
         const first = rows[0];
         const fieldIds = this.resolveReservationFieldIds({
           resourceKind: this.readRecordFieldString(first, 'RESOURCE_KIND'),
@@ -1814,7 +1829,9 @@ export class WebFormService {
           statusFieldId: this.readRecordFieldString(first, 'RESOURCE_STATUS_FIELD_ID'),
           unitFieldId: this.readRecordFieldString(first, 'RESOURCE_UNIT_FIELD_ID')
         });
-        const consumedQuantity = rows.reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+        const consumedQuantity = rowsByMode.consume.reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+        const releasedQuantity = rowsByMode.release.reduce((sum, record) => sum + this.readNumericRecordField(record, 'RESERVED_QTY'), 0);
+        const totalClosedQuantity = consumedQuantity + releasedQuantity;
         const remainingQuantity = this.readNumericRecordField(inventoryRecord, fieldIds.quantityFieldId);
         const reservedQuantity = this.readNumericRecordField(inventoryRecord, fieldIds.reservedQuantityFieldId);
         if (mode === 'consume' && consumedQuantity > remainingQuantity + 1e-9) {
@@ -1823,17 +1840,17 @@ export class WebFormService {
           );
         }
         const nextRemainingQuantity = mode === 'consume' ? Math.max(0, remainingQuantity - consumedQuantity) : remainingQuantity;
-        const nextReservedQuantity = Math.max(0, reservedQuantity - consumedQuantity);
+        const nextReservedQuantity = Math.max(0, reservedQuantity - totalClosedQuantity);
         const nextInventoryValues = cloneRecordValues(inventoryRecord.values || {});
         nextInventoryValues[fieldIds.quantityFieldId] = this.formatReservationQuantity(nextRemainingQuantity);
         nextInventoryValues[fieldIds.reservedQuantityFieldId] = this.formatReservationQuantity(nextReservedQuantity);
-        if (fieldIds.statusFieldId && mode === 'consume') {
+        if (fieldIds.statusFieldId && consumedQuantity > 0) {
           nextInventoryValues[fieldIds.statusFieldId] = nextRemainingQuantity > 0 ? 'available' : 'used';
         }
-        if (mode === 'consume' && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_FORM_KEY')) {
+        if (consumedQuantity > 0 && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_FORM_KEY')) {
           nextInventoryValues.LEFTOVER_USED_BY_FORM_KEY = sourceFormKey;
         }
-        if (mode === 'consume' && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_RECORD_ID')) {
+        if (consumedQuantity > 0 && Object.prototype.hasOwnProperty.call(nextInventoryValues, 'LEFTOVER_USED_BY_RECORD_ID')) {
           nextInventoryValues.LEFTOVER_USED_BY_RECORD_ID = sourceRecordId;
         }
         const inventoryContext = this.getFormContextLite(resourceFormKey);
@@ -1863,21 +1880,38 @@ export class WebFormService {
           })
         );
 
-        rows.forEach(record => {
+        rowsByMode.consume.forEach(record => {
           const nextReservationValues = cloneRecordValues(record.values || {});
-          nextReservationValues.STATUS = mode === 'release' ? 'released' : 'consumed';
+          nextReservationValues.STATUS = 'consumed';
           const saveResult = this.saveInternalRecord({
             context: ledgerContext,
             recordId: (record.id || '').toString().trim(),
             language: record.language || 'EN',
-            status: mode === 'release' ? 'released' : 'consumed',
+            status: 'consumed',
             values: nextReservationValues,
-            auditAction: mode === 'release' ? 'inventoryReservation:release' : 'inventoryReservation:consume'
+            auditAction: 'inventoryReservation:consume'
           });
           if (!saveResult.success) {
             throw new Error(saveResult.message || 'Failed to close reservation ledger row.');
           }
         });
+        rowsByMode.release.forEach(record => {
+          const nextReservationValues = cloneRecordValues(record.values || {});
+          nextReservationValues.STATUS = 'released';
+          const saveResult = this.saveInternalRecord({
+            context: ledgerContext,
+            recordId: (record.id || '').toString().trim(),
+            language: record.language || 'EN',
+            status: 'released',
+            values: nextReservationValues,
+            auditAction: 'inventoryReservation:release'
+          });
+          if (!saveResult.success) {
+            throw new Error(saveResult.message || 'Failed to close reservation ledger row.');
+          }
+        });
+        consumedReservations += rowsByMode.consume.length;
+        releasedReservations += rowsByMode.release.length;
       });
 
       touchedForms.forEach(target => {
@@ -1888,16 +1922,64 @@ export class WebFormService {
         sourceFormKey,
         sourceRecordId,
         reconciledReservations: activeReservations.length,
+        consumedReservations,
+        releasedReservations,
         touchedInventoryRecords: grouped.size
       });
 
       return {
         success: true,
-        message: mode === 'release' ? 'Inventory reservations released.' : 'Inventory reservations reconciled.',
+        message:
+          mode === 'release'
+            ? 'Inventory reservations released.'
+            : releasedReservations > 0
+              ? 'Inventory reservations reconciled and stale reservations released.'
+              : 'Inventory reservations reconciled.',
         reconciledReservations: activeReservations.length,
+        consumedReservations,
+        releasedReservations,
         touchedInventoryRecords: grouped.size,
         availability
       };
+    });
+  }
+
+  private shouldConsumeActiveReservationRecord(
+    sourceRecord: WebFormSubmission | null,
+    reservationRecord: WebFormSubmission
+  ): boolean {
+    if (!sourceRecord) return true;
+    const parentGroupId = this.readRecordFieldString(reservationRecord, 'SOURCE_PARENT_GROUP_ID');
+    const parentRowId = this.readRecordFieldString(reservationRecord, 'SOURCE_PARENT_ROW_ID');
+    const outputGroupId = this.readRecordFieldString(reservationRecord, 'SOURCE_OUTPUT_GROUP_ID');
+    const resourceItemId = this.readRecordFieldString(reservationRecord, 'RESOURCE_ITEM_ID');
+    if (!parentGroupId || !outputGroupId || !resourceItemId) return true;
+
+    const parentRows = this.parseFollowupLineItemRows(
+      (sourceRecord.values || {})[parentGroupId] || (sourceRecord.values || {})[`${parentGroupId}_json`]
+    );
+    if (!parentRows.length) return false;
+
+    const configuredKeyFieldId = this.readRecordFieldString(reservationRecord, 'SOURCE_OUTPUT_KEY_FIELD_ID');
+    const candidateKeyFieldIds = [
+      configuredKeyFieldId,
+      'LEFTOVER_ID',
+      'RESOURCE_ITEM_ID',
+      'ID',
+      'id'
+    ].filter(Boolean);
+
+    const candidateParentRows = parentRowId
+      ? parentRows.filter(candidate => this.normalizeFollowupLineItemRowId(candidate) === parentRowId)
+      : parentRows;
+    const rowsToSearch = candidateParentRows.length ? candidateParentRows : parentRows;
+
+    return rowsToSearch.some(parentRow => {
+      const outputRows = this.parseFollowupLineItemRows(parentRow[outputGroupId] || parentRow[`${outputGroupId}_json`]);
+      if (!outputRows.length) return false;
+      return outputRows.some(row =>
+        candidateKeyFieldIds.some(fieldId => `${(row || {})[fieldId] ?? ''}`.trim() === resourceItemId)
+      );
     });
   }
 
@@ -1920,12 +2002,73 @@ export class WebFormService {
     return this.submissions.getRecordVersion(form, recordId, rowNumberHint);
   }
 
+  private resolveReservationFinalSubmitStatuses(form: FormConfig): string[] {
+    const raw = form.reservationLifecycle?.reconcileOnFinalSubmit;
+    if (raw && typeof raw === 'object' && Array.isArray(raw.statuses) && raw.statuses.length) {
+      return raw.statuses.map(value => (value || '').toString().trim().toLowerCase()).filter(Boolean);
+    }
+    const closeStatus = (form.followupConfig?.statusTransitions?.onClose || '').toString().trim();
+    if (closeStatus) return [closeStatus.toLowerCase()];
+    return ['closed'];
+  }
+
+  private shouldReconcileReservationsOnFinalSubmit(
+    form: FormConfig,
+    nextStatus: string
+  ): {
+    enabled: boolean;
+    ledgerFormKey: string;
+    refreshMode: 'full' | 'revisionOnly' | 'none';
+  } {
+    const raw = form.reservationLifecycle?.reconcileOnFinalSubmit;
+    const enabled =
+      raw === true ||
+      (raw && typeof raw === 'object' && raw.enabled !== false);
+    if (!enabled) {
+      return {
+        enabled: false,
+        ledgerFormKey: '',
+        refreshMode: 'full'
+      };
+    }
+    const normalizedStatus = (nextStatus || '').toString().trim().toLowerCase();
+    const statuses = this.resolveReservationFinalSubmitStatuses(form);
+    if (!normalizedStatus || !statuses.includes(normalizedStatus)) {
+      return {
+        enabled: false,
+        ledgerFormKey: '',
+        refreshMode: 'full'
+      };
+    }
+    const ledgerFormKey =
+      (raw && typeof raw === 'object' ? raw.ledgerFormKey : '') ||
+      form.reservationLifecycle?.ledgerFormKey ||
+      'Config: Inventory Reservation Ledger';
+    const refreshMode =
+      raw &&
+      typeof raw === 'object' &&
+      (raw.refreshMode === 'full' || raw.refreshMode === 'revisionOnly' || raw.refreshMode === 'none')
+        ? raw.refreshMode
+        : 'full';
+    return {
+      enabled: true,
+      ledgerFormKey: (ledgerFormKey || '').toString().trim() || 'Config: Inventory Reservation Ledger',
+      refreshMode
+    };
+  }
+
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
     const result = this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
     if (result?.success) {
+      const savedRecordId = (result.meta?.id || (formObject as any).id || '').toString().trim();
+      const nextStatus = (
+        (formObject as any).__ckStatus !== undefined && (formObject as any).__ckStatus !== null
+          ? (formObject as any).__ckStatus
+          : ((formObject as any).status !== undefined && (formObject as any).status !== null ? (formObject as any).status : '')
+      ).toString().trim();
       const deleteRecordId = ((formObject as any).__ckDeleteRecordId || '').toString().trim();
       const releaseOnDeleteConfig = form.reservationLifecycle?.releaseOnDelete;
       const releaseOnDeleteEnabled =
@@ -1962,6 +2105,40 @@ export class WebFormService {
             sourceRecordId: deleteRecordId,
             releasedReservations: Number(releaseResult.reconciledReservations || 0) || 0,
             touchedInventoryRecords: Number(releaseResult.touchedInventoryRecords || 0) || 0
+          }
+        };
+      }
+      const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, nextStatus);
+      if (savedRecordId && !deleteRecordId && reconcileOnFinalSubmit.enabled) {
+        const reconcileResult = this.reconcileInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: savedRecordId,
+          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+          refreshMode: reconcileOnFinalSubmit.refreshMode
+        });
+        if (!reconcileResult.success) {
+          return {
+            success: false,
+            message: reconcileResult.message || 'Record saved but failed to reconcile active reservations.',
+            meta: {
+              ...(result.meta || {}),
+              reservationReconciliation: {
+                success: false,
+                sourceRecordId: savedRecordId
+              },
+              sourceSaved: true
+            }
+          };
+        }
+        result.meta = {
+          ...(result.meta || {}),
+          reservationReconciliation: {
+            success: true,
+            sourceRecordId: savedRecordId,
+            reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+            consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+            releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+            touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
           }
         };
       }
@@ -2266,7 +2443,35 @@ export class WebFormService {
     action: string
   ): FollowupActionResult {
     const { form, questions } = this.getFormContext(formKey);
-    const result = this.followups.triggerFollowupAction(form, questions, recordId, action);
+    const normalizedAction = (action || '').toString().trim().toUpperCase();
+    let result = this.followups.triggerFollowupAction(form, questions, recordId, action);
+    if (result?.success && normalizedAction === 'CLOSE_RECORD') {
+      const closeStatus = (result.status || form.followupConfig?.statusTransitions?.onClose || '').toString().trim();
+      const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, closeStatus);
+      if (recordId && reconcileOnFinalSubmit.enabled) {
+        const reconcileResult = this.reconcileInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: recordId,
+          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+          refreshMode: reconcileOnFinalSubmit.refreshMode
+        });
+        if (!reconcileResult.success) {
+          result = {
+            success: false,
+            message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.'
+          };
+        } else {
+          (result as any).reservationReconciliation = {
+            success: true,
+            sourceRecordId: recordId,
+            reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+            consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+            releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+            touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
+          };
+        }
+      }
+    }
     if (result?.success) {
       this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupAction');
     }
@@ -2280,6 +2485,38 @@ export class WebFormService {
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const { form, questions } = this.getFormContext(formKey);
     const result = this.followups.triggerFollowupActions(form, questions, recordId, actions);
+    const closeEntry = Array.isArray(result?.results)
+      ? result.results.find(entry => (entry?.action || '').toString().trim().toUpperCase() === 'CLOSE_RECORD')
+      : null;
+    if (closeEntry?.result?.success) {
+      const closeStatus = (closeEntry.result.status || form.followupConfig?.statusTransitions?.onClose || '').toString().trim();
+      const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, closeStatus);
+      if (recordId && reconcileOnFinalSubmit.enabled) {
+        const reconcileResult = this.reconcileInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: recordId,
+          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+          refreshMode: reconcileOnFinalSubmit.refreshMode
+        });
+        if (!reconcileResult.success) {
+          closeEntry.result = {
+            success: false,
+            message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.'
+          };
+          result.success = false;
+        } else {
+          (closeEntry.result as any).reservationReconciliation = {
+            success: true,
+            sourceRecordId: recordId,
+            reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+            consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+            releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+            touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
+          };
+          result.success = result.results.every(entry => !!entry.result?.success);
+        }
+      }
+    }
     if (result?.success) {
       this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupActions');
     }

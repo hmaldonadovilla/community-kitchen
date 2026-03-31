@@ -77,9 +77,9 @@ The main gaps are:
 
 The points below are authoritative for this implementation and override earlier ambiguity in this document.
 
-### 1. The `Leftover` step is inventory-backed, not record-copy-backed
+### 1. The `Leftover bank` step is inventory-backed, not record-copy-backed
 
-The `Leftover` step must display leftovers directly from the shared `Leftover Inventory` source through a configurable external-record picker or datasource-backed list.
+The `Leftover bank` step must display leftovers directly from the shared `Leftover Inventory` source through a configurable external-record picker or datasource-backed list.
 
 It must not copy the full leftover dataset into the Meal Production record just to render the step.
 
@@ -90,7 +90,7 @@ Allowed data in the Meal Production record at this stage:
 - the selected usage mode when applicable
 - any other minimal selection metadata needed to preserve the user choice
 
-Not allowed as the source of truth for the `Leftover` step:
+Not allowed as the source of truth for the `Leftover bank` step:
 
 - a duplicated full leftover inventory payload stored inside the Meal Production record
 - a duplicated ingredient list stored only to support display in the selector UI
@@ -99,7 +99,7 @@ The inventory record remains the source of truth until the selection is normaliz
 
 ### 2. `MP_TYPE_LI` is generated immediately from selection
 
-The `Leftover` step is only the selection UI.
+The `Leftover bank` step is only the selection UI.
 
 As soon as the user:
 
@@ -176,7 +176,7 @@ The reservation model must therefore support:
 - immediate recalculation of free quantity after each reservation change
 - reconciliation on final submit so reserved quantity becomes either consumed quantity or released quantity
 
-Selection in the `Leftover` step must not reserve the entire item by status alone.
+Selection in the `Leftover bank` step must not reserve the entire item by status alone.
 
 Instead:
 
@@ -189,7 +189,7 @@ The detailed design in `docs/leftover-inventory/design/reservation-lifecycle-des
 
 ### 4. `Production` step must remain intact
 
-The `Leftover` step replaces only the old leftover selection and reconstruction UX.
+The `Leftover bank` step replaces only the old leftover selection and reconstruction UX.
 
 It must not replace or degrade the existing `Production` step behavior.
 
@@ -200,31 +200,31 @@ The following must remain in place:
 - the ingredient evidence upload field
 - the existing production-oriented configuration that already works today
 
-The role of the `Leftover` step is only to influence the generated `MP_TYPE_LI` rows that the `Production` step then consumes through the existing logic.
+The role of the `Leftover bank` step is only to influence the generated `MP_TYPE_LI` rows that the `Production` step then consumes through the existing logic.
 
-### 4a. `Leftover registration` is a separate final step after Portioning
+### 4a. `Leftovers` is a separate final step after Portioning
 
-The registration of newly created leftovers must not happen inside `2. Leftover`.
+The registration of newly created leftovers must not happen inside `2. Leftover bank`.
 
 It is a separate end-of-flow step that comes after `5. Portioning`.
 
 Required guided-step order:
 
 1. `Order`
-2. `Leftover`
+2. `Leftover bank`
 3. `Production`
 4. `Food safety`
 5. `Portioning`
-6. `Leftover registration`
+6. `Leftovers`
 
 The purpose split is strict:
 
-- `2. Leftover` consumes existing inventory
-- `6. Leftover registration` creates new inventory from what remains after cooking and portioning
+- `2. Leftover bank` consumes existing inventory
+- `6. Leftovers` creates new inventory from what remains after cooking and portioning
 
 ### 5. Read-only ingredient inspection
 
-The `Ingredients` action in the `Leftover` step is informational only.
+The `Ingredients` action in the `Leftover bank` step is informational only.
 
 It must open a full-page read-only overlay backed by the selected inventory record's `LEFTOVER_INGREDIENTS_LI`.
 
@@ -237,7 +237,7 @@ The overlay must not expose editing affordances:
 
 ### 6. Compact-row interaction contract
 
-The `Leftover` step uses a generic compact-row pattern that must stay configuration-driven.
+The `Leftover bank` step uses a generic compact-row pattern that must stay configuration-driven.
 
 Compact row contract:
 
@@ -253,9 +253,9 @@ For the Meal Production use case, the compact headline must resolve to:
 
 ## Target functional model
 
-### 1. Leftover registration
+### 1. Leftovers
 
-After `5. Portioning`, Meal Production opens a dedicated `Leftover registration` step.
+After `5. Portioning`, Meal Production opens a dedicated `Leftovers` step.
 
 This step is always present.
 
@@ -322,7 +322,8 @@ Each leftover inventory record stores:
 There is an operational caveat:
 
 - the PDF generation and customer email follow-up must still be triggered immediately after Portioning is completed
-- the user must still continue to the final `Leftover registration` step before the Meal Production record is finally submitted
+- the user must still continue to the final `Leftovers` step before the Meal Production record is finally submitted
+- the user should not be left waiting on background PDF or email work just to continue the guided flow
 
 Therefore, the current Portioning submit interaction must be split into two distinct concepts:
 
@@ -333,19 +334,28 @@ At the end of `5. Portioning`, the user triggers a `next step` action, not the f
 This action must:
 
 - show the same confirmation dialog currently shown at the end of Portioning
+- persist whatever milestone state is required for the follow-up actions to run correctly
 - trigger the same follow-up actions currently tied to that milestone, including PDF generation and customer email
-- advance the user to `6. Leftover registration`
+- advance the user to `6. Leftovers`
 - keep the Meal Production record open for final completion
+- immediately show a configurable dialog explaining that background actions are running and the user can continue
 
 #### B. Final record submission
 
-The actual record submission happens only after `6. Leftover registration` is completed.
+The actual record submission happens only after `6. Leftovers` is completed.
 
 This final submission must:
 
 - persist the new leftover inventory records
 - finalize inventory consumption updates for selected leftovers
 - close the Meal Production record as it does today
+- start inventory consumption or reconciliation before follow-up actions, or in parallel when safe, so the user is not blocked by later PDF or email work
+- redirect the user immediately to the appropriate post-submit screen and show a configurable success dialog explaining that background actions are still running
+
+Post-submit screen requirements:
+
+- if the user lands on the summary view, the preview button that depends on the PDF URL must stay disabled until that URL has been returned
+- if the user lands on `6. Leftovers` after the Portioning milestone action, the same configurable background-processing dialog must explain that PDF and email work is already running while the user continues registering new leftovers
 
 ### Required reusable platform feature: follow-up actions on `next step`
 
@@ -356,6 +366,8 @@ The new requirement needs a reusable feature:
 - show a dialog on `next step`
 - run configured follow-up actions on `next step`
 - continue the guided flow without final submission
+- show a dialog after submit while background follow-up actions continue
+- let post-submit views expose partially ready state, such as a disabled PDF-preview action until the PDF URL is available
 
 This must be implemented as a generic guided-step capability, not a Meal Production-specific hack.
 
@@ -363,11 +375,14 @@ Recommended configuration direction:
 
 - step-level or action-level `beforeNextDialog`
 - step-level or action-level `nextStepFollowupActions`
+- step-level or action-level `afterActionDialog`
+- submit-level `postSubmitBackgroundDialog`
 - support for the same follow-up primitives already used for submit, PDF generation, email sending, and audit logging
+- support disabling or deferring UI actions that depend on asynchronous follow-up results, such as a PDF-preview link
 
-### 2. Leftover usage in Meal Production
+### 2. Leftover bank in Meal Production
 
-The current leftover flow inside the Meal Production record is replaced by a dedicated `Leftovers` step.
+The current leftover flow inside the Meal Production record is replaced by a dedicated `Leftover bank` step.
 
 The step lists inventory records from the shared `Leftover Inventory` source.
 
@@ -476,7 +491,6 @@ The first iteration should update the same inventory record in place after parti
 Each leftover inventory item has a lifecycle state:
 
 - `available`
-- `selected`
 - `used`
 - `expired`
 
@@ -522,7 +536,7 @@ Recommended ingredient row fields:
 Recommended constrained enums:
 
 - `LEFTOVER_KIND`: `entireDish`, `partialDish`
-- `LEFTOVER_STATUS`: `available`, `selected`, `used`, `expired`
+- `LEFTOVER_STATUS`: `available`, `used`, `expired`
 - `LEFTOVER_USAGE_MODE`: `reheat`, `combine`
 
 Quantity semantics:
@@ -651,7 +665,7 @@ This should be implemented as a generic service entrypoint plus a scheduled Apps
 
 Replace the earlier binary leftover question with a dedicated final guided step:
 
-- `6. Leftover registration`
+- `6. Leftovers`
 
 Recommended behavior:
 
@@ -660,7 +674,7 @@ Recommended behavior:
 - provide a separate partial-leftover row section below
 - create inventory records from this final step, not from the earlier consumption step
 
-### 2. New Meal Production `Leftovers` step
+### 2. New Meal Production `Leftover bank` step
 
 Replace the current manual leftover overlay flow with:
 
@@ -742,10 +756,10 @@ Add the new leftover registration stage to Meal Production.
 
 Scope:
 
-- add the `6. Leftover registration` step
+- add the `6. Leftovers` step
 - add the entire-dish leftover table by meal type with required zero-or-greater values
 - add the partial-leftover row section
-- add the generic `next step` follow-up capability so Portioning can still run PDF and email actions before final submit
+- add the generic `next step` and post-submit follow-up capability so Portioning can still run PDF and email actions before final submit and final submit can return the user immediately while background actions continue
 - create inventory records on final submit
 - capture source Meal Production references
 
@@ -753,14 +767,14 @@ Deliverable:
 
 - leftovers are registered at the end of production by the cook who knows them best
 
-### Phase 4. Leftover usage in Meal Production
+### Phase 4. Leftover bank in Meal Production
 
 Replace the current manual leftover use flow.
 
 Scope:
 
 - remove the current user-facing leftover overlay flow
-- add the new `Leftovers` step
+- add the new `Leftover bank` step
 - list `available` leftovers from inventory
 - map selected leftovers into Meal Production internal rows
 - support `reheat` and `combine`
@@ -798,7 +812,7 @@ Scope:
 
 Deliverable:
 
-- Portioning can trigger PDF and email immediately, while the record stays open for `Leftover registration`
+- Portioning can trigger PDF and email immediately, while the record stays open for `Leftovers`, and final submit can return the user immediately while background actions continue
 
 ## Recommended file areas to change
 
@@ -885,12 +899,13 @@ That is why the design keeps the current internal prep-row model alive for now.
 
 5. Follow-up timing is operationally important.
 
-PDF generation and email sending cannot be delayed until the final leftover-registration completion.
+PDF generation and email sending cannot be delayed until the final `Leftovers` completion.
 
 That means the platform must distinguish between:
 
 - milestone follow-up execution
 - final record submission
+- post-submit background follow-up completion
 
 ## Non-goals for the first iteration
 
@@ -904,138 +919,76 @@ That means the platform must distinguish between:
 
 1. build the generic shared-table submit-effects foundation
 2. add the Leftover Inventory form
-3. add portioning leftover registration
-4. add the new Meal Production leftover-consumption step
-5. preserve current summary and report outputs by normalizing into the existing internal rows
-6. add the final leftover-registration step plus guided `next step` follow-up support
-7. add expiry automation and operational guards
+3. add reservation ledger and reservation-aware `2. Leftover bank`
+4. preserve current summary and report outputs by normalizing into the existing internal rows
+5. add submit-time reservation reconciliation and lifecycle closeout
+6. add the final `6. Leftovers` step plus guided `next step` and post-submit follow-up support
+7. validate the complete post-production flow end to end on staging
 
 ## Assessment of the current implementation state
 
-As of 2026-03-24, the implementation direction has partially diverged from the intended model above.
+As of 2026-03-31, the reservation-driven inventory lifecycle is largely implemented and behaving correctly in staging.
 
-The main mismatches are:
+Implemented foundations:
 
-- the `Leftover` step still carries local record fields and duplicated line-item structures that make it look like the Meal Production record owns the leftover payload
-- `MP_TYPE_LI` regeneration exists in parts of the config, but it is not yet reliably behaving as the authoritative immediate output of selection
-- the `Ingredients` overlay behavior has been moving toward read-only, but the plan needs to state explicitly that it must read from inventory `LEFTOVER_INGREDIENTS_LI`, not from a Meal Production-owned duplicate
-- the current implementation has also affected the `Production` step, while the intended design is to preserve the existing `to cook` and evidence flow
+- `2. Leftover bank` is inventory-backed and no longer relies on Meal Production-owned duplicated selector data as the source of truth
+- immediate `MP_TYPE_LI` generation from selection is working and remains config-driven
+- reservation ledger creation, conflict reconciliation, release-on-delete, stale-release, and final submit reconciliation are implemented
+- `Production` is restored and consumes the normalized `MP_TYPE_LI` rows
+- the read-only ingredients overlay is sourced from inventory
+- conflict dialogs and submit-time reconciliation feedback are configurable
 
-This means the next implementation pass should not be more patching in place. It should be a real alignment pass against this plan.
+The reservation platform is no longer the main blocker. The remaining work is the end-of-flow capture step and the user experience around milestone and submit follow-up actions.
 
-## Recommended next steps after plan alignment
+## Remaining implementation backlog
 
-1. remove the `Leftover` step's duplicated leftover-data ownership
-2. make the inventory row the only source for display and read-only ingredient inspection
-3. keep only minimal selection state in Meal Production
-4. make immediate `MP_TYPE_LI` generation the single authoritative output of selection
-5. add immediate inventory reservation transitions: `available -> selected`, `selected -> available`, `selected -> used`
-6. restore the `Production` step to its original `to cook` and evidence responsibilities
-7. then revalidate the full flow end to end on staging before adding the later leftover-capture step
+### Must build next
 
-## Corrective backlog
-
-This backlog defines the required sequence for correcting the current implementation.
-
-The order matters. Items in the first section must be addressed before adding more feature work.
-
-### Must fix before continuing
-
-These items are blockers because the current implementation is not aligned with the intended model.
-
-1. Remove hybrid ownership from the `Leftover` step
-
-- stop treating Meal Production as a secondary source of leftover truth
-- keep only minimal selection state in the Meal Production record:
-  - leftover record id
-  - selected checkbox state
-  - quantity to use
-  - usage mode
-- stop relying on duplicated local payload fields as the operational source for the selector UI
-- stop persisting datasource-shaped selector rows as business data inside `MP_LEFTOVER_USAGE_LI`
-- replace that persisted selector structure with transient datasource-backed selection rows rendered from inventory at runtime
-
-2. Make inventory the only source for display and ingredient inspection
-
-- the row headline must resolve from the inventory record
-- the read-only ingredients overlay must resolve from inventory `LEFTOVER_INGREDIENTS_LI`
-- the selector UI must not require a duplicated Meal Production-owned ingredient payload to render correctly
-
-3. Restore `Production` step behavior
-
-- remove the regression introduced by the leftover work
-- preserve:
-  - `to cook`
-  - `Ingredients needed`
-  - ingredient evidence upload
-- ensure the `Production` step only consumes normalized `MP_TYPE_LI` rows
-
-4. Make `MP_TYPE_LI` generation reliably authoritative
-
-- selection must immediately create the corresponding `MP_TYPE_LI` row
-- deselection must immediately remove the corresponding `MP_TYPE_LI` row
-- quantity changes must immediately update the corresponding `MP_TYPE_LI` row
-- usage-mode changes must immediately update the corresponding `MP_TYPE_LI` row
-- the generated row must retain leftover source identity so it can be matched back to the selected inventory item
-
-5. Add the missing inventory reservation state
-
-- extend `LEFTOVER_STATUS` with `selected`
-- implement:
-  - `available -> selected`
-  - `selected -> available`
-  - `selected -> used`
-- update expiry logic so it is compatible with the reservation model
-
-### Must refactor for alignment
-
-These items are required for the implementation to remain configurable and reusable.
-
-1. Replace leftover-specific UI branches with generic compact-row behavior
-
-- keep the compact row pattern config-driven
-- move leftover-specific semantics out of renderer internals where possible
-- keep the renderer generic:
-  - headline parts
-  - sentence-row parts
-  - row actions
-  - sizing behavior
-- keep the transient row model generic as well:
-  - datasource-backed rows
-  - anchor field
-  - immediate selection effects
-  - no record-persistence requirement for the selector rows themselves
-
-2. Introduce generic external-record reservation support
-
-- status transitions during selection must be implemented as a reusable external-record capability
-- avoid naming the platform feature after leftovers
-- keep the mechanism usable for future stock and shared-table workflows
-
-3. Introduce generic submit-time quantity reconciliation
-
-- full consumption: set source record to `used`
-- partial consumption: reduce source quantity and return status to `available`
-- update the same inventory record in place for the first iteration
-
-4. Separate milestone follow-up from final submission
-
-- add generic guided-step confirmation before `next step`
-- add generic guided-step follow-up actions on `next step`
-- use that for Portioning so PDF and email happen before final leftover registration
-
-5. Add the `6. Leftover registration` step as a real end-of-flow step
+1. Add the real `6. Leftovers` step
 
 - one required entire-dish leftover quantity field per meal row
 - explicit `0` required when no leftovers exist
 - separate partial-leftover row section
-- final inventory creation happens from this last step
+- final creation of new leftover inventory records from this step
+
+2. Generalize guided-step background follow-up UX
+
+- keep `5. Portioning` as a milestone action, not final submission
+- run configured follow-up actions immediately after Portioning completion
+- show a configurable dialog explaining that background actions are running
+- advance the user to `6. Leftovers` without waiting for PDF or email completion
+
+3. Generalize post-submit background follow-up UX
+
+- after final submit, process inventory reconciliation before or in parallel with follow-up actions
+- send the user immediately to the appropriate screen, typically summary or home
+- show a configurable dialog explaining that background actions such as PDF generation and email are still running
+- disable UI actions that depend on asynchronous results, such as the PDF-preview action, until the required result exists
+
+### Must complete for end-to-end feature closure
+
+1. Create new leftover inventory records from `6. Leftovers`
+
+- entire-dish rows create `LE-*` records
+- partial rows create `LP-*` records
+- preserve source traceability back to the Meal Production record and meal row
+
+2. Wire Portioning milestone and final submit into the new step flow
+
+- `5. Portioning` completion should open `6. Leftovers`
+- final record close happens only after `6. Leftovers`
+- inventory consumption must already be safe before or during the background follow-up path
+
+3. Add end-to-end regression coverage for the full post-production flow
+
+- Portioning milestone triggers background follow-up and advances to `6. Leftovers`
+- `6. Leftovers` creates new inventory records correctly
+- final submit reconciles consumed reservations and new leftovers together
+- summary or home view behaves correctly while the PDF URL is still pending
 
 ### Can defer
 
-These items are valuable, but they should not block the correction pass above.
-
-1. Further UI polish on compact sentence rows
+1. Additional UI polish on compact sentence rows
 
 - typography tuning
 - spacing adjustments
@@ -1043,9 +996,9 @@ These items are valuable, but they should not block the correction pass above.
 
 2. Additional diagnostics and telemetry
 
-- reservation transition logs
-- partial-consumption reconciliation logs
-- next-step follow-up diagnostics
+- follow-up timing instrumentation
+- background-action completion diagnostics
+- leftover-capture diagnostics for `6. Leftovers`
 
 3. Broader generic stock features
 
@@ -1056,18 +1009,16 @@ These items are valuable, but they should not block the correction pass above.
 
 ## Recommended implementation sequence
 
-To avoid destabilizing the form further, the next implementation pass should follow this sequence exactly:
-
-1. restore `Production` step behavior and remove old leftover-flow regressions
-2. simplify the `Leftover` step to minimal selection state only
-3. replace persisted `MP_LEFTOVER_USAGE_LI` selector rows with transient datasource-backed rows and remove legacy leftover config blocks
-4. make inventory the only display source for the selector and ingredient overlay
-5. make immediate `MP_TYPE_LI` generation reliable and observable
-6. add inventory reservation state transitions
-7. add partial-consumption reconciliation on final submit
-8. add guided `next step` follow-up support
-9. add the final `Leftover registration` step
-10. validate the whole flow end to end on staging
+1. add the real `6. Leftovers` step and its data model
+2. add generic guided-step background follow-up support for `5. Portioning`
+3. add generic post-submit background follow-up support and disabled pending-result actions
+4. create new leftover inventory records from `6. Leftovers`
+5. validate the full flow end to end on staging:
+   - select from `2. Leftover bank`
+   - run Portioning milestone follow-up
+   - complete `6. Leftovers`
+   - final submit
+   - verify summary, PDF, email, and pending-result behavior
 
 ## Final recommendation
 

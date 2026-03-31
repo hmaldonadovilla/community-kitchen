@@ -119,6 +119,7 @@ import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/ac
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
+import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
   buildFieldIdMap,
   filterDedupRulesForPrecheck,
@@ -6967,6 +6968,130 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     };
   }, [autoSaveDebounceMs, autoSaveEnabled, definition, isClosedRecord, performAutoSave, submitting, view, values, lineItems]);
 
+  const ensureDraftRecordId = useCallback(
+    async (args?: { reason?: string; fieldPath?: string }): Promise<{ success: boolean; recordId?: string; message?: string }> => {
+      let recordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      if (recordId) return { success: true, recordId };
+
+      const signature = (dedupSignatureRef.current || '').toString();
+      if (signature) {
+        if (dedupCheckingRef.current) {
+          const message = 'Checking duplicates…';
+          logEvent('record.ensure.blocked.dedup.checking', {
+            reason: args?.reason || null,
+            fieldPath: args?.fieldPath || null
+          });
+          return { success: false, message };
+        }
+        const conflict = dedupConflictRef.current;
+        if (conflict && conflict.message) {
+          const message = conflict.message.toString();
+          logEvent('record.ensure.blocked.dedup.conflict', {
+            reason: args?.reason || null,
+            fieldPath: args?.fieldPath || null,
+            ruleId: conflict.ruleId
+          });
+          return { success: false, message };
+        }
+      }
+
+      try {
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        setDraftSave({ phase: 'saving' });
+        const statusRaw =
+          ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+          '';
+        const draftStatus = resolveAutoSaveStatus(statusRaw);
+        const draft = buildDraftPayload({
+          definition,
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current
+        }) as any;
+        draft.__ckSaveMode = 'draft';
+        draft.__ckStatus = draftStatus;
+        draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
+        const res = await submit(draft);
+        if (!res?.success) {
+          const message = (res?.message || 'Failed to create draft record.').toString();
+          setDraftSave({ phase: 'error', message });
+          return { success: false, message };
+        }
+        recordId = (res?.meta?.id || '').toString();
+        if (!recordId) {
+          const message = 'Failed to create draft record id.';
+          setDraftSave({ phase: 'error', message });
+          return { success: false, message };
+        }
+        setSelectedRecordId(recordId);
+        selectedRecordIdRef.current = recordId;
+        setLastSubmissionMeta(prev => ({
+          ...(prev || {}),
+          id: recordId,
+          createdAt: res?.meta?.createdAt || prev?.createdAt,
+          updatedAt: res?.meta?.updatedAt || prev?.updatedAt,
+          dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
+            ? Number((res as any).meta.dataVersion)
+            : prev?.dataVersion,
+          status: draftStatus
+        }));
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        const dv = Number((res as any)?.meta?.dataVersion);
+        if (Number.isFinite(dv) && dv > 0) {
+          recordDataVersionRef.current = dv;
+        }
+        const rn = Number((res as any)?.meta?.rowNumber);
+        if (Number.isFinite(rn) && rn >= 2) {
+          recordRowNumberRef.current = rn;
+        }
+        setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
+        upsertListCacheRow({
+          recordId,
+          values: (draft as any).values as any,
+          createdAt: (res?.meta?.createdAt || '').toString() || undefined,
+          updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
+          status: draftStatus,
+          dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
+            ? Number((res as any).meta.dataVersion)
+            : undefined,
+          rowNumber: Number.isFinite(Number((res as any)?.meta?.rowNumber))
+            ? Number((res as any).meta.rowNumber)
+            : undefined
+        });
+        logEvent('record.ensure.saved', {
+          recordId,
+          reason: args?.reason || null,
+          fieldPath: args?.fieldPath || null
+        });
+        return { success: true, recordId };
+      } catch (err: any) {
+        const message = resolveUiErrorMessage(err, 'Failed to create draft record.');
+        logEvent('record.ensure.error', {
+          reason: args?.reason || null,
+          fieldPath: args?.fieldPath || null,
+          message: resolveLogMessage(err, 'Failed to create draft record.')
+        });
+        if (message) {
+          setDraftSave({ phase: 'error', message });
+        } else {
+          setDraftSave({ phase: 'idle' });
+        }
+        return { success: false, message: message || '' };
+      }
+    },
+    [definition, formKey, logEvent, submit, upsertListCacheRow]
+  );
+
   const uploadFieldUrls = useCallback(
     async (args: {
       scope: 'top' | 'line';
@@ -7039,111 +7164,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
 
         // Step 1: ensure we have a record id saved to the destination tab before uploading (prevents orphan uploads).
-        let recordId =
-          resolveExistingRecordId({
-            selectedRecordId: selectedRecordIdRef.current,
-            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-          }) || '';
-
-        if (!recordId) {
-          const signature = (dedupSignatureRef.current || '').toString();
-          if (signature) {
-            if (dedupCheckingRef.current) {
-              const msg = 'Checking duplicates…';
-              logEvent('upload.ensureRecord.blocked.dedup.checking', { fieldPath: args.fieldPath });
-              return { success: false, message: msg };
-            }
-            const conflict = dedupConflictRef.current;
-            if (conflict && conflict.message) {
-              const msg = conflict.message.toString();
-              logEvent('upload.ensureRecord.blocked.dedup.conflict', { fieldPath: args.fieldPath, ruleId: conflict.ruleId });
-              return { success: false, message: msg };
-            }
-          }
-          try {
-            setDraftSave({ phase: 'saving' });
-            const statusRaw =
-              ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
-              '';
-            const draftStatus = resolveAutoSaveStatus(statusRaw);
-            const draft = buildDraftPayload({
-              definition,
-              formKey,
-              language: languageRef.current,
-              values: valuesRef.current,
-              lineItems: lineItemsRef.current
-            }) as any;
-            draft.__ckSaveMode = 'draft';
-            draft.__ckStatus = draftStatus;
-            draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
-            const res = await submit(draft);
-            if (!res?.success) {
-              const msg = (res?.message || 'Failed to create draft record.').toString();
-              setDraftSave({ phase: 'error', message: msg });
-              return { success: false, message: msg };
-            }
-            recordId = (res?.meta?.id || '').toString();
-            if (!recordId) {
-              const msg = 'Failed to create draft record id.';
-              setDraftSave({ phase: 'error', message: msg });
-              return { success: false, message: msg };
-            }
-            setSelectedRecordId(recordId);
-            // Keep ref in sync immediately so subsequent async flows (submit/upload queues) can resolve the current record id safely.
-            selectedRecordIdRef.current = recordId;
-            setLastSubmissionMeta(prev => ({
-              ...(prev || {}),
-              id: recordId,
-              createdAt: res?.meta?.createdAt || prev?.createdAt,
-              updatedAt: res?.meta?.updatedAt || prev?.updatedAt,
-              dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
-                ? Number((res as any).meta.dataVersion)
-                : prev?.dataVersion,
-              status: draftStatus
-            }));
-            recordStaleRef.current = null;
-            setRecordStale(null);
-            const dv = Number((res as any)?.meta?.dataVersion);
-            if (Number.isFinite(dv) && dv > 0) {
-              recordDataVersionRef.current = dv;
-            }
-            const rn = Number((res as any)?.meta?.rowNumber);
-            if (Number.isFinite(rn) && rn >= 2) {
-              recordRowNumberRef.current = rn;
-            }
-            setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
-            // Keep list view up-to-date without triggering a refetch.
-            upsertListCacheRow({
-              recordId,
-              // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups
-              // and does not keep File objects in memory (draft payload is URL-only for uploads).
-              values: (draft as any).values as any,
-              createdAt: (res?.meta?.createdAt || '').toString() || undefined,
-              updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
-              status: draftStatus,
-              dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
-                ? Number((res as any).meta.dataVersion)
-                : undefined,
-              rowNumber: Number.isFinite(Number((res as any)?.meta?.rowNumber))
-                ? Number((res as any).meta.rowNumber)
-                : undefined
-            });
-            logEvent('upload.ensureRecord.saved', { recordId, fieldPath: args.fieldPath });
-          } catch (err: any) {
-            const uiMessage = resolveUiErrorMessage(err, 'Failed to create draft record.');
-            const logMessage = resolveLogMessage(err, 'Failed to create draft record.');
-            if (uiMessage) {
-              setDraftSave({ phase: 'error', message: uiMessage });
-            } else {
-              setDraftSave({ phase: 'idle' });
-            }
-            logEvent('upload.ensureRecord.error', { fieldPath: args.fieldPath, message: logMessage });
-            return { success: false, message: uiMessage || '' };
-          }
+        const ensuredRecord = await ensureDraftRecordId({ reason: 'upload', fieldPath: args.fieldPath });
+        const recordId = `${ensuredRecord.recordId || ''}`.trim();
+        if (!ensuredRecord.success || !recordId) {
+          return { success: false, message: ensuredRecord.message || 'Failed to create draft record.' };
         }
 
-          ensureSession('afterEnsureRecord');
+        ensureSession('afterEnsureRecord');
 
         // Step 2: upload file payloads to Drive and get final URL list.
         const readStateItems = (): Array<string | File> => {
@@ -7414,7 +7441,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return next;
     },
-    [autoSaveDebounceMs, definition, formKey, isClosedRecord, logEvent, performAutoSave, resolveAutoSaveStatus, syncUploadQueueSize, upsertListCacheRow]
+    [autoSaveDebounceMs, ensureDraftRecordId, formKey, isClosedRecord, logEvent, performAutoSave, syncUploadQueueSize]
   );
 
   useEffect(() => {
@@ -7943,6 +7970,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         actions.push('CLOSE_RECORD');
 
         const followupErrors: string[] = [];
+        const byAction = new Map<string, any>();
         try {
           setStatus('Running follow-up…');
           setStatusLevel('info');
@@ -7958,7 +7986,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             actionsCount: actions.length
           });
           const entries = Array.isArray(batch?.results) ? batch.results : [];
-          const byAction = new Map<string, any>();
           entries.forEach(entry => {
             const key = (entry?.action || '').toString().trim().toUpperCase();
             if (key) byAction.set(key, entry?.result || null);
@@ -8011,7 +8038,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatus(`Submitted, but follow-up had issues: ${followupErrors.join(' · ')}`);
           setStatusLevel('error');
         } else {
-          setStatus(tSystem('actions.submittedClosed', language, 'Submitted and closed.'));
+          const reconciliation = byAction.get('CLOSE_RECORD')?.reservationReconciliation || null;
+          const consumedReservations = Number(reconciliation?.consumedReservations || 0) || 0;
+          const releasedReservations = Number(reconciliation?.releasedReservations || 0) || 0;
+          const baseMessage = tSystem('actions.submittedClosed', language, 'Submitted and closed.');
+          const feedbackConfig =
+            typeof definition?.reservationLifecycle?.reconcileOnFinalSubmit === 'object'
+              ? definition.reservationLifecycle.reconcileOnFinalSubmit.feedback
+              : undefined;
+          const statusMessage = buildReservationReconciliationFeedback({
+            language,
+            feedback: feedbackConfig,
+            baseMessage,
+            consumedReservations,
+            releasedReservations
+          });
+          setStatus(statusMessage);
           setStatusLevel('success');
         }
       }
@@ -9488,6 +9530,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           openConfirmDialog={customConfirm.openConfirm}
           setAutoSaveHold={setAutoSaveHoldFromUi}
           summarySubmitIntentRef={summarySubmitIntentRef}
+          ensureRecordId={ensureDraftRecordId}
         />
       ) : null}
 

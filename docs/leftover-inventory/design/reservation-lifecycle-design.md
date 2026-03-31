@@ -665,7 +665,7 @@ The reservation UX is already functional, but it still needs post-reconciliation
 
 Required work:
 
-- ensure final submit feedback clearly explains what was consumed and what was released when relevant
+- keep submit-time reconciliation feedback configurable and localized
 - keep optimistic availability updates consistent in every reservation mutation path
 - continue tightening the compact leftover row controls for readability
 

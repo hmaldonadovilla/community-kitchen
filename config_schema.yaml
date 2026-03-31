@@ -5238,6 +5238,70 @@ components:
           description: Optional override for the reservation ledger form.
       additionalProperties: true
 
+    ReservationReconcileOnFinalSubmitConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable/disable reservation reconciliation when the source record reaches a final status.
+        statuses:
+          type: array
+          items:
+            type: string
+          description: |
+            Source statuses that trigger final reconciliation. Defaults to
+            `followupConfig.statusTransitions.onClose` when omitted, then falls back to `["closed"]`.
+        ledgerFormKey:
+          type: string
+          description: Optional override for the reservation ledger form.
+        refreshMode:
+          type: string
+          enum: [full, revisionOnly, none]
+          description: |
+            Post-reconciliation cache refresh strategy.
+            - `full`: recompute affected form summaries and datasource revisions
+            - `revisionOnly`: bump revisions without warming broader caches
+            - `none`: skip cache refreshes entirely
+        feedback:
+          $ref: '#/components/schemas/ReservationReconciliationFeedbackConfig'
+      additionalProperties: true
+
+    ReservationReconciliationFeedbackConfig:
+      type: object
+      description: |
+        Optional user-facing submit feedback shown after final reservation reconciliation succeeds.
+
+        Supported placeholders in `message`:
+        - `{baseMessage}`
+        - `{reconciliationSummary}`
+        - `{consumedReservations}`
+        - `{releasedReservations}`
+
+        Supported placeholders in summary fragments:
+        - `{count}`
+      properties:
+        message:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        consumedSummarySingular:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        consumedSummaryPlural:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        releasedSummarySingular:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+        releasedSummaryPlural:
+          oneOf:
+            - $ref: '#/components/schemas/LocalizedString'
+            - type: string
+      additionalProperties: true
+
     ReservationConflictDialogConfig:
       type: object
       description: |
@@ -5297,6 +5361,13 @@ components:
           description: |
             Automatically release active reservations when the source record is deleted.
             This covers dedup-key delete/recreate flows and other configured delete paths.
+        reconcileOnFinalSubmit:
+          oneOf:
+            - type: boolean
+            - $ref: '#/components/schemas/ReservationReconcileOnFinalSubmitConfig'
+          description: |
+            Reconcile active reservations when the source record reaches its configured final status.
+            This is the generic submit-time closeout hook for reservation-backed inventory flows.
       additionalProperties: true
 
 
