@@ -2143,6 +2143,10 @@ export class Dashboard {
       if (label) step.label = label;
       const helpText = normalizeLocalized((stepRaw as any).helpText);
       if (helpText) step.helpText = helpText;
+      const includeWhen = normalizeCondition((stepRaw as any).includeWhen);
+      if (includeWhen) step.includeWhen = includeWhen;
+      const excludeWhen = normalizeCondition((stepRaw as any).excludeWhen);
+      if (excludeWhen) step.excludeWhen = excludeWhen;
       const contextHeader = normalizeStepContextHeader((stepRaw as any).contextHeader ?? (stepRaw as any).guidedContextHeader);
       if (contextHeader) step.contextHeader = contextHeader;
       const navRaw = (stepRaw as any).navigation;
@@ -2182,6 +2186,13 @@ export class Dashboard {
             }
             if ((milestoneActionRaw as any).advanceAfterStart !== undefined) {
               milestoneAction.advanceAfterStart = Boolean((milestoneActionRaw as any).advanceAfterStart);
+            }
+            const validationScope = normalizeString((milestoneActionRaw as any).validationScope).toLowerCase();
+            if (validationScope === 'currentstep') milestoneAction.validationScope = 'currentStep';
+            if (validationScope === 'throughcurrentstep') milestoneAction.validationScope = 'throughCurrentStep';
+            if (validationScope === 'fullform') milestoneAction.validationScope = 'fullForm';
+            if ((milestoneActionRaw as any).waitForBackgroundSaves !== undefined) {
+              milestoneAction.waitForBackgroundSaves = Boolean((milestoneActionRaw as any).waitForBackgroundSaves);
             }
             const confirmationDialog = normalizeDialogConfig((milestoneActionRaw as any).confirmationDialog);
             if (confirmationDialog) milestoneAction.confirmationDialog = confirmationDialog;

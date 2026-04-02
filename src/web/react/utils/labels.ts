@@ -23,7 +23,15 @@ const humanizeFallbackId = (rawId: string): string => {
 
 export const resolveLabel = (q: WebQuestionDefinition, language: LangCode) => {
   const key = (language || 'en').toString().toLowerCase();
-  return (q.label && (q.label as any)[key]) || (q.label && (q.label as any).en) || humanizeFallbackId(q.id || '');
+  const rawQuestion = (q || {}) as any;
+  const localizedLabel =
+    (q.label && (q.label as any)[key]) ||
+    (q.label && (q.label as any).en) ||
+    rawQuestion[`q${key.charAt(0).toUpperCase()}${key.slice(1)}`] ||
+    rawQuestion.qEn ||
+    rawQuestion[`label${key.charAt(0).toUpperCase()}${key.slice(1)}`] ||
+    rawQuestion.labelEn;
+  return localizedLabel || humanizeFallbackId(q.id || '');
 };
 
 export const resolveFieldLabel = (field: any, language: LangCode, fallback: string) => {

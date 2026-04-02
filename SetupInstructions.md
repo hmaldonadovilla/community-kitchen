@@ -1050,6 +1050,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       **Notes:**
       - Steps can mix **top-level questions** and **line item groups**.
       - Use `helpText` on a step to display guidance above the step content (e.g., food safety confirmation + per-pot photo instructions).
+      - Use step-level `includeWhen` / `excludeWhen` to hide entire steps dynamically. Hidden steps are removed from the stepper and from guided validation/advancement.
       - Line groups can be rendered **inline** or via a **full-page overlay** (`displayMode: "overlay"` or step `render.lineGroups.mode`).
       - You can filter visible rows per step using `rows.includeWhen` / `rows.excludeWhen` (e.g., `quantity > 0`) and scope subgroups via `subGroups.include`.
       - If you need to **show all rows** but only **validate/advance based on a subset** (e.g., ignore rows where `QTY < 1` while still displaying them), use `validationRows.includeWhen` / `validationRows.excludeWhen` on the step target.
@@ -1097,6 +1098,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
         - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
           - ensure a persisted draft record id exists (`ensureRecordId`)
+          - wait for in-flight uploads/autosaves to settle before starting (`waitForBackgroundSaves`)
+          - validate the current step, all visible steps through the current step, or the full form before starting (`validationScope`)
           - run the batch in background (`runInBackground`)
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
@@ -1109,6 +1112,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - The UI exposes virtual step fields (default prefix `__ckStep`) so existing `visibility.showWhen` rules can gate fields/buttons:
         - `__ckStepValid_<STEP_ID>` / `__ckStepComplete_<STEP_ID>`
         - `__ckStepMaxValidIndex` / `__ckStepMaxCompleteIndex`
+      - Datasource-backed visibility can use the virtual field format `__ckDataSourceCount.<DATA_SOURCE_ID>` to hide steps/buttons when a datasource currently has no cached rows.
       - Selection effects: you can give any `selectionEffects[]` rule an `id`, and auto-created rows will be tagged with `__ckSelectionEffectId = "<id>"` so row-level `visibility` / `validationRules` / `rowDisclaimer` can reference the originating rule.
       - Full design details live in `docs/guided-steps-edit-mode-design.md`.
 

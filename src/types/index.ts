@@ -3439,6 +3439,18 @@ export interface StepMilestoneActionConfig {
    * Optional acknowledgement dialog shown after the action has started.
    */
   feedbackDialog?: SystemActionGateDialogConfig;
+  /**
+   * Validation scope to enforce before the milestone action starts.
+   * - currentStep: validate only the active step (default)
+   * - throughCurrentStep: validate all visible guided steps from the beginning through the active step
+   * - fullForm: validate the full form definition
+   */
+  validationScope?: 'currentStep' | 'throughCurrentStep' | 'fullForm';
+  /**
+   * When true, wait for in-flight uploads/autosaves to settle before starting the milestone action.
+   * Default: false
+   */
+  waitForBackgroundSaves?: boolean;
 }
 
 export interface StepRowFilterConfig {
@@ -3854,6 +3866,19 @@ export interface StepConfig {
   id: string;
   label?: LocalizedString;
   helpText?: LocalizedString;
+  /**
+   * Optional step-level visibility gate.
+   *
+   * Use this to hide/show whole guided steps based on the same `when` clause system used by
+   * field visibility and validation rules. Virtual guided-step/system fields are supported.
+   */
+  includeWhen?: WhenClause;
+  /**
+   * Optional step-level exclusion gate.
+   *
+   * When this clause matches, the step is hidden even if `includeWhen` also matches.
+   */
+  excludeWhen?: WhenClause;
   contextHeader?: StepContextHeaderConfig;
   render?: StepsRenderDefaultsConfig;
   include: StepTargetConfig[];
@@ -4705,4 +4730,18 @@ export interface FollowupActionResult {
   pdfUrl?: string;
   fileId?: string;
   updatedAt?: string;
+  reservationReconciliation?: {
+    success: boolean;
+    sourceRecordId?: string;
+    reconciledReservations?: number;
+    consumedReservations?: number;
+    releasedReservations?: number;
+    touchedInventoryRecords?: number;
+  };
+  submitEffects?: {
+    configured?: number;
+    executed?: number;
+    created?: number;
+    operation?: 'create' | 'update' | string;
+  };
 }

@@ -181,6 +181,88 @@ const replaceGroupFieldTokens = (
   return html.replace(pattern, text);
 };
 
+const transformRowsForBlock = (args: {
+  blockText: string;
+  rows: any[];
+  group: QuestionConfig;
+  subConfig?: SubGroupConfig;
+  targetSubToken?: string;
+  lineItemRows: Record<string, any[]>;
+  dataSources?: DataSourceService;
+  language?: string;
+}): any[] => {
+  const { blockText, group, subConfig, targetSubToken, lineItemRows, dataSources, language } = args;
+  let rows = Array.isArray(args.rows) ? args.rows.slice() : [];
+  if (!rows.length) return rows;
+
+  const excludeWhen = extractExcludeWhenFromText(blockText);
+  if (excludeWhen && excludeWhen.clauses.length) {
+    const normalizedGroupId = (group.id || '').toString().toUpperCase();
+    const defaultPrefix = targetSubToken ? `${normalizedGroupId}.${targetSubToken}` : normalizedGroupId;
+    rows = rows.filter(dataRow => {
+      const shouldExclude = excludeWhen.clauses.some(clause => {
+        const key = (clause.key || '').toString().trim();
+        if (!key) return false;
+        const fullKey = key.includes('.') ? key : `${defaultPrefix}.${key}`;
+        const rendered = resolveLineItemTokenValue({
+          token: fullKey,
+          group,
+          rowData: dataRow,
+          subGroup: subConfig as any,
+          subGroupToken: targetSubToken,
+          dataSources,
+          language
+        });
+        const current = normalizeText(rendered).toLowerCase();
+        if (!current) return false;
+        return (clause.values || []).some(v => normalizeText(v).toLowerCase() === current);
+      });
+      return !shouldExclude;
+    });
+  }
+
+  const excludeWhenWhen = extractExcludeWhenWhenFromText(blockText);
+  if (excludeWhenWhen && rows.length) {
+    rows = rows.filter(dataRow => {
+      const shouldExclude = matchesTemplateWhenClause({
+        when: excludeWhenWhen.when,
+        group,
+        rowData: dataRow,
+        subGroup: subConfig as any,
+        subGroupToken: targetSubToken,
+        lineItemRows,
+        dataSources,
+        language
+      });
+      return !shouldExclude;
+    });
+  }
+
+  const consolidatedDirective = extractConsolidatedTableFromText(blockText);
+  if (consolidatedDirective && targetSubToken && rows.length) {
+    const normalizedGroupId = (group.id || '').toString().toUpperCase();
+    const matchesGroup = consolidatedDirective.groupId === normalizedGroupId;
+    const wantsSub = consolidatedDirective.subGroupId;
+    const normalizedTarget = targetSubToken.toUpperCase();
+    const slugTarget = slugifyPlaceholder(targetSubToken);
+    const matchesSub = wantsSub === normalizedTarget || (slugTarget && wantsSub === slugTarget);
+    if (matchesGroup && matchesSub) {
+      const placeholdersForKey = extractLineItemPlaceholders(blockText).filter(p => p.groupId === normalizedGroupId);
+      rows = consolidateConsolidatedTableRows({
+        rows,
+        placeholders: placeholdersForKey,
+        group,
+        subConfig: subConfig as any,
+        targetSubGroupId: targetSubToken,
+        dataSources,
+        language
+      });
+    }
+  }
+
+  return rows;
+};
+
 const expandBlock = (args: {
   blockText: string;
   groupLookup: Record<string, QuestionConfig>;
@@ -352,70 +434,16 @@ const expandBlock = (args: {
     return stripDirectiveTokens(blockText);
   }
 
-  const excludeWhen = extractExcludeWhenFromText(blockText);
-  if (excludeWhen && excludeWhen.clauses.length && rows.length) {
-    const normalizedGroupId = (group.id || '').toString().toUpperCase();
-    const defaultPrefix = targetSubToken ? `${normalizedGroupId}.${targetSubToken}` : normalizedGroupId;
-    rows = rows.filter(dataRow => {
-      const shouldExclude = excludeWhen.clauses.some(clause => {
-        const key = (clause.key || '').toString().trim();
-        if (!key) return false;
-        const fullKey = key.includes('.') ? key : `${defaultPrefix}.${key}`;
-        const rendered = resolveLineItemTokenValue({
-          token: fullKey,
-          group,
-          rowData: dataRow,
-          subGroup: subConfig as any,
-          subGroupToken: targetSubToken,
-          dataSources,
-          language
-        });
-        const current = normalizeText(rendered).toLowerCase();
-        if (!current) return false;
-        return (clause.values || []).some(v => normalizeText(v).toLowerCase() === current);
-      });
-      return !shouldExclude;
-    });
-  }
-
-  const excludeWhenWhen = extractExcludeWhenWhenFromText(blockText);
-  if (excludeWhenWhen && rows.length) {
-    rows = rows.filter(dataRow => {
-        const shouldExclude = matchesTemplateWhenClause({
-          when: excludeWhenWhen.when,
-          group,
-          rowData: dataRow,
-          subGroup: subConfig as any,
-          subGroupToken: targetSubToken,
-          lineItemRows,
-          dataSources,
-          language
-        });
-      return !shouldExclude;
-    });
-  }
-
-  const consolidatedDirective = extractConsolidatedTableFromText(blockText);
-  if (consolidatedDirective && targetSubToken && rows.length) {
-    const normalizedGroupId = (group.id || '').toString().toUpperCase();
-    const matchesGroup = consolidatedDirective.groupId === normalizedGroupId;
-    const wantsSub = consolidatedDirective.subGroupId;
-    const normalizedTarget = targetSubToken.toUpperCase();
-    const slugTarget = slugifyPlaceholder(targetSubToken);
-    const matchesSub = wantsSub === normalizedTarget || (slugTarget && wantsSub === slugTarget);
-    if (matchesGroup && matchesSub) {
-      const placeholdersForKey = extractLineItemPlaceholders(blockText).filter(p => p.groupId === normalizedGroupId);
-      rows = consolidateConsolidatedTableRows({
-        rows,
-        placeholders: placeholdersForKey,
-        group,
-        subConfig: subConfig as any,
-        targetSubGroupId: targetSubToken,
-        dataSources,
-        language
-      });
-    }
-  }
+  rows = transformRowsForBlock({
+    blockText,
+    rows,
+    group,
+    subConfig,
+    targetSubToken,
+    lineItemRows,
+    dataSources,
+    language
+  });
 
   const orderBy = extractOrderByFromText(blockText);
   if (orderBy && orderBy.keys.length && rows.length > 1) {
@@ -546,7 +574,17 @@ export const applyHtmlLineItemBlocks = (args: {
     const forcedSub = subConfig ? { token: subToken, config: subConfig, rowsAreSubRows: true } : undefined;
 
     if (repeatDirective.kind === 'GROUP_TABLE') {
-      const groupedValues = collectGroupFieldValues(rows, repeatDirective.fieldId);
+      const displayRows = transformRowsForBlock({
+        blockText: tableHtml,
+        rows,
+        group,
+        subConfig,
+        targetSubToken: subToken,
+        lineItemRows,
+        dataSources,
+        language
+      });
+      const groupedValues = collectGroupFieldValues(displayRows, repeatDirective.fieldId);
       if (!groupedValues.length) return '';
       const orderBy = extractOrderByFromText(tableHtml);
       const orderedGroupValues = (() => {
@@ -582,7 +620,7 @@ export const applyHtmlLineItemBlocks = (args: {
       })();
       const out: string[] = [];
       orderedGroupValues.forEach((groupValue, idx) => {
-        const scopedRows = rows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
+        const scopedRows = displayRows.filter(r => normalizeText(r?.[repeatDirective.fieldId]) === normalizeText(groupValue));
         if (!scopedRows.length) return;
         const orderedRows =
           orderBy && orderBy.keys.length

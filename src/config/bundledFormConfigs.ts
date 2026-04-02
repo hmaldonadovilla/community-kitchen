@@ -9930,21 +9930,17 @@ export const BUNDLED_FORM_CONFIGS = [
         "preActions": [
           "CLOSE_RECORD"
         ],
-        "backgroundActions": [
-          "CREATE_PDF",
-          "SEND_EMAIL"
-        ],
         "navigateTo": "summary",
         "feedbackDialog": {
           "title": {
-            "en": "Background actions started",
-            "fr": "Actions en arrière-plan démarrées",
-            "nl": "Achtergrondacties gestart"
+            "en": "Meal production closed",
+            "fr": "Production des repas clôturée",
+            "nl": "Maaltijdproductie afgesloten"
           },
           "message": {
-            "en": "The meal production report has been submitted. PDF creation and email delivery are running in the background. You can already review the summary while these actions finish.",
-            "fr": "Le rapport de production des repas a été soumis. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan. Vous pouvez déjà consulter le résumé pendant que ces actions se terminent.",
-            "nl": "Het maaltijdproductierapport is ingediend. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond. Je kunt de samenvatting al bekijken terwijl deze acties worden voltooid."
+            "en": "Meal production has been completed and the leftover registrations have been saved. You can now review the summary record.",
+            "fr": "La production des repas est terminée et les enregistrements des restes ont été sauvegardés. Vous pouvez maintenant consulter le récapitulatif.",
+            "nl": "De maaltijdproductie is afgerond en de registraties van de restanten zijn opgeslagen. U kunt nu het samenvattingsrecord bekijken."
           },
           "confirmLabel": {
             "en": "OK",
@@ -10290,6 +10286,13 @@ export const BUNDLED_FORM_CONFIGS = [
         "items": [
           {
             "id": "orderInfo",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "include": [
               {
                 "kind": "question",
@@ -10342,6 +10345,17 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Select any available leftovers to use for each meal. Entire dish leftovers can be reheated or combined. Part dish leftovers can be used partially by lowering the quantity."
             },
             "id": "leftoverForm",
+            "includeWhen": {
+              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
+              "greaterThan": 0
+            },
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -11319,6 +11333,13 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
             },
             "id": "deliveryForm",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -11685,7 +11706,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
-                                      "UNIT": "UNIT"
+                                      "UNIT": "UNIT",
+                                      "CAT": "CAT",
+                                      "ALLERGEN": "ALLERGEN"
                                     },
                                     "aggregateBy": [
                                       "ING",
@@ -11764,6 +11787,13 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "foodSafety",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -11830,6 +11860,13 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "portioning",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -11902,11 +11939,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "milestoneAction": {
                 "type": "followupBatch",
                 "actions": [
+                  "RECONCILE_RESERVATIONS",
                   "CREATE_PDF",
                   "SEND_EMAIL"
                 ],
                 "ensureRecordId": true,
                 "runInBackground": true,
+                "validationScope": "throughCurrentStep",
+                "waitForBackgroundSaves": true,
                 "advanceAfterStart": true,
                 "confirmationDialog": {
                   "title": {
@@ -12590,6 +12630,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_QTY",
               "LEFTOVER_UNIT"
             ],
+            "addButtonPlacement": "top",
             "tableColumnWidths": {
               "LEFTOVER_INGREDIENT": "50%",
               "LEFTOVER_QTY": "25%",
@@ -13378,7 +13419,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"defaultValue\": 0,\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -13959,7 +14000,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelFr": "Portions restantes",
               "labelNl": "Resterende porties",
               "required": false,
-              "defaultValue": 0,
               "visibility": {
                 "showWhen": {
                   "fieldId": "__ckStep",
@@ -14098,7 +14138,9 @@ export const BUNDLED_FORM_CONFIGS = [
                       "lineItemMapping": {
                         "ING": "ING",
                         "QTY": "QTY",
-                        "UNIT": "UNIT"
+                        "UNIT": "UNIT",
+                        "CAT": "CAT",
+                        "ALLERGEN": "ALLERGEN"
                       },
                       "aggregateBy": [
                         "ING",
@@ -14522,40 +14564,22 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active",
         "visibility": {
           "showWhen": {
-            "any": [
-              {
-                "lineItems": {
-                  "groupId": "MP_MEALS_REQUEST",
-                  "subGroupId": "MP_TYPE_LI",
-                  "when": {
-                    "all": [
-                      {
-                        "fieldId": "PREP_TYPE",
-                        "equals": "Cook"
-                      },
-                      {
-                        "fieldId": "RECIPE",
-                        "notEmpty": true
-                      }
-                    ]
-                  }
-                }
-              },
-              {
-                "lineItems": {
-                  "groupId": "MP_MEALS_REQUEST",
-                  "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
-                  "when": {
-                    "fieldId": "__ckRowSource",
-                    "equals": "manual"
-                  },
-                  "parentWhen": {
+            "lineItems": {
+              "groupId": "MP_MEALS_REQUEST",
+              "subGroupId": "MP_TYPE_LI",
+              "when": {
+                "all": [
+                  {
                     "fieldId": "PREP_TYPE",
-                    "equals": "Full"
+                    "equals": "Cook"
+                  },
+                  {
+                    "fieldId": "RECIPE",
+                    "notEmpty": true
                   }
-                }
+                ]
               }
-            ]
+            }
           }
         },
         "button": {
@@ -15553,6 +15577,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "LEFTOVER_QTY",
                 "LEFTOVER_UNIT"
               ],
+              "addButtonPlacement": "top",
               "tableColumnWidths": {
                 "LEFTOVER_INGREDIENT": "50%",
                 "LEFTOVER_QTY": "25%",
@@ -16437,7 +16462,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "Options (EN)": "",
               "Options (FR)": "",
               "Options (NL)": "",
-              "Config (JSON/REF)": "{\n  \"defaultValue\": 0,\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+              "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -16981,7 +17006,6 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelFr": "Portions restantes",
                 "labelNl": "Resterende porties",
                 "required": false,
-                "defaultValue": 0,
                 "visibility": {
                   "showWhen": {
                     "fieldId": "__ckStep",
@@ -17120,7 +17144,9 @@ export const BUNDLED_FORM_CONFIGS = [
                         "lineItemMapping": {
                           "ING": "ING",
                           "QTY": "QTY",
-                          "UNIT": "UNIT"
+                          "UNIT": "UNIT",
+                          "CAT": "CAT",
+                          "ALLERGEN": "ALLERGEN"
                         },
                         "aggregateBy": [
                           "ING",
@@ -17544,40 +17570,22 @@ export const BUNDLED_FORM_CONFIGS = [
           "status": "Active",
           "visibility": {
             "showWhen": {
-              "any": [
-                {
-                  "lineItems": {
-                    "groupId": "MP_MEALS_REQUEST",
-                    "subGroupId": "MP_TYPE_LI",
-                    "when": {
-                      "all": [
-                        {
-                          "fieldId": "PREP_TYPE",
-                          "equals": "Cook"
-                        },
-                        {
-                          "fieldId": "RECIPE",
-                          "notEmpty": true
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "lineItems": {
-                    "groupId": "MP_MEALS_REQUEST",
-                    "subGroupPath": "MP_TYPE_LI.MP_INGREDIENTS_LI",
-                    "when": {
-                      "fieldId": "__ckRowSource",
-                      "equals": "manual"
-                    },
-                    "parentWhen": {
+              "lineItems": {
+                "groupId": "MP_MEALS_REQUEST",
+                "subGroupId": "MP_TYPE_LI",
+                "when": {
+                  "all": [
+                    {
                       "fieldId": "PREP_TYPE",
-                      "equals": "Full"
+                      "equals": "Cook"
+                    },
+                    {
+                      "fieldId": "RECIPE",
+                      "notEmpty": true
                     }
-                  }
+                  ]
                 }
-              ]
+              }
             }
           },
           "button": {
@@ -18526,21 +18534,17 @@ export const BUNDLED_FORM_CONFIGS = [
         "preActions": [
           "CLOSE_RECORD"
         ],
-        "backgroundActions": [
-          "CREATE_PDF",
-          "SEND_EMAIL"
-        ],
         "navigateTo": "summary",
         "feedbackDialog": {
           "title": {
-            "en": "Background actions started",
-            "fr": "Actions en arrière-plan démarrées",
-            "nl": "Achtergrondacties gestart"
+            "en": "Meal production closed",
+            "fr": "Production des repas clôturée",
+            "nl": "Maaltijdproductie afgesloten"
           },
           "message": {
-            "en": "The meal production report has been submitted. PDF creation and email delivery are running in the background. You can already review the summary while these actions finish.",
-            "fr": "Le rapport de production des repas a été soumis. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan. Vous pouvez déjà consulter le résumé pendant que ces actions se terminent.",
-            "nl": "Het maaltijdproductierapport is ingediend. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond. Je kunt de samenvatting al bekijken terwijl deze acties worden voltooid."
+            "en": "Meal production has been completed and the leftover registrations have been saved. You can now review the summary record.",
+            "fr": "La production des repas est terminée et les enregistrements des restes ont été sauvegardés. Vous pouvez maintenant consulter le récapitulatif.",
+            "nl": "De maaltijdproductie is afgerond en de registraties van de restanten zijn opgeslagen. U kunt nu het samenvattingsrecord bekijken."
           },
           "confirmLabel": {
             "en": "OK",
@@ -18815,6 +18819,13 @@ export const BUNDLED_FORM_CONFIGS = [
         "items": [
           {
             "id": "orderInfo",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "include": [
               {
                 "kind": "question",
@@ -18867,6 +18878,17 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Select any available leftovers to use for each meal. Entire dish leftovers can be reheated or combined. Part dish leftovers can be used partially by lowering the quantity."
             },
             "id": "leftoverForm",
+            "includeWhen": {
+              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
+              "greaterThan": 0
+            },
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -19818,6 +19840,13 @@ export const BUNDLED_FORM_CONFIGS = [
               "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
             },
             "id": "deliveryForm",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -20184,7 +20213,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "lineItemMapping": {
                                       "ING": "ING",
                                       "QTY": "QTY",
-                                      "UNIT": "UNIT"
+                                      "UNIT": "UNIT",
+                                      "CAT": "CAT",
+                                      "ALLERGEN": "ALLERGEN"
                                     },
                                     "aggregateBy": [
                                       "ING",
@@ -20263,6 +20294,13 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "foodSafety",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -20329,6 +20367,13 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "portioning",
+            "excludeWhen": {
+              "fieldId": "status",
+              "equals": [
+                "Emailed",
+                "Closed"
+              ]
+            },
             "contextHeader": {
               "parts": [
                 "MP_DISTRIBUTOR",
@@ -20401,11 +20446,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "milestoneAction": {
                 "type": "followupBatch",
                 "actions": [
+                  "RECONCILE_RESERVATIONS",
                   "CREATE_PDF",
                   "SEND_EMAIL"
                 ],
                 "ensureRecordId": true,
                 "runInBackground": true,
+                "validationScope": "throughCurrentStep",
+                "waitForBackgroundSaves": true,
                 "advanceAfterStart": true,
                 "confirmationDialog": {
                   "title": {

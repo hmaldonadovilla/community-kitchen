@@ -156,6 +156,13 @@ import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUp
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
+import {
+  DATA_SOURCE_CACHE_CLEARED_EVENT,
+  DATA_SOURCE_CACHE_UPDATED_EVENT,
+  getCachedDataSourceItemCount
+} from '../../data/dataSources';
+import { collectDataSourceConfigsForPrefetch } from '../../data/dataSourcePrefetch';
 
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
 const listRowActionButtonWidthStyle: React.CSSProperties = {
@@ -175,6 +182,11 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
     return raw === undefined || raw === null ? '' : String(raw);
   });
 };
+
+const DATA_SOURCE_COUNT_FIELD_PREFIX = '__ckDataSourceCount.';
+
+const normalizeDataSourceVisibilityKey = (value: string): string =>
+  (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 const lineItemDedupDefaultMessage: LocalizedString = {
   en: 'This entry already exists in this list.',
@@ -827,6 +839,9 @@ const FormView: React.FC<FormViewProps> = ({
   const overlayOpenActionLoggedRef = useRef<Set<string>>(new Set());
   const guidedLineGroupOverrideLoggedRef = useRef<Set<string>>(new Set());
   const foodSafetyDiagnosticLoggedRef = useRef(false);
+  const guidedVisibilityDiagnosticSignatureRef = useRef('');
+  const rowFlowDiagnosticSignatureRef = useRef('');
+  const rowFlowSegmentActionsDiagnosticSignatureRef = useRef('');
   const [overlayOpenActionSuppressed, setOverlayOpenActionSuppressed] = useState<Record<string, boolean>>({});
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
   const openConfirmDialogResolved = openConfirmDialog || fallbackConfirm.openConfirm;
@@ -895,6 +910,74 @@ const FormView: React.FC<FormViewProps> = ({
   const guidedStepsCfg = definition.steps?.mode === 'guided' ? definition.steps : undefined;
   const guidedEnabled = Boolean(guidedStepsCfg && Array.isArray(guidedStepsCfg.items) && guidedStepsCfg.items.length > 0);
   const guidedPrefix = (guidedStepsCfg?.stateFields?.prefix || '__ckStep').toString();
+  const [dataSourceVisibilityVersion, setDataSourceVisibilityVersion] = useState(0);
+  const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
+  const guidedDataSourceConfigMap = useMemo(() => {
+    const byExact = new Map<string, any>();
+    const byNormalized = new Map<string, any>();
+    guidedDataSourceConfigs.forEach(cfg => {
+      const id = (cfg?.id || '').toString().trim();
+      if (!id) return;
+      if (!byExact.has(id)) byExact.set(id, cfg);
+      const normalized = normalizeDataSourceVisibilityKey(id);
+      if (normalized && !byNormalized.has(normalized)) byNormalized.set(normalized, cfg);
+    });
+    return { byExact, byNormalized };
+  }, [guidedDataSourceConfigs]);
+
+  useEffect(() => {
+    const bump = () => setDataSourceVisibilityVersion(version => version + 1);
+    try {
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
+      window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
+      return () => {
+        window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
+        window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
+      };
+    } catch (_) {
+      return;
+    }
+  }, []);
+
+  const resolveStepVisibilityValue = useCallback(
+    (fieldId: string): FieldValue | undefined => {
+      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
+        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
+        const config =
+          guidedDataSourceConfigMap.byExact.get(key) ||
+          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
+        if (config) {
+          const count = getCachedDataSourceItemCount(config, language);
+          if (count !== null) return count as FieldValue;
+        }
+      }
+      const direct = values[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      const sys = getSystemFieldValue(fieldId, recordMeta);
+      if (sys !== undefined) return sys as FieldValue;
+      for (const rows of Object.values(lineItems)) {
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          const candidate = (row as LineItemRowState).values[fieldId];
+          if (candidate !== undefined && candidate !== null && candidate !== '') return candidate as FieldValue;
+        }
+      }
+      return undefined;
+    },
+    [guidedDataSourceConfigMap, language, lineItems, recordMeta, values]
+  );
+  const guidedVisibleSteps = useMemo(
+    () =>
+      guidedEnabled
+        ? filterVisibleGuidedSteps((guidedStepsCfg?.items || []) as any[], {
+            getValue: (fieldId: string) => resolveStepVisibilityValue(fieldId),
+            getLineItems: (groupId: string) => lineItems[groupId] || [],
+            getLineItemKeys: () => Object.keys(lineItems)
+          })
+        : [],
+    [dataSourceVisibilityVersion, guidedEnabled, guidedStepsCfg, lineItems, resolveStepVisibilityValue]
+  );
 
   const guidedStatus = useMemo(() => {
     if (!guidedEnabled) return { steps: [], maxCompleteIndex: -1, maxValidIndex: -1 };
@@ -903,10 +986,10 @@ const FormView: React.FC<FormViewProps> = ({
 
   const guidedStepIds = useMemo(() => {
     if (!guidedEnabled) return [] as string[];
-    return (guidedStepsCfg!.items || [])
+    return guidedVisibleSteps
       .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
       .filter(Boolean);
-  }, [guidedEnabled, guidedStepsCfg]);
+  }, [guidedEnabled, guidedVisibleSteps]);
 
   const [activeGuidedStepId, setActiveGuidedStepId] = useState<string>(() => {
     const first = guidedStepIds[0];
@@ -948,7 +1031,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (!guidedStepsCfg) return -1;
 
     const stepCfgById = new Map<string, any>();
-    (guidedStepsCfg.items || []).forEach((s: any) => {
+    guidedVisibleSteps.forEach((s: any) => {
       const id = (s?.id ?? '').toString().trim();
       if (!id) return;
       if (!stepCfgById.has(id)) stepCfgById.set(id, s);
@@ -988,6 +1071,19 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('steps.validation.noticeMode', { mode: 'fieldOnly' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guidedEnabled]);
+
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    const payload = {
+      visibleStepIds: guidedStepIds,
+      visibleStepCount: guidedStepIds.length,
+      hiddenStepCount: Math.max(0, ((guidedStepsCfg?.items || []) as any[]).length - guidedStepIds.length)
+    };
+    const signature = JSON.stringify(payload);
+    if (guidedVisibilityDiagnosticSignatureRef.current === signature) return;
+    guidedVisibilityDiagnosticSignatureRef.current = signature;
+    onDiagnostic?.('steps.visibility.resolved', payload);
+  }, [guidedEnabled, guidedStepIds, guidedStepsCfg, onDiagnostic]);
 
   useEffect(() => {
     if (!orderedEntryEnabled) return;
@@ -1130,7 +1226,7 @@ const FormView: React.FC<FormViewProps> = ({
   const rowFlowTargets = useMemo(() => {
     if (!guidedStepsCfg) return [];
     const targets: Array<{ stepId: string; groupId: string; mode: string }> = [];
-    (guidedStepsCfg.items || []).forEach(step => {
+    guidedVisibleSteps.forEach(step => {
       const stepId = (step?.id || '').toString();
       const includes = Array.isArray(step?.include) ? step.include : [];
       includes.forEach((target: any) => {
@@ -1144,12 +1240,12 @@ const FormView: React.FC<FormViewProps> = ({
       });
     });
     return targets;
-  }, [guidedStepsCfg]);
+  }, [guidedStepsCfg, guidedVisibleSteps]);
 
   const rowFlowSegmentActionTargets = useMemo(() => {
     if (!guidedStepsCfg) return [];
     const targets: Array<{ stepId: string; groupId: string; segmentsWithActions: number; multiActionSegments: number }> = [];
-    (guidedStepsCfg.items || []).forEach(step => {
+    guidedVisibleSteps.forEach(step => {
       const stepId = (step?.id || '').toString();
       const includes = Array.isArray(step?.include) ? step.include : [];
       includes.forEach((target: any) => {
@@ -1168,16 +1264,24 @@ const FormView: React.FC<FormViewProps> = ({
       });
     });
     return targets;
-  }, [guidedStepsCfg]);
+  }, [guidedStepsCfg, guidedVisibleSteps]);
 
   useEffect(() => {
     if (!rowFlowTargets.length) return;
-    onDiagnostic?.('form.rowFlow.enabled', { targets: rowFlowTargets });
+    const payload = { targets: rowFlowTargets };
+    const signature = JSON.stringify(payload);
+    if (rowFlowDiagnosticSignatureRef.current === signature) return;
+    rowFlowDiagnosticSignatureRef.current = signature;
+    onDiagnostic?.('form.rowFlow.enabled', payload);
   }, [onDiagnostic, rowFlowTargets]);
 
   useEffect(() => {
     if (!rowFlowSegmentActionTargets.length) return;
-    onDiagnostic?.('form.rowFlow.output.segmentActions.enabled', { targets: rowFlowSegmentActionTargets });
+    const payload = { targets: rowFlowSegmentActionTargets };
+    const signature = JSON.stringify(payload);
+    if (rowFlowSegmentActionsDiagnosticSignatureRef.current === signature) return;
+    rowFlowSegmentActionsDiagnosticSignatureRef.current = signature;
+    onDiagnostic?.('form.rowFlow.output.segmentActions.enabled', payload);
   }, [onDiagnostic, rowFlowSegmentActionTargets]);
 
   // Clamp/initialize the active step when step config or validity changes.
@@ -1209,7 +1313,7 @@ const FormView: React.FC<FormViewProps> = ({
   const guidedInlineLineGroupIds = useMemo(() => {
     const out = new Set<string>();
     if (!guidedEnabled || !guidedStepsCfg) return out;
-    const steps = guidedStepsCfg.items || [];
+    const steps = guidedVisibleSteps;
     if (!steps.length) return out;
     const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
     const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
@@ -1247,12 +1351,12 @@ const FormView: React.FC<FormViewProps> = ({
     });
 
     return out;
-  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg]);
+  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedVisibleSteps]);
 
   const buildGuidedStepDefinition = useCallback(
     (stepId?: string): WebFormDefinition | null => {
       if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return null;
-      const steps = guidedStepsCfg.items || [];
+      const steps = guidedVisibleSteps;
       const resolvedStepId = (stepId || activeGuidedStepId || '').toString().trim();
       const stepCfg =
         (steps.find(s => (s?.id || '').toString().trim() === resolvedStepId) || steps[0]) as any;
@@ -1468,14 +1572,88 @@ const FormView: React.FC<FormViewProps> = ({
 
       return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
     },
-    [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedStepsCfg, onDiagnostic]
+    [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg, onDiagnostic]
+  );
+
+  const validateGuidedStepScope = useCallback(
+    (args: {
+      scope: 'currentStep' | 'throughCurrentStep' | 'fullForm';
+      stepId: string;
+      stepIndex: number;
+    }): { errors: FormErrors; firstInvalidStepId: string | null } => {
+      if (args.scope === 'fullForm') {
+        const nextErrors = validateForm({
+          definition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups,
+          virtualState: guidedVirtualState
+        });
+        return {
+          errors: nextErrors,
+          firstInvalidStepId: Object.keys(nextErrors).length ? guidedStepIds[0] || args.stepId || null : null
+        };
+      }
+
+      const stepIds =
+        args.scope === 'throughCurrentStep'
+          ? guidedStepIds.slice(0, Math.max(0, args.stepIndex) + 1)
+          : [args.stepId];
+      const mergedErrors: FormErrors = {};
+      let firstInvalidStepId: string | null = null;
+
+      stepIds.forEach(stepId => {
+        const stepDefinition = buildGuidedStepDefinition(stepId) || definition;
+        const stepCfg = guidedVisibleSteps.find(step => (step?.id || '').toString().trim() === stepId) as any;
+        const stepStatus = guidedStatus.steps.find(step => step.id === stepId);
+        const forwardGate = normalizeForwardGate(
+          stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate,
+          guidedDefaultForwardGate
+        );
+        const requiredMode =
+          forwardGate === 'whenComplete' && !stepStatus?.complete ? ('stepComplete' as const) : ('configured' as const);
+        const nextErrors = validateForm({
+          definition: stepDefinition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups,
+          requiredMode,
+          virtualState: guidedVirtualState
+        });
+        if (Object.keys(nextErrors).length && !firstInvalidStepId) {
+          firstInvalidStepId = stepId;
+        }
+        Object.assign(mergedErrors, nextErrors);
+      });
+
+      return { errors: mergedErrors, firstInvalidStepId };
+    },
+    [
+      buildGuidedStepDefinition,
+      collapsedRows,
+      collapsedSubgroups,
+      definition,
+      guidedDefaultForwardGate,
+      guidedStatus.steps,
+      guidedStepIds,
+      guidedVirtualState,
+      guidedVisibleSteps,
+      language,
+      lineItems,
+      normalizeForwardGate,
+      values
+    ]
   );
 
   const orderedEntryQuestions = useMemo(() => {
     if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
     if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
 
-    const steps = guidedStepsCfg.items || [];
+    const steps = guidedVisibleSteps;
     const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
     const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
     const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
@@ -1534,8 +1712,7 @@ const FormView: React.FC<FormViewProps> = ({
       add((target as any).id);
     });
 
-    const steps = guidedStepsCfg.items || [];
-    steps.forEach(step => {
+    guidedVisibleSteps.forEach(step => {
       const stepTargets: any[] = Array.isArray((step as any)?.include) ? (step as any).include : [];
       stepTargets.forEach(target => {
         if (!target || typeof target !== 'object') return;
@@ -1547,7 +1724,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     byConfig.forEach(add);
     return ordered.length ? ordered : byConfig;
-  }, [definition.questions, guidedEnabled, guidedStepIds, guidedStepsCfg]);
+  }, [definition.questions, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg]);
 
   const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
   const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -1594,10 +1771,6 @@ const FormView: React.FC<FormViewProps> = ({
 
       // Forward navigation: use computed reachability (contiguous gating).
       if (nextIdx > effectiveMaxReachableIndex) {
-        // When blocked by the system action gate, do not trigger submit/next logic (it would bypass the gate).
-        if (!guidedForwardNavigationBlocked && submitActionRef?.current) {
-          submitActionRef.current();
-        }
         onDiagnostic?.('steps.step.blocked', {
           from: activeGuidedStepId,
           to: nextId,
@@ -1617,6 +1790,7 @@ const FormView: React.FC<FormViewProps> = ({
       guidedDefaultForwardGate,
       guidedEnabled,
       guidedStepIds,
+      guidedVisibleSteps,
       guidedStepsCfg,
       maxReachableGuidedIndex,
       dedupNavigationBlocked,
@@ -1632,7 +1806,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (!guidedStepsCfg) return;
     if (activeGuidedStepIndex >= guidedStepIds.length - 1) return;
 
-    const stepCfg = guidedStepsCfg.items.find(s => (s?.id || '').toString() === activeGuidedStepId) as any;
+    const stepCfg = guidedVisibleSteps.find(s => (s?.id || '').toString() === activeGuidedStepId) as any;
     const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
     const autoAdvance = normalizeAutoAdvance(
       stepCfg?.navigation?.autoAdvance ?? stepCfg?.autoAdvance ?? (guidedStepsCfg as any)?.defaultAutoAdvance,
@@ -1793,6 +1967,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedEnabled,
     guidedStepIds,
     guidedStatus.steps,
+    guidedVisibleSteps,
     guidedStepsCfg,
     maxReachableGuidedIndex,
     normalizeAutoAdvance,
@@ -1845,7 +2020,7 @@ const FormView: React.FC<FormViewProps> = ({
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
       // It should validate only the current step's visible targets (not the full form).
       if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep && !forceFinalSubmit) {
-        const steps = guidedStepsCfg.items || [];
+        const steps = guidedVisibleSteps;
         const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
         const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
         const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
@@ -1938,11 +2113,45 @@ const FormView: React.FC<FormViewProps> = ({
         const nextId = guidedStepIds[activeGuidedStepIndex + 1];
         const milestoneAction = stepCfg?.navigation?.milestoneAction;
         if (milestoneAction && onGuidedStepMilestone) {
+          const validationScope = (milestoneAction?.validationScope || 'currentStep') as
+            | 'currentStep'
+            | 'throughCurrentStep'
+            | 'fullForm';
+          if (validationScope !== 'currentStep') {
+            const scopeResult = validateGuidedStepScope({
+              scope: validationScope,
+              stepId: activeGuidedStepId,
+              stepIndex: activeGuidedStepIndex
+            });
+            setErrors(scopeResult.errors);
+            if (Object.keys(scopeResult.errors).length) {
+              const targetStepId = scopeResult.firstInvalidStepId || activeGuidedStepId;
+              onDiagnostic?.('steps.gate.blocked', {
+                stepId: targetStepId,
+                gate: validationScope,
+                errorCount: Object.keys(scopeResult.errors).length,
+                requiredMode: 'configured'
+              });
+              if (targetStepId && targetStepId !== activeGuidedStepId) {
+                selectGuidedStep(targetStepId, 'user');
+              }
+              errorNavAllowOverlayOpenRef.current = true;
+              errorNavRequestRef.current += 1;
+              errorNavModeRef.current = 'focus';
+              onDiagnostic?.('validation.navigate.request', {
+                attempt: errorNavRequestRef.current,
+                scope: validationScope,
+                mode: errorNavModeRef.current
+              });
+              return;
+            }
+          }
           onDiagnostic?.('steps.step.milestone.begin', {
             stepId: activeGuidedStepId,
             type: milestoneAction?.type || null,
             actionCount: Array.isArray(milestoneAction?.actions) ? milestoneAction.actions.length : 0,
-            nextStepId: nextId || null
+            nextStepId: nextId || null,
+            validationScope
           });
           void onGuidedStepMilestone({
             stepId: activeGuidedStepId || '',
@@ -2010,6 +2219,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedDefaultForwardGate,
     guidedEnabled,
     guidedStepIds,
+    guidedVisibleSteps,
     guidedStepsCfg,
     language,
     lineItems,
@@ -2020,6 +2230,7 @@ const FormView: React.FC<FormViewProps> = ({
     summarySubmitIntentRef,
     submitActionRef,
     submitting,
+    validateGuidedStepScope,
     values
   ]);
 
@@ -2029,7 +2240,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (!guidedEnabled) return;
       if (!guidedStepsCfg || !guidedStepIds.length) return;
       if (activeGuidedStepIndex <= 0) return;
-      const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
+      const stepCfg = guidedVisibleSteps[activeGuidedStepIndex] as any;
       const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
       const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
       const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
@@ -2050,6 +2261,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedBackActionRef,
     guidedEnabled,
     guidedStepIds,
+    guidedVisibleSteps,
     guidedStepsCfg,
     onDiagnostic,
     selectGuidedStep
@@ -2061,7 +2273,7 @@ const FormView: React.FC<FormViewProps> = ({
       onGuidedUiChange(null);
       return;
     }
-    const stepCfg = (guidedStepsCfg.items || [])[activeGuidedStepIndex] as any;
+    const stepCfg = guidedVisibleSteps[activeGuidedStepIndex] as any;
     const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
     const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
     const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
@@ -2099,13 +2311,14 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     activeGuidedStepIndex,
-    guidedEnabled,
-    guidedStepIds,
-    guidedStepsCfg,
-    guidedDefaultForwardGate,
-    guidedStatus.steps,
-    language,
     dedupNavigationBlocked,
+    guidedDefaultForwardGate,
+    guidedEnabled,
+    guidedStatus.steps,
+    guidedStepIds,
+    guidedVisibleSteps,
+    guidedStepsCfg,
+    language,
     onGuidedUiChange
   ]);
 
@@ -2340,7 +2553,7 @@ const FormView: React.FC<FormViewProps> = ({
         const validationDefinition = overlayDefinition || stepDefinition || definition;
         const requiredMode = (() => {
           if (overlayDefinition || !guidedEnabled || !guidedStepsCfg || !stepDefinition) return 'configured';
-          const steps = guidedStepsCfg.items || [];
+          const steps = guidedVisibleSteps;
           const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
           const gate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
           return gate === 'whenComplete' ? 'stepComplete' : 'configured';
@@ -5936,25 +6149,35 @@ const FormView: React.FC<FormViewProps> = ({
 
   const resolveVisibilityValue = useCallback(
     (fieldId: string): FieldValue | undefined => {
-    if (guidedVirtualState) {
-      const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
-      if (virtual !== undefined) return virtual as FieldValue;
-    }
-    const direct = values[fieldId];
-    if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-    const sys = getSystemFieldValue(fieldId, recordMeta);
-    if (sys !== undefined) return sys as FieldValue;
-    // scan all line item groups for the first non-empty occurrence
-    for (const rows of Object.values(lineItems)) {
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows) {
-        const v = (row as LineItemRowState).values[fieldId];
-        if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+      if (guidedVirtualState) {
+        const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
+        if (virtual !== undefined) return virtual as FieldValue;
       }
-    }
-    return undefined;
+      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
+        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
+        const config =
+          guidedDataSourceConfigMap.byExact.get(key) ||
+          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
+        if (config) {
+          const count = getCachedDataSourceItemCount(config, language);
+          if (count !== null) return count as FieldValue;
+        }
+      }
+      const direct = values[fieldId];
+      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
+      const sys = getSystemFieldValue(fieldId, recordMeta);
+      if (sys !== undefined) return sys as FieldValue;
+      // scan all line item groups for the first non-empty occurrence
+      for (const rows of Object.values(lineItems)) {
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          const v = (row as LineItemRowState).values[fieldId];
+          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
+        }
+      }
+      return undefined;
     },
-    [guidedVirtualState, lineItems, recordMeta, values]
+    [guidedDataSourceConfigMap, guidedVirtualState, language, lineItems, recordMeta, values]
   );
 
   const topVisibilityCtx = useMemo(
@@ -6095,13 +6318,23 @@ const FormView: React.FC<FormViewProps> = ({
         const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
         if (virtual !== undefined) return virtual as FieldValue;
       }
+      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
+        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
+        const config =
+          guidedDataSourceConfigMap.byExact.get(key) ||
+          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
+        if (config) {
+          const count = getCachedDataSourceItemCount(config, language);
+          if (count !== null) return count as FieldValue;
+        }
+      }
       const direct = sourceValues[fieldId];
       if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
       const sys = getSystemFieldValue(fieldId, recordMeta);
       if (sys !== undefined) return sys as FieldValue;
       return undefined;
     },
-    [guidedVirtualState, recordMeta]
+    [guidedDataSourceConfigMap, guidedVirtualState, language, recordMeta]
   );
 
   const getTopValueNoScan = useCallback(
@@ -8660,7 +8893,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return { key: firstKey };
 
       const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-      const steps = guidedStepsCfg.items || [];
+      const steps = guidedVisibleSteps;
       const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
       const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
       const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
@@ -12673,7 +12906,7 @@ const FormView: React.FC<FormViewProps> = ({
 
   const renderGuidedContent = (): React.ReactNode => {
     if (!guidedEnabled || !guidedStepsCfg) return null;
-    const steps = guidedStepsCfg.items || [];
+    const steps = guidedVisibleSteps;
     if (!steps.length) return null;
 
     const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;

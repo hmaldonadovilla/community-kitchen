@@ -20,5 +20,11 @@ describe('resolveLabel', () => {
     const question = { id: 'MP_UNLOCK_FOR_EDIT' } as any;
     expect(resolveLabel(question, 'EN')).toBe('Unlock for edit');
   });
-});
 
+  test('resolves raw config question labels from qEn/qFr/qNl', () => {
+    const question = { id: 'HUB_BTN', qEn: 'Hub', qFr: 'Hub FR', qNl: 'Hub NL' } as any;
+    expect(resolveLabel(question, 'EN')).toBe('Hub');
+    expect(resolveLabel(question, 'FR')).toBe('Hub FR');
+    expect(resolveLabel(question, 'NL')).toBe('Hub NL');
+  });
+});

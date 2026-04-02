@@ -1601,6 +1601,66 @@ describe('WebFormService', () => {
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
   });
 
+  test('reconcileInventoryReservations heals stale ledger resource record ids using resource item id fallback', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-HEAL-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0,
+      LEFTOVER_USED_BY_FORM_KEY: '',
+      LEFTOVER_USED_BY_RECORD_ID: ''
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-HEAL-1',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-HEAL-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-HEAL-1',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const ledgerContext = (service as any).getFormContextLite(ledgerFormKey);
+    const staleReservationSave = (service as any).saveInternalRecord({
+      context: ledgerContext,
+      recordId: (reserved.reservationId || '').toString(),
+      language: 'EN',
+      status: 'active',
+      values: {
+        ...(service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString())?.values || {}),
+        RESOURCE_RECORD_ID: 'leftover.'
+      },
+      auditAction: 'test:corruptReservationRecordId'
+    });
+    expect(staleReservationSave.success).toBe(true);
+
+    const reconciled = service.reconcileInventoryReservations({
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-HEAL-1',
+      ledgerFormKey
+    });
+    expect(reconciled.success).toBe(true);
+    expect(reconciled.reconciledReservations).toBe(1);
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+
+    const healedReservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((healedReservation?.values as any)?.STATUS).toBe('consumed');
+    expect((healedReservation?.values as any)?.RESOURCE_RECORD_ID).toBe((inventory.meta?.id || '').toString());
+  });
+
   test('releaseInventoryReservations releases reserved quantity without consuming inventory', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const inventory = service.saveSubmissionWithId({
@@ -2111,6 +2171,244 @@ describe('WebFormService', () => {
     expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
     const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('triggerFollowupAction RECONCILE_RESERVATIONS reconciles active reservations without closing the record', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      reservationLifecycle: {
+        ledgerFormKey,
+        reconcileOnFinalSubmit: {
+          enabled: true,
+          ledgerFormKey,
+          refreshMode: 'full'
+        }
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-MILESTONE-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-MILESTONE-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 5,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-MILESTONE-1',
+      resourceKind: 'Entire dish',
+      quantity: 2,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-MILESTONE-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-MILESTONE-1',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const result = service.triggerFollowupAction('Config: Delivery', 'REC-MILESTONE-1', 'RECONCILE_RESERVATIONS');
+    expect(result.success).toBe(true);
+    expect(result.reservationReconciliation?.success).toBe(true);
+    expect(result.status).toBeUndefined();
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(3);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('triggerFollowupActions batch supports RECONCILE_RESERVATIONS before pdf and email', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      pdfTemplateId: { EN: 'pdf-template-en' },
+      emailTemplateId: { EN: 'email-template-en' },
+      emailRecipients: ['ops@example.com'],
+      statusTransitions: { onPdf: 'PDF Created', onEmail: 'Emailed' },
+      reservationLifecycle: {
+        ledgerFormKey,
+        reconcileOnFinalSubmit: {
+          enabled: true,
+          ledgerFormKey,
+          refreshMode: 'full'
+        }
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    const followups = (service as any).followups || (service as any);
+    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'http://pdf',
+      fileId: 'file-1',
+      blob: null
+    });
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-MILESTONE-2',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-MILESTONE-2',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 4,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-MILESTONE-2',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-MILESTONE-2',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-MILESTONE-2',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-MILESTONE-2', [
+      'RECONCILE_RESERVATIONS',
+      'CREATE_PDF',
+      'SEND_EMAIL'
+    ]);
+    expect(result.success).toBe(true);
+    const reconcileEntry = result.results.find((entry: any) => entry.action === 'RECONCILE_RESERVATIONS');
+    expect(reconcileEntry?.result?.success).toBe(true);
+    expect(reconcileEntry?.result?.reservationReconciliation?.success).toBe(true);
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(0);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('triggerFollowupAction applies close-state submit effects before returning success', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      statusTransitions: { onClose: 'Closed' },
+      submitEffects: [
+        {
+          id: 'captureOnClose',
+          type: 'createRecord',
+          targetFormKey: 'Config: Inventory',
+          runOn: 'both',
+          when: {
+            fieldId: 'status',
+            equals: ['Closed']
+          },
+          values: {
+            SOURCE_RECORD_ID: '{{source.id}}',
+            SOURCE_STATUS: '{{source.status}}',
+            LEFTOVER_KIND: 'entireDish'
+          }
+        }
+      ]
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ]);
+
+    const inventoryConfig = ss.getSheetByName('Config: Inventory') || ss.insertSheet('Config: Inventory');
+    (inventoryConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_STATUS', 'TEXT', 'Source status', 'Source status', 'Source status', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Leftover kind', 'Leftover kind', 'Leftover kind', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-CLOSE-EFFECT',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const closeResult = (service as any).triggerFollowupAction('Config: Delivery', 'REC-CLOSE-EFFECT', 'CLOSE_RECORD');
+    expect(closeResult.success).toBe(true);
+    expect(closeResult.status).toBe('Closed');
+    expect(closeResult.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 1,
+        operation: 'update'
+      })
+    );
+
+    const closedRecord = service.fetchSubmissionById('Config: Delivery', 'REC-CLOSE-EFFECT');
+    expect((closedRecord as any)?.status).toBe('Closed');
+
+    const inventorySheet = ss.getSheetByName('Inventory Data');
+    expect(inventorySheet).toBeDefined();
+    expect(inventorySheet!.getLastRow()).toBe(2);
+    const values = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const header = values[0].map((value: any) => (value || '').toString().trim());
+    const sourceRecordCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
+    const sourceStatusCol = header.findIndex((value: string) => /\[SOURCE_STATUS\]\s*$/.test(value));
+    expect(values[1][sourceRecordCol]).toBe('REC-CLOSE-EFFECT');
+    expect(values[1][sourceStatusCol]).toBe('Closed');
   });
 
   test('saveSubmissionWithId can delete an existing record immediately for dedup delete-on-key-change flow', () => {

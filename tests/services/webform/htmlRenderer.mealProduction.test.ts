@@ -108,6 +108,23 @@ const recordValues = {
 
 const dataSources = { lookupDataSourceDetails: () => null } as any;
 
+function seedIngredientsData(ss: MockSpreadsheet): void {
+  const ingredientsSheet = ss.insertSheet('Ingredients Data');
+  ingredientsSheet.setMockData([
+    [
+      'Language',
+      'Ingredient name [INGREDIENT_NAME]',
+      'Category [CATEGORY]',
+      'Allowed unit [ALLOWED_UNIT]',
+      'Dietary applicability [DIETARY_APPLICABILITY]',
+      'Supplier [SUPPLIER]',
+      'Allergen [ALLERGEN]'
+    ],
+    ['EN', 'Green beans - frozen', 'Frozen vegetables', 'bag', 'Vegan, Vegetarian', 'Freshmed', 'None'],
+    ['EN', 'Salt', 'Herbs - spices - condiments', 'Tbsp, gr', 'Vegan, Vegetarian', 'Freshmed', 'None']
+  ]);
+}
+
 describe('meal production bundled HTML rendering', () => {
   it('renders nested ingredients in bundle:ingredients_needed.html from record values', () => {
     const record: WebFormSubmission = {
@@ -248,7 +265,9 @@ describe('meal production bundled HTML rendering', () => {
   });
 
   it('renders meal production bundled templates through WebFormService using actual bundled form config', () => {
-    const service = new WebFormService(new MockSpreadsheet() as any);
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
     const payload: WebFormSubmission = {
       formKey: 'Config: Meal Production',
       language: 'EN',
@@ -268,8 +287,177 @@ describe('meal production bundled HTML rendering', () => {
     expect(recipe.html).toContain('Salt');
   });
 
+  it('backfills missing ingredient category and allergen metadata at render time for actual bundled meal production records', () => {
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
+    const payload: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: {
+        ...recordValues,
+        MP_MEALS_REQUEST: [
+          {
+            [ROW_ID_KEY]: 'meal-1',
+            MEAL_TYPE: 'Diabetic',
+            ORD_QTY: 15,
+            FINAL_QTY: 15,
+            MP_TYPE_LI: [
+              {
+                [ROW_ID_KEY]: 'prep-1',
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 15,
+                RECIPE: 'Garlic green beans',
+                REC_INST: 'Cook gently.',
+                MP_INGREDIENTS_LI: [
+                  { [ROW_ID_KEY]: 'ing-1', CAT: '', ING: 'Green beans - frozen', QTY: 1.2, UNIT: 'bag', ALLERGEN: '' },
+                  { [ROW_ID_KEY]: 'ing-2', CAT: '', ING: 'Salt', QTY: 3, UNIT: 'Tbsp', ALLERGEN: '' }
+                ]
+              }
+            ]
+          }
+        ]
+      } as any,
+      status: 'In progress'
+    } as any;
+
+    const ingredientsNeeded = service.renderInlineHtmlTemplate(payload, { EN: 'bundle:ingredients_needed.html' });
+
+    expect(ingredientsNeeded.success).toBe(true);
+    expect(ingredientsNeeded.html).toContain('Frozen vegetables');
+    expect(ingredientsNeeded.html).toContain('Herbs - spices - condiments');
+    expect(ingredientsNeeded.html).toContain('Green beans - frozen');
+    expect(ingredientsNeeded.html).toContain('Salt');
+  });
+
+  it('filters grouped ingredient categories from bundle:ingredients_needed.html using the same rules as ingredient rows', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000900',
+      values: {
+        MP_DISTRIBUTOR: 'Belliard',
+        MP_SERVICE: 'Dinner',
+        MP_PREP_DATE: '2026-04-01',
+        MP_ID: 'MP-AA000900',
+        MP_MEALS_REQUEST: [
+          {
+            [ROW_ID_KEY]: 'meal-1',
+            MEAL_TYPE: 'Diabetic',
+            ORD_QTY: 20,
+            FINAL_QTY: 20,
+            MP_TYPE_LI: [
+              {
+                [ROW_ID_KEY]: 'prep-cook',
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 10,
+                RECIPE: 'Adassi',
+                MP_INGREDIENTS_LI: [
+                  {
+                    [ROW_ID_KEY]: 'ing-cook-1',
+                    CAT: 'Dry carbohydrates',
+                    ING: 'Rice',
+                    QTY: 2,
+                    UNIT: 'kg',
+                    ALLERGEN: 'None'
+                  }
+                ]
+              },
+              {
+                [ROW_ID_KEY]: 'prep-leftover',
+                PREP_TYPE: 'Entire dish',
+                PREP_QTY: 10,
+                RECIPE: 'Rice curry & fish',
+                MP_INGREDIENTS_LI: [
+                  {
+                    [ROW_ID_KEY]: 'ing-leftover-1',
+                    CAT: 'Animal protein Halal',
+                    ING: 'Fishsticks',
+                    QTY: 12,
+                    UNIT: 'piece',
+                    ALLERGEN: 'Fish'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      } as any
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:ingredients_needed.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Rice');
+    expect(res.html).toContain('Dry carbohydrates');
+    expect(res.html).not.toContain('Fishsticks');
+    expect(res.html).not.toContain('Animal protein Halal');
+  });
+
+  it('omits empty grouped categories from bundle:ingredients_needed.html when only leftovers remain after filtering', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000901',
+      values: {
+        MP_DISTRIBUTOR: 'Belliard',
+        MP_SERVICE: 'Dinner',
+        MP_PREP_DATE: '2026-04-01',
+        MP_ID: 'MP-AA000901',
+        MP_MEALS_REQUEST: [
+          {
+            [ROW_ID_KEY]: 'meal-1',
+            MEAL_TYPE: 'Diabetic',
+            ORD_QTY: 20,
+            FINAL_QTY: 20,
+            MP_TYPE_LI: [
+              {
+                [ROW_ID_KEY]: 'prep-leftover',
+                PREP_TYPE: 'Entire dish',
+                PREP_QTY: 10,
+                RECIPE: 'Rice curry & fish',
+                MP_INGREDIENTS_LI: [
+                  {
+                    [ROW_ID_KEY]: 'ing-leftover-1',
+                    CAT: 'Animal protein Halal',
+                    ING: 'Fishsticks',
+                    QTY: 12,
+                    UNIT: 'piece',
+                    ALLERGEN: 'Fish'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      } as any
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:ingredients_needed.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).not.toContain('Fishsticks');
+    expect(res.html).not.toContain('Animal protein Halal');
+    expect(res.html).not.toContain('<table class="ck-ingredients-table"');
+  });
+
   it('renders meal production bundled templates from the actual bundled definition draft payload path', () => {
-    const service = new WebFormService(new MockSpreadsheet() as any);
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
     const bundledDefinition = service.buildDefinition('Config: Meal Production');
     const lineItems = buildInitialLineItems(bundledDefinition, recordValues as any);
     const payload = buildDraftPayload({
@@ -293,7 +481,9 @@ describe('meal production bundled HTML rendering', () => {
   });
 
   it('renders mp.ing_recipe.html from the filtered overlay payload path', () => {
-    const service = new WebFormService(new MockSpreadsheet() as any);
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
     const bundledDefinition = service.buildDefinition('Config: Meal Production');
     const lineItems = buildInitialLineItems(bundledDefinition, recordValues as any);
     const payload = buildDraftPayload({

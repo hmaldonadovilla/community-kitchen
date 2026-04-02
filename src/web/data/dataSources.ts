@@ -15,6 +15,7 @@ type CacheKey = string;
 const cache: Map<CacheKey, any> = new Map();
 const inflight: Map<CacheKey, Promise<any>> = new Map();
 export const DATA_SOURCE_CACHE_CLEARED_EVENT = 'ck:datasourcecachecleared';
+export const DATA_SOURCE_CACHE_UPDATED_EVENT = 'ck:datasourcecacheupdated';
 const RUNNER_RETRY_DELAY = 150;
 const RUNNER_MAX_ATTEMPTS = 20;
 const OPTIONS_AUTO_PAGE_MAX_PAGES = 80;
@@ -105,6 +106,24 @@ const parsePersistEnvelope = (
     };
   } catch (_) {
     return null;
+  }
+};
+
+const emitCacheUpdated = (config: DataSourceConfig, language: LangCode, itemCount: number): void => {
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(
+        new CustomEvent(DATA_SOURCE_CACHE_UPDATED_EVENT, {
+          detail: {
+            id: (config?.id || '').toString(),
+            language: (language || 'EN').toString().toUpperCase(),
+            itemCount
+          }
+        })
+      );
+    }
+  } catch (_) {
+    // ignore
   }
 };
 
@@ -387,6 +406,12 @@ export async function fetchDataSource(
     cache.set(cacheKey, finalRes);
     if (finalRes) {
       savePersisted(config, language, finalRes);
+      const itemCount = Array.isArray((finalRes as any)?.items)
+        ? (finalRes as any).items.length
+        : Array.isArray(finalRes)
+          ? finalRes.length
+          : 0;
+      emitCacheUpdated(config, language, itemCount);
     }
     return finalRes;
   })().finally(() => {
@@ -403,6 +428,16 @@ export function peekCachedDataSource(config: DataSourceConfig, language: LangCod
     return cache.get(cacheKey) ?? null;
   }
   return loadPersisted(config, language);
+}
+
+export function getCachedDataSourceItemCount(config: DataSourceConfig, language: LangCode): number | null {
+  const cached = peekCachedDataSource(config, language);
+  if (!cached) return null;
+  if (Array.isArray(cached)) return cached.length;
+  if (cached && typeof cached === 'object' && Array.isArray((cached as any).items)) {
+    return (cached as any).items.length;
+  }
+  return 0;
 }
 
 export function mutateCachedDataSource(
@@ -429,6 +464,12 @@ export function mutateCachedDataSource(
 
   cache.set(cacheKey, next);
   savePersisted(config, language, next);
+  const itemCount = Array.isArray((next as any)?.items)
+    ? (next as any).items.length
+    : Array.isArray(next)
+      ? next.length
+      : 0;
+  emitCacheUpdated(config, language, itemCount);
   return next;
 }
 

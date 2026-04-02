@@ -3212,6 +3212,12 @@ components:
           description: |
             Optional helper text displayed above the step content (guided mode).
             Use this for step-wide guidance such as food safety confirmations or photo requirements.
+        includeWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional step-level visibility gate. Hidden steps are removed from the guided stepper and validation flow.
+        excludeWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional step-level hide condition. Hidden steps are removed from the guided stepper and validation flow.
         render:
           $ref: '#/components/schemas/StepsRenderDefaultsConfig'
         include:
@@ -3295,6 +3301,15 @@ components:
         runInBackground:
           type: boolean
           description: When true, the UI continues immediately and follow-up results reconcile later. Default false.
+        validationScope:
+          type: string
+          enum: [currentStep, throughCurrentStep, fullForm]
+          description: |
+            Validation scope to enforce before the milestone action starts.
+            `throughCurrentStep` validates all visible guided steps from the beginning through the active step.
+        waitForBackgroundSaves:
+          type: boolean
+          description: When true, wait for in-flight uploads/autosaves to settle before the milestone action starts. Default false.
         advanceAfterStart:
           type: boolean
           description: When true, automatically advance to the next guided step after the action starts successfully. Default true.

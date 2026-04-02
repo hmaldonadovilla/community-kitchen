@@ -689,6 +689,8 @@ describe('Dashboard', () => {
                 actions: ['CREATE_PDF', 'SEND_EMAIL'],
                 ensureRecordId: true,
                 runInBackground: true,
+                validationScope: 'throughCurrentStep',
+                waitForBackgroundSaves: true,
                 advanceAfterStart: true,
                 confirmationDialog: {
                   title: { EN: 'Please confirm' },
@@ -726,6 +728,8 @@ describe('Dashboard', () => {
       actions: ['CREATE_PDF', 'SEND_EMAIL'],
       ensureRecordId: true,
       runInBackground: true,
+      validationScope: 'throughCurrentStep',
+      waitForBackgroundSaves: true,
       advanceAfterStart: true,
       confirmationDialog: {
         title: { en: 'Please confirm' },
@@ -742,6 +746,34 @@ describe('Dashboard', () => {
         dismissOnBackdrop: true
       }
     });
+  });
+
+  test('getForms parses guided step includeWhen and excludeWhen', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverBank',
+            includeWhen: { fieldId: '__ckDataSourceCount.Leftover Inventory Data', greaterThan: 0 },
+            excludeWhen: { fieldId: 'status', equals: ['Emailed', 'Closed'] },
+            include: ['Q1']
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const step = (forms[0].steps as any)?.items?.[0];
+    expect(step?.includeWhen).toEqual({ fieldId: '__ckDataSourceCount.Leftover Inventory Data', greaterThan: 0 });
+    expect(step?.excludeWhen).toEqual({ fieldId: 'status', equals: ['Emailed', 'Closed'] });
   });
 
   test('getForms parses submit-time background follow-up config', () => {

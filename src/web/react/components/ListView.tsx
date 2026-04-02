@@ -38,6 +38,7 @@ import { sortListItems } from '../app/listViewSorting';
 import { groupListItemsByField } from '../app/listViewGrouping';
 import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../app/listViewLegend';
 import { ListViewLegend } from './app/ListViewLegend';
+import { resolveLabel } from '../utils/labels';
 
 interface ListViewProps {
   formKey: string;
@@ -2179,7 +2180,7 @@ const ListView: React.FC<ListViewProps> = ({
           <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
             {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
             {visiblePresetButtons.map(({ q, cfg }) => {
-              const labelNode = resolveLocalizedString((q as any)?.label ?? q?.id ?? cfg.action ?? '', language, q?.id ?? '');
+              const labelNode = resolveLabel((q as any) || ({ id: cfg.action } as any), language) || cfg.action || '';
               const mode = (cfg.mode || listSearchMode) as 'text' | 'date' | 'advanced';
               const keyword = (cfg.keyword || '').toString();
               const dateValue = (cfg.dateValue || '').toString();

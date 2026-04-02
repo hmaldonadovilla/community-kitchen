@@ -16,6 +16,16 @@ const findQuestion = (questions: any[], id: string): any => {
 
 describe('staging integrity dialogs and list legend config', () => {
   const hasNonEmptyEnText = (value: any): boolean => typeof value?.en === 'string' && value.en.trim().length > 0;
+  const collectObjects = (value: any, predicate: (entry: any) => boolean, acc: any[] = []): any[] => {
+    if (Array.isArray(value)) {
+      value.forEach(entry => collectObjects(entry, predicate, acc));
+      return acc;
+    }
+    if (!value || typeof value !== 'object') return acc;
+    if (predicate(value)) acc.push(value);
+    Object.values(value).forEach(entry => collectObjects(entry, predicate, acc));
+    return acc;
+  };
   const containsIcons = (legend: any[], expectedIcons: string[]) => {
     const icons = new Set((legend || []).map(item => (item?.icon || '').toString().trim().toLowerCase()).filter(Boolean));
     expectedIcons.forEach(icon => expect(icons.has(icon)).toBe(true));
@@ -171,22 +181,51 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
 
       expect(leftoverBank?.label?.en).toBe('Leftover bank');
+      expect(leftoverBank?.includeWhen).toEqual({
+        fieldId: '__ckDataSourceCount.Leftover Inventory Data',
+        greaterThan: 0
+      });
+      expect(leftoverBank?.excludeWhen).toEqual({
+        fieldId: 'status',
+        equals: ['Emailed', 'Closed']
+      });
       expect(portioning?.label?.en).toBe('Portioning');
+      expect(portioning?.excludeWhen).toEqual({
+        fieldId: 'status',
+        equals: ['Emailed', 'Closed']
+      });
       expect(leftovers?.label?.en).toBe('Leftovers');
+      expect(leftovers?.excludeWhen).toBeUndefined();
       expect(portioning?.navigation?.submitLabel?.en).toBe('Complete portioning');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
-      expect(portioning?.navigation?.milestoneAction?.actions).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
+      expect(portioning?.navigation?.milestoneAction?.actions).toEqual([
+        'RECONCILE_RESERVATIONS',
+        'CREATE_PDF',
+        'SEND_EMAIL'
+      ]);
       expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(true);
+      expect(portioning?.navigation?.milestoneAction?.validationScope).toBe('throughCurrentStep');
+      expect(portioning?.navigation?.milestoneAction?.waitForBackgroundSaves).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Background actions started');
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
+      ['orderInfo', 'deliveryForm', 'foodSafety'].forEach(stepId => {
+        const step = items.find((entry: any) => entry?.id === stepId);
+        expect(step?.excludeWhen).toEqual({
+          fieldId: 'status',
+          equals: ['Emailed', 'Closed']
+        });
+      });
       expect(root?.submissionAfterSubmit?.preActions).toEqual(['CLOSE_RECORD']);
-      expect(root?.submissionAfterSubmit?.backgroundActions).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
+      expect(root?.submissionAfterSubmit?.backgroundActions).toBeUndefined();
       expect(root?.submissionAfterSubmit?.navigateTo).toBe('summary');
-      expect(root?.submissionAfterSubmit?.feedbackDialog?.title?.en).toBe('Background actions started');
+      expect(root?.submissionAfterSubmit?.feedbackDialog?.title?.en).toBe('Meal production closed');
+      expect(root?.submissionAfterSubmit?.feedbackDialog?.showCancel).toBe(false);
+      expect(root?.submissionAfterSubmit?.feedbackDialog?.showCloseButton).toBe(false);
+      expect(root?.submissionAfterSubmit?.feedbackDialog?.dismissOnBackdrop).toBe(false);
 
       const portioningQuestionIds = new Set((portioning?.include || []).map((entry: any) => entry?.id).filter(Boolean));
       expect(portioningQuestionIds.has('MP_HAS_LEFTOVERS_PRODUCED')).toBe(false);
@@ -207,6 +246,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const partialLeftovers = findQuestion(questions || [], 'MP_LEFTOVER_CAPTURE_LI');
       expect(partialLeftovers?.qEn).toBe('Partial leftovers');
       expect(partialLeftovers?.visibility).toBeUndefined();
+      expect(partialLeftovers?.lineItemConfig?.ui?.addButtonPlacement).toBe('top');
 
       const pdfPreview = findQuestion(questions || [], 'PDF_PREVIEW');
       expect(pdfPreview?.button?.disableWhenValueMissing).toBe(true);
@@ -214,7 +254,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const meals = findQuestion(questions || [], 'MP_MEALS_REQUEST');
       const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
-      expect(leftoverPortionsField?.defaultValue).toBe(0);
+      expect(leftoverPortionsField?.defaultValue).toBeUndefined();
 
       const followupEffects = Array.isArray(root?.followupConfig?.submitEffects)
         ? root.followupConfig.submitEffects
@@ -241,6 +281,23 @@ describe('staging integrity dialogs and list legend config', () => {
     assertSearchPresets(cfg.definition?.questions || []);
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
+
+    const recipeIngredientEffects = collectObjects(
+      cfg,
+      (entry: any) =>
+        entry?.type === 'addLineItemsFromDataSource' &&
+        entry?.groupId === 'MP_INGREDIENTS_LI' &&
+        entry?.targetPath === 'MP_INGREDIENTS_LI' &&
+        entry?.dataField === 'Q65ILNUSGL'
+    );
+    expect(recipeIngredientEffects.length).toBeGreaterThanOrEqual(4);
+    recipeIngredientEffects.forEach((effect: any) => {
+      expect(effect?.lineItemMapping?.ING).toBe('ING');
+      expect(effect?.lineItemMapping?.QTY).toBe('QTY');
+      expect(effect?.lineItemMapping?.UNIT).toBe('UNIT');
+      expect(effect?.lineItemMapping?.CAT).toBe('CAT');
+      expect(effect?.lineItemMapping?.ALLERGEN).toBe('ALLERGEN');
+    });
   });
 
   test('ingredients management uses field-based home leave guard dialog', () => {

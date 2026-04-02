@@ -231,7 +231,7 @@
           {{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}
           <span class="ck-ingredient-allergen">{{DEFAULT(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN, "")}}</span>
           <span class="ck-directives">
-            {{EXCLUDE_WHEN_WHEN({"not":{"any":[{"all":[{"fieldId":"PREP_TYPE","equals":"Cook"},{"fieldId":"RECIPE","notEmpty":true}]},{"all":[{"fieldId":"PREP_TYPE","equals":"Full"},{"fieldId":"__ckRowSource","equals":"manual"}]}]}})}}
+            {{EXCLUDE_WHEN_WHEN({"not":{"all":[{"fieldId":"PREP_TYPE","equals":"Cook"},{"fieldId":"RECIPE","notEmpty":true}]}})}}
             {{CONSOLIDATED_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI)}}
           </span>
         </td>
