@@ -246,34 +246,31 @@ export class SubmissionService {
     const nextVersion = previousVersion + 1;
     setIf(columns.dataVersion, nextVersion);
 
-    // Draft autosave: write status + protect closed records from background saves.
     const saveMode = ((formObject as any).__ckSaveMode || '').toString().trim().toLowerCase();
+    const transitions = form.followupConfig?.statusTransitions;
+    const statusFieldId = form.followupConfig?.statusFieldId;
+    const statusFieldIdx =
+      statusFieldId && columns.fields[statusFieldId] ? (columns.fields[statusFieldId] as number) : undefined;
+    const metaStatusIdx = columns.status;
+    const statusIdx = statusFieldIdx || metaStatusIdx;
+    const readCellText = (colIdx?: number): string => {
+      if (!colIdx || !existingRowValues) return '';
+      try {
+        const raw = existingRowValues[colIdx - 1];
+        return raw === undefined || raw === null ? '' : raw.toString();
+      } catch (_) {
+        return '';
+      }
+    };
+    const explicitStatusValue = ((formObject as any).__ckStatus || '').toString().trim();
+
+    // Draft autosave: write status + protect closed records from background saves.
     if (saveMode === 'draft') {
-      const transitions = form.followupConfig?.statusTransitions;
       const inProgressFallback =
         resolveStatusTransitionValue(transitions, 'inProgress', language) ||
         (form.autoSave?.status ? form.autoSave.status.toString() : '') ||
         'In progress';
-      const statusValueRaw =
-        ((formObject as any).__ckStatus || form.autoSave?.status || inProgressFallback)?.toString?.() || inProgressFallback;
-      const statusValue = statusValueRaw.toString().trim() || inProgressFallback || 'In progress';
-
-      // Determine the "status" column to write to (either a configured statusFieldId, or the default Status meta column).
-      const statusFieldId = form.followupConfig?.statusFieldId;
-      const statusFieldIdx =
-        statusFieldId && columns.fields[statusFieldId] ? (columns.fields[statusFieldId] as number) : undefined;
-      const metaStatusIdx = columns.status;
-      const statusIdx = statusFieldIdx || metaStatusIdx;
-
-      const readCellText = (colIdx?: number): string => {
-        if (!colIdx || !existingRowValues) return '';
-        try {
-          const raw = existingRowValues[colIdx - 1];
-          return raw === undefined || raw === null ? '' : raw.toString();
-        } catch (_) {
-          return '';
-        }
-      };
+      const statusValue = explicitStatusValue || inProgressFallback || 'In progress';
 
       const existingStatusText = (() => {
         const fromField = statusFieldIdx ? readCellText(statusFieldIdx).trim() : '';
@@ -306,6 +303,11 @@ export class SubmissionService {
       }
 
       setIf(statusIdx, statusValue);
+    } else if (explicitStatusValue) {
+      setIf(statusIdx, explicitStatusValue);
+      if (statusFieldId) {
+        (formObject as any)[statusFieldId] = explicitStatusValue;
+      }
     }
 
     const candidateValues: Record<string, any> = {};

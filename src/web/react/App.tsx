@@ -15,6 +15,8 @@ import {
   LocalizedString,
   SelectionEffect,
   StepMilestoneActionConfig,
+  SystemActionGateDialogConfig,
+  WebFormDefinition,
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
@@ -108,6 +110,7 @@ import {
   parseSubgroupKey,
   parseRowNonMatchOptions,
   resolveSubgroupKey,
+  ROW_ID_KEY,
   ROW_NON_MATCH_OPTIONS_KEY
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
@@ -118,6 +121,7 @@ import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } 
 import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
+import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
@@ -929,6 +933,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const guidedMilestoneBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.milestone.busy', onDiagnostic: logEvent });
+  const guidedStepAdvanceBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.advance.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
 
   useEffect(() => {
@@ -1554,6 +1559,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setDraftSave({ phase: 'paused' });
       } else {
         autoSaveDirtyRef.current = true;
+        if (pending.fieldPath) {
+          uploadedFieldValueOverridesRef.current.delete(pending.fieldPath);
+        }
         setDraftSave({ phase: 'dirty' });
       }
 
@@ -2230,13 +2238,148 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
-  const uploadPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const uploadedFieldValueOverridesRef = useRef<
+    Map<
+      string,
+      {
+        scope: 'top' | 'line';
+        questionId?: string;
+        groupId?: string;
+        rowId?: string;
+        fieldId?: string;
+        items: Array<string | File>;
+      }
+    >
+  >(new Map());
   const [uploadQueueSize, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
     setUploadQueueSize(uploadQueueRef.current.size);
+  }, []);
+
+  const scheduleLatestAutoSave = useCallback(
+    (reason: string, delayMs: number) => {
+      const nextDelay = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+      autoSaveQueuedRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      autoSaveTimerRef.current = globalThis.setTimeout(() => {
+        autoSaveTimerRef.current = null;
+        autoSaveQueuedRef.current = false;
+        void performAutoSaveRef.current(reason);
+      }, nextDelay) as any;
+      logEvent('autosave.queue.latest', { reason, delayMs: nextDelay });
+    },
+    [logEvent]
+  );
+
+  const applyUploadedFieldOverrides = useCallback(
+    (args: {
+      values: Record<string, FieldValue>;
+      lineItems: LineItemState;
+    }): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
+      const overrides = uploadedFieldValueOverridesRef.current;
+      if (!overrides.size) return args;
+      let nextValues = args.values;
+      let nextLineItems = args.lineItems;
+      overrides.forEach(entry => {
+        if (entry.scope === 'top' && entry.questionId) {
+          nextValues = {
+            ...nextValues,
+            [entry.questionId]: entry.items as unknown as FieldValue
+          };
+          return;
+        }
+        if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
+          const rows = nextLineItems[entry.groupId] || [];
+          const nextRows = rows.map(row => {
+            if (row.id !== entry.rowId) return row;
+            return {
+              ...row,
+              values: {
+                ...(row.values || {}),
+                [entry.fieldId as string]: entry.items
+              }
+            };
+          });
+          nextLineItems = {
+            ...nextLineItems,
+            [entry.groupId]: nextRows
+          };
+        }
+      });
+      return { values: nextValues, lineItems: nextLineItems };
+    },
+    []
+  );
+
+  const applyUploadedFieldPayloadOverrides = useCallback((payload: any): any => {
+    const overrides = uploadedFieldValueOverridesRef.current;
+    if (!payload || !overrides.size) return payload;
+
+    const toUrlOnlyString = (items: Array<string | File>): string => {
+      const urls: string[] = [];
+      const seen = new Set<string>();
+      (items || []).forEach(item => {
+        if (!item) return;
+        if (typeof item === 'string') {
+          item
+            .split(',')
+            .map(part => part.trim())
+            .filter(Boolean)
+            .forEach(url => {
+              if (seen.has(url)) return;
+              seen.add(url);
+              urls.push(url);
+            });
+          return;
+        }
+        if (typeof item === 'object' && typeof (item as any).url === 'string') {
+          const url = ((item as any).url as string).trim();
+          if (!url || seen.has(url)) return;
+          seen.add(url);
+          urls.push(url);
+        }
+      });
+      return urls.join(', ');
+    };
+
+    const nextPayload = {
+      ...payload,
+      values: {
+        ...(((payload as any)?.values || {}) as Record<string, any>)
+      }
+    } as any;
+
+    overrides.forEach(entry => {
+      const nextValue = toUrlOnlyString(entry.items);
+      if (entry.scope === 'top' && entry.questionId) {
+        nextPayload.values[entry.questionId] = nextValue;
+        nextPayload[entry.questionId] = nextValue;
+        return;
+      }
+      if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
+        const rawRows = Array.isArray(nextPayload.values[entry.groupId]) ? nextPayload.values[entry.groupId] : [];
+        const nextRows = rawRows.map((row: any) => {
+          const rowId = ((row?.[ROW_ID_KEY] || row?.id || '') as any).toString();
+          if (rowId !== entry.rowId) return row;
+          return {
+            ...(row || {}),
+            [entry.fieldId as string]: nextValue
+          };
+        });
+        nextPayload.values[entry.groupId] = nextRows;
+        nextPayload.values[`${entry.groupId}_json`] = JSON.stringify(nextRows);
+        nextPayload[entry.groupId] = nextRows;
+        nextPayload[`${entry.groupId}_json`] = JSON.stringify(nextRows);
+      }
+    });
+
+    return nextPayload;
   }, []);
 
   useEffect(() => {
@@ -2562,9 +2705,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const listBackgroundPrefetchKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
   const dataSourcePrefetchKeyRef = useRef<string>('');
+  const formDataSourceRefreshKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
   const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
+  const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [dataSourceVisibilityVersion, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
   const guidedDataSourceConfigMap = useMemo(() => {
@@ -2593,6 +2738,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     } catch (_) {
       return;
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      guidedDataSourceRefreshTimersRef.current.forEach(timer => clearTimeout(timer));
+      guidedDataSourceRefreshTimersRef.current = [];
+    };
   }, []);
 
   useEffect(() => {
@@ -5914,6 +6066,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       values
     ]
   );
+  const resolveGuidedUploadWaitDialog = useCallback(
+    (rawDialog?: SystemActionGateDialogConfig | null) => ({
+      title: resolveLocalizedString(
+        rawDialog?.title,
+        languageRef.current,
+        tSystem('navigation.waitTitle', languageRef.current, 'Please wait')
+      ),
+      message: resolveDialogTemplate(
+        rawDialog?.message,
+        tSystem('navigation.waitPhotos', languageRef.current, 'Please wait while your photos finish uploading.')
+      )
+    }),
+    [resolveDialogTemplate]
+  );
   const submitConfirmMessage = useMemo(
     () =>
       resolveDialogTemplate(
@@ -6374,6 +6540,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const sessionAtStart = recordSessionRef.current;
       const valuesSnapshot = valuesRef.current;
       const lineItemsSnapshot = lineItemsRef.current;
+      const withUploadOverrides = applyUploadedFieldOverrides({
+        values: valuesSnapshot,
+        lineItems: lineItemsSnapshot
+      });
       const languageSnapshot = languageRef.current;
       const hasConfiguredAutoSaveGate = autoSaveEnableFieldIds.length > 0;
 
@@ -6414,13 +6584,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           autoSaveDirtyRef.current = true;
           // Re-attempt autosave shortly; avoids getting stuck in a "dirty" state once the check completes.
           try {
-            if (autoSaveTimerRef.current) {
-              globalThis.clearTimeout(autoSaveTimerRef.current);
-              autoSaveTimerRef.current = null;
-            }
-            autoSaveTimerRef.current = globalThis.setTimeout(() => {
-              void performAutoSave('dedupPrecheck.wait');
-            }, 600) as any;
+            scheduleLatestAutoSave('dedupPrecheck.wait', 600);
           } catch (_) {
             // ignore
           }
@@ -6452,14 +6616,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('autosave.begin', { reason, debounceMs: autoSaveDebounceMs });
 
       try {
-        const payload = buildDraftPayload({
-          definition,
-          formKey,
-          language: languageSnapshot,
-          values: valuesSnapshot,
-          lineItems: lineItemsSnapshot,
-          existingRecordId
-        }) as any;
+        const payload = applyUploadedFieldPayloadOverrides(
+          buildDraftPayload({
+            definition,
+            formKey,
+            language: languageSnapshot,
+            values: withUploadOverrides.values,
+            lineItems: withUploadOverrides.lineItems,
+            existingRecordId
+          }) as any
+        );
         payload.__ckSaveMode = 'draft';
         payload.__ckStatus = statusForSave;
         payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
@@ -6603,6 +6769,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dedupBaselineSignatureRef.current = (currentDedupSignature || '').toString();
         dedupKeyFingerprintBaselineRef.current = currentDedupFingerprint;
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
+        uploadedFieldValueOverridesRef.current.clear();
         logEvent('autosave.success', {
           reason,
           recordId: newId || null,
@@ -6632,18 +6799,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       } finally {
         autoSaveInFlightRef.current = false;
         if (autoSaveQueuedRef.current && !submittingRef.current) {
-          autoSaveQueuedRef.current = false;
-          if (autoSaveTimerRef.current) {
-            globalThis.clearTimeout(autoSaveTimerRef.current);
-            autoSaveTimerRef.current = null;
-          }
-          autoSaveTimerRef.current = globalThis.setTimeout(() => {
-            void performAutoSave('queued');
-          }, autoSaveDebounceMs) as any;
+          scheduleLatestAutoSave('queued', autoSaveDebounceMs);
         }
       }
     },
     [
+      applyUploadedFieldPayloadOverrides,
       autoSaveDebounceMs,
       autoSaveEnabled,
       autoSaveEnableFieldIds,
@@ -6658,6 +6819,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       loadRecordSnapshot,
       logEvent,
       matchesClosedStatus,
+      scheduleLatestAutoSave,
       upsertListCacheRow
     ]
   );
@@ -6705,7 +6867,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const waitForBackgroundSaves = useCallback(
-    async (reason: string): Promise<{ ok: boolean; message?: string }> => {
+    async (
+      reason: string,
+      waitForQueue: 'all' | 'uploadsOnly' | 'none' = 'all'
+    ): Promise<{ ok: boolean; message?: string }> => {
+      if (waitForQueue === 'none') {
+        logEvent('backgroundQueue.wait.skipped', { reason, waitForQueue });
+        return { ok: true };
+      }
       const sessionAtStart = recordSessionRef.current;
       const startedAt = Date.now();
       const startAutosave = !!autoSaveInFlightRef.current;
@@ -6713,6 +6882,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (startAutosave || startUploads > 0) {
         logEvent('backgroundQueue.wait.start', {
           reason,
+          waitForQueue,
           autosaveInFlight: startAutosave,
           uploadsInFlight: startUploads
         });
@@ -6733,17 +6903,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         if (failures.length) {
           const message = failures[0] || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.');
-          logEvent('backgroundQueue.wait.uploads.failed', { reason, message });
+          logEvent('backgroundQueue.wait.uploads.failed', { reason, waitForQueue, message });
           return { ok: false, message };
         }
       }
 
-      if (autoSaveInFlightRef.current) {
+      if (waitForQueue === 'all' && autoSaveInFlightRef.current) {
         const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
         while (autoSaveInFlightRef.current) {
           if (recordSessionRef.current !== sessionAtStart) {
             logEvent('backgroundQueue.wait.sessionChanged', {
               reason,
+              waitForQueue,
               sessionAtStart,
               sessionNow: recordSessionRef.current
             });
@@ -6756,17 +6927,67 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (recordStaleRef.current) {
         logEvent('backgroundQueue.wait.blocked.recordStale', {
           reason,
+          waitForQueue,
           recordId: recordStaleRef.current.recordId
         });
         return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
       }
 
       if (startAutosave || startUploads > 0) {
-        logEvent('backgroundQueue.wait.done', { reason, durationMs: Date.now() - startedAt });
+        logEvent('backgroundQueue.wait.done', { reason, waitForQueue, durationMs: Date.now() - startedAt });
       }
       return { ok: true };
     },
     [logEvent]
+  );
+
+  const waitForGuidedStepAdvance = useCallback(
+    async (args: {
+      stepId: string;
+      nextStepId?: string;
+      trigger: 'next' | 'auto';
+      waitDialog?: SystemActionGateDialogConfig | null;
+    }): Promise<{ success: boolean; message?: string }> => {
+      const uploadsInFlight = uploadQueueRef.current.size;
+      if (uploadsInFlight <= 0) {
+        return { success: true };
+      }
+      const copy = resolveGuidedUploadWaitDialog(args.waitDialog);
+      const seq = guidedStepAdvanceBusy.lock({
+        title: copy.title,
+        message: copy.message,
+        kind: 'guidedStepAdvance',
+        diagnosticMeta: {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger,
+          uploadsInFlight
+        }
+      });
+      try {
+        const waitResult = await waitForBackgroundSaves(
+          `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}`,
+          'uploadsOnly'
+        );
+        if (!waitResult.ok) {
+          const message = (
+            waitResult.message ||
+            tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
+          ).toString();
+          setStatus(message);
+          setStatusLevel('error');
+          return { success: false, message };
+        }
+        return { success: true };
+      } finally {
+        guidedStepAdvanceBusy.unlock(seq, {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger
+        });
+      }
+    },
+    [guidedStepAdvanceBusy, resolveGuidedUploadWaitDialog, waitForBackgroundSaves]
   );
 
   useEffect(() => {
@@ -6999,9 +7220,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (prev.phase === 'dirty') return prev;
       return { phase: 'dirty' };
     });
-    autoSaveTimerRef.current = globalThis.setTimeout(() => {
-      void performAutoSave('dedupHold.release');
-    }, autoSaveDebounceMs) as any;
+    scheduleLatestAutoSave('dedupHold.release', autoSaveDebounceMs);
   }, [
     autoSaveDebounceMs,
     autoSaveEnabled,
@@ -7011,6 +7230,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     dedupSignature,
     fieldChangeDialog.state.open,
     performAutoSave,
+    scheduleLatestAutoSave,
     view
   ]);
 
@@ -7094,21 +7314,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (prev.phase === 'dirty') return prev;
       return { phase: 'dirty' };
     });
-
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    autoSaveTimerRef.current = globalThis.setTimeout(() => {
-      void performAutoSave('debounced');
-    }, autoSaveDebounceMs) as any;
+    scheduleLatestAutoSave('debounced', autoSaveDebounceMs);
     return () => {
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
     };
-  }, [autoSaveDebounceMs, autoSaveEnabled, definition, isClosedRecord, performAutoSave, submitting, view, values, lineItems]);
+  }, [autoSaveDebounceMs, autoSaveEnabled, definition, isClosedRecord, performAutoSave, scheduleLatestAutoSave, submitting, view, values, lineItems]);
 
   const ensureDraftRecordId = useCallback(
     async (args?: { reason?: string; fieldPath?: string }): Promise<{ success: boolean; recordId?: string; message?: string }> => {
@@ -7142,6 +7355,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
 
+      if (autoSaveInFlightRef.current) {
+        const startedAt = Date.now();
+        const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+        logEvent('record.ensure.waitAutosave', {
+          reason: args?.reason || null,
+          fieldPath: args?.fieldPath || null
+        });
+        while (autoSaveInFlightRef.current) {
+          recordId =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+          if (recordId) {
+            logEvent('record.ensure.reusedAutosaveResult', {
+              reason: args?.reason || null,
+              fieldPath: args?.fieldPath || null,
+              recordId,
+              durationMs: Date.now() - startedAt
+            });
+            return { success: true, recordId };
+          }
+          if (Date.now() - startedAt > 10_000) break;
+          await sleep(80);
+        }
+        recordId =
+          resolveExistingRecordId({
+            selectedRecordId: selectedRecordIdRef.current,
+            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+          }) || '';
+        if (recordId) {
+          logEvent('record.ensure.reusedAutosaveResult', {
+            reason: args?.reason || null,
+            fieldPath: args?.fieldPath || null,
+            recordId,
+            durationMs: Date.now() - startedAt
+          });
+          return { success: true, recordId };
+        }
+      }
+
       try {
         if (autoSaveTimerRef.current) {
           globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -7152,13 +7408,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
           '';
         const draftStatus = resolveAutoSaveStatus(statusRaw);
-        const draft = buildDraftPayload({
-          definition,
-          formKey,
-          language: languageRef.current,
-          values: valuesRef.current,
-          lineItems: lineItemsRef.current
-        }) as any;
+        const draft = applyUploadedFieldPayloadOverrides(
+          buildDraftPayload({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current
+          }) as any
+        );
         draft.__ckSaveMode = 'draft';
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
@@ -7231,7 +7489,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: false, message: message || '' };
       }
     },
-    [definition, formKey, logEvent, submit, upsertListCacheRow]
+    [applyUploadedFieldPayloadOverrides, definition, formKey, logEvent, submit, upsertListCacheRow]
   );
 
   const applyFollowupBatchResults = useCallback(
@@ -7286,13 +7544,91 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [logEvent, upsertListCacheRow]
   );
 
+  const refreshGuidedDataSourcesInBackground = useCallback(
+    (args: { reason: string; forceRefresh?: boolean; retryDelaysMs?: number[] }) => {
+      if (!guidedDataSourceConfigs.length) return;
+      const retryDelays = Array.isArray(args.retryDelaysMs) && args.retryDelaysMs.length
+        ? Array.from(new Set(args.retryDelaysMs.map(value => Number(value)).filter(value => Number.isFinite(value) && value >= 0)))
+        : [0];
+      logEvent('dataSource.prefetch.submitEffects.start', {
+        formKey,
+        language,
+        dataSources: guidedDataSourceConfigs.length,
+        reason: args.reason,
+        forceRefresh: Boolean(args.forceRefresh),
+        attempts: retryDelays.length
+      });
+      retryDelays.forEach((delayMs, attemptIndex) => {
+        const run = () => {
+          void prefetchDataSources(guidedDataSourceConfigs, language, {
+            forceRefresh: Boolean(args.forceRefresh)
+          })
+            .then(res => {
+              logEvent('dataSource.prefetch.submitEffects.done', {
+                formKey,
+                language,
+                requested: res.requested,
+                succeeded: res.succeeded,
+                failed: res.failed,
+                reason: args.reason,
+                forceRefresh: Boolean(args.forceRefresh),
+                attempt: attemptIndex + 1,
+                attempts: retryDelays.length
+              });
+            })
+            .catch((err: any) => {
+              logEvent('dataSource.prefetch.submitEffects.error', {
+                formKey,
+                language,
+                reason: args.reason,
+                forceRefresh: Boolean(args.forceRefresh),
+                message: err?.message || err?.toString?.() || 'unknown',
+                attempt: attemptIndex + 1,
+                attempts: retryDelays.length
+              });
+            });
+        };
+        if (delayMs <= 0) {
+          run();
+          return;
+        }
+        const timer = setTimeout(run, delayMs);
+        guidedDataSourceRefreshTimersRef.current.push(timer);
+      });
+    },
+    [formKey, guidedDataSourceConfigs, language, logEvent]
+  );
+
+  useEffect(() => {
+    if (view !== 'form') return;
+    if (!guidedDataSourceConfigs.length) return;
+    if (recordLoadingId) return;
+    const refreshKey = `${formKey}::${language}::${selectedRecordId || 'create'}::${view}`;
+    if (formDataSourceRefreshKeyRef.current === refreshKey) return;
+    formDataSourceRefreshKeyRef.current = refreshKey;
+    refreshGuidedDataSourcesInBackground({
+      reason: 'form.open',
+      forceRefresh: true,
+      retryDelaysMs: [0, 1200]
+    });
+  }, [formKey, guidedDataSourceConfigs.length, language, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
+
   const refreshAfterFollowupBatch = useCallback(
-    async (args: { recordId: string; reason: string }) => {
+    async (args: { recordId: string; reason: string; mode?: 'snapshot' | 'sharedDataOnly' }) => {
       invalidateClientSharedDataCaches({ includePersistedDataSources: true });
       logEvent('sharedData.cache.invalidated', {
         reason: args.reason,
-        recordId: args.recordId
+        recordId: args.recordId,
+        mode: args.mode || 'snapshot'
       });
+      if (args.mode === 'sharedDataOnly') {
+        refreshGuidedDataSourcesInBackground({
+          reason: `${args.reason}.sharedDataOnly`,
+          forceRefresh: true,
+          retryDelaysMs: [0, 1200, 3500]
+        });
+        return;
+      }
       try {
         await loadRecordSnapshot(args.recordId);
       } catch (err: any) {
@@ -7303,7 +7639,240 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
       }
     },
-    [loadRecordSnapshot, logEvent]
+    [loadRecordSnapshot, logEvent, refreshGuidedDataSourcesInBackground]
+  );
+
+  const applySuccessfulSubmissionState = useCallback(
+    (args: {
+      recordId: string;
+      payload?: any;
+      response?: any;
+      statusFallback?: string | null;
+    }) => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return;
+      const meta = (args.response?.meta || {}) as any;
+      const nextStatus = (meta?.status || args.statusFallback || null) as string | null;
+      const nextCreatedAt = (meta?.createdAt || '').toString() || undefined;
+      const nextUpdatedAt = (meta?.updatedAt || '').toString() || undefined;
+      const nextPdfUrl = (meta?.pdfUrl || '').toString() || undefined;
+      const nextDataVersion = Number(meta?.dataVersion);
+      const nextRowNumber = Number(meta?.rowNumber);
+      const payloadValues = (((args.payload as any)?.values || {}) as Record<string, any>) || {};
+
+      setSelectedRecordId(recordId);
+      selectedRecordIdRef.current = recordId;
+      setLastSubmissionMeta(prev => ({
+        id: recordId || prev?.id || selectedRecordIdRef.current,
+        createdAt: nextCreatedAt || prev?.createdAt,
+        updatedAt: nextUpdatedAt || prev?.updatedAt,
+        dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : prev?.dataVersion,
+        status: nextStatus || prev?.status || null
+      }));
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
+        recordDataVersionRef.current = nextDataVersion;
+      }
+      if (Number.isFinite(nextRowNumber) && nextRowNumber >= 2) {
+        recordRowNumberRef.current = nextRowNumber;
+      }
+
+      setSelectedRecordSnapshot(prev => {
+        if (prev && prev.id && prev.id !== recordId) return prev;
+        if (!prev) return prev;
+        return {
+          ...prev,
+          id: recordId,
+          createdAt: nextCreatedAt || prev.createdAt,
+          updatedAt: nextUpdatedAt || prev.updatedAt,
+          status: nextStatus || prev.status,
+          pdfUrl: nextPdfUrl || prev.pdfUrl,
+          values: payloadValues && Object.keys(payloadValues).length
+            ? { ...(prev.values || {}), ...payloadValues }
+            : prev.values
+        };
+      });
+
+      upsertListCacheRow({
+        recordId,
+        values: payloadValues,
+        createdAt: nextCreatedAt,
+        updatedAt: nextUpdatedAt,
+        status: nextStatus,
+        pdfUrl: nextPdfUrl,
+        dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : undefined,
+        rowNumber: Number.isFinite(nextRowNumber) ? nextRowNumber : undefined
+      });
+    },
+    [upsertListCacheRow]
+  );
+
+  const persistCurrentSnapshot = useCallback(
+    async (args: {
+      reason: string;
+      mode: 'draft' | 'submit';
+      existingRecordId?: string;
+      statusOverride?: string | null;
+      collapsedRows?: Record<string, boolean>;
+      collapsedSubgroups?: Record<string, boolean>;
+    }): Promise<{ success: boolean; response?: any; payload?: any; recordId?: string; message?: string }> => {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      autoSaveQueuedRef.current = false;
+      if (autoSaveInFlightRef.current) {
+        const startedAt = Date.now();
+        const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+        logEvent('snapshot.save.waitAutosave', {
+          reason: args.reason,
+          mode: args.mode,
+          existingRecordId: args.existingRecordId || null
+        });
+        while (autoSaveInFlightRef.current) {
+          if (Date.now() - startedAt > 10_000) break;
+          await sleep(80);
+        }
+        logEvent('snapshot.save.waitAutosave.done', {
+          reason: args.reason,
+          mode: args.mode,
+          durationMs: Date.now() - startedAt,
+          stillInFlight: autoSaveInFlightRef.current
+        });
+      }
+      if (
+        args.mode === 'draft' &&
+        args.existingRecordId &&
+        !autoSaveInFlightRef.current &&
+        !autoSaveDirtyRef.current &&
+        !autoSaveQueuedRef.current
+      ) {
+        logEvent('snapshot.save.skipped.cleanDraft', {
+          reason: args.reason,
+          recordId: args.existingRecordId
+        });
+        return {
+          success: true,
+          recordId: args.existingRecordId,
+          response: {
+            success: true,
+            meta: {
+              id: args.existingRecordId,
+              updatedAt: lastSubmissionMetaRef.current?.updatedAt || selectedRecordSnapshotRef.current?.updatedAt || '',
+              dataVersion: recordDataVersionRef.current || undefined,
+              rowNumber: recordRowNumberRef.current || undefined,
+              status: lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || null
+            }
+          }
+        };
+      }
+      const payloadSource = applyUploadedFieldOverrides({
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current
+      });
+      const valuesForPayload = ingredientsFormActive
+        ? applyIngredientActivationSystemFields(payloadSource.values as any)
+        : payloadSource.values;
+      const payload = applyUploadedFieldPayloadOverrides(
+        args.mode === 'submit'
+          ? await buildSubmissionPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: valuesForPayload,
+              lineItems: payloadSource.lineItems,
+              existingRecordId: args.existingRecordId,
+              collapsedRows: args.collapsedRows,
+              collapsedSubgroups: args.collapsedSubgroups
+            })
+          : buildDraftPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: valuesForPayload,
+              lineItems: payloadSource.lineItems,
+              existingRecordId: args.existingRecordId
+            })
+      );
+      if (args.mode === 'draft') {
+        (payload as any).__ckSaveMode = 'draft';
+        (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
+      }
+      const nextStatus =
+        (args.statusOverride || '').toString().trim() ||
+        (args.mode === 'draft'
+          ? resolveAutoSaveStatus(
+              (((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+                '')
+            )
+          : '');
+      if (nextStatus) {
+        (payload as any).__ckStatus = nextStatus;
+        (payload as any).values = {
+          ...((((payload as any)?.values || {}) as Record<string, any>) || {}),
+          status: nextStatus
+        };
+      }
+      const baseVersion = recordDataVersionRef.current;
+      if (args.existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
+        (payload as any).__ckClientDataVersion = Number(baseVersion);
+      }
+      const payloadValues = (payload as any).values as Record<string, any> | undefined;
+      if (payloadValues) {
+        const fileUpdates = computeUrlOnlyUploadUpdates(definition, payloadValues);
+        if (Object.keys(fileUpdates).length) {
+          setValues(prev => ({ ...prev, ...fileUpdates }));
+          setSelectedRecordSnapshot(prev =>
+            prev ? { ...prev, values: { ...(prev.values || {}), ...fileUpdates } } : prev
+          );
+        }
+      }
+      const response = await submit(payload);
+      const ok = Boolean(response?.success);
+      const recordId = (((response as any)?.meta?.id) || args.existingRecordId || '').toString().trim();
+      if (!ok) {
+        return {
+          success: false,
+          response,
+          payload,
+          recordId,
+          message: (response?.message || 'Failed to save the current record.').toString()
+        };
+      }
+      if (recordId) {
+        applySuccessfulSubmissionState({
+          recordId,
+          payload,
+          response,
+          statusFallback: nextStatus || null
+        });
+      }
+      autoSaveDirtyRef.current = false;
+      autoSaveQueuedRef.current = false;
+      uploadedFieldValueOverridesRef.current.clear();
+      setDraftSave({
+        phase: 'saved',
+        updatedAt: ((response?.meta?.updatedAt || '') as string).toString() || undefined
+      });
+      logEvent('snapshot.save.success', {
+        reason: args.reason,
+        mode: args.mode,
+        recordId: recordId || null,
+        status: nextStatus || null
+      });
+      return { success: true, response, payload, recordId };
+    },
+    [
+      applySuccessfulSubmissionState,
+      applyUploadedFieldPayloadOverrides,
+      definition,
+      formKey,
+      ingredientsFormActive,
+      logEvent,
+      resolveAutoSaveStatus,
+      submit
+    ]
   );
 
   const openConfiguredConfirmDialog = useCallback(
@@ -7355,10 +7924,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!args.action || args.action.type !== 'followupBatch') {
         return { success: false, message: 'Unsupported step action.' };
       }
-      const actions = Array.isArray(args.action.actions)
+      const preActions = Array.isArray(args.action.preActions)
+        ? args.action.preActions.map((entry: string) => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const backgroundActions = Array.isArray(args.action.backgroundActions)
+        ? args.action.backgroundActions.map((entry: string) => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const legacyActions = Array.isArray(args.action.actions)
         ? args.action.actions.map((entry: string) => (entry || '').toString().trim()).filter(Boolean)
         : [];
-      if (!actions.length) {
+      const effectiveBackgroundActions =
+        backgroundActions.length > 0
+          ? backgroundActions
+          : (preActions.length === 0 ? legacyActions : []);
+      if (!preActions.length && !effectiveBackgroundActions.length) {
         return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
       }
 
@@ -7377,6 +7956,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return { success: false, advanceToNext: false, message: 'cancelled' };
         }
       }
+      const milestoneQueuePolicy =
+        args.action.waitForQueue ||
+        (args.action.waitForBackgroundSaves ? 'all' : 'none');
       const busySeq = guidedMilestoneBusy.lock({
         title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
         message: tSystem(
@@ -7396,17 +7978,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }) || '';
 
       try {
-        const waitResult = await flushAutoSaveBeforeNavigate(reason);
-        logEvent('guidedStep.milestone.flush', {
-          stepId: args.stepId,
-          recordId: existingRecordId || null,
-          flushed: waitResult
-        });
-        if (args.action.waitForBackgroundSaves === true) {
-          const queueResult = await waitForBackgroundSaves(reason);
+        if (milestoneQueuePolicy === 'all') {
+          const waitResult = await flushAutoSaveBeforeNavigate(reason);
+          logEvent('guidedStep.milestone.flush', {
+            stepId: args.stepId,
+            recordId: existingRecordId || null,
+            flushed: waitResult
+          });
+        } else if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+          logEvent('guidedStep.milestone.flush.skipped', {
+            stepId: args.stepId,
+            recordId: existingRecordId || null,
+            waitForQueue: milestoneQueuePolicy
+          });
+        }
+        if (milestoneQueuePolicy !== 'none') {
+          const queueResult = await waitForBackgroundSaves(reason, milestoneQueuePolicy);
           logEvent('guidedStep.milestone.queueWait', {
             stepId: args.stepId,
             recordId: existingRecordId || null,
+            waitForQueue: milestoneQueuePolicy,
             ok: queueResult.ok
           });
           if (!queueResult.ok) {
@@ -7433,13 +8026,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId = ensured.recordId;
         }
 
-        const runBatch = async (): Promise<{ success: boolean; message?: string }> => {
+        const snapshotSavedByEnsure = !existingRecordId && !!recordId;
+        if (!snapshotSavedByEnsure) {
+          const snapshotResult = await persistCurrentSnapshot({
+            reason: `${reason}.snapshot`,
+            mode: 'draft',
+            existingRecordId: recordId
+          });
+          if (!snapshotResult.success || !snapshotResult.recordId) {
+            const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('guidedStep.milestone.snapshot.failed', {
+              stepId: args.stepId,
+              recordId: recordId || null,
+              message
+            });
+            return { success: false, message };
+          }
+          recordId = snapshotResult.recordId;
+        }
+
+        const runBatch = async (actions: string[], batchReason: string): Promise<{ success: boolean; message?: string }> => {
           try {
             logEvent('guidedStep.milestone.followup.begin', {
               stepId: args.stepId,
               recordId,
               actions,
-              runInBackground: args.action.runInBackground === true,
+              runInBackground: batchReason.endsWith('.background') && args.action.runInBackground === true,
               nextStepId: args.nextStepId || null
             });
             const batch = await triggerFollowupBatch(formKey, recordId, actions);
@@ -7447,9 +8061,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               recordId,
               actions,
               batch,
-              reason
+              reason: batchReason
             });
-            await refreshAfterFollowupBatch({ recordId, reason });
+            await refreshAfterFollowupBatch({
+              recordId,
+              reason: batchReason,
+              mode: batchReason.endsWith('.background') || batchReason.endsWith('.pre') ? 'sharedDataOnly' : 'snapshot'
+            });
             if (followupErrors.length) {
               const message = followupErrors.join(' · ');
               setStatus(message);
@@ -7478,8 +8096,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         };
 
-        if (args.action.runInBackground === true) {
-          void runBatch();
+        if (preActions.length) {
+          const preOutcome = await runBatch(preActions, `${reason}.pre`);
+          if (!preOutcome.success) {
+            return { success: false, advanceToNext: false, message: preOutcome.message };
+          }
+        }
+
+        if (effectiveBackgroundActions.length && args.action.runInBackground === true) {
+          void runBatch(effectiveBackgroundActions, `${reason}.background`);
           guidedMilestoneBusy.unlock(busySeq, {
             stepId: args.stepId,
             launchedBackground: true
@@ -7500,7 +8125,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
         }
 
-        const outcome = await runBatch();
+        const outcome = effectiveBackgroundActions.length
+          ? await runBatch(effectiveBackgroundActions, `${reason}.background`)
+          : { success: true as const };
         guidedMilestoneBusy.unlock(busySeq, {
           stepId: args.stepId,
           launchedBackground: false,
@@ -7541,6 +8168,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedMilestoneBusy,
       logEvent,
       openConfiguredConfirmDialog,
+      persistCurrentSnapshot,
       refreshAfterFollowupBatch,
       resolveLogMessage,
       resolveUiErrorMessage,
@@ -7735,153 +8363,65 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
 
           // Step 3: update local state with URL(s) (replace uploaded File objects), then save draft again to persist URL(s) to the sheet.
+          const applyTopLevelMerge = (baseValues: Record<string, FieldValue>) => ({
+            ...baseValues,
+            [args.questionId as string]: mergedItems as unknown as FieldValue
+          });
+          const applyLineMerge = (baseLineItems: LineItemState): LineItemState => {
+            const rows = baseLineItems[args.groupId!] || [];
+            const nextRows = rows.map(r => {
+              if (r.id !== args.rowId) return r;
+              return { ...r, values: { ...(r.values || {}), [args.fieldId!]: mergedItems } };
+            });
+            return { ...baseLineItems, [args.groupId!]: nextRows };
+          };
+
           const nextValues =
-            args.scope === 'top' && args.questionId
-              ? { ...valuesRef.current, [args.questionId]: mergedItems }
-              : valuesRef.current;
+            args.scope === 'top' && args.questionId ? applyTopLevelMerge(valuesRef.current) : valuesRef.current;
 
           const nextLineItems =
             args.scope === 'line' && args.groupId && args.rowId && args.fieldId
-              ? (() => {
-                  const current = lineItemsRef.current;
-                  const rows = current[args.groupId!] || [];
-                  const nextRows = rows.map(r => {
-                    if (r.id !== args.rowId) return r;
-                    return { ...r, values: { ...(r.values || {}), [args.fieldId!]: mergedItems } };
-                  });
-                  return { ...current, [args.groupId!]: nextRows };
-                })()
+              ? applyLineMerge(lineItemsRef.current)
               : lineItemsRef.current;
 
           valuesRef.current = nextValues;
           lineItemsRef.current = nextLineItems;
+          uploadedFieldValueOverridesRef.current.set(args.fieldPath, {
+            scope: args.scope,
+            questionId: args.questionId,
+            groupId: args.groupId,
+            rowId: args.rowId,
+            fieldId: args.fieldId,
+            items: mergedItems
+          });
 
           if (allowUiAfterUpload) {
             if (args.scope === 'top' && args.questionId) {
-              setValues(nextValues);
+              setValues(prev => {
+                const merged = applyTopLevelMerge(prev);
+                valuesRef.current = merged;
+                return merged;
+              });
             }
-            if (args.scope === 'line' && args.groupId) {
-              setLineItems(nextLineItems);
+            if (args.scope === 'line' && args.groupId && args.rowId && args.fieldId) {
+              setLineItems(prev => {
+                const merged = applyLineMerge(prev);
+                lineItemsRef.current = merged;
+                return merged;
+              });
             }
           }
 
-          ensureSession('beforeSaveUrls');
-
-          const persistUrls = async (): Promise<{ success: boolean; message?: string }> => {
-            // Avoid optimistic-lock races with an autosave that started right before this upload.
-            // (Autosave is blocked while uploads are in-flight, but an autosave already in-flight can still finish and bump the server version.)
-            try {
-              if (autoSaveInFlightRef.current) {
-                const startedAt = Date.now();
-                logEvent('upload.saveUrls.waitAutosave', {
-                  fieldPath: args.fieldPath,
-                  recordId,
-                  cachedVersion: Number.isFinite(Number(recordDataVersionRef.current)) ? Number(recordDataVersionRef.current) : null
-                });
-                const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
-                while (autoSaveInFlightRef.current) {
-                  if (Date.now() - startedAt > 10_000) break;
-                  await sleep(80);
-                }
-                logEvent('upload.saveUrls.waitAutosave.done', {
-                  fieldPath: args.fieldPath,
-                  recordId,
-                  durationMs: Date.now() - startedAt,
-                  stillInFlight: autoSaveInFlightRef.current
-                });
-                ensureSession('afterWaitAutosave');
-              }
-            } catch (_) {
-              // ignore
-            }
-
-            const statusRaw2 =
-              ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
-              '';
-            const draftStatus2 = resolveAutoSaveStatus(statusRaw2);
-            const draftValues = valuesRef.current;
-            const draftLineItems = lineItemsRef.current;
-            const draft2 = buildDraftPayload({
-              definition,
-              formKey,
-              language: languageRef.current,
-              values: draftValues,
-              lineItems: draftLineItems,
-              existingRecordId: recordId
-            }) as any;
-            draft2.__ckSaveMode = 'draft';
-            draft2.__ckStatus = draftStatus2;
-            draft2.__ckCreateFlow = createFlowRef.current ? '1' : '';
-            const baseVersion = recordDataVersionRef.current;
-            if (recordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
-              draft2.__ckClientDataVersion = Number(baseVersion);
-            }
-
-            const res2 = await submit(draft2);
-            if (!res2?.success) {
-              const msg = (res2?.message || 'Failed to save uploaded file URLs.').toString();
-              const lower = msg.toLowerCase();
-              const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
-              if (isStale) {
-                const serverVersionRaw = Number((res2 as any)?.meta?.dataVersion);
-                markRecordStale({
-                  reason: 'upload.saveUrls.rejected.stale',
-                  recordId,
-                  cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
-                  serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
-                  serverRow: null
-                });
-                return { success: false, message: msg };
-              }
-              logEvent('upload.saveUrls.error', { fieldPath: args.fieldPath, recordId, message: msg });
-              setDraftSave({ phase: 'error', message: msg });
-              return { success: false, message: msg };
-            }
-
-            const allowUiAfterSave = ensureSession('afterSaveUrls') && allowUiUpdates;
-
-            recordStaleRef.current = null;
-            setRecordStale(null);
-            const dv2 = Number((res2 as any)?.meta?.dataVersion);
-            if (Number.isFinite(dv2) && dv2 > 0) {
-              recordDataVersionRef.current = dv2;
-            }
-            const rn2 = Number((res2 as any)?.meta?.rowNumber);
-            if (Number.isFinite(rn2) && rn2 >= 2) {
-              recordRowNumberRef.current = rn2;
-            }
-            if (allowUiAfterSave) {
-              setLastSubmissionMeta(prev => ({
-                ...(prev || {}),
-                id: recordId,
-                updatedAt: (res2?.meta?.updatedAt || prev?.updatedAt) as any,
-                dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : prev?.dataVersion,
-                status: draftStatus2
-              }));
-              setDraftSave({ phase: 'saved', updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined });
-            }
-            // Keep list view up-to-date without triggering a refetch.
-            upsertListCacheRow({
-              recordId,
-              // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups.
-              values: (draft2 as any).values as any,
-              updatedAt: (res2?.meta?.updatedAt || '').toString() || undefined,
-              status: draftStatus2,
-              dataVersion: Number.isFinite(Number((res2 as any)?.meta?.dataVersion)) ? Number((res2 as any).meta.dataVersion) : undefined,
-              rowNumber: Number.isFinite(Number((res2 as any)?.meta?.rowNumber)) ? Number((res2 as any).meta.rowNumber) : undefined
-            });
-            logEvent('upload.saveUrls.success', { fieldPath: args.fieldPath, recordId, urls: mergedItems.length });
-            return { success: true };
-          };
-
-          const persistPromise = uploadPersistQueueRef.current
-            .catch(() => undefined)
-            .then(() => persistUrls());
-          uploadPersistQueueRef.current = persistPromise.then(
-            () => undefined,
-            () => undefined
-          );
-          return await persistPromise;
+          ensureSession('afterLocalMerge');
+          autoSaveDirtyRef.current = true;
+          autoSaveQueuedRef.current = true;
+          setDraftSave(prev => (prev.phase === 'saving' ? prev : { phase: 'dirty' }));
+          logEvent('upload.urls.localMerged', {
+            fieldPath: args.fieldPath,
+            recordId,
+            urls: mergedItems.filter(it => typeof it === 'string').length
+          });
+          return { success: true };
         } catch (err: any) {
           const uiMessage = resolveUiErrorMessage(
             err,
@@ -7907,15 +8447,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (uploadQueueRef.current.get(queueKey) === next) uploadQueueRef.current.delete(queueKey);
           syncUploadQueueSize();
           // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
-          if (uploadQueueRef.current.size === 0 && autoSaveQueuedRef.current && autoSaveDirtyRef.current && !submittingRef.current) {
-            autoSaveQueuedRef.current = false;
-            if (autoSaveTimerRef.current) {
-              globalThis.clearTimeout(autoSaveTimerRef.current);
-              autoSaveTimerRef.current = null;
-            }
-            autoSaveTimerRef.current = globalThis.setTimeout(() => {
-              void performAutoSave('upload.queue.drained');
-            }, autoSaveDebounceMs) as any;
+          if (
+            uploadQueueRef.current.size === 0 &&
+            autoSaveQueuedRef.current &&
+            autoSaveDirtyRef.current &&
+            !submittingRef.current
+          ) {
+            scheduleLatestAutoSave('upload.queue.drained', autoSaveDebounceMs);
             logEvent('autosave.queued.uploadDrained', { debounceMs: autoSaveDebounceMs });
           }
         } catch (_) {
@@ -7924,7 +8462,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return next;
     },
-    [autoSaveDebounceMs, ensureDraftRecordId, formKey, isClosedRecord, logEvent, performAutoSave, syncUploadQueueSize]
+    [autoSaveDebounceMs, ensureDraftRecordId, formKey, isClosedRecord, logEvent, performAutoSave, scheduleLatestAutoSave, syncUploadQueueSize]
   );
 
   useEffect(() => {
@@ -8066,7 +8604,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }
 
-  async function handleSubmit(submitUi?: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) {
+  async function handleSubmit(submitUi?: {
+    collapsedRows: Record<string, boolean>;
+    collapsedSubgroups: Record<string, boolean>;
+    validationDefinition?: WebFormDefinition;
+    validationVirtualState?: GuidedStepsVirtualState | null;
+  }) {
     if (submitPipelineInFlightRef.current) {
       logEvent('submit.blocked.inFlightGuard');
       return;
@@ -8085,6 +8628,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return;
     }
     clearStatus();
+    const submitQueuePolicy =
+      definition.submissionAfterSubmit?.waitForQueue ||
+      'all';
+    const waitRes = await waitForBackgroundSaves('submit', submitQueuePolicy);
+    if (!waitRes.ok) {
+      const msg = (waitRes.message || tSystem('actions.submitFailed', language, 'Submit failed')).toString();
+      setStatus(msg);
+      setStatusLevel('error');
+      logEvent('submit.blocked.backgroundQueue', {
+        message: msg,
+        phase: 'preValidation',
+        waitForQueue: submitQueuePolicy
+      });
+      return;
+    }
     setValidationAttempted(true);
     setValidationNoticeHidden(false);
     logEvent('submit.validate.begin', { language, lineItemGroups: Object.keys(lineItems).length });
@@ -8165,10 +8723,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     }
 
+    const validationDefinition = submitUi?.validationDefinition || definition;
+    const validationVirtualState = submitUi?.validationVirtualState || null;
+
     try {
       setValidationWarnings(
         collectValidationWarnings({
-          definition,
+          definition: validationDefinition,
           language,
           values,
           lineItems,
@@ -8182,17 +8743,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('submit.warnings.failed', { message: err?.message || err || 'unknown' });
     }
     const nextErrors = validateForm({
-      definition,
+      definition: validationDefinition,
       language,
       values,
       lineItems,
       collapsedRows: submitUi?.collapsedRows,
-      collapsedSubgroups: submitUi?.collapsedSubgroups
+      collapsedSubgroups: submitUi?.collapsedSubgroups,
+      virtualState: validationVirtualState
     });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       submitConfirmedRef.current = false;
-      logEvent('submit.validate.failed');
+      logEvent('submit.validate.failed', {
+        errorCount: Object.keys(nextErrors).length,
+        firstErrorKeys: Object.keys(nextErrors).slice(0, 5),
+        scopedValidation: validationDefinition !== definition
+      });
       if (submitRequestedFromSummary && viewRef.current === 'summary') {
         summarySubmitIntentRef.current = false;
         setView('form');
@@ -8261,15 +8827,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // ignore
     }
     try {
-      const waitRes = await waitForBackgroundSaves('submit');
-      if (!waitRes.ok) {
-        const msg = (waitRes.message || tSystem('actions.submitFailed', language, 'Submit failed')).toString();
-        setStatus(msg);
-        setStatusLevel('error');
-        logEvent('submit.blocked.backgroundQueue', { message: msg });
-        return;
-      }
-
       let existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
@@ -8304,44 +8861,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
         });
       }
-      const payload = await buildSubmissionPayload({
-        definition,
-        formKey,
-        language: languageRef.current,
-        values: ingredientsFormActive ? applyIngredientActivationSystemFields(valuesRef.current as any) : valuesRef.current,
-        lineItems: lineItemsRef.current,
-        existingRecordId,
-        collapsedRows: submitUi?.collapsedRows,
-        collapsedSubgroups: submitUi?.collapsedSubgroups
-      });
+      const configuredAfterSubmit = definition.submissionAfterSubmit;
+      const configuredPreActions = Array.isArray(configuredAfterSubmit?.preActions)
+        ? configuredAfterSubmit.preActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const configuredBackgroundActions = Array.isArray(configuredAfterSubmit?.backgroundActions)
+        ? configuredAfterSubmit.backgroundActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
+        : [];
+      const closeOnlyPreActions =
+        configuredPreActions.length === 1 &&
+        configuredPreActions[0].toString().trim().toUpperCase() === 'CLOSE_RECORD';
       const submitBaseVersion = recordDataVersionRef.current;
-      if (existingRecordId && Number.isFinite(Number(submitBaseVersion)) && Number(submitBaseVersion) > 0) {
-        (payload as any).__ckClientDataVersion = Number(submitBaseVersion);
-      }
-      const payloadValues = (payload as any).values as Record<string, any> | undefined;
-      if (payloadValues) {
-        const fileUpdates = computeUrlOnlyUploadUpdates(definition, payloadValues);
-        if (Object.keys(fileUpdates).length) {
-          setValues(prev => ({ ...prev, ...fileUpdates }));
-          setSelectedRecordSnapshot(prev =>
-            prev ? { ...prev, values: { ...(prev.values || {}), ...fileUpdates } } : prev
-          );
-        }
-      }
+      const closeStatusForPrimarySubmit = closeOnlyPreActions
+        ? (resolveStatusTransitionValue((definition as any)?.followup?.statusTransitions, 'onClose', languageRef.current, {
+            includeDefaultOnClose: true
+          }) || 'Closed')
+        : '';
       const submitRpcStartMark = `ck.submit.rpc.start.${Date.now()}`;
       const submitRpcEndMark = `ck.submit.rpc.end.${Date.now()}`;
       perfMark(submitRpcStartMark);
-      const res = await submit(payload);
+      const submitResult = await persistCurrentSnapshot({
+        reason: 'submit',
+        mode: 'submit',
+        existingRecordId,
+        statusOverride: closeStatusForPrimarySubmit || undefined,
+        collapsedRows: submitUi?.collapsedRows,
+        collapsedSubgroups: submitUi?.collapsedSubgroups
+      });
       perfMark(submitRpcEndMark);
       perfMeasure('ck.submit.rpc', submitRpcStartMark, submitRpcEndMark, {
         formKey,
         recordId: existingRecordId || null
       });
+      const payload = submitResult.payload;
+      const res = submitResult.response;
       if (!res) {
         logEvent('submit.emptyResponse', { formKey, existingRecordId: existingRecordId || null });
       }
-      const ok = Boolean(res?.success);
-      const message = (res?.message || (ok ? 'Submitted' : 'Submit failed')).toString();
+      const ok = Boolean(submitResult.success && res?.success);
+      const message = (submitResult.message || res?.message || (ok ? 'Submitted' : 'Submit failed')).toString();
       setStatus(message);
       setStatusLevel(ok ? 'success' : 'error');
       if (!ok) {
@@ -8362,28 +8920,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       logEvent('submit.success', { recordId: (res as any)?.meta?.id });
 
-      const recordId = (((res as any)?.meta?.id) || existingRecordId || selectedRecordId || '').toString();
-      if (recordId) setSelectedRecordId(recordId);
+      const recordId = ((submitResult.recordId || (res as any)?.meta?.id || existingRecordId || selectedRecordId || '') as string).toString();
       dedupBaselineSignatureRef.current = (submitDedupSignature || '').toString();
       dedupKeyFingerprintBaselineRef.current = submitDedupFingerprint;
-
-      setLastSubmissionMeta(prev => ({
-        id: recordId || prev?.id || selectedRecordId,
-        createdAt: (res as any)?.meta?.createdAt || prev?.createdAt,
-        updatedAt: (res as any)?.meta?.updatedAt || prev?.updatedAt,
-        dataVersion: Number.isFinite(Number(((res as any)?.meta as any)?.dataVersion)) ? Number(((res as any).meta as any).dataVersion) : prev?.dataVersion,
-        status: ((res as any)?.meta as any)?.status || prev?.status || null
-      }));
-      recordStaleRef.current = null;
-      setRecordStale(null);
-      const dv = Number(((res as any)?.meta as any)?.dataVersion);
-      if (Number.isFinite(dv) && dv > 0) {
-        recordDataVersionRef.current = dv;
-      }
-      const rn = Number(((res as any)?.meta as any)?.rowNumber);
-      if (Number.isFinite(rn) && rn >= 2) {
-        recordRowNumberRef.current = rn;
-      }
 
       const runFollowupBatchForSubmit = async (args: { actions: string[]; reason: string; refresh: boolean }) => {
         const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
@@ -8409,13 +8948,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       };
 
       const followupCfg = (definition as any)?.followup || null;
-      const configuredAfterSubmit = definition.submissionAfterSubmit;
-      const configuredPreActions = Array.isArray(configuredAfterSubmit?.preActions)
-        ? configuredAfterSubmit.preActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
-        : [];
-      const configuredBackgroundActions = Array.isArray(configuredAfterSubmit?.backgroundActions)
-        ? configuredAfterSubmit.backgroundActions.map(entry => (entry || '').toString().trim()).filter(Boolean)
-        : [];
       const fallbackActions: string[] = [];
       if (followupCfg?.pdfTemplateId) fallbackActions.push('CREATE_PDF');
       if (followupCfg?.emailTemplateId && followupCfg?.emailRecipients) fallbackActions.push('SEND_EMAIL');
@@ -8428,18 +8960,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (recordId) {
         if (configuredAfterSubmit && (configuredPreActions.length || configuredBackgroundActions.length)) {
           handledSubmitNavigation = true;
+          if (closeOnlyPreActions) {
+            closeResultByAction = new Map<string, any>([
+              [
+                'CLOSE_RECORD',
+                {
+                  success: true,
+                  status: ((res as any)?.meta || {})?.status || closeStatusForPrimarySubmit || null,
+                  reservationReconciliation: ((res as any)?.meta || {})?.reservationReconciliation || null,
+                  submitEffects: ((res as any)?.meta || {})?.submitEffects || null
+                }
+              ]
+            ]);
+            const submitEffectsCreated = Number((res as any)?.meta?.submitEffects?.created || 0) || 0;
+            const submitEffectsUpdated = Number((res as any)?.meta?.submitEffects?.updated || 0) || 0;
+            invalidateClientSharedDataCaches({ includePersistedDataSources: true });
+            logEvent('sharedData.cache.invalidated', {
+              reason: 'submit.afterSubmit.pre.primaryClose',
+              recordId,
+              submitEffectsCreated,
+              submitEffectsUpdated
+            });
+            if (submitEffectsCreated > 0 || submitEffectsUpdated > 0) {
+              refreshGuidedDataSourcesInBackground({
+                reason: 'submit.afterSubmit.pre.primaryClose.submitEffects',
+                forceRefresh: true,
+                retryDelaysMs: [0, 1200, 3500]
+              });
+            }
+          }
           if (configuredPreActions.length) {
             try {
               setStatus('Finalizing submission…');
               setStatusLevel('info');
               logEvent('submit.afterSubmit.pre.begin', { recordId, actions: configuredPreActions });
-              const outcome = await runFollowupBatchForSubmit({
-                actions: configuredPreActions,
-                reason: 'submit.afterSubmit.pre',
-                refresh: true
-              });
-              followupErrors = outcome.followupErrors;
-              closeResultByAction = outcome.byAction;
+              if (!closeOnlyPreActions) {
+                const outcome = await runFollowupBatchForSubmit({
+                  actions: configuredPreActions,
+                  reason: 'submit.afterSubmit.pre',
+                  refresh: true
+                });
+                followupErrors = outcome.followupErrors;
+                closeResultByAction = outcome.byAction;
+              }
               logEvent('submit.afterSubmit.pre.done', {
                 recordId,
                 actionsCount: configuredPreActions.length,
@@ -8577,13 +9140,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
 
       if (!handledSubmitNavigation) {
+        const submitEffectsCreated = Number((res as any)?.meta?.submitEffects?.created || 0) || 0;
+        const submitEffectsUpdated = Number((res as any)?.meta?.submitEffects?.updated || 0) || 0;
         invalidateClientSharedDataCaches({ includePersistedDataSources: true });
         logEvent('sharedData.cache.invalidated', {
           reason: 'submit.success',
           recordId: recordId || null,
-          submitEffectsCreated: Number((res as any)?.meta?.submitEffects?.created || 0) || 0,
-          submitEffectsUpdated: Number((res as any)?.meta?.submitEffects?.updated || 0) || 0
+          submitEffectsCreated,
+          submitEffectsUpdated
         });
+        if (submitEffectsCreated > 0 || submitEffectsUpdated > 0) {
+          refreshGuidedDataSourcesInBackground({
+            reason: 'submit.success.submitEffects',
+            forceRefresh: true,
+            retryDelaysMs: [0, 1200, 3500]
+          });
+        }
 
         // Refresh from saved record to surface server-side autoIncrement + follow-up changes immediately.
         if (recordId) {
@@ -10059,6 +10631,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setAutoSaveHold={setAutoSaveHoldFromUi}
           summarySubmitIntentRef={summarySubmitIntentRef}
           ensureRecordId={ensureDraftRecordId}
+          onBeforeGuidedStepAdvance={waitForGuidedStepAdvance}
         />
       ) : null}
 
@@ -10277,6 +10850,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         title={guidedMilestoneBusy.state.title || tSystem('draft.savingShort', language, 'Saving…')}
         message={guidedMilestoneBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
         zIndex={12046}
+      />
+
+      <BlockingOverlay
+        open={guidedStepAdvanceBusy.state.open}
+        title={guidedStepAdvanceBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+        message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
+        zIndex={12047}
       />
 
       <ConfirmDialogOverlay

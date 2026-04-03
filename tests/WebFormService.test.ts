@@ -217,6 +217,342 @@ describe('WebFormService', () => {
     ]);
   });
 
+  test('fetchDataSource backfills legacy entire-dish leftover fields from the source meal row only when missing', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', '', '', ''],
+      ['Ingredients Management', 'Config: Ingredients Management', 'Ingredients Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfigSheet = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
+    (inventoryConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RECIPE', 'TEXT', 'Recipe', 'Recipe', 'Recipe', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['DIETARY_APPLICABILITY', 'TEXT', 'Dietary applicability', 'Dietary applicability', 'Dietary applicability', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const mealProductionConfigSheet = ss.getSheetByName('Config: Meal Production') || ss.insertSheet('Config: Meal Production');
+    (mealProductionConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_MEALS_REQUEST', 'LINE_ITEM_GROUP', 'Meals', 'Meals', 'Meals', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const ingredientsConfigSheet =
+      ss.getSheetByName('Config: Ingredients Management') || ss.insertSheet('Config: Ingredients Management');
+    (ingredientsConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['INGREDIENT_NAME', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['DIETARY_APPLICABILITY', 'TEXT', 'Dietary applicability', 'Dietary applicability', 'Dietary applicability', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+    const ingredientsDataSheet = ss.getSheetByName('Ingredients Data') || ss.insertSheet('Ingredients Data');
+    (ingredientsDataSheet as any).setMockData([
+      ['System Record ID', 'Form Record ID [INGREDIENT_NAME]', 'Dietary applicability [DIETARY_APPLICABILITY]', 'Status [STATUS]'],
+      ['row-1', 'Olive oil', 'Vegetarian, Vegan, Diabetic, No-salt, Standard', 'Active'],
+      ['row-2', 'Potato', 'Vegetarian, Vegan, Standard', 'Active']
+    ]);
+
+    jest.spyOn((service as any).listing, 'fetchSubmissions').mockReturnValue({
+      items: [
+        {
+          id: 'inv-1',
+          LEFTOVER_ID: 'LE-8',
+          LEFTOVER_KIND: 'Entire dish',
+          LEFTOVER_RECIPE: '',
+          LEFTOVER_MEAL_TYPE: '',
+          DIETARY_APPLICABILITY: '',
+          LEFTOVER_SOURCE_FORM_KEY: 'Config: Meal Production',
+          LEFTOVER_SOURCE_RECORD_ID: 'MP-1',
+          LEFTOVER_SOURCE_ROW_ID: 'meal-row-1',
+          LEFTOVER_STATUS: 'available'
+        }
+      ],
+      totalCount: 1
+    });
+
+    jest.spyOn(service, 'fetchSubmissionById').mockImplementation((formKey: string, id: string) => {
+      if (formKey === 'Config: Meal Production' && id === 'MP-1') {
+        return {
+          id: 'MP-1',
+          values: {
+            MP_MEALS_REQUEST: [
+              {
+                __ckRowId: 'meal-row-1',
+                MEAL_TYPE: 'Vegetarian',
+                MP_TYPE_LI: [
+                  {
+                    __ckRowId: 'prep-row-1',
+                    PREP_TYPE: 'Cook',
+                    RECIPE: 'Greek stew',
+                    MP_INGREDIENTS_LI: [
+                      { ING: 'Olive oil' },
+                      { ING: 'Potato' }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        } as any;
+      }
+      return null;
+    });
+
+    const res = service.fetchDataSource({
+      id: 'Leftover Inventory Data',
+      formKey: 'Config: Leftover Inventory',
+      backfill: {
+        whenMissingAnyFieldIds: ['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'],
+        sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
+        sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+        sourceRowIdFieldId: 'LEFTOVER_SOURCE_ROW_ID',
+        scopes: [
+          {
+            id: 'mealRow',
+            groupId: 'MP_MEALS_REQUEST',
+            matchBySourceRowId: true
+          },
+          {
+            id: 'cookRow',
+            groupId: 'MP_TYPE_LI',
+            parentScopeId: 'mealRow',
+            matchBySourceRowId: true,
+            rowFilter: {
+              includeWhen: {
+                fieldId: 'PREP_TYPE',
+                equals: ['Cook']
+              }
+            },
+            fallbackMatch: 'first'
+          },
+          {
+            id: 'partialRow',
+            groupId: 'MP_LEFTOVER_CAPTURE_LI',
+            matchBySourceRowId: true,
+            fallbackMatch: 'first'
+          }
+        ],
+        values: {
+          LEFTOVER_RECIPE: '{{cookRow.RECIPE}}',
+          LEFTOVER_MEAL_TYPE: '{{mealRow.MEAL_TYPE}}',
+          LEFTOVER_INGREDIENT: '{{partialRow.LEFTOVER_INGREDIENT}}',
+          DIETARY_APPLICABILITY: {
+            op: 'lookupSetIntersection',
+            collectionPath: 'cookRow.MP_INGREDIENTS_LI',
+            itemFieldId: 'ING',
+            lookupFormKey: 'Config: Ingredients Management',
+            lookupKeyFieldId: 'INGREDIENT_NAME',
+            lookupValueFieldId: 'DIETARY_APPLICABILITY',
+            splitOn: ',',
+            joinWith: ', ',
+            fallback: '{{partialRow.LEFTOVER_DIETARY_APPLICABILITY}}'
+          }
+        }
+      },
+      projection: [
+        'id',
+        'LEFTOVER_ID',
+        'LEFTOVER_KIND',
+        'LEFTOVER_RECIPE',
+        'LEFTOVER_MEAL_TYPE',
+        'DIETARY_APPLICABILITY',
+        'LEFTOVER_SOURCE_FORM_KEY',
+        'LEFTOVER_SOURCE_RECORD_ID',
+        'LEFTOVER_SOURCE_ROW_ID'
+      ]
+    } as any, 'EN');
+
+    expect(res.items).toEqual([
+      expect.objectContaining({
+        id: 'inv-1',
+        LEFTOVER_ID: 'LE-8',
+        LEFTOVER_RECIPE: 'Greek stew',
+        LEFTOVER_MEAL_TYPE: 'Vegetarian',
+        DIETARY_APPLICABILITY: 'Vegetarian, Vegan, Standard'
+      })
+    ]);
+  });
+
+  test('fetchDataSource backfills legacy entire-dish leftover fields when source row id points to the cook row', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', '', '', ''],
+      ['Ingredients Management', 'Config: Ingredients Management', 'Ingredients Data', 'Desc', '', '', '', '']
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const inventoryConfigSheet = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
+    (inventoryConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RECIPE', 'TEXT', 'Recipe', 'Recipe', 'Recipe', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['DIETARY_APPLICABILITY', 'TEXT', 'Dietary applicability', 'Dietary applicability', 'Dietary applicability', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const mealProductionConfigSheet = ss.getSheetByName('Config: Meal Production') || ss.insertSheet('Config: Meal Production');
+    (mealProductionConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_MEALS_REQUEST', 'LINE_ITEM_GROUP', 'Meals', 'Meals', 'Meals', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const ingredientsConfigSheet =
+      ss.getSheetByName('Config: Ingredients Management') || ss.insertSheet('Config: Ingredients Management');
+    (ingredientsConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['INGREDIENT_NAME', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['DIETARY_APPLICABILITY', 'TEXT', 'Dietary applicability', 'Dietary applicability', 'Dietary applicability', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+    const ingredientsDataSheet = ss.getSheetByName('Ingredients Data') || ss.insertSheet('Ingredients Data');
+    (ingredientsDataSheet as any).setMockData([
+      ['System Record ID', 'Form Record ID [INGREDIENT_NAME]', 'Dietary applicability [DIETARY_APPLICABILITY]', 'Status [STATUS]'],
+      ['row-1', 'Bulgur', 'Vegan', 'Active']
+    ]);
+
+    jest.spyOn((service as any).listing, 'fetchSubmissions').mockReturnValue({
+      items: [
+        {
+          id: 'inv-2',
+          LEFTOVER_ID: 'LE-12',
+          LEFTOVER_KIND: 'Entire dish',
+          LEFTOVER_RECIPE: '',
+          LEFTOVER_MEAL_TYPE: '',
+          DIETARY_APPLICABILITY: '',
+          LEFTOVER_SOURCE_FORM_KEY: 'Config: Meal Production',
+          LEFTOVER_SOURCE_RECORD_ID: 'MP-2',
+          LEFTOVER_SOURCE_ROW_ID: 'cook-row-1',
+          LEFTOVER_STATUS: 'available'
+        }
+      ],
+      totalCount: 1
+    });
+
+    jest.spyOn(service, 'fetchSubmissionById').mockImplementation((formKey: string, id: string) => {
+      if (formKey === 'Config: Meal Production' && id === 'MP-2') {
+        return {
+          id: 'MP-2',
+          values: {
+            MP_MEALS_REQUEST: [
+              {
+                __ckRowId: 'meal-row-2',
+                MEAL_TYPE: 'Vegan',
+                MP_TYPE_LI: [
+                  {
+                    __ckRowId: 'cook-row-1',
+                    PREP_TYPE: 'Cook',
+                    RECIPE: 'Bulgur & vegetable warm salad',
+                    MP_INGREDIENTS_LI: [
+                      { ING: 'Bulgur' }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        } as any;
+      }
+      return null;
+    });
+
+    const res = service.fetchDataSource({
+      id: 'Leftover Inventory Data',
+      formKey: 'Config: Leftover Inventory',
+      backfill: {
+        whenMissingAnyFieldIds: ['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'],
+        sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
+        sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+        sourceRowIdFieldId: 'LEFTOVER_SOURCE_ROW_ID',
+        scopes: [
+          {
+            id: 'mealRow',
+            groupId: 'MP_MEALS_REQUEST',
+            matchBySourceRowId: true
+          },
+          {
+            id: 'cookRow',
+            groupId: 'MP_TYPE_LI',
+            parentScopeId: 'mealRow',
+            matchBySourceRowId: true,
+            rowFilter: {
+              includeWhen: {
+                fieldId: 'PREP_TYPE',
+                equals: ['Cook']
+              }
+            },
+            fallbackMatch: 'first'
+          },
+          {
+            id: 'partialRow',
+            groupId: 'MP_LEFTOVER_CAPTURE_LI',
+            matchBySourceRowId: true,
+            fallbackMatch: 'first'
+          }
+        ],
+        values: {
+          LEFTOVER_RECIPE: '{{cookRow.RECIPE}}',
+          LEFTOVER_MEAL_TYPE: '{{mealRow.MEAL_TYPE}}',
+          LEFTOVER_INGREDIENT: '{{partialRow.LEFTOVER_INGREDIENT}}',
+          DIETARY_APPLICABILITY: {
+            op: 'lookupSetIntersection',
+            collectionPath: 'cookRow.MP_INGREDIENTS_LI',
+            itemFieldId: 'ING',
+            lookupFormKey: 'Config: Ingredients Management',
+            lookupKeyFieldId: 'INGREDIENT_NAME',
+            lookupValueFieldId: 'DIETARY_APPLICABILITY',
+            splitOn: ',',
+            joinWith: ', ',
+            fallback: '{{partialRow.LEFTOVER_DIETARY_APPLICABILITY}}'
+          }
+        }
+      },
+      projection: [
+        'id',
+        'LEFTOVER_ID',
+        'LEFTOVER_KIND',
+        'LEFTOVER_RECIPE',
+        'LEFTOVER_MEAL_TYPE',
+        'DIETARY_APPLICABILITY',
+        'LEFTOVER_SOURCE_FORM_KEY',
+        'LEFTOVER_SOURCE_RECORD_ID',
+        'LEFTOVER_SOURCE_ROW_ID'
+      ]
+    } as any, 'EN');
+
+    expect(res.items).toEqual([
+      expect.objectContaining({
+        id: 'inv-2',
+        LEFTOVER_ID: 'LE-12',
+        LEFTOVER_RECIPE: 'Bulgur & vegetable warm salad',
+        LEFTOVER_MEAL_TYPE: 'Vegan',
+        DIETARY_APPLICABILITY: 'Vegan'
+      })
+    ]);
+  });
+
   test('submitWebForm appends rows with line item JSON and file url', () => {
     const result = service.submitWebForm({
       formKey: 'Config: Delivery',
@@ -2171,6 +2507,81 @@ describe('WebFormService', () => {
     expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
     const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('SEND_EMAIL does not downgrade a record that is already closed', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      emailTemplateId: { EN: 'email-template-en' },
+      emailRecipients: ['ops@example.com'],
+      statusTransitions: { onEmail: 'Emailed', onClose: 'Closed' }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ]);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-CLOSE-GUARD',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Closed'
+    } as any);
+
+    const result = service.triggerFollowupAction('Config: Delivery', 'REC-CLOSE-GUARD', 'SEND_EMAIL');
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('Closed');
+
+    const updated = service.fetchSubmissionById('Config: Delivery', 'REC-CLOSE-GUARD');
+    expect((updated as any)?.status).toBe('Closed');
+  });
+
+  test('saveSubmissionWithId persists explicit non-draft closed status to the record', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      statusTransitions: { onEmail: 'Emailed', onClose: 'Closed' }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ]);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMAIL-THEN-CLOSE',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Emailed'
+    } as any);
+
+    const closeResult = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMAIL-THEN-CLOSE',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckStatus: 'Closed'
+    } as any);
+
+    expect(closeResult.success).toBe(true);
+
+    const updated = service.fetchSubmissionById('Config: Delivery', 'REC-EMAIL-THEN-CLOSE');
+    expect((updated as any)?.status).toBe('Closed');
   });
 
   test('triggerFollowupAction RECONCILE_RESERVATIONS reconciles active reservations without closing the record', () => {
