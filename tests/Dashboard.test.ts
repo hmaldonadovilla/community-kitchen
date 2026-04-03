@@ -1089,7 +1089,8 @@ describe('Dashboard', () => {
       submitValidation: {
         enforceFieldOrder: true,
         hideSubmitTopErrorMessage: true,
-        submitTopErrorMessage: { EN: 'Fix required fields' }
+        submitTopErrorMessage: { EN: 'Fix required fields' },
+        orderedEntryFieldErrorMessage: { EN: 'Enter 0 or more for {field}.' }
       }
     });
     const mockData = [
@@ -1104,7 +1105,8 @@ describe('Dashboard', () => {
     expect(forms[0].submitValidation).toEqual({
       enforceFieldOrder: true,
       hideSubmitTopErrorMessage: true,
-      submitTopErrorMessage: { en: 'Fix required fields' }
+      submitTopErrorMessage: { en: 'Fix required fields' },
+      orderedEntryFieldErrorMessage: { en: 'Enter 0 or more for {field}.' }
     });
   });
 

@@ -6330,6 +6330,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
                 const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
                   const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
+                  const tone = ((segment.config?.tone || 'default').toString() || 'default').trim().toLowerCase();
+                  const segmentTextStyle: React.CSSProperties =
+                    tone === 'muted'
+                      ? { color: 'var(--muted)' }
+                      : tone === 'strong'
+                        ? { fontWeight: 600 }
+                        : {};
                   if (segmentType === 'text') {
                     const text = resolveLocalizedString(segment.config?.text, language, '');
                     if (!text) return null;
@@ -6343,7 +6350,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         key={`${segment.id}-${idx}`}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
                       >
-                        <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{text}</span>
+                        <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', ...segmentTextStyle }}>{text}</span>
                         {separatorNode}
                       </span>
                     );
@@ -6376,6 +6383,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const controlStyle = ((segment.config.controlStyle || 'default').toString() || 'default').trim().toLowerCase();
                     if (controlStyle === 'compact') {
                       const fieldPath = `${target.primaryRow.groupKey}__${field.id}__${target.primaryRow.row.id}`;
+                      const segmentHasError = Boolean((errors as any)?.[fieldPath]);
                       if (field.type === 'NUMBER') {
                         const rawValue = (target.primaryRow.row?.values || {})[field.id];
                         const valueText = rawValue === undefined || rawValue === null ? '' : `${rawValue}`;
@@ -6418,7 +6426,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 fontVariantNumeric: 'tabular-nums',
                                 fontSize: 'var(--ck-font-control)',
                                 fontWeight: 500,
-                                lineHeight: 1
+                                lineHeight: 1,
+                                ...(segmentHasError
+                                  ? {
+                                      borderColor: 'var(--danger)',
+                                      boxShadow: '0 0 0 1px var(--danger)'
+                                    }
+                                  : {})
                               }}
                             />
                             {segmentActions}
@@ -6456,7 +6470,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 minHeight: 34,
                                 fontSize: 'var(--ck-font-control)',
                                 fontWeight: 500,
-                                lineHeight: 1
+                                lineHeight: 1,
+                                ...(segmentHasError
+                                  ? {
+                                      borderColor: 'var(--danger)',
+                                      boxShadow: '0 0 0 1px var(--danger)'
+                                    }
+                                  : {})
                               }}
                             />
                             {segmentActions}
@@ -6497,7 +6517,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       key={`${segment.config.fieldRef}-${idx}`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
                     >
-                      <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatted}</span>
+                      <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', ...segmentTextStyle }}>{formatted}</span>
                       {segmentActions}
                       {separatorNode}
                     </span>

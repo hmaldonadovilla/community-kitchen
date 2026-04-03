@@ -88,3 +88,14 @@ export const collectDataSourceConfigsForPrefetch = (definition: WebFormDefinitio
   visit(definition, 0);
   return out;
 };
+
+export const isHomePrefetchEligibleDataSource = (config: DataSourceConfig | null | undefined): boolean => {
+  if (!config || typeof config !== 'object') return false;
+  if ((config as any).prefetchOnHome === true) return true;
+  const hasTransactionalStatusFilter =
+    !!`${(config as any).statusFieldId || ''}`.trim() &&
+    normalizeStringArray((config as any).statusAllowList).length > 0;
+  if (hasTransactionalStatusFilter) return false;
+  if ((config as any).backfill && typeof (config as any).backfill === 'object') return false;
+  return true;
+};

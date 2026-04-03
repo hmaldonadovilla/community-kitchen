@@ -2584,6 +2584,14 @@ components:
           type: string
           enum: [options, prefill, list]
           description: Whether the source populates options, prefills values/line items, or serves list views.
+        prefetchOnHome:
+          type: boolean
+          description: |
+            Optional home/list prefetch override.
+
+            By default, record-like data sources with `statusAllowList` or `backfill` are not prefetched on the home/list
+            screen because they are often transactional. Set `prefetchOnHome: true` only when a datasource-backed visibility
+            or count check must be ready before the form opens, such as `__ckDataSourceCount.Some Data Source`.
         sheetId:
           type: string
           description: Optional sheet id when sourcing from another spreadsheet file.
@@ -3403,7 +3411,8 @@ components:
             - `none`: do not wait for either queue
         waitForBackgroundSaves:
           type: boolean
-          description: Legacy alias for `waitForQueue: "all"`.
+          description: |
+            Legacy alias for `waitForQueue: "all"`.
         advanceAfterStart:
           type: boolean
           description: When true, automatically advance to the next guided step after the action starts successfully. Default true.
@@ -3591,7 +3600,8 @@ components:
           description: Parent field id or reference field (e.g., "childRef.RECIPE").
         text:
           $ref: '#/components/schemas/LocalizedString'
-          description: Static localized text segment when `type: "text"`.
+          description: |
+            Static localized text segment when `type: "text"`.
         label:
           $ref: '#/components/schemas/LocalizedString'
         showWhen:

@@ -251,6 +251,7 @@ describe('meal production leftover selection config', () => {
             expect.objectContaining({ fieldRef: 'cookRow.RECIPE' }),
             expect.objectContaining({
               fieldRef: 'cookIngredients.ING',
+              tone: 'muted',
               format: expect.objectContaining({
                 type: 'list',
                 listDelimiter: ', ',

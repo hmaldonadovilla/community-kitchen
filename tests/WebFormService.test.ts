@@ -217,6 +217,47 @@ describe('WebFormService', () => {
     ]);
   });
 
+  test('fetchDataSource preserves source totalCount for paginated form-backed datasources after status filtering', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Inventory Form', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+    ]);
+
+    const inventoryConfigSheet = ss.getSheetByName('Config: Inventory') || ss.insertSheet('Config: Inventory');
+    (inventoryConfigSheet as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    jest.spyOn((service as any).listing, 'fetchSubmissions').mockReturnValue({
+      items: [
+        { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' },
+        { id: 'rec-2', LEFTOVER_ID: 'LE-2', LEFTOVER_STATUS: 'used' }
+      ],
+      nextPageToken: 'NTA=',
+      totalCount: 50
+    });
+
+    const res = service.fetchDataSource({
+      id: 'Leftover Inventory Data',
+      formKey: 'Config: Inventory',
+      projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
+      statusFieldId: 'LEFTOVER_STATUS',
+      statusAllowList: ['available']
+    } as any, 'EN');
+
+    expect(res.items).toEqual([
+      { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' }
+    ]);
+    expect(res.nextPageToken).toBe('NTA=');
+    expect(res.totalCount).toBe(50);
+  });
+
   test('fetchDataSource backfills legacy entire-dish leftover fields from the source meal row only when missing', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [
@@ -384,6 +425,7 @@ describe('WebFormService', () => {
         DIETARY_APPLICABILITY: 'Vegetarian, Vegan, Standard'
       })
     ]);
+    expect(JSON.parse(JSON.stringify(res))).toEqual(res);
   });
 
   test('fetchDataSource backfills legacy entire-dish leftover fields when source row id points to the cook row', () => {

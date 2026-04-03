@@ -71,6 +71,52 @@ describe('web dataSources persistence', () => {
     expect(localStorage.getItem(keys[0]!) || '').toContain('"projection":["B"]');
   });
 
+  it('resolves datasource item count from a persisted sibling variant when the exact signature is missing', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    installGoogleScriptRunMock(cfg => ({ items: [{ projection: cfg?.projection || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache, getCachedDataSourceItemCount } = await import(
+      '../../../src/web/data/dataSources'
+    );
+    clearFetchDataSourceCache();
+
+    const projectionA = { id: 'Leftover Inventory Data', projection: ['A'] } as any;
+    const projectionB = { id: 'Leftover Inventory Data', projection: ['B'] } as any;
+
+    await fetchDataSource(projectionA, 'EN', { forceRefresh: true });
+    await fetchDataSource(projectionB, 'EN', { forceRefresh: true });
+    clearFetchDataSourceCache({ includePersisted: false });
+
+    expect(getCachedDataSourceItemCount(projectionA, 'EN')).toBe(1);
+  });
+
+  it('prefers a non-empty sibling datasource count over a newer empty sibling variant', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    installGoogleScriptRunMock(cfg => ({ items: [{ projection: cfg?.projection || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache, getCachedDataSourceItemCount } = await import(
+      '../../../src/web/data/dataSources'
+    );
+    clearFetchDataSourceCache();
+
+    const nonEmpty = { id: 'Leftover Inventory Data', projection: ['A'] } as any;
+    const empty = { id: 'Leftover Inventory Data', projection: ['B'] } as any;
+
+    await fetchDataSource(nonEmpty, 'EN', { forceRefresh: true });
+    localStorage.setItem(
+      'ck.ds.Leftover%20Inventory%20Data.EN.v2.empty',
+      JSON.stringify({
+        savedAtMs: Date.now() + 1000,
+        response: { items: [] }
+      })
+    );
+    clearFetchDataSourceCache({ includePersisted: false });
+
+    expect(getCachedDataSourceItemCount(empty, 'EN')).toBe(1);
+  });
+
   it('prunes older persisted form-backed variants for the same datasource id and language', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };

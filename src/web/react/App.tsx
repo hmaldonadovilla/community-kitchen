@@ -161,7 +161,7 @@ import {
   getCachedDataSourceItemCount,
   prefetchDataSources
 } from '../data/dataSources';
-import { collectDataSourceConfigsForPrefetch } from '../data/dataSourcePrefetch';
+import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
 import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
@@ -2209,6 +2209,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     stepSubmitLabel?: string | LocalizedString;
   } | null>(null);
   const [formIsValid, setFormIsValid] = useState<boolean>(() => (orderedEntryEnabled ? false : true));
+  const [requestedGuidedStepId, setRequestedGuidedStepId] = useState<string | null>(null);
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
@@ -2225,6 +2226,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveDirtyRef = useRef<boolean>(false);
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
+  const draftSaveRequestInFlightRef = useRef<boolean>(false);
+  const draftSaveRequestPromiseRef = useRef<Promise<any> | null>(null);
   const performAutoSaveRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const autoSaveUserEditedRef = useRef<boolean>(false);
   const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
@@ -2275,6 +2278,52 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('autosave.queue.latest', { reason, delayMs: nextDelay });
     },
     [logEvent]
+  );
+
+  const waitForDraftSaveRequest = useCallback(
+    async (reason: string, timeoutMs = 10000): Promise<void> => {
+      if (!draftSaveRequestInFlightRef.current || !draftSaveRequestPromiseRef.current) return;
+      const startedAt = Date.now();
+      logEvent('draftSave.wait.begin', { reason });
+      while (draftSaveRequestInFlightRef.current && draftSaveRequestPromiseRef.current) {
+        const inFlight = draftSaveRequestPromiseRef.current;
+        try {
+          await inFlight;
+        } catch (_) {
+          // ignore and re-check state below
+        }
+        if (!draftSaveRequestInFlightRef.current) break;
+        if (Date.now() - startedAt > timeoutMs) break;
+        await new Promise<void>(resolve => globalThis.setTimeout(resolve, 80));
+      }
+      logEvent('draftSave.wait.done', {
+        reason,
+        durationMs: Date.now() - startedAt,
+        stillInFlight: draftSaveRequestInFlightRef.current
+      });
+    },
+    [logEvent]
+  );
+
+  const runDraftSaveRequest = useCallback(
+    async <T,>(reason: string, runner: () => Promise<T>): Promise<T> => {
+      let currentPromise: Promise<T> | null = null;
+      const promise = (async () => {
+        draftSaveRequestInFlightRef.current = true;
+        try {
+          return await runner();
+        } finally {
+          if (draftSaveRequestPromiseRef.current === currentPromise) {
+            draftSaveRequestPromiseRef.current = null;
+          }
+          draftSaveRequestInFlightRef.current = false;
+        }
+      })();
+      currentPromise = promise;
+      draftSaveRequestPromiseRef.current = promise as Promise<any>;
+      return promise;
+    },
+    []
   );
 
   const applyUploadedFieldOverrides = useCallback(
@@ -2903,7 +2952,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const key = `${formKey}::${language}`;
     if (dataSourcePrefetchKeyRef.current === key) return;
     dataSourcePrefetchKeyRef.current = key;
-    const configs = collectDataSourceConfigsForPrefetch(definition);
+    const configs = collectDataSourceConfigsForPrefetch(definition).filter(isHomePrefetchEligibleDataSource);
     if (!configs.length) return;
     const startedAt = Date.now();
     const timer = globalThis.setTimeout(() => {
@@ -6602,8 +6651,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
       }
-      if (autoSaveInFlightRef.current) {
+      if (draftSaveRequestInFlightRef.current) {
         autoSaveQueuedRef.current = true;
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.draftSaveInFlight', { reason });
         return;
       }
 
@@ -6634,7 +6685,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           payload.__ckClientDataVersion = Number(baseVersion);
         }
 
-        const res = await submit(payload);
+        const res = await runDraftSaveRequest('autosave', () => submit(payload));
         const ok = !!res?.success;
         const msg = (res?.message || '').toString();
         if (!ok) {
@@ -6819,6 +6870,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       loadRecordSnapshot,
       logEvent,
       matchesClosedStatus,
+      runDraftSaveRequest,
       scheduleLatestAutoSave,
       upsertListCacheRow
     ]
@@ -7355,32 +7407,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
 
-      if (autoSaveInFlightRef.current) {
-        const startedAt = Date.now();
-        const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
-        logEvent('record.ensure.waitAutosave', {
+      if (draftSaveRequestInFlightRef.current) {
+        logEvent('record.ensure.waitDraftSave', {
           reason: args?.reason || null,
           fieldPath: args?.fieldPath || null
         });
-        while (autoSaveInFlightRef.current) {
-          recordId =
-            resolveExistingRecordId({
-              selectedRecordId: selectedRecordIdRef.current,
-              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-            }) || '';
-          if (recordId) {
-            logEvent('record.ensure.reusedAutosaveResult', {
-              reason: args?.reason || null,
-              fieldPath: args?.fieldPath || null,
-              recordId,
-              durationMs: Date.now() - startedAt
-            });
-            return { success: true, recordId };
-          }
-          if (Date.now() - startedAt > 10_000) break;
-          await sleep(80);
-        }
+        await waitForDraftSaveRequest('record.ensureDraftRecordId');
         recordId =
           resolveExistingRecordId({
             selectedRecordId: selectedRecordIdRef.current,
@@ -7388,11 +7420,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
           }) || '';
         if (recordId) {
-          logEvent('record.ensure.reusedAutosaveResult', {
+          logEvent('record.ensure.reusedDraftSaveResult', {
             reason: args?.reason || null,
             fieldPath: args?.fieldPath || null,
-            recordId,
-            durationMs: Date.now() - startedAt
+            recordId
           });
           return { success: true, recordId };
         }
@@ -7420,7 +7451,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draft.__ckSaveMode = 'draft';
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
-        const res = await submit(draft);
+        const res = await runDraftSaveRequest('ensureDraftRecordId', () => submit(draft));
         if (!res?.success) {
           const message = (res?.message || 'Failed to create draft record.').toString();
           setDraftSave({ phase: 'error', message });
@@ -7489,7 +7520,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: false, message: message || '' };
       }
     },
-    [applyUploadedFieldPayloadOverrides, definition, formKey, logEvent, submit, upsertListCacheRow]
+    [applyUploadedFieldPayloadOverrides, definition, formKey, logEvent, runDraftSaveRequest, submit, upsertListCacheRow, waitForDraftSaveRequest]
   );
 
   const applyFollowupBatchResults = useCallback(
@@ -7708,6 +7739,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [upsertListCacheRow]
   );
 
+  const applyLocalRecordStatus = useCallback(
+    (args: { recordId: string; status: string | null | undefined }) => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return;
+      const nextStatus = (args.status || '').toString().trim() || null;
+      setLastSubmissionMeta(prev => ({
+        ...(prev || { id: recordId }),
+        id: recordId,
+        status: nextStatus
+      }));
+      setSelectedRecordSnapshot(prev =>
+        prev
+          ? {
+              ...prev,
+              id: prev.id || recordId,
+              status: nextStatus || prev.status || undefined
+            }
+          : prev
+      );
+      upsertListCacheRow({
+        recordId,
+        status: nextStatus
+      });
+    },
+    [upsertListCacheRow]
+  );
+
   const persistCurrentSnapshot = useCallback(
     async (args: {
       reason: string;
@@ -7722,29 +7780,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveTimerRef.current = null;
       }
       autoSaveQueuedRef.current = false;
-      if (autoSaveInFlightRef.current) {
-        const startedAt = Date.now();
-        const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
-        logEvent('snapshot.save.waitAutosave', {
+      if (draftSaveRequestInFlightRef.current) {
+        logEvent('snapshot.save.waitDraftSave', {
           reason: args.reason,
           mode: args.mode,
           existingRecordId: args.existingRecordId || null
         });
-        while (autoSaveInFlightRef.current) {
-          if (Date.now() - startedAt > 10_000) break;
-          await sleep(80);
-        }
-        logEvent('snapshot.save.waitAutosave.done', {
-          reason: args.reason,
-          mode: args.mode,
-          durationMs: Date.now() - startedAt,
-          stillInFlight: autoSaveInFlightRef.current
-        });
+        await waitForDraftSaveRequest(`snapshot:${args.reason}`);
       }
       if (
         args.mode === 'draft' &&
         args.existingRecordId &&
-        !autoSaveInFlightRef.current &&
+        !draftSaveRequestInFlightRef.current &&
         !autoSaveDirtyRef.current &&
         !autoSaveQueuedRef.current
       ) {
@@ -7828,7 +7875,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           );
         }
       }
-      const response = await submit(payload);
+      const response =
+        args.mode === 'draft'
+          ? await runDraftSaveRequest(`snapshot:${args.reason}`, () => submit(payload))
+          : await submit(payload);
       const ok = Boolean(response?.success);
       const recordId = (((response as any)?.meta?.id) || args.existingRecordId || '').toString().trim();
       if (!ok) {
@@ -7871,7 +7921,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       logEvent,
       resolveAutoSaveStatus,
-      submit
+      runDraftSaveRequest,
+      submit,
+      waitForDraftSaveRequest
     ]
   );
 
@@ -7937,6 +7989,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         backgroundActions.length > 0
           ? backgroundActions
           : (preActions.length === 0 ? legacyActions : []);
+      const resolveOptimisticStatusForActions = (actions: string[]): string => {
+        const normalized = actions.map(entry => (entry || '').toString().trim().toUpperCase()).filter(Boolean);
+        if (!normalized.length) return '';
+        if (normalized.includes('CLOSE_RECORD')) {
+          return resolveStatusTransitionValue(statusTransitions, 'onClose', languageRef.current, {
+            includeDefaultOnClose: true
+          }) || 'Closed';
+        }
+        if (normalized.includes('SEND_EMAIL')) {
+          return resolveStatusTransitionValue(statusTransitions, 'onEmail', languageRef.current, {
+            includeDefaultOnClose: false
+          });
+        }
+        if (normalized.includes('CREATE_PDF')) {
+          return resolveStatusTransitionValue(statusTransitions, 'onPdf', languageRef.current, {
+            includeDefaultOnClose: false
+          });
+        }
+        return '';
+      };
       if (!preActions.length && !effectiveBackgroundActions.length) {
         return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
       }
@@ -8104,7 +8176,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         if (effectiveBackgroundActions.length && args.action.runInBackground === true) {
-          void runBatch(effectiveBackgroundActions, `${reason}.background`);
+          const previousStatus =
+            ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
+          const optimisticStatus = resolveOptimisticStatusForActions(effectiveBackgroundActions);
+          if (optimisticStatus) {
+            applyLocalRecordStatus({ recordId, status: optimisticStatus });
+          }
+          void (async () => {
+            const outcome = await runBatch(effectiveBackgroundActions, `${reason}.background`);
+            if (outcome.success) return;
+            if (optimisticStatus) {
+              applyLocalRecordStatus({ recordId, status: previousStatus || null });
+            }
+            setRequestedGuidedStepId(args.stepId || null);
+          })();
           guidedMilestoneBusy.unlock(busySeq, {
             stepId: args.stepId,
             launchedBackground: true
@@ -8165,12 +8250,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
       formKey,
+      applyLocalRecordStatus,
       guidedMilestoneBusy,
       logEvent,
       openConfiguredConfirmDialog,
       persistCurrentSnapshot,
       refreshAfterFollowupBatch,
       resolveLogMessage,
+      statusTransitions,
       resolveUiErrorMessage,
       waitForBackgroundSaves
     ]
@@ -10625,6 +10712,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
           onGuidedStepMilestone={handleGuidedStepMilestone}
+          requestedGuidedStepId={requestedGuidedStepId}
+          onRequestedGuidedStepHandled={() => setRequestedGuidedStepId(null)}
           dedupNavigationBlocked={dedupNavigationBlocked}
           guidedForwardNavigationBlocked={submitDisabledByGate}
           openConfirmDialog={customConfirm.openConfirm}

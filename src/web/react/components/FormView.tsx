@@ -672,6 +672,8 @@ interface FormViewProps {
     trigger: 'next' | 'auto';
     waitDialog?: ConfirmDialogOpenArgs;
   }) => Promise<{ success: boolean; message?: string }>;
+  requestedGuidedStepId?: string | null;
+  onRequestedGuidedStepHandled?: () => void;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   /**
@@ -727,6 +729,8 @@ const FormView: React.FC<FormViewProps> = ({
   onGuidedUiChange,
   onGuidedStepMilestone,
   onBeforeGuidedStepAdvance,
+  requestedGuidedStepId,
+  onRequestedGuidedStepHandled,
   dedupNavigationBlocked,
   openConfirmDialog,
   setAutoSaveHold,
@@ -1308,6 +1312,23 @@ const FormView: React.FC<FormViewProps> = ({
     setActiveGuidedStepId(nextId);
     onDiagnostic?.('steps.step.change', { from: currentIdx >= 0 ? guidedStepIds[currentIdx] : null, to: nextId, reason: 'load' });
   }, [activeGuidedStepId, guidedEnabled, guidedStepIds, maxReachableGuidedIndex, onDiagnostic]);
+
+  useEffect(() => {
+    if (!guidedEnabled) return;
+    const requestedId = (requestedGuidedStepId || '').toString().trim();
+    if (!requestedId) return;
+    if (!guidedStepIds.includes(requestedId)) {
+      onRequestedGuidedStepHandled?.();
+      return;
+    }
+    if (requestedId === activeGuidedStepId) {
+      onRequestedGuidedStepHandled?.();
+      return;
+    }
+    setActiveGuidedStepId(requestedId);
+    onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: requestedId, reason: 'externalRequest' });
+    onRequestedGuidedStepHandled?.();
+  }, [activeGuidedStepId, guidedEnabled, guidedStepIds, onDiagnostic, onRequestedGuidedStepHandled, requestedGuidedStepId]);
 
   const guidedVirtualState = useMemo(() => {
     if (!guidedEnabled) return null;
@@ -6543,21 +6564,54 @@ const FormView: React.FC<FormViewProps> = ({
       if (fromAll) return { [missingFieldPath]: fromAll };
       const parts = missingFieldPath.split('__').filter(Boolean);
       let label = '';
+      let configuredFieldMessage = '';
+      const resolveRuleMessage = (source: any): string => {
+        const fieldSpecific = resolveLocalizedString(source?.orderedEntryErrorMessage, language, '')
+          .toString()
+          .trim();
+        if (fieldSpecific) return fieldSpecific;
+        const rules = Array.isArray(source?.validationRules) ? source.validationRules : [];
+        const requiredRule = rules.find((rule: any) => {
+          const then = rule?.then;
+          return then && typeof then === 'object' && then.required === true;
+        });
+        return resolveLocalizedString(requiredRule?.message, language, '')
+          .toString()
+          .trim();
+      };
       if (parts.length >= 2) {
         const [groupId, fieldId] = parts;
         const group = (definition.questions || []).find(q => q.id === groupId);
         const field = group?.lineItemConfig?.fields?.find((f: any) => (f?.id ?? '').toString() === fieldId);
-        if (field) label = resolveFieldLabel(field, language, fieldId);
+        if (field) {
+          label = resolveFieldLabel(field, language, fieldId);
+          configuredFieldMessage = resolveRuleMessage(field);
+        }
       } else {
         const q = (definition.questions || []).find(q => q.id === missingFieldPath);
-        if (q) label = resolveFieldLabel(q, language, q.id);
+        if (q) {
+          label = resolveFieldLabel(q, language, q.id);
+          configuredFieldMessage = resolveRuleMessage(q);
+        }
       }
       const fallbackLabel = label || missingFieldPath;
+      const configuredMessage = resolveLocalizedString(
+        definition.submitValidation?.orderedEntryFieldErrorMessage,
+        language,
+        ''
+      )
+        .toString()
+        .trim();
+      const message = configuredFieldMessage
+        ? configuredFieldMessage.replace(/\{field\}/g, fallbackLabel)
+        : configuredMessage
+        ? configuredMessage.replace(/\{field\}/g, fallbackLabel)
+        : tSystem('validation.fieldRequired', language, '{field} is required.', { field: fallbackLabel });
       return {
-        [missingFieldPath]: tSystem('validation.fieldRequired', language, '{field} is required.', { field: fallbackLabel })
+        [missingFieldPath]: message
       };
     },
-    [definition.questions, language]
+    [definition.questions, definition.submitValidation?.orderedEntryFieldErrorMessage, language]
   );
 
   useEffect(() => {

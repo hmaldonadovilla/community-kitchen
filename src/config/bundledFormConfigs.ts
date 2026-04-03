@@ -10498,6 +10498,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "id": "Leftover Inventory Data",
                       "formKey": "Config: Leftover Inventory",
                       "mode": "options",
+                      "prefetchOnHome": true,
                       "statusFieldId": "LEFTOVER_STATUS",
                       "statusAllowList": [
                         "available"
@@ -10834,40 +10835,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "labelNl": "Restant",
                         "required": true,
                         "readOnly": true,
-                        "dataSource": {
-                          "id": "Leftover Inventory Data",
-                          "formKey": "Config: Leftover Inventory",
-                          "mode": "options",
-                          "statusFieldId": "LEFTOVER_STATUS",
-                          "statusAllowList": [
-                            "available"
-                          ],
-                          "projection": [
-                            "id",
-                            "LEFTOVER_STATUS",
-                            "LEFTOVER_ID",
-                            "LEFTOVER_KIND",
-                            "LEFTOVER_MEAL_TYPE",
-                            "LEFTOVER_RECIPE",
-                            "LEFTOVER_INGREDIENT",
-                            "LEFTOVER_CAT",
-                            "LEFTOVER_ALLERGEN",
-                            "LEFTOVER_PORTIONS",
-                            "LEFTOVER_QTY",
-                            "LEFTOVER_UNIT",
-                            "LEFTOVER_INGREDIENTS_LI",
-                            "LEFTOVER_EXP_DATE"
-                          ],
-                          "mapping": {
-                            "value": "LEFTOVER_ID"
-                          },
-                          "tooltipField": "LEFTOVER_RECIPE",
-                          "tooltipLabel": {
-                            "en": "Recipe",
-                            "fr": "Recette",
-                            "nl": "Recept"
-                          }
-                        },
                         "ui": {
                           "renderAsLabel": true,
                           "hideLabel": true
@@ -12316,6 +12283,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       {
                         "fieldRef": "cookIngredients.ING",
+                        "tone": "muted",
                         "label": {
                           "en": "{{value}} | ",
                           "fr": "{{value}} | ",
@@ -19349,6 +19317,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "id": "Leftover Inventory Data",
                       "formKey": "Config: Leftover Inventory",
                       "mode": "options",
+                      "prefetchOnHome": true,
                       "statusFieldId": "LEFTOVER_STATUS",
                       "statusAllowList": [
                         "available"
@@ -19659,40 +19628,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "labelNl": "Restant",
                         "required": true,
                         "readOnly": true,
-                        "dataSource": {
-                          "id": "Leftover Inventory Data",
-                          "formKey": "Config: Leftover Inventory",
-                          "mode": "options",
-                          "statusFieldId": "LEFTOVER_STATUS",
-                          "statusAllowList": [
-                            "available"
-                          ],
-                          "projection": [
-                            "id",
-                            "LEFTOVER_STATUS",
-                            "LEFTOVER_ID",
-                            "LEFTOVER_KIND",
-                            "LEFTOVER_MEAL_TYPE",
-                            "LEFTOVER_RECIPE",
-                            "LEFTOVER_INGREDIENT",
-                            "LEFTOVER_CAT",
-                            "LEFTOVER_ALLERGEN",
-                            "LEFTOVER_PORTIONS",
-                            "LEFTOVER_QTY",
-                            "LEFTOVER_UNIT",
-                            "LEFTOVER_INGREDIENTS_LI",
-                            "LEFTOVER_EXP_DATE"
-                          ],
-                          "mapping": {
-                            "value": "LEFTOVER_ID"
-                          },
-                          "tooltipField": "LEFTOVER_RECIPE",
-                          "tooltipLabel": {
-                            "en": "Recipe",
-                            "fr": "Recette",
-                            "nl": "Recept"
-                          }
-                        },
                         "ui": {
                           "renderAsLabel": true,
                           "hideLabel": true
@@ -21141,6 +21076,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       {
                         "fieldRef": "cookIngredients.ING",
+                        "tone": "muted",
                         "label": {
                           "en": "{{value}} | ",
                           "fr": "{{value}} | ",

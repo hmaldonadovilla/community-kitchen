@@ -1132,6 +1132,10 @@ export class Dashboard {
       submitValidationObj?.submitErrorMessage ??
       submitValidationObj?.topErrorMessage ??
       submitValidationObj?.errorMessage;
+    const orderedEntryFieldErrorMessageRaw =
+      submitValidationObj?.orderedEntryFieldErrorMessage ??
+      submitValidationObj?.orderedFieldErrorMessage ??
+      submitValidationObj?.fieldErrorMessage;
     const submitValidationHideTopErrorRaw =
       submitValidationObj?.hideSubmitTopErrorMessage ??
       submitValidationObj?.hideTopErrorMessage ??
@@ -1141,12 +1145,14 @@ export class Dashboard {
     const submitValidation: SubmitValidationConfig | undefined =
       submitValidationEnforceRaw === undefined &&
       submitValidationMessageRaw === undefined &&
+      orderedEntryFieldErrorMessageRaw === undefined &&
       submitValidationHideTopError === undefined
         ? undefined
         : {
             enforceFieldOrder: normalizeBoolean(submitValidationEnforceRaw),
             hideSubmitTopErrorMessage: submitValidationHideTopError,
-            submitTopErrorMessage: normalizeLocalized(submitValidationMessageRaw)
+            submitTopErrorMessage: normalizeLocalized(submitValidationMessageRaw),
+            orderedEntryFieldErrorMessage: normalizeLocalized(orderedEntryFieldErrorMessageRaw)
           };
     const submissionConfirmationRaw =
       parsed.submissionConfirmationMessage !== undefined

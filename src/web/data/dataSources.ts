@@ -153,8 +153,6 @@ const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
     const targetKey = getPersistKey(config, language);
-    const prefix = getPersistKeyPrefix(config, language);
-    prunePersistedSiblingKeys(window.localStorage, prefix, targetKey);
     const raw = window.localStorage.getItem(targetKey);
     if (!raw) return null;
     const parsed = parsePersistEnvelope(raw);
@@ -430,14 +428,69 @@ export function peekCachedDataSource(config: DataSourceConfig, language: LangCod
   return loadPersisted(config, language);
 }
 
-export function getCachedDataSourceItemCount(config: DataSourceConfig, language: LangCode): number | null {
-  const cached = peekCachedDataSource(config, language);
+const resolveCachedItemCount = (cached: any): number | null => {
   if (!cached) return null;
   if (Array.isArray(cached)) return cached.length;
   if (cached && typeof cached === 'object' && Array.isArray((cached as any).items)) {
     return (cached as any).items.length;
   }
   return 0;
+};
+
+const getSiblingCachedDataSourceItemCount = (config: DataSourceConfig, language: LangCode): number | null => {
+  const idPart = (config?.id || 'default').toString();
+  const langPart = (language || 'EN').toString().toUpperCase();
+  const cacheKeyPrefix = `${idPart}::${langPart}::`;
+  let newestCount: number | null = null;
+  let positiveCount: number | null = null;
+
+  for (const [candidateKey, candidateValue] of cache.entries()) {
+    if (!candidateKey.startsWith(cacheKeyPrefix)) continue;
+    const itemCount = resolveCachedItemCount(candidateValue);
+    if (itemCount === null) continue;
+    newestCount = itemCount;
+    if (itemCount > 0) {
+      positiveCount = Math.max(positiveCount ?? 0, itemCount);
+    }
+  }
+  if (positiveCount !== null) return positiveCount;
+  if (newestCount !== null) return newestCount;
+
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const prefix = getPersistKeyPrefix(config, language);
+    let newestSavedAtMs = -1;
+    let persistedNewestCount: number | null = null;
+    let persistedPositiveCount: number | null = null;
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const candidateKey = window.localStorage.key(i);
+      if (!candidateKey || !candidateKey.startsWith(prefix)) continue;
+      const raw = window.localStorage.getItem(candidateKey);
+      if (!raw) continue;
+      const parsed = parsePersistEnvelope(raw);
+      if (!parsed || !parsed.response) continue;
+      const itemCount = resolveCachedItemCount(parsed.response);
+      if (itemCount === null) continue;
+      if (itemCount > 0) {
+        persistedPositiveCount = Math.max(persistedPositiveCount ?? 0, itemCount);
+      }
+      const savedAtMs = Number.isFinite(parsed.savedAtMs) ? Number(parsed.savedAtMs) : 0;
+      if (savedAtMs >= newestSavedAtMs) {
+        newestSavedAtMs = savedAtMs;
+        persistedNewestCount = itemCount;
+      }
+    }
+    return persistedPositiveCount ?? persistedNewestCount;
+  } catch (_) {
+    return null;
+  }
+};
+
+export function getCachedDataSourceItemCount(config: DataSourceConfig, language: LangCode): number | null {
+  const cached = peekCachedDataSource(config, language);
+  const exactCount = resolveCachedItemCount(cached);
+  if (exactCount !== null) return exactCount;
+  return getSiblingCachedDataSourceItemCount(config, language);
 }
 
 export function mutateCachedDataSource(

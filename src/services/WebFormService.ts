@@ -58,6 +58,7 @@ const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
 const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~100KB item limit.
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
 const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
+const toPlainData = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
 
 type HomeBootstrapCachePayload = {
@@ -1381,11 +1382,16 @@ export class WebFormService {
         return next;
       });
     const normalizedItems = this.backfillFormBackedDataSourceItems(config, formKey, effectiveProjection, items);
-    return {
+    const rawTotalCount = Number(response.totalCount);
+    const totalCount =
+      Number.isFinite(rawTotalCount) && rawTotalCount > 0
+        ? rawTotalCount
+        : normalizedItems.length;
+    return toPlainData({
       items: normalizedItems,
       nextPageToken: response.nextPageToken,
-      totalCount: normalizedItems.length
-    };
+      totalCount
+    });
   }
 
   private extendProjectionForDataSourceBackfill(

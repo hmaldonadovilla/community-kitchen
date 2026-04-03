@@ -1545,6 +1545,21 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         { "dataSource": { "id": "RECIPES", "mode": "options", "statusAllowList": ["Active"] } }
         ```
 
+      - **Home/list datasource prefetch override (optional)**: Datasources with `statusAllowList` or `backfill` are skipped by default during home/list prefetch because they are often transactional. If a datasource-backed count/visibility rule must already be available before the form opens, set `dataSource.prefetchOnHome: true` on the specific datasource config that should drive that check.
+
+        ```json
+        {
+          "dataSource": {
+            "id": "Leftover Inventory Data",
+            "formKey": "Config: Leftover Inventory",
+            "mode": "options",
+            "statusFieldId": "LEFTOVER_STATUS",
+            "statusAllowList": ["available"],
+            "prefetchOnHome": true
+          }
+        }
+        ```
+
     - **Choice UI controls (iOS-style)**: For `CHOICE` questions (and line-item `CHOICE` fields), you can optionally set `ui.control` in the Config JSON to influence which control is rendered:
       - `auto` (default): `<= 3` options → segmented, `<= 6` → radio list, else → native dropdown. Boolean-like non-required choices (e.g., YES/NO) may render as an iOS switch.
       - `select`, `radio`, `segmented`, `switch`: force a specific variant.

@@ -3350,6 +3350,13 @@ export interface SubmitValidationConfig {
    */
   submitTopErrorMessage?: LocalizedString;
   /**
+   * Optional localized override for the inline ordered-entry field message.
+   *
+   * Intended for guided flows where the first missing field should explain
+   * exactly what the user must enter before continuing.
+   */
+  orderedEntryFieldErrorMessage?: LocalizedString;
+  /**
    * Optional localized override for the "Needs attention" message shown under line-item group pills.
    */
   lineItemGroupNeedsAttentionMessage?: LocalizedString;
@@ -3608,6 +3615,13 @@ export interface RowFlowOutputSegmentConfig {
   type?: 'field' | 'text';
   fieldRef?: string;
   text?: LocalizedString;
+  /**
+   * Optional tone override for rendered segment text.
+   * - default: regular body text
+   * - muted: secondary/supporting text
+   * - strong: stronger emphasis for read-only text
+   */
+  tone?: 'default' | 'muted' | 'strong';
   /**
    * Optional label/template for this value (supports {{value}} placeholder).
    */

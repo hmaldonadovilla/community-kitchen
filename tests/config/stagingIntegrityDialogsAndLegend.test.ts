@@ -218,6 +218,18 @@ describe('staging integrity dialogs and list legend config', () => {
           'LEFTOVER_SOURCE_ROW_ID'
         ])
       );
+      expect(leftoverInventoryRows?.dataSource?.prefetchOnHome).toBe(true);
+      const hiddenLeftoverIdFields = collectObjects(root, (entry: any) => entry?.id === 'LEFTOVER_ID');
+      expect(hiddenLeftoverIdFields.length).toBeGreaterThan(0);
+      hiddenLeftoverIdFields.forEach((field: any) => {
+        expect(field?.visibility).toEqual({
+          showWhen: {
+            fieldId: 'NEVER_SHOW',
+            equals: '1'
+          }
+        });
+        expect(field?.dataSource).toBeUndefined();
+      });
       expect(leftoverInventoryRows?.dataSource?.backfill?.whenMissingAnyFieldIds).toEqual(
         expect.arrayContaining(['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'])
       );
