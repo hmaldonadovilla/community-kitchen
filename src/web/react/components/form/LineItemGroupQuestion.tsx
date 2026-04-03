@@ -6393,50 +6393,57 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         return (
                           <span
                             key={`${segment.config.fieldRef}-${idx}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
                             data-field-path={fieldPath}
                           >
-                            <AutoWidthInput
-                              className="ck-compact-control ck-compact-control--number"
-                              value={valueText}
-                              disabled={isLineFieldInteractionBlocked(field)}
-                              readOnly={field?.readOnly === true}
-                              inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
-                              pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
-                              ariaLabel={resolveFieldLabel(field, language, field.id)}
-                              selectAllOnFocus
-                              sanitize={raw =>
-                                sanitizeNumericDraft(raw, {
-                                  integerOnly: allowsIntegerOnly
-                                })
-                              }
-                              minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 48}
-                              maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 132}
-                              extraWidth={Math.max(
-                                24,
-                                Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 2.2) * 8)
-                              )}
-                              onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
-                              inputStyle={{
-                                boxSizing: 'border-box',
-                                minHeight: 34,
-                                paddingInlineStart: 8,
-                                paddingInlineEnd: 8,
-                                textAlign: 'center',
-                                fontVariantNumeric: 'tabular-nums',
-                                fontSize: 'var(--ck-font-control)',
-                                fontWeight: 500,
-                                lineHeight: 1,
-                                ...(segmentHasError
-                                  ? {
-                                      borderColor: 'var(--danger)',
-                                      boxShadow: '0 0 0 1px var(--danger)'
-                                    }
-                                  : {})
-                              }}
-                            />
-                            {segmentActions}
-                            {separatorNode}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
+                              <AutoWidthInput
+                                className="ck-compact-control ck-compact-control--number"
+                                value={valueText}
+                                disabled={isLineFieldInteractionBlocked(field)}
+                                readOnly={field?.readOnly === true}
+                                inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
+                                pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                                ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                selectAllOnFocus
+                                sanitize={raw =>
+                                  sanitizeNumericDraft(raw, {
+                                    integerOnly: allowsIntegerOnly
+                                  })
+                                }
+                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 48}
+                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 132}
+                                extraWidth={Math.max(
+                                  24,
+                                  Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 2.2) * 8)
+                                )}
+                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
+                                inputStyle={{
+                                  boxSizing: 'border-box',
+                                  minHeight: 34,
+                                  paddingInlineStart: 8,
+                                  paddingInlineEnd: 8,
+                                  textAlign: 'center',
+                                  fontVariantNumeric: 'tabular-nums',
+                                  fontSize: 'var(--ck-font-control)',
+                                  fontWeight: 500,
+                                  lineHeight: 1,
+                                  ...(segmentHasError
+                                    ? {
+                                        borderColor: 'var(--danger)',
+                                        boxShadow: '0 0 0 1px var(--danger)'
+                                      }
+                                    : {})
+                                }}
+                              />
+                              {segmentActions}
+                              {separatorNode}
+                            </span>
+                            {segmentHasError && (errors as any)?.[fieldPath] ? (
+                              <div className="error" style={{ marginTop: 0 }}>
+                                {(errors as any)[fieldPath]}
+                              </div>
+                            ) : null}
                           </span>
                         );
                       }
@@ -6453,34 +6460,41 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         return (
                           <span
                             key={`${segment.config.fieldRef}-${idx}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
                             data-field-path={fieldPath}
                           >
-                            <AutoWidthSelect
-                              className="ck-compact-control ck-compact-control--choice"
-                              value={valueText}
-                              options={options}
-                              ariaLabel={resolveFieldLabel(field, language, field.id)}
-                              minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 76}
-                              maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 180}
-                              extraWidth={34}
-                              disabled={isLineFieldInputDisabled(field)}
-                              onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next)}
-                              selectStyle={{
-                                minHeight: 34,
-                                fontSize: 'var(--ck-font-control)',
-                                fontWeight: 500,
-                                lineHeight: 1,
-                                ...(segmentHasError
-                                  ? {
-                                      borderColor: 'var(--danger)',
-                                      boxShadow: '0 0 0 1px var(--danger)'
-                                    }
-                                  : {})
-                              }}
-                            />
-                            {segmentActions}
-                            {separatorNode}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
+                              <AutoWidthSelect
+                                className="ck-compact-control ck-compact-control--choice"
+                                value={valueText}
+                                options={options}
+                                ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 76}
+                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 180}
+                                extraWidth={34}
+                                disabled={isLineFieldInputDisabled(field)}
+                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next)}
+                                selectStyle={{
+                                  minHeight: 34,
+                                  fontSize: 'var(--ck-font-control)',
+                                  fontWeight: 500,
+                                  lineHeight: 1,
+                                  ...(segmentHasError
+                                    ? {
+                                        borderColor: 'var(--danger)',
+                                        boxShadow: '0 0 0 1px var(--danger)'
+                                      }
+                                    : {})
+                                }}
+                              />
+                              {segmentActions}
+                              {separatorNode}
+                            </span>
+                            {segmentHasError && (errors as any)?.[fieldPath] ? (
+                              <div className="error" style={{ marginTop: 0 }}>
+                                {(errors as any)[fieldPath]}
+                              </div>
+                            ) : null}
                           </span>
                         );
                       }
@@ -13922,6 +13936,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     const parts = Array.isArray((matchedRule as any)?.parts) ? ((matchedRule as any).parts as any[]) : [];
                                     if (!parts.length) return null;
                                     const feedbackFieldPaths = new Set<string>();
+                                    const resolveCompactFieldError = (fieldId: string): string => {
+                                      const directPath = `${subKey}__${fieldId}__${subRow.id}`;
+                                      const directMessage = errors[directPath];
+                                      if (directMessage) return directMessage;
+                                      const suffix = `__${fieldId}__${subRow.id}`;
+                                      const matchingKey = Object.keys(errors || {}).find(key => key === directPath || key.endsWith(suffix));
+                                      return matchingKey ? errors[matchingKey] : '';
+                                    };
 
                                     return (
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
@@ -14028,7 +14050,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         </div>
                                         {Array.from(feedbackFieldPaths).map(fieldPath => (
                                           <React.Fragment key={`feedback:${fieldPath}`}>
-                                            {errors[fieldPath] ? <div className="error">{errors[fieldPath]}</div> : null}
+                                            {(() => {
+                                              const rawParts = fieldPath.split('__').filter(Boolean);
+                                              const fieldId = rawParts.length >= 2 ? rawParts[rawParts.length - 2] : '';
+                                              const message = fieldId ? resolveCompactFieldError(fieldId) : (errors[fieldPath] || '');
+                                              return message ? <div className="error">{message}</div> : null;
+                                            })()}
                                             {renderWarnings(fieldPath)}
                                           </React.Fragment>
                                         ))}

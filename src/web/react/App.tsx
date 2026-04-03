@@ -8168,22 +8168,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         };
 
-        if (preActions.length) {
-          const preOutcome = await runBatch(preActions, `${reason}.pre`);
-          if (!preOutcome.success) {
-            return { success: false, advanceToNext: false, message: preOutcome.message };
-          }
-        }
+        const launchEntireBatchInBackground = args.action.runInBackground === true;
+        const allBackgroundActions = [
+          ...preActions,
+          ...effectiveBackgroundActions
+        ].filter(Boolean);
 
-        if (effectiveBackgroundActions.length && args.action.runInBackground === true) {
+        if (launchEntireBatchInBackground && allBackgroundActions.length) {
           const previousStatus =
             ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
-          const optimisticStatus = resolveOptimisticStatusForActions(effectiveBackgroundActions);
+          const optimisticStatus = resolveOptimisticStatusForActions(allBackgroundActions);
           if (optimisticStatus) {
             applyLocalRecordStatus({ recordId, status: optimisticStatus });
           }
           void (async () => {
-            const outcome = await runBatch(effectiveBackgroundActions, `${reason}.background`);
+            let outcome: { success: boolean; message?: string } = { success: true };
+            if (preActions.length) {
+              outcome = await runBatch(preActions, `${reason}.pre`);
+            }
+            if (outcome.success && effectiveBackgroundActions.length) {
+              outcome = await runBatch(effectiveBackgroundActions, `${reason}.background`);
+            }
             if (outcome.success) return;
             if (optimisticStatus) {
               applyLocalRecordStatus({ recordId, status: previousStatus || null });
@@ -8208,6 +8213,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
           }
           return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
+        }
+
+        if (preActions.length) {
+          const preOutcome = await runBatch(preActions, `${reason}.pre`);
+          if (!preOutcome.success) {
+            return { success: false, advanceToNext: false, message: preOutcome.message };
+          }
         }
 
         const outcome = effectiveBackgroundActions.length

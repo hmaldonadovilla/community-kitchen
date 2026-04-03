@@ -334,6 +334,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoversMeals?.presentation).toBe('liftedRowFields');
       expect((leftoversMeals?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual([
         'MEAL_TYPE',
+        'FINAL_QTY',
         'MP_LEFTOVER_PORTIONS_CAPTURE'
       ]);
 

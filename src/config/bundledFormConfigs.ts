@@ -12227,6 +12227,10 @@ export const BUNDLED_FORM_CONFIGS = [
                     "id": "MEAL_TYPE",
                     "renderAsLabel": true
                   },
+                  {
+                    "id": "FINAL_QTY",
+                    "renderAsLabel": true
+                  },
                   "MP_LEFTOVER_PORTIONS_CAPTURE"
                 ],
                 "subGroups": {
@@ -12279,6 +12283,14 @@ export const BUNDLED_FORM_CONFIGS = [
                           "en": "{{value}} | ",
                           "fr": "{{value}} | ",
                           "nl": "{{value}} | "
+                        }
+                      },
+                      {
+                        "fieldRef": "FINAL_QTY",
+                        "label": {
+                          "en": "{{value}} portions delivered | ",
+                          "fr": "{{value}} portions livrées | ",
+                          "nl": "{{value}} geleverde porties | "
                         }
                       },
                       {
@@ -21020,6 +21032,10 @@ export const BUNDLED_FORM_CONFIGS = [
                     "id": "MEAL_TYPE",
                     "renderAsLabel": true
                   },
+                  {
+                    "id": "FINAL_QTY",
+                    "renderAsLabel": true
+                  },
                   "MP_LEFTOVER_PORTIONS_CAPTURE"
                 ],
                 "subGroups": {
@@ -21072,6 +21088,14 @@ export const BUNDLED_FORM_CONFIGS = [
                           "en": "{{value}} | ",
                           "fr": "{{value}} | ",
                           "nl": "{{value}} | "
+                        }
+                      },
+                      {
+                        "fieldRef": "FINAL_QTY",
+                        "label": {
+                          "en": "{{value}} portions delivered | ",
+                          "fr": "{{value}} portions livrées | ",
+                          "nl": "{{value}} geleverde porties | "
                         }
                       },
                       {
