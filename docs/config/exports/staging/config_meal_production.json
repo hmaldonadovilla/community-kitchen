@@ -2171,7 +2171,6 @@
       },
       "options": [
         "⁠Akkara",
-        "⁠Anjali",
         "⁠Roya",
         "⁠Saga",
         "⁠Nezka",
@@ -2181,7 +2180,6 @@
       ],
       "optionsFr": [
         "⁠Akkara",
-        "⁠Anjali",
         "⁠Roya",
         "⁠Saga",
         "⁠Nezka",
@@ -2191,7 +2189,6 @@
       ],
       "optionsNl": [
         "⁠Akkara",
-        "⁠Anjali",
         "⁠Roya",
         "⁠Saga",
         "⁠Nezka",
@@ -2205,12 +2202,6 @@
           "Options (FR)": "⁠Akkara",
           "Options (NL)": "⁠Akkara",
           "__ckOptionValue": "⁠Akkara"
-        },
-        {
-          "Options (EN)": "⁠Anjali",
-          "Options (FR)": "⁠Anjali",
-          "Options (NL)": "⁠Anjali",
-          "__ckOptionValue": "⁠Anjali"
         },
         {
           "Options (EN)": "⁠Roya",
@@ -2357,7 +2348,7 @@
       "derivedValue": {
         "op": "addDays",
         "dependsOn": "MP_PREP_DATE",
-        "offsetDays": 2,
+        "offsetDays": 3,
         "hidden": true
       }
     },
@@ -4540,7 +4531,6 @@
         "options": {
           "en": [
             "⁠Akkara",
-            "⁠Anjali",
             "⁠Roya",
             "⁠Saga",
             "⁠Nezka",
@@ -4550,7 +4540,6 @@
           ],
           "fr": [
             "⁠Akkara",
-            "⁠Anjali",
             "⁠Roya",
             "⁠Saga",
             "⁠Nezka",
@@ -4560,7 +4549,6 @@
           ],
           "nl": [
             "⁠Akkara",
-            "⁠Anjali",
             "⁠Roya",
             "⁠Saga",
             "⁠Nezka",
@@ -4574,12 +4562,6 @@
               "Options (FR)": "⁠Akkara",
               "Options (NL)": "⁠Akkara",
               "__ckOptionValue": "⁠Akkara"
-            },
-            {
-              "Options (EN)": "⁠Anjali",
-              "Options (FR)": "⁠Anjali",
-              "Options (NL)": "⁠Anjali",
-              "__ckOptionValue": "⁠Anjali"
             },
             {
               "Options (EN)": "⁠Roya",
@@ -4719,7 +4701,7 @@
         "derivedValue": {
           "op": "addDays",
           "dependsOn": "MP_PREP_DATE",
-          "offsetDays": 2,
+          "offsetDays": 3,
           "hidden": true
         },
         "visibility": {
