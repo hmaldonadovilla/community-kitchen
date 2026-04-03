@@ -67,6 +67,43 @@ const resolveExistingPdfFile = (
   }
 };
 
+const normalizeStatusValue = (value: any): string =>
+  (value === undefined || value === null ? '' : value.toString().trim()).toLowerCase();
+
+const resolveCurrentRecordStatusValue = (followup: FollowupConfig, ctx: RecordContext): string => {
+  const explicitStatusCol = followup.statusFieldId ? ctx.columns.fields[followup.statusFieldId] : undefined;
+  const statusCol = explicitStatusCol || ctx.columns.status;
+  if (!statusCol || !ctx.rowIndex || !ctx.sheet) {
+    return (ctx.record?.status || '').toString().trim();
+  }
+  try {
+    const current = ctx.sheet.getRange(ctx.rowIndex, statusCol, 1, 1).getValue();
+    return (current || '').toString().trim();
+  } catch (_) {
+    return (ctx.record?.status || '').toString().trim();
+  }
+};
+
+const resolveSafeStatusTransitionValue = (
+  followup: FollowupConfig,
+  currentStatus: string,
+  record: WebFormSubmission | null | undefined,
+  transition: 'onPdf' | 'onEmail' | 'onClose'
+): string => {
+  const nextValue = resolveStatusTransitionValue(followup.statusTransitions, transition, record?.language, {
+    includeDefaultOnClose: transition === 'onClose'
+  });
+  if (transition === 'onClose') return (nextValue || '').toString().trim();
+  const closeValue = resolveStatusTransitionValue(followup.statusTransitions, 'onClose', record?.language, {
+    includeDefaultOnClose: true
+  });
+  if (!closeValue) return (nextValue || '').toString().trim();
+  if (normalizeStatusValue(currentStatus) === normalizeStatusValue(closeValue)) {
+    return '';
+  }
+  return (nextValue || '').toString().trim();
+};
+
 export const handleCreatePdfAction = (args: {
   form: FormConfig;
   questions: QuestionConfig[];
@@ -94,7 +131,13 @@ export const handleCreatePdfAction = (args: {
     if (ctx.columns.pdfUrl && existing.url) {
       ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(existing.url);
     }
-    const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onPdf', ctx.record?.language);
+    const currentStatus = resolveCurrentRecordStatusValue(followup, ctx);
+    const statusValue = resolveSafeStatusTransitionValue(
+      followup,
+      currentStatus,
+      ctx.record,
+      'onPdf'
+    );
     let updatedAt = statusValue
       ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
       : null;
@@ -104,7 +147,7 @@ export const handleCreatePdfAction = (args: {
     submissionService.refreshRecordCache(form.configSheet, questions, ctx);
     return {
       success: true,
-      status: statusValue || ctx.record.status,
+      status: statusValue || currentStatus || ctx.record.status,
       pdfUrl: existing.url,
       fileId: existing.fileId,
       updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
@@ -123,7 +166,13 @@ export const handleCreatePdfAction = (args: {
   if (ctx.columns.pdfUrl && pdfArtifact.url) {
     ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
   }
-  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onPdf', ctx.record?.language);
+  const currentStatus = resolveCurrentRecordStatusValue(followup, ctx);
+  const statusValue = resolveSafeStatusTransitionValue(
+    followup,
+    currentStatus,
+    ctx.record,
+    'onPdf'
+  );
   let updatedAt = statusValue
     ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
     : null;
@@ -138,7 +187,7 @@ export const handleCreatePdfAction = (args: {
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
     success: true,
-    status: statusValue || ctx.record.status,
+    status: statusValue || currentStatus || ctx.record.status,
     pdfUrl: pdfArtifact.url,
     fileId: pdfArtifact.fileId,
     updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
@@ -240,7 +289,13 @@ export const handleSendEmailAction = (args: {
     debugLog('followup.email.failed', { error: err ? err.toString() : 'unknown' });
     return { success: false, message: 'Failed to send follow-up email.' };
   }
-  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onEmail', ctx.record?.language);
+  const currentStatus = resolveCurrentRecordStatusValue(followup, ctx);
+  const statusValue = resolveSafeStatusTransitionValue(
+    followup,
+    currentStatus,
+    ctx.record,
+    'onEmail'
+  );
   let updatedAt = statusValue
     ? submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId)
     : null;
@@ -250,7 +305,7 @@ export const handleSendEmailAction = (args: {
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
     success: true,
-    status: statusValue || ctx.record.status,
+    status: statusValue || currentStatus || ctx.record.status,
     pdfUrl: pdfArtifact?.url,
     fileId: pdfArtifact?.fileId,
     updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
@@ -269,16 +324,20 @@ export const handleCloseRecordAction = (args: {
   if (!ctx) {
     return { success: false, message: 'Record not found.' };
   }
-  const statusValue = resolveStatusTransitionValue(followup.statusTransitions, 'onClose', ctx.record?.language, {
-    includeDefaultOnClose: true
-  });
+  const currentStatus = resolveCurrentRecordStatusValue(followup, ctx);
+  const statusValue = resolveSafeStatusTransitionValue(
+    followup,
+    currentStatus,
+    ctx.record,
+    'onClose'
+  );
   const updatedAt =
     submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId) ||
     submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
     success: true,
-    status: statusValue,
+    status: statusValue || currentStatus,
     updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record?.updatedAt
   };
 };

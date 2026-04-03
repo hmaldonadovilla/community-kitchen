@@ -6,6 +6,7 @@ import {
   FollowupSubmitEffect,
   FormConfig,
   FormConfigExport,
+  DataSourceConfig,
   DedupRule,
   InventoryAvailabilitySnapshot,
   InventoryReservationMutationRequest,
@@ -94,11 +95,13 @@ export class WebFormService {
   private _docPropsResolved: boolean;
   private _cache?: GoogleAppsScript.Cache.Cache | null;
   private _cacheResolved: boolean;
+  private _lookupFieldValueCache?: Map<string, Map<string, string>>;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
     this._docPropsResolved = false;
     this._cacheResolved = false;
+    this._lookupFieldValueCache = new Map();
   }
 
   private get dashboard(): Dashboard {
@@ -1330,7 +1333,8 @@ export class WebFormService {
       : defaultPageSize;
     const configProjection = Array.isArray(config?.projection) ? config.projection : undefined;
     const effectiveProjection = configProjection?.length ? configProjection : projection;
-    const response = this.listing.fetchSubmissions(form, questions, effectiveProjection, pageSize, pageToken);
+    const fetchProjection = this.extendProjectionForDataSourceBackfill(config, effectiveProjection);
+    const response = this.listing.fetchSubmissions(form, questions, fetchProjection, pageSize, pageToken);
     const localeKey = (config?.localeKey || '').toString().trim();
     const localeNeedle = (locale || '').toString().trim().toLowerCase();
     const statusFieldId = ((config?.statusFieldId || 'status') || '').toString().trim();
@@ -1376,11 +1380,435 @@ export class WebFormService {
         });
         return next;
       });
+    const normalizedItems = this.backfillFormBackedDataSourceItems(config, formKey, effectiveProjection, items);
     return {
-      items,
+      items: normalizedItems,
       nextPageToken: response.nextPageToken,
-      totalCount: items.length
+      totalCount: normalizedItems.length
     };
+  }
+
+  private extendProjectionForDataSourceBackfill(
+    config: DataSourceConfig | undefined,
+    projection: string[] | undefined
+  ): string[] | undefined {
+    const base = Array.isArray(projection) ? projection.map(value => `${value || ''}`.trim()).filter(Boolean) : [];
+    const backfill = config?.backfill;
+    if (!backfill) {
+      return base.length ? base : projection;
+    }
+    const extras = [
+      `${backfill.sourceFormKeyFieldId || ''}`.trim(),
+      `${backfill.sourceRecordIdFieldId || ''}`.trim(),
+      `${backfill.sourceRowIdFieldId || ''}`.trim()
+    ].filter(Boolean);
+    if (!extras.length) {
+      return base.length ? base : projection;
+    }
+    const merged = Array.from(new Set([...base, ...extras]));
+    return merged.length ? merged : projection;
+  }
+
+  private backfillFormBackedDataSourceItems(
+    config: DataSourceConfig | undefined,
+    formKey: string,
+    projection: string[] | undefined,
+    items: Record<string, any>[]
+  ): Record<string, any>[] {
+    const backfill = config?.backfill;
+    if (!backfill || !Array.isArray(items) || !items.length) {
+      return items;
+    }
+
+    const requestedFields = new Set(
+      (Array.isArray(projection) ? projection : [])
+        .map(value => `${value || ''}`.trim())
+        .filter(Boolean)
+    );
+    const trackedFields = Array.from(
+      new Set([
+        ...(Array.isArray(backfill.whenMissingAnyFieldIds) ? backfill.whenMissingAnyFieldIds : []),
+        ...Object.keys(backfill.values || {})
+      ])
+    ).filter(Boolean);
+    if (
+      requestedFields.size > 0 &&
+      trackedFields.length > 0 &&
+      !trackedFields.some(fieldId => requestedFields.has(fieldId))
+    ) {
+      return items;
+    }
+
+    const sourceRecordCache = new Map<string, WebFormSubmission | null>();
+    let appliedCount = 0;
+    const nextItems = items.map(item => {
+      if (!item || typeof item !== 'object') return item;
+      const missingFieldIds = (Array.isArray(backfill.whenMissingAnyFieldIds) ? backfill.whenMissingAnyFieldIds : [])
+        .map(value => `${value || ''}`.trim())
+        .filter(fieldId => fieldId && this.isBackfillValueMissing((item as Record<string, any>)[fieldId]));
+      if (!missingFieldIds.length) return item;
+
+      const sourceFormKey = `${(item as Record<string, any>)[backfill.sourceFormKeyFieldId || ''] || ''}`.trim();
+      const sourceRecordId = `${(item as Record<string, any>)[backfill.sourceRecordIdFieldId || ''] || ''}`.trim();
+      const sourceRowId = `${(item as Record<string, any>)[backfill.sourceRowIdFieldId || ''] || ''}`.trim();
+      if (!sourceFormKey || !sourceRecordId) return item;
+
+      const cacheKey = `${sourceFormKey}::${sourceRecordId}`;
+      let sourceRecord = sourceRecordCache.get(cacheKey);
+      if (sourceRecord === undefined) {
+        sourceRecord = this.fetchSubmissionById(sourceFormKey, sourceRecordId);
+        sourceRecordCache.set(cacheKey, sourceRecord);
+      }
+      if (!sourceRecord) return item;
+
+      const scopeRows = this.resolveDataSourceBackfillScopes({
+        sourceRecord,
+        sourceRowId,
+        backfill
+      });
+      if (!Object.keys(scopeRows).length) return item;
+
+      const nextItem = { ...item };
+      let mutated = false;
+      const templateVars = {
+        item,
+        row: item,
+        source: item,
+        record: sourceRecord.values || {},
+        sourceRecord: sourceRecord.values || {},
+        submission: sourceRecord,
+        ...scopeRows
+      } as Record<string, any>;
+
+      Object.entries(backfill.values || {}).forEach(([fieldIdRaw, template]) => {
+        const fieldId = `${fieldIdRaw || ''}`.trim();
+        if (!fieldId || !this.isBackfillValueMissing((nextItem as Record<string, any>)[fieldId])) {
+          return;
+        }
+        const resolved = this.resolveConfigComputedValue(resolveTemplateValue(template, templateVars), templateVars);
+        if (this.isBackfillValueMissing(resolved)) return;
+        (nextItem as Record<string, any>)[fieldId] = resolved;
+        mutated = true;
+      });
+
+      if (!mutated) {
+        return item;
+      }
+
+      appliedCount += 1;
+      return nextItem;
+    });
+
+    if (appliedCount > 0) {
+      debugLog('datasource.formBackfill.applied', {
+        formKey: this.resolveCanonicalFormKey(formKey),
+        appliedCount
+      });
+    }
+    return nextItems;
+  }
+
+  private resolveDataSourceBackfillScopes(args: {
+    sourceRecord: WebFormSubmission;
+    sourceRowId: string;
+    backfill: NonNullable<DataSourceConfig['backfill']>;
+  }): Record<string, Record<string, any>> {
+    const { sourceRecord, backfill } = args;
+    const normalizedSourceRowId = `${args.sourceRowId || ''}`.trim();
+    const scopeDefs = Array.isArray(backfill.scopes) ? backfill.scopes : [];
+    if (!scopeDefs.length) return {};
+
+    const topCtx =
+      sourceRecord.formKey && `${sourceRecord.formKey || ''}`.trim()
+        ? buildRecordVisibilityContext(sourceRecord, this.getFormContextLite(sourceRecord.formKey || '').questions).ctx
+        : {
+            getValue: (fieldId: string) => ((sourceRecord.values || {}) as Record<string, any>)[fieldId],
+            getLineItems: () => [],
+            getLineItemKeys: () => []
+          };
+    const defsById = new Map(scopeDefs.map(def => [`${def.id || ''}`.trim(), def]));
+    const candidateCache = new Map<string, Array<{ row: Record<string, any>; ancestors: Record<string, Record<string, any>> }>>();
+    const resolved: Record<string, Record<string, any>> = {};
+
+    const collectCandidates = (
+      scopeId: string
+    ): Array<{ row: Record<string, any>; ancestors: Record<string, Record<string, any>> }> => {
+      if (candidateCache.has(scopeId)) return candidateCache.get(scopeId) || [];
+      const def = defsById.get(scopeId);
+      if (!def) return [];
+
+      let candidates: Array<{ row: Record<string, any>; ancestors: Record<string, Record<string, any>> }> = [];
+      if (def.parentScopeId) {
+        const parentCandidates = collectCandidates(`${def.parentScopeId || ''}`.trim());
+        candidates = parentCandidates.flatMap(parentCandidate => {
+          const childRows = this.parseFollowupLineItemRows(
+            parentCandidate.row[def.groupId] || parentCandidate.row[`${def.groupId}_json`]
+          );
+          return childRows.map(rawRow => {
+            const row = (rawRow || {}) as Record<string, any>;
+            return {
+              row,
+              ancestors: {
+                ...parentCandidate.ancestors,
+                [scopeId]: row
+              }
+            };
+          });
+        });
+      } else {
+        const rootRows = this.parseFollowupLineItemRows(
+          (sourceRecord.values || {})[def.groupId] || (sourceRecord.values || {})[`${def.groupId}_json`]
+        );
+        candidates = rootRows.map(rawRow => {
+          const row = (rawRow || {}) as Record<string, any>;
+          return {
+            row,
+            ancestors: {
+              [scopeId]: row
+            }
+          };
+        });
+      }
+      candidateCache.set(scopeId, candidates);
+      return candidates;
+    };
+
+    scopeDefs.forEach(def => {
+      const scopeId = `${def.id || ''}`.trim();
+      if (!scopeId) return;
+      let candidates = collectCandidates(scopeId);
+      if (def.parentScopeId) {
+        const parentScopeId = `${def.parentScopeId || ''}`.trim();
+        const resolvedParent = resolved[parentScopeId];
+        if (resolvedParent) {
+          candidates = candidates.filter(candidate => candidate.ancestors[parentScopeId] === resolvedParent);
+        }
+      }
+
+      let matched = null as { row: Record<string, any>; ancestors: Record<string, Record<string, any>> } | null;
+      if (def.matchBySourceRowId && normalizedSourceRowId) {
+        matched = candidates.find(candidate => this.normalizeFollowupLineItemRowId(candidate.row) === normalizedSourceRowId) || null;
+      }
+      if (!matched && def.fallbackMatch === 'first') {
+        const filtered = candidates.filter(candidate =>
+          this.matchesBackfillRowFilter({
+            row: candidate.row,
+            parentValues: def.parentScopeId ? candidate.ancestors[`${def.parentScopeId || ''}`.trim()] : undefined,
+            groupKey: def.groupId,
+            topCtx,
+            filter: def.rowFilter
+          })
+        );
+        matched = filtered[0] || null;
+      }
+      if (!matched) return;
+      Object.entries(matched.ancestors).forEach(([ancestorId, row]) => {
+        if (row) resolved[ancestorId] = row;
+      });
+    });
+
+    return resolved;
+  }
+
+  private matchesBackfillRowFilter(args: {
+    row: Record<string, any>;
+    parentValues?: Record<string, any>;
+    groupKey: string;
+    topCtx: ReturnType<typeof buildRecordVisibilityContext>['ctx'];
+    filter?: { includeWhen?: any; excludeWhen?: any } | null;
+  }): boolean {
+    const filter = args.filter;
+    if (!filter) return true;
+    const rowCtx = buildRowVisibilityContext({
+      row: args.row,
+      groupKey: args.groupKey,
+      parentValues: args.parentValues,
+      topCtx: args.topCtx
+    });
+    if (filter.includeWhen && !matchesWhenClause(filter.includeWhen, rowCtx.ctx, { now: new Date() })) {
+      return false;
+    }
+    if (filter.excludeWhen && matchesWhenClause(filter.excludeWhen, rowCtx.ctx, { now: new Date() })) {
+      return false;
+    }
+    return true;
+  }
+
+  private isBackfillValueMissing(value: any): boolean {
+    if (value === undefined || value === null) return true;
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'string') return value.trim() === '';
+    return false;
+  }
+
+  private readTemplatePathValue(pathRaw: any, vars: Record<string, any>): any {
+    const path = `${pathRaw || ''}`.trim();
+    if (!path) return '';
+    const parts = path.split('.').map(part => part.trim()).filter(Boolean);
+    let current: any = vars;
+    for (const part of parts) {
+      if (current === undefined || current === null) return '';
+      if (typeof current === 'object' && current !== null && Object.prototype.hasOwnProperty.call(current, part)) {
+        current = current[part];
+        continue;
+      }
+      if (
+        typeof current === 'object' &&
+        current !== null &&
+        Object.prototype.hasOwnProperty.call(current, 'values') &&
+        current.values &&
+        typeof current.values === 'object' &&
+        Object.prototype.hasOwnProperty.call(current.values, part)
+      ) {
+        current = current.values[part];
+        continue;
+      }
+      return '';
+    }
+    return current === undefined ? '' : current;
+  }
+
+  private normalizeLookupCollection(value: any): any[] {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const raw = value.trim();
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private splitDelimitedValues(value: any, delimiterRaw?: any): string[] {
+    const raw = `${value ?? ''}`.trim();
+    if (!raw) return [];
+    const delimiter = `${delimiterRaw || ','}`;
+    return raw
+      .split(delimiter)
+      .map(token => token.trim())
+      .filter(Boolean);
+  }
+
+  private getLookupFieldValueMap(args: {
+    formKey: string;
+    keyFieldId: string;
+    valueFieldId: string;
+  }): Map<string, string> {
+    const cacheKey = JSON.stringify({
+      formKey: this.resolveCanonicalFormKey(args.formKey),
+      keyFieldId: args.keyFieldId,
+      valueFieldId: args.valueFieldId
+    });
+    const existing = this._lookupFieldValueCache?.get(cacheKey);
+    if (existing) return existing;
+
+    const map = new Map<string, string>();
+    const { form, questions } = this.getFormContextLite(args.formKey);
+    const { sheet, headers, columns } = this.submissions.ensureDestination(
+      form.destinationTab || `${form.title} Responses`,
+      questions
+    );
+    const keyCol = Number(columns.fields?.[args.keyFieldId] || 0);
+    const valueCol = Number(columns.fields?.[args.valueFieldId] || 0);
+    if (keyCol > 0 && valueCol > 0) {
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+        rows.forEach(rowValues => {
+          const key = (rowValues[keyCol - 1] ?? '').toString().trim();
+          const value = (rowValues[valueCol - 1] ?? '').toString().trim();
+          if (!key || !value || map.has(key)) return;
+          map.set(key, value);
+        });
+      }
+    }
+    if (!map.size) {
+      this.fetchAllSubmissionRecords(form, questions).forEach(record => {
+        const key = this.readRecordFieldString(record, args.keyFieldId);
+        const value = this.readRecordFieldString(record, args.valueFieldId);
+        if (!key || !value || map.has(key)) return;
+        map.set(key, value);
+      });
+    }
+    this._lookupFieldValueCache?.set(cacheKey, map);
+    return map;
+  }
+
+  private resolveLookupSetIntersection(value: Record<string, any>, vars: Record<string, any>): string {
+    const collection = this.normalizeLookupCollection(this.readTemplatePathValue(value.collectionPath, vars));
+    const itemFieldId = `${value.itemFieldId || ''}`.trim();
+    const itemValues = collection
+      .map(entry => {
+        if (!itemFieldId) return `${entry ?? ''}`.trim();
+        if (!entry || typeof entry !== 'object') return '';
+        return `${(entry as Record<string, any>)[itemFieldId] ?? ''}`.trim();
+      })
+      .filter(Boolean);
+    if (!itemValues.length) {
+      const fallbackResolved = this.resolveConfigComputedValue(resolveTemplateValue(value.fallback, vars), vars);
+      return typeof fallbackResolved === 'string' ? fallbackResolved.trim() : `${fallbackResolved ?? ''}`.trim();
+    }
+
+    const lookupFormKey = `${value.lookupFormKey || ''}`.trim();
+    const lookupKeyFieldId = `${value.lookupKeyFieldId || ''}`.trim();
+    const lookupValueFieldId = `${value.lookupValueFieldId || ''}`.trim();
+    if (!lookupFormKey || !lookupKeyFieldId || !lookupValueFieldId) return '';
+
+    const lookupMap = this.getLookupFieldValueMap({
+      formKey: lookupFormKey,
+      keyFieldId: lookupKeyFieldId,
+      valueFieldId: lookupValueFieldId
+    });
+    const fallbackValue = (() => {
+      const fallbackResolved = this.resolveConfigComputedValue(resolveTemplateValue(value.fallback, vars), vars);
+      return typeof fallbackResolved === 'string' ? fallbackResolved.trim() : `${fallbackResolved ?? ''}`.trim();
+    })();
+    let intersection: string[] | null = null;
+    const seenItems = new Set<string>();
+    for (const itemValue of itemValues) {
+      if (seenItems.has(itemValue)) continue;
+      seenItems.add(itemValue);
+      const lookupValue =
+        lookupMap.get(itemValue) ||
+        lookupMap.get(itemValue.toLowerCase()) ||
+        Array.from(lookupMap.entries()).find(([key]) => key.toLowerCase() === itemValue.toLowerCase())?.[1] ||
+        '';
+      const tokens = this.splitDelimitedValues(lookupValue, value.splitOn || ',');
+      if (!tokens.length) {
+        return fallbackValue;
+      }
+      if (!intersection) {
+        intersection = tokens;
+        continue;
+      }
+      const tokenSet = new Set(tokens.map(token => token.toLowerCase()));
+      intersection = intersection.filter(token => tokenSet.has(token.toLowerCase()));
+      if (!intersection.length) break;
+    }
+    const joined = (intersection || []).join(`${value.joinWith || ', '}`.toString()).trim();
+    return joined || fallbackValue;
+  }
+
+  private resolveConfigComputedValue(value: any, vars: Record<string, any>): any {
+    if (Array.isArray(value)) {
+      return value.map(entry => this.resolveConfigComputedValue(entry, vars));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    const op = `${(value as Record<string, any>).op || ''}`.trim();
+    if (op === 'lookupSetIntersection') {
+      return this.resolveLookupSetIntersection(value as Record<string, any>, vars);
+    }
+    const out: Record<string, any> = {};
+    Object.keys(value as Record<string, any>).forEach(key => {
+      out[key] = this.resolveConfigComputedValue((value as Record<string, any>)[key], vars);
+    });
+    return out;
   }
 
   public fetchSubmissions(
@@ -4085,7 +4513,7 @@ export class WebFormService {
         parent: scope.parent,
         lineItem: scope.lineItem
       });
-      const resolved = resolveTemplateValue(args.effect, vars) as FollowupSubmitEffect;
+      const resolved = this.resolveConfigComputedValue(resolveTemplateValue(args.effect, vars), vars) as FollowupSubmitEffect;
       const payloadValues = cloneRecordValues((resolved.values || {}) as Record<string, any>);
       const payload: WebFormSubmission = {
         formKey: resolved.targetFormKey,

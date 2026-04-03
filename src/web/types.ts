@@ -47,6 +47,7 @@ import {
   QuestionGroupConfig,
   SummaryVisibility,
   StepMilestoneActionConfig,
+  SystemActionGateDialogConfig,
   StepRowFilterConfig,
   WhenClause,
   ValidationRule,
@@ -57,6 +58,7 @@ import {
 } from '../types';
 
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
+export type { SystemActionGateDialogConfig };
 
 export type FieldValue =
   | string

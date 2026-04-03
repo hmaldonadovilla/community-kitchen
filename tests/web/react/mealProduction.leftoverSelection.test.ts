@@ -68,17 +68,29 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         LEFTOVER_ID: 'LEFTOVER_ID',
         LEFTOVER_KIND: 'LEFTOVER_KIND',
+        LEFTOVER_MEAL_TYPE: 'LEFTOVER_MEAL_TYPE',
+        LEFTOVER_RECIPE: 'LEFTOVER_RECIPE',
+        LEFTOVER_INGREDIENT: 'LEFTOVER_INGREDIENT',
+        DIETARY_APPLICABILITY: 'DIETARY_APPLICABILITY',
         LEFTOVER_PORTIONS_AVAILABLE: 'LEFTOVER_PORTIONS',
         LEFTOVER_QTY_AVAILABLE: 'LEFTOVER_QTY',
         LEFTOVER_UNIT: 'LEFTOVER_UNIT'
       })
     );
-    expect(config?.sourceFieldMapping?.LEFTOVER_RECIPE).toBeUndefined();
-    expect(config?.sourceFieldMapping?.LEFTOVER_INGREDIENT).toBeUndefined();
     expect(config?.sourceFieldMapping?.LEFTOVER_INGREDIENTS_LI).toBeUndefined();
     expect(config?.sourceFieldMapping?.LEFTOVER_RECORD_ID).toBeUndefined();
-    expect(config?.parentMatchFieldId).toBeUndefined();
-    expect(config?.sourceMatchFieldId).toBeUndefined();
+    expect(config?.parentMatchFieldId).toBe('MEAL_TYPE');
+    expect(config?.sourceMatchFieldId).toBe('DIETARY_APPLICABILITY');
+    expect(config?.sourceMatchMode).toBe('includesDelimited');
+    expect(config?.sourceMatchDelimiter).toBe(',');
+    expect(config?.presentation).toBe('sourceFirstAllocations');
+    expect(config?.presentationWhen).toEqual({
+      fieldId: '__ckStep',
+      equals: ['leftoverForm']
+    });
+    expect(config?.hideParentRowsWhenPresentationActive).toBe(true);
+    expect(config?.allocationLabelFieldId).toBe('MEAL_TYPE');
+    expect(config?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
     expect(config?.exclusiveSelection).toBeUndefined();
 
     expect(config?.outputRules).toEqual(
@@ -158,14 +170,35 @@ describe('meal production leftover selection config', () => {
     const entireHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) => rule?.when?.equals === 'Entire dish');
     expect(partHeadline?.parts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourcePath: 'LEFTOVER_INGREDIENT' }),
+        expect.objectContaining({ sourcePathAlternatives: ['LEFTOVER_INGREDIENT', 'LEFTOVER_RECIPE'] }),
         expect.objectContaining({ fieldId: 'LEFTOVER_QTY_AVAILABLE' })
       ])
     );
     expect(entireHeadline?.parts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourcePath: 'LEFTOVER_RECIPE' }),
+        expect.objectContaining({
+          sourcePathAlternatives: ['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE']
+        }),
         expect.objectContaining({ fieldId: 'LEFTOVER_PORTIONS_AVAILABLE' })
+      ])
+    );
+    const detailRules = config?.ui?.compactDetailRows || [];
+    expect(detailRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Part dish' }),
+          parts: expect.arrayContaining([expect.objectContaining({ sourcePath: 'LEFTOVER_INGREDIENT' })])
+        }),
+        expect.objectContaining({
+          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Entire dish' }),
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'sourceListSummary',
+              sourcePath: 'LEFTOVER_INGREDIENTS_LI',
+              summaryFieldId: 'ING'
+            })
+          ])
+        })
       ])
     );
     expect(config?.availability).toEqual(
@@ -180,6 +213,61 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         enabled: true,
         ledgerFormKey: 'Config: Inventory Reservation Ledger'
+      })
+    );
+  });
+
+  it('configures the Leftovers step LE capture as a rowFlow sentence with cook references', () => {
+    const definition = getDefinition();
+    const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');
+    const target = leftoversStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
+
+    expect(target?.subGroups?.include).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'MP_TYPE_LI',
+          fields: expect.arrayContaining(['PREP_TYPE', 'RECIPE'])
+        })
+      ])
+    );
+    expect(target?.rowFlow).toEqual(
+      expect.objectContaining({
+        references: expect.objectContaining({
+          cookRow: expect.objectContaining({
+            groupId: 'MP_TYPE_LI',
+            match: 'first'
+          }),
+          cookIngredients: expect.objectContaining({
+            groupId: 'MP_INGREDIENTS_LI',
+            parentRef: 'cookRow',
+            match: 'any'
+          })
+        }),
+        output: expect.objectContaining({
+          separator: '',
+          hideEmpty: true,
+          segments: expect.arrayContaining([
+            expect.objectContaining({ fieldRef: 'MEAL_TYPE' }),
+            expect.objectContaining({ fieldRef: 'cookRow.RECIPE' }),
+            expect.objectContaining({
+              fieldRef: 'cookIngredients.ING',
+              format: expect.objectContaining({
+                type: 'list',
+                listDelimiter: ', ',
+                unique: true
+              })
+            }),
+            expect.objectContaining({
+              fieldRef: 'MP_LEFTOVER_PORTIONS_CAPTURE',
+              renderAs: 'control',
+              controlStyle: 'compact'
+            }),
+            expect.objectContaining({
+              type: 'text',
+              text: expect.objectContaining({ en: ' portions' })
+            })
+          ])
+        })
       })
     );
   });

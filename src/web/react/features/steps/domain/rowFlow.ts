@@ -288,6 +288,7 @@ export const resolveRowFlowFieldTarget = (args: {
 };
 
 const resolveSegmentValues = (segment: RowFlowOutputSegmentConfig, target: RowFlowResolvedFieldTarget | null): FieldValue[] => {
+  if (((segment?.type || 'field').toString().trim().toLowerCase() === 'text')) return [];
   if (!target || !segment?.fieldRef) return [];
   const fieldId = target.fieldId;
   if (!fieldId) return [];
@@ -296,6 +297,7 @@ const resolveSegmentValues = (segment: RowFlowOutputSegmentConfig, target: RowFl
 
 export const resolveRowFlowSegmentActionIds = (segment?: RowFlowOutputSegmentConfig | null): string[] => {
   if (!segment) return [];
+  if (((segment?.type || 'field').toString().trim().toLowerCase() === 'text')) return [];
   const results: string[] = [];
   const seen = new Set<string>();
   const pushAction = (value?: unknown) => {
@@ -375,15 +377,20 @@ export const resolveRowFlowState = (args: {
   const { config, groupId, rowId, rowValues, lineItems, topValues, subGroupIds, activeFieldPath, activeFieldType } = args;
   if (!config) return null;
   const references = resolveRowFlowReferences({ config, groupId, rowId, lineItems, subGroupIds });
+  let textSegmentCounter = 0;
   const segments = (config.output?.segments || [])
     .map(segment => {
-      const target = resolveRowFlowFieldTarget({
-        fieldRef: segment.fieldRef,
-        groupId,
-        rowId,
-        rowValues,
-        references
-      });
+      const segmentType = ((segment?.type || 'field').toString() || 'field').trim().toLowerCase();
+      const target =
+        segmentType === 'text'
+          ? null
+          : resolveRowFlowFieldTarget({
+              fieldRef: segment.fieldRef || '',
+              groupId,
+              rowId,
+              rowValues,
+              references
+            });
       const values = resolveSegmentValues(segment, target);
       const showWhenOk = resolveWhenMatch({
         when: segment.showWhen,
@@ -393,8 +400,19 @@ export const resolveRowFlowState = (args: {
         fallbackRow: { groupKey: groupId, rowValues, rowId }
       });
       if (!showWhenOk) return null;
-      if (config.output?.hideEmpty && values.length === 0) return null;
-      return { id: segment.fieldRef, config: segment, target, values } as RowFlowResolvedSegment;
+      if (
+        segmentType !== 'text' &&
+        config.output?.hideEmpty &&
+        values.length === 0 &&
+        `${segment?.renderAs || ''}`.trim().toLowerCase() !== 'control'
+      ) {
+        return null;
+      }
+      const segmentId =
+        segmentType === 'text'
+          ? `text:${textSegmentCounter++}`
+          : (segment.fieldRef || '').toString();
+      return { id: segmentId, config: segment, target, values } as RowFlowResolvedSegment;
     })
     .filter(Boolean) as RowFlowResolvedSegment[];
 

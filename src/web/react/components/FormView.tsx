@@ -155,7 +155,7 @@ import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClau
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
-import { resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
 import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
@@ -554,7 +554,12 @@ interface FormViewProps {
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   lineItems: LineItemState;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
-  onSubmit: (ctx: { collapsedRows: Record<string, boolean>; collapsedSubgroups: Record<string, boolean> }) => Promise<void>;
+  onSubmit: (ctx: {
+    collapsedRows: Record<string, boolean>;
+    collapsedSubgroups: Record<string, boolean>;
+    validationDefinition?: WebFormDefinition;
+    validationVirtualState?: GuidedStepsVirtualState | null;
+  }) => Promise<void>;
   /**
    * Allows the app shell (bottom action bar) to trigger submit while preserving
    * FormView-specific behavior (e.g., validation navigation).
@@ -661,6 +666,12 @@ interface FormViewProps {
     action: StepMilestoneActionConfig;
     nextStepId?: string;
   }) => Promise<{ success: boolean; advanceToNext?: boolean; message?: string }>;
+  onBeforeGuidedStepAdvance?: (args: {
+    stepId: string;
+    nextStepId?: string;
+    trigger: 'next' | 'auto';
+    waitDialog?: ConfirmDialogOpenArgs;
+  }) => Promise<{ success: boolean; message?: string }>;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   /**
@@ -715,6 +726,7 @@ const FormView: React.FC<FormViewProps> = ({
   onFormValidityChange,
   onGuidedUiChange,
   onGuidedStepMilestone,
+  onBeforeGuidedStepAdvance,
   dedupNavigationBlocked,
   openConfirmDialog,
   setAutoSaveHold,
@@ -1808,6 +1820,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const stepCfg = guidedVisibleSteps.find(s => (s?.id || '').toString() === activeGuidedStepId) as any;
     const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
     const autoAdvance = normalizeAutoAdvance(
       stepCfg?.navigation?.autoAdvance ?? stepCfg?.autoAdvance ?? (guidedStepsCfg as any)?.defaultAutoAdvance,
       guidedDefaultAutoAdvance
@@ -1894,7 +1907,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     let deferLogged = false;
-    const attemptAdvance = () => {
+    const attemptAdvance = async () => {
       guidedAutoAdvanceTimerRef.current = null;
       const nextId = guidedStepIds[activeGuidedStepIndex + 1];
       if (!nextId) return;
@@ -1939,6 +1952,25 @@ const FormView: React.FC<FormViewProps> = ({
         // ignore focus detection failures
       }
 
+      if (onBeforeGuidedStepAdvance) {
+        const outcome = await onBeforeGuidedStepAdvance({
+          stepId: activeGuidedStepId || '',
+          nextStepId: nextId || undefined,
+          trigger: 'auto',
+          waitDialog
+        });
+        if (!outcome?.success) {
+          onDiagnostic?.('steps.step.autoAdvance.blocked', {
+            from: activeGuidedStepId,
+            to: nextId,
+            gate: forwardGate,
+            mode: autoAdvance,
+            message: outcome?.message || null
+          });
+          return;
+        }
+      }
+
       // Disarm for this satisfaction cycle and advance.
       const st = guidedAutoAdvanceStateRef.current;
       if (st && st.stepId === activeGuidedStepId) {
@@ -1949,8 +1981,12 @@ const FormView: React.FC<FormViewProps> = ({
       selectGuidedStep(nextId, 'auto');
     };
 
-    guidedAutoAdvanceAttemptRef.current = attemptAdvance;
-    guidedAutoAdvanceTimerRef.current = globalThis.setTimeout(attemptAdvance, 220);
+    guidedAutoAdvanceAttemptRef.current = () => {
+      void attemptAdvance();
+    };
+    guidedAutoAdvanceTimerRef.current = globalThis.setTimeout(() => {
+      void attemptAdvance();
+    }, 220);
 
     return () => {
       guidedAutoAdvanceAttemptRef.current = null;
@@ -1973,6 +2009,7 @@ const FormView: React.FC<FormViewProps> = ({
     normalizeAutoAdvance,
     normalizeForwardGate,
     onDiagnostic,
+    onBeforeGuidedStepAdvance,
     selectGuidedStep
   ]);
 
@@ -2024,6 +2061,7 @@ const FormView: React.FC<FormViewProps> = ({
         const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
         const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
         const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+        const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
 
         // Step submission should never trigger guided auto-advance; keep the user on the step while we validate.
         if (guidedAutoAdvanceTimerRef.current) {
@@ -2175,9 +2213,29 @@ const FormView: React.FC<FormViewProps> = ({
           return;
         }
         if (nextId) {
-          setErrors({});
-          onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
-          selectGuidedStep(nextId, 'user');
+          const continueAdvance = async () => {
+            if (onBeforeGuidedStepAdvance) {
+              const outcome = await onBeforeGuidedStepAdvance({
+                stepId: activeGuidedStepId || '',
+                nextStepId: nextId || undefined,
+                trigger: 'next',
+                waitDialog
+              });
+              if (!outcome?.success) {
+                onDiagnostic?.('steps.step.advance.blocked', {
+                  from: activeGuidedStepId,
+                  to: nextId,
+                  reason: 'submitNext',
+                  message: outcome?.message || null
+                });
+                return;
+              }
+            }
+            setErrors({});
+            onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
+            selectGuidedStep(nextId, 'user');
+          };
+          void continueAdvance();
         }
         return;
       }
@@ -2202,7 +2260,20 @@ const FormView: React.FC<FormViewProps> = ({
       errorNavRequestRef.current += 1;
       errorNavModeRef.current = 'focus';
       onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, mode: errorNavModeRef.current });
-      void onSubmit({ collapsedRows, collapsedSubgroups }).catch((err: any) => {
+      const submitCtx: {
+        collapsedRows: Record<string, boolean>;
+        collapsedSubgroups: Record<string, boolean>;
+        validationDefinition?: WebFormDefinition;
+        validationVirtualState?: GuidedStepsVirtualState | null;
+      } = { collapsedRows, collapsedSubgroups };
+      if (guidedEnabled && guidedStepIds.length) {
+        const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId);
+        if (stepDefinition) {
+          submitCtx.validationDefinition = stepDefinition;
+          submitCtx.validationVirtualState = guidedVirtualState;
+        }
+      }
+      void onSubmit(submitCtx).catch((err: any) => {
         onDiagnostic?.('submit.exception', { message: err?.message || err || 'unknown' });
       });
     };

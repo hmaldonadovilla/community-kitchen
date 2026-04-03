@@ -59,6 +59,16 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
 
   const isLikelyImageName = (name: string): boolean => /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
 
+  const objectThumbSignature = useMemo(() => {
+    if (!open) return '';
+    return items
+      .map((it, idx) => {
+        if (!isFileInstance(it)) return `url:${idx}:${it}`;
+        return `file:${idx}:${it.name}:${it.size}:${it.lastModified}:${it.type || ''}`;
+      })
+      .join('||');
+  }, [items, open]);
+
   const objectThumbs = useMemo(() => {
     if (!open) return new Map<string, string>();
     const canObjectUrl =
@@ -73,7 +83,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       map.set(key, URL.createObjectURL(file));
     });
     return map;
-  }, [items, open]);
+  }, [objectThumbSignature, open]);
 
   useEffect(() => {
     return () => {

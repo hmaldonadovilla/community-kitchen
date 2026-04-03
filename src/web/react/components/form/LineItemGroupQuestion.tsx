@@ -90,6 +90,7 @@ import {
   buildReservationConflictDialogCopy,
   computeReservationConflictUsableQuantity
 } from './reservationConflictDialog';
+import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
@@ -109,6 +110,62 @@ const getByPath = (root: any, path: string): any => {
     const fallbackKey = Object.keys(acc).find(key => key.toLowerCase() === normalized);
     return fallbackKey ? acc[fallbackKey] : undefined;
   }, root);
+};
+
+const coerceStructuredItems = (payload: any): Record<string, any>[] => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) {
+    return payload.filter(entry => entry && typeof entry === 'object') as Record<string, any>[];
+  }
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(entry => entry && typeof entry === 'object') as Record<string, any>[];
+      }
+      if (parsed && typeof parsed === 'object') {
+        return [parsed as Record<string, any>];
+      }
+    } catch (_) {
+      return [];
+    }
+    return [];
+  }
+  if (payload && typeof payload === 'object') {
+    return [payload as Record<string, any>];
+  }
+  return [];
+};
+
+const resolveCompactPartType = (part: any): string => {
+  if (!part || typeof part !== 'object') return 'text';
+  const explicit = (part.type || '').toString().trim().toLowerCase();
+  if (explicit) return explicit;
+  if (part.fieldId || part.sourcePath) return 'field';
+  if (Array.isArray(part.sourcePathAlternatives) && part.sourcePathAlternatives.some((value: any) => `${value || ''}`.trim())) {
+    return 'field';
+  }
+  if (Array.isArray(part.fieldIdAlternatives) && part.fieldIdAlternatives.some((value: any) => `${value || ''}`.trim())) {
+    return 'field';
+  }
+  return 'text';
+};
+
+const coerceDelimitedValues = (raw: any, delimiter: string): string[] => {
+  if (Array.isArray(raw)) {
+    return raw
+      .map(entry => `${entry ?? ''}`.trim())
+      .filter(Boolean);
+  }
+  const text = `${raw ?? ''}`.trim();
+  if (!text) return [];
+  if (!delimiter) return [text];
+  return text
+    .split(delimiter)
+    .map(entry => entry.trim())
+    .filter(Boolean);
 };
 import {
   ROW_HIDE_REMOVE_KEY,
@@ -556,6 +613,23 @@ export const LineItemGroupQuestion: React.FC<{
     () => (Array.isArray(dataSourceRows) ? dataSourceRows.filter(Boolean) : []),
     [dataSourceRows]
   );
+  const topLevelVisibilityContext = React.useMemo<VisibilityContext>(
+    () => ({
+      getValue: (fieldId: string) => resolveTopValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    }),
+    [lineItems, resolveTopValue]
+  );
+  const sourceFirstDataSourceRows = React.useMemo(
+    () =>
+      stepDataSourceRows.filter(config => {
+        if (`${(config as any)?.presentation || ''}`.trim() !== 'sourceFirstAllocations') return false;
+        const when = (config as any)?.presentationWhen;
+        return !when || matchesWhenClause(when as any, topLevelVisibilityContext);
+      }),
+    [stepDataSourceRows, topLevelVisibilityContext]
+  );
   const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
   const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
@@ -563,6 +637,7 @@ export const LineItemGroupQuestion: React.FC<{
   const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
   const reservationSyncCounterRef = React.useRef(0);
+  const sourceFirstPresentationLoggedRef = React.useRef<string>('');
 
   React.useEffect(() => {
     stepDataSourceDraftsRef.current = stepDataSourceDrafts;
@@ -684,6 +759,30 @@ export const LineItemGroupQuestion: React.FC<{
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
     };
   }, [language, stepDataSourceRows]);
+
+  React.useEffect(() => {
+    if (!sourceFirstDataSourceRows.length) {
+      sourceFirstPresentationLoggedRef.current = '';
+      return;
+    }
+    const countRows = (config: any): number => {
+      if (!config?.dataSource || typeof config.dataSource !== 'object') return 0;
+      const cached = peekCachedDataSource(config.dataSource, language);
+      const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
+      return items.length;
+    };
+    const signature = sourceFirstDataSourceRows
+      .map(config => `${(config as any)?.id || 'datasource'}:${countRows(config)}`)
+      .join('|');
+    if (!signature || sourceFirstPresentationLoggedRef.current === signature) return;
+    sourceFirstPresentationLoggedRef.current = signature;
+    onDiagnostic?.('dataSourceRows.sourceFirst.enabled', {
+      groupId: q.id,
+      configIds: sourceFirstDataSourceRows.map(config => `${(config as any)?.id || ''}`.trim()).filter(Boolean),
+      sourceRowCount: sourceFirstDataSourceRows.reduce((count, config) => count + countRows(config), 0),
+      parentRowCount: parentRows.length
+    });
+  }, [language, onDiagnostic, parentRows.length, q.id, sourceFirstDataSourceRows]);
 
   const resolveVirtualRowWhenContext = React.useCallback(
     (args: {
@@ -819,22 +918,94 @@ export const LineItemGroupQuestion: React.FC<{
     [resolveVirtualPresetNode]
   );
 
-  const resolveStepDataSourceRowsForParent = React.useCallback(
-    (config: any, parentRow: LineItemRowState): any[] => {
+  const resolveStepDataSourceRows = React.useCallback(
+    (config: any): any[] => {
       if (!config?.dataSource || typeof config.dataSource !== 'object') return [];
       const cached = peekCachedDataSource(config.dataSource, language);
       const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
-      if (!items.length) return [];
-      const sourceMatchFieldId = (config?.sourceMatchFieldId || '').toString().trim();
-      const parentMatchFieldId = (config?.parentMatchFieldId || '').toString().trim();
-      const parentMatchValue = parentMatchFieldId ? (parentRow.values as any)?.[parentMatchFieldId] : undefined;
-      return items.filter((item: any) => {
-        if (!sourceMatchFieldId || !parentMatchFieldId) return true;
-        return `${item?.[sourceMatchFieldId] ?? ''}` === `${parentMatchValue ?? ''}`;
-      });
+      return items.length ? items : [];
     },
     [language, stepDataSourceRefreshTick]
   );
+
+  const resolveStepDataSourceRowsForParent = React.useCallback(
+    (config: any, parentRow: LineItemRowState): any[] => {
+      const items = resolveStepDataSourceRows(config);
+      if (!items.length) return [];
+      const sourceMatchFieldId = (config?.sourceMatchFieldId || '').toString().trim();
+      const sourceMatchFieldIds = Array.isArray(config?.sourceMatchFieldIds)
+        ? (config.sourceMatchFieldIds as any[]).map(value => `${value || ''}`.trim()).filter(Boolean)
+        : [];
+      const parentMatchFieldId = (config?.parentMatchFieldId || '').toString().trim();
+      const parentMatchValue = parentMatchFieldId ? (parentRow.values as any)?.[parentMatchFieldId] : undefined;
+      return items.filter((item: any) => {
+        if ((!sourceMatchFieldId && !sourceMatchFieldIds.length) || !parentMatchFieldId) return true;
+        return matchesDataSourceRowToParent({
+          item,
+          sourceMatchFieldId,
+          sourceMatchFieldIds,
+          parentValue: parentMatchValue,
+          mode: (config?.sourceMatchMode || 'equals') as string,
+          delimiter: (config?.sourceMatchDelimiter || '').toString()
+        });
+        });
+    },
+    [resolveStepDataSourceRows]
+  );
+
+  const sourceFirstPresentationEntries = React.useMemo(() => {
+    return sourceFirstDataSourceRows.map((config: any) => {
+      const sourceRows = resolveStepDataSourceRows(config);
+      const visibleSourceRows = sourceRows
+        .map((sourceRow: Record<string, any>) => {
+          const eligibleParents = parentRows.filter(parentRow => {
+            const parentMatchFieldId = `${config?.parentMatchFieldId || ''}`.trim();
+            const sourceMatchFieldId = `${config?.sourceMatchFieldId || ''}`.trim();
+            const sourceMatchFieldIds = Array.isArray(config?.sourceMatchFieldIds)
+              ? (config.sourceMatchFieldIds as any[]).map(value => `${value || ''}`.trim()).filter(Boolean)
+              : [];
+            if (!parentMatchFieldId || (!sourceMatchFieldId && !sourceMatchFieldIds.length)) return true;
+            return matchesDataSourceRowToParent({
+              item: sourceRow,
+              sourceMatchFieldId,
+              sourceMatchFieldIds,
+              parentValue: (parentRow.values as any)?.[parentMatchFieldId],
+              mode: `${config?.sourceMatchMode || 'equals'}`.trim(),
+              delimiter: `${config?.sourceMatchDelimiter || ''}`.trim()
+            });
+          });
+          if (!eligibleParents.length) return null;
+          return { sourceRow, eligibleParents };
+        })
+        .filter(Boolean) as Array<{ sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }>;
+      const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
+      const emptyStateMessage = resolveLocalizedString(
+        (uiCfg as any)?.emptyStateMessage,
+        language,
+        sourceRows.length ? '' : tSystem('datasource.empty', language, 'No records are available.')
+      ).trim();
+      return {
+        config,
+        sourceRows,
+        visibleSourceRows,
+        emptyStateMessage
+      };
+    });
+  }, [language, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows]);
+
+  React.useEffect(() => {
+    if (!sourceFirstPresentationEntries.length) return;
+    sourceFirstPresentationEntries.forEach(entry => {
+      if (entry.visibleSourceRows.length || !entry.sourceRows.length) return;
+      onDiagnostic?.('dataSourceRows.sourceFirst.empty', {
+        groupId: q.id,
+        configId: `${entry.config?.id || ''}`.trim(),
+        sourceRowCount: entry.sourceRows.length,
+        parentRowCount: parentRows.length,
+        reason: 'noEligibleParentMatches'
+      });
+    });
+  }, [onDiagnostic, parentRows.length, q.id, sourceFirstPresentationEntries]);
 
   const resolveDataSourceOutputGroup = React.useCallback(
     (config: any, parentRowId: string): { key: string; subConfig: any | null } | null => {
@@ -913,6 +1084,11 @@ export const LineItemGroupQuestion: React.FC<{
       const next: Record<string, FieldValue> = {};
       Object.entries(sourceFieldMapping).forEach(([targetFieldId, sourceFieldId]) => {
         next[targetFieldId] = (args.sourceRow as any)?.[sourceFieldId];
+      });
+      Object.entries(args.sourceRow || {}).forEach(([key, value]) => {
+        if (value === undefined) return;
+        if (Object.prototype.hasOwnProperty.call(next, key)) return;
+        next[key] = value as FieldValue;
       });
       if (args.outputRow?.values) {
         Object.entries(args.outputRow.values).forEach(([key, value]) => {
@@ -2017,6 +2193,7 @@ export const LineItemGroupQuestion: React.FC<{
       const valuesForField = segment.values;
       const formatType = segment.config?.format?.type === 'list' ? 'list' : 'text';
       const listDelimiter = segment.config?.format?.listDelimiter || ', ';
+      const uniqueValues = segment.config?.format?.unique !== false;
       const rowValues = segment.target?.primaryRow?.row?.values || {};
       const mapped = field?.valueMap
         ? resolveValueMapValue(
@@ -2039,7 +2216,8 @@ export const LineItemGroupQuestion: React.FC<{
           const match = localized.find(opt => opt.value === raw);
           return (match?.label || raw || '').toString();
         });
-        const text = formatType === 'list' ? labels.filter(Boolean).join(listDelimiter) : labels[0] || '';
+        const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
+        const text = formatType === 'list' ? normalizedLabels.join(listDelimiter) : normalizedLabels[0] || '';
         return { text, hasValue: text.trim() !== '' };
       }
 
@@ -2051,7 +2229,8 @@ export const LineItemGroupQuestion: React.FC<{
         }
         return val.toString();
       });
-      const text = formatType === 'list' ? labels.filter(Boolean).join(listDelimiter) : labels[0] || '';
+      const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
+      const text = formatType === 'list' ? normalizedLabels.join(listDelimiter) : normalizedLabels[0] || '';
       return { text, hasValue: text.trim() !== '' };
     },
     [ensureLineOptions, language, optionState, optionSortFor, resolveTopValue]
@@ -4849,6 +5028,666 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           );
         };
 
+        const hideParentRowsForSourceFirst = sourceFirstPresentationEntries.some(
+          entry =>
+            (entry.visibleSourceRows.length > 0 || !!entry.emptyStateMessage) &&
+            (entry.config as any)?.hideParentRowsWhenPresentationActive !== false
+        );
+
+        const renderSourceFirstDataSourceConfigs = (): React.ReactNode => {
+          if (!sourceFirstPresentationEntries.length) return null;
+
+          const resolveDisplayValue = (
+            field: any,
+            virtualValues: Record<string, FieldValue>,
+            parentValues: Record<string, FieldValue>
+          ): string => {
+            if (!field) return '';
+            const raw = Object.prototype.hasOwnProperty.call(virtualValues, field.id)
+              ? virtualValues[field.id]
+              : parentValues[field.id];
+            if (raw === undefined || raw === null || raw === '') return '';
+            if (field.type === 'DATE') return toDateInputValue(raw);
+            if (field.type === 'CHOICE' || field.type === 'CHECKBOX') {
+              const optionSet = toOptionSet(field);
+              const options = buildLocalizedOptions(optionSet, optionSet.en || [], language, {
+                sort: optionSortFor(field)
+              });
+              const rawList = Array.isArray(raw) ? raw : [raw];
+              return rawList
+                .map(value => `${value ?? ''}`)
+                .filter(Boolean)
+                .map(value => options.find(option => option.value === value)?.label || value)
+                .join(', ');
+            }
+            return `${raw}`.trim();
+          };
+
+          const resolveCompactFieldDisplayValue = (
+            fieldId: string,
+            virtualValues: Record<string, FieldValue>,
+            sourceRow: Record<string, any>,
+            fieldById: Map<string, any>,
+            parentValues: Record<string, FieldValue>
+          ): string => {
+            const field = fieldById.get(fieldId);
+            const display = field
+              ? resolveDisplayValue(field, virtualValues, parentValues)
+              : `${virtualValues[fieldId] ?? parentValues[fieldId] ?? ''}`.trim();
+            if (display) return display;
+            const sourceValue = getByPath(sourceRow, fieldId);
+            return sourceValue === undefined || sourceValue === null ? '' : `${sourceValue}`.trim();
+          };
+
+          const resolveCompactSourceValue = (
+            part: any,
+            virtualValues: Record<string, FieldValue>,
+            sourceRow: Record<string, any>,
+            fieldById: Map<string, any>,
+            parentValues: Record<string, FieldValue>
+          ): string => {
+            const sourcePathCandidates = [
+              `${part?.sourcePath || ''}`.trim(),
+              ...(Array.isArray(part?.sourcePathAlternatives)
+                ? part.sourcePathAlternatives.map((value: any) => `${value || ''}`.trim()).filter(Boolean)
+                : [])
+            ].filter(Boolean);
+            for (const candidate of sourcePathCandidates) {
+              const sourceValue = getByPath(sourceRow, candidate);
+              if (sourceValue !== undefined && sourceValue !== null && `${sourceValue}`.trim() !== '') {
+                return `${sourceValue}`.trim();
+              }
+              if (!candidate.includes('.')) {
+                const fallbackDisplay = resolveCompactFieldDisplayValue(
+                  candidate,
+                  virtualValues,
+                  sourceRow,
+                  fieldById,
+                  parentValues
+                );
+                if (fallbackDisplay) return fallbackDisplay;
+              }
+            }
+
+            const fieldIdCandidates = [
+              `${part?.fieldId || ''}`.trim(),
+              ...(Array.isArray(part?.fieldIdAlternatives)
+                ? part.fieldIdAlternatives.map((value: any) => `${value || ''}`.trim()).filter(Boolean)
+                : [])
+            ].filter(Boolean);
+            for (const candidate of fieldIdCandidates) {
+              const display = resolveCompactFieldDisplayValue(
+                candidate,
+                virtualValues,
+                sourceRow,
+                fieldById,
+                parentValues
+              );
+              if (display) return display;
+            }
+            return '';
+          };
+
+          const resolveCompactTextParts = (
+            parts: any[],
+            virtualValues: Record<string, FieldValue>,
+            sourceRow: Record<string, any>,
+            fieldById: Map<string, any>,
+            parentValues: Record<string, FieldValue>
+          ): string =>
+            parts
+              .map((part: any) => {
+                if (!part || typeof part !== 'object') return '';
+                const partType = resolveCompactPartType(part);
+                if (partType === 'text') {
+                  return resolveLocalizedString(part.text, language, '');
+                }
+                if (partType === 'sourcelistsummary') {
+                  const entries = coerceStructuredItems(getByPath(sourceRow, `${part.sourcePath || ''}`.trim()));
+                  if (!entries.length) return '';
+                  const summaryFieldId = `${part.summaryFieldId || part.fieldId || ''}`.trim();
+                  const separator = resolveLocalizedString(part.separator, language, ', ') || ', ';
+                  const values = entries
+                    .map(entry => (summaryFieldId ? getByPath(entry, summaryFieldId) : entry))
+                    .map(value => `${value ?? ''}`.trim())
+                    .filter(Boolean);
+                  const normalized = part.unique === false ? values : Array.from(new Set(values));
+                  return normalized.join(separator);
+                }
+                const display = resolveCompactSourceValue(part, virtualValues, sourceRow, fieldById, parentValues);
+                const fieldId = `${part.fieldId || ''}`.trim();
+                if (!display && !fieldId) return '';
+                const suffix = part.suffix
+                  ? resolveLocalizedString(part.suffix, language, '')
+                  : part.suffixFieldId
+                    ? (() => {
+                        const suffixFieldId = `${part.suffixFieldId || ''}`.trim();
+                        const suffixField = suffixFieldId ? fieldById.get(suffixFieldId) : null;
+                        return suffixField
+                          ? resolveDisplayValue(suffixField, virtualValues, parentValues)
+                          : `${virtualValues[suffixFieldId] ?? parentValues[suffixFieldId] ?? ''}`.trim();
+                      })()
+                    : '';
+                return [display, suffix].filter(Boolean).join(' ').trim();
+              })
+              .filter(Boolean)
+              .join('');
+
+          const renderAllocationSentenceParts = (args: {
+            config: any;
+            parentRow: LineItemRowState;
+            sourceRow: Record<string, any>;
+            virtualValues: Record<string, FieldValue>;
+            fieldById: Map<string, any>;
+            selectedFieldId: string;
+            sentenceParts: any[];
+          }): React.ReactNode =>
+            args.sentenceParts.map((part: any, partIndex: number) => {
+              if (!part || typeof part !== 'object') return null;
+              const partType = resolveCompactPartType(part);
+              if (partType === 'text') {
+                const text = resolveLocalizedString(part.text, language, '');
+                return text ? (
+                  <span
+                    key={`text:${args.parentRow.id}:${partIndex}`}
+                    style={{
+                      color: 'var(--muted)',
+                      fontWeight: 600,
+                      fontSize: 'var(--ck-font-control)',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      minHeight: 40
+                    }}
+                  >
+                    {text}
+                  </span>
+                ) : null;
+              }
+              const fieldId = `${part.fieldId || ''}`.trim();
+              if (!fieldId) return null;
+              const field = args.fieldById.get(fieldId);
+              if (!field) return null;
+              if (field.type === 'NUMBER') {
+                const rawValue = args.virtualValues[fieldId];
+                const valueText = rawValue === undefined || rawValue === null ? '' : rawValue.toString();
+                const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 48;
+                const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 132;
+                const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.2;
+                const suffixText = part.suffix
+                  ? resolveLocalizedString(part.suffix, language, '')
+                  : part.suffixFieldId
+                    ? resolveDisplayValue(
+                        args.fieldById.get(`${part.suffixFieldId || ''}`.trim()),
+                        args.virtualValues,
+                        args.parentRow.values as Record<string, FieldValue>
+                      )
+                    : '';
+                const allowsIntegerOnly = allowsVirtualIntegerOnly(
+                  field,
+                  args.virtualValues,
+                  args.parentRow.values as Record<string, FieldValue>
+                );
+                const maxFieldId = resolveVirtualMaxFieldId(
+                  field,
+                  args.virtualValues,
+                  args.parentRow.values as Record<string, FieldValue>
+                );
+                const maxValue =
+                  maxFieldId && maxFieldId in args.virtualValues
+                    ? toFiniteNumber(args.virtualValues[maxFieldId])
+                    : null;
+                return (
+                  <span
+                    key={`field:${args.parentRow.id}:${fieldId}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      flex: '0 0 auto',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <AutoWidthInput
+                      className="ck-compact-control ck-compact-control--number"
+                      value={valueText}
+                      disabled={isLineFieldInteractionBlocked(field)}
+                      readOnly={false}
+                      inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
+                      pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                      ariaLabel={resolveFieldLabel(field, language, field.id)}
+                      selectAllOnFocus
+                      sanitize={raw =>
+                        sanitizeNumericDraft(raw, {
+                          integerOnly: allowsIntegerOnly,
+                          maxValue
+                        })
+                      }
+                      minWidth={minWidth}
+                      maxWidth={maxWidth}
+                      extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
+                      onChange={next => {
+                        const nextValue = next === '' ? null : next;
+                        const currentValue =
+                          args.virtualValues[fieldId] === undefined || args.virtualValues[fieldId] === null
+                            ? null
+                            : `${args.virtualValues[fieldId]}`;
+                        const normalizedNext =
+                          nextValue === null || nextValue === undefined ? null : `${nextValue}`;
+                        if (normalizedNext === currentValue) return;
+                        syncStepDataSourceOutputRowWithReservation({
+                          config: args.config,
+                          parentRow: args.parentRow,
+                          sourceRow: args.sourceRow,
+                          patch: {
+                            ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                            [fieldId]: nextValue
+                          }
+                        });
+                      }}
+                      inputStyle={{
+                        boxSizing: 'border-box',
+                        minHeight: 34,
+                        paddingInlineStart: 8,
+                        paddingInlineEnd: 8,
+                        textAlign: 'center',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: 'var(--ck-font-control)',
+                        fontWeight: 500,
+                        lineHeight: 1
+                      }}
+                    />
+                    {suffixText ? <span style={{ whiteSpace: 'nowrap' }}>{suffixText}</span> : null}
+                  </span>
+                );
+              }
+              if (field.type === 'CHOICE') {
+                const rawValue = args.virtualValues[fieldId];
+                const valueText =
+                  Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
+                const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
+                  sort: optionSortFor(field)
+                }).map(option => ({
+                  value: option.value,
+                  label: option.label,
+                  tooltip: option.tooltip,
+                  searchText: option.searchText
+                }));
+                const controlDecision = computeChoiceControlVariant(
+                  options.map(option => ({ value: option.value, label: option.label })),
+                  !!field.required,
+                  ((field as any)?.ui?.control || '').toString()
+                );
+                if (controlDecision.variant === 'segmented') {
+                  return (
+                    <span
+                      key={`field:${args.parentRow.id}:${fieldId}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
+                    >
+                      <div
+                        className="ck-choice-control ck-segmented"
+                        role="radiogroup"
+                        aria-label={resolveFieldLabel(field, language, field.id)}
+                        style={{ width: 'auto', maxWidth: 'none', flex: '0 0 auto' }}
+                      >
+                        {options.map(option => {
+                          const active = valueText === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={active ? 'active' : undefined}
+                              aria-pressed={active}
+                              disabled={isLineFieldInteractionBlocked(field)}
+                              onClick={() => {
+                                if (active) return;
+                                syncStepDataSourceOutputRowWithReservation({
+                                  config: args.config,
+                                  parentRow: args.parentRow,
+                                  sourceRow: args.sourceRow,
+                                  patch: {
+                                    ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                                    [fieldId]: option.value
+                                  }
+                                });
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </span>
+                  );
+                }
+                return (
+                  <AutoWidthSelect
+                    key={`field:${args.parentRow.id}:${fieldId}`}
+                    className="ck-compact-control ck-compact-control--choice"
+                    value={valueText}
+                    options={options}
+                    ariaLabel={resolveFieldLabel(field, language, field.id)}
+                    minWidth={Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 72}
+                    maxWidth={Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 220}
+                    extraWidth={34}
+                    disabled={isLineFieldInteractionBlocked(field)}
+                    onChange={next => {
+                      if (`${next ?? ''}` === `${args.virtualValues[fieldId] ?? ''}`) return;
+                      syncStepDataSourceOutputRowWithReservation({
+                        config: args.config,
+                        parentRow: args.parentRow,
+                        sourceRow: args.sourceRow,
+                        patch: {
+                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                          [fieldId]: next
+                        }
+                      });
+                    }}
+                    selectStyle={{
+                      minHeight: 34,
+                      fontSize: 'var(--ck-font-control)',
+                      lineHeight: 1.2,
+                      fontWeight: 500
+                    }}
+                  />
+                );
+              }
+              return null;
+            });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+              {sourceFirstPresentationEntries.map((entry, configIndex: number) => {
+                const { config, sourceRows, visibleSourceRows, emptyStateMessage } = entry;
+                if (!sourceRows.length && !emptyStateMessage) return null;
+                const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
+                const fields = Array.isArray(config?.fields) ? (config.fields as any[]) : [];
+                const fieldById = new Map<string, any>();
+                fields.forEach(field => {
+                  const id = field?.id ? field.id.toString() : '';
+                  if (id) fieldById.set(id, field);
+                });
+                const compactHeadlineRows = Array.isArray(uiCfg.compactHeadlineRows) ? (uiCfg.compactHeadlineRows as any[]) : [];
+                const compactDetailRows = Array.isArray(uiCfg.compactDetailRows) ? (uiCfg.compactDetailRows as any[]) : [];
+                const compactSentenceRows = Array.isArray(uiCfg.compactSentenceRows) ? (uiCfg.compactSentenceRows as any[]) : [];
+                const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
+                const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
+                const allocationLabelFieldId = `${config?.allocationLabelFieldId || uiCfg?.allocationLabelFieldId || ''}`.trim();
+                const distinctAllocationLabels = allocationLabelFieldId
+                  ? Array.from(
+                      new Set(
+                        parentRows
+                          .map(parentRow => `${parentRow.values?.[allocationLabelFieldId] ?? ''}`.trim())
+                          .filter(Boolean)
+                      )
+                    )
+                  : [];
+                const showAllocationLabel = distinctAllocationLabels.length > 1;
+                const listScrollStyle =
+                  Number.isFinite(Number(uiCfg?.maxVisibleRows)) && Number(uiCfg.maxVisibleRows) > 0
+                    ? ({
+                        maxHeight: `${Math.max(1, Math.floor(Number(uiCfg.maxVisibleRows))) * 132}px`,
+                        overflowY: 'auto' as const,
+                        overflowX: 'hidden' as const,
+                        WebkitOverflowScrolling: 'touch' as const,
+                        overscrollBehavior: 'contain' as const,
+                        touchAction: 'pan-y' as const
+                      })
+                    : undefined;
+                if (!visibleSourceRows.length) {
+                  return emptyStateMessage ? (
+                    <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
+                      <div
+                        style={{
+                          padding: '12px 0',
+                          lineHeight: 1.4,
+                          color: 'var(--muted)'
+                        }}
+                      >
+                        {emptyStateMessage}
+                      </div>
+                    </div>
+                  ) : null;
+                }
+                return (
+                  <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
+                    {visibleSourceRows.map(({ sourceRow, eligibleParents }, sourceIndex) => {
+                      const sourceKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
+                      const sourceKey = sourceKeyFieldId ? `${sourceRow?.[sourceKeyFieldId] ?? ''}`.trim() : '';
+                      if (!sourceKey) return null;
+                      const anchorParentRow = eligibleParents[0];
+                      const headlineVirtualValues = buildVirtualDataSourceRowValues({
+                        config,
+                        sourceRow,
+                        parentRowId: anchorParentRow?.id
+                      });
+                      const headlineRule = compactHeadlineRows.find(rule =>
+                        !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                          rowValues: headlineVirtualValues,
+                          parentValues: anchorParentRow?.values as Record<string, FieldValue>
+                        }))
+                      );
+                      const detailRule = compactDetailRows.find(rule =>
+                        !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                          rowValues: headlineVirtualValues,
+                          parentValues: anchorParentRow?.values as Record<string, FieldValue>
+                        }))
+                      );
+                      const headlineText = headlineRule
+                        ? resolveCompactTextParts(
+                            Array.isArray(headlineRule.parts) ? headlineRule.parts : [],
+                            headlineVirtualValues,
+                            sourceRow,
+                            fieldById,
+                            anchorParentRow?.values as Record<string, FieldValue>
+                          )
+                        : '';
+                      const detailText = detailRule
+                        ? resolveCompactTextParts(
+                            Array.isArray(detailRule.parts) ? detailRule.parts : [],
+                            headlineVirtualValues,
+                            sourceRow,
+                            fieldById,
+                            anchorParentRow?.values as Record<string, FieldValue>
+                          )
+                        : '';
+                      return (
+                        <div
+                          key={`source-first-row:${sourceKey}`}
+                          style={{
+                            padding: '12px 0',
+                            borderBottom:
+                              sourceIndex < visibleSourceRows.length - 1 ? '1px solid var(--border)' : undefined
+                          }}
+                        >
+                          {headlineText ? (
+                            <div style={{ fontSize: 'calc(var(--ck-font-control) * 1.08)', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                              {headlineText}
+                            </div>
+                          ) : null}
+                          {detailText ? (
+                            <div style={{ marginTop: 4, color: 'var(--muted)', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                              {detailText}
+                            </div>
+                          ) : null}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                            {eligibleParents.map(parentRow => {
+                              const output = resolveDataSourceOutputGroup(config, parentRow.id);
+                              const outputRows = output ? lineItems[output.key] || [] : [];
+                              const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
+                              const existingOutputRow =
+                                outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
+                              const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
+                              const virtualValues = buildVirtualDataSourceRowValues({
+                                config,
+                                sourceRow,
+                                outputRow: existingOutputRow,
+                                draftValues: stepDataSourceDrafts[draftKey] || null,
+                                parentRowId: parentRow.id
+                              });
+                              const isSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
+                              const sentenceRule = compactSentenceRows.find(rule =>
+                                !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                                  rowValues: virtualValues,
+                                  parentValues: parentRow.values as Record<string, FieldValue>
+                                }))
+                              );
+                              const sentenceParts = Array.isArray(sentenceRule?.parts) ? (sentenceRule.parts as any[]) : [];
+                              const sentenceFieldErrors = Array.from(
+                                new Set(
+                                  sentenceParts
+                                    .map((part: any) => {
+                                      const fieldId = `${part?.fieldId || ''}`.trim();
+                                      if (!fieldId) return null;
+                                      const field = fieldById.get(fieldId);
+                                      if (!field) return null;
+                                      const errors = validateVirtualFieldRules(
+                                        field,
+                                        virtualValues,
+                                        parentRow.values as Record<string, FieldValue>
+                                      );
+                                      return errors[0] || null;
+                                    })
+                                    .filter(Boolean) as string[]
+                                )
+                              );
+                              const buildSelectionTogglePatch = (checked: boolean): Record<string, any> => {
+                                const patch: Record<string, any> = { [selectedFieldId]: checked };
+                                if (!checked) return patch;
+                                const nextVirtualValues = {
+                                  ...virtualValues,
+                                  [selectedFieldId]: true
+                                } as Record<string, any>;
+                                if (quantityFieldId) {
+                                  const quantityField = fieldById.get(quantityFieldId);
+                                  const currentQty = nextVirtualValues[quantityFieldId];
+                                  const qtyIsEmpty =
+                                    currentQty === undefined ||
+                                    currentQty === null ||
+                                    `${currentQty}`.trim() === '';
+                                  if (quantityField && qtyIsEmpty) {
+                                    const maxFieldId = resolveVirtualMaxFieldId(
+                                      quantityField,
+                                      nextVirtualValues,
+                                      parentRow.values as Record<string, FieldValue>
+                                    );
+                                    const maxValue = maxFieldId ? nextVirtualValues[maxFieldId] : undefined;
+                                    if (maxValue !== undefined && maxValue !== null && `${maxValue}`.trim() !== '') {
+                                      patch[quantityFieldId] = `${maxValue}`;
+                                    }
+                                  }
+                                }
+                                const defaultModeValue = `${config?.defaultModeValue || ''}`.trim();
+                                const modeFieldId = `${config?.modeFieldId || ''}`.trim();
+                                if (modeFieldId && defaultModeValue) {
+                                  const currentMode = nextVirtualValues[modeFieldId];
+                                  const modeIsEmpty =
+                                    currentMode === undefined ||
+                                    currentMode === null ||
+                                    `${currentMode}`.trim() === '';
+                                  if (modeIsEmpty) {
+                                    patch[modeFieldId] = defaultModeValue;
+                                  }
+                                }
+                                return patch;
+                              };
+                              const allocationLabel = allocationLabelFieldId
+                                ? `${parentRow.values[allocationLabelFieldId] ?? ''}`.trim()
+                                : '';
+                              return (
+                                <div key={`allocation:${sourceKey}:${parentRow.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'flex-start',
+                                      flexWrap: 'wrap',
+                                      gap: 8,
+                                      paddingInlineStart: showAllocationLabel ? 12 : 0
+                                    }}
+                                  >
+                                    {showAllocationLabel && allocationLabel ? (
+                                      <span style={{ minWidth: 96, lineHeight: 1.35, fontWeight: 600 }}>
+                                        {allocationLabel}
+                                      </span>
+                                    ) : null}
+                                    {selectedFieldId ? (
+                                      <label
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          minHeight: 32,
+                                          minWidth: 32,
+                                          flex: '0 0 auto',
+                                          paddingTop: 2
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={event =>
+                                            syncStepDataSourceOutputRowWithReservation({
+                                              config,
+                                              parentRow,
+                                              sourceRow,
+                                              patch: buildSelectionTogglePatch(event.target.checked)
+                                            })
+                                          }
+                                          style={{
+                                            width: 24,
+                                            height: 24,
+                                            margin: 0,
+                                            accentColor: 'var(--accent)'
+                                          }}
+                                        />
+                                      </label>
+                                    ) : null}
+                                    {isSelected ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: sentenceFieldErrors.length ? 4 : 0, minWidth: 0, flex: 1 }}>
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            flexWrap: 'nowrap',
+                                            alignItems: 'center',
+                                            columnGap: 6,
+                                            rowGap: 6,
+                                            minWidth: 0,
+                                            lineHeight: 1.35,
+                                            overflowX: 'auto'
+                                          }}
+                                        >
+                                          {renderAllocationSentenceParts({
+                                            config,
+                                            parentRow,
+                                            sourceRow,
+                                            virtualValues,
+                                            fieldById,
+                                            selectedFieldId,
+                                            sentenceParts
+                                          })}
+                                        </div>
+                                        {sentenceFieldErrors.map((message, index) => (
+                                          <div key={`allocation-error:${sourceKey}:${parentRow.id}:${index}`} className="error">
+                                            {message}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        };
+
         return (
             <div
               key={q.id}
@@ -4863,15 +5702,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               {groupHelperNode}
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
-            {shouldRenderTopToolbar ? (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                  {showSelectorTop ? selectorControl : null}
-                  {showAddTop ? renderAddButton() : null}
+              {shouldRenderTopToolbar ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
+                    {showSelectorTop ? selectorControl : null}
+                    {showAddTop ? renderAddButton() : null}
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            {parentRows.map((row, rowIdx) => {
+              ) : null}
+            {renderSourceFirstDataSourceConfigs()}
+            {!(sourceFirstDataSourceRows.length && hideParentRowsForSourceFirst) ? parentRows.map((row, rowIdx) => {
               const useEdgeToEdgeRowChrome = q.id === 'MP_TYPE_LI' || (q as any)?.ui?.edgeToEdgeRows === true;
               const isLastEdgeToEdgeRow = useEdgeToEdgeRowChrome && rowIdx === parentRows.length - 1;
               const groupCtx: VisibilityContext = {
@@ -5472,6 +6312,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 };
 
                 const outputSegments = rowFlowState.segments.filter(segment => {
+                  const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
+                  if (segmentType === 'text') return true;
                   const target = segment.target;
                   if (!target?.fieldId) return false;
                   const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
@@ -5487,6 +6329,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 });
 
                 const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
+                  const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
+                  if (segmentType === 'text') {
+                    const text = resolveLocalizedString(segment.config?.text, language, '');
+                    if (!text) return null;
+                    const separatorNode = showSeparator && separator ? (
+                      <span aria-hidden="true" style={{ marginLeft: 6, flexShrink: 0 }}>
+                        {separator}
+                      </span>
+                    ) : null;
+                    return (
+                      <span
+                        key={`${segment.id}-${idx}`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
+                      >
+                        <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{text}</span>
+                        {separatorNode}
+                      </span>
+                    );
+                  }
                   const target = segment.target;
                   if (!target || !target.fieldId) return null;
                   const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
@@ -5503,7 +6364,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       {segmentActionNodes}
                     </span>
                   ) : null;
-                  const separatorNode = showSeparator ? (
+                  const separatorNode = showSeparator && separator ? (
                     <span aria-hidden="true" style={{ marginLeft: 6, flexShrink: 0 }}>
                       {separator}
                     </span>
@@ -5512,6 +6373,98 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const groupInfo = resolveRowFlowGroupConfig(target.primaryRow.groupKey);
                     if (!groupInfo?.config) return null;
                     const groupDef = buildRowFlowGroupDefinition(target.primaryRow.groupKey, groupInfo.config);
+                    const controlStyle = ((segment.config.controlStyle || 'default').toString() || 'default').trim().toLowerCase();
+                    if (controlStyle === 'compact') {
+                      const fieldPath = `${target.primaryRow.groupKey}__${field.id}__${target.primaryRow.row.id}`;
+                      if (field.type === 'NUMBER') {
+                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
+                        const valueText = rawValue === undefined || rawValue === null ? '' : `${rawValue}`;
+                        const allowsIntegerOnly = Array.isArray(field?.validationRules)
+                          ? field.validationRules.some((rule: any) => rule?.then?.integer === true)
+                          : false;
+                        return (
+                          <span
+                            key={`${segment.config.fieldRef}-${idx}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            data-field-path={fieldPath}
+                          >
+                            <AutoWidthInput
+                              className="ck-compact-control ck-compact-control--number"
+                              value={valueText}
+                              disabled={isLineFieldInteractionBlocked(field)}
+                              readOnly={field?.readOnly === true}
+                              inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
+                              pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                              ariaLabel={resolveFieldLabel(field, language, field.id)}
+                              selectAllOnFocus
+                              sanitize={raw =>
+                                sanitizeNumericDraft(raw, {
+                                  integerOnly: allowsIntegerOnly
+                                })
+                              }
+                              minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 48}
+                              maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 132}
+                              extraWidth={Math.max(
+                                24,
+                                Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 2.2) * 8)
+                              )}
+                              onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
+                              inputStyle={{
+                                boxSizing: 'border-box',
+                                minHeight: 34,
+                                paddingInlineStart: 8,
+                                paddingInlineEnd: 8,
+                                textAlign: 'center',
+                                fontVariantNumeric: 'tabular-nums',
+                                fontSize: 'var(--ck-font-control)',
+                                fontWeight: 500,
+                                lineHeight: 1
+                              }}
+                            />
+                            {segmentActions}
+                            {separatorNode}
+                          </span>
+                        );
+                      }
+                      if (field.type === 'CHOICE') {
+                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
+                        const valueText =
+                          Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
+                        const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
+                          sort: optionSortFor(field)
+                        }).map(option => ({
+                          value: option.value,
+                          label: option.label
+                        }));
+                        return (
+                          <span
+                            key={`${segment.config.fieldRef}-${idx}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            data-field-path={fieldPath}
+                          >
+                            <AutoWidthSelect
+                              className="ck-compact-control ck-compact-control--choice"
+                              value={valueText}
+                              options={options}
+                              ariaLabel={resolveFieldLabel(field, language, field.id)}
+                              minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 76}
+                              maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 180}
+                              extraWidth={34}
+                              disabled={isLineFieldInputDisabled(field)}
+                              onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next)}
+                              selectStyle={{
+                                minHeight: 34,
+                                fontSize: 'var(--ck-font-control)',
+                                fontWeight: 500,
+                                lineHeight: 1
+                              }}
+                            />
+                            {segmentActions}
+                            {separatorNode}
+                          </span>
+                        );
+                      }
+                    }
                     return (
                       <span
                         key={`${segment.config.fieldRef}-${idx}`}
@@ -10227,7 +11180,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           >
                                             {sentenceParts.map((part: any, partIndex: number) => {
                                             if (!part || typeof part !== 'object') return null;
-                                            const partType = ((part.type || '').toString() || (part.fieldId ? 'field' : 'text')).toLowerCase();
+                                            const partType = resolveCompactPartType(part);
                                             if (partType === 'text') {
                                               const text = resolveLocalizedString(part.text, language, '');
                                               return text ? (
@@ -13442,7 +14395,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   })}
                 </div>
               );
-            })}
+            }) : null}
             {rowFlowEnabled && defaultActionScope === 'group' ? renderGroupOutputActions() : null}
             {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">

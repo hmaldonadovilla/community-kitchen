@@ -51,6 +51,61 @@ describe('rowFlow domain', () => {
     expect(ingSegment?.values).toEqual(['Tomato', 'Onion']);
   });
 
+  it('keeps text segments and unique list output for nested references', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { MEAL_TYPE: 'Vegetarian', MP_LEFTOVER_PORTIONS_CAPTURE: 5 } }],
+      'MEALS::r1::TYPE': [{ id: 't1', values: { PREP_TYPE: 'Cook', RECIPE: 'Greek stew' } }],
+      'MEALS::r1::TYPE::t1::ING': [
+        { id: 'i1', values: { ING: 'Olive oil' } },
+        { id: 'i2', values: { ING: 'Garlic paste' } },
+        { id: 'i3', values: { ING: 'Olive oil' } }
+      ]
+    };
+
+    const rowFlow: any = {
+      references: {
+        cookRow: { groupId: 'TYPE', match: 'first', rowFilter: { includeWhen: { fieldId: 'PREP_TYPE', equals: ['Cook'] } } },
+        cookIngredients: { groupId: 'ING', parentRef: 'cookRow', match: 'any' }
+      },
+      output: {
+        separator: '',
+        hideEmpty: true,
+        segments: [
+          { fieldRef: 'MEAL_TYPE', label: { en: '{{value}} | ' } },
+          { fieldRef: 'cookRow.RECIPE', label: { en: '{{value}} | ' } },
+          { fieldRef: 'cookIngredients.ING', format: { type: 'list', listDelimiter: ', ', unique: true } },
+          { type: 'text', text: { en: ' | ' } },
+          { fieldRef: 'MP_LEFTOVER_PORTIONS_CAPTURE', renderAs: 'control', controlStyle: 'compact' },
+          { type: 'text', text: { en: ' portions' } }
+        ]
+      },
+      prompts: []
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MEAL_TYPE: 'Vegetarian', MP_LEFTOVER_PORTIONS_CAPTURE: 5 },
+      lineItems,
+      subGroupIds: ['TYPE']
+    });
+
+    expect(state?.segments.map(segment => segment.id)).toEqual([
+      'MEAL_TYPE',
+      'cookRow.RECIPE',
+      'cookIngredients.ING',
+      'text:0',
+      'MP_LEFTOVER_PORTIONS_CAPTURE',
+      'text:1'
+    ]);
+    expect(state?.segments.find(segment => segment.id === 'cookIngredients.ING')?.values).toEqual([
+      'Olive oil',
+      'Garlic paste',
+      'Olive oil'
+    ]);
+  });
+
   it('selects the first incomplete prompt while keeping completed prompts visible', () => {
     const lineItems: any = {
       MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'No' } }],

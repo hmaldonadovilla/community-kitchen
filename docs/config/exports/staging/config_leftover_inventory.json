@@ -351,6 +351,28 @@
       }
     },
     {
+      "id": "DIETARY_APPLICABILITY",
+      "type": "TEXT",
+      "qEn": "Dietary applicability",
+      "qFr": "Applicabilité diététique",
+      "qNl": "Dieettoepassing",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "valueMap": {
+        "dependsOn": "LEFTOVER_INGREDIENT",
+        "optionMapRef": {
+          "ref": "REF:Ingredients Data",
+          "keyColumn": "INGREDIENT_NAME",
+          "lookupColumn": "DIETARY_APPLICABILITY"
+        }
+      }
+    },
+    {
       "id": "LEFTOVER_QTY",
       "type": "NUMBER",
       "qEn": "Quantity",
@@ -1082,6 +1104,28 @@
             "ref": "REF:Ingredients Data",
             "keyColumn": "INGREDIENT_NAME",
             "lookupColumn": "ALLERGEN"
+          }
+        }
+      },
+      {
+        "id": "DIETARY_APPLICABILITY",
+        "type": "TEXT",
+        "qEn": "Dietary applicability",
+        "qFr": "Applicabilité diététique",
+        "qNl": "Dieettoepassing",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "valueMap": {
+          "dependsOn": "LEFTOVER_INGREDIENT",
+          "optionMapRef": {
+            "ref": "REF:Ingredients Data",
+            "keyColumn": "INGREDIENT_NAME",
+            "lookupColumn": "DIETARY_APPLICABILITY"
           }
         }
       },

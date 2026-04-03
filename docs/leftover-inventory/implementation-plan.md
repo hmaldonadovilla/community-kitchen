@@ -12,6 +12,14 @@ Detailed design for the reservation-aware inventory lifecycle now lives in:
 
 - `docs/leftover-inventory/design/reservation-lifecycle-design.md`
 
+Detailed design for the next source-first `Leftover bank` and sentence-based `Leftovers` layout now lives in:
+
+- `docs/leftover-inventory/design/source-first-leftover-bank-and-leftovers-layout.md`
+
+Detailed design for the closeout execution model and background follow-up sequencing now lives in:
+
+- `docs/leftover-inventory/design/finalization-and-background-followups.md`
+
 ## Executive recommendation
 
 The recommended solution is:
@@ -222,13 +230,61 @@ The purpose split is strict:
 - `2. Leftover bank` consumes existing inventory
 - `6. Leftovers` creates new inventory from what remains after cooking and portioning
 
+### 4b. Freshly registered leftovers must be immediately reusable
+
+After `6. Leftovers` creates new inventory records:
+
+- the frontend must invalidate and refresh the leftover datasource automatically
+- local persisted datasource state must be updated
+- the user must not need a hard refresh to see or use the leftovers that were just created
+
+This should remain generic and datasource-driven.
+
+Preferred implementation direction:
+
+- invalidate `Leftover Inventory Data`
+- refetch it automatically
+- replace persisted local cache with the refreshed authoritative dataset
+
+This should be implemented through the generic datasource refresh path, not through a Meal Production-only local patch.
+
+### 4c. Leftover dietary applicability must be stored and used
+
+Each leftover inventory record must carry the dietary applicability it supports.
+
+This is required so `2. Leftover bank` can show only compatible dishes for each leftover item.
+
+For newly created entire-dish leftovers in `6. Leftovers`:
+
+- dietary applicability must be derived from the cooked dish ingredients
+- the derived values must be saved to the inventory record
+- the same values must be exposed through datasource responses and persisted client cache
+
+For newly created partial-dish leftovers in `6. Leftovers`:
+
+- dietary applicability must also be captured and saved to the inventory record
+- it should be derived using the same generic ingredient classification rules where possible
+- if derivation alone is not sufficient, the registration flow must still ensure explicit dietary applicability is captured before the leftover is saved
+
+For selection in `2. Leftover bank`:
+
+- the UI must filter out incompatible dishes using that saved applicability
+- filtering must happen before rendering allocation controls where possible
+- if only one compatible dish remains, the UI should collapse to the simplified single-dish presentation
+- this filtering rule applies to both `LE` and `LP`
+
 ### 5. Read-only ingredient inspection
 
 The `Ingredients` action in the `Leftover bank` step is informational only.
 
-It must open a full-page read-only overlay backed by the selected inventory record's `LEFTOVER_INGREDIENTS_LI`.
+This requirement is now superseded by the source-first layout design.
 
-The overlay must not expose editing affordances:
+The preferred primary behavior is:
+
+- show ingredient information inline as a compact summary sentence
+- use the same readable style in both `Leftover bank` and `Leftovers`
+
+If an expanded detail view is still retained as a secondary fallback, it must remain read-only:
 
 - no `Add line` button
 - no remove or trash actions
@@ -947,6 +1003,9 @@ Implemented foundations:
   - configured follow-up batches can run in background
   - milestone steps can show configurable confirmation and acknowledgement dialogs
   - `5. Portioning` now uses this path to start PDF/email work before advancing to `6. Leftovers`
+- the current `Leftover bank` is still meal-first, not source-first
+- newly created leftovers are saved on the server, but immediate datasource refresh after `6. Leftovers` is not implemented yet
+- dietary applicability derivation and filtering in `Leftover bank` are not implemented yet
 
 The reservation platform and the generic milestone or post-submit follow-up UX are no longer the main blockers. The remaining work is now concentrated on hardening and validating the full post-production flow end to end, especially the creation of new leftover inventory records from `6. Leftovers`.
 
@@ -977,12 +1036,28 @@ The reservation platform and the generic milestone or post-submit follow-up UX a
   - disabled `openUrlField` actions while required URLs are missing
 - the remaining work is live end-to-end verification of this flow on staging
 
-3. Add end-to-end regression coverage for the full post-production flow
+3. Add immediate datasource refresh after `6. Leftovers`
+
+- newly created leftovers must become visible and usable without a hard refresh
+- invalidate and refetch `Leftover Inventory Data`
+- refresh persisted datasource cache with the authoritative server result
+
+4. Add dietary applicability capture, derivation, and filtering
+
+- derive dietary applicability when registering new `LE` records
+- capture or derive dietary applicability when registering new `LP` records
+- persist it on the inventory record
+- expose it in datasource responses and local cache
+- filter dish allocations in `2. Leftover bank` by compatibility for both `LE` and `LP`
+
+5. Add end-to-end regression coverage for the full post-production flow
 
 - Portioning milestone triggers background follow-up and advances to `6. Leftovers`
 - `6. Leftovers` creates new inventory records correctly
 - final submit reconciles consumed reservations and new leftovers together
 - summary or home view behaves correctly while the PDF URL is still pending
+- freshly registered leftovers appear without hard refresh
+- dietary filtering only shows compatible dishes
 
 ### Can defer
 
@@ -1007,14 +1082,19 @@ The reservation platform and the generic milestone or post-submit follow-up UX a
 
 ## Recommended implementation sequence
 
-1. validate and harden new leftover inventory record creation from `6. Leftovers`
-2. validate the full flow end to end on staging:
+1. add the generic source-first allocation renderer for `2. Leftover bank`
+2. add reusable inline ingredient summary rendering for both `Leftover bank` and `Leftovers`
+3. validate and harden new leftover inventory record creation from `6. Leftovers`
+4. add immediate datasource refresh after `6. Leftovers`
+5. add dietary applicability capture, derivation, and persistence for newly created leftovers
+6. filter `2. Leftover bank` dish allocations by leftover dietary applicability for both `LE` and `LP`
+7. validate the full flow end to end on staging:
    - select from `2. Leftover bank`
    - run Portioning milestone follow-up
    - complete `6. Leftovers`
    - final submit
-   - verify summary, PDF, email, and pending-result behavior
-3. add broader end-to-end regression coverage for the full post-production flow
+   - verify summary, PDF, email, pending-result behavior, immediate leftover refresh, and dietary filtering
+8. add broader end-to-end regression coverage for the full post-production flow
 
 ## Final recommendation
 

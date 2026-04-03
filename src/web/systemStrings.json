@@ -90,6 +90,16 @@
     "refresh": { "en": "Refresh record", "fr": "Actualiser l'enregistrement", "nl": "Record vernieuwen" }
   },
   "navigation": {
+    "waitTitle": {
+      "en": "Please wait",
+      "fr": "Veuillez patienter",
+      "nl": "Even geduld"
+    },
+    "waitPhotos": {
+      "en": "Please wait while your photos finish uploading.",
+      "fr": "Veuillez patienter pendant le téléversement de vos photos.",
+      "nl": "Wacht even terwijl je foto's worden geüpload."
+    },
     "waitSaving": {
       "en": "Please wait while we save your changes...",
       "fr": "Veuillez patienter pendant que nous enregistrons vos modifications...",

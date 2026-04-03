@@ -1237,16 +1237,21 @@ export class Dashboard {
       submissionAfterSubmitObj &&
       (submissionAfterSubmitObj.preActions !== undefined ||
         submissionAfterSubmitObj.backgroundActions !== undefined ||
+        submissionAfterSubmitObj.waitForQueue !== undefined ||
         submissionAfterSubmitObj.navigateTo !== undefined ||
         submissionAfterSubmitObj.feedbackDialog !== undefined)
         ? (() => {
             const out: Record<string, any> = {};
             const preActions = normalizeStringArray(submissionAfterSubmitObj.preActions);
             const backgroundActions = normalizeStringArray(submissionAfterSubmitObj.backgroundActions);
+            const waitForQueue = (normalizeString(submissionAfterSubmitObj.waitForQueue) || '').toLowerCase();
             const navigateTo = (normalizeString(submissionAfterSubmitObj.navigateTo) || '').toLowerCase();
             const feedbackDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.feedbackDialog);
             if (preActions?.length) out.preActions = preActions;
             if (backgroundActions?.length) out.backgroundActions = backgroundActions;
+            if (waitForQueue === 'all' || waitForQueue === 'uploadsonly' || waitForQueue === 'none') {
+              out.waitForQueue = waitForQueue === 'uploadsonly' ? 'uploadsOnly' : waitForQueue;
+            }
             if (navigateTo === 'auto' || navigateTo === 'form' || navigateTo === 'summary' || navigateTo === 'list') {
               out.navigateTo = navigateTo;
             }
@@ -2114,6 +2119,7 @@ export class Dashboard {
     const defaultAutoAdvance = normalizeAutoAdvance((value as any).defaultAutoAdvance);
     const stepSubmitLabel = normalizeLocalized((value as any).stepSubmitLabel);
     const backButtonLabel = normalizeLocalized((value as any).backButtonLabel);
+    const waitForUploadsDialogDefault = normalizeDialogConfig((value as any).waitForUploadsDialog);
     const showBackButtonRaw = (value as any).showBackButton;
     const showBackButton =
       showBackButtonRaw !== undefined && showBackButtonRaw !== null ? Boolean(showBackButtonRaw) : undefined;
@@ -2161,23 +2167,46 @@ export class Dashboard {
         if (submitLabel) nav.submitLabel = submitLabel;
         const backLabel = normalizeLocalized((navRaw as any).backLabel);
         if (backLabel) nav.backLabel = backLabel;
+        const waitForUploadsDialog = normalizeDialogConfig((navRaw as any).waitForUploadsDialog);
+        if (waitForUploadsDialog) nav.waitForUploadsDialog = waitForUploadsDialog;
         if ((navRaw as any).showBackButton !== undefined && (navRaw as any).showBackButton !== null) {
           nav.showBackButton = Boolean((navRaw as any).showBackButton);
         }
         const milestoneActionRaw = (navRaw as any).milestoneAction;
         if (milestoneActionRaw && typeof milestoneActionRaw === 'object') {
           const typeRaw = normalizeString((milestoneActionRaw as any).type).toLowerCase();
+          const preActionsRaw = Array.isArray((milestoneActionRaw as any).preActions)
+            ? (milestoneActionRaw as any).preActions
+            : (milestoneActionRaw as any).preActions !== undefined
+              ? [(milestoneActionRaw as any).preActions]
+              : [];
+          const backgroundActionsRaw = Array.isArray((milestoneActionRaw as any).backgroundActions)
+            ? (milestoneActionRaw as any).backgroundActions
+            : (milestoneActionRaw as any).backgroundActions !== undefined
+              ? [(milestoneActionRaw as any).backgroundActions]
+              : [];
           const actionsRaw = Array.isArray((milestoneActionRaw as any).actions)
             ? (milestoneActionRaw as any).actions
             : (milestoneActionRaw as any).actions !== undefined
               ? [(milestoneActionRaw as any).actions]
               : [];
+          const preActions = preActionsRaw.map((entry: any) => normalizeString(entry)).filter(Boolean);
+          const backgroundActions = backgroundActionsRaw.map((entry: any) => normalizeString(entry)).filter(Boolean);
           const actions = actionsRaw.map((entry: any) => normalizeString(entry)).filter(Boolean);
-          if ((typeRaw === 'followupbatch' || typeRaw === 'followup' || typeRaw === 'batch') && actions.length) {
+          const effectiveBackgroundActions =
+            backgroundActions.length > 0
+              ? backgroundActions
+              : (preActions.length === 0 ? actions : []);
+          if (
+            (typeRaw === 'followupbatch' || typeRaw === 'followup' || typeRaw === 'batch') &&
+            (preActions.length > 0 || effectiveBackgroundActions.length > 0 || actions.length > 0)
+          ) {
             const milestoneAction: any = {
-              type: 'followupBatch',
-              actions
+              type: 'followupBatch'
             };
+            if (preActions.length) milestoneAction.preActions = preActions;
+            if (effectiveBackgroundActions.length) milestoneAction.backgroundActions = effectiveBackgroundActions;
+            if (actions.length) milestoneAction.actions = actions;
             if ((milestoneActionRaw as any).ensureRecordId !== undefined) {
               milestoneAction.ensureRecordId = Boolean((milestoneActionRaw as any).ensureRecordId);
             }
@@ -2191,8 +2220,15 @@ export class Dashboard {
             if (validationScope === 'currentstep') milestoneAction.validationScope = 'currentStep';
             if (validationScope === 'throughcurrentstep') milestoneAction.validationScope = 'throughCurrentStep';
             if (validationScope === 'fullform') milestoneAction.validationScope = 'fullForm';
+            const waitForQueue = normalizeString((milestoneActionRaw as any).waitForQueue).toLowerCase();
+            if (waitForQueue === 'all') milestoneAction.waitForQueue = 'all';
+            if (waitForQueue === 'uploadsonly') milestoneAction.waitForQueue = 'uploadsOnly';
+            if (waitForQueue === 'none') milestoneAction.waitForQueue = 'none';
             if ((milestoneActionRaw as any).waitForBackgroundSaves !== undefined) {
               milestoneAction.waitForBackgroundSaves = Boolean((milestoneActionRaw as any).waitForBackgroundSaves);
+              if (milestoneAction.waitForBackgroundSaves && !milestoneAction.waitForQueue) {
+                milestoneAction.waitForQueue = 'all';
+              }
             }
             const confirmationDialog = normalizeDialogConfig((milestoneActionRaw as any).confirmationDialog);
             if (confirmationDialog) milestoneAction.confirmationDialog = confirmationDialog;
@@ -2228,6 +2264,7 @@ export class Dashboard {
     if (defaultAutoAdvance) out.defaultAutoAdvance = defaultAutoAdvance;
     if (stepSubmitLabel) out.stepSubmitLabel = stepSubmitLabel;
     if (backButtonLabel) out.backButtonLabel = backButtonLabel;
+    if (waitForUploadsDialogDefault) out.waitForUploadsDialog = waitForUploadsDialogDefault;
     if (showBackButton !== undefined) out.showBackButton = showBackButton;
     if (header) out.header = header;
     return out as StepsConfig;

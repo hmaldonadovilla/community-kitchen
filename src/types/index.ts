@@ -950,6 +950,15 @@ export interface SubmissionAfterSubmitConfig {
    */
   backgroundActions?: string[];
   /**
+   * Which in-flight client queues must settle before final submit starts.
+   * - all: wait for uploads and autosave
+   * - uploadsOnly: wait only for uploads (recommended for final close flows)
+   * - none: do not wait for either queue
+   *
+   * Default: all
+   */
+  waitForQueue?: 'all' | 'uploadsOnly' | 'none';
+  /**
    * Where the client should navigate immediately after `preActions` succeed.
    *
    * Default: `auto`
@@ -2794,6 +2803,28 @@ export interface DataSourceConfig {
   mapping?: Record<string, string>; // optional map from source column -> target field id
   tooltipField?: string; // optional column used for option tooltips
   tooltipLabel?: LocalizedString | string; // optional localized label for tooltip trigger/header
+  /**
+   * Optional backfill pass for form-backed data sources.
+   *
+   * Use this when legacy records are missing derived fields but can still be reconstructed from
+   * a referenced source record/row. The backfill runs only when one of `whenMissingAnyFieldIds`
+   * is empty on the fetched datasource row.
+   */
+  backfill?: {
+    whenMissingAnyFieldIds: string[];
+    sourceFormKeyFieldId: string;
+    sourceRecordIdFieldId: string;
+    sourceRowIdFieldId?: string;
+    scopes: Array<{
+      id: string;
+      groupId: string;
+      parentScopeId?: string;
+      matchBySourceRowId?: boolean;
+      rowFilter?: StepRowFilterConfig;
+      fallbackMatch?: 'first';
+    }>;
+    values: Record<string, any>;
+  };
 }
 
 export interface PageSectionConfig {
@@ -3377,6 +3408,11 @@ export interface StepsConfig {
    * Global toggle for showing the Back button in guided steps (default: true).
    */
   showBackButton?: boolean;
+  /**
+   * Optional default waiting dialog shown when guided-step navigation is paused
+   * because required uploads are still in progress.
+   */
+  waitForUploadsDialog?: SystemActionGateDialogConfig;
   header?: StepsHeaderConfig;
   items: StepConfig[];
 }
@@ -3404,6 +3440,11 @@ export interface StepNavigationConfig {
    * (for example, generating PDFs/emails) before advancing to the next step.
    */
   milestoneAction?: StepMilestoneActionConfig;
+  /**
+   * Optional override dialog shown when this step cannot advance yet because
+   * required uploads are still in progress.
+   */
+  waitForUploadsDialog?: SystemActionGateDialogConfig;
 }
 
 export interface StepMilestoneActionConfig {
@@ -3412,9 +3453,21 @@ export interface StepMilestoneActionConfig {
    */
   type: 'followupBatch';
   /**
-   * Follow-up action ids to trigger for the current record.
+   * Blocking follow-up action ids to trigger after the current form snapshot is saved.
+   * Use this for actions that must complete before the user continues
+   * (for example inventory reconciliation).
    */
-  actions: string[];
+  preActions?: string[];
+  /**
+   * Non-blocking follow-up action ids to trigger after blocking work succeeds.
+   * When `runInBackground` is true, these actions continue after the user advances.
+   */
+  backgroundActions?: string[];
+  /**
+   * Legacy follow-up action ids to trigger for the current record.
+   * When `preActions` and `backgroundActions` are omitted, `actions` is treated as `backgroundActions`.
+   */
+  actions?: string[];
   /**
    * When true, ensure a persisted draft record id exists before triggering the batch.
    * Default: true
@@ -3447,8 +3500,18 @@ export interface StepMilestoneActionConfig {
    */
   validationScope?: 'currentStep' | 'throughCurrentStep' | 'fullForm';
   /**
+   * Which in-flight client queues must settle before the milestone action starts.
+   * - all: wait for uploads and autosave
+   * - uploadsOnly: wait only for uploads
+   * - none: do not wait for either queue
+   *
+   * Default: none
+   */
+  waitForQueue?: 'all' | 'uploadsOnly' | 'none';
+  /**
    * When true, wait for in-flight uploads/autosaves to settle before starting the milestone action.
-   * Default: false
+   *
+   * Legacy alias for `waitForQueue: "all"`.
    */
   waitForBackgroundSaves?: boolean;
 }
@@ -3538,10 +3601,13 @@ export interface RowFlowOutputConfig {
 export interface RowFlowOutputSegmentFormatConfig {
   type?: 'text' | 'list';
   listDelimiter?: string;
+  unique?: boolean;
 }
 
 export interface RowFlowOutputSegmentConfig {
-  fieldRef: string;
+  type?: 'field' | 'text';
+  fieldRef?: string;
+  text?: LocalizedString;
   /**
    * Optional label/template for this value (supports {{value}} placeholder).
    */
@@ -3549,6 +3615,10 @@ export interface RowFlowOutputSegmentConfig {
   showWhen?: WhenClause;
   format?: RowFlowOutputSegmentFormatConfig;
   renderAs?: 'value' | 'control';
+  controlStyle?: 'default' | 'compact';
+  minWidth?: number;
+  maxWidth?: number;
+  paddingChars?: number;
   editAction?: string;
   /**
    * Optional action ids to render as icons next to this segment.

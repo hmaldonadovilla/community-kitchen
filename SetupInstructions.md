@@ -1062,14 +1062,18 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - For a compact progressive row header that stays visible in both collapsed and expanded states, set `lineItemConfig.ui.rowHeaderSummaryTemplate`, for example `{MEAL_TYPE} | {ORD_QTY}`.
       - For compact sentence-style line item rows, enable `lineItemConfig.ui.compactRows: true` and define:
         - `ui.compactHeadlineRows` for the first display line
+        - `ui.compactDetailRows` for secondary inline summary text such as ingredient lists
         - `ui.compactSentenceRows` for the inline sentence/control line
         - `ui.compactActions` for optional row actions such as opening a read-only subgroup overlay
         - `ui.persistRows: false` when the compact rows are UI-only selector state and must not be saved back into the record
         - compact-row actions can set `overlayLabel` separately from the button label when the overlay should not repeat the button text as a title
         - use local hydrated fields for compact-row text when the selector already copied inventory data into the row; reserve `sourceFieldId + sourcePath` for true datasource lookups
+        - use `type: "sourceListSummary"` inside compact headline/detail parts when the row should summarize a nested datasource list inline (for example, comma-separated ingredient names)
         - use `selectionEffects.addLineItems` with `replaceExistingByEffectId: true` when compact-row edits must immediately regenerate one downstream normalized line item
         - when a compact row lives inside a subgroup and needs to regenerate a sibling subgroup for the same parent row, point `selectionEffects[].groupId` at the sibling subgroup id; the runtime resolves it relative to the current parent row automatically
         - use `selectionEffects.type: "addLineItemsFromFieldPayload"` when the downstream line items should be hydrated from a serialized payload already stored on the current row
+        - for datasource-backed allocation screens that must render each shared source row once and allocate it into multiple parent rows, set the datasource-row config `presentation: "sourceFirstAllocations"` and optionally add `presentationWhen`, `hideParentRowsWhenPresentationActive`, `allocationLabelFieldId`, `sourceMatchFieldIds` (fallback match fields checked in order), and `ui.emptyStateMessage` when filtering leaves no compatible source rows
+        - for form-backed datasources with legacy rows missing derived fields, use `dataSource.backfill` to declare a repair pass in config. Point it at the source form/record/row fields, define root/nested `scopes`, and map `values` from those scopes; the server only applies the backfill when one of `whenMissingAnyFieldIds` is empty on the fetched datasource row
       - Compact headline parts can read directly from a datasource-backed selector by setting `sourceFieldId`, `sourcePath`, optional `lookupField`, and optional `suffixSourcePath`. This keeps compact rows configuration-driven and avoids duplicating the same display values into hidden fields only for presentation.
       - **Row flow (steps)**: Use `rowFlow` on a step line-group target to render an output line + a single active prompt per row.
 
@@ -1084,7 +1088,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
         ```
 
-        - `output.segments` defines the text line (supports labels, list formatting, and `showWhen`).
+        - `output.segments` defines the text line (supports labels, list formatting, `format.unique`, static `type: "text"` segments, and `showWhen`).
+        - Use `renderAs: "control"` to place a field inline in the output row; combine with `controlStyle: "compact"` plus `minWidth` / `maxWidth` / `paddingChars` when the control should read like part of a sentence.
         - `output.segments[].editAction` (single) or `editActions` (array) renders one or more action icons next to a segment.
         - `output.actions` lets you place row actions at the start/end of the output line; use `output.actionsLayout: "below"` to render them on a separate row. Use `output.actionsScope: "group"` (or per-action `scope: "group"`) to render actions once after all rows.
         - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
@@ -1097,10 +1102,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
         - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
+          - run blocking follow-up actions first (`preActions`), then launch non-blocking ones (`backgroundActions`)
           - ensure a persisted draft record id exists (`ensureRecordId`)
-          - wait for in-flight uploads/autosaves to settle before starting (`waitForBackgroundSaves`)
+          - choose which client queues to wait for before starting (`waitForQueue: "all" | "uploadsOnly" | "none"`)
+          - legacy alias: `waitForBackgroundSaves: true` maps to `waitForQueue: "all"`
           - validate the current step, all visible steps through the current step, or the full form before starting (`validationScope`)
-          - run the batch in background (`runInBackground`)
+          - run the configured `backgroundActions` in background (`runInBackground`)
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
       - Read-only labels in steps:
@@ -1158,6 +1165,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       {
         "submissionAfterSubmit": {
           "preActions": ["CLOSE_RECORD"],
+          "waitForQueue": "uploadsOnly",
           "backgroundActions": ["CREATE_PDF", "SEND_EMAIL"],
           "navigateTo": "summary",
           "feedbackDialog": {

@@ -686,11 +686,12 @@ describe('Dashboard', () => {
               submitLabel: { EN: 'Complete portioning' },
               milestoneAction: {
                 type: 'followupBatch',
-                actions: ['CREATE_PDF', 'SEND_EMAIL'],
+                preActions: ['RECONCILE_RESERVATIONS'],
+                backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
                 ensureRecordId: true,
                 runInBackground: true,
                 validationScope: 'throughCurrentStep',
-                waitForBackgroundSaves: true,
+                waitForQueue: 'uploadsOnly',
                 advanceAfterStart: true,
                 confirmationDialog: {
                   title: { EN: 'Please confirm' },
@@ -725,11 +726,12 @@ describe('Dashboard', () => {
     expect(step?.navigation?.submitLabel).toEqual({ en: 'Complete portioning' });
     expect(step?.navigation?.milestoneAction).toEqual({
       type: 'followupBatch',
-      actions: ['CREATE_PDF', 'SEND_EMAIL'],
+      preActions: ['RECONCILE_RESERVATIONS'],
+      backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
       ensureRecordId: true,
       runInBackground: true,
       validationScope: 'throughCurrentStep',
-      waitForBackgroundSaves: true,
+      waitForQueue: 'uploadsOnly',
       advanceAfterStart: true,
       confirmationDialog: {
         title: { en: 'Please confirm' },
@@ -776,12 +778,61 @@ describe('Dashboard', () => {
     expect(step?.excludeWhen).toEqual({ fieldId: 'status', equals: ['Emailed', 'Closed'] });
   });
 
+  test('getForms parses guided step upload wait dialog defaults and overrides', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        waitForUploadsDialog: {
+          title: { EN: 'Please wait' },
+          message: { EN: 'Please wait while your photos finish uploading.' },
+          showCancel: false
+        },
+        items: [
+          {
+            id: 'production',
+            include: ['Q1'],
+            navigation: {
+              forwardGate: 'whenValid',
+              waitForUploadsDialog: {
+                title: { EN: 'Hold on' },
+                message: { EN: 'Your photos are still uploading.' },
+                showCancel: false
+              }
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    const steps = forms[0].steps as any;
+    const step = steps?.items?.[0];
+    expect(steps?.waitForUploadsDialog).toEqual({
+      title: { en: 'Please wait' },
+      message: { en: 'Please wait while your photos finish uploading.' },
+      showCancel: false
+    });
+    expect(step?.navigation?.waitForUploadsDialog).toEqual({
+      title: { en: 'Hold on' },
+      message: { en: 'Your photos are still uploading.' },
+      showCancel: false
+    });
+  });
+
   test('getForms parses submit-time background follow-up config', () => {
     const configJson = JSON.stringify({
       submission: {
         afterSubmit: {
           preActions: ['CLOSE_RECORD'],
           backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+          waitForQueue: 'uploadsOnly',
           navigateTo: 'summary',
           feedbackDialog: {
             title: { EN: 'Background actions started' },
@@ -806,6 +857,7 @@ describe('Dashboard', () => {
     expect(forms[0].submissionAfterSubmit).toEqual({
       preActions: ['CLOSE_RECORD'],
       backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+      waitForQueue: 'uploadsOnly',
       navigateTo: 'summary',
       feedbackDialog: {
         title: { en: 'Background actions started' },

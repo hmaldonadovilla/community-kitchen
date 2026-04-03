@@ -176,6 +176,9 @@ describe('staging integrity dialogs and list legend config', () => {
 
     const assertGuidedStepLayout = (root: any, questions: any[]) => {
       const items = Array.isArray(root?.steps?.items) ? root.steps.items : [];
+      expect(root?.steps?.waitForUploadsDialog?.title?.en).toBe('Please wait');
+      expect(root?.steps?.waitForUploadsDialog?.message?.en).toBe('Please wait while your photos finish uploading.');
+      expect(root?.steps?.waitForUploadsDialog?.showCancel).toBe(false);
       const leftoverBank = items.find((entry: any) => entry?.id === 'leftoverForm');
       const portioning = items.find((entry: any) => entry?.id === 'portioning');
       const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
@@ -189,6 +192,82 @@ describe('staging integrity dialogs and list legend config', () => {
         fieldId: 'status',
         equals: ['Emailed', 'Closed']
       });
+      const leftoverBankMeals = (leftoverBank?.include || []).find(
+        (entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST'
+      );
+      const leftoverDataSourceRows = Array.isArray(leftoverBankMeals?.dataSourceRows)
+        ? leftoverBankMeals.dataSourceRows
+        : [];
+      const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
+      expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
+      expect(leftoverInventoryRows?.presentationWhen).toEqual({
+        fieldId: '__ckStep',
+        equals: ['leftoverForm']
+      });
+      expect(leftoverInventoryRows?.hideParentRowsWhenPresentationActive).toBe(true);
+      expect(leftoverInventoryRows?.allocationLabelFieldId).toBe('MEAL_TYPE');
+      expect(leftoverInventoryRows?.sourceMatchFieldId).toBe('DIETARY_APPLICABILITY');
+      expect(leftoverInventoryRows?.parentMatchFieldId).toBe('MEAL_TYPE');
+      expect(leftoverInventoryRows?.sourceMatchMode).toBe('includesDelimited');
+      expect(leftoverInventoryRows?.sourceMatchDelimiter).toBe(',');
+      expect(leftoverInventoryRows?.dataSource?.projection).toEqual(
+        expect.arrayContaining([
+          'DIETARY_APPLICABILITY',
+          'LEFTOVER_SOURCE_FORM_KEY',
+          'LEFTOVER_SOURCE_RECORD_ID',
+          'LEFTOVER_SOURCE_ROW_ID'
+        ])
+      );
+      expect(leftoverInventoryRows?.dataSource?.backfill?.whenMissingAnyFieldIds).toEqual(
+        expect.arrayContaining(['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'])
+      );
+      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceFormKeyFieldId).toBe('LEFTOVER_SOURCE_FORM_KEY');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceRecordIdFieldId).toBe('LEFTOVER_SOURCE_RECORD_ID');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceRowIdFieldId).toBe('LEFTOVER_SOURCE_ROW_ID');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.scopes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'mealRow', groupId: 'MP_MEALS_REQUEST' }),
+          expect.objectContaining({ id: 'cookRow', groupId: 'MP_TYPE_LI' }),
+          expect.objectContaining({ id: 'partialRow', groupId: 'MP_LEFTOVER_CAPTURE_LI' })
+        ])
+      );
+      const partialRowScope = (leftoverInventoryRows?.dataSource?.backfill?.scopes || []).find(
+        (entry: any) => entry?.id === 'partialRow'
+      );
+      expect(partialRowScope?.fallbackMatch).toBeUndefined();
+      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_RECIPE).toBe('{{cookRow.RECIPE}}');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_MEAL_TYPE).toBe('{{mealRow.MEAL_TYPE}}');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_INGREDIENT).toBe('{{partialRow.LEFTOVER_INGREDIENT}}');
+      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.DIETARY_APPLICABILITY).toEqual(
+        expect.objectContaining({
+          op: 'lookupSetIntersection',
+          collectionPath: 'cookRow.MP_INGREDIENTS_LI',
+          itemFieldId: 'ING',
+          lookupFormKey: 'Config: Ingredients Management',
+          lookupKeyFieldId: 'INGREDIENT_NAME',
+          lookupValueFieldId: 'DIETARY_APPLICABILITY',
+          fallback: '{{partialRow.LEFTOVER_DIETARY_APPLICABILITY}}'
+        })
+      );
+      expect(leftoverInventoryRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
+      expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(
+        expect.objectContaining({
+          LEFTOVER_MEAL_TYPE: 'LEFTOVER_MEAL_TYPE',
+          LEFTOVER_RECIPE: 'LEFTOVER_RECIPE',
+          LEFTOVER_INGREDIENT: 'LEFTOVER_INGREDIENT',
+          DIETARY_APPLICABILITY: 'DIETARY_APPLICABILITY'
+        })
+      );
+      expect(leftoverInventoryRows?.ui?.compactDetailRows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Part dish' })
+          }),
+          expect.objectContaining({
+            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Entire dish' })
+          })
+        ])
+      );
       expect(portioning?.label?.en).toBe('Portioning');
       expect(portioning?.excludeWhen).toEqual({
         fieldId: 'status',
@@ -198,14 +277,16 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftovers?.excludeWhen).toBeUndefined();
       expect(portioning?.navigation?.submitLabel?.en).toBe('Complete portioning');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
-      expect(portioning?.navigation?.milestoneAction?.actions).toEqual([
-        'RECONCILE_RESERVATIONS',
+      expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([
+        'RECONCILE_RESERVATIONS'
+      ]);
+      expect(portioning?.navigation?.milestoneAction?.backgroundActions).toEqual([
         'CREATE_PDF',
         'SEND_EMAIL'
       ]);
       expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.validationScope).toBe('throughCurrentStep');
-      expect(portioning?.navigation?.milestoneAction?.waitForBackgroundSaves).toBe(true);
+      expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('uploadsOnly');
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Background actions started');
@@ -221,6 +302,7 @@ describe('staging integrity dialogs and list legend config', () => {
       });
       expect(root?.submissionAfterSubmit?.preActions).toEqual(['CLOSE_RECORD']);
       expect(root?.submissionAfterSubmit?.backgroundActions).toBeUndefined();
+      expect(root?.submissionAfterSubmit?.waitForQueue).toBe('uploadsOnly');
       expect(root?.submissionAfterSubmit?.navigateTo).toBe('summary');
       expect(root?.submissionAfterSubmit?.feedbackDialog?.title?.en).toBe('Meal production closed');
       expect(root?.submissionAfterSubmit?.feedbackDialog?.showCancel).toBe(false);
@@ -265,6 +347,18 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(entireDishEffect?.type).toBe('createRecord');
       expect(entireDishEffect?.forEachLineItem?.groupId).toBe('MP_MEALS_REQUEST');
       expect(entireDishEffect?.forEachLineItem?.subGroupPath).toEqual(['MP_TYPE_LI']);
+      expect(entireDishEffect?.values?.DIETARY_APPLICABILITY).toEqual(
+        expect.objectContaining({
+          op: 'lookupSetIntersection',
+          collectionPath: 'row.MP_INGREDIENTS_LI',
+          itemFieldId: 'ING',
+          lookupFormKey: 'Config: Ingredients Management',
+          lookupKeyFieldId: 'INGREDIENT_NAME',
+          lookupValueFieldId: 'DIETARY_APPLICABILITY'
+        })
+      );
+      const partialDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedLeftovers');
+      expect(partialDishEffect?.values?.DIETARY_APPLICABILITY).toBe('{{row.LEFTOVER_DIETARY_APPLICABILITY}}');
     };
 
     assertMainHomeDialog(cfg.form);

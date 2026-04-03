@@ -1517,6 +1517,23 @@ components:
           description: |
             Optional compact headline layouts for `compactRows` renderers.
             The first matching rule wins and renders the first line of each row.
+        compactDetailRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompactRowRuleConfig'
+          description: |
+            Optional compact detail layouts for `compactRows` renderers.
+            The first matching rule wins and renders a secondary summary line below the headline
+            and above the compact sentence controls. Parts may include inline datasource summaries
+            such as `type: "sourceListSummary"`.
+        emptyStateMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional empty-state copy for datasource-backed compact renderers such as
+            `presentation: "sourceFirstAllocations"`.
+
+            Use this when datasource filtering can legitimately remove every compatible source row,
+            so the UI explains why the section is empty instead of rendering a blank space.
         persistRows:
           type: boolean
           description: |
@@ -1775,7 +1792,7 @@ components:
       properties:
         type:
           type: string
-          enum: [text, field, primary, meta]
+          enum: [text, field, primary, meta, sourceListSummary]
         text:
           oneOf:
             - type: string
@@ -1797,6 +1814,22 @@ components:
           type: string
           description: |
             Optional source-row field/path to render for this compact part when `sourceFieldId` is set.
+        summaryFieldId:
+          type: string
+          description: |
+            For `type: "sourceListSummary"`, the field/path to extract from each nested source entry
+            before joining them into one inline summary string.
+        separator:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional separator used by `type: "sourceListSummary"` when joining nested values.
+            Defaults to `", "`.
+        unique:
+          type: boolean
+          description: |
+            When true (default), `sourceListSummary` removes duplicate values before joining.
         suffix:
           oneOf:
             - type: string
@@ -2608,6 +2641,47 @@ components:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Optional localized label/title to show on the tooltip trigger and overlay header for fields using this data source.
+        backfill:
+          type: object
+          description: |
+            Optional form-backed datasource repair pass for legacy rows that are missing derived fields.
+
+            Use this only when the datasource row stores pointers back to a source record and the missing values can be
+            reconstructed from configured root/nested line-item scopes. The backfill runs only when one of
+            `whenMissingAnyFieldIds` is empty on the fetched row.
+          properties:
+            whenMissingAnyFieldIds:
+              type: array
+              items:
+                type: string
+            sourceFormKeyFieldId:
+              type: string
+            sourceRecordIdFieldId:
+              type: string
+            sourceRowIdFieldId:
+              type: string
+            scopes:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  groupId:
+                    type: string
+                  parentScopeId:
+                    type: string
+                  matchBySourceRowId:
+                    type: boolean
+                  rowFilter:
+                    $ref: '#/components/schemas/StepRowFilterConfig'
+                  fallbackMatch:
+                    type: string
+                    enum: [first]
+                required: [id, groupId]
+            values:
+              type: object
+              additionalProperties: true
       required: [id]
       example:
         id: recipes
@@ -3279,7 +3353,7 @@ components:
 
     StepMilestoneActionConfig:
       type: object
-      required: [type, actions]
+      required: [type]
       description: |
         Generic milestone action for guided steps. Use this when a non-final step must run
         configured follow-up actions (for example PDF/email generation) before the user moves on.
@@ -3289,12 +3363,24 @@ components:
         type:
           type: string
           enum: [followupBatch]
+        preActions:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: Blocking follow-up action ids to trigger after the current form snapshot is saved.
+        backgroundActions:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: Non-blocking follow-up action ids to trigger after blocking milestone work succeeds.
         actions:
           type: array
           minItems: 1
           items:
             type: string
-          description: Follow-up action ids to trigger for the current record.
+          description: Legacy alias for `backgroundActions` when no explicit `preActions` / `backgroundActions` are configured.
         ensureRecordId:
           type: boolean
           description: When true, ensure a persisted draft record id exists before triggering the action batch. Default true.
@@ -3307,9 +3393,17 @@ components:
           description: |
             Validation scope to enforce before the milestone action starts.
             `throughCurrentStep` validates all visible guided steps from the beginning through the active step.
+        waitForQueue:
+          type: string
+          enum: [all, uploadsOnly, none]
+          description: |
+            Which client queues must settle before the milestone action starts.
+            - `all`: wait for uploads and autosave
+            - `uploadsOnly`: wait only for uploads
+            - `none`: do not wait for either queue
         waitForBackgroundSaves:
           type: boolean
-          description: When true, wait for in-flight uploads/autosaves to settle before the milestone action starts. Default false.
+          description: Legacy alias for `waitForQueue: "all"`.
         advanceAfterStart:
           type: boolean
           description: When true, automatically advance to the next guided step after the action starts successfully. Default true.
@@ -3338,6 +3432,14 @@ components:
           description: |
             Follow-up actions that may continue after the user has already been redirected.
             Typical example: `["CREATE_PDF", "SEND_EMAIL"]`.
+        waitForQueue:
+          type: string
+          enum: [all, uploadsOnly, none]
+          description: |
+            Which client queues must settle before final submit starts.
+            - `all`: wait for uploads and autosave
+            - `uploadsOnly`: wait only for uploads
+            - `none`: do not wait for either queue
         navigateTo:
           type: string
           enum: [auto, form, summary, list]
@@ -3469,14 +3571,27 @@ components:
           enum: [text, list]
         listDelimiter:
           type: string
+        unique:
+          type: boolean
+          description: |
+            When true (default), duplicate values are removed before rendering list output.
       additionalProperties: false
 
     RowFlowOutputSegmentConfig:
       type: object
       properties:
+        type:
+          type: string
+          enum: [field, text]
+          description: |
+            - field: resolve `fieldRef` against the current row or a named reference (default)
+            - text: render a static localized text segment from `text`
         fieldRef:
           type: string
           description: Parent field id or reference field (e.g., "childRef.RECIPE").
+        text:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Static localized text segment when `type: "text"`.
         label:
           $ref: '#/components/schemas/LocalizedString'
         showWhen:
@@ -3486,6 +3601,17 @@ components:
         renderAs:
           type: string
           enum: [value, control]
+        controlStyle:
+          type: string
+          enum: [default, compact]
+          description: |
+            When `renderAs: "control"`, render the control in the default field layout or as a compact inline control.
+        minWidth:
+          type: number
+        maxWidth:
+          type: number
+        paddingChars:
+          type: number
         editAction:
           type: string
           description: Action id to render as an edit icon next to this segment.
@@ -3494,7 +3620,12 @@ components:
           items:
             type: string
           description: Action ids to render as icons next to this segment (renders alongside editAction when provided).
-      required: [fieldRef]
+      anyOf:
+        - required: [fieldRef]
+        - properties:
+            type:
+              const: text
+          required: [type, text]
       additionalProperties: false
 
     RowFlowPromptInputConfig:
