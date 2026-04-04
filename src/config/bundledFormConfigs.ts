@@ -7755,10 +7755,12 @@ export const BUNDLED_FORM_CONFIGS = [
         "nl": "Inventarisreserveringslogboek"
       },
       "listViewMetaColumns": [
-        "createdAt",
-        "updatedAt",
-        "status"
+        "updatedAt"
       ],
+      "listViewDefaultSort": {
+        "fieldId": "updatedAt",
+        "direction": "desc"
+      },
       "listViewPageSize": 25,
       "listViewPaginationControlsEnabled": true,
       "listViewHeaderSortEnabled": true,
@@ -7783,7 +7785,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Reservation ID",
         "required": true,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -7797,7 +7799,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Resource form key",
         "required": true,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -7811,7 +7813,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Resource record ID",
         "required": true,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -7839,7 +7841,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Resource kind",
         "required": false,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -7934,7 +7936,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": true,
         "readOnly": true,
         "defaultValue": "active",
-        "listView": true,
+        "listView": false,
         "options": [
           "active",
           "released",
@@ -7960,7 +7962,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Source form key",
         "required": true,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -7974,7 +7976,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qNl": "Source record ID",
         "required": true,
         "readOnly": true,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -8072,14 +8074,16 @@ export const BUNDLED_FORM_CONFIGS = [
         "fr": "Inventaire des restes",
         "nl": "Restinventaris"
       },
-      "listViewMetaColumns": [
-        "createdAt",
-        "updatedAt",
-        "status"
-      ],
+      "listViewMetaColumns": [],
       "listViewDefaultSort": {
         "fieldId": "LEFTOVER_EXP_DATE",
         "direction": "asc"
+      },
+      "listViewDefaultWhen": {
+        "fieldId": "LEFTOVER_STATUS",
+        "equals": [
+          "available"
+        ]
       },
       "listViewPageSize": 25,
       "listViewPaginationControlsEnabled": true,
@@ -8215,7 +8219,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Type de repas",
         "qNl": "Type maaltijd",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -8228,7 +8232,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Recipe",
         "qNl": "Recipe",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -8291,7 +8295,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Ingrédient",
         "qNl": "Ingrediënt",
         "required": false,
-        "listView": true,
+        "listView": false,
         "ui": {
           "control": "select"
         },
@@ -8429,7 +8433,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Quantité",
         "qNl": "Hoeveelheid",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -8470,7 +8474,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Unité",
         "qNl": "Eenheid",
         "required": false,
-        "listView": true,
+        "listView": false,
         "ui": {
           "control": "select"
         },
@@ -8522,7 +8526,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "qFr": "Portions",
         "qNl": "Portions",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -8972,7 +8976,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "qFr": "Type de repas",
           "qNl": "Type maaltijd",
           "required": false,
-          "listView": true,
+          "listView": false,
           "options": [],
           "optionsFr": [],
           "optionsNl": [],
@@ -8985,7 +8989,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "qFr": "Recipe",
           "qNl": "Recipe",
           "required": false,
-          "listView": true,
+          "listView": false,
           "options": [],
           "optionsFr": [],
           "optionsNl": [],
@@ -9048,7 +9052,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "qFr": "Ingrédient",
           "qNl": "Ingrediënt",
           "required": false,
-          "listView": true,
+          "listView": false,
           "ui": {
             "control": "select"
           },
@@ -10468,19 +10472,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "showItemPill": false,
                     "addButtonPlacement": "hidden",
                     "saveDisabledRows": true
-                  },
-                  "totals": [
-                    {
-                      "type": "sum",
-                      "fieldId": "ORD_QTY",
-                      "label": {
-                        "en": "Total ordered",
-                        "fr": "Total commandé",
-                        "nl": "Totaal besteld"
-                      },
-                      "decimalPlaces": 0
-                    }
-                  ]
+                  }
                 },
                 "dataSourceRows": [
                   {
@@ -11138,7 +11130,6 @@ export const BUNDLED_FORM_CONFIGS = [
                       "mode": "default",
                       "persistRows": false,
                       "hideRemoveColumn": true,
-                      "maxVisibleRows": 5,
                       "defaultCollapsed": false,
                       "showItemPill": false,
                       "addButtonPlacement": "hidden",
@@ -11586,20 +11577,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
-                "groupOverride": {
-                  "totals": [
-                    {
-                      "type": "sum",
-                      "fieldId": "ORD_QTY",
-                      "label": {
-                        "en": "Total ordered",
-                        "fr": "Total commandé",
-                        "nl": "Totaal besteld"
-                      },
-                      "decimalPlaces": 0
-                    }
-                  ]
-                },
+                "groupOverride": {},
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {
@@ -15374,7 +15352,7 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "NEXT_7_DAYS_BTN",
         "type": "BUTTON",
-        "qEn": "Today and next 7 days",
+        "qEn": "Next 7 days",
         "qFr": "Aujourd'hui et les 7 prochains jours",
         "qNl": "Vandaag en de volgende 7 dagen",
         "required": false,
@@ -15390,7 +15368,7 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "target": "overlay",
           "title": {
-            "en": "Today and next 7 days activities",
+            "en": "Next 7 days activities",
             "fr": "Activites d'aujourd'hui et des 7 prochains jours",
             "nl": "Activiteiten van vandaag en de volgende 7 dagen"
           },
@@ -18405,7 +18383,7 @@ export const BUNDLED_FORM_CONFIGS = [
         {
           "id": "NEXT_7_DAYS_BTN",
           "type": "BUTTON",
-          "qEn": "Today and next 7 days",
+          "qEn": "Next 7 days",
           "qFr": "Aujourd'hui et les 7 prochains jours",
           "qNl": "Vandaag en de volgende 7 dagen",
           "required": false,
@@ -18421,7 +18399,7 @@ export const BUNDLED_FORM_CONFIGS = [
             ],
             "target": "overlay",
             "title": {
-              "en": "Today and next 7 days activities",
+              "en": "Next 7 days activities",
               "fr": "Activites d'aujourd'hui et des 7 prochains jours",
               "nl": "Activiteiten van vandaag en de volgende 7 dagen"
             },
@@ -19299,19 +19277,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "showItemPill": false,
                     "addButtonPlacement": "hidden",
                     "saveDisabledRows": true
-                  },
-                  "totals": [
-                    {
-                      "type": "sum",
-                      "fieldId": "ORD_QTY",
-                      "label": {
-                        "en": "Total ordered",
-                        "fr": "Total commandé",
-                        "nl": "Totaal besteld"
-                      },
-                      "decimalPlaces": 0
-                    }
-                  ]
+                  }
                 },
                 "dataSourceRows": [
                   {
@@ -19943,7 +19909,6 @@ export const BUNDLED_FORM_CONFIGS = [
                       "mode": "default",
                       "persistRows": false,
                       "hideRemoveColumn": true,
-                      "maxVisibleRows": 5,
                       "defaultCollapsed": false,
                       "showItemPill": false,
                       "addButtonPlacement": "hidden",
@@ -20391,20 +20356,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
-                "groupOverride": {
-                  "totals": [
-                    {
-                      "type": "sum",
-                      "fieldId": "ORD_QTY",
-                      "label": {
-                        "en": "Total ordered",
-                        "fr": "Total commandé",
-                        "nl": "Totaal besteld"
-                      },
-                      "decimalPlaces": 0
-                    }
-                  ]
-                },
+                "groupOverride": {},
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {

@@ -5353,8 +5353,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               }}
                               style={{
                                 flex: '0 0 auto',
-                                minWidth: '8.25ch',
-                                paddingInline: 16,
+                                minWidth: '12.5ch',
+                                paddingInline: 20,
                                 whiteSpace: 'nowrap'
                               }}
                             >
@@ -5640,11 +5640,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             })
                                           }
                                           style={{
-                                            width: 28,
-                                            height: 28,
+                                            width: 36,
+                                            height: 36,
                                             margin: 0,
                                             accentColor: 'var(--accent)',
-                                            transform: 'scale(1.18)',
+                                            transform: 'scale(1.36)',
                                             transformOrigin: 'center'
                                           }}
                                         />
@@ -11184,11 +11184,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                 })
                                               }
                                               style={{
-                                                width: 28,
-                                                height: 28,
+                                                width: 36,
+                                                height: 36,
                                                 margin: 0,
                                                 accentColor: 'var(--accent)',
-                                                transform: 'scale(1.18)',
+                                                transform: 'scale(1.36)',
                                                 transformOrigin: 'center'
                                               }}
                                             />
@@ -11414,8 +11414,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                             }
                                                             style={{
                                                               flex: '0 0 auto',
-                                                              minWidth: '8.25ch',
-                                                              paddingInline: 16,
+                                                              minWidth: '12.5ch',
+                                                              paddingInline: 20,
                                                               whiteSpace: 'nowrap'
                                                             }}
                                                           >
@@ -14141,11 +14141,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                     handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
                                                   }}
                                                   style={{
-                                                    width: 32,
-                                                    height: 32,
+                                                    width: 36,
+                                                    height: 36,
                                                     margin: 0,
                                                     flex: '0 0 auto',
-                                                    accentColor: 'var(--accent)'
+                                                    accentColor: 'var(--accent)',
+                                                    transform: 'scale(1.2)',
+                                                    transformOrigin: 'center'
                                                   }}
                                                 />
                                               </label>
@@ -14210,11 +14212,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                         );
                                                       }}
                                                       style={{
-                                                        width: 32,
-                                                        height: 32,
+                                                        width: 36,
+                                                        height: 36,
                                                         margin: 0,
                                                         flex: '0 0 auto',
-                                                        accentColor: 'var(--accent)'
+                                                        accentColor: 'var(--accent)',
+                                                        transform: 'scale(1.2)',
+                                                        transformOrigin: 'center'
                                                       }}
                                                     />
                                                   </label>

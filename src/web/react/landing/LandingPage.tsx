@@ -4,6 +4,7 @@ import packageJson from '../../../../package.json';
 import { BUNDLED_FORM_CONFIGS } from '../../../config/bundledFormConfigs';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
 import { AppHeader } from '../components/app/AppHeader';
+import { BlockingOverlay } from '../features/overlays/BlockingOverlay';
 import { appendAdminQuery, buildBundledLandingCatalog, isTruthyParam, pickLandingLogoUrl, resolveLandingHeaderTitle } from './model';
 
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
@@ -78,6 +79,7 @@ const LandingPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FormCatalogItem[]>(() => bundledItems);
   const [isMobile, setIsMobile] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const envTag = useMemo(() => resolveEnvTag(), []);
   const headerTitle = useMemo(() => resolveLandingHeaderTitle(typeof document !== 'undefined' ? document.title : ''), []);
@@ -143,6 +145,11 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="page">
+      <BlockingOverlay
+        open={!!pendingNavigation}
+        title={pendingNavigation?.title || 'Please wait'}
+        message={pendingNavigation?.message || 'Opening the selected form...'}
+      />
       <AppHeader
         title={headerTitle}
         titleRight={headerRight}
@@ -186,7 +193,16 @@ const LandingPage: React.FC = () => {
                   onClick={event => {
                     event.preventDefault();
                     logEvent('catalog.navigate', { formKey: item.formKey, targetUrl });
-                    navigateToTopLevel(targetUrl);
+                    setPendingNavigation({
+                      targetUrl,
+                      title: 'Please wait',
+                      message: 'Opening the selected form...'
+                    });
+                    globalThis.requestAnimationFrame?.(() => {
+                      globalThis.requestAnimationFrame?.(() => {
+                        navigateToTopLevel(targetUrl);
+                      });
+                    });
                   }}
                 >
                   <div style={{ fontWeight: 600 }}>{item.title}</div>

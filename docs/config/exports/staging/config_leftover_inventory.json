@@ -22,14 +22,16 @@
       "fr": "Inventaire des restes",
       "nl": "Restinventaris"
     },
-    "listViewMetaColumns": [
-      "createdAt",
-      "updatedAt",
-      "status"
-    ],
+    "listViewMetaColumns": [],
     "listViewDefaultSort": {
       "fieldId": "LEFTOVER_EXP_DATE",
       "direction": "asc"
+    },
+    "listViewDefaultWhen": {
+      "fieldId": "LEFTOVER_STATUS",
+      "equals": [
+        "available"
+      ]
     },
     "listViewPageSize": 25,
     "listViewPaginationControlsEnabled": true,
@@ -165,7 +167,7 @@
       "qFr": "Type de repas",
       "qNl": "Type maaltijd",
       "required": false,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -178,7 +180,7 @@
       "qFr": "Recipe",
       "qNl": "Recipe",
       "required": false,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -241,7 +243,7 @@
       "qFr": "Ingrédient",
       "qNl": "Ingrediënt",
       "required": false,
-      "listView": true,
+      "listView": false,
       "ui": {
         "control": "select"
       },
@@ -379,7 +381,7 @@
       "qFr": "Quantité",
       "qNl": "Hoeveelheid",
       "required": false,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -420,7 +422,7 @@
       "qFr": "Unité",
       "qNl": "Eenheid",
       "required": false,
-      "listView": true,
+      "listView": false,
       "ui": {
         "control": "select"
       },
@@ -472,7 +474,7 @@
       "qFr": "Portions",
       "qNl": "Portions",
       "required": false,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -922,7 +924,7 @@
         "qFr": "Type de repas",
         "qNl": "Type maaltijd",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -935,7 +937,7 @@
         "qFr": "Recipe",
         "qNl": "Recipe",
         "required": false,
-        "listView": true,
+        "listView": false,
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
@@ -998,7 +1000,7 @@
         "qFr": "Ingrédient",
         "qNl": "Ingrediënt",
         "required": false,
-        "listView": true,
+        "listView": false,
         "ui": {
           "control": "select"
         },

@@ -23,10 +23,12 @@
       "nl": "Inventarisreserveringslogboek"
     },
     "listViewMetaColumns": [
-      "createdAt",
-      "updatedAt",
-      "status"
+      "updatedAt"
     ],
+    "listViewDefaultSort": {
+      "fieldId": "updatedAt",
+      "direction": "desc"
+    },
     "listViewPageSize": 25,
     "listViewPaginationControlsEnabled": true,
     "listViewHeaderSortEnabled": true,
@@ -51,7 +53,7 @@
       "qNl": "Reservation ID",
       "required": true,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -65,7 +67,7 @@
       "qNl": "Resource form key",
       "required": true,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -79,7 +81,7 @@
       "qNl": "Resource record ID",
       "required": true,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -107,7 +109,7 @@
       "qNl": "Resource kind",
       "required": false,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -202,7 +204,7 @@
       "required": true,
       "readOnly": true,
       "defaultValue": "active",
-      "listView": true,
+      "listView": false,
       "options": [
         "active",
         "released",
@@ -228,7 +230,7 @@
       "qNl": "Source form key",
       "required": true,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
@@ -242,7 +244,7 @@
       "qNl": "Source record ID",
       "required": true,
       "readOnly": true,
-      "listView": true,
+      "listView": false,
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
