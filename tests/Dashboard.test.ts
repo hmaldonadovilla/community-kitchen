@@ -683,7 +683,7 @@ describe('Dashboard', () => {
             id: 'portioning',
             include: ['Q1'],
             navigation: {
-              submitLabel: { EN: 'Complete portioning' },
+              submitLabel: { EN: 'Finish portioning' },
               milestoneAction: {
                 type: 'followupBatch',
                 preActions: ['RECONCILE_RESERVATIONS'],
@@ -723,7 +723,7 @@ describe('Dashboard', () => {
     const dashboard = new Dashboard(mockSS as any);
     const forms = dashboard.getForms();
     const step = (forms[0].steps as any)?.items?.[0];
-    expect(step?.navigation?.submitLabel).toEqual({ en: 'Complete portioning' });
+    expect(step?.navigation?.submitLabel).toEqual({ en: 'Finish portioning' });
     expect(step?.navigation?.milestoneAction).toEqual({
       type: 'followupBatch',
       preActions: ['RECONCILE_RESERVATIONS'],

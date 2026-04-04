@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import packageJson from '../../../../package.json';
+import { BUNDLED_FORM_CONFIGS } from '../../../config/bundledFormConfigs';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
 import { AppHeader } from '../components/app/AppHeader';
-import { appendAdminQuery, isTruthyParam, pickLandingLogoUrl, resolveLandingHeaderTitle } from './model';
+import { appendAdminQuery, buildBundledLandingCatalog, isTruthyParam, pickLandingLogoUrl, resolveLandingHeaderTitle } from './model';
 
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 
@@ -72,9 +73,10 @@ const logEvent = (event: string, payload?: Record<string, unknown>): void => {
 };
 
 const LandingPage: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+  const bundledItems = useMemo(() => buildBundledLandingCatalog(BUNDLED_FORM_CONFIGS as any), []);
+  const [loading, setLoading] = useState(bundledItems.length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<FormCatalogItem[]>([]);
+  const [items, setItems] = useState<FormCatalogItem[]>(() => bundledItems);
   const [isMobile, setIsMobile] = useState(false);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const envTag = useMemo(() => resolveEnvTag(), []);
@@ -99,21 +101,27 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (!bundledItems.length) {
+      setLoading(true);
+    }
     setError(null);
-    logEvent('catalog.fetch.start', { adminEnabled });
+    logEvent('catalog.fetch.start', { adminEnabled, bundledCount: bundledItems.length });
     fetchFormCatalogApi()
       .then(response => {
         if (cancelled) return;
         const list = Array.isArray(response) ? response : [];
-        setItems(list);
-        logEvent('catalog.fetch.success', { count: list.length });
+        if (list.length) {
+          setItems(list);
+        }
+        logEvent('catalog.fetch.success', { count: list.length, replacedBundled: list.length > 0 });
       })
       .catch((err: any) => {
         if (cancelled) return;
         const message = (err?.message || err?.toString?.() || 'Failed to load forms.').toString();
-        setError(message);
-        logEvent('catalog.fetch.error', { message });
+        if (!bundledItems.length) {
+          setError(message);
+        }
+        logEvent('catalog.fetch.error', { message, usedBundledFallback: bundledItems.length > 0 });
       })
       .finally(() => {
         if (cancelled) return;
@@ -122,7 +130,7 @@ const LandingPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [adminEnabled]);
+  }, [adminEnabled, bundledItems]);
 
   const headerRight = useMemo(() => {
     if (!envTag) return null;

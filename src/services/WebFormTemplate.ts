@@ -1306,6 +1306,14 @@ export function buildWebFormHtml(
         border: 1px solid var(--accent);
         color: var(--accentText);
         box-shadow: none;
+        white-space: normal;
+        text-align: center;
+      }
+      .ck-bottom-submit .ck-bottom-label {
+        white-space: normal;
+        text-align: center;
+        line-height: 1.1;
+        max-inline-size: 12ch;
       }
       .ck-bottom-submit:disabled {
         opacity: 0.6;

@@ -44,7 +44,13 @@ export const resolveFieldLabel = (field: any, language: LangCode, fallback: stri
   }
 
   const key = (language || 'EN').toString().trim().toUpperCase();
-  if (key === 'FR') return field?.labelFr || field?.labelEn || fallback;
-  if (key === 'NL') return field?.labelNl || field?.labelEn || fallback;
-  return field?.labelEn || fallback;
+  const localizedQuestionKey = `q${key.charAt(0)}${key.slice(1).toLowerCase()}`;
+  const localizedLabelKey = `label${key.charAt(0)}${key.slice(1).toLowerCase()}`;
+  if (key === 'FR') {
+    return field?.labelFr || field?.qFr || field?.labelEn || field?.qEn || fallback;
+  }
+  if (key === 'NL') {
+    return field?.labelNl || field?.qNl || field?.labelEn || field?.qEn || fallback;
+  }
+  return field?.[localizedLabelKey] || field?.[localizedQuestionKey] || field?.labelEn || field?.qEn || fallback;
 };

@@ -11445,9 +11445,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "parts": [
                             {
                               "fieldId": "LEFTOVER_USAGE_MODE",
-                              "minWidth": 152,
-                              "maxWidth": 252,
-                              "paddingChars": 6
+                              "minWidth": 196,
+                              "maxWidth": 312,
+                              "paddingChars": 9
                             },
                             {
                               "fieldId": "LEFTOVER_USE_QTY",
@@ -12125,7 +12125,7 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "navigation": {
               "submitLabel": {
-                "en": "Complete portioning",
+                "en": "Finish portioning",
                 "fr": "Terminer le portionnement",
                 "nl": "Portionering afronden"
               },
@@ -20250,9 +20250,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "parts": [
                             {
                               "fieldId": "LEFTOVER_USAGE_MODE",
-                              "minWidth": 152,
-                              "maxWidth": 252,
-                              "paddingChars": 6
+                              "minWidth": 196,
+                              "maxWidth": 312,
+                              "paddingChars": 9
                             },
                             {
                               "fieldId": "LEFTOVER_USE_QTY",
@@ -20930,7 +20930,7 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "navigation": {
               "submitLabel": {
-                "en": "Complete portioning",
+                "en": "Finish portioning",
                 "fr": "Terminer le portionnement",
                 "nl": "Portionering afronden"
               },

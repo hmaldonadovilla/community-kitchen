@@ -13,6 +13,13 @@ describe('resolveFieldLabel', () => {
     expect(resolveFieldLabel(question, 'FR', 'fallback')).toBe('Montant');
     expect(resolveFieldLabel(question, 'NL', 'fallback')).toBe('Bedrag');
   });
+
+  test('falls back to qEn/qFr/qNl when labelEn/labelFr/labelNl are absent', () => {
+    const question = { qEn: 'Date', qFr: 'Date FR', qNl: 'Datum' };
+    expect(resolveFieldLabel(question, 'EN', 'fallback')).toBe('Date');
+    expect(resolveFieldLabel(question, 'FR', 'fallback')).toBe('Date FR');
+    expect(resolveFieldLabel(question, 'NL', 'fallback')).toBe('Datum');
+  });
 });
 
 describe('resolveLabel', () => {

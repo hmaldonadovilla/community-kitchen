@@ -1,4 +1,5 @@
 import type { FormCatalogItem } from '../api';
+import type { FormConfigExport } from '../../../types';
 
 export const LANDING_TITLE_FALLBACK = 'Community Kitchen';
 
@@ -43,4 +44,29 @@ export const pickLandingLogoUrl = (items: FormCatalogItem[]): string | undefined
 export const resolveLandingHeaderTitle = (documentTitle?: string | null): string => {
   const raw = (documentTitle || '').toString().trim();
   return raw || LANDING_TITLE_FALLBACK;
+};
+
+export const buildBundledLandingCatalog = (configs: FormConfigExport[]): FormCatalogItem[] => {
+  const items = (Array.isArray(configs) ? configs : [])
+    .map(config => {
+      const formKey = (config?.formKey || config?.form?.configSheet || config?.form?.title || '').toString().trim();
+      if (!formKey) return null;
+      const title = (config?.form?.title || formKey).toString().trim() || formKey;
+      const description = (config?.form?.description || '').toString().trim() || undefined;
+      const targetUrl =
+        (config?.form?.appUrl || config?.form?.formId || `?form=${encodeURIComponent(formKey)}`).toString().trim();
+      if (!targetUrl) return null;
+      const logoUrl = (config?.form?.appHeader?.logoUrl || '').toString().trim() || undefined;
+      return {
+        formKey,
+        title,
+        description,
+        targetUrl,
+        logoUrl
+      } satisfies FormCatalogItem;
+    })
+    .filter(Boolean) as FormCatalogItem[];
+
+  items.sort((a, b) => a.title.localeCompare(b.title));
+  return items;
 };

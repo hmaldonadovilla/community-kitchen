@@ -5351,6 +5351,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   }
                                 });
                               }}
+                              style={{
+                                flex: '0 0 auto',
+                                minWidth: '8.25ch',
+                                paddingInline: 16,
+                                whiteSpace: 'nowrap'
+                              }}
                             >
                               {option.label}
                             </button>
@@ -5616,10 +5622,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           justifyContent: 'center',
-                                          minHeight: 32,
-                                          minWidth: 32,
+                                          minHeight: 44,
+                                          minWidth: 44,
                                           flex: '0 0 auto',
-                                          paddingTop: 2
+                                          paddingTop: 0
                                         }}
                                       >
                                         <input
@@ -5634,10 +5640,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             })
                                           }
                                           style={{
-                                            width: 24,
-                                            height: 24,
+                                            width: 28,
+                                            height: 28,
                                             margin: 0,
-                                            accentColor: 'var(--accent)'
+                                            accentColor: 'var(--accent)',
+                                            transform: 'scale(1.18)',
+                                            transformOrigin: 'center'
                                           }}
                                         />
                                       </label>
@@ -11157,8 +11165,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                minHeight: 32,
-                                                minWidth: 32,
+                                                minHeight: 44,
+                                                minWidth: 44,
                                                 paddingRight: 0,
                                                 flex: '0 0 auto',
                                                 paddingTop: 2
@@ -11173,17 +11181,19 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                     parentRow: row,
                                                     sourceRow,
                                                     patch: buildSelectionTogglePatch(event.target.checked)
-                                                  })
-                                                }
-                                                style={{
-                                                  width: 32,
-                                                  height: 32,
-                                                  margin: 0,
-                                                  accentColor: 'var(--accent)'
-                                                }}
-                                              />
-                                            </label>
-                                          ) : null}
+                                                })
+                                              }
+                                              style={{
+                                                width: 28,
+                                                height: 28,
+                                                margin: 0,
+                                                accentColor: 'var(--accent)',
+                                                transform: 'scale(1.18)',
+                                                transformOrigin: 'center'
+                                              }}
+                                            />
+                                          </label>
+                                        ) : null}
                                           <div
                                             style={{
                                               fontSize: 'calc(var(--ck-font-control) * 1.16)',
@@ -11404,7 +11414,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                             }
                                                             style={{
                                                               flex: '0 0 auto',
-                                                              minWidth: 'unset',
+                                                              minWidth: '8.25ch',
+                                                              paddingInline: 16,
                                                               whiteSpace: 'nowrap'
                                                             }}
                                                           >
