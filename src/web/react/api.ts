@@ -754,7 +754,7 @@ export interface FormCatalogItem {
   formKey: string;
   title: string;
   description?: string;
-  targetUrl: string;
+  targetUrl?: string;
   logoUrl?: string;
 }
 

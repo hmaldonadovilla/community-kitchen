@@ -78,6 +78,7 @@ const LandingPage: React.FC = () => {
   const [loading, setLoading] = useState(bundledItems.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FormCatalogItem[]>(() => bundledItems);
+  const [catalogReady, setCatalogReady] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
@@ -107,6 +108,7 @@ const LandingPage: React.FC = () => {
       setLoading(true);
     }
     setError(null);
+    setCatalogReady(false);
     logEvent('catalog.fetch.start', { adminEnabled, bundledCount: bundledItems.length });
     fetchFormCatalogApi()
       .then(response => {
@@ -114,15 +116,14 @@ const LandingPage: React.FC = () => {
         const list = Array.isArray(response) ? response : [];
         if (list.length) {
           setItems(list);
+          setCatalogReady(true);
         }
         logEvent('catalog.fetch.success', { count: list.length, replacedBundled: list.length > 0 });
       })
       .catch((err: any) => {
         if (cancelled) return;
         const message = (err?.message || err?.toString?.() || 'Failed to load forms.').toString();
-        if (!bundledItems.length) {
-          setError(message);
-        }
+        setError(message);
         logEvent('catalog.fetch.error', { message, usedBundledFallback: bundledItems.length > 0 });
       })
       .finally(() => {
@@ -182,15 +183,29 @@ const LandingPage: React.FC = () => {
         {!loading && !error && items.length ? (
           <div style={{ display: 'grid', gap: 10 }}>
             {items.map(item => {
-              const targetUrl = appendAdminQuery(item.targetUrl || `?form=${encodeURIComponent(item.formKey)}`, adminEnabled);
+              const rawTargetUrl = (item.targetUrl || '').toString().trim();
+              const targetUrl = rawTargetUrl ? appendAdminQuery(rawTargetUrl, adminEnabled) : '';
+              const isReady = catalogReady && !!targetUrl;
               return (
                 <a
                   key={item.formKey}
-                  href={targetUrl}
-                  target="_top"
+                  href={isReady ? targetUrl : undefined}
+                  target={isReady ? '_top' : undefined}
+                  aria-disabled={!isReady}
                   className="card"
-                  style={{ textDecoration: 'none', color: 'var(--text)', display: 'block' }}
+                  style={{
+                    textDecoration: 'none',
+                    color: 'var(--text)',
+                    display: 'block',
+                    opacity: isReady ? 1 : 0.72,
+                    cursor: isReady ? 'pointer' : 'progress'
+                  }}
                   onClick={event => {
+                    if (!isReady) {
+                      event.preventDefault();
+                      logEvent('catalog.navigate.blocked', { formKey: item.formKey, reason: 'targetUrlNotReady' });
+                      return;
+                    }
                     event.preventDefault();
                     logEvent('catalog.navigate', { formKey: item.formKey, targetUrl });
                     setPendingNavigation({
@@ -209,6 +224,11 @@ const LandingPage: React.FC = () => {
                   {item.description ? (
                     <div className="muted" style={{ marginTop: 4 }}>
                       {item.description}
+                    </div>
+                  ) : null}
+                  {!isReady ? (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {catalogReady ? 'Destination unavailable.' : 'Loading destination...'}
                     </div>
                   ) : null}
                 </a>

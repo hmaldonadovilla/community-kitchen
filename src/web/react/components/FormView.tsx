@@ -13347,7 +13347,16 @@ const FormView: React.FC<FormViewProps> = ({
         });
       })();
 
-      const stepLineCfg: any = { ...(lineCfg as any), fields: orderedFields, subGroups: filteredSubGroups };
+      const stepHasSourceFirstAllocations = hasStepDataSourceRows
+        && (((target as any).dataSourceRows as any[]) || []).some(
+          (cfg: any) => ((cfg?.presentation || '').toString().trim().toLowerCase() === 'sourcefirstallocations')
+        );
+      const stepLineCfg: any = {
+        ...(lineCfg as any),
+        ...(stepHasSourceFirstAllocations ? { totals: [] } : {}),
+        fields: orderedFields,
+        subGroups: filteredSubGroups
+      };
       // Safety: when a row filter is applied for this step, hide "Add line" controls to avoid creating invisible rows.
       if (rowFilter) {
         stepLineCfg.ui = { ...(stepLineCfg.ui || {}), addButtonPlacement: 'hidden' };

@@ -53,9 +53,7 @@ export const buildBundledLandingCatalog = (configs: FormConfigExport[]): FormCat
       if (!formKey) return null;
       const title = (config?.form?.title || formKey).toString().trim() || formKey;
       const description = (config?.form?.description || '').toString().trim() || undefined;
-      const targetUrl =
-        (config?.form?.appUrl || config?.form?.formId || `?form=${encodeURIComponent(formKey)}`).toString().trim();
-      if (!targetUrl) return null;
+      const targetUrl = (config?.form?.appUrl || '').toString().trim() || undefined;
       const logoUrl = (config?.form?.appHeader?.logoUrl || '').toString().trim() || undefined;
       return {
         formKey,

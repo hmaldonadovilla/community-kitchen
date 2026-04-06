@@ -3838,6 +3838,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               .filter((field): field is (typeof tableFieldsAll)[number] => Boolean(field))
           : [];
         const tableFieldIdSet = new Set(tableFields.map(field => field.id));
+        const isSourceFirstAllocations = (() => {
+          if (!rowFlowEnabled) return false;
+          const dataSourceRowsCfg = Array.isArray((q.lineItemConfig as any)?.dataSourceRows)
+            ? ((q.lineItemConfig as any).dataSourceRows as any[])
+            : [];
+          return dataSourceRowsCfg.some(cfg => ((cfg?.presentation || '').toString().trim().toLowerCase() === 'sourcefirstallocations'));
+        })();
         const tableTotals =
           isTableMode && !rowFlowEnabled
             ? groupTotals.filter(total => {
@@ -3845,7 +3852,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 return key ? tableFieldIdSet.has(key) : false;
               })
             : [];
-        const toolbarTotals = isTableMode && !rowFlowEnabled ? [] : groupTotals;
+        const toolbarTotals = isTableMode && !rowFlowEnabled ? [] : isSourceFirstAllocations ? [] : groupTotals;
         const genericNonMatchWarnings = (() => {
           const seen = new Set<string>();
           messageFieldsAll.forEach(field => {
@@ -5353,8 +5360,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               }}
                               style={{
                                 flex: '0 0 auto',
-                                minWidth: '12.5ch',
-                                paddingInline: 20,
+                                minWidth: '8.25ch',
+                                paddingInline: 16,
                                 whiteSpace: 'nowrap'
                               }}
                             >
@@ -11414,8 +11421,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                             }
                                                             style={{
                                                               flex: '0 0 auto',
-                                                              minWidth: '12.5ch',
-                                                              paddingInline: 20,
+                                                              minWidth: '8.25ch',
+                                                              paddingInline: 16,
                                                               whiteSpace: 'nowrap'
                                                             }}
                                                           >
@@ -14509,9 +14516,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 ) : null}
                 <div className="line-item-toolbar-actions">
                   {showAddBottom ? renderAddButton() : null}
-                  {groupTotals.length ? (
+                  {toolbarTotals.length ? (
                     <div className="line-item-totals">
-                      {groupTotals.map(t => (
+                      {toolbarTotals.map(t => (
                         <span key={t.key} className="pill">
                           {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
                         </span>

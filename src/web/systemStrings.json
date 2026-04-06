@@ -104,6 +104,11 @@
       "en": "Please wait while we save your changes...",
       "fr": "Veuillez patienter pendant que nous enregistrons vos modifications...",
       "nl": "Wacht even terwijl we je wijzigingen opslaan..."
+    },
+    "waitForms": {
+      "en": "Please wait while we open the forms page...",
+      "fr": "Veuillez patienter pendant que nous ouvrons la page des formulaires...",
+      "nl": "Wacht even terwijl we de formulierenpagina openen..."
     }
   },
   "actions": {

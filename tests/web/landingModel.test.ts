@@ -73,4 +73,32 @@ describe('landing model helpers', () => {
       }
     ]);
   });
+
+  test('buildBundledLandingCatalog leaves targetUrl empty when only runtime catalog can resolve it', () => {
+    const items = buildBundledLandingCatalog([
+      {
+        formKey: 'Config: Inventory',
+        generatedAt: '2026-04-04T00:00:00.000Z',
+        form: {
+          title: 'Inventory',
+          configSheet: 'Config: Inventory',
+          formId: 'ignored-runtime-only-id'
+        } as any,
+        questions: [],
+        dedupRules: [],
+        definition: {} as any,
+        validationErrors: []
+      }
+    ] as any);
+
+    expect(items).toEqual([
+      {
+        formKey: 'Config: Inventory',
+        title: 'Inventory',
+        description: undefined,
+        targetUrl: undefined,
+        logoUrl: undefined
+      }
+    ]);
+  });
 });

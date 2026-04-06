@@ -9929,11 +9929,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       onClick: () => {
         const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
         logEvent('ui.header.drawer.landing.navigate', { targetUrl });
-        navigateToTopLevel(targetUrl);
+        const seq = navigateHomeBusy.lock({
+          title: tSystem('navigation.waitTitle', language, 'Please wait'),
+          message: tSystem('navigation.waitForms', language, 'Please wait while we open the forms page...')
+        });
+        globalThis.requestAnimationFrame?.(() => {
+          globalThis.requestAnimationFrame?.(() => {
+            navigateToTopLevel(targetUrl);
+            globalThis.setTimeout?.(() => {
+              navigateHomeBusy.unlock(seq, { targetUrl });
+            }, 1500);
+          });
+        });
       }
     });
     return actions;
-  }, [hasAnalyticsPageWidgets, headerAdminEnabled, headerServiceUrl, language, openAnalyticsOverlay]);
+  }, [hasAnalyticsPageWidgets, headerAdminEnabled, headerServiceUrl, language, navigateHomeBusy, openAnalyticsOverlay, logEvent]);
 
   const dedupDialogConflict = useMemo(() => {
     const conflict = (dedupConflict || dedupNotice) as any;
