@@ -442,17 +442,16 @@ export class WebFormService {
   }
 
   private buildBundledDefinition(bundled: FormConfigExport): WebFormDefinition {
+    const activeQuestions = this.filterActiveQuestions(bundled.questions || []);
+    const dedupRules = bundled.dedupRules || [];
     const embedded = this.resolveEmbeddedBundledDefinition(bundled);
-    if (embedded) {
+    if (!activeQuestions.length && embedded) {
       debugLog('definition.bundle.prebuilt.hit', {
         formKey: this.resolveBundledDefinitionKey(bundled),
         questions: embedded.questions?.length || 0
       });
       return embedded;
     }
-
-    const activeQuestions = this.filterActiveQuestions(bundled.questions || []);
-    const dedupRules = bundled.dedupRules || [];
     const cacheKey = this.buildBundledDefinitionCacheKey(bundled, activeQuestions, dedupRules);
     const startedAt = Date.now();
     try {
@@ -470,6 +469,9 @@ export class WebFormService {
     }
 
     const definition = this.definitionBuilder.buildDefinitionFromConfig(bundled.form, activeQuestions, dedupRules);
+    if (embedded?.steps && typeof embedded.steps === 'object') {
+      definition.steps = this.mergeBundledSteps(definition.steps, embedded.steps);
+    }
     try {
       this.cacheManager.cachePut(cacheKey, definition, 60 * 60 * 24);
       debugLog('definition.bundle.cache.miss', {

@@ -7,6 +7,7 @@ import {
   optionKey,
   optionKeysWithAliases,
   optionParentAliases,
+  toOptionSet,
   toDependencyValue
 } from '../../../src/web/core/options';
 import { fetchDataSource } from '../../../src/web/data/dataSources';
@@ -99,6 +100,26 @@ describe('core options helpers', () => {
         en: ['Apple', 'Banana', 'banana', 'carrot'],
         fr: ['Apple', 'Banana', 'banana', 'carrot'],
         nl: ['Apple', 'Banana', 'banana', 'carrot']
+      });
+    });
+  });
+
+  describe('toOptionSet', () => {
+    it('derives a base option set from optionFilter maps when explicit options are missing', () => {
+      const result = toOptionSet({
+        optionFilter: {
+          optionMap: {
+            Tomato: ['kg', 'gr'],
+            Cheese: ['kg', 'piece'],
+            '*': ['Tbsp']
+          }
+        }
+      });
+
+      expect(result).toEqual({
+        en: ['kg', 'gr', 'piece', 'Tbsp'],
+        fr: ['kg', 'gr', 'piece', 'Tbsp'],
+        nl: ['kg', 'gr', 'piece', 'Tbsp']
       });
     });
   });

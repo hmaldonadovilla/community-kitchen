@@ -6,12 +6,14 @@ const path = require('node:path');
 
 const LINTABLE_EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.ts', '.tsx']);
 const DEFAULT_LINT_BASE_REF = '7228fc2c7f1f550fa36bf2d7368779ba1adf48d6';
+const PROCESS_MAX_BUFFER = 16 * 1024 * 1024;
 
 function runGit(args, options = {}) {
   try {
     return execFileSync('git', args, {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: PROCESS_MAX_BUFFER
     }).trimEnd();
   } catch (error) {
     if (options.optional) {
@@ -169,7 +171,8 @@ function main() {
     ['eslint', '--format', 'json', '--no-warn-ignored', ...changedLintableFiles],
     {
       encoding: 'utf8',
-      shell: false
+      shell: false,
+      maxBuffer: PROCESS_MAX_BUFFER
     }
   );
 

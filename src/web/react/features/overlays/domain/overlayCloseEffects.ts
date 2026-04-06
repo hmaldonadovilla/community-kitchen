@@ -1,10 +1,20 @@
 import type { FieldValue, VisibilityContext } from '../../../../types';
+import type { WebFormDefinition } from '../../../../../types';
 import type { LineItemState } from '../../../types';
 import type { RowFlowActionEffect } from '../../../../../types';
 import { matchesWhenClause } from '../../../../rules/visibility';
-import { buildSubgroupKey } from '../../../app/lineItems';
+import { buildSubgroupKey, cascadeRemoveLineItemRows } from '../../../app/lineItems';
+import { applyValueMapsToForm } from '../../../app/valueMaps';
+import { markRecipeIngredientsDirtyForGroupKey } from '../../../app/recipeIngredientsDirty';
 
 export type OverlayCloseDeletePlan = Array<{ groupKey: string; rowIds: string[] }>;
+export type OverlayCloseDeleteState = {
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  removedSubgroupKeys: string[];
+  removed: Array<{ groupId: string; rowId: string }>;
+  dirtyGroups: Array<{ groupId: string; parentGroupKey?: string; parentRowId?: string }>;
+};
 
 const normalizeId = (raw: unknown): string => {
   if (raw === undefined || raw === null) return '';
@@ -106,3 +116,71 @@ export const resolveOverlayCloseDeletePlan = (args: {
   return plan;
 };
 
+export const resolveOverlayCloseDeleteScope = (args: {
+  overlayGroupId: string;
+  overlayRowId?: string;
+  detailSelectionGroupId?: string;
+  detailSelectionRowId?: string;
+}): { overlayGroupId: string; overlayRowId?: string } => {
+  const overlayGroupId = normalizeId(args.overlayGroupId);
+  const overlayRowId = normalizeId(args.overlayRowId);
+  const detailSelectionGroupId = normalizeId(args.detailSelectionGroupId);
+  const detailSelectionRowId = normalizeId(args.detailSelectionRowId);
+  const detailWithinOverlay =
+    !!overlayGroupId &&
+    !!detailSelectionGroupId &&
+    !!detailSelectionRowId &&
+    (detailSelectionGroupId === overlayGroupId || detailSelectionGroupId.startsWith(`${overlayGroupId}::`));
+  if (detailWithinOverlay) {
+    return { overlayGroupId: detailSelectionGroupId, overlayRowId: detailSelectionRowId };
+  }
+  return { overlayGroupId, overlayRowId: overlayRowId || undefined };
+};
+
+export const applyOverlayCloseDeletePlan = (args: {
+  definition: WebFormDefinition;
+  deletePlan: OverlayCloseDeletePlan;
+  topValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+}): OverlayCloseDeleteState => {
+  const roots = (Array.isArray(args.deletePlan) ? args.deletePlan : [])
+    .flatMap(entry =>
+      ((entry?.rowIds || []) as string[])
+        .map(rowId => ({ groupId: normalizeId(entry?.groupKey), rowId: normalizeId(rowId) }))
+        .filter(root => root.groupId && root.rowId)
+    );
+  if (!roots.length) {
+    return {
+      values: { ...(args.topValues || {}) },
+      lineItems: { ...(args.lineItems || {}) },
+      removedSubgroupKeys: [],
+      removed: [],
+      dirtyGroups: []
+    };
+  }
+
+  const cascade = cascadeRemoveLineItemRows({ lineItems: args.lineItems || {}, roots });
+  let nextLineItems = cascade.lineItems;
+  const dirtyGroups: Array<{ groupId: string; parentGroupKey?: string; parentRowId?: string }> = [];
+  const dirtyGroupIds = Array.from(new Set(roots.map(root => root.groupId))).filter(Boolean);
+  dirtyGroupIds.forEach(groupId => {
+    const marked = markRecipeIngredientsDirtyForGroupKey(nextLineItems, groupId);
+    nextLineItems = marked.lineItems;
+    if (marked.changed) {
+      dirtyGroups.push({
+        groupId,
+        parentGroupKey: marked.parentGroupKey,
+        parentRowId: marked.parentRowId
+      });
+    }
+  });
+
+  const recomputed = applyValueMapsToForm(args.definition, args.topValues || {}, nextLineItems, { mode: 'init' });
+  return {
+    values: recomputed.values,
+    lineItems: recomputed.lineItems,
+    removedSubgroupKeys: cascade.removedSubgroupKeys,
+    removed: cascade.removed,
+    dirtyGroups
+  };
+};

@@ -203,7 +203,7 @@ describe('WebFormService config override', () => {
     expect(buildSpy).toHaveBeenCalledTimes(1);
   });
 
-  test('prefers embedded definition questions when bundled export already includes them', () => {
+  test('rebuilds bundled definition from questions even when an embedded definition is present', () => {
     (getBundledFormConfig as jest.Mock).mockReturnValue(buildBundledExportWithEmbeddedDefinition());
 
     const ss = new MockSpreadsheet();
@@ -214,8 +214,8 @@ describe('WebFormService config override', () => {
 
     expect(def.title).toBe('Bundled Form');
     expect(def.destinationTab).toBe('Bundled Responses');
-    expect(def.questions[0]?.label).toBe('Embedded Leftover ID');
+    expect(def.questions[0]?.label).toEqual({ en: 'Leftover ID', fr: 'Leftover ID', nl: 'Leftover ID' });
     expect(def.steps?.items?.map((step: any) => step.id)).toEqual(['bundledStep', 'staleStep', 'insertedStep', 'finalStep']);
-    expect(buildSpy).not.toHaveBeenCalled();
+    expect(buildSpy).toHaveBeenCalledTimes(1);
   });
 });

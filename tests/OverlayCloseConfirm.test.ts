@@ -1,5 +1,10 @@
 import { resolveOverlayCloseConfirm } from '../src/web/react/features/overlays/domain/overlayCloseConfirm';
-import { resolveOverlayCloseDeletePlan } from '../src/web/react/features/overlays/domain/overlayCloseEffects';
+import {
+  applyOverlayCloseDeletePlan,
+  resolveOverlayCloseDeletePlan,
+  resolveOverlayCloseDeleteScope
+} from '../src/web/react/features/overlays/domain/overlayCloseEffects';
+import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../src/web/react/app/recipeIngredientsDirty';
 
 describe('overlay close confirm', () => {
   test('resolves simple RowFlowActionConfirmConfig as-is', () => {
@@ -170,5 +175,84 @@ describe('overlay close effects', () => {
     });
 
     expect(plan).toEqual([{ groupKey: subKey, rowIds: ['i1'] }]);
+  });
+
+  test('applies delete plans with the same cascade and dirty recompute as normal row removal', () => {
+    const rootGroupId = 'MP_MEALS_REQUEST';
+    const rootRowId = 'req_1';
+    const overlaySubId = 'MP_TYPE_LI';
+    const overlayGroupId = `${rootGroupId}::${rootRowId}::${overlaySubId}`;
+    const parentRowId = 'cook_1';
+    const subId = 'MP_INGREDIENTS_LI';
+    const subKey = `${overlayGroupId}::${parentRowId}::${subId}`;
+
+    const nextState = applyOverlayCloseDeletePlan({
+      definition: { questions: [] } as any,
+      deletePlan: [{ groupKey: subKey, rowIds: ['i1'] }],
+      topValues: { STATUS: 'Draft' } as any,
+      lineItems: {
+        [rootGroupId]: [{ id: rootRowId, values: {} }],
+        [overlayGroupId]: [{ id: parentRowId, values: { PREP_TYPE: 'Cook' } }],
+        [subKey]: [
+          { id: 'i1', values: { ING: 'Carrot', QTY: '', UNIT: '' } },
+          { id: 'i2', values: { ING: 'Onion', QTY: 1, UNIT: 'kg' } }
+        ]
+      } as any
+    });
+
+    expect((nextState.lineItems[subKey] || []).map((row: any) => row.id)).toEqual(['i2']);
+    expect((nextState.lineItems[overlayGroupId] || [])[0]?.values?.[CK_RECIPE_INGREDIENTS_DIRTY_KEY]).toBe(true);
+    expect(nextState.removed).toEqual([{ groupId: subKey, rowId: 'i1' }]);
+    expect(nextState.dirtyGroups).toEqual([
+      { groupId: subKey, parentGroupKey: overlayGroupId, parentRowId }
+    ]);
+    expect(nextState.values).toEqual({ STATUS: 'Draft' });
+  });
+
+  test('uses the active overlay detail row as the delete scope for nested subgroup rows', () => {
+    const rootGroupId = 'MP_MEALS_REQUEST';
+    const rootRowId = 'req_1';
+    const typeGroupKey = `${rootGroupId}::${rootRowId}::MP_TYPE_LI`;
+    const cookRowId = 'cook_1';
+    const ingredientsKey = `${typeGroupKey}::${cookRowId}::MP_INGREDIENTS_LI`;
+
+    const deleteScope = resolveOverlayCloseDeleteScope({
+      overlayGroupId: rootGroupId,
+      overlayRowId: rootRowId,
+      detailSelectionGroupId: typeGroupKey,
+      detailSelectionRowId: cookRowId
+    });
+
+    expect(deleteScope).toEqual({
+      overlayGroupId: typeGroupKey,
+      overlayRowId: cookRowId
+    });
+
+    const plan = resolveOverlayCloseDeletePlan({
+      effects: [
+        {
+          type: 'deleteLineItems',
+          groupId: 'MP_INGREDIENTS_LI',
+          rowFilter: {
+            includeWhen: {
+              any: [{ fieldId: 'QTY', notEmpty: false }, { fieldId: 'UNIT', notEmpty: false }]
+            }
+          }
+        }
+      ] as any,
+      overlayGroupId: deleteScope.overlayGroupId,
+      overlayRowId: deleteScope.overlayRowId,
+      topValues: {},
+      lineItems: {
+        [rootGroupId]: [{ id: rootRowId, values: {} }],
+        [typeGroupKey]: [{ id: cookRowId, values: { PREP_TYPE: 'Cook' } }],
+        [ingredientsKey]: [
+          { id: 'i1', values: { ING: 'Courgette', QTY: '', UNIT: '' } },
+          { id: 'i2', values: { ING: 'Salt', QTY: 1, UNIT: 'kg' } }
+        ]
+      } as any
+    });
+
+    expect(plan).toEqual([{ groupKey: ingredientsKey, rowIds: ['i1'] }]);
   });
 });

@@ -41,7 +41,9 @@ import { ConfirmDialogOverlay } from '../features/overlays/ConfirmDialogOverlay'
 import { useConfirmDialog } from '../features/overlays/useConfirmDialog';
 import type { ConfirmDialogOpenArgs } from '../features/overlays/useConfirmDialog';
 import { getOverlayCloseAllowCloseFromEdit, resolveOverlayCloseConfirm } from '../features/overlays/domain/overlayCloseConfirm';
-import { resolveOverlayCloseDeletePlan } from '../features/overlays/domain/overlayCloseEffects';
+import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/domain/overlayDetailNavigation';
+import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
+import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
@@ -862,7 +864,6 @@ const FormView: React.FC<FormViewProps> = ({
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
   const openConfirmDialogResolved = openConfirmDialog || fallbackConfirm.openConfirm;
   const showFallbackConfirmOverlay = !openConfirmDialog;
-  const subgroupOverlayAutosaveHoldRef = useRef<{ rootSubKey: string } | null>(null);
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const valuesRef = useRef(values);
@@ -901,6 +902,25 @@ const FormView: React.FC<FormViewProps> = ({
   useEffect(() => {
     optionStateRef.current = optionState;
   }, [optionState]);
+
+  useEffect(() => {
+    if (!setAutoSaveHold) return;
+    const hold = overlay.open || lineItemGroupOverlay.open || subgroupOverlay.open;
+    setAutoSaveHold(hold, { reason: 'overlayEditing' });
+    onDiagnostic?.('autosave.hold.request', {
+      hold,
+      reason: 'overlayEditing',
+      lineSelectOpen: overlay.open,
+      lineItemOverlayOpen: lineItemGroupOverlay.open,
+      subgroupOverlayOpen: subgroupOverlay.open
+    });
+  }, [
+    lineItemGroupOverlay.open,
+    onDiagnostic,
+    overlay.open,
+    setAutoSaveHold,
+    subgroupOverlay.open
+  ]);
 
   const isOverlayOpenActionSuppressed = useCallback(
     (key: string) => Boolean(key && overlayOpenActionSuppressed[key]),
@@ -3759,7 +3779,9 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const closeSubgroupOverlay = useCallback(() => {
-    const closingSubKey = (subgroupOverlay.subKey || '').toString();
+    if (overlay.open) {
+      setOverlay({ open: false, options: [], selected: [] });
+    }
     const previous = overlayStackRef.current.pop();
     if (previous) {
       if (previous.kind === 'subgroup') {
@@ -3775,12 +3797,7 @@ const FormView: React.FC<FormViewProps> = ({
     overlayStackRef.current = [];
     setSubgroupOverlay({ open: false });
     onDiagnostic?.('subgroup.overlay.close');
-    if (subgroupOverlayAutosaveHoldRef.current?.rootSubKey === closingSubKey) {
-      subgroupOverlayAutosaveHoldRef.current = null;
-      setAutoSaveHold?.(false, { reason: 'subgroupOverlay' });
-      onDiagnostic?.('autosave.hold.request', { hold: false, reason: 'subgroupOverlay', subKey: closingSubKey });
-    }
-  }, [onDiagnostic, setAutoSaveHold, subgroupOverlay.subKey]);
+  }, [onDiagnostic, overlay.open, setOverlay]);
 
 	  const attemptCloseSubgroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
@@ -3793,6 +3810,7 @@ const FormView: React.FC<FormViewProps> = ({
         const tokens = subgroupParentGroupKey.split('::').filter(Boolean);
         return (tokens[tokens.length - 1] || '').toString();
       })();
+      const subgroupParentRowId = (subgroupInfo?.parentRowId || '').toString();
       const isPartDishIngredientsOverlay =
         subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
       const overlayFields = (subgroupOverlay.groupOverride as any)?.fields;
@@ -3873,20 +3891,65 @@ const FormView: React.FC<FormViewProps> = ({
         closeSubgroupOverlay();
         return;
       }
+      const validationDefinition = buildSubgroupOverlayValidationDefinition();
+      const nextErrors = validationDefinition
+        ? validateForm({
+            definition: validationDefinition,
+            language,
+            values,
+            lineItems,
+            collapsedRows,
+            collapsedSubgroups,
+            virtualState: guidedVirtualState
+          })
+        : {};
+      const errorKeys = Object.keys(nextErrors);
+      const hasErrors = errorKeys.length > 0;
+
+      if (subgroupKey && hasErrors) {
+        setErrors(prev => mergeLineItemGroupErrors(prev, subgroupKey, nextErrors));
+      }
       const overlayCloseCtx: VisibilityContext = {
         getValue: fid => (valuesRef.current as any)[fid],
         getLineValue: (_rowId: string, fid: string) => (valuesRef.current as any)[fid],
         getLineItems: groupId => lineItemsRef.current[groupId] || [],
         getLineItemKeys: () => Object.keys(lineItemsRef.current || {})
       };
+      const firstErrorLabel = (() => {
+        if (!hasErrors) return '';
+        const firstKey = errorKeys[0] || '';
+        const parts = firstKey.split('__');
+        if (parts.length !== 3) return '';
+        const groupKey = parts[0] || '';
+        const fieldId = parts[1] || '';
+        if (!groupKey || !fieldId) return '';
+        const group = resolveLineItemGroupForKey(groupKey);
+        const fields = (group?.lineItemConfig as any)?.fields || [];
+        const field = Array.isArray(fields) ? fields.find((entry: any) => (entry?.id || '').toString() === fieldId) : null;
+        return resolveFieldLabel(field, language, fieldId);
+      })();
       const confirmResolved = resolveOverlayCloseConfirm({
         closeConfirm: subgroupOverlay.closeConfirm,
         ctx: overlayCloseCtx
       });
+      const allowCloseFromEdit = getOverlayCloseAllowCloseFromEdit(subgroupOverlay.closeConfirm);
+      if (source === 'button' && !allowCloseFromEdit && !hasErrors) {
+        closeSubgroupOverlay();
+        setErrors(prev => clearLineItemGroupErrors(prev, subgroupKey));
+        onDiagnostic?.('subgroup.overlay.close.allowed', {
+          source,
+          subgroupKey,
+          hadErrors: false,
+          confirmShown: false
+        });
+        return;
+      }
       if (confirmResolved && openConfirmDialogResolved) {
         const confirm = confirmResolved.confirm;
         const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
-        const message = resolveLocalizedString(confirm.body, language, '');
+        const baseMessage = resolveLocalizedString(confirm.body, language, '');
+        const hint = confirmResolved.highlightFirstError && firstErrorLabel ? ` First issue: ${firstErrorLabel}.` : '';
+        const message = `${baseMessage || ''}${hint}`.trim();
         const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
         const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
         openConfirmDialogResolved({
@@ -3897,27 +3960,175 @@ const FormView: React.FC<FormViewProps> = ({
           showCancel: confirm.showCancel !== false,
           kind: confirm.kind || 'overlayClose',
           refId: `${subgroupOverlay.subKey || ''}::close`,
-          onConfirm: closeSubgroupOverlay
+          onConfirm: () => {
+            if (subgroupParentGroupKey && subgroupParentRowId && confirmResolved.onConfirmEffects.length) {
+              const currentLineItems = lineItemsRef.current || {};
+              const currentValues = ((valuesRef.current || {}) as Record<string, FieldValue>) || {};
+              const deleteScope = resolveOverlayCloseDeleteScope({
+                overlayGroupId: subgroupParentGroupKey,
+                overlayRowId: subgroupParentRowId,
+                detailSelectionGroupId: overlayDetailSelection?.groupId,
+                detailSelectionRowId: overlayDetailSelection?.rowId
+              });
+              const deletePlan = resolveOverlayCloseDeletePlan({
+                effects: confirmResolved.onConfirmEffects,
+                overlayGroupId: deleteScope.overlayGroupId,
+                overlayRowId: deleteScope.overlayRowId,
+                topValues: currentValues,
+                lineItems: currentLineItems
+              });
+              if (deletePlan.length) {
+                const removedRoots = deletePlan.flatMap(entry =>
+                  (entry.rowIds || []).map(rowId => ({
+                    groupId: (entry.groupKey || '').toString(),
+                    rowId: (rowId || '').toString()
+                  }))
+                );
+                if (onSelectionEffect) {
+                  removedRoots.forEach(root => {
+                    if (!root.groupId || !root.rowId) return;
+                    const groupQuestion = resolveLineItemGroupForKey(root.groupId);
+                    const rows = currentLineItems[root.groupId] || [];
+                    const targetRow = rows.find(r => r.id === root.rowId);
+                    if (!groupQuestion || !targetRow) return;
+                    const effectFields = ((groupQuestion.lineItemConfig?.fields || []) as any[]).filter(
+                      field => Array.isArray((field as any)?.selectionEffects) && (field as any).selectionEffects.length
+                    );
+                    effectFields.forEach(field => {
+                      const contextId = buildLineContextId(groupQuestion.id, targetRow.id, field.id);
+                      onSelectionEffect(field as unknown as WebQuestionDefinition, null, {
+                        contextId,
+                        lineItem: { groupId: groupQuestion.id, rowId: targetRow.id, rowValues: targetRow.values },
+                        forceContextReset: true
+                      });
+                    });
+                  });
+                }
+                const nextState = applyOverlayCloseDeletePlan({
+                  definition,
+                  deletePlan,
+                  topValues: currentValues,
+                  lineItems: currentLineItems
+                });
+                if (nextState.removedSubgroupKeys.length) {
+                  setSubgroupSelectors(prevSel => {
+                    const nextSel = { ...prevSel };
+                    nextState.removedSubgroupKeys.forEach(key => {
+                      delete (nextSel as any)[key];
+                    });
+                    return nextSel;
+                  });
+                }
+                setValues(nextState.values);
+                setLineItems(nextState.lineItems);
+                valuesRef.current = nextState.values;
+                lineItemsRef.current = nextState.lineItems;
+                const deletedByGroup = new Map<string, Set<string>>();
+                nextState.removed.forEach(entry => {
+                  const groupId = (entry.groupId || '').toString();
+                  const rowId = (entry.rowId || '').toString();
+                  if (!groupId || !rowId) return;
+                  const existing = deletedByGroup.get(groupId) || new Set<string>();
+                  existing.add(rowId);
+                  deletedByGroup.set(groupId, existing);
+                });
+                setErrors(prev => {
+                  let changed = false;
+                  const next: FormErrors = {};
+                  Object.entries(prev || {}).forEach(([key, val]) => {
+                    const parts = key.split('__');
+                    if (parts.length === 3) {
+                      const groupId = parts[0];
+                      const rowId = parts[2];
+                      const deleted = deletedByGroup.get(groupId);
+                      if (deleted && deleted.has(rowId)) {
+                        changed = true;
+                        return;
+                      }
+                    }
+                    next[key] = val;
+                  });
+                  return changed ? next : prev;
+                });
+                nextState.dirtyGroups.forEach(entry => {
+                  onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+                    groupId: entry.groupId,
+                    parentGroupKey: entry.parentGroupKey || null,
+                    parentRowId: entry.parentRowId || null,
+                    reason: 'overlayCloseDelete'
+                  });
+                });
+                Array.from(new Set(removedRoots.map(root => root.groupId).filter(Boolean))).forEach(groupId => {
+                  runSelectionEffectsForAncestorRows(groupId, currentLineItems, nextState.lineItems, {
+                    mode: 'init',
+                    topValues: nextState.values
+                  });
+                });
+                onDiagnostic?.('subgroup.overlay.close.effects.deleteLineItems', {
+                  subgroupKey,
+                  deleteGroups: deletePlan.map(entry => ({ groupKey: entry.groupKey, count: entry.rowIds.length }))
+                });
+              }
+            }
+            if (subgroupKey && (confirmResolved.validateOnReopen || hasErrors)) {
+              overlayCloseValidateOnOpenRef.current[subgroupKey] = true;
+            }
+            closeSubgroupOverlay();
+            if (!hasErrors) {
+              setErrors(prev => clearLineItemGroupErrors(prev, subgroupKey));
+            }
+            onDiagnostic?.('subgroup.overlay.close.confirmed', {
+              source,
+              subgroupKey,
+              hadErrors: hasErrors,
+              validateOnReopen: confirmResolved.validateOnReopen
+            });
+          }
         });
-        onDiagnostic?.('subgroup.overlay.close.confirm.open', { source });
+        onDiagnostic?.('subgroup.overlay.close.confirm.open', {
+          source,
+          subgroupKey,
+          hadErrors: hasErrors,
+          configSource: confirmResolved.source
+        });
         return;
       }
+      if (subgroupKey && hasErrors) {
+        overlayCloseValidateOnOpenRef.current[subgroupKey] = true;
+      }
       closeSubgroupOverlay();
+      if (!hasErrors) {
+        setErrors(prev => clearLineItemGroupErrors(prev, subgroupKey));
+      }
+      onDiagnostic?.('subgroup.overlay.close.allowed', {
+        source,
+        subgroupKey,
+        hadErrors: hasErrors,
+        confirmShown: false
+      });
     },
 	    [
+	      buildSubgroupOverlayValidationDefinition,
 	      closeSubgroupOverlay,
-	      definition.questions,
+	      collapsedRows,
+	      collapsedSubgroups,
+	      definition,
+	      guidedVirtualState,
 	      language,
+	      lineItems,
 	      onDiagnostic,
 	      onSelectionEffect,
 	      openConfirmDialogResolved,
-	      setAutoSaveHold,
+	      overlayDetailSelection?.groupId,
+	      overlayDetailSelection?.rowId,
+	      resolveLineItemGroupForKey,
+	      runSelectionEffectsForAncestorRows,
+	      setErrors,
 	      setLineItems,
-	      subgroupOverlay.closeConfirm,
-	      subgroupOverlay.groupOverride,
-	      subgroupOverlay.open,
-	      subgroupOverlay.rowFilter,
-	      subgroupOverlay.subKey
+	      setSubgroupSelectors,
+	      setValues,
+	      subgroupOverlay,
+	      values
 	    ]
 	  );
 
@@ -3970,6 +4181,9 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   const closeLineItemGroupOverlay = useCallback(() => {
+    if (overlay.open) {
+      setOverlay({ open: false, options: [], selected: [] });
+    }
     const previous = overlayStackRef.current.pop();
     if (previous) {
       if (previous.kind === 'subgroup') {
@@ -3985,7 +4199,7 @@ const FormView: React.FC<FormViewProps> = ({
     overlayStackRef.current = [];
     setLineItemGroupOverlay({ open: false });
     onDiagnostic?.('lineItemGroup.overlay.close');
-  }, [onDiagnostic]);
+  }, [onDiagnostic, overlay.open, setOverlay]);
 
   const validateLineItemGroupOverlay = useCallback((): FormErrors | null => {
     const validationDefinition = buildLineItemGroupOverlayValidationDefinition();
@@ -4017,6 +4231,140 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     values
   ]);
+
+  const validateSubgroupOverlay = useCallback((): FormErrors | null => {
+    const validationDefinition = buildSubgroupOverlayValidationDefinition();
+    if (!validationDefinition) return null;
+    try {
+      return validateForm({
+        definition: validationDefinition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups,
+        virtualState: guidedVirtualState
+      });
+    } catch (err: any) {
+      onDiagnostic?.('validation.subgroupOverlay.error', {
+        message: err?.message || err || 'unknown',
+        groupId: subgroupOverlay.subKey
+      });
+      return null;
+    }
+  }, [
+    buildSubgroupOverlayValidationDefinition,
+    collapsedRows,
+    collapsedSubgroups,
+    guidedVirtualState,
+    language,
+    lineItems,
+    onDiagnostic,
+    subgroupOverlay.subKey,
+    values
+  ]);
+
+  const validateOverlayDetailGroup = useCallback(
+    (detailGroupDef: WebQuestionDefinition): FormErrors => {
+      const validationDefinition: WebFormDefinition = {
+        ...(definition as any),
+        questions: [detailGroupDef]
+      } as WebFormDefinition;
+      return validateForm({
+        definition: validationDefinition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups,
+        virtualState: guidedVirtualState
+      });
+    },
+    [collapsedRows, collapsedSubgroups, definition, guidedVirtualState, language, lineItems, values]
+  );
+
+  const attemptSaveOverlayDetailEdit = useCallback(
+    (args: {
+      detailGroupDef: WebQuestionDefinition;
+      errorGroupKey: string;
+      groupId: string;
+      rowId: string;
+      detailKey: string;
+      canView: boolean;
+    }) => {
+      const nextErrors = resolveOverlayDetailErrors({
+        errorGroupKey: args.errorGroupKey,
+        lineOverlayOpen: lineItemGroupOverlay.open,
+        lineOverlayGroupId: (lineItemGroupOverlay.groupId || '').toString(),
+        subgroupOverlayOpen: subgroupOverlay.open,
+        subgroupOverlaySubKey: (subgroupOverlay.subKey || '').toString(),
+        lineOverlayErrors: validateLineItemGroupOverlay(),
+        subgroupOverlayErrors: validateSubgroupOverlay(),
+        fallbackErrors: validateOverlayDetailGroup(args.detailGroupDef)
+      });
+      const hasErrors = Object.keys(nextErrors).length > 0;
+
+      setErrors(prev =>
+        hasErrors ? mergeLineItemGroupErrors(prev, args.errorGroupKey, nextErrors) : clearLineItemGroupErrors(prev, args.errorGroupKey)
+      );
+
+      if (hasErrors) {
+        onDiagnostic?.('lineItems.overlayDetail.edit.invalid', {
+          groupId: args.groupId,
+          rowId: args.rowId,
+          errorGroupKey: args.errorGroupKey,
+          errorCount: Object.keys(nextErrors).length
+        });
+        return false;
+      }
+
+      if (args.canView) {
+        setOverlayDetailSelection({ groupId: args.groupId, rowId: args.rowId, mode: 'view' });
+        overlayDetailEditSnapshotRef.current = null;
+      } else if (overlayDetailEditSnapshotRef.current?.key === args.detailKey) {
+        overlayDetailEditSnapshotRef.current = {
+          key: args.detailKey,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current
+        };
+      }
+
+      onDiagnostic?.('lineItems.overlayDetail.edit.save', {
+        groupId: args.groupId,
+        rowId: args.rowId,
+        mode: args.canView ? 'view' : 'edit'
+      });
+      return true;
+    },
+    [
+      lineItemGroupOverlay.groupId,
+      lineItemGroupOverlay.open,
+      onDiagnostic,
+      setErrors,
+      setOverlayDetailSelection,
+      subgroupOverlay.open,
+      subgroupOverlay.subKey,
+      validateLineItemGroupOverlay,
+      validateSubgroupOverlay,
+      validateOverlayDetailGroup
+    ]
+  );
+
+  const clearSelectionEffectsForRow = useCallback((groupQuestion: WebQuestionDefinition, row: LineItemRowState) => {
+    if (!onSelectionEffect) return;
+    const effectFields = (groupQuestion.lineItemConfig?.fields || []).filter(
+      field => Array.isArray((field as any).selectionEffects) && (field as any).selectionEffects.length
+    );
+    if (!effectFields.length) return;
+    effectFields.forEach(field => {
+      const contextId = buildLineContextId(groupQuestion.id, row.id, field.id);
+      onSelectionEffect(field as unknown as WebQuestionDefinition, null, {
+        contextId,
+        lineItem: { groupId: groupQuestion.id, rowId: row.id, rowValues: row.values },
+        forceContextReset: true
+      });
+    });
+  }, [onSelectionEffect]);
 
   const attemptCloseLineItemGroupOverlay = useCallback(
     (source: 'button' | 'escape') => {
@@ -4122,30 +4470,66 @@ const FormView: React.FC<FormViewProps> = ({
           refId: `${overlayGroupId || ''}::close`,
           onConfirm: () => {
             if (overlayGroupId && args.onConfirmEffects.length) {
-              const deletePlan = resolveOverlayCloseDeletePlan({
-                effects: args.onConfirmEffects,
+              const currentLineItems = lineItemsRef.current || {};
+              const currentValues = ((valuesRef.current || {}) as Record<string, FieldValue>) || {};
+              const deleteScope = resolveOverlayCloseDeleteScope({
                 overlayGroupId,
                 overlayRowId: scope?.rowId,
-                topValues: (valuesRef.current || {}) as any,
-                lineItems: lineItemsRef.current
+                detailSelectionGroupId: overlayDetailSelection?.groupId,
+                detailSelectionRowId: overlayDetailSelection?.rowId
+              });
+              const deletePlan = resolveOverlayCloseDeletePlan({
+                effects: args.onConfirmEffects,
+                overlayGroupId: deleteScope.overlayGroupId,
+                overlayRowId: deleteScope.overlayRowId,
+                topValues: currentValues,
+                lineItems: currentLineItems
               });
               if (deletePlan.length) {
-                const deletedByGroup = new Map<string, Set<string>>();
-                deletePlan.forEach(entry => deletedByGroup.set(entry.groupKey, new Set(entry.rowIds)));
-                setLineItems(prev => {
-                  let changed = false;
-                  const next: LineItemState = { ...prev };
-                  deletePlan.forEach(entry => {
-                    const rows = next[entry.groupKey] || prev[entry.groupKey] || [];
-                    if (!rows.length) return;
-                    const deleted = deletedByGroup.get(entry.groupKey);
-                    if (!deleted || !deleted.size) return;
-                    const filtered = rows.filter(r => !deleted.has((r.id || '').toString()));
-                    if (filtered.length === rows.length) return;
-                    next[entry.groupKey] = filtered;
-                    changed = true;
+                const removedRoots = deletePlan.flatMap(entry =>
+                  (entry.rowIds || []).map(rowId => ({
+                    groupId: (entry.groupKey || '').toString(),
+                    rowId: (rowId || '').toString()
+                  }))
+                );
+                if (onSelectionEffect) {
+                  removedRoots.forEach(root => {
+                    if (!root.groupId || !root.rowId) return;
+                    const groupQuestion = definition.questions.find(q => q.id === root.groupId);
+                    const rows = currentLineItems[root.groupId] || [];
+                    const targetRow = rows.find(r => r.id === root.rowId);
+                    if (groupQuestion && targetRow) {
+                      clearSelectionEffectsForRow(groupQuestion, targetRow);
+                    }
                   });
-                  return changed ? next : prev;
+                }
+                const nextState = applyOverlayCloseDeletePlan({
+                  definition,
+                  deletePlan,
+                  topValues: currentValues,
+                  lineItems: currentLineItems
+                });
+                if (nextState.removedSubgroupKeys.length) {
+                  setSubgroupSelectors(prevSel => {
+                    const nextSel = { ...prevSel };
+                    nextState.removedSubgroupKeys.forEach(key => {
+                      delete (nextSel as any)[key];
+                    });
+                    return nextSel;
+                  });
+                }
+                setValues(nextState.values);
+                setLineItems(nextState.lineItems);
+                valuesRef.current = nextState.values;
+                lineItemsRef.current = nextState.lineItems;
+                const deletedByGroup = new Map<string, Set<string>>();
+                nextState.removed.forEach(entry => {
+                  const groupKey = (entry.groupId || '').toString();
+                  const rowId = (entry.rowId || '').toString();
+                  if (!groupKey || !rowId) return;
+                  const existing = deletedByGroup.get(groupKey) || new Set<string>();
+                  existing.add(rowId);
+                  deletedByGroup.set(groupKey, existing);
                 });
                 setErrors(prev => {
                   let changed = false;
@@ -4164,6 +4548,20 @@ const FormView: React.FC<FormViewProps> = ({
                     next[key] = val;
                   });
                   return changed ? next : prev;
+                });
+                nextState.dirtyGroups.forEach(entry => {
+                  onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+                    groupId: entry.groupId,
+                    parentGroupKey: entry.parentGroupKey || null,
+                    parentRowId: entry.parentRowId || null,
+                    reason: 'overlayCloseDelete'
+                  });
+                });
+                Array.from(new Set(removedRoots.map(root => root.groupId).filter(Boolean))).forEach(groupId => {
+                  runSelectionEffectsForAncestorRows(groupId, currentLineItems, nextState.lineItems, {
+                    mode: 'init',
+                    topValues: nextState.values
+                  });
                 });
                 onDiagnostic?.('lineItemGroup.overlay.close.effects.deleteLineItems', {
                   groupId: overlayGroupId,
@@ -4216,17 +4614,23 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       closeLineItemGroupOverlay,
+      clearSelectionEffectsForRow,
+      definition,
       language,
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
       lineItemGroupOverlay.closeConfirm,
       openConfirmDialogResolved,
       onDiagnostic,
+      onSelectionEffect,
       overlayDetailSelection,
+      runSelectionEffectsForAncestorRows,
       resolveLineItemGroupForKey,
       setErrors,
       setLineItems,
+      setSubgroupSelectors,
       setOverlayDetailSelection,
+      setValues,
       validateLineItemGroupOverlay
     ]
   );
@@ -4307,16 +4711,6 @@ const FormView: React.FC<FormViewProps> = ({
       }
       const rowFilter = options?.rowFilter || null;
       const groupOverride = options?.groupOverride;
-      const groupOverrideFields = (groupOverride as any)?.fields;
-      const isPrepSelectionOverlay =
-        Array.isArray(groupOverrideFields) && groupOverrideFields.some((f: any) => (f?.id || '').toString().trim() === 'PREP_TYPE');
-      if (isPrepSelectionOverlay) {
-        if (!subgroupOverlayAutosaveHoldRef.current || subgroupOverlayAutosaveHoldRef.current.rootSubKey !== subKey) {
-          subgroupOverlayAutosaveHoldRef.current = { rootSubKey: subKey };
-          setAutoSaveHold?.(true, { reason: 'subgroupOverlay' });
-          onDiagnostic?.('autosave.hold.request', { hold: true, reason: 'subgroupOverlay', subKey });
-        }
-      }
       const hideInlineSubgroups = options?.hideInlineSubgroups === true;
       const hideCloseButton = options?.hideCloseButton === true;
       const subgroupDefaults = resolveSubgroupDefs(subKey);
@@ -5267,6 +5661,13 @@ const FormView: React.FC<FormViewProps> = ({
       if (
         targetSubgroupInfo &&
         tries === 4 &&
+        shouldAutoOpenSubgroupForPendingAnchor({
+          targetParentGroupKey: targetSubgroupInfo.parentGroupKey,
+          lineItemOverlayOpen: lineItemGroupOverlay.open,
+          lineItemOverlayGroupId: lineItemGroupOverlay.groupId,
+          subgroupOverlayOpen: subgroupOverlay.open,
+          subgroupOverlaySubKey: subgroupOverlay.subKey
+        }) &&
         (!subgroupOverlay.open || subgroupOverlay.subKey !== targetGroupKey)
       ) {
         openSubgroupOverlay(targetGroupKey, { source: 'autoscroll' });
@@ -6223,20 +6624,6 @@ const FormView: React.FC<FormViewProps> = ({
     setValues(nextValues);
     setLineItems(recomputed);
     runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
-  };
-
-  const clearSelectionEffectsForRow = (groupQuestion: WebQuestionDefinition, row: LineItemRowState) => {
-    if (!onSelectionEffect) return;
-    const effectFields = (groupQuestion.lineItemConfig?.fields || []).filter(field => Array.isArray((field as any).selectionEffects) && (field as any).selectionEffects.length);
-    if (!effectFields.length) return;
-    effectFields.forEach(field => {
-      const contextId = buildLineContextId(groupQuestion.id, row.id, field.id);
-      onSelectionEffect(field as unknown as WebQuestionDefinition, null, {
-        contextId,
-        lineItem: { groupId: groupQuestion.id, rowId: row.id, rowValues: row.values },
-        forceContextReset: true
-      });
-    });
   };
 
   const resolveVisibilityValue = useCallback(
@@ -10644,23 +11031,14 @@ const FormView: React.FC<FormViewProps> = ({
                     const detailKey = detailRowId ? `${subKey}::${detailRowId}` : '';
                     const handleDetailSave = () => {
                       if (!detailRowId) return;
-                      if (overlayDetailCanView) {
-                        setOverlayDetailSelection({ groupId: subKey, rowId: detailRowId, mode: 'view' });
-                      } else if (overlayDetailEditSnapshotRef.current?.key === detailKey) {
-                        overlayDetailEditSnapshotRef.current = {
-                          key: detailKey,
-                          values: valuesRef.current,
-                          lineItems: lineItemsRef.current
-                        };
-                      }
-                      onDiagnostic?.('lineItems.overlayDetail.edit.save', {
+                      attemptSaveOverlayDetailEdit({
+                        detailGroupDef,
+                        errorGroupKey: detailSubKey,
                         groupId: subKey,
                         rowId: detailRowId,
-                        mode: overlayDetailCanView ? 'view' : 'edit'
+                        detailKey,
+                        canView: overlayDetailCanView
                       });
-                      if (overlayDetailCanView) {
-                        overlayDetailEditSnapshotRef.current = null;
-                      }
                     };
                     const handleDetailCancel = () => {
                       if (!detailRowId) return;
@@ -12739,23 +13117,14 @@ const FormView: React.FC<FormViewProps> = ({
                       const detailKey = detailRowId ? `${groupId}::${detailRowId}` : '';
                       const handleDetailSave = () => {
                         if (!detailRowId) return;
-                        if (overlayDetailCanView) {
-                          setOverlayDetailSelection({ groupId, rowId: detailRowId, mode: 'view' });
-                        } else if (overlayDetailEditSnapshotRef.current?.key === detailKey) {
-                          overlayDetailEditSnapshotRef.current = {
-                            key: detailKey,
-                            values: valuesRef.current,
-                            lineItems: lineItemsRef.current
-                          };
-                        }
-                        onDiagnostic?.('lineItems.overlayDetail.edit.save', {
+                        attemptSaveOverlayDetailEdit({
+                          detailGroupDef: subGroupDef,
+                          errorGroupKey: subKey,
                           groupId,
                           rowId: detailRowId,
-                          mode: overlayDetailCanView ? 'view' : 'edit'
+                          detailKey,
+                          canView: overlayDetailCanView
                         });
-                        if (overlayDetailCanView) {
-                          overlayDetailEditSnapshotRef.current = null;
-                        }
                       };
                       const handleDetailCancel = () => {
                         if (!detailRowId) return;

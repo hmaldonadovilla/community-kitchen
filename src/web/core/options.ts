@@ -3,6 +3,13 @@ import { FieldValue, LangCode, OptionSet } from '../types';
 import { fetchDataSource } from '../data/dataSources';
 
 export const toOptionSet = (question: any): OptionSet => {
+  const deriveOptionSetFromFilterMap = (): OptionSet | null => {
+    const optionMap = question?.optionFilter?.optionMap;
+    if (!optionMap || typeof optionMap !== 'object') return null;
+    const values = Object.values(optionMap).flatMap(entry => (Array.isArray(entry) ? entry : []));
+    return buildOptionSet(values.map(value => (value === null || value === undefined ? '' : value.toString())));
+  };
+
   if (question?.options?.en || question?.options?.fr || question?.options?.nl) {
     const optionSet = question.options as OptionSet;
     if (!optionSet.raw && Array.isArray(question?.optionsRaw)) {
@@ -30,12 +37,15 @@ export const toOptionSet = (question: any): OptionSet => {
         nl: (question as any).optionsNl,
         raw: Array.isArray(question?.optionsRaw) ? (question.optionsRaw as any[]) : undefined
       };
+      if (!optionSet.en?.length && !optionSet.fr?.length && !optionSet.nl?.length) {
+        return deriveOptionSetFromFilterMap() || optionSet;
+      }
       if (Object.keys(tooltips).length) optionSet.tooltips = tooltips;
       return optionSet;
     }
     return opts as OptionSet;
   }
-  return {};
+  return deriveOptionSetFromFilterMap() || {};
 };
 
 export const optionKey = (id: string, parentId?: string): string => (parentId ? `${parentId}.${id}` : id);
