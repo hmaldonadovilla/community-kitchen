@@ -1,11 +1,26 @@
+jest.mock('../../../src/web/data/dataSources', () => ({
+  fetchDataSource: jest.fn()
+}));
+
+import { fetchDataSource } from '../../../src/web/data/dataSources';
 import { runSelectionEffects } from '../../../src/web/react/app/selectionEffects';
 import { runSelectionEffectsForAncestors } from '../../../src/web/react/app/runSelectionEffectsForAncestors';
-import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
+import {
+  buildSubgroupKey,
+  ROW_PARENT_GROUP_ID_KEY,
+  ROW_PARENT_ROW_ID_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY,
+  ROW_SOURCE_KEY
+} from '../../../src/web/react/app/lineItems';
 import type { LineItemState } from '../../../src/web/react/types';
 import type { FieldValue } from '../../../src/web/types';
 import type { WebFormDefinition, WebQuestionDefinition } from '../../../src/types';
 
 describe('selectionEffects ancestor propagation (change)', () => {
+  beforeEach(() => {
+    (fetchDataSource as unknown as jest.Mock).mockReset();
+  });
+
   it('recomputes ancestor-derived fields immediately after selection-effect line item mutations', async () => {
     const definition: WebFormDefinition = {
       title: 'Test',
@@ -422,5 +437,217 @@ describe('selectionEffects ancestor propagation (change)', () => {
     expect(Number(cookRow?.values.PREP_QTY)).toBe(5);
     const mealRow = (lineItems.MEALS || []).find(row => row.id === mealRowId);
     expect(Number(mealRow?.values?.MP_TO_COOK)).toBe(5);
+  });
+
+  it('recomputes same-row recipe ingredients when an auto row multiplier changes', async () => {
+    (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          QFTD5RD2EM: 'Dhaal (diabetic)',
+          NUM_PORTIONS: 15,
+          Q65ILNUSGL: [{ ING: 'Salt', QTY: 4, UNIT: 'Tbsp' }]
+        }
+      ]
+    });
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'MP_TO_COOK',
+                type: 'NUMBER',
+                label: { en: 'To cook', fr: 'To cook', nl: 'To cook' },
+                required: false,
+                selectionEffects: [
+                  {
+                    id: 'mp_to_cook_sync',
+                    type: 'addLineItems',
+                    groupId: 'MP_TYPE_LI',
+                    when: { fieldId: 'MP_TO_COOK', greaterThan: 0 },
+                    preset: {
+                      PREP_QTY: '$row.MP_TO_COOK',
+                      PREP_TYPE: 'Cook'
+                    },
+                    replaceExistingByEffectId: true,
+                    hideRemoveButton: true
+                  }
+                ]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                fields: [
+                  { id: 'PREP_TYPE', type: 'TEXT', label: { en: 'Type', fr: 'Type', nl: 'Type' } },
+                  { id: 'PREP_QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' } },
+                  {
+                    id: 'RECIPE',
+                    type: 'CHOICE',
+                    label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' },
+                    required: false,
+                    dataSource: {
+                      id: 'Recipes Data',
+                      mode: 'options',
+                      projection: ['QFTD5RD2EM', 'NUM_PORTIONS', 'Q65ILNUSGL']
+                    } as any,
+                    selectionEffects: [
+                      {
+                        id: 'recipe_ingredients_sync',
+                        type: 'addLineItemsFromDataSource',
+                        groupId: 'MP_INGREDIENTS_LI',
+                        targetPath: 'MP_INGREDIENTS_LI',
+                        lookupField: 'QFTD5RD2EM',
+                        dataField: 'Q65ILNUSGL',
+                        rowMultiplierFieldId: 'PREP_QTY',
+                        dataSourceMultiplierField: 'NUM_PORTIONS',
+                        scaleNumericFields: ['QTY'],
+                        lineItemMapping: {
+                          ING: 'ING',
+                          QTY: 'QTY',
+                          UNIT: 'UNIT'
+                        },
+                        aggregateBy: ['ING', 'UNIT'],
+                        aggregateNumericFields: ['QTY'],
+                        preserveManualRows: false
+                      }
+                    ]
+                  }
+                ],
+                subGroups: [
+                  {
+                    id: 'MP_INGREDIENTS_LI',
+                    fields: [
+                      { id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' } },
+                      { id: 'QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' } },
+                      { id: 'UNIT', type: 'TEXT', label: { en: 'Unit', fr: 'Unit', nl: 'Unit' } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    const mealRowId = 'meal_1';
+    const prepKey = buildSubgroupKey('MEALS', mealRowId, 'MP_TYPE_LI');
+    const ingredientsKey = buildSubgroupKey(prepKey, 'cook_1', 'MP_INGREDIENTS_LI');
+    let values: Record<string, FieldValue> = {};
+    let lineItems: LineItemState = {
+      MEALS: [{ id: mealRowId, values: { MP_TO_COOK: 5 } }],
+      [prepKey]: [
+        {
+          id: 'cook_1',
+          values: {
+            PREP_TYPE: 'Cook',
+            PREP_QTY: 5,
+            RECIPE: 'Dhaal (diabetic)',
+            [ROW_SOURCE_KEY]: 'auto',
+            [ROW_SELECTION_EFFECT_ID_KEY]: 'mp_to_cook_sync',
+            [ROW_PARENT_GROUP_ID_KEY]: 'MEALS',
+            [ROW_PARENT_ROW_ID_KEY]: mealRowId
+          },
+          autoGenerated: true,
+          effectContextId: 'MEALS::meal_1::MP_TO_COOK::mp_to_cook_sync'
+        }
+      ],
+      [ingredientsKey]: [{ id: 'ing_1', values: { ING: 'Salt', QTY: '1.33', UNIT: 'Tbsp' } }]
+    };
+
+    const setValues = (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: LineItemState | ((prev: LineItemState) => LineItemState)) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    const invokeSelectionEffects = (
+      question: WebQuestionDefinition,
+      value: FieldValue,
+      opts?: { lineItem?: { groupId: string; rowId: string; rowValues: any }; contextId?: string; forceContextReset?: boolean },
+      snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState }
+    ) => {
+      const currentValues = snapshots?.values || values;
+      const currentLineItems = snapshots?.lineItems || lineItems;
+      runSelectionEffects({
+        definition,
+        question,
+        value,
+        language: 'EN' as any,
+        values: currentValues,
+        lineItems: currentLineItems,
+        setValues,
+        setLineItems,
+        opts,
+        onLineItemsMutated: ({ sourceGroupKey, prevLineItems, nextLineItems, nextValues }) => {
+          globalThis.setTimeout(() => {
+            runSelectionEffectsForAncestors({
+              definition,
+              values: nextValues,
+              onSelectionEffect: (ancestorQuestion, ancestorValue, ancestorOpts) => {
+                invokeSelectionEffects(ancestorQuestion, ancestorValue, ancestorOpts, {
+                  values: nextValues,
+                  lineItems: nextLineItems
+                });
+              },
+              sourceGroupKey,
+              prevLineItems,
+              nextLineItems,
+              options: { mode: 'change', topValues: nextValues }
+            });
+          }, 0);
+        }
+      });
+    };
+
+    invokeSelectionEffects(
+      {
+        id: 'MP_TO_COOK',
+        type: 'NUMBER',
+        selectionEffects: [
+          {
+            id: 'mp_to_cook_sync',
+            type: 'addLineItems',
+            groupId: 'MP_TYPE_LI',
+            when: { fieldId: 'MP_TO_COOK', greaterThan: 0 },
+            preset: {
+              PREP_QTY: '$row.MP_TO_COOK',
+              PREP_TYPE: 'Cook'
+            },
+            replaceExistingByEffectId: true,
+            hideRemoveButton: true
+          }
+        ]
+      } as any,
+      50,
+      {
+        lineItem: {
+          groupId: 'MEALS',
+          rowId: mealRowId,
+          rowValues: { MP_TO_COOK: 50 }
+        }
+      }
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const cookRow = (lineItems[prepKey] || []).find(row => row.id === 'cook_1');
+    expect(Number(cookRow?.values.PREP_QTY)).toBe(50);
+    const ingredientRows = lineItems[ingredientsKey] || [];
+    expect(ingredientRows).toHaveLength(1);
+    expect(Number(ingredientRows[0].values.QTY)).toBe(13.33);
+    expect(ingredientRows[0].values.UNIT).toBe('Tbsp');
   });
 });

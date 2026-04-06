@@ -2,6 +2,7 @@ import type { FieldValue, WebFormDefinition, WebQuestionDefinition } from '../..
 import type { LineItemState } from '../types';
 import { applyValueMapsToLineRow, type ApplyValueMapsMode } from './valueMaps';
 import { buildLineContextId, parseSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { selectionEffectDependsOnField } from './selectionEffectDependencies';
 
 type AncestorSelectionEffectMode = 'init' | 'change' | 'blur';
 
@@ -151,20 +152,40 @@ export const runSelectionEffectsForAncestors = (args: RunSelectionEffectsForAnce
       ...buildSelectionEffectRowValuesForKey({ groupKey, targetRowId, nextLineItems }),
       ...nextComputed
     };
+    const changedFieldIds = groupFields
+      .map(field => (field?.id ?? '').toString().trim())
+      .filter(Boolean)
+      .filter(fieldId => {
+        const prevValue = (prevComputed as Record<string, FieldValue>)[fieldId];
+        const nextValue = (nextComputed as Record<string, FieldValue>)[fieldId];
+        return !areFieldValuesEqual(prevValue, nextValue);
+      });
+    if (!changedFieldIds.length) return;
 
     effectFields.forEach(effectField => {
-      const prevValue = (prevComputed as Record<string, FieldValue>)[effectField.id];
-      const nextValue = (nextComputed as Record<string, FieldValue>)[effectField.id];
-      if (areFieldValuesEqual(prevValue, nextValue)) return;
+      const fieldId = (effectField?.id ?? '').toString().trim();
+      if (!fieldId) return;
+      const fieldValueChanged = changedFieldIds.includes(fieldId);
+      const dependencyChanged =
+        !fieldValueChanged && changedFieldIds.some(changedFieldId => selectionEffectDependsOnField(effectField, changedFieldId));
+      if (!fieldValueChanged && !dependencyChanged) return;
 
-      const contextId = buildLineContextId(groupKey, targetRowId, effectField.id);
+      const nextValue = (nextComputed as Record<string, FieldValue>)[fieldId];
+      const contextId = buildLineContextId(groupKey, targetRowId, fieldId);
       const effectQuestion = effectField as unknown as WebQuestionDefinition;
       onSelectionEffect(effectQuestion, nextValue ?? null, {
         contextId,
-        lineItem: { groupId: groupKey, rowId: targetRowId, rowValues }
+        lineItem: { groupId: groupKey, rowId: targetRowId, rowValues },
+        forceContextReset: dependencyChanged || undefined
       });
     });
   };
+
+  const sourceRows = nextLineItems[sourceGroupKey] || [];
+  sourceRows.forEach(row => {
+    if (!row?.id) return;
+    runSelectionEffectsForRow(sourceGroupKey, row.id);
+  });
 
   const subgroupInfo = parseSubgroupKey(sourceGroupKey);
   if (!subgroupInfo?.parentGroupKey || !subgroupInfo.parentRowId) return;
