@@ -11,7 +11,11 @@ This project uses TypeScript. You need to build the script before using it in Go
 1. Open a terminal in this directory.
 2. Run `npm install` to install dependencies.
 3. Run `npm test` to run unit tests (Optional).
-4. Run `npm run build` to compile the TypeScript code.
+4. Run `npm run lint` to run the repository lint and typecheck flow (Optional).
+5. Run `npm run lint:changed` before opening a PR to fail only on new lint issues introduced by your changes.
+   - By default this compares against commit `7228fc2c7f1f550fa36bf2d7368779ba1adf48d6`.
+   - Use `LINT_BASE_REF=<git-ref> npm run lint:changed` to compare against a different base branch or commit.
+6. Run `npm run build` to compile the TypeScript code.
    - This will generate a `dist/Code.js` file.
 
 ## 2b. Optional: Bundle a Config Export (sheetless override)
@@ -2616,6 +2620,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Optional source-form cleanup hooks:
      - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted
      - `reservationLifecycle.reconcileOnFinalSubmit` consumes/releases active reservations in one batched closeout when the source record reaches its final status
+     - `lifecycle.rules[]` with `type: "releaseActiveReservations"` releases all remaining active reservations owned by that source form from the daily `2am` lifecycle trigger
      - `lifecycle.rules[]` with `type: "releaseStaleReservations"` releases active reservations for stale unfinished source records from the daily `2am` lifecycle trigger
 
    Example:
@@ -2634,12 +2639,9 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      "lifecycle": {
        "rules": [
          {
-           "id": "releaseStaleReservations",
-           "type": "releaseStaleReservations",
-           "dateFieldId": "MP_PREP_DATE",
-           "compare": "beforeToday",
-           "ledgerFormKey": "Config: Inventory Reservation Ledger",
-           "releaseWhenSourceMissing": true
+           "id": "releaseActiveReservations",
+           "type": "releaseActiveReservations",
+           "ledgerFormKey": "Config: Inventory Reservation Ledger"
          }
        ]
      }
@@ -2903,7 +2905,7 @@ Recommended steps after deploying a new bundle:
 - Run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)**:
   - Installs `onEdit` triggers to keep options + `Data Version` + indexes consistent when users manually edit sheets.
   - Installs a daily time-based trigger for `runDailyAnalyticsRecompute` to reconcile analytics snapshots.
-  - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Inventory`).
+  - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Inventory` when `LEFTOVER_EXP_DATE <= today`, or daily `releaseActiveReservations` cleanup for reservation-backed source forms).
 
 ### UI tips (React edit + Summary)
 

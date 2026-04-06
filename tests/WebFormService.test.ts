@@ -1730,7 +1730,7 @@ describe('WebFormService', () => {
         formKey: 'Config: Leftover Inventory',
         language: 'EN',
         LEFTOVER_STATUS: 'available',
-        LEFTOVER_EXP_DATE: '2026-03-21',
+        LEFTOVER_EXP_DATE: '2026-03-22',
         LEFTOVER_NAME: 'Stew'
       } as any);
       expect(stillAvailable.success).toBe(true);
@@ -1753,6 +1753,20 @@ describe('WebFormService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test('shouldApplyLifecycleRule supports onOrBeforeToday for inclusive expiry configs', () => {
+    const rule = {
+      type: 'dateStatusTransition',
+      dateFieldId: 'LEFTOVER_EXP_DATE',
+      statusFieldId: 'LEFTOVER_STATUS',
+      fromStatuses: ['available'],
+      toStatus: 'expired',
+      compare: 'onOrBeforeToday'
+    };
+
+    expect((service as any).shouldApplyLifecycleRule(rule, 'available', '2026-03-21', '2026-03-21')).toBe(true);
+    expect((service as any).shouldApplyLifecycleRule(rule, 'available', '2026-03-22', '2026-03-21')).toBe(false);
   });
 
   test('saveSubmissionWithId ignores __ckRecreateFromRecordId and updates the same record id', () => {
@@ -3066,6 +3080,90 @@ describe('WebFormService', () => {
     } finally {
       todaySpy.mockRestore();
     }
+  });
+
+  test('runDailyLifecycleRecompute releases active reservations for configured source forms without date checks', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const sourceFormKey = 'Config: Source Reservations';
+    const lifecycleJson = JSON.stringify({
+      reservationLifecycle: {
+        ledgerFormKey,
+        releaseOnDelete: true
+      },
+      lifecycle: {
+        rules: [
+          {
+            id: 'releaseActiveReservations',
+            type: 'releaseActiveReservations',
+            ledgerFormKey
+          }
+        ]
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Source Reservations', sourceFormKey, 'Source Reservation Data', 'Desc', '', '', '', lifecycleJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    const sourceConfig = ss.getSheetByName(sourceFormKey) || ss.insertSheet(sourceFormKey);
+    (sourceConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SRC_LABEL', 'TEXT', 'Source label', 'Source label', 'Source label', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    expect(service.saveSubmissionWithId({
+      formKey: sourceFormKey,
+      language: 'EN',
+      id: 'SRC-DAILY-1',
+      SRC_LABEL: 'Open reservation owner',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any).success).toBe(true);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-DAILY',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 7,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-DAILY',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey,
+      sourceRecordId: 'SRC-DAILY-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-DAILY',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const primeSpy = jest.spyOn(service as any, 'primeHomeBootstrapCache');
+    const result = service.runDailyLifecycleRecompute();
+    expect(result.success).toBe(true);
+    expect(result.updatedForms).toBe(1);
+    expect(result.updatedRecords).toBe(1);
+    expect(primeSpy).toHaveBeenCalledTimes(1);
+    expect(primeSpy).toHaveBeenCalledWith(sourceFormKey, expect.any(Number), 'runDailyLifecycleRecompute');
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(7);
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('released');
   });
 
   test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {

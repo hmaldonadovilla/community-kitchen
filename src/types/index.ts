@@ -2664,7 +2664,27 @@ export interface LifecycleReleaseStaleReservationsRule {
   releaseWhenSourceMissing?: boolean;
 }
 
-export type LifecycleRule = LifecycleDateStatusTransitionRule | LifecycleReleaseStaleReservationsRule;
+export interface LifecycleReleaseActiveReservationsRule {
+  /**
+   * Optional stable rule id for diagnostics.
+   */
+  id?: string;
+  /**
+   * Release all active reservations owned by this source form whenever the daily lifecycle trigger runs.
+   */
+  type: 'releaseActiveReservations';
+  /**
+   * Optional override for the reservation ledger form.
+   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
+   * `Config: Inventory Reservation Ledger`.
+   */
+  ledgerFormKey?: string;
+}
+
+export type LifecycleRule =
+  | LifecycleDateStatusTransitionRule
+  | LifecycleReleaseStaleReservationsRule
+  | LifecycleReleaseActiveReservationsRule;
 
 export interface LifecycleConfig {
   /**

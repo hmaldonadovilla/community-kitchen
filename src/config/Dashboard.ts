@@ -2539,10 +2539,12 @@ export class Dashboard {
   private normalizeLifecycleRule(raw: any): LifecycleRule | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const type = (raw.type ?? raw.kind ?? 'dateStatusTransition').toString().trim();
-    if (type !== 'dateStatusTransition' && type !== 'releaseStaleReservations') return undefined;
+    if (type !== 'dateStatusTransition' && type !== 'releaseStaleReservations' && type !== 'releaseActiveReservations') {
+      return undefined;
+    }
     const dateFieldId = (raw.dateFieldId ?? raw.fieldId ?? raw.dateField ?? '').toString().trim();
     const toStatus = (raw.toStatus ?? raw.status ?? raw.nextStatus ?? '').toString().trim();
-    if (!dateFieldId) return undefined;
+    if ((type === 'dateStatusTransition' || type === 'releaseStaleReservations') && !dateFieldId) return undefined;
     if (type === 'dateStatusTransition' && !toStatus) return undefined;
     const compareRaw = (raw.compare ?? raw.operator ?? 'beforeToday').toString().trim();
     const compare = compareRaw === 'onOrBeforeToday' ? 'onOrBeforeToday' : 'beforeToday';
@@ -2564,6 +2566,10 @@ export class Dashboard {
             dateFieldId,
             compare
           }
+        : type === 'releaseActiveReservations'
+          ? {
+              type: 'releaseActiveReservations'
+            }
         : {
             type: 'dateStatusTransition',
             dateFieldId,
@@ -2572,16 +2578,24 @@ export class Dashboard {
           };
     const id = (raw.id ?? '').toString().trim();
     if (id) rule.id = id;
-    if (statusFieldId) rule.statusFieldId = statusFieldId;
-    if (fromStatuses?.length) rule.fromStatuses = fromStatuses;
-    if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
-      rule.dayOffset = Math.trunc(dayOffsetRaw);
+    if (type !== 'releaseActiveReservations') {
+      if (statusFieldId) {
+        (rule as any).statusFieldId = statusFieldId;
+      }
+      if (fromStatuses?.length) {
+        (rule as any).fromStatuses = fromStatuses;
+      }
+      if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
+        (rule as any).dayOffset = Math.trunc(dayOffsetRaw);
+      }
     }
-    if (type === 'releaseStaleReservations') {
+    if (type === 'releaseStaleReservations' || type === 'releaseActiveReservations') {
       const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
       if (ledgerFormKey) {
         (rule as any).ledgerFormKey = ledgerFormKey;
       }
+    }
+    if (type === 'releaseStaleReservations') {
       if (raw.releaseWhenSourceMissing !== undefined) {
         (rule as any).releaseWhenSourceMissing = Boolean(raw.releaseWhenSourceMissing);
       }

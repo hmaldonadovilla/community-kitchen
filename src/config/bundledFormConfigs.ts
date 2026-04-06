@@ -8110,7 +8110,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "available"
             ],
             "toStatus": "expired",
-            "compare": "beforeToday"
+            "compare": "onOrBeforeToday"
           }
         ]
       }
@@ -10054,12 +10054,9 @@ export const BUNDLED_FORM_CONFIGS = [
       "lifecycle": {
         "rules": [
           {
-            "id": "releaseStaleInventoryReservations",
-            "type": "releaseStaleReservations",
-            "dateFieldId": "MP_PREP_DATE",
-            "compare": "beforeToday",
-            "ledgerFormKey": "Config: Inventory Reservation Ledger",
-            "releaseWhenSourceMissing": true
+            "id": "releaseActiveInventoryReservations",
+            "type": "releaseActiveReservations",
+            "ledgerFormKey": "Config: Inventory Reservation Ledger"
           }
         ]
       },

@@ -353,11 +353,11 @@ Home page runtime strategy in the current Apps Script architecture:
   - Optional: set `listView.search.placeholder` to customize the search input placeholder text (set `""` to remove it), and set `listView.title: ""` to hide the list heading.
   - Recommended: use trigger-based `analytics.widgets` for Home/List KPIs and the dedicated analytics page (`?form=<...>&page=analytics`). Legacy `listView.metric` remains runtime-compatible but is deprecated.
 - **Trigger-based analytics module**: Configure `analytics.widgets` to compute `aggregate`/`arithmetic`/`script` metrics server-side, persist snapshots in hidden per-form analytics sheets, and render them in List (`placements: ["listView"]`) and/or the analytics page (`placements: ["analyticsPage"]`). Recomputes run on save/edit/follow-up actions plus a daily reconciliation trigger (`runDailyAnalyticsRecompute`).
-- **Lifecycle status automation**: Configure `lifecycle.rules` on a form to run generic daily rules from the Apps Script trigger (`runDailyLifecycleRecompute`, installed at `2am`). Supported rules now include `dateStatusTransition` (for example `available -> expired` when `LEFTOVER_EXP_DATE < today`) and `releaseStaleReservations` (release still-active reservation ledger rows for stale source records, for example yesterday's unfinished Meal Production reservations).
+- **Lifecycle status automation**: Configure `lifecycle.rules` on a form to run generic daily rules from the Apps Script trigger (`runDailyLifecycleRecompute`, installed at `2am`). Supported rules now include `dateStatusTransition` (for example `available -> expired` when `LEFTOVER_EXP_DATE <= today`), `releaseActiveReservations` (release all still-active reservation ledger rows owned by a source form on each daily run), and `releaseStaleReservations` (release still-active reservation ledger rows for stale source records when you explicitly need date-driven cleanup).
 - **Reservation-backed shared inventory**: The leftover flow now has a server-side reservation foundation for quantity-based shared inventory. `Leftover Inventory` stores aggregate reserved quantities (`LEFTOVER_RESERVED_QTY`, `LEFTOVER_RESERVED_PORTIONS`), while `Config: Inventory Reservation Ledger` tracks row-level active / released / consumed reservations. The UI should continue reading availability from the inventory datasource; reservation writes go through one atomic server endpoint so conflicts return a fresh authoritative availability snapshot.
 - **Datasource-row reservation sync**: Datasource-backed selection rows can keep rendering from inventory while still reserving against the server. The client updates the inventory datasource cache from the returned availability snapshot so other rows in the same form immediately see the refreshed free quantity without an extra list fetch.
 - **Configurable reservation conflict dialog**: Datasource-backed reservation rows can define `reservation.conflictDialog` so concurrency conflicts explain what happened and offer two actions: use the authoritative available quantity or cancel the attempted change. Message templates support `{itemLabel}`, `{itemId}`, `{available}`, `{unit}`, `{availableWithUnit}`, `{requested}`, and `{current}`.
-- **Reservation lifecycle hooks**: Source forms can now configure `reservationLifecycle.releaseOnDelete` so active reservations are released automatically when the source record is deleted (including dedup-key delete/recreate flows). The same source form can add a `lifecycle.rules[]` entry of type `releaseStaleReservations` so the daily `2am` lifecycle trigger releases stale unfinished reservations without custom code. Final closeout is also configurable via `reservationLifecycle.reconcileOnFinalSubmit`, which consumes or releases active reservations in one batched server reconciliation when the source record reaches its final status. Submit feedback for that reconciliation can be localized/configured via `reservationLifecycle.reconcileOnFinalSubmit.feedback`.
+- **Reservation lifecycle hooks**: Source forms can now configure `reservationLifecycle.releaseOnDelete` so active reservations are released automatically when the source record is deleted (including dedup-key delete/recreate flows). Source forms can also add a `lifecycle.rules[]` entry of type `releaseActiveReservations` so the daily `2am` lifecycle trigger releases all remaining active reservations without custom code, or keep using `releaseStaleReservations` when cleanup should remain date-driven. Final closeout is also configurable via `reservationLifecycle.reconcileOnFinalSubmit`, which consumes or releases active reservations in one batched server reconciliation when the source record reaches its final status. Submit feedback for that reconciliation can be localized/configured via `reservationLifecycle.reconcileOnFinalSubmit.feedback`.
 - **Central landing page + admin canonicalization**: Opening the web app without `form` now renders a form-catalog landing page. Admin aliases (`?admin-true` or `?admin=1|true|yes|on`) are accepted and propagated as canonical `admin=true` in navigation links.
 - **Line-item section selector filters**: `lineItemConfig.sectionSelector` now supports its own `optionFilter` (including sheet-driven `optionMapRef` with multi-column keys). If you set `sectionSelector.required: true`, the **Add line** button is disabled until a selector value is chosen (prevents creating empty rows in `addMode: "inline"`). Set `sectionSelector.choiceSearchEnabled: true` to always render the searchable input (search indexes include extra `optionsRef` columns). Use `sectionSelector.hideLabel: true` to hide the selector label (placeholder only).
 - **Compact selector tables**: Line-item table UI now supports `ui.maxVisibleRows` to cap visible rows and make the body scrollable, plus `ui.hideRemoveColumn` to hide the trailing trash/remove column when the table is being used as a bounded selector instead of a manually managed list.
@@ -404,6 +404,22 @@ Run unit tests with:
 ```bash
 npm test
 ```
+
+Run the repository lint checks with:
+
+```bash
+npm run lint
+```
+
+This keeps the current repo-wide ESLint warning baseline visible without failing on legacy warnings.
+
+For contributor changes, run the forward-only lint gate before opening a PR:
+
+```bash
+npm run lint:changed
+```
+
+`lint:changed` compares your work against commit `7228fc2c7f1f550fa36bf2d7368779ba1adf48d6` by default, fails on new ESLint warnings or errors introduced on added lines, and then runs `tsc --noEmit`. Override the comparison target with `LINT_BASE_REF=<git-ref>` when needed.
 
 ## Deployment & caching (summary)
 

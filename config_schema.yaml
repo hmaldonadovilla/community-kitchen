@@ -5444,6 +5444,22 @@ components:
             When true (default), also release active reservations when the source record can no longer be found.
       required: [type, dateFieldId]
 
+    LifecycleReleaseActiveReservationsRule:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Optional stable rule id for diagnostics.
+        type:
+          type: string
+          enum: [releaseActiveReservations]
+        ledgerFormKey:
+          type: string
+          description: |
+            Optional override for the reservation ledger form.
+            Defaults to `reservationLifecycle.ledgerFormKey` or `Config: Inventory Reservation Ledger`.
+      required: [type]
+
     LifecycleConfig:
       type: object
       properties:
@@ -5453,11 +5469,13 @@ components:
             oneOf:
               - $ref: '#/components/schemas/LifecycleDateStatusTransitionRule'
               - $ref: '#/components/schemas/LifecycleReleaseStaleReservationsRule'
+              - $ref: '#/components/schemas/LifecycleReleaseActiveReservationsRule'
       description: |
-        Generic date-driven lifecycle automation evaluated by the daily Apps Script trigger.
+        Generic daily lifecycle automation evaluated by the daily Apps Script trigger.
 
         Typical use:
-        - mark leftovers `expired` when `LEFTOVER_EXP_DATE < today`
+        - mark leftovers `expired` when `LEFTOVER_EXP_DATE <= today`
+        - release all active reservations for a source form every day
         - release stale active reservations for unfinished source records
         - later reuse for other stock/inventory status rollovers
 

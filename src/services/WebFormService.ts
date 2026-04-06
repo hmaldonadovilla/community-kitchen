@@ -984,7 +984,7 @@ export class WebFormService {
   }
 
   private resolveLifecycleStatusColumn(form: FormConfig, rule: LifecycleRule, columns: HeaderColumns): number | undefined {
-    const explicitFieldId = (rule.statusFieldId || '').toString().trim();
+    const explicitFieldId = `${'statusFieldId' in rule ? rule.statusFieldId || '' : ''}`.trim();
     if (explicitFieldId && columns.fields?.[explicitFieldId]) {
       return Number(columns.fields[explicitFieldId]) || undefined;
     }
@@ -1001,20 +1001,63 @@ export class WebFormService {
     rawDateValue: any,
     todayIso: string
   ): boolean {
+    const fromStatusesRaw = 'fromStatuses' in rule ? rule.fromStatuses : undefined;
     const status = (currentStatus === undefined || currentStatus === null ? '' : currentStatus.toString().trim()).toLowerCase();
-    const fromStatuses = Array.isArray(rule.fromStatuses)
-      ? rule.fromStatuses.map(value => (value || '').toString().trim().toLowerCase()).filter(Boolean)
+    const fromStatuses = Array.isArray(fromStatusesRaw)
+      ? fromStatusesRaw.map((value: any) => (value || '').toString().trim().toLowerCase()).filter(Boolean)
       : [];
     if (fromStatuses.length && !fromStatuses.includes(status)) return false;
     const dateIso = normalizeToIsoDate(rawDateValue);
     if (!dateIso) return false;
-    const offsetDays = Number.isFinite(Number(rule.dayOffset || 0)) ? Math.trunc(Number(rule.dayOffset || 0)) : 0;
+    const dayOffsetRaw = 'dayOffset' in rule ? rule.dayOffset : 0;
+    const offsetDays = Number.isFinite(Number(dayOffsetRaw || 0)) ? Math.trunc(Number(dayOffsetRaw || 0)) : 0;
     const compareIso = offsetDays ? this.shiftIsoDate(todayIso, offsetDays) : todayIso;
     if (!compareIso) return false;
-    if (rule.compare === 'onOrBeforeToday') {
+    if (('compare' in rule ? rule.compare : 'beforeToday') === 'onOrBeforeToday') {
       return dateIso <= compareIso;
     }
     return dateIso < compareIso;
+  }
+
+  private getActiveLifecycleReservationsForForm(
+    formKey: string,
+    ledgerKey: string,
+    cache: Map<string, WebFormSubmission[]>
+  ): WebFormSubmission[] {
+    if (cache.has(ledgerKey)) {
+      return cache.get(ledgerKey) || [];
+    }
+    const ledgerContext = this.getFormContextLite(ledgerKey);
+    const rows = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
+      this.isActiveReservationRecord(record) &&
+      this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === formKey
+    );
+    cache.set(ledgerKey, rows);
+    return rows;
+  }
+
+  private releaseLifecycleReservationsForSource(args: {
+    formKey: string;
+    sourceRecordId: string;
+    ledgerKey: string;
+    releasedSourceRecords: Set<string>;
+    errors: string[];
+    errorLabel: string;
+  }): number {
+    const releaseKey = `${args.ledgerKey}::${args.sourceRecordId}`;
+    if (args.releasedSourceRecords.has(releaseKey)) return 0;
+    const releaseResult = this.releaseInventoryReservations({
+      sourceFormKey: args.formKey,
+      sourceRecordId: args.sourceRecordId,
+      ledgerFormKey: args.ledgerKey,
+      refreshMode: 'revisionOnly'
+    });
+    if (!releaseResult.success) {
+      args.errors.push(`${args.formKey}: ${args.errorLabel}: ${releaseResult.message}`);
+      return 0;
+    }
+    args.releasedSourceRecords.add(releaseKey);
+    return Number(releaseResult.reconciledReservations || 0);
   }
 
   public runDailyLifecycleRecompute(): { success: boolean; updatedForms: number; updatedRecords: number; errors: string[] } {
@@ -1044,24 +1087,49 @@ export class WebFormService {
         const releasedSourceRecords = new Set<string>();
 
         rules.forEach(rule => {
+          if (rule.type === 'releaseActiveReservations') {
+            const ledgerFormKey =
+              (rule.ledgerFormKey || form.reservationLifecycle?.ledgerFormKey || 'Config: Inventory Reservation Ledger')
+                .toString()
+                .trim();
+            const ledgerKey = ledgerFormKey || 'Config: Inventory Reservation Ledger';
+            const activeReservations = this.getActiveLifecycleReservationsForForm(
+              formKey,
+              ledgerKey,
+              activeReservationRowsByLedger
+            );
+            if (!activeReservations.length) return;
+
+            const sourceRecordIds = Array.from(
+              new Set(
+                activeReservations
+                  .map(record => this.readRecordFieldString(record, 'SOURCE_RECORD_ID'))
+                  .filter(Boolean)
+              )
+            );
+            sourceRecordIds.forEach(sourceRecordId => {
+              updatedRecords += this.releaseLifecycleReservationsForSource({
+                formKey,
+                sourceRecordId,
+                ledgerKey,
+                releasedSourceRecords,
+                errors,
+                errorLabel: `active reservation release failed for ${sourceRecordId}`
+              });
+            });
+            return;
+          }
           if (rule.type === 'releaseStaleReservations') {
             const ledgerFormKey =
               (rule.ledgerFormKey || form.reservationLifecycle?.ledgerFormKey || 'Config: Inventory Reservation Ledger')
                 .toString()
                 .trim();
             const ledgerKey = ledgerFormKey || 'Config: Inventory Reservation Ledger';
-            const activeReservations = (() => {
-              if (activeReservationRowsByLedger.has(ledgerKey)) {
-                return activeReservationRowsByLedger.get(ledgerKey) || [];
-              }
-              const ledgerContext = this.getFormContextLite(ledgerKey);
-              const rows = this.fetchAllSubmissionRecords(ledgerContext.form, ledgerContext.questions).filter(record =>
-                this.isActiveReservationRecord(record) &&
-                this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === formKey
-              );
-              activeReservationRowsByLedger.set(ledgerKey, rows);
-              return rows;
-            })();
+            const activeReservations = this.getActiveLifecycleReservationsForForm(
+              formKey,
+              ledgerKey,
+              activeReservationRowsByLedger
+            );
             if (!activeReservations.length) return;
 
             const sourceRowIndexById = new Map<string, number>();
@@ -1082,26 +1150,27 @@ export class WebFormService {
             });
 
             groupedBySource.forEach((reservationRows, sourceRecordId) => {
-              const releaseKey = `${ledgerKey}::${sourceRecordId}`;
-              if (releasedSourceRecords.has(releaseKey)) return;
               const sourceRowIndex = sourceRowIndexById.get(sourceRecordId);
               if (sourceRowIndex === undefined) {
                 if (rule.releaseWhenSourceMissing === false) return;
-                const releaseResult = this.releaseInventoryReservations({
-                  sourceFormKey: formKey,
+                updatedRecords += this.releaseLifecycleReservationsForSource({
+                  formKey,
                   sourceRecordId,
-                  ledgerFormKey: ledgerKey,
-                  refreshMode: 'revisionOnly'
+                  ledgerKey,
+                  releasedSourceRecords,
+                  errors,
+                  errorLabel: `stale release failed for missing source ${sourceRecordId}`
                 });
-                if (!releaseResult.success) {
-                  errors.push(`${formKey}: stale release failed for missing source ${sourceRecordId}: ${releaseResult.message}`);
-                  return;
-                }
-                releasedSourceRecords.add(releaseKey);
-                updatedRecords += Number(releaseResult.reconciledReservations || 0);
                 return;
               }
               const statusCol = this.resolveLifecycleStatusColumn(resolvedForm, rule, columns);
+              if (Array.isArray(rule.fromStatuses) && rule.fromStatuses.length && !statusCol) {
+                errors.push(
+                  `${formKey}: lifecycle rule ${(rule.id || rule.type).toString()} missing status column` +
+                  `${rule.statusFieldId ? ` for ${rule.statusFieldId}` : ''}`
+                );
+                return;
+              }
               const currentStatus = statusCol ? rows[sourceRowIndex][statusCol - 1] : undefined;
               const dateCol = Number(columns.fields?.[rule.dateFieldId] || 0);
               if (!dateCol) {
@@ -1112,18 +1181,14 @@ export class WebFormService {
               if (!this.shouldApplyLifecycleRule(rule, currentStatus, rawDateValue, todayIso)) {
                 return;
               }
-              const releaseResult = this.releaseInventoryReservations({
-                sourceFormKey: formKey,
+              updatedRecords += this.releaseLifecycleReservationsForSource({
+                formKey,
                 sourceRecordId,
-                ledgerFormKey: ledgerKey,
-                refreshMode: 'revisionOnly'
+                ledgerKey,
+                releasedSourceRecords,
+                errors,
+                errorLabel: `stale release failed for ${sourceRecordId}`
               });
-              if (!releaseResult.success) {
-                errors.push(`${formKey}: stale release failed for ${sourceRecordId}: ${releaseResult.message}`);
-                return;
-              }
-              releasedSourceRecords.add(releaseKey);
-              updatedRecords += Number(releaseResult.reconciledReservations || 0);
             });
             return;
           }
