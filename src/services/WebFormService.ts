@@ -699,8 +699,9 @@ export class WebFormService {
   } {
     const canonicalKey = this.resolveCanonicalFormKey(formKey) || (formKey || '').toString().trim();
     const rev = this.readHomeRevision(canonicalKey);
-    const parsedClientRev = Number(clientRev);
-    if (Number.isFinite(parsedClientRev) && parsedClientRev === rev) {
+    const hasClientRev = clientRev !== null && clientRev !== undefined && `${clientRev}`.trim() !== '';
+    const parsedClientRev = hasClientRev ? Number(clientRev) : NaN;
+    if (hasClientRev && Number.isFinite(parsedClientRev) && parsedClientRev === rev) {
       return { notModified: true, rev, cache: 'hit' };
     }
 

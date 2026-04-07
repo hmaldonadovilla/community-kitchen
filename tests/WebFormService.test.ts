@@ -177,6 +177,25 @@ describe('WebFormService', () => {
     expect(res.analyticsRev).toBe(0);
   });
 
+  test('fetchHomeBootstrap does not treat null client revision as revision zero', () => {
+    jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(0);
+    jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);
+    jest.spyOn(service as any, 'resolveBundledConfig').mockReturnValue(null);
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({ listView: { columns: [{ fieldId: 'Q4' }] } });
+    jest.spyOn(service as any, 'buildBootstrap').mockReturnValue({
+      listResponse: { items: [{ id: 'rec-1', Q4: 'ACME' }], totalCount: 1 },
+      records: {}
+    });
+    jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
+
+    const res = service.fetchHomeBootstrap('Config: Delivery', null as any);
+
+    expect(res.notModified).toBe(false);
+    expect(res.rev).toBe(0);
+    expect(res.listResponse?.items).toHaveLength(1);
+    expect((service as any).buildBootstrap).toHaveBeenCalled();
+  });
+
   test('fetchDataSource can read records from another form via formKey', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [
