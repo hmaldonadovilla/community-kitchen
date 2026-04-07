@@ -20,7 +20,11 @@ description: Development Rules
 - Update the config_schema.yaml file to reflect the new feature (yaml schema for the new feature). This file is used by LLMs to generate form configuration, it need to provide clear and descriptive information.
 - Update the README.md file to reflect the new feature (high level overview).
 - Create unit tests to cover the new feature.
-- Run typescript lint verification to ensure the new feature is compliant with the typescript lint rules. Fix errors and avoid generating new warnings.
+- Lint is part of the Definition of Done / DLC and must be run for every change before completion.
+- Use `npm run lint:changed` as the required lint gate for local feature work. This script compares changed lines against the baseline commit defined in `scripts/lint-changed.js` (`DEFAULT_LINT_BASE_REF`) unless `LINT_BASE_REF` overrides it.
+- `npm run lint:changed` is the authoritative guard while the repository still carries an intentional warning baseline. Do not treat the existing warning baseline as permission to introduce new lint findings on changed lines.
+- `npm run lint` remains useful for visibility across the full repo, but it is not the main enforcement mechanism while the baseline cleanup is still in progress.
+- Run typescript lint verification and fix errors and new warnings introduced by your change.
 - Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
 - Run `npm run build` to ensure the application can be compiled successfully.
 - Before stating a new feature, create a solution design, and implementation pland and split the work into logical slices that can be tracked, bring value, can be tested and make sense to be commited individually.
@@ -36,6 +40,8 @@ description: Development Rules
 - The human developer owns `CLASP_DEPLOYMENT_ID` and `CLASP_TARGET_WEB_APP_URL` values in `.env.deploy.staging`.
 - Honor `.env.deploy.staging` as the source of truth for deployment id and target web URL.
 - Do not override, regenerate, or replace deployment id / web URL values unless the human developer explicitly asks for it.
+- Treat lint as part of CI/CD for staging deploys. `npm run deploy:apps-script` must run the lint gate before tests/build/deploy.
+- The deploy-time lint gate is `npm run lint:changed`, not a raw full-repo eslint run, because the repo currently uses a baseline commit to allow historical warnings while blocking new ones.
 - Before deploying, run `npm run build` (or rely on the build step inside `npm run deploy:apps-script`).
 - After deploying, refresh the page before validating behavior.
 - After deployment changes, run validation tests using Playwright.

@@ -107,6 +107,10 @@ if [[ -n "${CLASP_TARGET_WEB_APP_URL:-}" && -n "${CLASP_DEPLOYMENT_ID:-}" ]]; th
   fi
 fi
 
+if [[ "${SKIP_LINT:-}" != "1" ]]; then
+  npm run lint:changed
+fi
+
 if [[ "${SKIP_TESTS:-}" != "1" ]]; then
   npm test
 fi
