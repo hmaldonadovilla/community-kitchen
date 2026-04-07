@@ -3096,6 +3096,10 @@ export interface FormConfig {
    */
   listViewSearch?: ListViewConfig['search'];
   /**
+   * Optional override for list/home section ordering and metric alignment (recommended: `listView.layout`).
+   */
+  listViewLayout?: ListViewConfig['layout'];
+  /**
    * Optional override for the list view UI mode (table vs cards) and toggle behavior (recommended: `listView.view`).
    */
   listViewView?: ListViewConfig['view'];
@@ -4515,6 +4519,24 @@ export interface ListViewSearchConfig {
    * Example: "View recipes:".
    */
   presetsTitle?: LocalizedString | string;
+  /**
+   * Optional initial search value applied when the list screen first renders.
+   *
+   * - For `mode: "text"` / `mode: "advanced"`, use `value`.
+   * - For `mode: "date"`, use `value: "YYYY-MM-DD"` or `relativeDate: "today"`.
+   */
+  initialValue?: string | ListViewSearchInitialValueConfig;
+}
+
+export interface ListViewSearchInitialValueConfig {
+  /**
+   * Explicit initial search value.
+   */
+  value?: string;
+  /**
+   * Optional relative date helper for date search.
+   */
+  relativeDate?: 'today';
 }
 
 export interface ListViewDateHeadingConfig {
@@ -4551,6 +4573,23 @@ export interface ListViewViewConfig {
    * Default: `mode` (or `table` when `mode` is not set).
    */
   defaultMode?: 'table' | 'cards';
+}
+
+export type ListViewSectionType = 'title' | 'metric' | 'dateHeading' | 'search' | 'results' | 'presets' | 'pagination';
+
+export interface ListViewLayoutConfig {
+  /**
+   * Optional ordered list of sections to render on the List/Home page.
+   *
+   * When omitted, the UI keeps the legacy built-in layout.
+   */
+  sections?: ListViewSectionType[];
+  /**
+   * Optional metric alignment override when `metric` is rendered as its own section.
+   *
+   * Default: `end`.
+   */
+  metricAlign?: 'start' | 'center' | 'end';
 }
 
 export type AnalyticsPlacement = 'listView' | 'analyticsPage';
@@ -4732,6 +4771,12 @@ export interface ListViewConfig {
    * Optional list search configuration (defaults to text search).
    */
   search?: ListViewSearchConfig;
+  /**
+   * Optional layout override for ordering the major list/home sections.
+   *
+   * When omitted, the UI keeps the legacy layout order.
+   */
+  layout?: ListViewLayoutConfig;
   /**
    * Optional legend shown below the list view table to explain icons/visual indicators.
    */

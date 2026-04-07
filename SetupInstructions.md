@@ -513,6 +513,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - The list view automatically fetches this field for filtering even if it is not shown as a visible column.
       - Recent rows are still prefetched for fast initial load. If the searched date is older than, or exactly equal to, the oldest currently prefetched date, the app automatically falls back to a server-side date query so older records remain reachable.
       - Optional: add `listView.search.helperText` to show helper copy below the date picker.
+      - Optional: add `listView.search.initialValue` when the date picker should start with a visible preset date (for example `{ "relativeDate": "today" }`).
       - Optional: add `listView.defaultWhen` to apply a default row filter before the user starts searching.
       - Optional: add `listView.dateHeading` to show headings such as `Wed, 04-Feb-2026 activities` above the results.
 
@@ -558,6 +559,24 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```json
       { "listView": { "search": { "presetsTitle": { "en": "View recipes:" } } } }
       ```
+
+    - Want to reorder the major **Home/List** sections without hardcoding a form-specific page? Set `listView.layout.sections`:
+
+      ```json
+      {
+        "listView": {
+          "layout": {
+            "sections": ["metric", "search", "dateHeading", "results", "presets", "pagination"],
+            "metricAlign": "center"
+          }
+        }
+      }
+      ```
+
+      Notes:
+      - Supported section ids are `title`, `metric`, `search`, `dateHeading`, `results`, `presets`, and `pagination`.
+      - When omitted, the UI keeps the legacy order.
+      - `metricAlign` only affects standalone metric sections (not the legacy title row).
 
       Advanced mode example (filters):
 

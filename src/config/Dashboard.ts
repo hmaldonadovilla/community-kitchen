@@ -26,6 +26,7 @@ import {
   GroupBehaviorConfig,
   ListViewColumnConfig,
   ListViewLegendItem,
+  ListViewLayoutConfig,
   ListViewMetricConfig,
   ListViewSearchConfig,
   ListViewViewConfig,
@@ -150,6 +151,7 @@ export class Dashboard {
       const listViewDefaultWhen = dashboardConfig?.listViewDefaultWhen;
       const listViewDateHeading = dashboardConfig?.listViewDateHeading;
       const listViewSearch = dashboardConfig?.listViewSearch;
+      const listViewLayout = dashboardConfig?.listViewLayout;
       const listViewView = dashboardConfig?.listViewView;
       const listViewMetric = dashboardConfig?.listViewMetric;
       const analytics = dashboardConfig?.analytics;
@@ -214,6 +216,7 @@ export class Dashboard {
           listViewDefaultWhen,
           listViewDateHeading,
           listViewSearch,
+          listViewLayout,
           listViewView,
           listViewMetric,
           analytics,
@@ -294,6 +297,7 @@ export class Dashboard {
     listViewDefaultWhen?: any;
     listViewDateHeading?: { fieldId: string; suffix?: LocalizedString | string };
     listViewSearch?: ListViewSearchConfig;
+    listViewLayout?: ListViewLayoutConfig;
     listViewView?: ListViewViewConfig;
     listViewMetric?: ListViewMetricConfig;
     analytics?: AnalyticsConfig;
@@ -745,6 +749,14 @@ export class Dashboard {
         ? listViewObj.searchMode
         : undefined;
     const listViewSearch = this.normalizeListViewSearch(listViewSearchRaw);
+
+    const listViewLayoutRaw =
+      (parsed as any).listViewLayout !== undefined
+        ? (parsed as any).listViewLayout
+        : listViewObj && (listViewObj as any).layout !== undefined
+          ? (listViewObj as any).layout
+          : undefined;
+    const listViewLayout = this.normalizeListViewLayout(listViewLayoutRaw);
 
     const listViewViewRaw =
       (parsed as any).listViewView !== undefined
@@ -1376,6 +1388,7 @@ export class Dashboard {
       !listViewDefaultWhen &&
       !listViewDateHeading &&
       !listViewSearch &&
+      !listViewLayout &&
       !listViewView &&
       !listViewMetric &&
       !analytics?.widgets?.length &&
@@ -1433,6 +1446,7 @@ export class Dashboard {
       listViewDefaultWhen,
       listViewDateHeading,
       listViewSearch,
+      listViewLayout,
       listViewView,
       listViewMetric,
       analytics,
@@ -3466,6 +3480,43 @@ export class Dashboard {
     const helperText = normalizeLocalizedMaybeEmpty(helperTextRaw);
     const presetsTitleRaw = (value as any).presetsTitle;
     const presetsTitle = normalizeLocalizedMaybeEmpty(presetsTitleRaw);
+    const initialValueRaw =
+      (value as any).initialValue !== undefined
+        ? (value as any).initialValue
+        : (value as any).defaultValue !== undefined
+          ? (value as any).defaultValue
+          : (value as any).initialDateValue !== undefined
+            ? (value as any).initialDateValue
+            : undefined;
+    const initialValue = (() => {
+      if (initialValueRaw === undefined || initialValueRaw === null) return undefined;
+      if (typeof initialValueRaw === 'string') {
+        const trimmed = initialValueRaw.trim();
+        return trimmed ? trimmed : undefined;
+      }
+      if (typeof initialValueRaw !== 'object') return undefined;
+      const valueRaw =
+        (initialValueRaw as any).value !== undefined
+          ? (initialValueRaw as any).value
+          : (initialValueRaw as any).dateValue !== undefined
+            ? (initialValueRaw as any).dateValue
+            : undefined;
+      const relativeDateRaw =
+        (initialValueRaw as any).relativeDate !== undefined
+          ? (initialValueRaw as any).relativeDate
+          : (initialValueRaw as any).relative !== undefined
+            ? (initialValueRaw as any).relative
+            : undefined;
+      const valueText =
+        valueRaw === undefined || valueRaw === null
+          ? ''
+          : valueRaw.toString().trim();
+      const relativeDate = relativeDateRaw === undefined || relativeDateRaw === null ? '' : relativeDateRaw.toString().trim().toLowerCase();
+      const out: { value?: string; relativeDate?: 'today' } = {};
+      if (valueText) out.value = valueText;
+      if (relativeDate === 'today') out.relativeDate = 'today';
+      return Object.keys(out).length ? out : undefined;
+    })();
     if (mode === 'advanced') {
       const fieldsRaw =
         (value as any).fields !== undefined
@@ -3494,6 +3545,7 @@ export class Dashboard {
       if (placeholder !== undefined) out.placeholder = placeholder;
       if (helperText !== undefined) out.helperText = helperText;
       if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
+      if (initialValue !== undefined) out.initialValue = initialValue;
       return out as ListViewSearchConfig;
     }
     if (mode !== 'date') {
@@ -3501,6 +3553,7 @@ export class Dashboard {
       if (placeholder !== undefined) out.placeholder = placeholder;
       if (helperText !== undefined) out.helperText = helperText;
       if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
+      if (initialValue !== undefined) out.initialValue = initialValue;
       return out as ListViewSearchConfig;
     }
 
@@ -3519,7 +3572,40 @@ export class Dashboard {
     if (placeholder !== undefined) out.placeholder = placeholder;
     if (helperText !== undefined) out.helperText = helperText;
     if (presetsTitle !== undefined) out.presetsTitle = presetsTitle;
+    if (initialValue !== undefined) out.initialValue = initialValue;
     return out as ListViewSearchConfig;
+  }
+
+  private normalizeListViewLayout(value: any): ListViewLayoutConfig | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+
+    const sectionsRaw =
+      Array.isArray((value as any).sections)
+        ? ((value as any).sections as any[])
+        : Array.isArray((value as any).order)
+          ? ((value as any).order as any[])
+          : undefined;
+    const allowedSections: ListViewLayoutConfig['sections'] = ['title', 'metric', 'dateHeading', 'search', 'results', 'presets', 'pagination'];
+    const sections = (sectionsRaw || [])
+      .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+      .filter((entry): entry is NonNullable<ListViewLayoutConfig['sections']>[number] =>
+        allowedSections.includes(entry as NonNullable<ListViewLayoutConfig['sections']>[number])
+      );
+    if (!sections.length) return undefined;
+
+    const metricAlignRaw =
+      (value as any).metricAlign !== undefined
+        ? (value as any).metricAlign
+        : (value as any).metricAlignment !== undefined
+          ? (value as any).metricAlignment
+          : undefined;
+    const metricAlign = metricAlignRaw === undefined || metricAlignRaw === null ? '' : metricAlignRaw.toString().trim().toLowerCase();
+
+    const out: ListViewLayoutConfig = { sections };
+    if (metricAlign === 'start' || metricAlign === 'center' || metricAlign === 'end') {
+      out.metricAlign = metricAlign;
+    }
+    return out;
   }
 
   private normalizeListViewView(value: any): ListViewViewConfig | undefined {

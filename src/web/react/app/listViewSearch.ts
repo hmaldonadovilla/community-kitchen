@@ -1,3 +1,5 @@
+import type { ListViewSearchConfig } from '../../types';
+
 /**
  * List view search helpers (pure functions).
  *
@@ -77,4 +79,27 @@ export const shouldUseServerDateSearch = (args: {
   const oldestPrefetchedDate = resolveOldestPrefetchedIsoDate(args.items, fieldId);
   if (!oldestPrefetchedDate) return true;
   return queryDate <= oldestPrefetchedDate;
+};
+
+export const resolveInitialListSearchValue = (
+  search: ListViewSearchConfig | undefined,
+  now: Date = new Date()
+): string => {
+  const initial = search?.initialValue;
+  if (initial === undefined || initial === null) return '';
+
+  if (typeof initial === 'string') {
+    const trimmed = initial.trim();
+    if (!trimmed) return '';
+    return search?.mode === 'date' ? normalizeToIsoDateLocal(trimmed) || '' : trimmed;
+  }
+
+  const relativeDate = (initial.relativeDate || '').toString().trim().toLowerCase();
+  if ((search?.mode || 'text') === 'date' && relativeDate === 'today') {
+    return normalizeToIsoDateLocal(now) || '';
+  }
+
+  const rawValue = (initial.value || '').toString().trim();
+  if (!rawValue) return '';
+  return search?.mode === 'date' ? normalizeToIsoDateLocal(rawValue) || '' : rawValue;
 };

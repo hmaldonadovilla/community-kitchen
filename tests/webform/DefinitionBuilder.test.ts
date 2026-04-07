@@ -22,7 +22,11 @@ describe('DefinitionBuilder', () => {
         legendColumns: 2,
         legendColumnWidths: [25, 75],
         view: { mode: 'cards', toggleEnabled: true, defaultMode: 'cards' },
-        search: { mode: 'advanced', fields: ['Q1', 'status'] },
+        search: { mode: 'advanced', fields: ['Q1', 'status'], initialValue: 'Draft' },
+        layout: {
+          sections: ['metric', 'search', 'results', 'presets', 'pagination'],
+          metricAlign: 'center'
+        },
         metric: {
           label: { en: 'portions delivered' },
           groupId: 'MP_MEALS_REQUEST',
@@ -120,7 +124,11 @@ describe('DefinitionBuilder', () => {
     expect((def.listView as any)?.legendColumns).toBe(2);
     expect((def.listView as any)?.legendColumnWidths).toEqual([25, 75]);
     expect(def.listView?.view).toEqual({ mode: 'cards', toggleEnabled: true, defaultMode: 'cards' });
-    expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'] });
+    expect(def.listView?.search).toEqual({ mode: 'advanced', fields: ['Q1', 'status'], initialValue: 'Draft' });
+    expect((def.listView as any)?.layout).toEqual({
+      sections: ['metric', 'search', 'results', 'presets', 'pagination'],
+      metricAlign: 'center'
+    });
     expect((def.listView as any)?.metric).toEqual({
       label: { en: 'portions delivered' },
       groupId: 'MP_MEALS_REQUEST',

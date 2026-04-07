@@ -18,10 +18,12 @@ import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/lis
 import { collectListViewMetricDependencies, computeListViewMetricValue } from '../app/listViewMetric';
 import {
   normalizeToIsoDateLocal,
+  resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
   shouldClearAppliedQueryOnInputClear,
   shouldUseServerDateSearch
 } from '../app/listViewSearch';
+import { resolveListViewLayout } from '../app/listViewLayout';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { resolveListViewUiState } from '../app/listViewUiState';
 import { ListViewIcon } from './ListViewIcon';
@@ -96,6 +98,12 @@ const ListView: React.FC<ListViewProps> = ({
   const uiDisabled = Boolean(disabled);
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
   const paginationEnabled = definition.listView?.paginationControlsEnabled !== false;
+  const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
+  const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
+  const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
+  const advancedSearchEnabled = listSearchMode === 'advanced';
+  const searchInputId = 'ck-list-search';
+  const initialSearchValue = resolveInitialListSearchValue(definition.listView?.search);
   const [loading, setLoading] = useState(false);
   const [prefetching, setPrefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,20 +124,14 @@ const ListView: React.FC<ListViewProps> = ({
   const [pageIndex, setPageIndex] = useState(0);
   const defaultSortField = definition.listView?.defaultSort?.fieldId || 'updatedAt';
   const defaultSortDirection = (definition.listView?.defaultSort?.direction || 'desc') as 'asc' | 'desc';
-  const [searchInputValue, setSearchInputValue] = useState('');
-  const [searchQueryValue, setSearchQueryValue] = useState('');
+  const [searchInputValue, setSearchInputValue] = useState(() => initialSearchValue);
+  const [searchQueryValue, setSearchQueryValue] = useState(() => initialSearchValue);
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
   const headerSortEnabled = definition.listView?.headerSortEnabled !== false;
   const hideHeaderRow = definition.listView?.hideHeaderRow === true;
   const rowClickEnabled = definition.listView?.rowClickEnabled !== false;
-
-  const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
-  const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
-  const dateSearchEnabled = listSearchMode === 'date' && !!dateSearchFieldId;
-  const advancedSearchEnabled = listSearchMode === 'advanced';
-  const searchInputId = 'ck-list-search';
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedFieldFilters, setAdvancedFieldFilters] = useState<Record<string, string | string[]>>({});
@@ -170,6 +172,17 @@ const ListView: React.FC<ListViewProps> = ({
       setRecords(cachedRecords);
     }
   }, [cachedRecords]);
+
+  useEffect(() => {
+    setSearchInputValue(initialSearchValue);
+    setSearchQueryValue(initialSearchValue);
+    setAdvancedFieldFilters({});
+    setAdvancedHasSearched(false);
+    setAdvancedKeyword('');
+    setAdvancedOpen(false);
+    setOverlayPresetButton(null);
+    setPageIndex(0);
+  }, [formKey, initialSearchValue]);
 
   useEffect(() => {
     setHasLoadedOnce(cachedResponse !== undefined ? cachedResponse !== null : false);
@@ -687,8 +700,8 @@ const ListView: React.FC<ListViewProps> = ({
 
   useEffect(() => {
     setPageIndex(0);
-    setSearchInputValue('');
-    setSearchQueryValue('');
+    setSearchInputValue(initialSearchValue);
+    setSearchQueryValue(initialSearchValue);
     setAdvancedOpen(false);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
@@ -701,7 +714,7 @@ const ListView: React.FC<ListViewProps> = ({
     });
     setSortField(defaultSortField);
     setSortDirection(defaultSortDirection);
-  }, [formKey, refreshToken, defaultSortField, defaultSortDirection]);
+  }, [defaultSortDirection, defaultSortField, formKey, initialSearchValue, refreshToken]);
 
   useEffect(() => {
     setViewMode(viewToggleEnabled ? viewDefaultModeConfigured : viewModeConfigured);
@@ -2037,6 +2050,376 @@ const ListView: React.FC<ListViewProps> = ({
   const searchControlClass = `ck-list-search-control${
     (advancedSearchEnabled ? ' ck-has-advanced' : '') + (showClearSearch ? ' ck-has-clear' : '') + ((advancedSearchEnabled || showClearSearch) ? ' ck-has-icons' : '')
   }`;
+  const resolvedLayout = resolveListViewLayout(definition.listView?.layout);
+  const legacyHeaderNode =
+    titleNode || metricNode ? (
+      <div className="ck-list-title-row">
+        <div className="ck-list-title-main">{titleNode}</div>
+        {metricNode}
+      </div>
+    ) : null;
+  const titleSectionNode = titleNode ? <div className="ck-list-title-main">{titleNode}</div> : null;
+  const metricSectionNode = metricNode ? (
+    <div
+      className="ck-list-layout-metric"
+      style={{
+        display: 'flex',
+        justifyContent:
+          resolvedLayout?.metricAlign === 'start'
+            ? 'flex-start'
+            : resolvedLayout?.metricAlign === 'center'
+              ? 'center'
+              : 'flex-end',
+        marginBottom: 12
+      }}
+    >
+      {metricNode}
+    </div>
+  ) : null;
+  const dateHeadingNode = inlineDateHeadingText ? (
+    <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 'var(--ck-font-label)' }}>{inlineDateHeadingText}</div>
+  ) : null;
+  const searchSectionNode = (
+    <>
+      <div className="list-toolbar">
+        <label className="ck-list-search-label" htmlFor={searchInputId}>
+          {dateSearchEnabled
+            ? tSystem('list.searchByDate', language, 'Search by date')
+            : tSystem('list.searchByText', language, 'Search')}
+        </label>
+
+        <div className={searchControlClass}>
+          {dateSearchEnabled ? (
+            <DateInput
+              id={searchInputId}
+              value={searchInputValue}
+              language={language}
+              ariaLabel={tSystem('list.searchDateLabel', language, 'Filter by date')}
+              onChange={next => {
+                setSearchInputValue(next);
+                setSearchQueryValue(next);
+                if (!advancedSearchEnabled && advancedHasSearched) {
+                  setAdvancedFieldFilters({});
+                  setAdvancedHasSearched(false);
+                  setAdvancedKeyword('');
+                }
+              }}
+            />
+          ) : (
+            <input
+              id={searchInputId}
+              type="search"
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder || tSystem('list.searchPlaceholder', language, 'Search records')}
+              value={searchInputValue}
+              onChange={e => {
+                setSearchInputValue(e.target.value);
+                setSearchQueryValue(e.target.value);
+                if (!advancedSearchEnabled && advancedHasSearched) {
+                  setAdvancedFieldFilters({});
+                  setAdvancedHasSearched(false);
+                  setAdvancedKeyword('');
+                }
+              }}
+              onKeyDown={e => {
+                if (!advancedSearchEnabled) return;
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyAdvancedSearchNow();
+              }}
+            />
+          )}
+
+          {advancedSearchEnabled ? (
+            <button
+              type="button"
+              className="ck-list-search-advanced-icon"
+              aria-label={tSystem('list.advancedSearch', language, 'Advanced search')}
+              onClick={() => {
+                setAdvancedOpen(prev => {
+                  const next = !prev;
+                  onDiagnostic?.('list.search.advanced.toggle', { open: next });
+                  return next;
+                });
+              }}
+            >
+              {tSystem('list.advancedSearch', language, 'Advanced')}
+            </button>
+          ) : null}
+
+          {showClearSearch ? (
+            <button
+              type="button"
+              className="ck-list-search-clear-icon"
+              aria-label={tSystem('list.clearSearchInput', language, 'Clear search text')}
+              onClick={clearSearchInputOnly}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
+        </div>
+
+        {viewToggleEnabled ? (
+          <div className="ck-list-view-toggle" role="group" aria-label={tSystem('list.viewToggle', language, 'View')}>
+            <button
+              type="button"
+              className={viewMode === 'table' ? 'active' : ''}
+              onClick={() => {
+                setViewMode('table');
+                onDiagnostic?.('list.view.toggle', { mode: 'table' });
+              }}
+            >
+              {tSystem('list.view.table', language, 'Table')}
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'cards' ? 'active' : ''}
+              onClick={() => {
+                setViewMode('cards');
+                onDiagnostic?.('list.view.toggle', { mode: 'cards' });
+              }}
+            >
+              {tSystem('list.view.cards', language, 'List')}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {searchHelperText ? (
+        <div className="muted" role="note" style={{ marginTop: 10, marginBottom: 14 }}>
+          {searchHelperText}
+        </div>
+      ) : null}
+    </>
+  );
+  const presetsSectionNode = visiblePresetButtons.length ? (
+    <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
+      {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
+      {visiblePresetButtons.map(({ q, cfg }) => {
+        const labelNode = resolveLabel((q as any) || ({ id: cfg.action } as any), language) || cfg.action || '';
+        const mode = (cfg.mode || listSearchMode) as 'text' | 'date' | 'advanced';
+        const keyword = (cfg.keyword || '').toString();
+        const dateValue = (cfg.dateValue || '').toString();
+        const fieldFilters = (cfg.fieldFilters || {}) as Record<string, string | string[]>;
+        const target = ((cfg.target || 'inline') as string).toString().trim().toLowerCase() === 'overlay' ? 'overlay' : 'inline';
+        return (
+          <button
+            key={(q as any)?.id || cfg.action}
+            type="button"
+            className="secondary"
+            onClick={() => {
+              if (target === 'overlay') {
+                setOverlayPresetButton({ q, cfg });
+                onDiagnostic?.('list.search.preset.overlay.open', { buttonId: (q as any)?.id || null, mode });
+                return;
+              }
+              applySearchPreset({ mode, keyword, dateValue, fieldFilters });
+              onDiagnostic?.('list.search.preset.click', { buttonId: (q as any)?.id || null, mode });
+            }}
+          >
+            {labelNode}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+  const resultsSectionNode = (
+    <>
+      {showLoadingStatus ? (
+        <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
+      ) : effectiveUiNotice ? (
+        <div className="status muted" style={{ opacity: 0.9 }} role="note">
+          {effectiveUiNotice}
+        </div>
+      ) : null}
+
+      {effectiveUiError && <div className="error">{effectiveUiError}</div>}
+
+      {viewMode === 'table' ? (
+        <div className="list-table-wrapper">
+          <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+            {!hideHeaderRow ? (
+              <thead>
+                <tr>
+                  {columnsForTable.map(col => (
+                    <th
+                      key={col.fieldId}
+                      scope="col"
+                      aria-sort={
+                        sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+                      }
+                      style={{
+                        maxWidth: 180,
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        background: 'var(--card)',
+                        cursor: isSortableColumn(col) ? 'pointer' : 'default'
+                      }}
+                    >
+                      {isSortableColumn(col) ? (
+                        <button
+                          type="button"
+                          className="ck-list-sort-header"
+                          onClick={() => {
+                            const nextField = col.fieldId;
+                            if (sortField === nextField) {
+                              setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+                            } else {
+                              setSortField(nextField);
+                              setSortDirection(defaultDirectionForField(nextField));
+                            }
+                            setPageIndex(0);
+                          }}
+                        >
+                          <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
+                          {sortField === col.fieldId ? (
+                            <span className="ck-list-sort-indicator" aria-hidden="true">
+                              {sortDirection === 'asc' ? '▲' : '▼'}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : (
+                        resolveLocalizedString(col.label, language, col.fieldId)
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            ) : null}
+            <tbody>
+              {pagedItems.length ? (
+                pagedItems.map(row => (
+                  <tr
+                    key={row.id}
+                    onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
+                    style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
+                    aria-disabled={uiDisabled}
+                  >
+                    {columnsForTable.map(col => (
+                      <td
+                        key={col.fieldId}
+                        style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                      >
+                        {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : showNoRecords ? (
+                <tr>
+                  <td colSpan={columnsForTable.length} className="muted">
+                    {tSystem('list.noRecords', language, 'No records found.')}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : !showResults ? null : (
+        <div className="ck-list-cards">
+          {pagedItems.length ? (
+            pagedItems.map(row => (
+              <div
+                key={row.id}
+                className="ck-list-card"
+                role={rowClickEnabled ? 'button' : undefined}
+                tabIndex={rowClickEnabled ? (uiDisabled ? -1 : 0) : undefined}
+                aria-disabled={rowClickEnabled ? uiDisabled : undefined}
+                onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
+                onKeyDown={
+                  rowClickEnabled
+                    ? e => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();
+                        handleRowClick(row);
+                      }
+                    : undefined
+                }
+                style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
+              >
+                <div className="ck-list-card-title-row">
+                  <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
+                  {(() => {
+                    const statusText = (row.status || '').toString().trim();
+                    if (!statusText) return null;
+                    const statusKey = resolveStatusKey(statusText);
+                    return (
+                      <span
+                        className="ck-status-pill"
+                        title={statusText}
+                        aria-label={`Status: ${statusText}`}
+                        data-status-key={statusKey || undefined}
+                      >
+                        {statusText}
+                      </span>
+                    );
+                  })()}
+                </div>
+                {ruleColumnsForCards.length ? (
+                  <div className="ck-list-card-footer">
+                    {ruleColumnsForCards.map(col => {
+                      const node = renderRuleCell(row, col);
+                      if (node === null || node === undefined) return null;
+                      return (
+                        <div key={col.fieldId} className="ck-list-card-action">
+                          {node}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : showNoRecords ? (
+            <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
+          ) : null}
+        </div>
+      )}
+    </>
+  );
+  const paginationSectionNode =
+    paginationEnabled && showResults ? (
+      <div className="actions" style={{ justifyContent: 'space-between' }}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
+          disabled={!showPrev}
+          aria-label={tSystem('list.previous', language, 'Previous')}
+          title={tSystem('list.previous', language, 'Previous')}
+        >
+          {'<'}
+        </button>
+        <div className="muted" style={{ alignSelf: 'center' }}>
+          {tSystem('list.pageOf', language, 'Page {page} of {total}', {
+            page: totalPages ? pageIndex + 1 : 0,
+            total: totalPages
+          })}{' '}
+          •{' '}
+          {showLoadedOfTotal
+            ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', {
+                loaded: loadedCount,
+                total: effectiveTotalCount
+              })
+            : tSystem(
+                (visibleItems.length || effectiveTotalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
+                language,
+                (visibleItems.length || effectiveTotalCount) === 1 ? '{count} record' : '{count} records',
+                { count: visibleItems.length || effectiveTotalCount }
+              )}
+        </div>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))}
+          disabled={!showNext}
+          aria-label={tSystem('list.next', language, 'Next')}
+          title={tSystem('list.next', language, 'Next')}
+        >
+          {'>'}
+        </button>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -2055,158 +2438,33 @@ const ListView: React.FC<ListViewProps> = ({
         />
       ) : null}
         <div style={{ pointerEvents: uiDisabled ? 'none' : 'auto' }}>
-        {titleNode || metricNode ? (
-          <div className="ck-list-title-row">
-            <div className="ck-list-title-main">{titleNode}</div>
-            {metricNode}
-          </div>
-        ) : null}
-
-        {inlineDateHeadingText ? (
-          <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 'var(--ck-font-label)' }}>{inlineDateHeadingText}</div>
-        ) : null}
-
-        <div className="list-toolbar">
-          <label className="ck-list-search-label" htmlFor={searchInputId}>
-            {dateSearchEnabled
-              ? tSystem('list.searchByDate', language, 'Search by date')
-              : tSystem('list.searchByText', language, 'Search')}
-          </label>
-
-          <div className={searchControlClass}>
-            {dateSearchEnabled ? (
-              <DateInput
-                id={searchInputId}
-                value={searchInputValue}
-                language={language}
-                ariaLabel={tSystem('list.searchDateLabel', language, 'Filter by date')}
-                onChange={next => {
-                  setSearchInputValue(next);
-                  setSearchQueryValue(next);
-                  if (!advancedSearchEnabled && advancedHasSearched) {
-                    setAdvancedFieldFilters({});
-                    setAdvancedHasSearched(false);
-                    setAdvancedKeyword('');
-                  }
-                }}
-              />
-            ) : (
-              <input
-                id={searchInputId}
-                type="search"
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder || tSystem('list.searchPlaceholder', language, 'Search records')}
-                value={searchInputValue}
-                onChange={e => {
-                  setSearchInputValue(e.target.value);
-                  setSearchQueryValue(e.target.value);
-                  if (!advancedSearchEnabled && advancedHasSearched) {
-                    setAdvancedFieldFilters({});
-                    setAdvancedHasSearched(false);
-                    setAdvancedKeyword('');
-                  }
-                }}
-                onKeyDown={e => {
-                  if (!advancedSearchEnabled) return;
-                  if (e.key !== 'Enter') return;
-                  e.preventDefault();
-                  applyAdvancedSearchNow();
-                }}
-              />
-            )}
-
-            {advancedSearchEnabled ? (
-              <button
-                type="button"
-                className="ck-list-search-advanced-icon"
-                aria-label={tSystem('list.advancedSearch', language, 'Advanced search')}
-                onClick={() => {
-                  setAdvancedOpen(prev => {
-                    const next = !prev;
-                    onDiagnostic?.('list.search.advanced.toggle', { open: next });
-                    return next;
-                  });
-                }}
-              >
-                {tSystem('list.advancedSearch', language, 'Advanced')}
-              </button>
-            ) : null}
-
-            {showClearSearch ? (
-              <button
-                type="button"
-                className="ck-list-search-clear-icon"
-                aria-label={tSystem('list.clearSearchInput', language, 'Clear search text')}
-                onClick={clearSearchInputOnly}
-              >
-                <span aria-hidden="true">×</span>
-              </button>
-            ) : null}
-          </div>
-
-          {viewToggleEnabled ? (
-            <div className="ck-list-view-toggle" role="group" aria-label={tSystem('list.viewToggle', language, 'View')}>
-              <button
-                type="button"
-                className={viewMode === 'table' ? 'active' : ''}
-                onClick={() => {
-                  setViewMode('table');
-                  onDiagnostic?.('list.view.toggle', { mode: 'table' });
-                }}
-              >
-                {tSystem('list.view.table', language, 'Table')}
-              </button>
-              <button
-                type="button"
-                className={viewMode === 'cards' ? 'active' : ''}
-                onClick={() => {
-                  setViewMode('cards');
-                  onDiagnostic?.('list.view.toggle', { mode: 'cards' });
-                }}
-              >
-                {tSystem('list.view.cards', language, 'List')}
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        {searchHelperText ? (
-          <div className="muted" role="note" style={{ marginTop: 10, marginBottom: 14 }}>
-            {searchHelperText}
-          </div>
-        ) : null}
-
-        {visiblePresetButtons.length ? (
-          <div className="ck-list-search-presets" aria-label={tSystem('list.predefinedSearches', language, 'Quick filters')}>
-            {showPresetsTitle ? <span className="ck-list-search-presets-title">{presetsTitleText}</span> : null}
-            {visiblePresetButtons.map(({ q, cfg }) => {
-              const labelNode = resolveLabel((q as any) || ({ id: cfg.action } as any), language) || cfg.action || '';
-              const mode = (cfg.mode || listSearchMode) as 'text' | 'date' | 'advanced';
-              const keyword = (cfg.keyword || '').toString();
-              const dateValue = (cfg.dateValue || '').toString();
-              const fieldFilters = (cfg.fieldFilters || {}) as Record<string, string | string[]>;
-              const target = ((cfg.target || 'inline') as string).toString().trim().toLowerCase() === 'overlay' ? 'overlay' : 'inline';
-              return (
-                <button
-                  key={(q as any)?.id || cfg.action}
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    if (target === 'overlay') {
-                      setOverlayPresetButton({ q, cfg });
-                      onDiagnostic?.('list.search.preset.overlay.open', { buttonId: (q as any)?.id || null, mode });
-                      return;
-                    }
-                    applySearchPreset({ mode, keyword, dateValue, fieldFilters });
-                    onDiagnostic?.('list.search.preset.click', { buttonId: (q as any)?.id || null, mode });
-                  }}
-                >
-                  {labelNode}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        {resolvedLayout
+          ? resolvedLayout.sections.map(section => {
+              if (section === 'title') return titleSectionNode ? <React.Fragment key="title">{titleSectionNode}</React.Fragment> : null;
+              if (section === 'metric') return metricSectionNode ? <React.Fragment key="metric">{metricSectionNode}</React.Fragment> : null;
+              if (section === 'dateHeading') {
+                return dateHeadingNode ? <React.Fragment key="dateHeading">{dateHeadingNode}</React.Fragment> : null;
+              }
+              if (section === 'search') return <React.Fragment key="search">{searchSectionNode}</React.Fragment>;
+              if (section === 'results') return <React.Fragment key="results">{resultsSectionNode}</React.Fragment>;
+              if (section === 'presets') {
+                return presetsSectionNode ? <React.Fragment key="presets">{presetsSectionNode}</React.Fragment> : null;
+              }
+              if (section === 'pagination') {
+                return paginationSectionNode ? <React.Fragment key="pagination">{paginationSectionNode}</React.Fragment> : null;
+              }
+              return null;
+            })
+          : (
+            <>
+              {legacyHeaderNode}
+              {dateHeadingNode}
+              {searchSectionNode}
+              {presetsSectionNode}
+              {resultsSectionNode}
+              {paginationSectionNode}
+            </>
+          )}
 
         {advancedSearchEnabled && advancedOpen ? (
           <div
@@ -2334,199 +2592,6 @@ const ListView: React.FC<ListViewProps> = ({
           </div>
         ) : null}
 
-        {showLoadingStatus ? (
-          <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
-        ) : effectiveUiNotice ? (
-          <div className="status muted" style={{ opacity: 0.9 }} role="note">
-            {effectiveUiNotice}
-          </div>
-        ) : null}
-
-        {effectiveUiError && <div className="error">{effectiveUiError}</div>}
-
-        {viewMode === 'table' ? (
-          <div className="list-table-wrapper">
-            <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-              {!hideHeaderRow ? (
-                <thead>
-                  <tr>
-                    {columnsForTable.map(col => (
-                      <th
-                        key={col.fieldId}
-                        scope="col"
-                        aria-sort={
-                          sortField === col.fieldId ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
-                        }
-                        style={{
-                          maxWidth: 180,
-                          whiteSpace: 'normal',
-                          wordBreak: 'break-word',
-                          background: 'var(--card)',
-                          cursor: isSortableColumn(col) ? 'pointer' : 'default'
-                        }}
-                      >
-                        {isSortableColumn(col) ? (
-                          <button
-                            type="button"
-                            className="ck-list-sort-header"
-                            onClick={() => {
-                              const nextField = col.fieldId;
-                              if (sortField === nextField) {
-                                setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-                              } else {
-                                setSortField(nextField);
-                                setSortDirection(defaultDirectionForField(nextField));
-                              }
-                              setPageIndex(0);
-                            }}
-                          >
-                            <span>{resolveLocalizedString(col.label, language, col.fieldId)}</span>
-                            {sortField === col.fieldId ? (
-                              <span className="ck-list-sort-indicator" aria-hidden="true">
-                                {sortDirection === 'asc' ? '▲' : '▼'}
-                              </span>
-                            ) : null}
-                          </button>
-                        ) : (
-                          resolveLocalizedString(col.label, language, col.fieldId)
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-              ) : null}
-              <tbody>
-                {pagedItems.length ? (
-                  pagedItems.map(row => (
-                    <tr
-                      key={row.id}
-                      onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
-                      style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
-                      aria-disabled={uiDisabled}
-                    >
-                      {columnsForTable.map(col => (
-                        <td
-                          key={col.fieldId}
-                          style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
-                        >
-                          {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : showNoRecords ? (
-                  <tr>
-                    <td colSpan={columnsForTable.length} className="muted">
-                      {tSystem('list.noRecords', language, 'No records found.')}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        ) : !showResults ? null : (
-          <div className="ck-list-cards">
-            {pagedItems.length ? (
-              pagedItems.map(row => (
-                <div
-                  key={row.id}
-                  className="ck-list-card"
-                  role={rowClickEnabled ? 'button' : undefined}
-                  tabIndex={rowClickEnabled ? (uiDisabled ? -1 : 0) : undefined}
-                  aria-disabled={rowClickEnabled ? uiDisabled : undefined}
-                  onClick={rowClickEnabled ? () => handleRowClick(row) : undefined}
-                  onKeyDown={
-                    rowClickEnabled
-                      ? e => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return;
-                          e.preventDefault();
-                          handleRowClick(row);
-                        }
-                      : undefined
-                  }
-                  style={{ cursor: rowClickEnabled && !uiDisabled ? 'pointer' : 'default' }}
-                >
-                  <div className="ck-list-card-title-row">
-                    <div className="ck-list-card-title">{renderCellValue(row, cardTitleFieldId)}</div>
-                    {(() => {
-                      const statusText = (row.status || '').toString().trim();
-                      if (!statusText) return null;
-                      const statusKey = resolveStatusKey(statusText);
-                      return (
-                        <span
-                          className="ck-status-pill"
-                          title={statusText}
-                          aria-label={`Status: ${statusText}`}
-                          data-status-key={statusKey || undefined}
-                        >
-                          {statusText}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  {ruleColumnsForCards.length ? (
-                    <div className="ck-list-card-footer">
-                      {ruleColumnsForCards.map(col => {
-                        const node = renderRuleCell(row, col);
-                        if (node === null || node === undefined) return null;
-                        return (
-                          <div key={col.fieldId} className="ck-list-card-action">
-                            {node}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            ) : showNoRecords ? (
-              <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
-            ) : null}
-          </div>
-        )}
-
-        {paginationEnabled && showResults ? (
-          <div className="actions" style={{ justifyContent: 'space-between' }}>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
-              disabled={!showPrev}
-              aria-label={tSystem('list.previous', language, 'Previous')}
-              title={tSystem('list.previous', language, 'Previous')}
-            >
-              {'<'}
-            </button>
-            <div className="muted" style={{ alignSelf: 'center' }}>
-              {tSystem('list.pageOf', language, 'Page {page} of {total}', {
-                page: totalPages ? pageIndex + 1 : 0,
-                total: totalPages
-              })}{' '}
-              •{' '}
-              {showLoadedOfTotal
-                ? tSystem('list.recordsLoadedOfTotal', language, '{loaded} / {total} records', {
-                    loaded: loadedCount,
-                    total: effectiveTotalCount
-                  })
-                : tSystem(
-                    (visibleItems.length || effectiveTotalCount) === 1 ? 'list.recordsCountOne' : 'list.recordsCountMany',
-                    language,
-                    (visibleItems.length || effectiveTotalCount) === 1 ? '{count} record' : '{count} records',
-                    { count: visibleItems.length || effectiveTotalCount }
-                  )}
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setPageIndex(prev => (showNext ? prev + 1 : prev))}
-              disabled={!showNext}
-              aria-label={tSystem('list.next', language, 'Next')}
-              title={tSystem('list.next', language, 'Next')}
-            >
-              {'>'}
-            </button>
-          </div>
-        ) : null}
       </div>
     </div>
     <FullPageOverlay

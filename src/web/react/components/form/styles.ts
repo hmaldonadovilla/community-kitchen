@@ -33,6 +33,9 @@ export const FORM_VIEW_STYLES = `
         .ck-guided-context-header::-webkit-scrollbar {
           display: none;
         }
+        .ck-step-help-text {
+          white-space: pre-line;
+        }
 
         /* Top action bar (below header): match the BottomActionBar styling exactly (capsule + pill items). */
         .ck-top-action-bar {

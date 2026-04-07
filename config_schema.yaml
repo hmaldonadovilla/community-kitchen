@@ -2723,6 +2723,7 @@ components:
             - `defaultSort`: initial sort field/direction
             - `defaultWhen`: optional default row filter applied before the user starts searching
             - `dateHeading`: optional inline date heading shown above date-driven list results
+            - `layout`: optional section ordering for Home/List pages
             - `pageSize`: rows per page (default 10, max 50)
 
             Notes:
@@ -4972,6 +4973,28 @@ components:
           description: Optional localized suffix appended after the formatted date.
       required: [fieldId]
 
+    ListViewLayoutConfig:
+      type: object
+      properties:
+        sections:
+          type: array
+          items:
+            type: string
+            enum: [title, metric, dateHeading, search, results, presets, pagination]
+          description: |
+            Ordered list of major Home/List sections to render.
+
+            When omitted, the UI keeps the legacy layout order.
+        metricAlign:
+          type: string
+          enum: [start, center, end]
+          description: |
+            Horizontal alignment for the standalone `metric` section.
+            Default: `end`.
+      required: [sections]
+      description: |
+        Optional layout override for ordering the major Home/List sections.
+
     ListViewSearchPresetOverlayConfig:
       type: object
       properties:
@@ -5083,6 +5106,23 @@ components:
               description: |
                 Optional title shown inline before list view search preset buttons.
                 Example: "View recipes:".
+            initialValue:
+              oneOf:
+                - type: string
+                - type: object
+                  properties:
+                    value:
+                      type: string
+                      description: Explicit initial search value.
+                    relativeDate:
+                      type: string
+                      enum: [today]
+                      description: Relative date helper for date search.
+              description: |
+                Optional initial search value applied when the Home/List screen first renders.
+
+                - For `mode: text` / `mode: advanced`, use a plain string or `value`.
+                - For `mode: date`, use `value: "YYYY-MM-DD"` or `relativeDate: "today"` when the visible date picker should start prefilled.
             dateFieldId:
               type: string
               description: |
@@ -5126,7 +5166,7 @@ components:
         metric:
           $ref: '#/components/schemas/ListViewMetricConfig'
           description: |
-            Optional right-aligned list metric shown next to the list title.
+            Optional list metric shown on the Home/List screen.
 
             Use this for lightweight aggregate KPIs on the Home/List screen (for example,
             total delivered portions across closed records).
@@ -5134,6 +5174,11 @@ components:
             Runtime note:
             - The Home/List screen now uses a summary-first load strategy, starts the first Home bootstrap request as early as possible, and defers broader list hydration.
             - Prefer trigger-based `analytics.widgets` for Home/List KPIs when you need a precomputed value that should appear quickly on first load.
+        layout:
+          $ref: '#/components/schemas/ListViewLayoutConfig'
+          description: |
+            Optional layout override for ordering major Home/List sections such as the metric,
+            search controls, results, and preset buttons.
         defaultSort:
           type: object
           properties:

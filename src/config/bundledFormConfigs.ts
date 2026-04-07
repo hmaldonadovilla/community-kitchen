@@ -10224,11 +10224,7 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         ]
       },
-      "listViewTitle": {
-        "en": "Recent activity",
-        "fr": "Activité récente",
-        "nl": "Recente activiteit"
-      },
+      "listViewTitle": "",
       "listViewPageSize": 50,
       "listViewPaginationControlsEnabled": false,
       "listViewHideHeaderRow": true,
@@ -10431,11 +10427,25 @@ export const BUNDLED_FORM_CONFIGS = [
           "fr": "Choisissez une date pour laquelle vous souhaitez voir les informations de production des repas.",
           "nl": "Kies een datum waarvoor u de informatie over de maaltijdproductie wilt zien."
         },
+        "initialValue": {
+          "relativeDate": "today"
+        },
         "presetsTitle": {
-          "en": "Predefined lists:",
-          "fr": "Listes predefinies :",
-          "nl": "Voorgedefinieerde lijsten:"
+          "en": "",
+          "fr": "",
+          "nl": ""
         }
+      },
+      "listViewLayout": {
+        "sections": [
+          "metric",
+          "search",
+          "dateHeading",
+          "results",
+          "presets",
+          "pagination"
+        ],
+        "metricAlign": "center"
       },
       "autoSave": {
         "enabled": true,
@@ -10868,9 +10878,6 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "helpText": {
-              "en": "Select any available leftovers to use for each meal. Entire dish leftovers can be reheated or combined. Part dish leftovers can be used partially by lowering the quantity."
-            },
             "id": "leftoverForm",
             "includeWhen": {
               "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
@@ -11960,6 +11967,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off"
             },
+            "helpText": {
+              "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+            },
             "render": {
               "subGroups": {
                 "mode": "inline"
@@ -11968,7 +11978,7 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "helpText": {
-              "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
+              "en": "Remember to reheat and/or combine leftovers according to selection. Cook only the stated To cook number and using only the ingredients as stated in the corresponding recipe. Follow the Instructions for cooking and portioning."
             },
             "id": "deliveryForm",
             "excludeWhen": {
@@ -12896,9 +12906,9 @@ export const BUNDLED_FORM_CONFIGS = [
       "listViewDateHeading": {
         "fieldId": "MP_PREP_DATE",
         "suffix": {
-          "en": "activities",
-          "fr": "activites",
-          "nl": "activiteiten"
+          "en": "Meal Productions",
+          "fr": "productions de repas",
+          "nl": "maaltijdproducties"
         }
       }
     },
@@ -19018,11 +19028,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "fieldId": "MP_PREP_DATE",
           "direction": "desc"
         },
-        "title": {
-          "en": "Recent activity",
-          "fr": "Activite recente",
-          "nl": "Recente activiteit"
-        },
+        "title": "",
         "pageSize": 50,
         "paginationControlsEnabled": false,
         "hideHeaderRow": true,
@@ -19060,6 +19066,17 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         ],
+        "layout": {
+          "sections": [
+            "metric",
+            "search",
+            "dateHeading",
+            "results",
+            "presets",
+            "pagination"
+          ],
+          "metricAlign": "center"
+        },
         "legendColumns": 2,
         "legendColumnWidths": [
           50,
@@ -19073,23 +19090,22 @@ export const BUNDLED_FORM_CONFIGS = [
             "fr": "Choisissez une date pour laquelle vous souhaitez voir les informations de production des repas.",
             "nl": "Kies een datum waarvoor u de informatie over de maaltijdproductie wilt zien."
           },
+          "initialValue": {
+            "relativeDate": "today"
+          },
           "presetsTitle": {
-            "en": "Predefined lists:",
-            "fr": "Listes predefinies :",
-            "nl": "Voorgedefinieerde lijsten:"
+            "en": "",
+            "fr": "",
+            "nl": ""
           }
         },
         "rowClickEnabled": false,
-        "defaultWhen": {
-          "fieldId": "MP_PREP_DATE",
-          "isToday": true
-        },
         "dateHeading": {
           "fieldId": "MP_PREP_DATE",
           "suffix": {
-            "en": "activities",
-            "fr": "activites",
-            "nl": "activiteiten"
+            "en": "Meal Productions",
+            "fr": "productions de repas",
+            "nl": "maaltijdproducties"
           }
         }
       },
@@ -19655,9 +19671,6 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           {
-            "helpText": {
-              "en": "Select any available leftovers to use for each meal. Entire dish leftovers can be reheated or combined. Part dish leftovers can be used partially by lowering the quantity."
-            },
             "id": "leftoverForm",
             "includeWhen": {
               "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
@@ -20721,6 +20734,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off"
             },
+            "helpText": {
+              "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+            },
             "render": {
               "subGroups": {
                 "mode": "inline"
@@ -20729,7 +20745,7 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "helpText": {
-              "en": "Review if there is any entire dish leftover to be reheated before portioning. Use part dish leftover, if any, in today's dish. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning. Cook only the stated number of portions as per the recipe. Follow the Instructions for cooking and portioning."
+              "en": "Remember to reheat and/or combine leftovers according to selection. Cook only the stated To cook number and using only the ingredients as stated in the corresponding recipe. Follow the Instructions for cooking and portioning."
             },
             "id": "deliveryForm",
             "excludeWhen": {

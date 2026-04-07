@@ -1,5 +1,6 @@
 import {
   normalizeToIsoDateLocal,
+  resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
   shouldClearAppliedQueryOnInputClear,
   shouldUseServerDateSearch
@@ -111,5 +112,35 @@ describe('listViewSearch', () => {
         completeData: false
       })
     ).toBe(true);
+  });
+
+  it('resolves a relative today initial value for date search', () => {
+    expect(
+      resolveInitialListSearchValue(
+        {
+          mode: 'date',
+          initialValue: { relativeDate: 'today' }
+        },
+        new Date(2026, 3, 7)
+      )
+    ).toBe('2026-04-07');
+  });
+
+  it('normalizes explicit date initial values for date search', () => {
+    expect(
+      resolveInitialListSearchValue({
+        mode: 'date',
+        initialValue: { value: '2026-04-07T12:00:00.000Z' }
+      })
+    ).toBeTruthy();
+  });
+
+  it('keeps explicit text initial values unchanged for text search', () => {
+    expect(
+      resolveInitialListSearchValue({
+        mode: 'text',
+        initialValue: 'Closed'
+      })
+    ).toBe('Closed');
   });
 });

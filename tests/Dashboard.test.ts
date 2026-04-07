@@ -254,7 +254,7 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewLegendColumnWidths).toEqual([25, 75]);
   });
 
-  test('getForms parses list view defaultWhen, dateHeading, and search helper text', () => {
+  test('getForms parses list view defaultWhen, dateHeading, search initial value, and layout', () => {
     const configJson = JSON.stringify({
       listView: {
         defaultWhen: { fieldId: 'MP_PREP_DATE', isToday: true },
@@ -262,7 +262,12 @@ describe('Dashboard', () => {
         search: {
           mode: 'date',
           dateFieldId: 'MP_PREP_DATE',
-          helperText: { EN: 'Pick a date.' }
+          helperText: { EN: 'Pick a date.' },
+          initialValue: { relativeDate: 'today' }
+        },
+        layout: {
+          sections: ['metric', 'search', 'dateHeading', 'results', 'presets'],
+          metricAlign: 'center'
         }
       }
     });
@@ -280,7 +285,12 @@ describe('Dashboard', () => {
     expect((forms[0] as any).listViewSearch).toEqual({
       mode: 'date',
       dateFieldId: 'MP_PREP_DATE',
-      helperText: { en: 'Pick a date.' }
+      helperText: { en: 'Pick a date.' },
+      initialValue: { relativeDate: 'today' }
+    });
+    expect((forms[0] as any).listViewLayout).toEqual({
+      sections: ['metric', 'search', 'dateHeading', 'results', 'presets'],
+      metricAlign: 'center'
     });
   });
 
