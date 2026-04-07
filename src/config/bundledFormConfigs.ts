@@ -6880,6 +6880,481 @@ export const BUNDLED_FORM_CONFIGS = [
     "validationErrors": []
   },
   {
+    "formKey": "Config: Distributor",
+    "generatedAt": "2026-04-07T11:30:18.608Z",
+    "form": {
+      "title": "Distributors",
+      "configSheet": "Config: Distributor",
+      "destinationTab": "Distributor Data",
+      "description": "Capture info about distributors",
+      "appUrl": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbyEeTpS1mWGUC-hs3mtKDNtNu0N_TKt8nCbcB3x4tM/exec?form=Config%3A%20Distributor",
+      "formId": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbyEeTpS1mWGUC-hs3mtKDNtNu0N_TKt8nCbcB3x4tM/exec?form=Config%3A%20Distributor",
+      "rowIndex": 7,
+      "followupConfig": {
+        "statusTransitions": {
+          "inProgress": {
+            "en": "Draft",
+            "fr": "Brouillon",
+            "nl": "Conceptverslag"
+          },
+          "reOpened": {
+            "en": "Disabled",
+            "fr": "Désactivé",
+            "nl": "Uitgeschakeld"
+          },
+          "onClose": {
+            "en": "Active",
+            "fr": "Actif",
+            "nl": "Actief"
+          }
+        }
+      },
+      "appHeader": {
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+      }
+    },
+    "questions": [
+      {
+        "id": "DIST_NAME",
+        "type": "TEXT",
+        "qEn": "Name",
+        "qFr": "Name",
+        "qNl": "Name",
+        "required": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "NICKNAME",
+        "type": "TEXT",
+        "qEn": "Nickname",
+        "qFr": "Surnom",
+        "qNl": "Bijnaam",
+        "required": true,
+        "listView": true,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_EMAIL",
+        "type": "TEXT",
+        "qEn": "Email",
+        "qFr": "Email",
+        "qNl": "Email",
+        "required": true,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_PH",
+        "type": "TEXT",
+        "qEn": "Phone Number",
+        "qFr": "Phone Number",
+        "qNl": "Phone Number",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_ADDR_1",
+        "type": "TEXT",
+        "qEn": "Address",
+        "qFr": "Address",
+        "qNl": "Address",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_ADDR_2",
+        "type": "TEXT",
+        "qEn": "Address Line 2",
+        "qFr": "Address Line 2",
+        "qNl": "Address Line 2",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_CITY",
+        "type": "TEXT",
+        "qEn": "City",
+        "qFr": "City",
+        "qNl": "City",
+        "required": false,
+        "listView": false,
+        "options": [
+          "Clean",
+          "Needs Attention"
+        ],
+        "optionsFr": [
+          "Propre",
+          "Nécessite attention"
+        ],
+        "optionsNl": [
+          "Schoon",
+          "Aandacht nodig"
+        ],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_REGION",
+        "type": "TEXT",
+        "qEn": "Region",
+        "qFr": "Region",
+        "qNl": "Region",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_COUNTRY",
+        "type": "TEXT",
+        "qEn": "Country",
+        "qFr": "Country",
+        "qNl": "Country",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "DIST_POST_CODE",
+        "type": "TEXT",
+        "qEn": "Postal Code",
+        "qFr": "Postal Code",
+        "qNl": "Postal Code",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active"
+      },
+      {
+        "id": "RE_OPEN",
+        "type": "BUTTON",
+        "qEn": "Deactivate",
+        "qFr": "Désactiver",
+        "qNl": "Deactiveren",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Active"
+          }
+        },
+        "button": {
+          "action": "updateRecord",
+          "set": {
+            "status": "Disabled"
+          },
+          "navigateTo": "form",
+          "confirm": {
+            "title": {
+              "en": "Please confirm"
+            },
+            "message": {
+              "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?",
+              "fr": "Ce distributeur ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
+              "nl": "Deze distributeur zal niet meer verschijnen in het maaltijdproductieformulier. Wil je dooragaan?"
+            },
+            "confirmLabel": {
+              "en": "Yes",
+              "fr": "Oui",
+              "nl": "Ja"
+            },
+            "cancelLabel": {
+              "en": "No",
+              "fr": "Non",
+              "nl": "Nee"
+            }
+          },
+          "placements": [
+            "summaryBar"
+          ]
+        }
+      }
+    ],
+    "dedupRules": [],
+    "definition": {
+      "title": "Distributors",
+      "description": "Capture info about distributors",
+      "destinationTab": "Distributor Data",
+      "languages": [
+        "EN",
+        "FR",
+        "NL"
+      ],
+      "defaultLanguage": "EN",
+      "languageSelectorEnabled": true,
+      "questions": [
+        {
+          "id": "DIST_NAME",
+          "type": "TEXT",
+          "label": {
+            "en": "Name",
+            "fr": "Name",
+            "nl": "Name"
+          },
+          "required": true,
+          "listView": true
+        },
+        {
+          "id": "NICKNAME",
+          "type": "TEXT",
+          "label": {
+            "en": "Nickname",
+            "fr": "Surnom",
+            "nl": "Bijnaam"
+          },
+          "required": true,
+          "listView": true
+        },
+        {
+          "id": "DIST_EMAIL",
+          "type": "TEXT",
+          "label": {
+            "en": "Email",
+            "fr": "Email",
+            "nl": "Email"
+          },
+          "required": true,
+          "listView": false
+        },
+        {
+          "id": "DIST_PH",
+          "type": "TEXT",
+          "label": {
+            "en": "Phone Number",
+            "fr": "Phone Number",
+            "nl": "Phone Number"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "DIST_ADDR_1",
+          "type": "TEXT",
+          "label": {
+            "en": "Address",
+            "fr": "Address",
+            "nl": "Address"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "DIST_ADDR_2",
+          "type": "TEXT",
+          "label": {
+            "en": "Address Line 2",
+            "fr": "Address Line 2",
+            "nl": "Address Line 2"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "DIST_CITY",
+          "type": "TEXT",
+          "label": {
+            "en": "City",
+            "fr": "City",
+            "nl": "City"
+          },
+          "required": false,
+          "listView": false,
+          "options": {
+            "en": [
+              "Clean",
+              "Needs Attention"
+            ],
+            "fr": [
+              "Propre",
+              "Nécessite attention"
+            ],
+            "nl": [
+              "Schoon",
+              "Aandacht nodig"
+            ]
+          }
+        },
+        {
+          "id": "DIST_REGION",
+          "type": "TEXT",
+          "label": {
+            "en": "Region",
+            "fr": "Region",
+            "nl": "Region"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "DIST_COUNTRY",
+          "type": "TEXT",
+          "label": {
+            "en": "Country",
+            "fr": "Country",
+            "nl": "Country"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "DIST_POST_CODE",
+          "type": "TEXT",
+          "label": {
+            "en": "Postal Code",
+            "fr": "Postal Code",
+            "nl": "Postal Code"
+          },
+          "required": false,
+          "listView": false
+        },
+        {
+          "id": "RE_OPEN",
+          "type": "BUTTON",
+          "label": {
+            "en": "Deactivate",
+            "fr": "Désactiver",
+            "nl": "Deactiveren"
+          },
+          "required": false,
+          "listView": false,
+          "button": {
+            "action": "updateRecord",
+            "set": {
+              "status": "Disabled"
+            },
+            "navigateTo": "form",
+            "confirm": {
+              "title": {
+                "en": "Please confirm"
+              },
+              "message": {
+                "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?",
+                "fr": "Ce distributeur ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
+                "nl": "Deze distributeur zal niet meer verschijnen in het maaltijdproductieformulier. Wil je dooragaan?"
+              },
+              "confirmLabel": {
+                "en": "Yes",
+                "fr": "Oui",
+                "nl": "Ja"
+              },
+              "cancelLabel": {
+                "en": "No",
+                "fr": "Non",
+                "nl": "Nee"
+              }
+            },
+            "placements": [
+              "summaryBar"
+            ]
+          },
+          "visibility": {
+            "showWhen": {
+              "fieldId": "status",
+              "equals": "Active"
+            }
+          }
+        }
+      ],
+      "dataSources": [],
+      "listView": {
+        "columns": [
+          {
+            "fieldId": "DIST_NAME",
+            "label": {
+              "en": "Name",
+              "fr": "Name",
+              "nl": "Name"
+            },
+            "kind": "question"
+          },
+          {
+            "fieldId": "NICKNAME",
+            "label": {
+              "en": "Nickname",
+              "fr": "Surnom",
+              "nl": "Bijnaam"
+            },
+            "kind": "question"
+          },
+          {
+            "fieldId": "updatedAt",
+            "label": {
+              "en": "Updated",
+              "fr": "Mis à jour",
+              "nl": "Bijgewerkt"
+            },
+            "kind": "meta"
+          }
+        ],
+        "metaColumns": [
+          "updatedAt"
+        ],
+        "defaultSort": {
+          "fieldId": "updatedAt",
+          "direction": "desc"
+        }
+      },
+      "dedupRules": [],
+      "startRoute": "list",
+      "followup": {
+        "statusTransitions": {
+          "inProgress": {
+            "en": "Draft",
+            "fr": "Brouillon",
+            "nl": "Conceptverslag"
+          },
+          "reOpened": {
+            "en": "Disabled",
+            "fr": "Désactivé",
+            "nl": "Uitgeschakeld"
+          },
+          "onClose": {
+            "en": "Active",
+            "fr": "Actif",
+            "nl": "Actief"
+          }
+        }
+      },
+      "appHeader": {
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+      }
+    },
+    "validationErrors": []
+  },
+  {
     "formKey": "Config: Ingredients Management",
     "generatedAt": "2026-02-07T16:42:43.964Z",
     "form": {
