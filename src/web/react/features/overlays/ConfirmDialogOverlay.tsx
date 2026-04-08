@@ -204,7 +204,7 @@ export const ConfirmDialogOverlay: React.FC<{
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {title ? <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{title}</div> : null}
-          <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4 }}>{message}</div>
+          <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4, whiteSpace: 'pre-line' }}>{message}</div>
         </div>
         <div className="ck-dialog-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 4, flexWrap: 'wrap' }}>
           {showCancel ? (

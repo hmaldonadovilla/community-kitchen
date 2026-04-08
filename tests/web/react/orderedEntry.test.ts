@@ -1,4 +1,9 @@
-import { findFirstOrderedEntryIssue, findOrderedEntryBlock } from '../../../src/web/react/components/form/orderedEntry';
+import {
+  findFirstOrderedEntryIssue,
+  findOrderedEntryBlock,
+  isOrderedEntryValid,
+  shouldDeferOrderedEntryGuidance
+} from '../../../src/web/react/components/form/orderedEntry';
 import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
 
 describe('ordered entry blocking', () => {
@@ -131,6 +136,46 @@ describe('ordered entry blocking', () => {
       scope: 'line',
       reason: 'missingRequired'
     });
+  });
+
+  test('treats line-level ordered-entry issues as invalid even without explicit field errors', () => {
+    expect(
+      isOrderedEntryValid({
+        enabled: true,
+        errors: {},
+        firstIssue: {
+          missingFieldPath: 'MP_LEFTOVER_CAPTURE_LI__LEFTOVER_QTY__row1',
+          scope: 'line',
+          reason: 'missingRequired'
+        }
+      })
+    ).toBe(false);
+  });
+
+  test('shows line-level ordered-entry guidance immediately while typing', () => {
+    expect(
+      shouldDeferOrderedEntryGuidance({
+        issue: {
+          missingFieldPath: 'MP_LEFTOVER_CAPTURE_LI__LEFTOVER_QTY__row1',
+          scope: 'line',
+          reason: 'missingRequired'
+        },
+        activeTag: 'input'
+      })
+    ).toBe(false);
+  });
+
+  test('still defers top-level ordered-entry guidance while typing', () => {
+    expect(
+      shouldDeferOrderedEntryGuidance({
+        issue: {
+          missingFieldPath: 'NOTES',
+          scope: 'top',
+          reason: 'missingRequired'
+        },
+        activeTag: 'textarea'
+      })
+    ).toBe(true);
   });
 
   test('blocks line item edits when validation rules require earlier fields (including parent refs)', () => {

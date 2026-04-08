@@ -107,14 +107,26 @@ export class SubmissionService {
         return null;
       }
     })();
+    let hasLock = false;
     try {
       try {
         if (lock && typeof lock.tryLock === 'function') {
-          // Best-effort: keep short to avoid blocking the UI too long.
-          lock.tryLock(8000);
+          // Keep short to avoid blocking the UI too long, but do not proceed without the lock.
+          hasLock = !!lock.tryLock(8000);
+          if (!hasLock) {
+            return {
+              success: false,
+              message: 'Could not acquire the record save lock. Please retry.',
+              meta: {}
+            } as any;
+          }
         }
-      } catch (_) {
-        // ignore lock failures
+      } catch {
+        return {
+          success: false,
+          message: 'Could not acquire the record save lock. Please retry.',
+          meta: {}
+        } as any;
       }
 
       const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
@@ -390,6 +402,28 @@ export class SubmissionService {
       setIf(colIdx, value ?? '');
     });
 
+    const destinationRowNumber = existingRowIdx >= 0 ? (2 + existingRowIdx) : (sheet.getLastRow() + 1);
+    const hasMeaningfulChanges =
+      existingRowIdx < 0
+        ? true
+        : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
+    if (existingRowIdx >= 0 && !hasMeaningfulChanges) {
+      return {
+        success: true,
+        message: 'No changes to save.',
+        meta: {
+          id: recordId,
+          createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+          updatedAt:
+            this.readRecordMetadataIso(existingRowValues, columns.updatedAt) ||
+            this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+          dataVersion: previousVersion || undefined,
+          rowNumber: destinationRowNumber,
+          operation: 'noop'
+        }
+      };
+    }
+
     // Dedup check (indexed): search dedup signatures in the record index sheet.
     const effectiveDedupRules = (dedupRules || []).filter(r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form');
     if (effectiveDedupRules.length) {
@@ -484,7 +518,6 @@ export class SubmissionService {
       }
     }
 
-    const destinationRowNumber = existingRowIdx >= 0 ? (2 + existingRowIdx) : (sheet.getLastRow() + 1);
     if (existingRowIdx >= 0) {
       this.writeRowAtomicDelta(sheet, destinationRowNumber, existingRowValues || new Array(headers.length).fill(''), valuesArray);
     } else {
@@ -554,7 +587,7 @@ export class SubmissionService {
     return { success: true, message: 'Saved to sheet', meta };
     } finally {
       try {
-        if (lock && typeof lock.releaseLock === 'function') {
+        if (lock && hasLock && typeof lock.releaseLock === 'function') {
           lock.releaseLock();
         }
       } catch (_) {
@@ -1319,6 +1352,31 @@ export class SubmissionService {
       patch[idx - start] = next[idx];
     });
     sheet.getRange(rowNumber, start + 1, 1, patch.length).setValues([patch]);
+  }
+
+  private hasMeaningfulRowChanges(previousRowValues: any[], nextRowValues: any[], columns: HeaderColumns): boolean {
+    const width = Math.max(previousRowValues.length, nextRowValues.length);
+    if (width <= 0) return false;
+    const ignoredColumnIndexes = new Set<number>();
+    [columns.timestamp, columns.updatedAt, columns.dataVersion].forEach(idx => {
+      if (idx && idx > 0) ignoredColumnIndexes.add(idx - 1);
+    });
+    const prev = this.normalizeRowValues(previousRowValues, width);
+    const next = this.normalizeRowValues(nextRowValues, width);
+    for (let i = 0; i < width; i += 1) {
+      if (ignoredColumnIndexes.has(i)) continue;
+      if (!this.cellValuesEqual(prev[i], next[i])) return true;
+    }
+    return false;
+  }
+
+  private readRecordMetadataIso(rowValues: any[] | undefined, columnIndex?: number): string | undefined {
+    if (!rowValues || !columnIndex || columnIndex <= 0) return undefined;
+    try {
+      return this.asIso(rowValues[columnIndex - 1]);
+    } catch {
+      return undefined;
+    }
   }
 
   private writeAuditRows(args: {

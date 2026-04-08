@@ -77,6 +77,7 @@ import {
   resolveExistingRecordId,
   validateForm
 } from './app/submission';
+import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveTemplateIdForRecord } from './app/templateId';
@@ -117,11 +118,21 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
+import { buildDraftSaveFingerprint } from './app/draftSaveFingerprint';
 import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
 import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
+import {
+  filterGeneratedRecordsForDialog,
+  getGeneratedRecordsFromFollowupResult,
+  isGeneratedLeftoverRecord,
+  renderGeneratedLeftoverLine,
+  renderGeneratedRecordLine,
+  selectConditionalDialog,
+  selectMilestoneConfirmationDialog
+} from './features/steps/domain/milestoneDialogs';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
 import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
@@ -2194,6 +2205,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [allowLanguageSelection, availableLanguages, defaultLanguage, language, logEvent]);
 
   const formSubmitActionRef = useRef<(() => void) | null>(null);
+  const handleSubmitRef = useRef<() => void>(() => {});
   const formBackActionRef = useRef<(() => void) | null>(null);
   const orderedEntryEnabled = definition.submitValidation?.enforceFieldOrder === true;
   const [guidedUiState, setGuidedUiState] = useState<{
@@ -2228,6 +2240,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveQueuedRef = useRef<boolean>(false);
   const draftSaveRequestInFlightRef = useRef<boolean>(false);
   const draftSaveRequestPromiseRef = useRef<Promise<any> | null>(null);
+  const draftSaveRequestFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
+  const lastCompletedDraftSaveFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const performAutoSaveRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const autoSaveUserEditedRef = useRef<boolean>(false);
   const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
@@ -2324,6 +2338,74 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return promise;
     },
     []
+  );
+
+  const buildCurrentDraftSaveResponse = useCallback(
+    (recordId: string) => ({
+      success: true,
+      meta: {
+        id: recordId,
+        updatedAt: lastSubmissionMetaRef.current?.updatedAt || selectedRecordSnapshotRef.current?.updatedAt || '',
+        dataVersion: recordDataVersionRef.current || undefined,
+        rowNumber: recordRowNumberRef.current || undefined,
+        status: lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || null
+      }
+    }),
+    []
+  );
+
+  const runCoalescedDraftSaveRequest = useCallback(
+    async <T extends { success?: boolean; meta?: any },>(
+      reason: string,
+      payload: any,
+      runner: () => Promise<T>
+    ): Promise<T> => {
+      const fingerprint = buildDraftSaveFingerprint(payload);
+      if (
+        fingerprint &&
+        draftSaveRequestInFlightRef.current &&
+        draftSaveRequestPromiseRef.current &&
+        draftSaveRequestFingerprintRef.current?.recordId === fingerprint.recordId &&
+        draftSaveRequestFingerprintRef.current?.fingerprint === fingerprint.fingerprint
+      ) {
+        logEvent('draftSave.coalesced.inFlight', {
+          reason,
+          recordId: fingerprint.recordId
+        });
+        return draftSaveRequestPromiseRef.current as Promise<T>;
+      }
+
+      if (
+        fingerprint &&
+        lastCompletedDraftSaveFingerprintRef.current?.recordId === fingerprint.recordId &&
+        lastCompletedDraftSaveFingerprintRef.current?.fingerprint === fingerprint.fingerprint &&
+        !autoSaveDirtyRef.current &&
+        !autoSaveQueuedRef.current
+      ) {
+        logEvent('draftSave.coalesced.cached', {
+          reason,
+          recordId: fingerprint.recordId
+        });
+        return buildCurrentDraftSaveResponse(fingerprint.recordId) as T;
+      }
+
+      draftSaveRequestFingerprintRef.current = fingerprint;
+      try {
+        const result = await runDraftSaveRequest(reason, runner);
+        if (fingerprint && result?.success) {
+          lastCompletedDraftSaveFingerprintRef.current = fingerprint;
+        }
+        return result;
+      } finally {
+        if (
+          draftSaveRequestFingerprintRef.current?.recordId === fingerprint?.recordId &&
+          draftSaveRequestFingerprintRef.current?.fingerprint === fingerprint?.fingerprint
+        ) {
+          draftSaveRequestFingerprintRef.current = null;
+        }
+      }
+    },
+    [buildCurrentDraftSaveResponse, logEvent, runDraftSaveRequest]
   );
 
   const applyUploadedFieldOverrides = useCallback(
@@ -4650,7 +4732,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       bumpRecordSession,
       definition.summaryViewEnabled,
       listCache.records,
-      loadRecordSnapshot,
       logEvent,
       resolveStatusAutoView
     ]
@@ -6017,36 +6098,82 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   const autoSaveNoticeConfirmLabel = tSystem('autosaveNotice.confirm', language, 'Got it');
   const autoSaveNoticeCancelLabel = tSystem('autosaveNotice.cancel', language, tSystem('common.close', language, 'Close'));
+  const finalSubmitButtonLabelConfig = definition.submitButtonLabel || definition.steps?.stepSubmitLabel;
   const submitButtonLabelResolved = useMemo(
     () =>
       resolveLocalizedString(
-        definition.submitButtonLabel,
+        finalSubmitButtonLabelConfig,
         language,
         tSystem('submit.confirm', language, tSystem('actions.submit', language, 'Submit'))
       ),
-    [definition.submitButtonLabel, language]
+    [finalSubmitButtonLabelConfig, language]
   );
+  const submitConfirmationDialogConfig = useMemo(() => {
+    const afterSubmitConfig = definition.submissionAfterSubmit;
+    if (
+      afterSubmitConfig?.confirmationDialog ||
+      (Array.isArray(afterSubmitConfig?.confirmationDialogCases) && afterSubmitConfig.confirmationDialogCases.length > 0)
+    ) {
+      const guidedStepPrefix = ((definition.steps?.stateFields?.prefix || '__ckStep') as string).toString();
+      const submitVirtualState: GuidedStepsVirtualState | null =
+        guidedUiState?.activeStepId
+          ? {
+              prefix: guidedStepPrefix,
+              activeStepId: guidedUiState.activeStepId,
+              activeStepIndex: guidedUiState.activeStepIndex || 0,
+              maxValidIndex: -1,
+              maxCompleteIndex: -1,
+              steps: []
+            }
+          : null;
+      return (
+        selectConditionalDialog({
+          cases: afterSubmitConfig.confirmationDialogCases,
+          fallback: afterSubmitConfig.confirmationDialog,
+          ctx: buildValidationContext(values as any, lineItems as any, submitVirtualState),
+          now: new Date()
+        }) || null
+      );
+    }
+    return {
+      title: definition.submissionConfirmationTitle,
+      message: definition.submissionConfirmationMessage,
+      confirmLabel: definition.submissionConfirmationConfirmLabel,
+      cancelLabel: definition.submissionConfirmationCancelLabel
+    };
+  }, [
+    definition.steps?.stateFields?.prefix,
+    definition.submissionAfterSubmit,
+    definition.submissionConfirmationCancelLabel,
+    definition.submissionConfirmationConfirmLabel,
+    definition.submissionConfirmationMessage,
+    definition.submissionConfirmationTitle,
+    guidedUiState?.activeStepId,
+    guidedUiState?.activeStepIndex,
+    lineItems,
+    values
+  ]);
   const submitConfirmConfirmLabelResolved = useMemo(
-    () => resolveLocalizedString(definition.submissionConfirmationConfirmLabel, language, submitButtonLabelResolved),
-    [definition.submissionConfirmationConfirmLabel, language, submitButtonLabelResolved]
+    () => resolveLocalizedString(submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved),
+    [submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved]
   );
   const submitConfirmCancelLabelResolved = useMemo(
     () =>
       resolveLocalizedString(
-        definition.submissionConfirmationCancelLabel,
+        submitConfirmationDialogConfig?.cancelLabel,
         language,
         tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))
       ),
-    [definition.submissionConfirmationCancelLabel, language]
+    [submitConfirmationDialogConfig?.cancelLabel, language]
   );
   const submitConfirmTitle = useMemo(
     () =>
       resolveLocalizedString(
-        definition.submissionConfirmationTitle,
+        submitConfirmationDialogConfig?.title,
         language,
         tSystem('submit.confirmTitle', language, 'Confirm submission')
       ),
-    [definition.submissionConfirmationTitle, language]
+    [submitConfirmationDialogConfig?.title, language]
   );
   const resolveDialogTemplate = useCallback(
     (rawValue: LocalizedString | string | undefined, fallback: string): string => {
@@ -6132,10 +6259,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const submitConfirmMessage = useMemo(
     () =>
       resolveDialogTemplate(
-        definition.submissionConfirmationMessage,
+        submitConfirmationDialogConfig?.message,
         tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
       ),
-    [definition.submissionConfirmationMessage, language, resolveDialogTemplate]
+    [submitConfirmationDialogConfig?.message, language, resolveDialogTemplate]
   );
 
   useEffect(() => {
@@ -6202,9 +6329,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (updateRecordBusyOpen) return;
     if (view !== 'form') return;
     submitConfirmedRef.current = false;
-    logEvent('ui.submit.tap', { submitLabelOverridden: Boolean(definition.submitButtonLabel) });
+    logEvent('ui.submit.tap', { submitLabelOverridden: Boolean(finalSubmitButtonLabelConfig) });
     formSubmitActionRef.current?.();
-  }, [definition.submitButtonLabel, logEvent, recordLoadingId, submitting, updateRecordBusyOpen, view]);
+  }, [finalSubmitButtonLabelConfig, logEvent, recordLoadingId, submitting, updateRecordBusyOpen, view]);
 
   const cancelSubmitConfirm = useCallback(() => {
     setSubmitConfirmOpen(false);
@@ -6218,11 +6345,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     submitConfirmedRef.current = true;
     logEvent('ui.submitConfirm.confirm');
     if (viewRef.current === 'summary') {
-      void handleSubmit();
+      void handleSubmitRef.current();
       return;
     }
     formSubmitActionRef.current?.();
-  }, [handleSubmit, logEvent]);
+  }, [logEvent]);
 
   const autoSaveDebounceMs = (() => {
     const raw = definition.autoSave?.debounceMs;
@@ -6685,7 +6812,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           payload.__ckClientDataVersion = Number(baseVersion);
         }
 
-        const res = await runDraftSaveRequest('autosave', () => submit(payload));
+        const res = await runCoalescedDraftSaveRequest('autosave', payload, () => submit(payload));
         const ok = !!res?.success;
         const msg = (res?.message || '').toString();
         if (!ok) {
@@ -6856,6 +6983,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyUploadedFieldPayloadOverrides,
+      applyUploadedFieldOverrides,
       autoSaveDebounceMs,
       autoSaveEnabled,
       autoSaveEnableFieldIds,
@@ -6867,10 +6995,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       formKey,
       ingredientsFormActive,
       language,
-      loadRecordSnapshot,
       logEvent,
+      markRecordStale,
       matchesClosedStatus,
-      runDraftSaveRequest,
+      resolveLogMessage,
+      resolveUiErrorMessage,
+      runCoalescedDraftSaveRequest,
       scheduleLatestAutoSave,
       upsertListCacheRow
     ]
@@ -7451,7 +7581,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draft.__ckSaveMode = 'draft';
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
-        const res = await runDraftSaveRequest('ensureDraftRecordId', () => submit(draft));
+        const res = await runCoalescedDraftSaveRequest('ensureDraftRecordId', draft, () => submit(draft));
         if (!res?.success) {
           const message = (res?.message || 'Failed to create draft record.').toString();
           setDraftSave({ phase: 'error', message });
@@ -7520,7 +7650,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: false, message: message || '' };
       }
     },
-    [applyUploadedFieldPayloadOverrides, definition, formKey, logEvent, runDraftSaveRequest, submit, upsertListCacheRow, waitForDraftSaveRequest]
+    [
+      applyUploadedFieldPayloadOverrides,
+      definition,
+      formKey,
+      logEvent,
+      resolveAutoSaveStatus,
+      resolveLogMessage,
+      resolveUiErrorMessage,
+      runCoalescedDraftSaveRequest,
+      upsertListCacheRow,
+      waitForDraftSaveRequest
+    ]
   );
 
   const applyFollowupBatchResults = useCallback(
@@ -7877,7 +8018,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       const response =
         args.mode === 'draft'
-          ? await runDraftSaveRequest(`snapshot:${args.reason}`, () => submit(payload))
+          ? await runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, () => submit(payload))
           : await submit(payload);
       const ok = Boolean(response?.success);
       const recordId = (((response as any)?.meta?.id) || args.existingRecordId || '').toString().trim();
@@ -7916,13 +8057,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [
       applySuccessfulSubmissionState,
       applyUploadedFieldPayloadOverrides,
+      applyUploadedFieldOverrides,
       definition,
       formKey,
       ingredientsFormActive,
       logEvent,
       resolveAutoSaveStatus,
-      runDraftSaveRequest,
-      submit,
+      runCoalescedDraftSaveRequest,
       waitForDraftSaveRequest
     ]
   );
@@ -8014,9 +8155,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
 
       const reason = `guidedStepMilestone:${args.stepId || 'step'}`;
-      if (args.action.confirmationDialog) {
+      const guidedStepPrefix = ((((definition as any)?.steps as any)?.stateFields?.prefix || '__ckStep') as string).toString();
+      const milestoneVirtualState: GuidedStepsVirtualState | null =
+        guidedUiState?.activeStepId
+          ? {
+              prefix: guidedStepPrefix,
+              activeStepId: guidedUiState.activeStepId,
+              activeStepIndex: guidedUiState.activeStepIndex || 0,
+              maxValidIndex: -1,
+              maxCompleteIndex: -1,
+              steps: []
+            }
+          : null;
+      const milestoneConfirmationDialog = selectMilestoneConfirmationDialog({
+        action: args.action,
+        ctx: buildValidationContext(valuesRef.current as any, lineItemsRef.current as any, milestoneVirtualState),
+        now: new Date()
+      });
+      if (milestoneConfirmationDialog) {
+        logEvent('guidedStep.milestone.confirm.prompt', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          hasConditionalCases: Array.isArray(args.action.confirmationDialogCases) && args.action.confirmationDialogCases.length > 0,
+          title: resolveLocalizedString(milestoneConfirmationDialog.title, languageRef.current, '') || null
+        });
         const confirmed = await openConfiguredConfirmDialog({
-          dialog: args.action.confirmationDialog,
+          dialog: milestoneConfirmationDialog,
           kind: 'guidedStepMilestone',
           refId: args.stepId
         });
@@ -8119,7 +8283,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId = snapshotResult.recordId;
         }
 
-        const runBatch = async (actions: string[], batchReason: string): Promise<{ success: boolean; message?: string }> => {
+        const runBatch = async (
+          actions: string[],
+          batchReason: string
+        ): Promise<{ success: boolean; message?: string; byAction?: Map<string, any> }> => {
           try {
             logEvent('guidedStep.milestone.followup.begin', {
               stepId: args.stepId,
@@ -8129,12 +8296,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               nextStepId: args.nextStepId || null
             });
             const batch = await triggerFollowupBatch(formKey, recordId, actions);
-            const { followupErrors } = applyFollowupBatchResults({
+            const batchOutcome = applyFollowupBatchResults({
               recordId,
               actions,
               batch,
               reason: batchReason
             });
+            const { followupErrors } = batchOutcome;
             await refreshAfterFollowupBatch({
               recordId,
               reason: batchReason,
@@ -8151,7 +8319,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               recordId,
               actionsCount: actions.length
             });
-            return { success: true };
+            return { success: true, byAction: batchOutcome.byAction };
           } catch (err: any) {
             const uiMessage = resolveUiErrorMessage(err, 'Failed to run follow-up actions.');
             const logMessage = resolveLogMessage(err, 'Failed to run follow-up actions.');
@@ -8173,6 +8341,61 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ...preActions,
           ...effectiveBackgroundActions
         ].filter(Boolean);
+        const navigateAfterSuccess = (target: 'current' | 'form' | 'summary' | 'list' | undefined) => {
+          if (!target || target === 'current') return;
+          setView(target);
+        };
+        const maybeOpenGeneratedRecordsDialog = async (closeResult: any): Promise<boolean> => {
+          const dialogConfig = args.action.generatedRecordsDialog;
+          if (!dialogConfig) return false;
+          const generatedRecords = filterGeneratedRecordsForDialog({
+            config: dialogConfig,
+            records: getGeneratedRecordsFromFollowupResult(closeResult)
+          });
+          if (!generatedRecords.length) {
+            logEvent('guidedStep.milestone.generatedRecords.skip', {
+              stepId: args.stepId,
+              targetFormKey: dialogConfig.targetFormKey || null,
+              submitEffectIds: Array.isArray(dialogConfig.submitEffectIds) ? dialogConfig.submitEffectIds : []
+            });
+            return false;
+          }
+          const itemTemplate =
+            resolveLocalizedString(dialogConfig.itemTemplate, languageRef.current, '{{recordId}}') || '{{recordId}}';
+          const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
+          const lines = generatedRecords
+            .map(record =>
+              isGeneratedLeftoverRecord(record) ? renderGeneratedLeftoverLine(record, { bullet: true }) : renderGeneratedRecordLine(record, itemTemplate)
+            )
+            .filter(Boolean);
+          const message = [intro, ...lines].filter(Boolean).join('\n');
+          logEvent('guidedStep.milestone.generatedRecords.open', {
+            stepId: args.stepId,
+            count: generatedRecords.length,
+            targetFormKey: dialogConfig.targetFormKey || null
+          });
+          await openConfiguredConfirmDialog({
+            dialog: {
+              title: resolveLocalizedString(
+                dialogConfig.title,
+                languageRef.current,
+                tSystem('common.notice', languageRef.current, 'Notice')
+              ),
+              message,
+              confirmLabel: resolveLocalizedString(
+                dialogConfig.confirmLabel,
+                languageRef.current,
+                tSystem('common.ok', languageRef.current, 'OK')
+              ),
+              showCancel: false,
+              showCloseButton: false,
+              dismissOnBackdrop: false
+            },
+            kind: 'guidedStepMilestone.generatedRecords',
+            refId: args.stepId
+          });
+          return true;
+        };
 
         if (launchEntireBatchInBackground && allBackgroundActions.length) {
           const previousStatus =
@@ -8212,36 +8435,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               refId: args.stepId
             });
           }
+          navigateAfterSuccess(args.action.navigateToAfterSuccess);
           return { success: true, advanceToNext: args.action.advanceAfterStart !== false };
         }
 
+        let preOutcomeByAction: Map<string, any> | undefined;
         if (preActions.length) {
           const preOutcome = await runBatch(preActions, `${reason}.pre`);
           if (!preOutcome.success) {
             return { success: false, advanceToNext: false, message: preOutcome.message };
           }
+          preOutcomeByAction = preOutcome.byAction;
         }
 
         const outcome = effectiveBackgroundActions.length
           ? await runBatch(effectiveBackgroundActions, `${reason}.background`)
-          : { success: true as const };
+          : { success: true as const, byAction: undefined as Map<string, any> | undefined };
         guidedMilestoneBusy.unlock(busySeq, {
           stepId: args.stepId,
           launchedBackground: false,
           success: outcome.success
         });
         busyUnlocked = true;
-        if (outcome.success && args.action.feedbackDialog) {
-          const feedbackDialog = args.action.feedbackDialog;
-          void openConfiguredConfirmDialog({
-            dialog: {
-              ...feedbackDialog,
-              showCancel: feedbackDialog.showCancel ?? false,
-              confirmLabel: feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
-            },
-            kind: 'guidedStepMilestone',
-            refId: args.stepId
-          });
+        if (outcome.success) {
+          const closeActionResult =
+            preOutcomeByAction?.get('CLOSE_RECORD') ||
+            outcome.byAction?.get('CLOSE_RECORD') ||
+            null;
+          const generatedDialogShown = await maybeOpenGeneratedRecordsDialog(closeActionResult);
+          if (!generatedDialogShown && args.action.feedbackDialog) {
+            const feedbackDialog = args.action.feedbackDialog;
+            await openConfiguredConfirmDialog({
+              dialog: {
+                ...feedbackDialog,
+                showCancel: feedbackDialog.showCancel ?? false,
+                confirmLabel: feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
+              },
+              kind: 'guidedStepMilestone',
+              refId: args.stepId
+            });
+          }
+          navigateAfterSuccess(args.action.navigateToAfterSuccess);
         }
         return {
           success: outcome.success,
@@ -8259,10 +8493,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyFollowupBatchResults,
+      definition,
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
       formKey,
       applyLocalRecordStatus,
+      guidedUiState,
       guidedMilestoneBusy,
       logEvent,
       openConfiguredConfirmDialog,
@@ -8893,10 +9129,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (!submitConfirmedRef.current) {
       setSubmitConfirmOpen(true);
       logEvent('ui.submitConfirm.openAfterValidation', {
-        configuredMessage: Boolean(definition.submissionConfirmationMessage),
-        submitLabelOverridden: Boolean(definition.submitButtonLabel),
-        confirmLabelOverridden: Boolean(definition.submissionConfirmationConfirmLabel),
-        cancelLabelOverridden: Boolean(definition.submissionConfirmationCancelLabel)
+        configuredMessage: Boolean(submitConfirmationDialogConfig?.message),
+        submitLabelOverridden: Boolean(finalSubmitButtonLabelConfig),
+        confirmLabelOverridden: Boolean(submitConfirmationDialogConfig?.confirmLabel),
+        cancelLabelOverridden: Boolean(submitConfirmationDialogConfig?.cancelLabel),
+        hasConditionalCases: Boolean(definition.submissionAfterSubmit?.confirmationDialogCases?.length)
       });
       return;
     }
@@ -9045,6 +9282,61 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         return outcome;
       };
+      const maybeOpenSubmitGeneratedRecordsDialog = async (closeResult: any): Promise<boolean> => {
+        const dialogConfig = configuredAfterSubmit?.generatedRecordsDialog;
+        if (!dialogConfig) return false;
+        const generatedRecords = filterGeneratedRecordsForDialog({
+          config: dialogConfig,
+          records: getGeneratedRecordsFromFollowupResult(closeResult)
+        });
+        if (!generatedRecords.length) {
+          logEvent('submit.afterSubmit.generatedRecords.skip', {
+            recordId,
+            targetFormKey: dialogConfig.targetFormKey || null,
+            submitEffectIds: Array.isArray(dialogConfig.submitEffectIds) ? dialogConfig.submitEffectIds : []
+          });
+          return false;
+        }
+        const itemTemplate =
+          resolveLocalizedString(dialogConfig.itemTemplate, languageRef.current, '{{recordId}}') || '{{recordId}}';
+        const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
+        const lines = generatedRecords
+          .map(entry =>
+            isGeneratedLeftoverRecord(entry) ? renderGeneratedLeftoverLine(entry, { bullet: true }) : renderGeneratedRecordLine(entry, itemTemplate)
+          )
+          .filter(Boolean);
+        const message = [intro, ...lines].filter(Boolean).join('\n');
+        logEvent('submit.afterSubmit.generatedRecords.open', {
+          recordId,
+          count: generatedRecords.length,
+          targetFormKey: dialogConfig.targetFormKey || null
+        });
+        // The generated-records dialog is a post-submit success dialog.
+        // Release the blocking submit overlay before awaiting user acknowledgement,
+        // otherwise the dialog renders underneath the still-active spinner.
+        setSubmitting(false);
+        await openConfiguredConfirmDialog({
+          dialog: {
+            title: resolveLocalizedString(
+              dialogConfig.title,
+              languageRef.current,
+              tSystem('common.notice', languageRef.current, 'Notice')
+            ),
+            message,
+            confirmLabel: resolveLocalizedString(
+              dialogConfig.confirmLabel,
+              languageRef.current,
+              tSystem('common.ok', languageRef.current, 'OK')
+            ),
+            showCancel: false,
+            showCloseButton: false,
+            dismissOnBackdrop: false
+          },
+          kind: 'submitAfterSubmit.generatedRecords',
+          refId: recordId
+        });
+        return true;
+      };
 
       const followupCfg = (definition as any)?.followup || null;
       const fallbackActions: string[] = [];
@@ -9139,6 +9431,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatus(statusMessage);
           setStatusLevel('success');
 
+          const closeActionResult = closeResultByAction.get('CLOSE_RECORD') || null;
+          const generatedDialogShown = await maybeOpenSubmitGeneratedRecordsDialog(closeActionResult);
           const navigateTarget = (() => {
             const raw = (configuredAfterSubmit.navigateTo || 'auto').toString().trim().toLowerCase();
             if (raw === 'form' || raw === 'summary' || raw === 'list') return raw as 'form' | 'summary' | 'list';
@@ -9177,7 +9471,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               }
             })();
 
-            if (configuredAfterSubmit.feedbackDialog) {
+            if (!generatedDialogShown && configuredAfterSubmit.feedbackDialog) {
               void openConfiguredConfirmDialog({
                 dialog: {
                   ...configuredAfterSubmit.feedbackDialog,
@@ -9290,6 +9584,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }
   }
 
+  handleSubmitRef.current = handleSubmit;
+
   const handleSummarySubmit = useCallback(() => {
     if (submitting) return;
     if (recordLoadingId) return;
@@ -9297,12 +9593,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     submitConfirmedRef.current = false;
     summarySubmitIntentRef.current = true;
     logEvent('ui.submit.tap', {
-      submitLabelOverridden: Boolean(definition.submitButtonLabel),
+      submitLabelOverridden: Boolean(finalSubmitButtonLabelConfig),
       view: 'summary'
     });
     logEvent('summary.submit.fire', { sourceView: viewRef.current });
-    void handleSubmit();
-  }, [definition.submitButtonLabel, handleSubmit, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
+    void handleSubmitRef.current();
+  }, [finalSubmitButtonLabelConfig, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
 
   const handleRecordSelect = (
     row: ListItem,
@@ -10454,8 +10750,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const guidedSubmitLabel =
     view === 'form' && guidedUiState && !guidedUiState.isFinal
-      ? guidedUiState.stepSubmitLabel || definition.submitButtonLabel || tSystem('steps.next', language, 'Next')
-      : definition.submitButtonLabel;
+      ? guidedUiState.stepSubmitLabel || finalSubmitButtonLabelConfig || tSystem('steps.next', language, 'Next')
+      : finalSubmitButtonLabelConfig;
   const showGuidedBack = view === 'form' && !!guidedUiState?.backVisible;
   const guidedBackLabel = guidedUiState?.backLabel || tSystem('actions.back', language, 'Back');
   const guidedBackDisabled = guidedUiState ? !guidedUiState.backAllowed : false;

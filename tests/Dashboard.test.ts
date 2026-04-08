@@ -703,12 +703,22 @@ describe('Dashboard', () => {
                 validationScope: 'throughCurrentStep',
                 waitForQueue: 'uploadsOnly',
                 advanceAfterStart: true,
+                navigateToAfterSuccess: 'list',
                 confirmationDialog: {
                   title: { EN: 'Please confirm' },
                   message: { EN: 'Confirm milestone.' },
                   confirmLabel: { EN: 'Continue' },
                   cancelLabel: { EN: 'Cancel' }
                 },
+                confirmationDialogCases: [
+                  {
+                    when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+                    dialog: {
+                      title: { EN: 'Please confirm leftovers' },
+                      message: { EN: 'Store leftovers.' }
+                    }
+                  }
+                ],
                 feedbackDialog: {
                   title: { EN: 'Background actions started' },
                   message: { EN: 'You can continue.' },
@@ -716,6 +726,14 @@ describe('Dashboard', () => {
                   showCancel: false,
                   showCloseButton: true,
                   dismissOnBackdrop: true
+                },
+                generatedRecordsDialog: {
+                  submitEffectIds: ['captureProducedLeftovers'],
+                  targetFormKey: 'Config: Leftover Inventory',
+                  title: { EN: 'Generated leftovers' },
+                  message: { EN: 'Label them now.' },
+                  itemTemplate: { EN: '{{LEFTOVER_ID}}' },
+                  confirmLabel: { EN: 'OK' }
                 }
               }
             }
@@ -743,12 +761,22 @@ describe('Dashboard', () => {
       validationScope: 'throughCurrentStep',
       waitForQueue: 'uploadsOnly',
       advanceAfterStart: true,
+      navigateToAfterSuccess: 'list',
       confirmationDialog: {
         title: { en: 'Please confirm' },
         message: { en: 'Confirm milestone.' },
         confirmLabel: { en: 'Continue' },
         cancelLabel: { en: 'Cancel' }
       },
+      confirmationDialogCases: [
+        {
+          when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+          dialog: {
+            title: { en: 'Please confirm leftovers' },
+            message: { en: 'Store leftovers.' }
+          }
+        }
+      ],
       feedbackDialog: {
         title: { en: 'Background actions started' },
         message: { en: 'You can continue.' },
@@ -756,6 +784,14 @@ describe('Dashboard', () => {
         showCancel: false,
         showCloseButton: true,
         dismissOnBackdrop: true
+      },
+      generatedRecordsDialog: {
+        submitEffectIds: ['captureProducedLeftovers'],
+        targetFormKey: 'Config: Leftover Inventory',
+        title: { en: 'Generated leftovers' },
+        message: { en: 'Label them now.' },
+        itemTemplate: { en: '{{LEFTOVER_ID}}' },
+        confirmLabel: { en: 'OK' }
       }
     });
   });
@@ -844,6 +880,19 @@ describe('Dashboard', () => {
           backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
           waitForQueue: 'uploadsOnly',
           navigateTo: 'summary',
+          confirmationDialog: {
+            title: { EN: 'Please confirm' },
+            message: { EN: 'Confirm final close.' }
+          },
+          confirmationDialogCases: [
+            {
+              when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+              dialog: {
+                title: { EN: 'Please confirm leftovers' },
+                message: { EN: 'Store leftovers first.' }
+              }
+            }
+          ],
           feedbackDialog: {
             title: { EN: 'Background actions started' },
             message: { EN: 'Background processing is running.' },
@@ -851,6 +900,14 @@ describe('Dashboard', () => {
             showCancel: false,
             showCloseButton: false,
             dismissOnBackdrop: false
+          },
+          generatedRecordsDialog: {
+            submitEffectIds: ['captureProducedLeftovers'],
+            targetFormKey: 'Config: Leftover Inventory',
+            title: { EN: 'Generated leftovers' },
+            message: { EN: 'Label them now.' },
+            itemTemplate: { EN: '{{LEFTOVER_ID}}' },
+            confirmLabel: { EN: 'OK' }
           }
         }
       }
@@ -869,6 +926,19 @@ describe('Dashboard', () => {
       backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
       waitForQueue: 'uploadsOnly',
       navigateTo: 'summary',
+      confirmationDialog: {
+        title: { en: 'Please confirm' },
+        message: { en: 'Confirm final close.' }
+      },
+      confirmationDialogCases: [
+        {
+          when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+          dialog: {
+            title: { en: 'Please confirm leftovers' },
+            message: { en: 'Store leftovers first.' }
+          }
+        }
+      ],
       feedbackDialog: {
         title: { en: 'Background actions started' },
         message: { en: 'Background processing is running.' },
@@ -876,6 +946,14 @@ describe('Dashboard', () => {
         showCancel: false,
         showCloseButton: false,
         dismissOnBackdrop: false
+      },
+      generatedRecordsDialog: {
+        submitEffectIds: ['captureProducedLeftovers'],
+        targetFormKey: 'Config: Leftover Inventory',
+        title: { en: 'Generated leftovers' },
+        message: { en: 'Label them now.' },
+        itemTemplate: { en: '{{LEFTOVER_ID}}' },
+        confirmLabel: { en: 'OK' }
       }
     });
   });

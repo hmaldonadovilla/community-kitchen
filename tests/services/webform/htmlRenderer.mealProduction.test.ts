@@ -287,6 +287,48 @@ describe('meal production bundled HTML rendering', () => {
     expect(recipe.html).toContain('Salt');
   });
 
+  it('injects generated leftover records into the summary template payload for later rendering', () => {
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const inventoryConfig = ss.insertSheet('Config: Leftover Inventory');
+    inventoryConfig.setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RECIPE', 'TEXT', 'Recipe', 'Recipe', 'Recipe', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENT', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Qty', 'Qty', 'Qty', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+    const inventoryData = ss.insertSheet('Leftover Inventory Data');
+    inventoryData.setMockData([
+      ['ID [ID]', 'Leftover ID [LEFTOVER_ID]', 'Kind [LEFTOVER_KIND]', 'Recipe [LEFTOVER_RECIPE]', 'Ingredient [LEFTOVER_INGREDIENT]', 'Portions [LEFTOVER_PORTIONS]', 'Qty [LEFTOVER_QTY]', 'Unit [LEFTOVER_UNIT]', 'Source form [LEFTOVER_SOURCE_FORM_KEY]', 'Source record [LEFTOVER_SOURCE_RECORD_ID]'],
+      ['inv-1', 'LE-1', 'Entire dish', 'Garlic green beans', '', 5, '', '', 'Config: Meal Production', 'MP-AA000818'],
+      ['inv-2', 'LP-1', 'Part dish', '', 'Rice', '', 250, 'gr', 'Config: Meal Production', 'MP-AA000818']
+    ]);
+
+    const service = new WebFormService(ss as any);
+    const payload: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any,
+      status: 'Closed'
+    } as any;
+
+    const summary = service.renderSummaryHtmlTemplate(payload);
+
+    expect(summary.success).toBe(true);
+    expect(summary.html).toContain('<ul class="ck-generated-list" data-generated-leftovers-list></ul>');
+    expect(summary.html).toContain('data-generated-leftovers-json');
+    expect(summary.html).toContain('LE-1');
+    expect(summary.html).toContain('LP-1');
+    expect(summary.html).toContain('LEFTOVER_PORTIONS');
+  });
+
   it('backfills missing ingredient category and allergen metadata at render time for actual bundled meal production records', () => {
     const ss = new MockSpreadsheet();
     seedIngredientsData(ss);

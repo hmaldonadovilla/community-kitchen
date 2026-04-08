@@ -20,6 +20,9 @@ import {
   PaginatedResult,
   SubmissionBatchResult,
   FollowupActionResult
+  ,
+  FollowupSubmitEffectSourceLink,
+  SubmitEffectGeneratedRecord
 } from '../types';
 import { debugLog } from './webform/debug';
 import { CacheEtagManager, getDocumentProperties } from './webform/cache';
@@ -57,6 +60,14 @@ const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
 const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
 const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~100KB item limit.
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
+const FOLLOWUP_LANE_PROPERTY_PREFIX = 'CK_FOLLOWUP_LANE_';
+const FOLLOWUP_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
+const FOLLOWUP_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
+const FOLLOWUP_LANE_POLL_MS = 250;
+const RECORD_MUTATION_LANE_PROPERTY_PREFIX = 'CK_RECORD_MUTATION_LANE_';
+const RECORD_MUTATION_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
+const RECORD_MUTATION_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
+const RECORD_MUTATION_LANE_POLL_MS = 250;
 const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
 const toPlainData = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
@@ -81,6 +92,42 @@ type BootstrapContextOptions = {
   includeAnalytics?: boolean;
 };
 
+type FollowupLaneTicket = {
+  token: string;
+  sequence: number;
+};
+
+type FollowupLaneOwnerState = {
+  token: string;
+  sequence: number;
+  expiresAtMs: number;
+  updatedAt?: string;
+};
+
+type FollowupLaneState = {
+  lastIssuedSeq: number;
+  nextSeq: number;
+  owner?: FollowupLaneOwnerState;
+};
+
+type RecordMutationLaneTicket = {
+  token: string;
+  sequence: number;
+};
+
+type RecordMutationLaneOwnerState = {
+  token: string;
+  sequence: number;
+  expiresAtMs: number;
+  updatedAt?: string;
+};
+
+type RecordMutationLaneState = {
+  lastIssuedSeq: number;
+  nextSeq: number;
+  owner?: RecordMutationLaneOwnerState;
+};
+
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private _dashboard?: Dashboard;
@@ -97,12 +144,14 @@ export class WebFormService {
   private _cache?: GoogleAppsScript.Cache.Cache | null;
   private _cacheResolved: boolean;
   private _lookupFieldValueCache?: Map<string, Map<string, string>>;
+  private _activeRecordMutationLanes: Map<string, number>;
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
     this._docPropsResolved = false;
     this._cacheResolved = false;
     this._lookupFieldValueCache = new Map();
+    this._activeRecordMutationLanes = new Map();
   }
 
   private get dashboard(): Dashboard {
@@ -2762,10 +2811,38 @@ export class WebFormService {
 
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    const recordId = this.ensureMutationRecordId(formObject);
+    try {
+      return this.withQueuedRecordMutation(formKey, recordId, 'saveSubmissionWithId', () =>
+        this.saveSubmissionWithIdDirect(formObject)
+      );
+    } catch (err: any) {
+      const message = (err?.message || 'Could not queue record save.').toString();
+      debugLog('mutation.lane.save.error', {
+        formKey,
+        recordId: recordId || null,
+        message
+      });
+      return {
+        success: false,
+        message,
+        meta: {
+          id: recordId || undefined
+        }
+      };
+    }
+  }
+
+  private saveSubmissionWithIdDirect(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
+    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
     const result = this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
     if (result?.success) {
+      const operation = (result.meta?.operation || '').toString().trim().toLowerCase();
+      if (operation === 'noop') {
+        return result;
+      }
       const savedRecordId = (result.meta?.id || (formObject as any).id || '').toString().trim();
       const nextStatus = (
         (formObject as any).__ckStatus !== undefined && (formObject as any).__ckStatus !== null
@@ -2882,6 +2959,50 @@ export class WebFormService {
     return result;
   }
 
+  private saveSubmissionWithIdQueuedDirect(args: {
+    formObject: WebFormSubmission;
+    form: FormConfig;
+    questions: QuestionConfig[];
+    dedupRules: DedupRule[];
+    reason: string;
+  }): { success: boolean; message: string; meta: any } {
+    const formKey = (args.formObject.formKey || (args.formObject as any).form || args.form.configSheet || args.form.title || '').toString();
+    const recordId = this.ensureMutationRecordId(args.formObject);
+    try {
+      return this.withQueuedRecordMutation(formKey, recordId, args.reason, () =>
+        this.submissions.saveSubmissionWithId(args.formObject, args.form, args.questions, args.dedupRules)
+      );
+    } catch (err: any) {
+      const message = (err?.message || 'Could not queue record save.').toString();
+      debugLog('mutation.lane.directSave.error', {
+        formKey,
+        recordId: recordId || null,
+        reason: args.reason,
+        message
+      });
+      return {
+        success: false,
+        message,
+        meta: {
+          id: recordId || undefined
+        }
+      };
+    }
+  }
+
+  private ensureMutationRecordId(formObject: WebFormSubmission): string {
+    const incomingId = ((formObject as any).id || '').toString().trim();
+    if (incomingId) return incomingId;
+    const deleteRecordId = ((formObject as any).__ckDeleteRecordId || '').toString().trim();
+    if (deleteRecordId) return deleteRecordId;
+    const generatedId =
+      typeof Utilities !== 'undefined' && (Utilities as any).getUuid
+        ? (Utilities as any).getUuid().toString()
+        : `uuid-${Math.random().toString(16).slice(2)}`;
+    (formObject as any).id = generatedId;
+    return generatedId;
+  }
+
   public previewUpdateRecordDependencies(
     formObject: WebFormSubmission,
     buttonId: string
@@ -2994,12 +3115,20 @@ export class WebFormService {
           auditAction: `${parsed.id || buttonId}:dependencyGuard`,
           clientDataVersion: targetRecord.dataVersion
         });
-        const result = this.submissions.saveSubmissionWithId(payload, targetContext.form, targetContext.questions, targetDedupRules);
+        const result = this.saveSubmissionWithIdQueuedDirect({
+          formObject: payload,
+          form: targetContext.form,
+          questions: targetContext.questions,
+          dedupRules: targetDedupRules,
+          reason: 'applyUpdateRecordWithDependencies.target'
+        });
         if (!result?.success) {
           throw new Error((result?.message || 'Failed to update dependent records.').toString());
         }
         rollbackRecords.push(targetRecord);
-        updatedCount += 1;
+        if ((result?.meta?.operation || '').toString().trim().toLowerCase() !== 'noop') {
+          updatedCount += 1;
+        }
       });
 
       const sourceResult = this.saveSubmissionWithId(formObject);
@@ -3042,12 +3171,13 @@ export class WebFormService {
               formKey: targetContext.form.configSheet || targetContext.form.title,
               auditAction: `${parsed.id || buttonId}:dependencyRollback`
             });
-            const rollbackResult = this.submissions.saveSubmissionWithId(
-              rollbackPayload,
-              targetContext.form,
-              targetContext.questions,
-              targetDedupRules
-            );
+            const rollbackResult = this.saveSubmissionWithIdQueuedDirect({
+              formObject: rollbackPayload,
+              form: targetContext.form,
+              questions: targetContext.questions,
+              dedupRules: targetDedupRules,
+              reason: 'applyUpdateRecordWithDependencies.rollback'
+            });
             if (!rollbackResult?.success) rollbackFailed = true;
           } catch (_) {
             rollbackFailed = true;
@@ -3145,12 +3275,8 @@ export class WebFormService {
     recordId: string,
     action: string
   ): FollowupActionResult {
-    const { form, questions } = this.getFormContext(formKey);
-    const result = this.runFollowupActionWithLifecycle(formKey, form, questions, recordId, action);
-    if (result?.success) {
-      this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupAction');
-    }
-    return result;
+    const batch = this.triggerFollowupActions(formKey, recordId, [action]);
+    return batch.results?.[0]?.result || { success: false, message: 'Failed to run follow-up action.' };
   }
 
   public triggerFollowupActions(
@@ -3159,29 +3285,97 @@ export class WebFormService {
     actions: string[]
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const { form, questions } = this.getFormContext(formKey);
+    const result = this.runQueuedFollowupActions(formKey, form, questions, recordId, actions);
+    if (result?.success) {
+      this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupActions');
+    }
+    return result;
+  }
+
+  private runQueuedFollowupActions(
+    formKey: string,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    actions: string[]
+  ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const normalizedActions = Array.isArray(actions)
       ? actions
           .map(entry => (entry || '').toString().trim())
           .filter(Boolean)
       : [];
     if (!normalizedActions.length) {
-      return {
-        success: false,
-        results: [{ action: '', result: { success: false, message: 'No follow-up actions provided.' } }]
-      };
+      return this.buildFollowupBatchFailureResult([], 'No follow-up actions provided.');
     }
-    const results = normalizedActions.map(action => ({
-      action,
-      result: this.runFollowupActionWithLifecycle(formKey, form, questions, recordId, action)
-    }));
-    const result = {
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedRecordId) {
+      return this.buildFollowupBatchFailureResult(normalizedActions, 'Record ID is required.');
+    }
+
+    let ticket: FollowupLaneTicket | null = null;
+    try {
+      ticket = this.reserveFollowupLaneTicket(formKey, normalizedRecordId);
+    } catch (err: any) {
+      debugLog('followup.lane.reserve.error', {
+        formKey,
+        recordId: normalizedRecordId,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+    }
+    if (!ticket) {
+      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+    }
+
+    let turn: { success: boolean; message?: string };
+    try {
+      turn = this.waitForFollowupLaneTurn(formKey, normalizedRecordId, ticket);
+    } catch (err: any) {
+      debugLog('followup.lane.wait.error', {
+        formKey,
+        recordId: normalizedRecordId,
+        sequence: ticket.sequence,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+    }
+    if (!turn.success) {
+      return this.buildFollowupBatchFailureResult(normalizedActions, turn.message || 'Could not queue follow-up actions.');
+    }
+
+    const results: Array<{ action: string; result: FollowupActionResult }> = [];
+    try {
+      for (const action of normalizedActions) {
+        this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket);
+        const result = this.runFollowupActionWithLifecycle(formKey, form, questions, normalizedRecordId, action);
+        results.push({ action, result });
+      }
+    } finally {
+      this.releaseFollowupLaneTurn(formKey, normalizedRecordId, ticket);
+    }
+
+    return {
       success: results.every(entry => !!entry.result?.success),
       results
     };
-    if (result?.success) {
-      this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupActions');
-    }
-    return result;
+  }
+
+  private buildFollowupBatchFailureResult(
+    actions: string[],
+    message: string
+  ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
+    const normalizedMessage = (message || 'Failed to run follow-up actions.').toString();
+    const effectiveActions = Array.isArray(actions) && actions.length ? actions : [''];
+    return {
+      success: false,
+      results: effectiveActions.map(action => ({
+        action,
+        result: {
+          success: false,
+          message: normalizedMessage
+        }
+      }))
+    };
   }
 
   private refreshAnalyticsAndHomeBootstrap(form: FormConfig, questions: QuestionConfig[], reason: string): void {
@@ -3805,7 +3999,7 @@ export class WebFormService {
     if (!templateId) {
       return { success: false, message: 'No summary HTML template configured for this form.' };
     }
-    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    const record = this.prepareTemplateRenderRecord(formObject as any, questions, formKey);
     debugLog('renderSummaryHtmlTemplate.start', { formKey, language: record.language });
     const result = this.followups.renderHtmlFromHtmlTemplate({
       form,
@@ -3834,7 +4028,7 @@ export class WebFormService {
       return { success: false, message: 'templateIdMap is required.' };
     }
     const { form, questions } = this.getFormContext(formKey);
-    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    const record = this.prepareTemplateRenderRecord(formObject as any, questions, formKey);
     debugLog('renderInlineHtmlTemplate.start', { formKey, language: record.language });
     const result = this.followups.renderHtmlFromHtmlTemplate({
       form,
@@ -3849,6 +4043,16 @@ export class WebFormService {
     }
     debugLog('renderInlineHtmlTemplate.ok', { formKey, fileName: result.fileName || '' });
     return { success: true, html: result.html, fileName: result.fileName };
+  }
+
+  private prepareTemplateRenderRecord(
+    formObject: any,
+    questions: QuestionConfig[],
+    formKey: string
+  ): WebFormSubmission {
+    const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
+    this.attachRelatedSubmitEffectRecords(record, questions, formKey);
+    return record;
   }
 
   /**
@@ -3964,6 +4168,119 @@ export class WebFormService {
       pdfUrl: undefined
     };
     return record;
+  }
+
+  private attachRelatedSubmitEffectRecords(
+    record: WebFormSubmission,
+    questions: QuestionConfig[],
+    formKey: string
+  ): void {
+    const sourceRecordId = (record.id || '').toString().trim();
+    if (!sourceRecordId) return;
+    const sourceFormKey = this.resolveCanonicalFormKey(formKey);
+    if (!sourceFormKey) return;
+    const { form } = this.getFormContextLite(formKey);
+    const effects = Array.isArray(form.followupConfig?.submitEffects) ? form.followupConfig?.submitEffects : [];
+    if (!effects.length) return;
+
+    const byTargetFormKey: Record<string, SubmitEffectGeneratedRecord[]> = {};
+
+    effects.forEach(effect => {
+      const sourceLink = effect?.sourceLink;
+      if (!sourceLink?.sourceRecordIdFieldId) return;
+      const related = this.fetchRecordsLinkedToSource({
+        targetFormKey: effect.targetFormKey,
+        sourceLink,
+        sourceFormKey,
+        sourceRecordId
+      });
+      if (!related.length) return;
+      const targetFormKey = (effect.targetFormKey || '').toString().trim();
+      if (!targetFormKey) return;
+      byTargetFormKey[targetFormKey] = [...(byTargetFormKey[targetFormKey] || []), ...related];
+    });
+
+    if (!Object.keys(byTargetFormKey).length) return;
+    const payload = toPlainData({ byTargetFormKey });
+    const json = JSON.stringify(payload);
+    debugLog('submitEffects.relatedRecords.attached', {
+      formKey,
+      sourceRecordId,
+      targetFormKeys: Object.keys(byTargetFormKey),
+      total: Object.values(byTargetFormKey).reduce((sum, records) => sum + (Array.isArray(records) ? records.length : 0), 0)
+    });
+    (record as any).__ckGeneratedSubmitEffectRecords = payload;
+    (record.values as Record<string, any>).__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON = json;
+  }
+
+  private fetchRecordsLinkedToSource(args: {
+    targetFormKey: string;
+    sourceLink: FollowupSubmitEffectSourceLink;
+    sourceFormKey: string;
+    sourceRecordId: string;
+  }): SubmitEffectGeneratedRecord[] {
+    const targetFormKey = (args.targetFormKey || '').toString().trim();
+    const sourceRecordId = (args.sourceRecordId || '').toString().trim();
+    const sourceFormKey = (args.sourceFormKey || '').toString().trim();
+    const sourceRecordIdFieldId = (args.sourceLink?.sourceRecordIdFieldId || '').toString().trim();
+    const sourceFormKeyFieldId = (args.sourceLink?.sourceFormKeyFieldId || '').toString().trim();
+    if (!targetFormKey || !sourceRecordId || !sourceRecordIdFieldId) return [];
+
+    const { form, questions } = this.getFormContext(targetFormKey);
+    const { sheet, columns } = this.submissions.ensureDestination(
+      form.destinationTab || `${form.title} Responses`,
+      questions
+    );
+    const totalRows = Math.max(0, sheet.getLastRow() - 1);
+    if (!totalRows) return [];
+
+    const criteria: Array<{ fieldId: string; expected: string; colIndex: number }> = [];
+    const recordIdCol = Number(columns.fields[sourceRecordIdFieldId] || 0);
+    if (recordIdCol > 0) {
+      criteria.push({ fieldId: sourceRecordIdFieldId, expected: sourceRecordId, colIndex: recordIdCol });
+    }
+    const formKeyCol = Number(columns.fields[sourceFormKeyFieldId] || 0);
+    if (sourceFormKeyFieldId && formKeyCol > 0) {
+      criteria.push({ fieldId: sourceFormKeyFieldId, expected: sourceFormKey, colIndex: formKeyCol });
+    }
+    if (!criteria.length) return [];
+
+    const valuesByField = new Map<string, any[][]>();
+    criteria.forEach(entry => {
+      valuesByField.set(
+        entry.fieldId,
+        sheet.getRange(2, entry.colIndex, totalRows, 1).getValues()
+      );
+    });
+
+    const matchedRows: number[] = [];
+    for (let idx = 0; idx < totalRows; idx += 1) {
+      const matches = criteria.every(entry => {
+        const rows = valuesByField.get(entry.fieldId) || [];
+        const cell = rows[idx]?.[0];
+        return `${cell || ''}`.trim() === entry.expected;
+      });
+      if (matches) matchedRows.push(idx + 2);
+    }
+    if (!matchedRows.length) return [];
+    debugLog('submitEffects.relatedRecords.lookup', {
+      targetFormKey,
+      sourceFormKey,
+      sourceRecordId,
+      matches: matchedRows.length
+    });
+
+    return matchedRows
+      .map(rowNumber => {
+        const record = this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
+        if (!record?.id) return null;
+        return {
+          targetFormKey,
+          recordId: record.id,
+          values: toPlainData(record.values || {})
+        } as SubmitEffectGeneratedRecord;
+      })
+      .filter((entry): entry is SubmitEffectGeneratedRecord => Boolean(entry));
   }
 
   private resolveTemplateRenderQuestions(formKey: string, fallbackQuestions: any[]): any[] {
@@ -4201,7 +4518,7 @@ export class WebFormService {
         return typeof LockService !== 'undefined' && (LockService as any).getDocumentLock
           ? (LockService as any).getDocumentLock()
           : null;
-      } catch (_) {
+      } catch {
         return null;
       }
     })();
@@ -4332,7 +4649,13 @@ export class WebFormService {
       (payload as any).__ckStatus = args.status;
       payload.status = args.status;
     }
-    return this.submissions.saveSubmissionWithId(payload, args.context.form, args.context.questions, dedupRules);
+    return this.saveSubmissionWithIdQueuedDirect({
+      formObject: payload,
+      form: args.context.form,
+      questions: args.context.questions,
+      dedupRules,
+      reason: 'saveInternalRecord'
+    });
   }
 
   private buildInventoryAvailabilitySnapshot(args: {
@@ -4424,6 +4747,7 @@ export class WebFormService {
     let executed = 0;
     let created = 0;
     let updated = 0;
+    const generatedRecords: SubmitEffectGeneratedRecord[] = [];
 
     debugLog('submitEffects.start', {
       formKey: args.formKey,
@@ -4485,7 +4809,13 @@ export class WebFormService {
             if (effect.type === 'updateRecord' && !((payload as any).id || '').toString().trim()) {
               throw new Error('Follow-up submit effect updateRecord requires a target recordId.');
             }
-            const saveResult = this.submissions.saveSubmissionWithId(payload, targetContext.form, targetContext.questions, targetDedupRules);
+            const saveResult = this.saveSubmissionWithIdQueuedDirect({
+              formObject: payload,
+              form: targetContext.form,
+              questions: targetContext.questions,
+              dedupRules: targetDedupRules,
+              reason: `submitEffects.${effect.type}`
+            });
             if (!saveResult?.success) {
               throw new Error(
                 (
@@ -4496,8 +4826,22 @@ export class WebFormService {
                 ).toString()
               );
             }
-            if (effect.type === 'updateRecord') updated += 1;
-            else created += 1;
+            const saveOperation = (saveResult.meta?.operation || '').toString().trim().toLowerCase();
+            if (effect.type === 'updateRecord') {
+              if (saveOperation !== 'noop') updated += 1;
+            } else {
+              created += 1;
+            }
+            const savedRecordId = (saveResult.meta?.id || '').toString().trim();
+            if (effect.type === 'createRecord' && savedRecordId) {
+              const savedRecord = this.fetchSubmissionById(effect.targetFormKey, savedRecordId);
+              generatedRecords.push({
+                effectId: (effect as any).id ? (effect as any).id.toString() : undefined,
+                targetFormKey: effect.targetFormKey,
+                recordId: savedRecordId,
+                values: toPlainData((savedRecord?.values || payload.values || {}) as Record<string, any>)
+              });
+            }
             debugLog(`submitEffects.${effect.type}.ok`, {
               formKey: args.formKey,
               recordId: sourceRecord.id || null,
@@ -4529,7 +4873,8 @@ export class WebFormService {
           executed,
           created,
           updated,
-          operation
+          operation,
+          generatedRecords
         }
       };
     }
@@ -4555,7 +4900,8 @@ export class WebFormService {
         executed,
         created,
         updated,
-        operation
+        operation,
+        generatedRecords
       }
     };
   }
@@ -4792,6 +5138,557 @@ export class WebFormService {
         : null;
     } catch (_) {
       return null;
+    }
+  }
+
+  private withScriptLock<T>(label: string, timeoutMs: number, fn: () => T): T {
+    const lock = (() => {
+      try {
+        return typeof LockService !== 'undefined' && (LockService as any).getScriptLock
+          ? (LockService as any).getScriptLock()
+          : null;
+      } catch {
+        return null;
+      }
+    })();
+    let hasLock = false;
+    try {
+      if (lock) {
+        if (typeof lock.waitLock === 'function') {
+          lock.waitLock(timeoutMs);
+          hasLock = true;
+        } else if (typeof lock.tryLock === 'function') {
+          hasLock = !!lock.tryLock(timeoutMs);
+          if (!hasLock) {
+            throw new Error(`Timed out acquiring script lock for ${label}.`);
+          }
+        }
+      }
+      return fn();
+    } finally {
+      if (lock && hasLock) {
+        try {
+          lock.releaseLock();
+        } catch (err: any) {
+          debugLog('followup.lane.lock.release.error', {
+            label,
+            message: err?.message || err?.toString?.() || 'unknown'
+          });
+        }
+      }
+    }
+  }
+
+  private withQueuedRecordMutation<T>(formKey: string, recordId: string, reason: string, fn: () => T): T {
+    const normalizedFormKey = this.resolveCanonicalFormKey(formKey) || (formKey || '').toString().trim();
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedFormKey || !normalizedRecordId) {
+      return fn();
+    }
+    const executionKey = `${this.normalizeFormKey(normalizedFormKey)}::${normalizedRecordId}`;
+    const existingDepth = this._activeRecordMutationLanes.get(executionKey) || 0;
+    if (existingDepth > 0) {
+      this._activeRecordMutationLanes.set(executionKey, existingDepth + 1);
+      debugLog('mutation.lane.reentrant', {
+        formKey: normalizedFormKey,
+        recordId: normalizedRecordId,
+        depth: existingDepth + 1,
+        reason
+      });
+      try {
+        return fn();
+      } finally {
+        const nextDepth = (this._activeRecordMutationLanes.get(executionKey) || 1) - 1;
+        if (nextDepth > 0) this._activeRecordMutationLanes.set(executionKey, nextDepth);
+        else this._activeRecordMutationLanes.delete(executionKey);
+      }
+    }
+
+    const ticket = this.reserveRecordMutationLaneTicket(normalizedFormKey, normalizedRecordId);
+    if (!ticket) {
+      throw new Error('Could not queue record mutation.');
+    }
+    const turn = this.waitForRecordMutationLaneTurn(normalizedFormKey, normalizedRecordId, ticket);
+    if (!turn.success) {
+      throw new Error((turn.message || 'Could not queue record mutation.').toString());
+    }
+    this._activeRecordMutationLanes.set(executionKey, 1);
+    try {
+      this.touchRecordMutationLaneOwner(normalizedFormKey, normalizedRecordId, ticket);
+      return fn();
+    } finally {
+      this._activeRecordMutationLanes.delete(executionKey);
+      this.releaseRecordMutationLaneTurn(normalizedFormKey, normalizedRecordId, ticket);
+    }
+  }
+
+  private recordMutationLanePropertyKey(formKey: string, recordId: string): string {
+    const digest = this.cacheManager
+      .digestKey(`${this.normalizeFormKey(formKey)}::${(recordId || '').toString().trim()}`)
+      .replace(/[^a-zA-Z0-9:_-]/g, '_');
+    return `${RECORD_MUTATION_LANE_PROPERTY_PREFIX}${digest}`;
+  }
+
+  private readRecordMutationLaneState(
+    props: GoogleAppsScript.Properties.Properties | null,
+    formKey: string,
+    recordId: string
+  ): RecordMutationLaneState {
+    if (!props) return { lastIssuedSeq: 0, nextSeq: 1 };
+    try {
+      const raw = props.getProperty(this.recordMutationLanePropertyKey(formKey, recordId));
+      if (!raw) return { lastIssuedSeq: 0, nextSeq: 1 };
+      const parsed = JSON.parse(raw) as Partial<RecordMutationLaneState>;
+      const lastIssuedSeq = Number(parsed?.lastIssuedSeq || 0);
+      const nextSeq = Number(parsed?.nextSeq || 1);
+      const ownerRaw = parsed?.owner;
+      const owner =
+        ownerRaw &&
+        typeof ownerRaw === 'object' &&
+        (ownerRaw as any).token &&
+        Number.isFinite(Number((ownerRaw as any).sequence)) &&
+        Number.isFinite(Number((ownerRaw as any).expiresAtMs))
+          ? {
+              token: ((ownerRaw as any).token || '').toString(),
+              sequence: Number((ownerRaw as any).sequence),
+              expiresAtMs: Number((ownerRaw as any).expiresAtMs),
+              updatedAt: ((ownerRaw as any).updatedAt || '').toString() || undefined
+            }
+          : undefined;
+      return {
+        lastIssuedSeq: Number.isFinite(lastIssuedSeq) && lastIssuedSeq >= 0 ? lastIssuedSeq : 0,
+        nextSeq: Number.isFinite(nextSeq) && nextSeq >= 1 ? nextSeq : 1,
+        owner
+      };
+    } catch {
+      return { lastIssuedSeq: 0, nextSeq: 1 };
+    }
+  }
+
+  private writeRecordMutationLaneState(
+    props: GoogleAppsScript.Properties.Properties | null,
+    formKey: string,
+    recordId: string,
+    state: RecordMutationLaneState | null
+  ): void {
+    if (!props) return;
+    const key = this.recordMutationLanePropertyKey(formKey, recordId);
+    try {
+      const lastIssuedSeq = Number(state?.lastIssuedSeq || 0);
+      const nextSeq = Number(state?.nextSeq || 1);
+      const owner = state?.owner;
+      if (!state || (nextSeq > lastIssuedSeq && !owner)) {
+        props.deleteProperty(key);
+        return;
+      }
+      props.setProperty(
+        key,
+        JSON.stringify({
+          lastIssuedSeq,
+          nextSeq,
+          owner: owner
+            ? {
+                token: owner.token,
+                sequence: owner.sequence,
+                expiresAtMs: owner.expiresAtMs,
+                updatedAt: owner.updatedAt || new Date().toISOString()
+              }
+            : undefined
+        })
+      );
+    } catch {
+      // ignore lane persistence failures
+    }
+  }
+
+  private reserveRecordMutationLaneTicket(formKey: string, recordId: string): RecordMutationLaneTicket | null {
+    const props = this.scriptProperties();
+    const token = (typeof Utilities !== 'undefined' && (Utilities as any).getUuid
+      ? (Utilities as any).getUuid()
+      : `${Date.now()}-${Math.random()}`)
+      .toString();
+    if (!props) {
+      return { token, sequence: 1 };
+    }
+    return this.withScriptLock('mutation.lane.reserve', 8000, () => {
+      const state = this.readRecordMutationLaneState(props, formKey, recordId);
+      const sequence = Math.max(Number(state.lastIssuedSeq || 0), 0) + 1;
+      this.writeRecordMutationLaneState(props, formKey, recordId, {
+        ...state,
+        lastIssuedSeq: sequence,
+        nextSeq: Math.max(Number(state.nextSeq || 1), 1)
+      });
+      debugLog('mutation.lane.queued', {
+        formKey,
+        recordId,
+        sequence,
+        nextSeq: Math.max(Number(state.nextSeq || 1), 1)
+      });
+      return { token, sequence };
+    });
+  }
+
+  private waitForRecordMutationLaneTurn(
+    formKey: string,
+    recordId: string,
+    ticket: RecordMutationLaneTicket
+  ): { success: boolean; message?: string } {
+    const props = this.scriptProperties();
+    if (!props) return { success: true };
+    const startedAt = Date.now();
+    const sleepFn =
+      typeof Utilities !== 'undefined' && typeof (Utilities as any).sleep === 'function'
+        ? (ms: number) => (Utilities as any).sleep(ms)
+        : null;
+
+    while (Date.now() - startedAt < RECORD_MUTATION_LANE_WAIT_TIMEOUT_MS) {
+      const claimed = this.withScriptLock('mutation.lane.claim', 8000, () => {
+        const state = this.readRecordMutationLaneState(props, formKey, recordId);
+        const now = Date.now();
+        const activeOwner =
+          state.owner && Number(state.owner.expiresAtMs || 0) > now
+            ? state.owner
+            : undefined;
+        const normalizedState: RecordMutationLaneState = {
+          ...state,
+          owner: activeOwner
+        };
+        if (ticket.sequence < normalizedState.nextSeq) {
+          return { success: false, skipped: true };
+        }
+        if (ticket.sequence !== normalizedState.nextSeq || activeOwner) {
+          this.writeRecordMutationLaneState(props, formKey, recordId, normalizedState);
+          return { success: false, waitingFor: normalizedState.nextSeq, owner: activeOwner?.sequence || null };
+        }
+        normalizedState.owner = {
+          token: ticket.token,
+          sequence: ticket.sequence,
+          expiresAtMs: now + RECORD_MUTATION_LANE_OWNER_TTL_MS,
+          updatedAt: new Date(now).toISOString()
+        };
+        this.writeRecordMutationLaneState(props, formKey, recordId, normalizedState);
+        return { success: true };
+      });
+
+      if (claimed.success) {
+        debugLog('mutation.lane.claimed', {
+          formKey,
+          recordId,
+          sequence: ticket.sequence,
+          waitedMs: Date.now() - startedAt
+        });
+        return { success: true };
+      }
+      if ((claimed as any).skipped) {
+        return { success: false, message: 'Record mutation queue advanced past this request.' };
+      }
+      if (!sleepFn) {
+        return { success: false, message: 'Record mutation queue is busy. Please retry.' };
+      }
+      sleepFn(RECORD_MUTATION_LANE_POLL_MS);
+    }
+
+    debugLog('mutation.lane.wait.timeout', {
+      formKey,
+      recordId,
+      sequence: ticket.sequence,
+      waitedMs: Date.now() - startedAt
+    });
+    return {
+      success: false,
+      message: 'Another record mutation is still running for this record. Please retry shortly.'
+    };
+  }
+
+  private touchRecordMutationLaneOwner(formKey: string, recordId: string, ticket: RecordMutationLaneTicket): void {
+    const props = this.scriptProperties();
+    if (!props) return;
+    try {
+      this.withScriptLock('mutation.lane.touch', 2000, () => {
+        const state = this.readRecordMutationLaneState(props, formKey, recordId);
+        if (!state.owner || state.owner.token !== ticket.token) return;
+        state.owner = {
+          ...state.owner,
+          expiresAtMs: Date.now() + RECORD_MUTATION_LANE_OWNER_TTL_MS,
+          updatedAt: new Date().toISOString()
+        };
+        this.writeRecordMutationLaneState(props, formKey, recordId, state);
+      });
+    } catch (err: any) {
+      debugLog('mutation.lane.touch.error', {
+        formKey,
+        recordId,
+        sequence: ticket.sequence,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+    }
+  }
+
+  private releaseRecordMutationLaneTurn(formKey: string, recordId: string, ticket: RecordMutationLaneTicket): void {
+    const props = this.scriptProperties();
+    if (!props) return;
+    try {
+      this.withScriptLock('mutation.lane.release', 8000, () => {
+        const state = this.readRecordMutationLaneState(props, formKey, recordId);
+        const nextSeq = Math.max(Number(state.nextSeq || 1), ticket.sequence + 1);
+        const lastIssuedSeq = Math.max(Number(state.lastIssuedSeq || 0), ticket.sequence);
+        const ownerMatches = !!state.owner && state.owner.token === ticket.token;
+        const nextState: RecordMutationLaneState = {
+          lastIssuedSeq,
+          nextSeq,
+          owner: ownerMatches ? undefined : state.owner
+        };
+        this.writeRecordMutationLaneState(props, formKey, recordId, nextState);
+        debugLog('mutation.lane.released', {
+          formKey,
+          recordId,
+          sequence: ticket.sequence,
+          nextSeq,
+          queuedRemaining: Math.max(lastIssuedSeq - nextSeq + 1, 0)
+        });
+      });
+    } catch (err: any) {
+      debugLog('mutation.lane.release.error', {
+        formKey,
+        recordId,
+        sequence: ticket.sequence,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+    }
+  }
+
+  private followupLanePropertyKey(formKey: string, recordId: string): string {
+    const digest = this.cacheManager
+      .digestKey(`${this.normalizeFormKey(formKey)}::${(recordId || '').toString().trim()}`)
+      .replace(/[^a-zA-Z0-9:_-]/g, '_');
+    return `${FOLLOWUP_LANE_PROPERTY_PREFIX}${digest}`;
+  }
+
+  private readFollowupLaneState(
+    props: GoogleAppsScript.Properties.Properties | null,
+    formKey: string,
+    recordId: string
+  ): FollowupLaneState {
+    if (!props) return { lastIssuedSeq: 0, nextSeq: 1 };
+    try {
+      const raw = props.getProperty(this.followupLanePropertyKey(formKey, recordId));
+      if (!raw) return { lastIssuedSeq: 0, nextSeq: 1 };
+      const parsed = JSON.parse(raw) as Partial<FollowupLaneState>;
+      const lastIssuedSeq = Number(parsed?.lastIssuedSeq || 0);
+      const nextSeq = Number(parsed?.nextSeq || 1);
+      const ownerRaw = parsed?.owner;
+      const owner =
+        ownerRaw &&
+        typeof ownerRaw === 'object' &&
+        (ownerRaw as any).token &&
+        Number.isFinite(Number((ownerRaw as any).sequence)) &&
+        Number.isFinite(Number((ownerRaw as any).expiresAtMs))
+          ? {
+              token: ((ownerRaw as any).token || '').toString(),
+              sequence: Number((ownerRaw as any).sequence),
+              expiresAtMs: Number((ownerRaw as any).expiresAtMs),
+              updatedAt: ((ownerRaw as any).updatedAt || '').toString() || undefined
+            }
+          : undefined;
+      return {
+        lastIssuedSeq: Number.isFinite(lastIssuedSeq) && lastIssuedSeq >= 0 ? lastIssuedSeq : 0,
+        nextSeq: Number.isFinite(nextSeq) && nextSeq >= 1 ? nextSeq : 1,
+        owner
+      };
+    } catch {
+      return { lastIssuedSeq: 0, nextSeq: 1 };
+    }
+  }
+
+  private writeFollowupLaneState(
+    props: GoogleAppsScript.Properties.Properties | null,
+    formKey: string,
+    recordId: string,
+    state: FollowupLaneState | null
+  ): void {
+    if (!props) return;
+    const key = this.followupLanePropertyKey(formKey, recordId);
+    try {
+      const lastIssuedSeq = Number(state?.lastIssuedSeq || 0);
+      const nextSeq = Number(state?.nextSeq || 1);
+      const owner = state?.owner;
+      if (!state || (nextSeq > lastIssuedSeq && !owner)) {
+        props.deleteProperty(key);
+        return;
+      }
+      props.setProperty(
+        key,
+        JSON.stringify({
+          lastIssuedSeq,
+          nextSeq,
+          owner: owner
+            ? {
+                token: owner.token,
+                sequence: owner.sequence,
+                expiresAtMs: owner.expiresAtMs,
+                updatedAt: owner.updatedAt || new Date().toISOString()
+              }
+            : undefined
+        })
+      );
+    } catch {
+      // ignore lane persistence failures
+    }
+  }
+
+  private reserveFollowupLaneTicket(formKey: string, recordId: string): FollowupLaneTicket | null {
+    const props = this.scriptProperties();
+    const token = (typeof Utilities !== 'undefined' && (Utilities as any).getUuid
+      ? (Utilities as any).getUuid()
+      : `${Date.now()}-${Math.random()}`)
+      .toString();
+    if (!props) {
+      return { token, sequence: 1 };
+    }
+    return this.withScriptLock('followup.lane.reserve', 8000, () => {
+      const state = this.readFollowupLaneState(props, formKey, recordId);
+      const sequence = Math.max(Number(state.lastIssuedSeq || 0), 0) + 1;
+      this.writeFollowupLaneState(props, formKey, recordId, {
+        ...state,
+        lastIssuedSeq: sequence,
+        nextSeq: Math.max(Number(state.nextSeq || 1), 1)
+      });
+      debugLog('followup.lane.queued', {
+        formKey,
+        recordId,
+        sequence,
+        nextSeq: Math.max(Number(state.nextSeq || 1), 1)
+      });
+      return { token, sequence };
+    });
+  }
+
+  private waitForFollowupLaneTurn(
+    formKey: string,
+    recordId: string,
+    ticket: FollowupLaneTicket
+  ): { success: boolean; message?: string } {
+    const props = this.scriptProperties();
+    if (!props) return { success: true };
+    const startedAt = Date.now();
+    const sleepFn =
+      typeof Utilities !== 'undefined' && typeof (Utilities as any).sleep === 'function'
+        ? (ms: number) => (Utilities as any).sleep(ms)
+        : null;
+
+    while (Date.now() - startedAt < FOLLOWUP_LANE_WAIT_TIMEOUT_MS) {
+      const claimed = this.withScriptLock('followup.lane.claim', 8000, () => {
+        const state = this.readFollowupLaneState(props, formKey, recordId);
+        const now = Date.now();
+        const activeOwner =
+          state.owner && Number(state.owner.expiresAtMs || 0) > now
+            ? state.owner
+            : undefined;
+        const normalizedState: FollowupLaneState = {
+          ...state,
+          owner: activeOwner
+        };
+        if (ticket.sequence < normalizedState.nextSeq) {
+          return { success: false, skipped: true };
+        }
+        if (ticket.sequence !== normalizedState.nextSeq || activeOwner) {
+          this.writeFollowupLaneState(props, formKey, recordId, normalizedState);
+          return { success: false, waitingFor: normalizedState.nextSeq, owner: activeOwner?.sequence || null };
+        }
+        normalizedState.owner = {
+          token: ticket.token,
+          sequence: ticket.sequence,
+          expiresAtMs: now + FOLLOWUP_LANE_OWNER_TTL_MS,
+          updatedAt: new Date(now).toISOString()
+        };
+        this.writeFollowupLaneState(props, formKey, recordId, normalizedState);
+        return { success: true };
+      });
+
+      if (claimed.success) {
+        debugLog('followup.lane.claimed', {
+          formKey,
+          recordId,
+          sequence: ticket.sequence,
+          waitedMs: Date.now() - startedAt
+        });
+        return { success: true };
+      }
+      if ((claimed as any).skipped) {
+        return { success: false, message: 'Follow-up queue advanced past this request.' };
+      }
+      if (!sleepFn) {
+        return { success: false, message: 'Follow-up queue is busy. Please retry.' };
+      }
+      sleepFn(FOLLOWUP_LANE_POLL_MS);
+    }
+
+    debugLog('followup.lane.wait.timeout', {
+      formKey,
+      recordId,
+      sequence: ticket.sequence,
+      waitedMs: Date.now() - startedAt
+    });
+    return {
+      success: false,
+      message: 'Another follow-up batch is still running for this record. Please retry shortly.'
+    };
+  }
+
+  private touchFollowupLaneOwner(formKey: string, recordId: string, ticket: FollowupLaneTicket): void {
+    const props = this.scriptProperties();
+    if (!props) return;
+    try {
+      this.withScriptLock('followup.lane.touch', 2000, () => {
+        const state = this.readFollowupLaneState(props, formKey, recordId);
+        if (!state.owner || state.owner.token !== ticket.token) return;
+        state.owner = {
+          ...state.owner,
+          expiresAtMs: Date.now() + FOLLOWUP_LANE_OWNER_TTL_MS,
+          updatedAt: new Date().toISOString()
+        };
+        this.writeFollowupLaneState(props, formKey, recordId, state);
+      });
+    } catch (err: any) {
+      debugLog('followup.lane.touch.error', {
+        formKey,
+        recordId,
+        sequence: ticket.sequence,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+    }
+  }
+
+  private releaseFollowupLaneTurn(formKey: string, recordId: string, ticket: FollowupLaneTicket): void {
+    const props = this.scriptProperties();
+    if (!props) return;
+    try {
+      this.withScriptLock('followup.lane.release', 8000, () => {
+        const state = this.readFollowupLaneState(props, formKey, recordId);
+        const nextSeq = Math.max(Number(state.nextSeq || 1), ticket.sequence + 1);
+        const lastIssuedSeq = Math.max(Number(state.lastIssuedSeq || 0), ticket.sequence);
+        const ownerMatches = !!state.owner && state.owner.token === ticket.token;
+        const nextState: FollowupLaneState = {
+          lastIssuedSeq,
+          nextSeq,
+          owner: ownerMatches ? undefined : state.owner
+        };
+        this.writeFollowupLaneState(props, formKey, recordId, nextState);
+        debugLog('followup.lane.released', {
+          formKey,
+          recordId,
+          sequence: ticket.sequence,
+          nextSeq,
+          queuedRemaining: Math.max(lastIssuedSeq - nextSeq + 1, 0)
+        });
+      });
+    } catch (err: any) {
+      debugLog('followup.lane.release.error', {
+        formKey,
+        recordId,
+        sequence: ticket.sequence,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
     }
   }
 

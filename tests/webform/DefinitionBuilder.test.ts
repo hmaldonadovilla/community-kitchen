@@ -54,6 +54,17 @@ describe('DefinitionBuilder', () => {
       submissionConfirmationMessage: { EN: 'Ready to submit?' },
       submissionConfirmationConfirmLabel: { EN: 'Yes, submit' },
       submissionConfirmationCancelLabel: { EN: 'Not yet' },
+      submissionAfterSubmit: {
+        preActions: ['CLOSE_RECORD'],
+        waitForQueue: 'uploadsOnly',
+        navigateTo: 'list',
+        confirmationDialog: {
+          title: { EN: 'Please confirm' },
+          message: { EN: 'Please confirm there is no leftover.' },
+          confirmLabel: { EN: 'Yes, confirm' },
+          cancelLabel: { EN: 'No, continue editing' }
+        }
+      },
       dedupDialog: {
         title: { EN: 'No duplicates allowed' },
         intro: { EN: 'Record already exists for:' },
@@ -197,6 +208,17 @@ describe('DefinitionBuilder', () => {
     const def = builder.buildDefinition('Config: Pantry');
     expect(def.submissionConfirmationConfirmLabel).toEqual({ en: 'Yes, submit' });
     expect(def.submissionConfirmationCancelLabel).toEqual({ en: 'Not yet' });
+    expect(def.submissionAfterSubmit).toEqual({
+      preActions: ['CLOSE_RECORD'],
+      waitForQueue: 'uploadsOnly',
+      navigateTo: 'list',
+      confirmationDialog: {
+        title: { en: 'Please confirm' },
+        message: { en: 'Please confirm there is no leftover.' },
+        confirmLabel: { en: 'Yes, confirm' },
+        cancelLabel: { en: 'No, continue editing' }
+      }
+    });
   });
 
   test('buildDefinitionFromConfig tolerates bundled questions without options arrays', () => {

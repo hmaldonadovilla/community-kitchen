@@ -1131,8 +1131,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - legacy alias: `waitForBackgroundSaves: true` maps to `waitForQueue: "all"`
           - validate the current step, all visible steps through the current step, or the full form before starting (`validationScope`)
           - run the configured `backgroundActions` in background (`runInBackground`)
+          - serialize follow-up execution per record on the server so later milestone batches wait behind earlier in-flight batches for the same record
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
+          - redirect to another view after success (`navigateToAfterSuccess: "current" | "form" | "summary" | "list"`)
           - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
+          - choose the confirmation copy per record state with ordered `confirmationDialogCases[]`
+          - show a generated-records dialog after success (`generatedRecordsDialog`) when matching `submitEffects` created downstream records
       - Read-only labels in steps:
         - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
         - Line item + subgroup step targets support **step-scoped label rendering** in two equivalent ways:
@@ -1183,7 +1187,18 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         "submissionConfirmationCancelLabel": { "en": "Not yet" }
       }
       ```
-    - Need **submit-time background follow-up**? Configure `submissionAfterSubmit` so some actions complete before navigation and others continue after redirect. Example:
+    - Need **submit-time background follow-up**? Configure `submissionAfterSubmit` so some actions complete before navigation and others continue after redirect.
+      - `preActions`: follow-up action ids that must complete before navigation
+      - `backgroundActions`: follow-up action ids that can continue after navigation
+      - `waitForQueue`: `all` | `uploadsOnly` | `none`
+      - `navigateTo`: `auto` | `form` | `summary` | `list`
+      - `confirmationDialog`: optional confirmation dialog shown before final submit starts
+      - `confirmationDialogCases[]`: ordered conditional confirmation dialogs; first match wins and falls back to `confirmationDialog`
+      - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records
+      - `feedbackDialog`: optional acknowledgement dialog shown after background actions start
+      - same-record follow-up batches are serialized on the server, so final-submit `preActions` wait behind any earlier in-flight milestone batch for that record
+
+      Example:
       ```json
       {
         "submissionAfterSubmit": {
@@ -1278,6 +1293,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved. The first time a user opens Create/Edit/Copy, they’ll see a one-time autosave explainer overlay (copy lives in `autosaveNotice.*` in `src/web/systemStrings.json`).
       - Optional decoupling: use `autoSave.enableWhenFields` for autosave enablement gates and `autoSave.dedupTriggerFields` for dedup trigger fields.
       - Optional dedup popup copy: use `autoSave.dedupCheckDialog` to configure the checking/available/duplicate modal text and auto-close timings.
+      - The web app fingerprints draft payloads and coalesces repeated autosave / ensure-draft / explicit draft-save requests for the same unchanged record before calling `saveSubmissionWithId`.
     - Want dedup-key edits to delete the current record instead of mutating it? Add `"dedupDeleteOnKeyChange": true` in the same dashboard JSON column. When enabled, if a user changes a top-level field that participates in a reject dedup rule, the current record is deleted immediately (after confirm/blur + selection effects). Then standard create-flow dedup/autosave rules apply.
     - Want a confirmation dialog when users press **Home** with incomplete required data? Add:
       - `actionBars.system.home.dedupIncompleteDialog` for legacy dedup-key guards, or
@@ -2559,8 +2575,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
 - `submitEffects` (optional): declarative shared-table writes that run after the source record saves.
   - Supported types: `createRecord`, `updateRecord`
   - Use this to create or update a downstream record in another form, for example a shared inventory row
+  - Optional `id` gives the effect a stable name so milestone dialogs can target the generated records from specific effects
   - Use `recordId` when the downstream row should be updated in place on later source saves instead of creating duplicates
   - `recordId` is required for `updateRecord`
+  - Optional `sourceLink` describes which target fields store the originating source record id / form key; this lets later UI/template flows look up the generated downstream records from the saved source record
   - String values support `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, and `{{source.updatedAt}}`
   - `createRecord.forEachLineItem` and `updateRecord.forEachLineItem` can write one downstream record per matched source line-item row
   - Inside a `forEachLineItem` effect, templates can also use `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`, and `{{lineItem.index}}`
@@ -2573,6 +2591,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    {
      "submitEffects": [
        {
+         "id": "captureProducedLeftovers",
          "type": "createRecord",
          "targetFormKey": "Config: Leftover Inventory",
          "runOn": "create",
@@ -2588,6 +2607,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
            "SOURCE_FORM_KEY": "Config: Meal Production",
            "LEFTOVER_KIND": "{{source.LEFTOVER_KIND}}",
            "LEFTOVER_NOTES": "{{source.LEFTOVER_NOTES}}"
+         },
+         "sourceLink": {
+           "sourceRecordIdFieldId": "SOURCE_RECORD_ID",
+           "sourceFormKeyFieldId": "SOURCE_FORM_KEY"
          }
        }
      ]
@@ -2600,6 +2623,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    {
      "submitEffects": [
        {
+         "id": "captureProducedLeftovers",
          "type": "createRecord",
           "targetFormKey": "Config: Leftover Inventory",
          "runOn": "both",
@@ -2614,10 +2638,15 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
          },
          "values": {
            "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
+           "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
            "LEFTOVER_KIND": "{{row.LEFTOVER_KIND}}",
            "LEFTOVER_NAME": "{{row.LEFTOVER_NAME}}",
            "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
            "LEFTOVER_SEQ": "{{lineItem.index}}"
+         },
+         "sourceLink": {
+           "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID",
+           "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY"
          }
        }
      ]
@@ -2628,6 +2657,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Portioning captures produced leftovers in a dedicated `MP_LEFTOVER_CAPTURE_LI` group
    - Each row writes to `Config: Leftover Inventory` through `submitEffects.createRecord`
    - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream inventory row stable across autosave and later edits
+   - `sourceLink` lets the Leftovers step and summary template recover the generated `Config: Leftover Inventory` rows later from the Meal Production record
    - Final inventory usage updates can still be handled through `submitEffects.updateRecord`, but active leftover selection is now expected to use the dedicated reservation ledger flow instead of a status-only toggle
 
    Reservation-backed inventory lifecycle:
@@ -2912,10 +2942,15 @@ What is added/maintained:
   - Server-owned, monotonic integer (starts at 1 and increments on each update).
   - Used by the web app to validate cached records (`getRecordVersion` + banner prompting the user to refresh if stale).
   - Used for **optimistic locking**: draft autosave and submit are rejected when the client’s version is behind the sheet’s current version (prevents last-write-wins overwrites).
+  - Unchanged updates now return `operation: "noop"` and do **not** bump `Data Version`, `Updated At`, audit logs, or home/analytics cache revisions.
 - **Hidden index sheet per destination tab**: `__CK_INDEX__...`
   - Aligns by row number with the destination tab.
   - Stores: record id, row number, data version, timestamps, and per-rule dedup signatures.
   - Used for **fast record id → row** resolution and **indexed dedup checks**.
+- **Record mutation lane**
+  - Record writes are serialized per `(formKey, recordId)` on the server.
+  - This applies to `saveSubmissionWithId`, internal record saves, dependency-guard writes, and submit-effect record writes.
+  - Same-record mutations wait their turn instead of racing; unrelated records are unaffected.
 
 Recommended steps after deploying a new bundle:
 

@@ -1257,14 +1257,48 @@ export class Dashboard {
         submissionAfterSubmitObj.backgroundActions !== undefined ||
         submissionAfterSubmitObj.waitForQueue !== undefined ||
         submissionAfterSubmitObj.navigateTo !== undefined ||
-        submissionAfterSubmitObj.feedbackDialog !== undefined)
+        submissionAfterSubmitObj.confirmationDialog !== undefined ||
+        submissionAfterSubmitObj.confirmationDialogCases !== undefined ||
+        submissionAfterSubmitObj.feedbackDialog !== undefined ||
+        submissionAfterSubmitObj.generatedRecordsDialog !== undefined)
         ? (() => {
             const out: Record<string, any> = {};
             const preActions = normalizeStringArray(submissionAfterSubmitObj.preActions);
             const backgroundActions = normalizeStringArray(submissionAfterSubmitObj.backgroundActions);
             const waitForQueue = (normalizeString(submissionAfterSubmitObj.waitForQueue) || '').toLowerCase();
             const navigateTo = (normalizeString(submissionAfterSubmitObj.navigateTo) || '').toLowerCase();
+            const confirmationDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.confirmationDialog);
+            const confirmationDialogCasesRaw = submissionAfterSubmitObj.confirmationDialogCases;
+            const confirmationDialogCases = (Array.isArray(confirmationDialogCasesRaw) ? confirmationDialogCasesRaw : [])
+              .map(entry => {
+                if (!entry || typeof entry !== 'object') return null;
+                const dialog = normalizeSystemDialogConfigLocal((entry as any).dialog);
+                if (!dialog) return null;
+                const outEntry: Record<string, any> = { dialog };
+                const when = this.normalizeWhenClause((entry as any).when);
+                if (when) outEntry.when = when;
+                return outEntry;
+              })
+              .filter(Boolean);
             const feedbackDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.feedbackDialog);
+            const generatedRecordsDialogRaw = submissionAfterSubmitObj.generatedRecordsDialog;
+            let generatedRecordsDialog: Record<string, any> | undefined;
+            if (generatedRecordsDialogRaw && typeof generatedRecordsDialogRaw === 'object') {
+              const submitEffectIds = normalizeStringArray((generatedRecordsDialogRaw as any).submitEffectIds);
+              const targetFormKey = normalizeString((generatedRecordsDialogRaw as any).targetFormKey);
+              const title = normalizeLocalized((generatedRecordsDialogRaw as any).title);
+              const message = normalizeLocalized((generatedRecordsDialogRaw as any).message ?? (generatedRecordsDialogRaw as any).intro);
+              const itemTemplate = normalizeLocalized((generatedRecordsDialogRaw as any).itemTemplate);
+              const confirmLabel = normalizeLocalized((generatedRecordsDialogRaw as any).confirmLabel);
+              const outDialog: Record<string, any> = {};
+              if (submitEffectIds?.length) outDialog.submitEffectIds = submitEffectIds;
+              if (targetFormKey) outDialog.targetFormKey = targetFormKey;
+              if (title) outDialog.title = title;
+              if (message) outDialog.message = message;
+              if (itemTemplate) outDialog.itemTemplate = itemTemplate;
+              if (confirmLabel) outDialog.confirmLabel = confirmLabel;
+              if (Object.keys(outDialog).length) generatedRecordsDialog = outDialog;
+            }
             if (preActions?.length) out.preActions = preActions;
             if (backgroundActions?.length) out.backgroundActions = backgroundActions;
             if (waitForQueue === 'all' || waitForQueue === 'uploadsonly' || waitForQueue === 'none') {
@@ -1273,7 +1307,10 @@ export class Dashboard {
             if (navigateTo === 'auto' || navigateTo === 'form' || navigateTo === 'summary' || navigateTo === 'list') {
               out.navigateTo = navigateTo;
             }
+            if (confirmationDialog) out.confirmationDialog = confirmationDialog;
+            if (confirmationDialogCases.length) out.confirmationDialogCases = confirmationDialogCases;
             if (feedbackDialog) out.feedbackDialog = feedbackDialog;
+            if (generatedRecordsDialog) out.generatedRecordsDialog = generatedRecordsDialog;
             return Object.keys(out).length ? out : undefined;
           })()
         : undefined;
@@ -2236,6 +2273,15 @@ export class Dashboard {
             if ((milestoneActionRaw as any).advanceAfterStart !== undefined) {
               milestoneAction.advanceAfterStart = Boolean((milestoneActionRaw as any).advanceAfterStart);
             }
+            const navigateToAfterSuccess = normalizeString((milestoneActionRaw as any).navigateToAfterSuccess).toLowerCase();
+            if (
+              navigateToAfterSuccess === 'current' ||
+              navigateToAfterSuccess === 'form' ||
+              navigateToAfterSuccess === 'summary' ||
+              navigateToAfterSuccess === 'list'
+            ) {
+              milestoneAction.navigateToAfterSuccess = navigateToAfterSuccess;
+            }
             const validationScope = normalizeString((milestoneActionRaw as any).validationScope).toLowerCase();
             if (validationScope === 'currentstep') milestoneAction.validationScope = 'currentStep';
             if (validationScope === 'throughcurrentstep') milestoneAction.validationScope = 'throughCurrentStep';
@@ -2252,8 +2298,46 @@ export class Dashboard {
             }
             const confirmationDialog = normalizeDialogConfig((milestoneActionRaw as any).confirmationDialog);
             if (confirmationDialog) milestoneAction.confirmationDialog = confirmationDialog;
+            const confirmationDialogCasesRaw = (milestoneActionRaw as any).confirmationDialogCases;
+            const confirmationDialogCases = (Array.isArray(confirmationDialogCasesRaw) ? confirmationDialogCasesRaw : [])
+              .map((entry: any) => {
+                if (!entry || typeof entry !== 'object') return null;
+                const dialog = normalizeDialogConfig((entry as any).dialog ?? entry);
+                if (!dialog) return null;
+                const when = normalizeCondition((entry as any).when);
+                return when ? { when, dialog } : { dialog };
+              })
+              .filter(Boolean);
+            if (confirmationDialogCases.length) milestoneAction.confirmationDialogCases = confirmationDialogCases;
             const feedbackDialog = normalizeDialogConfig((milestoneActionRaw as any).feedbackDialog);
             if (feedbackDialog) milestoneAction.feedbackDialog = feedbackDialog;
+            const generatedRecordsDialogRaw = (milestoneActionRaw as any).generatedRecordsDialog;
+            if (generatedRecordsDialogRaw && typeof generatedRecordsDialogRaw === 'object') {
+              const generatedRecordsDialog: any = {};
+              const submitEffectIdsRaw = Array.isArray((generatedRecordsDialogRaw as any).submitEffectIds)
+                ? (generatedRecordsDialogRaw as any).submitEffectIds
+                : (generatedRecordsDialogRaw as any).submitEffectIds !== undefined
+                  ? [(generatedRecordsDialogRaw as any).submitEffectIds]
+                  : [];
+              const submitEffectIds = submitEffectIdsRaw.map((entry: any) => normalizeString(entry)).filter(Boolean);
+              if (submitEffectIds.length) generatedRecordsDialog.submitEffectIds = submitEffectIds;
+              const targetFormKey = normalizeString((generatedRecordsDialogRaw as any).targetFormKey);
+              if (targetFormKey) generatedRecordsDialog.targetFormKey = targetFormKey;
+              const title = normalizeLocalized((generatedRecordsDialogRaw as any).title);
+              if (title) generatedRecordsDialog.title = title;
+              const message = normalizeLocalized(
+                (generatedRecordsDialogRaw as any).message ??
+                  (generatedRecordsDialogRaw as any).intro
+              );
+              if (message) generatedRecordsDialog.message = message;
+              const itemTemplate = normalizeLocalized((generatedRecordsDialogRaw as any).itemTemplate);
+              if (itemTemplate) generatedRecordsDialog.itemTemplate = itemTemplate;
+              const confirmLabel = normalizeLocalized((generatedRecordsDialogRaw as any).confirmLabel);
+              if (confirmLabel) generatedRecordsDialog.confirmLabel = confirmLabel;
+              if (Object.keys(generatedRecordsDialog).length) {
+                milestoneAction.generatedRecordsDialog = generatedRecordsDialog;
+              }
+            }
             nav.milestoneAction = milestoneAction;
           }
         }
@@ -2640,6 +2724,13 @@ export class Dashboard {
       type: type as 'createRecord' | 'updateRecord',
       targetFormKey
     };
+    const effectIdRaw =
+      raw.effectId ??
+      (raw.recordId !== undefined || raw.targetRecordId !== undefined ? raw.id : undefined);
+    if (effectIdRaw !== undefined && effectIdRaw !== null) {
+      const effectId = effectIdRaw.toString().trim();
+      if (effectId) (effect as any).id = effectId;
+    }
 
     const when = this.normalizeWhenClause(raw.when ?? raw.match ?? raw.filter);
     if (when) effect.when = when;
@@ -2654,7 +2745,7 @@ export class Dashboard {
 
     if (Object.prototype.hasOwnProperty.call(raw, 'recordId')) {
       effect.recordId = (raw as any).recordId;
-    } else if (Object.prototype.hasOwnProperty.call(raw, 'id')) {
+    } else if (type === 'updateRecord' && Object.prototype.hasOwnProperty.call(raw, 'id')) {
       effect.recordId = (raw as any).id;
     } else if (Object.prototype.hasOwnProperty.call(raw, 'targetRecordId')) {
       effect.recordId = (raw as any).targetRecordId;
@@ -2684,6 +2775,22 @@ export class Dashboard {
     if (auditActionRaw !== undefined && auditActionRaw !== null) {
       const auditAction = auditActionRaw.toString().trim();
       if (auditAction) effect.auditAction = auditAction;
+    }
+    const sourceLinkRaw = raw.sourceLink;
+    if (sourceLinkRaw && typeof sourceLinkRaw === 'object') {
+      const sourceRecordIdFieldId =
+        (sourceLinkRaw as any).sourceRecordIdFieldId !== undefined && (sourceLinkRaw as any).sourceRecordIdFieldId !== null
+          ? (sourceLinkRaw as any).sourceRecordIdFieldId.toString().trim()
+          : '';
+      const sourceFormKeyFieldId =
+        (sourceLinkRaw as any).sourceFormKeyFieldId !== undefined && (sourceLinkRaw as any).sourceFormKeyFieldId !== null
+          ? (sourceLinkRaw as any).sourceFormKeyFieldId.toString().trim()
+          : '';
+      if (sourceRecordIdFieldId) {
+        (effect as any).sourceLink = sourceFormKeyFieldId
+          ? { sourceRecordIdFieldId, sourceFormKeyFieldId }
+          : { sourceRecordIdFieldId };
+      }
     }
 
     if (type === 'updateRecord') {

@@ -21,6 +21,26 @@ export type OrderedEntryBlock = {
 
 type FormErrors = Record<string, string>;
 
+export const isOrderedEntryValid = (args: {
+  enabled: boolean;
+  errors: FormErrors | null | undefined;
+  firstIssue?: OrderedEntryBlock | null;
+}): boolean => {
+  if (!args.enabled) return true;
+  if (args.firstIssue) return false;
+  return !args.errors || Object.keys(args.errors).length === 0;
+};
+
+export const shouldDeferOrderedEntryGuidance = (args: {
+  issue?: OrderedEntryBlock | null;
+  activeTag?: string | null;
+}): boolean => {
+  const tag = (args.activeTag || '').toString().trim().toLowerCase();
+  const isTypingContext = tag === 'input' || tag === 'textarea' || tag === 'select';
+  if (!isTypingContext) return false;
+  return args.issue?.scope !== 'line';
+};
+
 const isRequiredFieldMissing = (args: {
   field: any;
   rawValue: FieldValue | undefined;

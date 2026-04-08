@@ -137,9 +137,50 @@ describe('WebFormService', () => {
     return { inventoryFormKey, ledgerFormKey };
   };
 
+  const installFollowupLaneMocks = () => {
+    const previousPropertiesService = (global as any).PropertiesService;
+    const previousLockService = (global as any).LockService;
+    const store = new Map<string, string>();
+    const props: {
+      getProperty: jest.Mock<string | null, [string]>;
+      setProperty: jest.Mock<any, [string, string]>;
+      deleteProperty: jest.Mock<any, [string]>;
+    } = {
+      getProperty: jest.fn((key: string) => (store.has(key) ? store.get(key) || null : null)),
+      setProperty: jest.fn((key: string, value: string) => {
+        store.set(key, value);
+        return props;
+      }),
+      deleteProperty: jest.fn((key: string) => {
+        store.delete(key);
+        return props;
+      })
+    };
+    const lock = {
+      waitLock: jest.fn(),
+      releaseLock: jest.fn()
+    };
+    (global as any).PropertiesService = {
+      getScriptProperties: () => props
+    };
+    (global as any).LockService = {
+      getScriptLock: () => lock
+    };
+    return {
+      props,
+      lock,
+      store,
+      restore: () => {
+        (global as any).PropertiesService = previousPropertiesService;
+        (global as any).LockService = previousLockService;
+      }
+    };
+  };
+
   afterEach(() => {
     jest.restoreAllMocks();
     (global as any).GmailApp.sendEmail.mockClear();
+    (global as any).Utilities.sleep.mockReset();
   });
 
   test('buildDefinition exposes line items and upload config', () => {
@@ -1354,6 +1395,10 @@ describe('WebFormService', () => {
           id: 'captureProducedEntireDishLeftovers',
           type: 'createRecord',
           targetFormKey: inventoryFormKey,
+          sourceLink: {
+            sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
+            sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID'
+          },
           runOn: 'both',
           recordId: 'leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}',
           when: {
@@ -1389,6 +1434,10 @@ describe('WebFormService', () => {
           id: 'captureProducedLeftovers',
           type: 'createRecord',
           targetFormKey: inventoryFormKey,
+          sourceLink: {
+            sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
+            sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID'
+          },
           runOn: 'both',
           recordId: 'leftover::{{source.id}}::partial::{{lineItem.rowId}}',
           when: {
@@ -1554,6 +1603,24 @@ describe('WebFormService', () => {
         created: 2,
         operation: 'create'
       })
+    );
+    expect(closed.meta?.submitEffects?.generatedRecords).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effectId: 'captureProducedEntireDishLeftovers',
+          targetFormKey: inventoryFormKey,
+          values: expect.objectContaining({
+            LEFTOVER_ID: 'LE-1'
+          })
+        }),
+        expect.objectContaining({
+          effectId: 'captureProducedLeftovers',
+          targetFormKey: inventoryFormKey,
+          values: expect.objectContaining({
+            LEFTOVER_ID: 'LP-1'
+          })
+        })
+      ])
     );
 
     const inventorySheet = ss.getSheets().find((sheet: any) => sheet.getName() === 'Produced Leftover Inventory Data');
@@ -2820,6 +2887,91 @@ describe('WebFormService', () => {
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
   });
 
+  test('triggerFollowupActions waits for earlier queued batch on the same record', () => {
+    const lane = installFollowupLaneMocks();
+    try {
+      jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+      const actionSpy = jest
+        .spyOn(service as any, 'runFollowupActionWithLifecycle')
+        .mockImplementation((...args: any[]) => ({
+          success: true,
+          status: `${args[4]} done`,
+          updatedAt: '2026-04-08T10:00:00.000Z'
+        }));
+
+      const laneKey = (service as any).followupLanePropertyKey('Config: Delivery', 'REC-QUEUE-1');
+      lane.store.set(
+        laneKey,
+        JSON.stringify({
+          lastIssuedSeq: 1,
+          nextSeq: 1,
+          owner: {
+            token: 'active-batch',
+            sequence: 1,
+            expiresAtMs: Date.now() + 60_000
+          }
+        })
+      );
+
+      (global as any).Utilities.sleep.mockImplementation(() => {
+        lane.store.set(
+          laneKey,
+          JSON.stringify({
+            lastIssuedSeq: 2,
+            nextSeq: 2
+          })
+        );
+      });
+
+      const result = service.triggerFollowupActions('Config: Delivery', 'REC-QUEUE-1', ['CREATE_PDF', 'SEND_EMAIL']);
+
+      expect((global as any).Utilities.sleep).toHaveBeenCalled();
+      expect(actionSpy).toHaveBeenCalledTimes(2);
+      expect(actionSpy.mock.calls.map(call => call[4])).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
+      expect(result.success).toBe(true);
+      expect(lane.store.has(laneKey)).toBe(false);
+    } finally {
+      lane.restore();
+    }
+  });
+
+  test('triggerFollowupActions does not block unrelated records on a different lane', () => {
+    const lane = installFollowupLaneMocks();
+    try {
+      jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+      const actionSpy = jest
+        .spyOn(service as any, 'runFollowupActionWithLifecycle')
+        .mockImplementation((...args: any[]) => ({
+          success: true,
+          status: `${args[4]} done`,
+          updatedAt: '2026-04-08T10:00:00.000Z'
+        }));
+
+      const busyLaneKey = (service as any).followupLanePropertyKey('Config: Delivery', 'REC-BUSY');
+      lane.store.set(
+        busyLaneKey,
+        JSON.stringify({
+          lastIssuedSeq: 1,
+          nextSeq: 1,
+          owner: {
+            token: 'active-batch',
+            sequence: 1,
+            expiresAtMs: Date.now() + 60_000
+          }
+        })
+      );
+
+      const result = service.triggerFollowupActions('Config: Delivery', 'REC-FREE', ['CLOSE_RECORD']);
+
+      expect((global as any).Utilities.sleep).not.toHaveBeenCalled();
+      expect(actionSpy).toHaveBeenCalledTimes(1);
+      expect(actionSpy.mock.calls[0][3]).toBe('REC-FREE');
+      expect(result.success).toBe(true);
+    } finally {
+      lane.restore();
+    }
+  });
+
   test('triggerFollowupAction applies close-state submit effects before returning success', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const followupJson = JSON.stringify({
@@ -3306,6 +3458,117 @@ describe('WebFormService', () => {
 
     const snapshotRow = snapshotRows[0];
     expect((snapshotRow[snapshotIdx] || '').toString()).toContain('REC-AUDIT-1');
+  });
+
+  test('unchanged saves return noop and preserve data version', () => {
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+    expect(created.meta?.operation).toBe('create');
+    expect(created.meta?.dataVersion).toBeGreaterThan(0);
+
+    const second = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckClientDataVersion: created.meta?.dataVersion
+    } as any);
+
+    expect(second.success).toBe(true);
+    expect(second.message).toBe('No changes to save.');
+    expect(second.meta).toEqual(
+      expect.objectContaining({
+        id: 'REC-NOOP-1',
+        operation: 'noop',
+        dataVersion: created.meta?.dataVersion,
+        rowNumber: created.meta?.rowNumber,
+        updatedAt: created.meta?.updatedAt
+      })
+    );
+  });
+
+  test('noop updates do not append audit rows', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      auditLogging: {
+        enabled: true,
+        statuses: ['Ready for production'],
+        snapshotButtons: ['READY_PROD'],
+        sheetName: 'Delivery Audit'
+      }
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-AUDIT',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const changed = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-AUDIT',
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Ready for production',
+      __ckAuditAction: 'READY_PROD',
+      __ckClientDataVersion: created.meta?.dataVersion
+    } as any);
+    expect(changed.success).toBe(true);
+
+    const auditSheet = ss.getSheetByName('Delivery Audit');
+    expect(auditSheet).toBeDefined();
+    const beforeRows = auditSheet!.getValues().length;
+
+    const second = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-AUDIT',
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Ready for production',
+      __ckAuditAction: 'READY_PROD',
+      __ckClientDataVersion: changed.meta?.dataVersion
+    } as any);
+
+    expect(second.success).toBe(true);
+    expect(second.meta?.operation).toBe('noop');
+    expect(auditSheet!.getValues().length).toBe(beforeRows);
   });
 
   test('updates preserve unmanaged destination columns', () => {

@@ -152,6 +152,21 @@
     margin-top: 16px;
   }
 
+  .ck-generated-list {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .ck-generated-item {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    margin: 0;
+  }
+
+  .ck-generated-item + .ck-generated-item {
+    margin-top: 6px;
+  }
+
   .ck-action-button {
     border: 1px solid currentColor;
     background: transparent;
@@ -258,6 +273,11 @@
     </div>
   </div>
 
+  <div class="ck-section ck-hidden" data-generated-leftovers-section>
+    <div class="ck-section-title">Generated leftovers</div>
+    <ul class="ck-generated-list" data-generated-leftovers-list></ul>
+  </div>
+
   <div class="ck-section">
     <div class="ck-action-row">
       <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
@@ -267,6 +287,7 @@
       <div class="ck-value">{{FILES_ICON(ING_EVD)}}</div>
     </div>
   </div>
+  <div class="ck-hidden" data-generated-leftovers-json>{{__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON}}</div>
 </div>
 
 <script>
@@ -292,6 +313,29 @@
     var toText = function (value) {
       return (value || '').toString().trim();
     };
+    var formatPortionsLabel = function (value) {
+      if (!value) return '';
+      var numericValue = Number(value.toString().replace(/,/g, '.'));
+      var unit = !isNaN(numericValue) && numericValue === 1 ? 'portion' : 'portions';
+      return value + ' ' + unit;
+    };
+    var formatGeneratedLeftoverQuantity = function (values) {
+      var portions = toText(values.LEFTOVER_PORTIONS || '');
+      if (portions) return formatPortionsLabel(portions);
+      var qty = toText(values.LEFTOVER_QTY || '');
+      if (!qty) return '';
+      var unit = toText(values.LEFTOVER_UNIT || '');
+      return unit ? qty + ' ' + unit : qty;
+    };
+    var buildGeneratedLeftoverLabel = function (entry) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
+      var kind = toText(values.LEFTOVER_KIND || '');
+      var recipe = toText(values.LEFTOVER_RECIPE || '');
+      var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
+      var quantity = formatGeneratedLeftoverQuantity(values);
+      return [leftoverId, kind, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+    };
     var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
     var statusRaw = toText((root.querySelector('[data-record-status]') || {}).textContent || '');
     var isClosedStatus = normalize(statusKeyRaw) === 'onclose' || normalize(statusRaw) === 'closed';
@@ -301,6 +345,9 @@
     }
 
     var listContainer = root.querySelector('[data-ck-meal-list]');
+    var generatedJsonNode = root.querySelector('[data-generated-leftovers-json]');
+    var generatedSection = root.querySelector('[data-generated-leftovers-section]');
+    var generatedList = root.querySelector('[data-generated-leftovers-list]');
     var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
     if (!listContainer || !dataTables.length) return;
 
@@ -659,6 +706,37 @@
 
       listContainer.appendChild(mealBlock);
     });
+
+    try {
+      if (generatedJsonNode && generatedSection && generatedList) {
+        var generatedPayloadRaw = toText(generatedJsonNode.textContent || '');
+        if (generatedPayloadRaw && !isTemplateToken(generatedPayloadRaw)) {
+          var generatedPayload = JSON.parse(generatedPayloadRaw);
+          var generatedByTarget = generatedPayload && generatedPayload.byTargetFormKey ? generatedPayload.byTargetFormKey : {};
+          var leftoverRows = Array.isArray(generatedByTarget['Config: Leftover Inventory'])
+            ? generatedByTarget['Config: Leftover Inventory']
+            : [];
+          var seenIds = {};
+          leftoverRows.forEach(function (entry) {
+            var values = entry && typeof entry.values === 'object' ? entry.values : {};
+            var leftoverId = toText(values.LEFTOVER_ID || entry.recordId || '');
+            if (!leftoverId || seenIds[leftoverId]) return;
+            seenIds[leftoverId] = true;
+            var label = buildGeneratedLeftoverLabel(entry);
+            if (!label) return;
+            var item = document.createElement('li');
+            item.className = 'ck-generated-item';
+            item.textContent = label;
+            generatedList.appendChild(item);
+          });
+          if (generatedList.children.length) {
+            generatedSection.classList.remove('ck-hidden');
+          }
+        }
+      }
+    } catch (_) {
+      // ignore generated leftovers rendering failures
+    }
 
     dataTables.forEach(function (table) {
       table.remove();

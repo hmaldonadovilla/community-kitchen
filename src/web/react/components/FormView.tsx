@@ -98,7 +98,13 @@ import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, applyValueMapsToLineRow, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
-import { findFirstOrderedEntryIssue, findOrderedEntryBlock, type OrderedEntryTarget } from './form/orderedEntry';
+import {
+  findFirstOrderedEntryIssue,
+  findOrderedEntryBlock,
+  isOrderedEntryValid,
+  shouldDeferOrderedEntryGuidance,
+  type OrderedEntryTarget
+} from './form/orderedEntry';
 import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow';
 import {
   buildLineContextId,
@@ -1426,6 +1432,11 @@ const FormView: React.FC<FormViewProps> = ({
                 : q
             );
           }
+          return;
+        }
+
+        if (topQuestionIds.has(q.id)) {
+          scopedQuestions.push(q);
           return;
         }
 
@@ -4155,6 +4166,7 @@ const FormView: React.FC<FormViewProps> = ({
     buildLineItemGroupOverlayValidationDefinition,
     collapsedRows,
     collapsedSubgroups,
+    guidedVirtualState,
     language,
     lineItemGroupOverlay.groupId,
     lineItems,
@@ -5579,7 +5591,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
       try {
         focusable?.focus();
-      } catch (_) {
+      } catch {
         // ignore focus failures
       }
       return true;
@@ -6843,11 +6855,6 @@ const FormView: React.FC<FormViewProps> = ({
     values
   ]);
 
-  const orderedEntryValid = useMemo(() => {
-    if (!orderedEntryEnabled) return true;
-    return !orderedEntryErrors || Object.keys(orderedEntryErrors).length === 0;
-  }, [orderedEntryEnabled, orderedEntryErrors]);
-
   const firstOrderedEntryIssue = useMemo(() => {
     if (!orderedEntryEnabled) return null;
     return findFirstOrderedEntryIssue({
@@ -6873,6 +6880,14 @@ const FormView: React.FC<FormViewProps> = ({
     resolveVisibilityValue,
     values
   ]);
+
+  const orderedEntryValid = useMemo(() => {
+    return isOrderedEntryValid({
+      enabled: orderedEntryEnabled,
+      errors: orderedEntryErrors,
+      firstIssue: firstOrderedEntryIssue
+    });
+  }, [firstOrderedEntryIssue, orderedEntryEnabled, orderedEntryErrors]);
 
   const buildOrderedEntryErrors = useCallback(
     (missingFieldPath: string, allErrors: FormErrors): FormErrors => {
@@ -7055,8 +7070,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (currentGuidePath === missingFieldPath) return;
     const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
     const activeTag = (activeEl?.tagName || '').toLowerCase();
-    const isTypingContext = activeTag === 'input' || activeTag === 'textarea';
-    if (isTypingContext) return;
+    if (shouldDeferOrderedEntryGuidance({ issue: firstOrderedEntryIssue, activeTag })) return;
     errorNavAllowOverlayOpenRef.current = false;
     errorNavRequestRef.current += 1;
     errorNavModeRef.current = 'scroll';

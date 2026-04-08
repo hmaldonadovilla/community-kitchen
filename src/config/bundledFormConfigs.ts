@@ -10133,6 +10133,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "captureProducedEntireDishLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
+            "sourceLink": {
+              "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
+              "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
+            },
             "runOn": "both",
             "recordId": "leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}",
             "when": {
@@ -10190,6 +10194,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "captureProducedLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
+            "sourceLink": {
+              "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
+              "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
+            },
             "runOn": "both",
             "recordId": "leftover::{{source.id}}::partial::{{lineItem.rowId}}",
             "when": {
@@ -10457,26 +10465,84 @@ export const BUNDLED_FORM_CONFIGS = [
           "CLOSE_RECORD"
         ],
         "waitForQueue": "uploadsOnly",
-        "navigateTo": "summary",
-        "feedbackDialog": {
+        "navigateTo": "list",
+        "confirmationDialogCases": [
+          {
+            "when": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": [
+                      "MP_TYPE_LI"
+                    ],
+                    "match": "any",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "greaterThan": 0
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                    "match": "any",
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Please confirm"
+              },
+              "message": {
+                "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+              },
+              "confirmLabel": {
+                "en": "Yes, confirm"
+              },
+              "cancelLabel": {
+                "en": "No, continue editing"
+              }
+            }
+          }
+        ],
+        "confirmationDialog": {
           "title": {
-            "en": "Meal production closed",
-            "fr": "Production des repas clôturée",
-            "nl": "Maaltijdproductie afgesloten"
+            "en": "Please confirm"
           },
           "message": {
-            "en": "Meal production has been completed and the leftover registrations have been saved. You can now review the summary record.",
-            "fr": "La production des repas est terminée et les enregistrements des restes ont été sauvegardés. Vous pouvez maintenant consulter le récapitulatif.",
-            "nl": "De maaltijdproductie is afgerond en de registraties van de restanten zijn opgeslagen. U kunt nu het samenvattingsrecord bekijken."
+            "en": "Please confirm there is no leftover."
           },
           "confirmLabel": {
-            "en": "OK",
-            "fr": "OK",
-            "nl": "OK"
+            "en": "Yes, confirm"
           },
-          "showCancel": false,
-          "showCloseButton": false,
-          "dismissOnBackdrop": false
+          "cancelLabel": {
+            "en": "No, continue editing"
+          }
+        },
+        "generatedRecordsDialog": {
+          "submitEffectIds": [
+            "captureProducedEntireDishLeftovers",
+            "captureProducedLeftovers"
+          ],
+          "targetFormKey": "Config: Leftover Inventory",
+          "title": {
+            "en": "Generated leftovers"
+          },
+          "message": {
+            "en": "Use this list to label the physical leftovers before storing them:"
+          },
+          "itemTemplate": {
+            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+          },
+          "confirmLabel": {
+            "en": "OK"
+          }
         }
       },
       "reservationLifecycle": {
@@ -10768,6 +10834,9 @@ export const BUNDLED_FORM_CONFIGS = [
         "en": "Summary",
         "fr": "Summary",
         "nl": "Summary"
+      },
+      "submitButtonLabel": {
+        "en": "Complete"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -12781,7 +12850,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "displayMode": "inline"
               },
               {
-                "kind": "question",
+                "kind": "lineGroup",
                 "id": "MP_LEFTOVER_CAPTURE_LI"
               }
             ],
@@ -12791,9 +12860,98 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restanten"
             },
             "helpText": {
-              "en": "Enter leftover portions for each meal type and use 0 when there are none. Add any partial leftovers below before you complete the meal production report.",
+              "en": "Enter leftover portions for each meal type only when leftovers exist. Add any partial leftovers below before you complete the meal production report.",
               "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
               "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
+            },
+            "navigation": {
+              "milestoneAction": {
+                "type": "followupBatch",
+                "preActions": [
+                  "CLOSE_RECORD"
+                ],
+                "waitForQueue": "uploadsOnly",
+                "advanceAfterStart": false,
+                "navigateToAfterSuccess": "list",
+                "confirmationDialogCases": [
+                  {
+                    "when": {
+                      "any": [
+                        {
+                          "lineItems": {
+                            "groupId": "MP_MEALS_REQUEST",
+                            "subGroupPath": [
+                              "MP_TYPE_LI"
+                            ],
+                            "match": "any",
+                            "when": {
+                              "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                              "greaterThan": 0
+                            }
+                          }
+                        },
+                        {
+                          "lineItems": {
+                            "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                            "match": "any",
+                            "when": {
+                              "fieldId": "LEFTOVER_INGREDIENT",
+                              "notEmpty": true
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "dialog": {
+                      "title": {
+                        "en": "Please confirm"
+                      },
+                      "message": {
+                        "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+                      },
+                      "confirmLabel": {
+                        "en": "Yes, confirm"
+                      },
+                      "cancelLabel": {
+                        "en": "No, continue editing"
+                      }
+                    }
+                  }
+                ],
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Please confirm"
+                  },
+                  "message": {
+                    "en": "Please confirm there is no leftover."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirm"
+                  },
+                  "cancelLabel": {
+                    "en": "No, continue editing"
+                  }
+                },
+                "generatedRecordsDialog": {
+                  "submitEffectIds": [
+                    "captureProducedEntireDishLeftovers",
+                    "captureProducedLeftovers"
+                  ],
+                  "targetFormKey": "Config: Leftover Inventory",
+                  "title": {
+                    "en": "Generated leftovers"
+                  },
+                  "message": {
+                    "en": "Use this list to label the physical leftovers before storing them:"
+                  },
+                  "itemTemplate": {
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                  },
+                  "confirmLabel": {
+                    "en": "OK"
+                  }
+                }
+              }
             }
           }
         ],
@@ -12806,6 +12964,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "en": "Next",
           "fr": "Suivant",
           "nl": "Volgende"
+        },
+        "submitButtonLabel": {
+          "en": "Complete"
         },
         "backButtonLabel": {
           "en": "Back",
@@ -14169,7 +14330,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"all\": [\n          {\n            \"fieldId\": \"__ckStep\",\n            \"equals\": [\n              \"leftovers\"\n            ]\n          },\n          {\n            \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n            \"notEmpty\": true\n          }\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"integer\": true,\n        \"min\": 1\n      },\n      \"message\": {\n        \"en\": \"Enter a whole number greater than 0 when leftovers are present.\",\n        \"fr\": \"Saisissez un nombre entier supérieur à 0 lorsqu'il y a des restes.\",\n        \"nl\": \"Voer een geheel getal groter dan 0 in wanneer er restanten zijn.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Leave blank when there are no leftovers for this meal type.\",\n      \"fr\": \"Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -14761,29 +14922,36 @@ export const BUNDLED_FORM_CONFIGS = [
               "validationRules": [
                 {
                   "when": {
-                    "fieldId": "__ckStep",
-                    "equals": [
-                      "leftovers"
+                    "all": [
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "leftovers"
+                        ]
+                      },
+                      {
+                        "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                        "notEmpty": true
+                      }
                     ]
                   },
                   "then": {
                     "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
-                    "required": true,
                     "integer": true,
-                    "min": 0
+                    "min": 1
                   },
                   "message": {
-                    "en": "Enter 0 or more leftover portions.",
-                    "fr": "Entrez 0 portion restante ou plus.",
-                    "nl": "Voer 0 of meer resterende porties in."
+                    "en": "Enter a whole number greater than 0 when leftovers are present.",
+                    "fr": "Saisissez un nombre entier supérieur à 0 lorsqu'il y a des restes.",
+                    "nl": "Voer een geheel getal groter dan 0 in wanneer er restanten zijn."
                   }
                 }
               ],
               "ui": {
                 "helperText": {
-                  "en": "Enter 0 when there are no leftovers for this meal type.",
-                  "fr": "Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.",
-                  "nl": "Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype."
+                  "en": "Leave blank when there are no leftovers for this meal type.",
+                  "fr": "Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.",
+                  "nl": "Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype."
                 },
                 "helperPlacement": "belowLabel"
               }
@@ -17228,7 +17396,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "Options (EN)": "",
               "Options (FR)": "",
               "Options (NL)": "",
-              "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"fieldId\": \"__ckStep\",\n        \"equals\": [\n          \"leftovers\"\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"required\": true,\n        \"integer\": true,\n        \"min\": 0\n      },\n      \"message\": {\n        \"en\": \"Enter 0 or more leftover portions.\",\n        \"fr\": \"Entrez 0 portion restante ou plus.\",\n        \"nl\": \"Voer 0 of meer resterende porties in.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Enter 0 when there are no leftovers for this meal type.\",\n      \"fr\": \"Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
+              "Config (JSON/REF)": "{\n  \"visibility\": {\n    \"showWhen\": {\n      \"fieldId\": \"__ckStep\",\n      \"equals\": [\n        \"leftovers\"\n      ]\n    }\n  },\n  \"validationRules\": [\n    {\n      \"when\": {\n        \"all\": [\n          {\n            \"fieldId\": \"__ckStep\",\n            \"equals\": [\n              \"leftovers\"\n            ]\n          },\n          {\n            \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n            \"notEmpty\": true\n          }\n        ]\n      },\n      \"then\": {\n        \"fieldId\": \"MP_LEFTOVER_PORTIONS_CAPTURE\",\n        \"integer\": true,\n        \"min\": 1\n      },\n      \"message\": {\n        \"en\": \"Enter a whole number greater than 0 when leftovers are present.\",\n        \"fr\": \"Saisissez un nombre entier supérieur à 0 lorsqu'il y a des restes.\",\n        \"nl\": \"Voer een geheel getal groter dan 0 in wanneer er restanten zijn.\"\n      }\n    }\n  ],\n  \"ui\": {\n    \"helperText\": {\n      \"en\": \"Leave blank when there are no leftovers for this meal type.\",\n      \"fr\": \"Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.\",\n      \"nl\": \"Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype.\"\n    },\n    \"helperPlacement\": \"belowLabel\"\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -17783,29 +17951,36 @@ export const BUNDLED_FORM_CONFIGS = [
                 "validationRules": [
                   {
                     "when": {
-                      "fieldId": "__ckStep",
-                      "equals": [
-                        "leftovers"
+                      "all": [
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "leftovers"
+                          ]
+                        },
+                        {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "notEmpty": true
+                        }
                       ]
                     },
                     "then": {
                       "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
-                      "required": true,
                       "integer": true,
-                      "min": 0
+                      "min": 1
                     },
                     "message": {
-                      "en": "Enter 0 or more leftover portions.",
-                      "fr": "Entrez 0 portion restante ou plus.",
-                      "nl": "Voer 0 of meer resterende porties in."
+                      "en": "Enter a whole number greater than 0 when leftovers are present.",
+                      "fr": "Saisissez un nombre entier supérieur à 0 lorsqu'il y a des restes.",
+                      "nl": "Voer een geheel getal groter dan 0 in wanneer er restanten zijn."
                     }
                   }
                 ],
                 "ui": {
                   "helperText": {
-                    "en": "Enter 0 when there are no leftovers for this meal type.",
-                    "fr": "Saisissez 0 lorsqu'il n'y a pas de restes pour ce type de repas.",
-                    "nl": "Voer 0 in wanneer er geen restanten zijn voor dit maaltijdtype."
+                    "en": "Leave blank when there are no leftovers for this meal type.",
+                    "fr": "Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.",
+                    "nl": "Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype."
                   },
                   "helperPlacement": "belowLabel"
                 }
@@ -19177,6 +19352,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "captureProducedEntireDishLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
+            "sourceLink": {
+              "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
+              "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
+            },
             "runOn": "both",
             "recordId": "leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}",
             "when": {
@@ -19234,6 +19413,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "captureProducedLeftovers",
             "type": "createRecord",
             "targetFormKey": "Config: Leftover Inventory",
+            "sourceLink": {
+              "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
+              "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
+            },
             "runOn": "both",
             "recordId": "leftover::{{source.id}}::partial::{{lineItem.rowId}}",
             "when": {
@@ -19318,26 +19501,84 @@ export const BUNDLED_FORM_CONFIGS = [
           "CLOSE_RECORD"
         ],
         "waitForQueue": "uploadsOnly",
-        "navigateTo": "summary",
-        "feedbackDialog": {
+        "navigateTo": "list",
+        "confirmationDialogCases": [
+          {
+            "when": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": [
+                      "MP_TYPE_LI"
+                    ],
+                    "match": "any",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "greaterThan": 0
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                    "match": "any",
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Please confirm"
+              },
+              "message": {
+                "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+              },
+              "confirmLabel": {
+                "en": "Yes, confirm"
+              },
+              "cancelLabel": {
+                "en": "No, continue editing"
+              }
+            }
+          }
+        ],
+        "confirmationDialog": {
           "title": {
-            "en": "Meal production closed",
-            "fr": "Production des repas clôturée",
-            "nl": "Maaltijdproductie afgesloten"
+            "en": "Please confirm"
           },
           "message": {
-            "en": "Meal production has been completed and the leftover registrations have been saved. You can now review the summary record.",
-            "fr": "La production des repas est terminée et les enregistrements des restes ont été sauvegardés. Vous pouvez maintenant consulter le récapitulatif.",
-            "nl": "De maaltijdproductie is afgerond en de registraties van de restanten zijn opgeslagen. U kunt nu het samenvattingsrecord bekijken."
+            "en": "Please confirm there is no leftover."
           },
           "confirmLabel": {
-            "en": "OK",
-            "fr": "OK",
-            "nl": "OK"
+            "en": "Yes, confirm"
           },
-          "showCancel": false,
-          "showCloseButton": false,
-          "dismissOnBackdrop": false
+          "cancelLabel": {
+            "en": "No, continue editing"
+          }
+        },
+        "generatedRecordsDialog": {
+          "submitEffectIds": [
+            "captureProducedEntireDishLeftovers",
+            "captureProducedLeftovers"
+          ],
+          "targetFormKey": "Config: Leftover Inventory",
+          "title": {
+            "en": "Generated leftovers"
+          },
+          "message": {
+            "en": "Use this list to label the physical leftovers before storing them:"
+          },
+          "itemTemplate": {
+            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+          },
+          "confirmLabel": {
+            "en": "OK"
+          }
         }
       },
       "dedupDeleteOnKeyChange": true,
@@ -19581,6 +19822,9 @@ export const BUNDLED_FORM_CONFIGS = [
         "en": "Summary",
         "fr": "Summary",
         "nl": "Summary"
+      },
+      "submitButtonLabel": {
+        "en": "Complete"
       },
       "appHeader": {
         "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
@@ -21548,7 +21792,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "displayMode": "inline"
               },
               {
-                "kind": "question",
+                "kind": "lineGroup",
                 "id": "MP_LEFTOVER_CAPTURE_LI"
               }
             ],
@@ -21558,9 +21802,98 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restanten"
             },
             "helpText": {
-              "en": "Enter leftover portions for each meal type and use 0 when there are none. Add any partial leftovers below before you complete the meal production report.",
+              "en": "Enter leftover portions for each meal type only when leftovers exist. Add any partial leftovers below before you complete the meal production report.",
               "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
               "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
+            },
+            "navigation": {
+              "milestoneAction": {
+                "type": "followupBatch",
+                "preActions": [
+                  "CLOSE_RECORD"
+                ],
+                "waitForQueue": "uploadsOnly",
+                "advanceAfterStart": false,
+                "navigateToAfterSuccess": "list",
+                "confirmationDialogCases": [
+                  {
+                    "when": {
+                      "any": [
+                        {
+                          "lineItems": {
+                            "groupId": "MP_MEALS_REQUEST",
+                            "subGroupPath": [
+                              "MP_TYPE_LI"
+                            ],
+                            "match": "any",
+                            "when": {
+                              "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                              "greaterThan": 0
+                            }
+                          }
+                        },
+                        {
+                          "lineItems": {
+                            "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                            "match": "any",
+                            "when": {
+                              "fieldId": "LEFTOVER_INGREDIENT",
+                              "notEmpty": true
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "dialog": {
+                      "title": {
+                        "en": "Please confirm"
+                      },
+                      "message": {
+                        "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+                      },
+                      "confirmLabel": {
+                        "en": "Yes, confirm"
+                      },
+                      "cancelLabel": {
+                        "en": "No, continue editing"
+                      }
+                    }
+                  }
+                ],
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Please confirm"
+                  },
+                  "message": {
+                    "en": "Please confirm there is no leftover."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirm"
+                  },
+                  "cancelLabel": {
+                    "en": "No, continue editing"
+                  }
+                },
+                "generatedRecordsDialog": {
+                  "submitEffectIds": [
+                    "captureProducedEntireDishLeftovers",
+                    "captureProducedLeftovers"
+                  ],
+                  "targetFormKey": "Config: Leftover Inventory",
+                  "title": {
+                    "en": "Generated leftovers"
+                  },
+                  "message": {
+                    "en": "Use this list to label the physical leftovers before storing them:"
+                  },
+                  "itemTemplate": {
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                  },
+                  "confirmLabel": {
+                    "en": "OK"
+                  }
+                }
+              }
             }
           }
         ],
@@ -21573,6 +21906,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "en": "Next",
           "fr": "Suivant",
           "nl": "Volgende"
+        },
+        "submitButtonLabel": {
+          "en": "Complete"
         },
         "backButtonLabel": {
           "en": "Back",

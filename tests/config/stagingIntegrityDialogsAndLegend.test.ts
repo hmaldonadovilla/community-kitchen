@@ -243,6 +243,10 @@ describe('staging integrity dialogs and list legend config', () => {
           expect.objectContaining({ id: 'partialRow', groupId: 'MP_LEFTOVER_CAPTURE_LI' })
         ])
       );
+      const partialLeftoversTarget = (leftovers?.include || []).find(
+        (entry: any) => entry?.id === 'MP_LEFTOVER_CAPTURE_LI'
+      );
+      expect(partialLeftoversTarget?.kind).toBe('lineGroup');
       const partialRowScope = (leftoverInventoryRows?.dataSource?.backfill?.scopes || []).find(
         (entry: any) => entry?.id === 'partialRow'
       );
@@ -287,6 +291,7 @@ describe('staging integrity dialogs and list legend config', () => {
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
       expect(leftovers?.excludeWhen).toBeUndefined();
+      expect(root?.submitButtonLabel?.en).toBe('Complete');
       expect(portioning?.navigation?.submitLabel?.en).toBe('Finish portioning');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([
@@ -315,11 +320,40 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(root?.submissionAfterSubmit?.preActions).toEqual(['CLOSE_RECORD']);
       expect(root?.submissionAfterSubmit?.backgroundActions).toBeUndefined();
       expect(root?.submissionAfterSubmit?.waitForQueue).toBe('uploadsOnly');
-      expect(root?.submissionAfterSubmit?.navigateTo).toBe('summary');
-      expect(root?.submissionAfterSubmit?.feedbackDialog?.title?.en).toBe('Meal production closed');
-      expect(root?.submissionAfterSubmit?.feedbackDialog?.showCancel).toBe(false);
-      expect(root?.submissionAfterSubmit?.feedbackDialog?.showCloseButton).toBe(false);
-      expect(root?.submissionAfterSubmit?.feedbackDialog?.dismissOnBackdrop).toBe(false);
+      expect(root?.submissionAfterSubmit?.navigateTo).toBe('list');
+      expect(root?.submissionAfterSubmit?.confirmationDialogCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            when: expect.objectContaining({
+              any: expect.arrayContaining([
+                expect.objectContaining({
+                  lineItems: expect.objectContaining({
+                    groupId: 'MP_MEALS_REQUEST',
+                    subGroupPath: ['MP_TYPE_LI'],
+                    match: 'any',
+                    when: expect.objectContaining({
+                      fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
+                      greaterThan: 0
+                    })
+                  })
+                })
+              ])
+            }),
+            dialog: expect.objectContaining({
+              message: expect.objectContaining({
+                en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
+              })
+            })
+          })
+        ])
+      );
+      expect(root?.submissionAfterSubmit?.confirmationDialog?.message?.en).toBe('Please confirm there is no leftover.');
+      expect(root?.submissionAfterSubmit?.generatedRecordsDialog).toEqual(
+        expect.objectContaining({
+          targetFormKey: 'Config: Leftover Inventory',
+          title: expect.objectContaining({ en: 'Generated leftovers' })
+        })
+      );
 
       const portioningQuestionIds = new Set((portioning?.include || []).map((entry: any) => entry?.id).filter(Boolean));
       expect(portioningQuestionIds.has('MP_HAS_LEFTOVERS_PRODUCED')).toBe(false);
@@ -337,6 +371,46 @@ describe('staging integrity dialogs and list legend config', () => {
         'FINAL_QTY',
         'MP_LEFTOVER_PORTIONS_CAPTURE'
       ]);
+      expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
+      expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
+      expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('uploadsOnly');
+      expect(leftovers?.navigation?.milestoneAction?.advanceAfterStart).toBe(false);
+      expect(leftovers?.navigation?.milestoneAction?.navigateToAfterSuccess).toBe('list');
+      expect(leftovers?.navigation?.milestoneAction?.confirmationDialogCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            when: expect.objectContaining({
+              any: expect.arrayContaining([
+                expect.objectContaining({
+                  lineItems: expect.objectContaining({
+                    groupId: 'MP_MEALS_REQUEST',
+                    subGroupPath: ['MP_TYPE_LI'],
+                    match: 'any',
+                    when: expect.objectContaining({
+                      fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
+                      greaterThan: 0
+                    })
+                  })
+                })
+              ])
+            }),
+            dialog: expect.objectContaining({
+              message: expect.objectContaining({
+                en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
+              })
+            })
+          })
+        ])
+      );
+      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
+        'Please confirm there is no leftover.'
+      );
+      expect(leftovers?.navigation?.milestoneAction?.generatedRecordsDialog).toEqual(
+        expect.objectContaining({
+          targetFormKey: 'Config: Leftover Inventory',
+          title: expect.objectContaining({ en: 'Generated leftovers' })
+        })
+      );
 
       const partialLeftovers = findQuestion(questions || [], 'MP_LEFTOVER_CAPTURE_LI');
       expect(partialLeftovers?.qEn).toBe('Partial leftovers');
@@ -358,6 +432,10 @@ describe('staging integrity dialogs and list legend config', () => {
           : [];
       const entireDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedEntireDishLeftovers');
       expect(entireDishEffect?.type).toBe('createRecord');
+      expect(entireDishEffect?.sourceLink).toEqual({
+        sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+        sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY'
+      });
       expect(entireDishEffect?.forEachLineItem?.groupId).toBe('MP_MEALS_REQUEST');
       expect(entireDishEffect?.forEachLineItem?.subGroupPath).toEqual(['MP_TYPE_LI']);
       expect(entireDishEffect?.values?.DIETARY_APPLICABILITY).toEqual(
@@ -371,6 +449,10 @@ describe('staging integrity dialogs and list legend config', () => {
         })
       );
       const partialDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedLeftovers');
+      expect(partialDishEffect?.sourceLink).toEqual({
+        sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+        sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY'
+      });
       expect(partialDishEffect?.values?.DIETARY_APPLICABILITY).toBe('{{row.LEFTOVER_DIETARY_APPLICABILITY}}');
     };
 

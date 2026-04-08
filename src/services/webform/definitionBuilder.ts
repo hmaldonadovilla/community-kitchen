@@ -164,6 +164,7 @@ export class DefinitionBuilder {
       submissionConfirmationTitle: form.submissionConfirmationTitle,
       submissionConfirmationConfirmLabel: form.submissionConfirmationConfirmLabel,
       submissionConfirmationCancelLabel: form.submissionConfirmationCancelLabel,
+      submissionAfterSubmit: form.submissionAfterSubmit,
       dedupDialog: form.dedupDialog,
       submitButtonLabel: form.submitButtonLabel,
       summaryButtonLabel: form.summaryButtonLabel,
