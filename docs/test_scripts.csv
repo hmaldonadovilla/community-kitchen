@@ -1,0 +1,144 @@
+﻿#;Test scenario;HM
+1;"Create a meal production record for Belliard, for a Lunch Service and verify that the dietary types are Diabetic, No-salt, Vegan, Vegetarian. Select the name of a cook. Enter the number of portions ordered for each dietary type. Perform the following checks:
+1. Verify that the Requested portions total is correctly auto-calculated. Change the number and verify that the total is updated correctly. 
+2. Change the service to Dinner, verify that the system will warn you that if you continue, the data previously entered for number of Ordered portions will be deleted. Proceed with the change. Check that the dietary type is now changed to Diabetic, No-salt, Standard, Vegan, and Vegetarian.
+3. Change the production date to a future date. Check that the system will warn you that subsequent data previously entered will be deleted. Proceed with the change and verify that data previously entered for Service is no longer there.
+4. Keep the customer = Belliard and Production date = today's date. Do not select a Service, click on Home. Verify that the system will warn you that if you proceed, the record will be permanently deleted because the Service is missing from the record. Opt for Cancel, continue editing. ";OK
+2;Create a meal production record for Belliard, for a Dinner Service and verify that the dietary types are Diabetic, No-salt, Standard, Vegan, and Vegetarian. ;OK
+3;"Create a meal production record for Belliard, for a Dinner Service, select a cook select Lunch. Go back to Home page. 
+1. Select the record you have just created and change Service before entering number of portions in 'Ordered' field, verify that the system will warn you that any data or photos previously entered will be lost. 
+2. Click Delete subsequent data and verify that the name of the cook you are selected has been removed.";OK
+4;"Create a meal production record for Belliard, Lunch, production date = today's date and select a cook. Enter a value = or > 0 for all dietary types. Verify that the system brings you to the Production screen where you are asked if you will use Leftover. Click [Back] and change the customer from Belliard to Hub. 
+1. Verify that the system warns you that changing the customer will permanently delete production date, service, and any subsequent data you may have entered. You will be given the options to 
+- Cancel and keep current customer
+- Continue and delete subsequent data.
+2. Selelect Cancel and keep current customer. Verify that the system brings you back to Order screen where the Customer remains Belliard and you are automatically brought back to the Production screen where you are asked if you will use Leftover.";Script is outdated
+5;"Create a record for Hub, production date = today's date and service = lunch. Go back to Home page and create another record for Hub, with  production date = today's date and service = lunch. Verify that the system has detected that you are trying to create a duplicated Meal production record, i.e. same customer, same service and same production date. Verify that you the system will give you the choice to 
+- Change the customer, service or date or
+- Open existing record
+Select Change the customer, service or date. Verify that the system brings you back to the Order screen where you are asked to select a Customer.";OK
+6;Create a meal production record for Hub with a future production date. Verify that the system allows you to proceed with selecting the cook and entering the number of portions Ordered. ;OK
+7;Create a meal production record for Hub with a future production date. Select the cook and enter the number of portions Ordered. Verify that the system will allow you to Click on Ready for Production or Next to move to the Production page.Click on Next. Verify that the system is asking you if you will use Leftover. Select No. Verify that the number To cook = the ordered number of portions. Select a recipe. Verify that the list of recipes are the ones that were tagged as applicable to Vegetarian (and maybe other dietary types). Verify that as soon as the To cook receipe is selected, the system will remind you that Ingredients receipt photo, food safety and portioning can only be recorded on the day of production. ;OK but Script is outdated
+8;Create a meal production record for Hub with a future production date. Verify that the system allows you to proceed with selecting the cook and entering the number of portions Ordered. Verify that the system will allow you to Click on Ready for Production at the same the system allows you to click next and continue entering data related to Leftover and to cook recipes. Select No to the question 'Will you use leftover?'. ;OK but Script is outdated
+9;"Create a meal production record for le Phare with production date = today and Service = Lunch. Verify that the dietary type is by default Vegetarian. Select a cook and enter the number of portions ordered. Click on Ready for Production. Verify that the system is warning you that if you proceed the system will lock Customer, production date, service, cook and portions Ordered to protect against accidental deletion. The system gives you the options to 
+- Cancel
+- Yes, lock for production. 
+Select Yes, lock for production. Verify that all data previously entered on the Order page is no longer editable and Next button is enabled.";OK
+10;From the Home page, select the record for Le Phare lunch with today's date that you have just set to Ready for production. Verify that all data previously entered on the Order page are non-editable. Click on Next and verify that you are enabled to capture data for Leftover and Recipe to cook. ;OK
+11;Create a meal production record for Belliard, with a production date falling on a Sunday. Select Lunch and verify that all dieatary types are listed, including Standard;OK
+12;Create a meal production record for le Phare, for a Lunch or Dinner Service and verify that on the Order page dietary types is only Vegetarian;OK
+13;Verify that the system prevents you from entering negative number of requested portions in Order page;OK
+14;Create a Meal production record for the Hub, Lunch service and verify that the system prevents you from moving to Production page if you have not entered the values for Ordered portions. The button Next is disabled.;OK
+15;"Create a Meal production record for the Hub, Lunch service and number of portions (Vegetarian) = 450. On Production page, verify that the system shows 
+- Vegetarian | 450
+- Will leftover be used? YES/NO
+- Requested portions: 450.";OK but Script is outdated
+16;"On production page, in the scenario of Hub, Lunch, Vegetarian requested portions = 450 and Will leftover be used? = NO, verify that the system displays 
+- Vegetarian 450 No leftover ✏️.
+- To cook: 450 (=450 requested portions minus zero leftover portions)
+- Recipe [Select...] View/Edit";OK but Script is outdated
+17;"On production page, in the scenario of Hub, Lunch, Vegetarian requested portions = 450, Will leftover be used?= NO, select a recipe, e.g. Bulgur & Vegetable sauce. Verify that the system
+- automatically shows Ingredients needed button and Ingredients receipt photo next to it. 
+- enables you to view the list of ingredients related to the selected recipe
+- enables you to take/upload/remove one or more photos evidence for Ingredient receipt photo";OK but Script is outdated
+18;"On production page, in the scenario of Hub, Lunch, Vegetarian requested portions = 450, Will leftover be used?= NO, select a recipe, e.g. Bulgur & Vegetable sauce, clicks on button View/Edit next to Recipe. Verify that the systems displays the Ingredients and enables you to edit the list of ingredients by 
+- removing ingredients using 🗑
+- adding ingredients using exact words search engine 
+- changing quantities/units of listed ingredients";OK
+19;On production page, in the scenario of Hub, Lunch, Vegetarian requested portions = 450, Will leftover be used?= NO, select a recipe, e.g. Bulgur & Vegetable sauce, clicks on button View/Edit next to Recipe. Verify that you can view the Instructions corresponding to the selected recipe.;OK
+20;On production page, in the scenario of Leftover will not be used, verify that you can change the selection of recipe and the list of ingredients and instructions are automatically updated.;OK
+21;On production page, in the scenario of  Leftover will not be used, after having removed some ingredients, verify that the Ingredients needed is updated according to the changes you made.;OK
+22;On production page, in the scenario of  Leftover will not be used, after having added some ingredients, verify that the Ingredients needed is updated according to the changes you made.;OK
+23;On production page, in the scenario of  Leftover will not be used, after having changed the quantity/unit of some ingredients, verify that the Ingredients needed is updated according to the changes you made.;OK
+24;"On production page, when being asked if Leftover will be used, select YES. Verify that you are asked to select the type of Leftover either Entire Dish or Part Dish. Select Entire Dish. 
+1. Verify that you are asked to select the leftover recipe from a dropdown list of recipes only applicable to the concerned dietary category. Select Chili. 
+2. Verify that you are enabled to View/Edit the ingredients corresponding to the selected recipe for the Entire Dish of leftover. Click Edit/View and remove Basmati rice. 
+3. Verify that you are asked to enter the number of portions that the Entire Dish of leftover will yield. Verify that the system will show the message  'This number reduces the portions to cook. Enter 0 if leftover will be combined with today's dish.'. Enter 50. Click Back to Production. Verify that the To cook number is = 400.
+4. Verify that you are enabled to add another leftover by clicing on View/Edit next to Leftover Yes on the Production page. Select Entire dish. Select Adassi as leftover recipe. Enter 0 in number of portions the leftover will yield. Click View/Edit ingredients and take a snapshot of the ingredients of recipe Adassi. Click Back and then Back to production. Select Recipe Dhaal. Click View/Edit. Verify that you are enabled to Edit Ingredients. Remove Turmeric. Save changes and click Back to Production. 
+5. Click Ingredients needed. Verify that leftover ingredients are not included on the list. Verify that Turmeric that you have removed from Dhaal list of to cook ingredient is not on the list either.
+5. Click Summary at the bottom of the page. Verify that the system brings you to a screen where all data you have previously are presented to you in a non-editable format. Verify that the Summary shows 
+a) Leftover: 50 portions is shown with Chili recipe and Basmati is not on the list of its ingredients. 
+b) Leftover: 0 portions is shown with Adassi recipe without any ingredients.
+c) Cooked: 400 portions is shown with Dhaal. The list of ingredients include Adassi ingredients and exclude Turmenic.";Not run because script is outdated
+25;"Create a record for Le Phare, Production date = today's date, Service = lunch, ordered portions = 150. 
+On production page, when being asked if Leftover will be used, select YES. Select Entire Dish. Select the leftover recipe Adassi. Click View/Edit ingredients and take a snapshot (photo) of the list of ingredients for Adassi. Perform the following checks:
+1. Test that you can add an ingredient. Add oregano - dried.
+2. You can remove an ingredient. Remove Mint - dried
+3. Enter 0 in the field 'How many portions the leftover will yield. Go back to production. Verify that the system shows Vegetarian| 150|Leftover Yes [View/edit] 🗑️ | To cook: 150. Select recipe Dhaal and click on View/Edit and take a snapshot of the list of ingredients. 
+4. Go to Summary. Check that Leftover shows 0 | Adassi and that Cooked shows 150 | Dhaal followed by the list of ingredients of both Adassi and Dhaal combined. Check completeness against the snapshots you took. 
+5. Complete the creation of the record by adding the Ingredients receipt photo, click Next. Complete Food safety by Clicking Confirm that All pots > or = 0. Add 2 photos. Verify that the system automatically brings you to the Portioning screen. 
+6. On the Portioning screen, verify that the value in Delivered Portions = value in Ordered. Verify that the system will force you to enter a value that must be = or greater than the number of ordered portions if you try to blank out the field or enter a value < 150. Enter 160. 
+7. Verify that you can change the Responsible cook by selecting a different name. Select value Select and verify that the system reminds you that Responsible cook is required and the Submit button is not enabled. Select Akkara for Responsible cook.
+8. Verify that there is a Volunteer field and that the field is optional, meaning you can leave it empty and click Next.
+9. Verify that the system asks you: 'Please confirm that this report confirms Lunch for Le Phare has been produced by Akkara on today's date, inaccordance with Meal production procedure and hygiene rules. You will be given the following choices:
+a) No, Continue editing or
+b) Yes, confirm. 
+10. Select confirm. Verify that the system brings you to the Summary page 
+Verify the following:
+a) the expiring date = Production date + 2 calendar day
+b) Responsible cook is Akkara
+c) Production details shows: Vegetarian | Ordered: 150 portions. Photo evidence that All pots core temperature is > 63 are accessible.
+- Leftover: 0 portions | Adassi without any ingredients details.
+- Cooked: 150 portions | Dhaal with its ingredients combined with Adassi ingredients without Mint - dried and with Oregano - dried
+d) Total Delivered Portions reflects 160.
+e) Ingredients needed is accessible
+f) ingredient receipt photo is accessible. 
+11. Click on Final report at the bottom of the page. only shows against Vegetarian, 150 portions. Recipe = Dhaal and the list of ingredients is the combined list of ingredients of both Adassi and Dhaal. Check completeness against the snapshots you took. Confirm that there is no mention of Adassi on the Final report.
+";Not run because script is outdated
+27;On the Leftover page, verify that you are enabled to create multiple leftover records for a given dietary category by clicking + Add leftover. When being asked What type of leftover will be used, select Part dish.;Not run because script is outdated
+29;"On production page, verify that you can change Leftover used from YES to NO by deleting the Leftover, i.e. by clicking on 🗑️ and a message will appear to ask you to confirm that you are ok that all data entered will be lost. You will be given the following choices:
+- Keep leftover
+- Remove leftover";Not run because script is outdated
+30;"On production page, verify that you can change Leftover details by clicking on View/Edit. Verify that the system allows you to 
+- remove Leftover previously created by clicking on 🗑️
+- add leftover
+Click on 🗑️. Verify that the leftover is removed.";Not run because script is outdated
+31;On production page, in the scenario of Leftover will be used, verify that ingredients related to the Leftover, whether it is Entire dish or Part dish, are not added to the 'Ingredients needed' list.;OK
+32;In the case of Belliard where more than one dietary types are required, verify that the system will rightly prevents you to go to the next screen, i.e. Food Safety by clicking Next at the bottom of the page if you have not selected a recipe for all dietary category and you have not uploaded the ingredients receipt photo(s) evidence.;OK
+33;"On the Food Safety page, verify that
+- the system shows message 'Confirm that all cooking pots reached at least 63°C and add one photo per pot for each dietary type, including reheated leftover Entire dish.'
+- you are asked to confirm that all pots core temperature is = or > 63 and to upload at least one photo per pot ";OK
+34;On the Portioning page, verify that the value in Delivered portions is by default = Ordered portions;OK
+35;On the Portioning page, verify that you are enabled to change the Delivered portions value and it must be = or > to Ordered portions;OK
+36;"Verify that when you click on Summary, the system shows the following information:
+- Customer as per your selection | Service as per your selection 
+- Production date as per your selection
+- Expiration date auto-calculated as Meal production date + 2
+- Batch number auto-generated by the system
+- Responsible cook
+- Volunteer cook
+- List of dietary types with their following corresponding details:
+   ---> Ordered portions
+   ---> Leftover number of portions yield if Leftover is Entire dish, recipe of Leftover and ingredients if number of portions <>0
+  ---> Number of portions To cook and corresponding recipe and ingredients
+- Ingredients needed to cook all the dishes for Meal + ingredient receipt photo evidence
+";OK
+37;"Verify that the final report shows 
+- Community kitchen logo
+-  Community kitchen and contact details 
+- Prepared for {Customer} and contact details
+- Production date 
+- Expiration date
+- Batch number
+- Service
+- Serve hot. If reheating is required, reheat thoroughly. Keep refriggerated at < or = 4
+- List of dietary types, their corresponding delivered portions, recipe name and corresponding Ingredients used and allergens.  
+- Total number of delivered portions
+- Any Notes added on Portioning page.
+";OK
+38;Verify that the system prevents you from capturing Ingredients receipt photo evidence and entering Food safety or Portioning data for a future dated record and submitting it. ;OK
+39;"Create a complete record all the way to portioning, go back to order screen using the back button, change the production date to a future date. Verify that the system will display the following message: 
+Change production date?
+Changing the production will permanently delete service as well as any data or photos entered after service. A meal production record can only exist when customer, production date, and service are all filled in. If you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted. This action cannot be undone. 
+- Cancel and keep current production date
+- Continue and deleted subsequent data";OK
+40;Verify Meal production procedure and Hygiene rules are accessible from home page;OK
+41;"Create a meal production record for Le Phare, production date = today, service = dinner. Enter cook and enter number of Ordered portions. Change the Service from Dinner to Lunch. Verify that the system prompt you with a message:
+Changing Service will permanently delete any data or photos entered after service. This action cannot be undone. 
+- Cancel and keep current service
+- Continue and deleted subsequent data. 
+Select Continue and verify that the system will delete all data.";OK
+42;Verify that you can change Customer, Production date or Service subsequent data entered is deleted;OK
+43;"Verify that you cannot go back to Production from Entire Dish leftover page without entering the number of portion the dish will yield. The system will prompt you with message: Missing Entire leftover number of portions.
+Enter a number of portion this leftover dish will yield. Enter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish on the Report. If value > 0, the leftover will be shown as an entire dish with its recipe and ingredients. If no value is entered, this incomplete record will be removed permanently. If you decide to proceed anyway, the incomplete entire dish leftover record will be deleted.
+Close the window. Come back into the Production page of the record you just closed. Verify that the incomplete leftover was not created and the record shows No leftover with an Edit (pencil) button. ";Not run because script is outdated
