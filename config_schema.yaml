@@ -535,6 +535,11 @@ components:
                 applying the source update. If impacted records are found, the dedicated dialog is
                 shown and, on confirm, the configured `mutations` are applied to each impacted target
                 record before the current record is saved.
+            ensureRecordId:
+              type: boolean
+              description: |
+                When true, ensure a persisted draft record id exists before applying the update.
+                Useful for create-flow buttons that may be clicked before the first draft save finishes.
             navigateTo:
               type: string
               enum: [auto, form, summary, list]
@@ -3428,6 +3433,9 @@ components:
         autoAdvance:
           type: string
           enum: [off, onComplete, onValid]
+        autoAdvanceWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that must match before auto-advance is allowed to move to the next step.
         allowBack:
           type: boolean
           description: When true (default), users can navigate back to previous steps.

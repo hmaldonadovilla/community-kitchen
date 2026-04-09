@@ -86,6 +86,7 @@ import {
 import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
+import { resolveUiRecordStatus } from './app/recordMeta';
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
@@ -566,7 +567,7 @@ const pruneHomeListLocalCacheFamily = (storage: Storage, key: string): void => {
   keysToRemove.forEach(candidate => {
     try {
       storage.removeItem(candidate);
-    } catch (_) {
+    } catch {
       // ignore
     }
   });
@@ -595,7 +596,7 @@ const readHomeListLocalCache = (key: string): HomeListLocalCacheEntry | null => 
   } catch (_) {
     try {
       storage.removeItem(key);
-    } catch (_) {
+    } catch {
       // ignore
     }
     return null;
@@ -736,6 +737,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const submitConfirmedRef = useRef(false);
   const submitPipelineInFlightRef = useRef(false);
   const updateRecordActionInFlightRef = useRef(false);
+  const ensureDraftRecordIdActionRef = useRef<
+    ((args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>) | null
+  >(null);
+  const flushPendingDraftSaveActionRef = useRef<((reason: string) => Promise<{ ok: boolean; message?: string }>) | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string>(record?.id || '');
   const [selectedRecordSnapshot, setSelectedRecordSnapshot] = useState<WebFormSubmission | null>(record || null);
   const [prefetchedSummaryHtml, setPrefetchedSummaryHtml] = useState<{ recordId: string; html: string } | null>(null);
@@ -5973,6 +5978,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 submitCurrentRecordMutation('button.updateRecord.dependencyGuard', payload, (nextPayload: any) =>
                   applyUpdateRecordWithDependenciesApi(nextPayload as any, buttonId)
                 ),
+              ensureRecordId: (args?: { reason?: string; fieldPath?: string }) =>
+                ensureDraftRecordIdActionRef.current
+                  ? ensureDraftRecordIdActionRef.current(args)
+                  : Promise.resolve({
+                      success: false,
+                      message: tSystem('actions.noRecordSelected', languageRef.current, 'No record selected.')
+                    }),
+              flushPendingDraftSave: (reason: string) =>
+                flushPendingDraftSaveActionRef.current
+                  ? flushPendingDraftSaveActionRef.current(reason)
+                  : Promise.resolve({ ok: true }),
               tSystem,
               logEvent,
               refs: {
@@ -6005,6 +6021,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               qIdx: qIdx,
               navigateTo,
               set: setObj as any,
+              ensureRecordId: cfg?.ensureRecordId === true,
               busyTitle,
               submitMode
             }
@@ -6527,6 +6544,37 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const raw = (lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '').toString();
     return matchesStatusTransition(raw, statusTransitions, 'onClose', { includeDefaultOnClose: true });
   })();
+
+  const formViewCurrentRecord =
+    selectedRecordSnapshot || (selectedRecordId && !recordLoadingId ? listCache.records[selectedRecordId] : null);
+
+  const formRecordMeta = useMemo(
+    () => ({
+      id: (formViewCurrentRecord?.id || lastSubmissionMeta?.id || selectedRecordId || undefined) as any,
+      createdAt: (formViewCurrentRecord?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
+      updatedAt: (formViewCurrentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
+      status: resolveUiRecordStatus({
+        persistedStatus: formViewCurrentRecord?.status || lastSubmissionMeta?.status || null,
+        autoSaveDefaultStatus,
+        guidedForwardGateSatisfied: guidedUiState?.forwardGateSatisfied === true
+      }) as any,
+      pdfUrl: (formViewCurrentRecord?.pdfUrl || undefined) as any
+    }),
+    [
+      autoSaveDefaultStatus,
+      formViewCurrentRecord?.createdAt,
+      formViewCurrentRecord?.id,
+      formViewCurrentRecord?.pdfUrl,
+      formViewCurrentRecord?.status,
+      formViewCurrentRecord?.updatedAt,
+      guidedUiState?.forwardGateSatisfied,
+      lastSubmissionMeta?.createdAt,
+      lastSubmissionMeta?.id,
+      lastSubmissionMeta?.status,
+      lastSubmissionMeta?.updatedAt,
+      selectedRecordId
+    ]
+  );
 
   const dedupSignature = useMemo(() => {
     const startMark = `ck.selector.dedupSignature.start.${Date.now()}`;
@@ -7075,6 +7123,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setSelectedRecordId(newId);
           // Keep ref in sync immediately so other async flows (submit/upload) can safely resolve the current record id.
           selectedRecordIdRef.current = newId;
+          if (!existingRecordId) {
+            createFlowRef.current = false;
+          }
         }
         // Successful save => record is now at least as fresh as the server; clear stale banner + bump local version.
         recordStaleRef.current = null;
@@ -7205,6 +7256,71 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [autoSaveEnabled, isClosedRecord, logEvent, performAutoSave]
   );
+
+  const flushPendingDraftSaveForAction = useCallback(
+    async (reason: string): Promise<{ ok: boolean; message?: string }> => {
+      const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+
+      if (recordStaleRef.current) {
+        return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
+      }
+
+      if (dedupCheckingRef.current) {
+        logEvent('action.flush.waitDedup.start', { reason });
+        const startedAt = Date.now();
+        while (dedupCheckingRef.current) {
+          await sleep(60);
+          if (Date.now() - startedAt > 15_000) {
+            const message = tSystem('dedup.checking', languageRef.current, 'Checking duplicates…');
+            logEvent('action.flush.waitDedup.timeout', { reason, waitMs: Date.now() - startedAt });
+            return { ok: false, message };
+          }
+        }
+        logEvent('action.flush.waitDedup.done', { reason, waitMs: Date.now() - startedAt });
+      }
+
+      const dedupConflict = dedupConflictRef.current;
+      if (dedupConflict?.message) {
+        return { ok: false, message: dedupConflict.message.toString() };
+      }
+
+      const flushed = await flushAutoSaveBeforeNavigate(reason);
+      if (flushed && draftSaveRequestInFlightRef.current) {
+        await waitForDraftSaveRequest(`action.flush:${reason}`);
+      }
+
+      if (autoSaveDirtyRef.current || autoSaveQueuedRef.current) {
+        const message = lastDraftSaveFailureRef.current?.message || 'Could not save the latest changes.';
+        logEvent('action.flush.pendingAutosave.failed', {
+          reason,
+          dirty: autoSaveDirtyRef.current,
+          queued: autoSaveQueuedRef.current,
+          hasDraftFailure: !!lastDraftSaveFailureRef.current
+        });
+        return { ok: false, message };
+      }
+
+      if (lastDraftSaveFailureRef.current) {
+        return {
+          ok: false,
+          message: lastDraftSaveFailureRef.current.message || 'Could not save the latest changes.'
+        };
+      }
+      const staleInfo = recordStaleRef.current as RecordStaleInfo | null;
+      if (staleInfo) {
+        return { ok: false, message: staleInfo.message || 'Record is stale. Please refresh.' };
+      }
+      autoSaveDirtyRef.current = false;
+      autoSaveQueuedRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return { ok: true };
+    },
+    [flushAutoSaveBeforeNavigate, logEvent, waitForDraftSaveRequest]
+  );
+  flushPendingDraftSaveActionRef.current = flushPendingDraftSaveForAction;
 
   const waitForBackgroundSaves = useCallback(
     async (
@@ -7499,10 +7615,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     void flushAutoSaveBeforeNavigate('navigate.summary');
     try {
       globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
-    } catch (_) {
+    } catch {
       try {
         globalThis.scrollTo?.(0, 0);
-      } catch (_) {
+      } catch {
         // ignore
       }
     }
@@ -7714,12 +7830,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const signature = (dedupSignatureRef.current || '').toString();
       if (signature) {
         if (dedupCheckingRef.current) {
-          const message = 'Checking duplicates…';
-          logEvent('record.ensure.blocked.dedup.checking', {
+          logEvent('record.ensure.waitDedup.start', {
             reason: args?.reason || null,
             fieldPath: args?.fieldPath || null
           });
-          return { success: false, message };
+          const startedAt = Date.now();
+          const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+          while (dedupCheckingRef.current) {
+            await sleep(60);
+            if (Date.now() - startedAt > 15000) {
+              const message = tSystem('dedup.checking', languageRef.current, 'Checking duplicates…');
+              logEvent('record.ensure.waitDedup.timeout', {
+                reason: args?.reason || null,
+                fieldPath: args?.fieldPath || null,
+                waitMs: Date.now() - startedAt
+              });
+              return { success: false, message };
+            }
+          }
+          logEvent('record.ensure.waitDedup.done', {
+            reason: args?.reason || null,
+            fieldPath: args?.fieldPath || null,
+            waitMs: Date.now() - startedAt
+          });
         }
         const conflict = dedupConflictRef.current;
         if (conflict && conflict.message) {
@@ -7793,6 +7926,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         setSelectedRecordId(recordId);
         selectedRecordIdRef.current = recordId;
+        createFlowRef.current = false;
+        autoSaveDirtyRef.current = false;
+        autoSaveQueuedRef.current = false;
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
         setLastSubmissionMeta(prev => ({
           ...(prev || {}),
           id: recordId,
@@ -7872,6 +8012,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       waitForDraftSaveRequest
     ]
   );
+  ensureDraftRecordIdActionRef.current = ensureDraftRecordId;
 
   const applyFollowupBatchResults = useCallback(
     (args: { recordId: string; actions: string[]; batch: FollowupBatchResponse; reason: string }) => {
@@ -9859,7 +10000,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         globalThis.scrollTo(0, 0);
         logEvent('submit.scrollTopOnStart');
       }
-    } catch (_) {
+    } catch {
       // ignore
     }
     try {
@@ -11450,7 +11591,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const raw = Number((definition.listView as any)?.legendColumns ?? (definition as any)?.listViewLegendColumns);
     if (!Number.isFinite(raw) || raw <= 1) return 1;
     return Math.max(1, Math.min(2, Math.round(raw)));
-  }, [definition, definition.listView]);
+  }, [definition]);
   const listLegendColumnWidths = useMemo(() => {
     const raw = (definition.listView as any)?.legendColumnWidths ?? (definition as any)?.listViewLegendColumnWidths;
     if (!Array.isArray(raw) || raw.length < 2) return null;
@@ -11462,7 +11603,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const normalizedFirst = Number(((first / total) * 100).toFixed(2));
     const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
     return [normalizedFirst, normalizedSecond] as [number, number];
-  }, [definition, definition.listView]);
+  }, [definition]);
 
   useEffect(() => {
     if (view !== 'list') return;
@@ -11745,13 +11886,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setErrors={setErrors}
           status={status}
           statusTone={statusLevel}
-          recordMeta={{
-            id: (currentRecord?.id || lastSubmissionMeta?.id || selectedRecordId || undefined) as any,
-            createdAt: (currentRecord?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
-            updatedAt: (currentRecord?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
-            status: (currentRecord?.status || lastSubmissionMeta?.status || null) as any,
-            pdfUrl: (currentRecord?.pdfUrl || undefined) as any
-          }}
+          recordMeta={formRecordMeta}
           warningTop={validationWarnings.top}
           warningByField={validationWarnings.byField}
           showWarningsBanner={false}

@@ -74,6 +74,7 @@ export type UpdateRecordActionRequest = {
   qIdx?: number;
   navigateTo: UpdateRecordActionNavigateTo;
   set: UpdateRecordActionSet;
+  ensureRecordId?: boolean;
   busyTitle?: string;
   submitMode?: 'default' | 'dependencyGuard';
 };
@@ -83,6 +84,8 @@ export type UpdateRecordActionDeps = {
   formKey: string;
   submit: (payload: any) => Promise<any>;
   submitWithDependencies?: (payload: any, buttonRef: string) => Promise<UpdateRecordSubmitResult>;
+  ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
+  flushPendingDraftSave?: (reason: string) => Promise<{ ok: boolean; message?: string }>;
   tSystem: (key: string, language: LangCode, fallback?: string) => string;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 
@@ -152,12 +155,39 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
   });
 
   try {
-    const recordId =
+    let recordId =
       resolveExistingRecordId({
         selectedRecordId: deps.refs.selectedRecordIdRef.current,
         selectedRecordSnapshot: deps.refs.selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: deps.refs.lastSubmissionMetaRef.current?.id || null
       }) || '';
+    if (!recordId && req.ensureRecordId && deps.ensureRecordId) {
+      deps.logEvent('button.updateRecord.ensureRecordId.start', { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
+      const ensured = await deps.ensureRecordId({ reason: `button.updateRecord:${req.buttonId}` });
+      if (!ensured?.success) {
+        const msg = (ensured?.message || deps.tSystem('actions.noRecordSelected', language, 'No record selected.')).toString();
+        deps.setStatus(msg);
+        deps.setStatusLevel('error');
+        deps.logEvent('button.updateRecord.ensureRecordId.failed', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          message: msg
+        });
+        return;
+      }
+      recordId =
+        resolveExistingRecordId({
+          selectedRecordId: deps.refs.selectedRecordIdRef.current,
+          selectedRecordSnapshot: deps.refs.selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: deps.refs.lastSubmissionMetaRef.current?.id || null
+        }) ||
+        (ensured.recordId || '').toString();
+      deps.logEvent('button.updateRecord.ensureRecordId.success', {
+        buttonId: req.buttonId,
+        qIdx: req.qIdx ?? null,
+        recordId: recordId || null
+      });
+    }
     if (!recordId) {
       deps.setStatus(deps.tSystem('actions.noRecordSelected', language, 'No record selected.'));
       deps.setStatusLevel('error');
@@ -217,6 +247,32 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       deps.setStatusLevel('error');
       deps.logEvent('button.updateRecord.blocked.backgroundQueue', { message: msg, recordId });
       return;
+    }
+
+    if (deps.flushPendingDraftSave) {
+      deps.logEvent('button.updateRecord.flushPending.start', {
+        buttonId: req.buttonId,
+        qIdx: req.qIdx ?? null,
+        recordId
+      });
+      const flushRes = await deps.flushPendingDraftSave(`button.updateRecord:${req.buttonId}`);
+      if (!flushRes.ok) {
+        const msg = (flushRes.message || 'Could not save the latest changes.').toString();
+        deps.setStatus(msg);
+        deps.setStatusLevel('error');
+        deps.logEvent('button.updateRecord.flushPending.failed', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          recordId,
+          message: msg
+        });
+        return;
+      }
+      deps.logEvent('button.updateRecord.flushPending.done', {
+        buttonId: req.buttonId,
+        qIdx: req.qIdx ?? null,
+        recordId
+      });
     }
 
     deps.setDraftSave({ phase: 'saving' });

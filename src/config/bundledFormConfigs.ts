@@ -10948,7 +10948,11 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "navigation": {
               "forwardGate": "whenValid",
-              "autoAdvance": "onValid"
+              "autoAdvance": "onValid",
+              "autoAdvanceWhen": {
+                "fieldId": "status",
+                "equals": "In production"
+              }
             }
           },
           {
@@ -15849,6 +15853,10 @@ export const BUNDLED_FORM_CONFIGS = [
                 "equals": "orderInfo"
               },
               {
+                "fieldId": "__ckStepValid_orderInfo",
+                "equals": "true"
+              },
+              {
                 "fieldId": "status",
                 "equals": "In progress"
               }
@@ -15864,6 +15872,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "set": {
             "status": "In production"
           },
+          "ensureRecordId": true,
           "navigateTo": "form",
           "confirm": {
             "message": {
@@ -18878,6 +18887,10 @@ export const BUNDLED_FORM_CONFIGS = [
                   "equals": "orderInfo"
                 },
                 {
+                  "fieldId": "__ckStepValid_orderInfo",
+                  "equals": "true"
+                },
+                {
                   "fieldId": "status",
                   "equals": "In progress"
                 }
@@ -18893,6 +18906,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "set": {
               "status": "In production"
             },
+            "ensureRecordId": true,
             "navigateTo": "form",
             "confirm": {
               "message": {
@@ -19918,7 +19932,11 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "navigation": {
               "forwardGate": "whenValid",
-              "autoAdvance": "onValid"
+              "autoAdvance": "onValid",
+              "autoAdvanceWhen": {
+                "fieldId": "status",
+                "equals": "In production"
+              }
             }
           },
           {
@@ -22021,7 +22039,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "bdb175c7afe73de7da677ad13cc8a2a8"
+    "cacheFingerprint": "65df7c9e3152e1c0c2928fe6217f1d2f"
   },
   {
     "formKey": "Config: Recipes",

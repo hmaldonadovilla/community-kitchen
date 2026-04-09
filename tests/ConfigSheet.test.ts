@@ -926,6 +926,46 @@ describe('ConfigSheet', () => {
     });
   });
 
+  test('getQuestions parses BUTTON updateRecord ensureRecordId config JSON', () => {
+    const configSheet = mockSS.insertSheet('Config: UpdateRecordEnsureId');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'BTN_READY',
+        'BUTTON',
+        'Ready for Production',
+        '',
+        '',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "button": {
+            "action": "updateRecord",
+            "set": { "status": "In production" },
+            "ensureRecordId": true,
+            "navigateTo": "form"
+          }
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (configSheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: UpdateRecordEnsureId');
+    expect(questions.length).toBe(1);
+    expect((questions[0] as any).button).toEqual({
+      action: 'updateRecord',
+      set: { status: 'In production' },
+      ensureRecordId: true,
+      navigateTo: 'form'
+    });
+  });
+
   test('getQuestions parses BUTTON renderDocTemplate loadingLabel config JSON', () => {
     const configSheet = mockSS.insertSheet('Config: PdfButtons');
     const exampleRows = [

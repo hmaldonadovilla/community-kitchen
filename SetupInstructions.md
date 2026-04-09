@@ -991,6 +991,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           "showWhen": {
             "all": [
               { "fieldId": "__ckStep", "equals": "orderInfo" },
+              { "fieldId": "__ckStepValid_orderInfo", "equals": "true" },
               { "fieldId": "status", "equals": "In progress" }
             ]
           }
@@ -1053,7 +1054,10 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             {
               "id": "order",
               "label": { "en": "Order" },
-              "include": [{ "kind": "question", "id": "SERVICE" }]
+              "include": [{ "kind": "question", "id": "SERVICE" }],
+              "navigation": {
+                "autoAdvanceWhen": { "fieldId": "status", "equals": "In production" }
+              }
             },
             {
               "id": "meals",
@@ -1128,6 +1132,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
+        - Use `navigation.autoAdvanceWhen` when the step should become locally complete first but should only navigate after an extra runtime condition matches, for example `{ "fieldId": "status", "equals": "In production" }`.
         - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
           - run blocking follow-up actions first (`preActions`), then launch non-blocking ones (`backgroundActions`)
           - ensure a persisted draft record id exists (`ensureRecordId`)
@@ -2914,6 +2919,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 - **Update the current record** (`action: "updateRecord"`): draft-save specific top-level fields and/or status changes on the current record, optionally show a confirmation dialog, optionally navigate to another view, and optionally run a reusable `dependencyGuard` against another form before saving.
+  - Set `ensureRecordId: true` when the button can be pressed before the current draft has been persisted yet. The client will block, wait for dedup/autosave to settle, create the draft record if needed, and only then apply the requested update.
 - **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
   - Set `disableWhenValueMissing: true` to keep the button visible but disabled until the URL exists.
 

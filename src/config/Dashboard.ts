@@ -2217,8 +2217,10 @@ export class Dashboard {
         const nav: any = {};
         const gate = normalizeGate((navRaw as any).forwardGate);
         const adv = normalizeAutoAdvance((navRaw as any).autoAdvance);
+        const autoAdvanceWhen = normalizeCondition((navRaw as any).autoAdvanceWhen);
         if (gate) nav.forwardGate = gate;
         if (adv) nav.autoAdvance = adv;
+        if (autoAdvanceWhen) nav.autoAdvanceWhen = autoAdvanceWhen;
         if ((navRaw as any).allowBack !== undefined) nav.allowBack = Boolean((navRaw as any).allowBack);
         const submitLabel = normalizeLocalized((navRaw as any).submitLabel);
         if (submitLabel) nav.submitLabel = submitLabel;

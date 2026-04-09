@@ -1500,6 +1500,9 @@ export class ConfigSheet {
       );
 
       const config: ButtonConfig = { action: 'updateRecord', set: outSet } as any;
+      if (cfgRaw.ensureRecordId !== undefined && cfgRaw.ensureRecordId !== null) {
+        (config as any).ensureRecordId = Boolean(cfgRaw.ensureRecordId);
+      }
       if (navigateTo) (config as any).navigateTo = navigateTo;
       if (confirm) (config as any).confirm = confirm;
       if (dependencyGuard) (config as any).dependencyGuard = dependencyGuard;

@@ -15,6 +15,7 @@ description: Development Rules
 
 ## New features
 
+- Features are generic and reusable across different forms. Do not hardcode specific use cases into the feature logic, always use configuration to define the use case behavior.
 - When creating new features, always add diagnostic logs at the web form level and specific feature logs. This logs need to surface on the top of the web form, to be easily visible in DevTools console.
 - Update the SetupInstructions.md file to reflect the new feature (step by step instructions).
 - Update the config_schema.yaml file to reflect the new feature (yaml schema for the new feature). This file is used by LLMs to generate form configuration, it need to provide clear and descriptive information.

@@ -978,6 +978,13 @@ export interface UpdateRecordButtonConfig {
    */
   dependencyGuard?: UpdateRecordDependencyGuardConfig;
   /**
+   * When true, ensure a persisted draft record id exists before applying the update.
+   *
+   * Useful for create-flow buttons that mutate status immediately after the user completes
+   * the first guided step, because the record may still only exist in local client state.
+   */
+  ensureRecordId?: boolean;
+  /**
    * After a successful update, navigate to the specified view.
    * - auto: preserve current behavior (no forced navigation)
    */
@@ -3546,6 +3553,12 @@ export interface StepsConfig {
 export interface StepNavigationConfig {
   forwardGate?: StepForwardGate;
   autoAdvance?: StepAutoAdvance;
+  /**
+   * Optional condition that must match before auto-advance is allowed to fire.
+   * This keeps step completion local while deferring navigation until the record
+   * reaches a configured runtime state (for example, status === "In production").
+   */
+  autoAdvanceWhen?: WhenClause;
   allowBack?: boolean;
   /**
    * Optional label override for the primary action while this step is active (non-final steps).

@@ -870,7 +870,11 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "onValid"
+            "autoAdvance": "onValid",
+            "autoAdvanceWhen": {
+              "fieldId": "status",
+              "equals": "In production"
+            }
           }
         },
         {
@@ -5771,6 +5775,10 @@
               "equals": "orderInfo"
             },
             {
+              "fieldId": "__ckStepValid_orderInfo",
+              "equals": "true"
+            },
+            {
               "fieldId": "status",
               "equals": "In progress"
             }
@@ -5786,6 +5794,7 @@
         "set": {
           "status": "In production"
         },
+        "ensureRecordId": true,
         "navigateTo": "form",
         "confirm": {
           "message": {
@@ -8800,6 +8809,10 @@
                 "equals": "orderInfo"
               },
               {
+                "fieldId": "__ckStepValid_orderInfo",
+                "equals": "true"
+              },
+              {
                 "fieldId": "status",
                 "equals": "In progress"
               }
@@ -8815,6 +8828,7 @@
           "set": {
             "status": "In production"
           },
+          "ensureRecordId": true,
           "navigateTo": "form",
           "confirm": {
             "message": {
@@ -9845,7 +9859,11 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "onValid"
+            "autoAdvance": "onValid",
+            "autoAdvanceWhen": {
+              "fieldId": "status",
+              "equals": "In production"
+            }
           }
         },
         {

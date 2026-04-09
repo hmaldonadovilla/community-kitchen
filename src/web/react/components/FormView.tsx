@@ -89,6 +89,7 @@ import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
 import { HtmlPreview } from './app/HtmlPreview';
+import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
 import { PageSection } from './form/PageSection';
@@ -1807,6 +1808,7 @@ const FormView: React.FC<FormViewProps> = ({
       stepCfg?.navigation?.autoAdvance ?? stepCfg?.autoAdvance ?? (guidedStepsCfg as any)?.defaultAutoAdvance,
       guidedDefaultAutoAdvance
     );
+    const autoAdvanceWhen = (stepCfg?.navigation?.autoAdvanceWhen || null) as any;
     if (autoAdvance === 'off') {
       guidedAutoAdvanceAttemptRef.current = null;
       if (guidedAutoAdvanceTimerRef.current) {
@@ -1818,7 +1820,15 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-    const satisfied = autoAdvance === 'onValid' ? !!stepStatus?.valid : !!stepStatus?.complete;
+    const satisfiedBase = autoAdvance === 'onValid' ? !!stepStatus?.valid : !!stepStatus?.complete;
+    const autoAdvanceConditionMatched = isGuidedStepAutoAdvanceAllowed({
+      when: autoAdvanceWhen,
+      values,
+      lineItems,
+      recordMeta,
+      guidedVirtualState
+    });
+    const satisfied = satisfiedBase && autoAdvanceConditionMatched;
 
     const state = guidedAutoAdvanceStateRef.current;
     // On step change: record current satisfied state but never auto-advance immediately.
@@ -1836,7 +1846,9 @@ const FormView: React.FC<FormViewProps> = ({
           to: nextId || null,
           gate: forwardGate,
           mode: autoAdvance,
-          reason: 'stepChangeAlreadySatisfied'
+          reason: 'stepChangeAlreadySatisfied',
+          conditionConfigured: Boolean(autoAdvanceWhen),
+          conditionMatched: autoAdvanceConditionMatched
         });
       }
       return;
@@ -1863,7 +1875,9 @@ const FormView: React.FC<FormViewProps> = ({
         from: activeGuidedStepId,
         to: nextId || null,
         gate: forwardGate,
-        mode: autoAdvance
+        mode: autoAdvance,
+        conditionConfigured: Boolean(autoAdvanceWhen),
+        conditionMatched: autoAdvanceConditionMatched
       });
     }
     if (!nextState.armed) {
@@ -1947,7 +1961,9 @@ const FormView: React.FC<FormViewProps> = ({
             to: nextId,
             gate: forwardGate,
             mode: autoAdvance,
-            message: outcome?.message || null
+            message: outcome?.message || null,
+            conditionConfigured: Boolean(autoAdvanceWhen),
+            conditionMatched: autoAdvanceConditionMatched
           });
           return;
         }
@@ -1959,7 +1975,14 @@ const FormView: React.FC<FormViewProps> = ({
         guidedAutoAdvanceStateRef.current = { ...st, armed: false };
       }
 
-      onDiagnostic?.('steps.step.autoAdvance', { from: activeGuidedStepId, to: nextId, gate: forwardGate, mode: autoAdvance });
+      onDiagnostic?.('steps.step.autoAdvance', {
+        from: activeGuidedStepId,
+        to: nextId,
+        gate: forwardGate,
+        mode: autoAdvance,
+        conditionConfigured: Boolean(autoAdvanceWhen),
+        conditionMatched: autoAdvanceConditionMatched
+      });
       selectGuidedStep(nextId, 'auto');
     };
 
@@ -1983,16 +2006,20 @@ const FormView: React.FC<FormViewProps> = ({
     guidedDefaultAutoAdvance,
     guidedDefaultForwardGate,
     guidedEnabled,
+    guidedVirtualState,
     guidedStepIds,
     guidedStatus.steps,
     guidedVisibleSteps,
     guidedStepsCfg,
+    lineItems,
     maxReachableGuidedIndex,
     normalizeAutoAdvance,
     normalizeForwardGate,
     onDiagnostic,
     onBeforeGuidedStepAdvance,
-    selectGuidedStep
+    recordMeta,
+    selectGuidedStep,
+    values
   ]);
 
   // When auto-advance is armed and we're waiting for focus to leave a text entry element, kick an immediate re-check on blur.

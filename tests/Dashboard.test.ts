@@ -417,6 +417,48 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses guided step autoAdvanceWhen conditions', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'orderInfo',
+            include: [{ kind: 'question', id: 'SERVICE' }],
+            navigation: {
+              forwardGate: 'whenValid',
+              autoAdvance: 'onValid',
+              autoAdvanceWhen: { fieldId: 'status', equals: 'In production' }
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).steps).toEqual({
+      mode: 'guided',
+      items: [
+        {
+          id: 'orderInfo',
+          include: [{ kind: 'question', id: 'SERVICE' }],
+          navigation: {
+            forwardGate: 'whenValid',
+            autoAdvance: 'onValid',
+            autoAdvanceWhen: { fieldId: 'status', equals: 'In production' }
+          }
+        }
+      ]
+    });
+  });
+
   test('getForms enforces analytics script function naming contract', () => {
     const configJson = JSON.stringify({
       analyticsWidgets: [
