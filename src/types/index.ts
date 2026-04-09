@@ -4402,6 +4402,8 @@ export interface WebFormDefinition {
 export interface CopyCurrentRecordLineItemProfile {
   /**
    * LINE_ITEM_GROUP id (group key).
+   *
+   * For nested `subGroups`, this is the subgroup id relative to the copied parent row.
    */
   groupId: string;
   /**
@@ -4413,6 +4415,10 @@ export interface CopyCurrentRecordLineItemProfile {
    * Evaluated against row values, with best-effort fallback to top-level values.
    */
   includeWhen?: WhenClause;
+  /**
+   * Optional nested subgroup copy profiles to copy relative subgroup rows for each copied parent row.
+   */
+  subGroups?: CopyCurrentRecordLineItemProfile[];
 }
 
 export interface CopyCurrentRecordProfile {

@@ -109,6 +109,11 @@
       "en": "Please wait while we open the forms page...",
       "fr": "Veuillez patienter pendant que nous ouvrons la page des formulaires...",
       "nl": "Wacht even terwijl we de formulierenpagina openen..."
+    },
+    "waitCopyRecord": {
+      "en": "Please wait while we prepare your copied record...",
+      "fr": "Veuillez patienter pendant que nous préparons la copie de votre enregistrement...",
+      "nl": "Wacht even terwijl we je gekopieerde record voorbereiden..."
     }
   },
   "actions": {

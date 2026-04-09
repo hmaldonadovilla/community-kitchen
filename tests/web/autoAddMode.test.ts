@@ -54,4 +54,63 @@ describe('reconcileAutoAddModeGroups', () => {
       'Vegetarian'
     ]);
   });
+
+  it('preserves existing auto rows while dependencies are incomplete', () => {
+    const definition = {
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            addMode: 'auto',
+            anchorFieldId: 'MEAL_TYPE',
+            fields: [
+              {
+                id: 'MEAL_TYPE',
+                type: 'CHOICE',
+                options: ['Vegetarian', 'Vegan'],
+                optionFilter: {
+                  dependsOn: ['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE'],
+                  optionMap: {
+                    '*': ['Vegetarian']
+                  }
+                }
+              },
+              { id: 'ORD_QTY', type: 'NUMBER' }
+            ]
+          }
+        }
+      ]
+    } as any;
+
+    const currentRows = [
+      {
+        id: 'meal_1',
+        values: {
+          MEAL_TYPE: 'Vegetarian',
+          ORD_QTY: 450,
+          __ckRowSource: 'auto'
+        }
+      }
+    ];
+
+    const result = reconcileAutoAddModeGroups({
+      definition,
+      values: {
+        MP_DISTRIBUTOR: 'HUB',
+        MP_SERVICE: 'Lunch',
+        MP_PREP_DATE: ''
+      } as any,
+      lineItems: {
+        MP_MEALS_REQUEST: currentRows
+      } as any,
+      optionState: {},
+      language: 'EN',
+      ensureLineOptions: jest.fn()
+    });
+
+    expect(result.changed).toBe(false);
+    expect(result.lineItems.MP_MEALS_REQUEST).toBe(currentRows);
+    expect((result.lineItems.MP_MEALS_REQUEST || [])[0]?.values?.ORD_QTY).toBe(450);
+  });
 });
