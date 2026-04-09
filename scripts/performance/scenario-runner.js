@@ -26,8 +26,6 @@ try {
 const { chromium } = playwright;
 const {
   PLAYWRIGHT_CONTEXT_OPTIONS,
-  PRESET_MOBILE_4G,
-  PRESET_MOBILE_WIFI,
   PRESETS,
   kbpsToBytesPerSecond
 } = require('./playwrightMobileProfile');
@@ -272,7 +270,7 @@ async function waitForAppFrame(page, timeoutMs = 60000) {
         await candidate.waitForSelector('body', { timeout: 500 });
         const looksLikeApp = await frameLooksLikeApp(candidate);
         if (looksLikeApp) return candidate;
-      } catch (_) {
+      } catch {
         // continue scanning
       }
     }

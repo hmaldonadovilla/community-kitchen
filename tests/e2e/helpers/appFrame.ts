@@ -32,6 +32,18 @@ export async function waitForAppFrame(page: Page, timeoutMs = 60_000): Promise<F
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
+    const namedFrame = page.frames().find(frame => frame.name() === 'userHtmlFrame');
+    if (namedFrame) {
+      try {
+        await namedFrame.waitForSelector('body', { timeout: 500 });
+        if (await frameLooksLikeApp(namedFrame)) {
+          return namedFrame;
+        }
+      } catch {
+        // Fall through to the generic scan while the iframe is still warming up.
+      }
+    }
+
     const main = page.mainFrame();
     const frames = page.frames().sort((a, b) => {
       if (a === main) return 1;
