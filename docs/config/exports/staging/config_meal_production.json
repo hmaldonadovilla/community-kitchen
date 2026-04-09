@@ -2568,6 +2568,7 @@
             "nl": "Portionering"
           },
           "navigation": {
+            "autoAdvance": "off",
             "submitLabel": {
               "en": "Finish portioning",
               "fr": "Terminer le portionnement",
@@ -11531,6 +11532,7 @@
             "nl": "Portionering"
           },
           "navigation": {
+            "autoAdvance": "off",
             "submitLabel": {
               "en": "Finish portioning",
               "fr": "Terminer le portionnement",

@@ -1796,6 +1796,259 @@ const FormView: React.FC<FormViewProps> = ({
     ]
   );
 
+  const advanceGuidedStepFromCurrentStep = useCallback(
+    async (args: { trigger: 'submitNext' | 'stepBar'; targetStepId?: string }): Promise<boolean> => {
+      if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return false;
+
+      const steps = guidedVisibleSteps;
+      const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
+      const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+      const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
+      const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
+      const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+      if (!nextId) return false;
+
+      if (guidedAutoAdvanceTimerRef.current) {
+        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+        guidedAutoAdvanceTimerRef.current = null;
+      }
+      guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
+
+      const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId) || definition;
+
+      if (forwardGate === 'whenComplete' && !stepStatus?.complete) {
+        const nextErrors = validateForm({
+          definition: stepDefinition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups,
+          requiredMode: 'stepComplete',
+          virtualState: guidedVirtualState
+        });
+        setErrors(nextErrors);
+        const errorCount = Object.keys(nextErrors).length;
+        onDiagnostic?.('steps.gate.blocked', {
+          stepId: activeGuidedStepId,
+          gate: forwardGate,
+          errorCount,
+          requiredMode: 'stepComplete',
+          trigger: args.trigger
+        });
+        if (errorCount) {
+          errorNavAllowOverlayOpenRef.current = true;
+          errorNavRequestRef.current += 1;
+          errorNavModeRef.current = 'focus';
+          onDiagnostic?.('validation.navigate.request', {
+            attempt: errorNavRequestRef.current,
+            scope: 'guidedStep',
+            mode: errorNavModeRef.current
+          });
+          return false;
+        }
+        const firstTarget = (Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [])
+          .concat(Array.isArray(stepCfg?.include) ? stepCfg.include : [])
+          .find(
+            (t: any) =>
+              t && typeof t === 'object' && (t.kind || '').toString() === 'question' && (t.id || '').toString().trim()
+          );
+        if (firstTarget?.id) {
+          setPendingScrollAnchor(firstTarget.id.toString());
+        }
+        return false;
+      }
+
+      const nextErrors = validateForm({
+        definition: stepDefinition,
+        language,
+        values,
+        lineItems,
+        collapsedRows,
+        collapsedSubgroups,
+        virtualState: guidedVirtualState
+      });
+      setErrors(nextErrors);
+      if (forwardGate !== 'whenComplete' && Object.keys(nextErrors).length) {
+        onDiagnostic?.('steps.gate.blocked', {
+          stepId: activeGuidedStepId,
+          gate: forwardGate,
+          errorCount: Object.keys(nextErrors).length,
+          requiredMode: 'configured',
+          trigger: args.trigger
+        });
+        errorNavAllowOverlayOpenRef.current = true;
+        errorNavRequestRef.current += 1;
+        errorNavModeRef.current = 'focus';
+        onDiagnostic?.('validation.navigate.request', {
+          attempt: errorNavRequestRef.current,
+          scope: 'guidedStep',
+          mode: errorNavModeRef.current
+        });
+        return false;
+      }
+
+      const milestoneAction = stepCfg?.navigation?.milestoneAction;
+      if (milestoneAction && onGuidedStepMilestone) {
+        const validationScope = (milestoneAction?.validationScope || 'currentStep') as
+          | 'currentStep'
+          | 'throughCurrentStep'
+          | 'fullForm';
+        if (validationScope !== 'currentStep') {
+          const scopeResult = validateGuidedStepScope({
+            scope: validationScope,
+            stepId: activeGuidedStepId,
+            stepIndex: activeGuidedStepIndex
+          });
+          setErrors(scopeResult.errors);
+          if (Object.keys(scopeResult.errors).length) {
+            const targetStepId = scopeResult.firstInvalidStepId || activeGuidedStepId;
+            onDiagnostic?.('steps.gate.blocked', {
+              stepId: targetStepId,
+              gate: validationScope,
+              errorCount: Object.keys(scopeResult.errors).length,
+              requiredMode: 'configured',
+              trigger: args.trigger
+            });
+            if (targetStepId && targetStepId !== activeGuidedStepId) {
+              selectGuidedStep(targetStepId, 'user');
+            }
+            errorNavAllowOverlayOpenRef.current = true;
+            errorNavRequestRef.current += 1;
+            errorNavModeRef.current = 'focus';
+            onDiagnostic?.('validation.navigate.request', {
+              attempt: errorNavRequestRef.current,
+              scope: validationScope,
+              mode: errorNavModeRef.current
+            });
+            return false;
+          }
+        }
+        onDiagnostic?.('steps.step.milestone.begin', {
+          stepId: activeGuidedStepId,
+          type: milestoneAction?.type || null,
+          actionCount: Array.isArray(milestoneAction?.actions) ? milestoneAction.actions.length : 0,
+          nextStepId: nextId || null,
+          validationScope,
+          trigger: args.trigger,
+          requestedStepId: args.targetStepId || null
+        });
+        const result = await onGuidedStepMilestone({
+          stepId: activeGuidedStepId || '',
+          action: milestoneAction,
+          nextStepId: nextId || undefined
+        });
+        if (!result?.success) {
+          onDiagnostic?.('steps.step.milestone.failed', {
+            stepId: activeGuidedStepId,
+            message: result?.message || null,
+            trigger: args.trigger
+          });
+          return false;
+        }
+        const shouldAdvance = result?.advanceToNext !== false && (milestoneAction?.advanceAfterStart ?? true) !== false;
+        if (nextId && shouldAdvance) {
+          setErrors({});
+          onDiagnostic?.('steps.step.change', {
+            from: activeGuidedStepId,
+            to: nextId,
+            reason: args.trigger === 'stepBar' ? 'milestoneAction.stepBar' : 'milestoneAction'
+          });
+          selectGuidedStep(nextId, 'user');
+          return true;
+        }
+        return false;
+      }
+
+      if (onBeforeGuidedStepAdvance) {
+        const outcome = await onBeforeGuidedStepAdvance({
+          stepId: activeGuidedStepId || '',
+          nextStepId: nextId || undefined,
+          trigger: 'next',
+          waitDialog
+        });
+        if (!outcome?.success) {
+          onDiagnostic?.('steps.step.advance.blocked', {
+            from: activeGuidedStepId,
+            to: nextId,
+            reason: args.trigger,
+            message: outcome?.message || null
+          });
+          return false;
+        }
+      }
+
+      setErrors({});
+      onDiagnostic?.('steps.step.change', {
+        from: activeGuidedStepId,
+        to: nextId,
+        reason: args.trigger === 'stepBar' ? 'stepBarNext' : 'submitNext'
+      });
+      selectGuidedStep(nextId, 'user');
+      return true;
+    },
+    [
+      activeGuidedStepId,
+      activeGuidedStepIndex,
+      buildGuidedStepDefinition,
+      collapsedRows,
+      collapsedSubgroups,
+      definition,
+      guidedDefaultForwardGate,
+      guidedEnabled,
+      guidedStepIds,
+      guidedStatus.steps,
+      guidedStepsCfg,
+      guidedVirtualState,
+      guidedVisibleSteps,
+      language,
+      lineItems,
+      normalizeForwardGate,
+      onBeforeGuidedStepAdvance,
+      onDiagnostic,
+      onGuidedStepMilestone,
+      setPendingScrollAnchor,
+      setErrors,
+      selectGuidedStep,
+      validateGuidedStepScope,
+      values
+    ]
+  );
+
+  const handleGuidedStepSelect = useCallback(
+    (targetStepId: string) => {
+      if (!guidedEnabled) return;
+      const targetId = (targetStepId || '').toString().trim();
+      if (!targetId) return;
+      const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
+      const targetIdx = guidedStepIds.indexOf(targetId);
+      if (currentIdx < 0 || targetIdx < 0 || targetIdx <= currentIdx) {
+        selectGuidedStep(targetId, 'user');
+        return;
+      }
+
+      const stepCfg = (guidedVisibleSteps[activeGuidedStepIndex] || null) as any;
+      if (!stepCfg?.navigation?.milestoneAction) {
+        selectGuidedStep(targetId, 'user');
+        return;
+      }
+
+      void advanceGuidedStepFromCurrentStep({
+        trigger: 'stepBar',
+        targetStepId: targetId
+      });
+    },
+    [
+      activeGuidedStepId,
+      activeGuidedStepIndex,
+      advanceGuidedStepFromCurrentStep,
+      guidedEnabled,
+      guidedStepIds,
+      guidedVisibleSteps,
+      selectGuidedStep
+    ]
+  );
+
   // Auto-advance (default: onValid) while avoiding jumps mid-typing.
   useEffect(() => {
     if (!guidedEnabled) return;
@@ -2068,186 +2321,7 @@ const FormView: React.FC<FormViewProps> = ({
       // In guided steps, the bottom "Submit" action behaves like "Next" until the final step.
       // It should validate only the current step's visible targets (not the full form).
       if (guidedEnabled && guidedStepsCfg && guidedStepIds.length && !isGuidedFinalStep && !forceFinalSubmit) {
-        const steps = guidedVisibleSteps;
-        const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-        const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
-        const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-        const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
-
-        // Step submission should never trigger guided auto-advance; keep the user on the step while we validate.
-        if (guidedAutoAdvanceTimerRef.current) {
-          globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
-          guidedAutoAdvanceTimerRef.current = null;
-        }
-        guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
-
-        const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId) || definition;
-
-        // For `whenComplete` steps: block advancement ONLY on missing step fields, but show inline errors.
-        if (forwardGate === 'whenComplete' && !stepStatus?.complete) {
-          const nextErrors = validateForm({
-            definition: stepDefinition,
-            language,
-            values,
-            lineItems,
-            collapsedRows,
-            collapsedSubgroups,
-            requiredMode: 'stepComplete',
-            virtualState: guidedVirtualState
-          });
-          setErrors(nextErrors);
-          const errorCount = Object.keys(nextErrors).length;
-          onDiagnostic?.('steps.gate.blocked', {
-            stepId: activeGuidedStepId,
-            gate: forwardGate,
-            errorCount,
-            requiredMode: 'stepComplete'
-          });
-          if (errorCount) {
-            errorNavAllowOverlayOpenRef.current = true;
-            errorNavRequestRef.current += 1;
-            errorNavModeRef.current = 'focus';
-            onDiagnostic?.('validation.navigate.request', {
-              attempt: errorNavRequestRef.current,
-              scope: 'guidedStep',
-              mode: errorNavModeRef.current
-            });
-            return;
-          }
-          const firstTarget = (Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [])
-            .concat(Array.isArray(stepCfg?.include) ? stepCfg.include : [])
-            .find(
-              (t: any) =>
-                t && typeof t === 'object' && (t.kind || '').toString() === 'question' && (t.id || '').toString().trim()
-            );
-          if (firstTarget?.id) {
-            try {
-              navigateToFieldKey(firstTarget.id.toString());
-            } catch (_) {
-              // ignore
-            }
-          }
-          return;
-        }
-
-        const nextErrors = validateForm({
-          definition: stepDefinition,
-          language,
-          values,
-          lineItems,
-          collapsedRows,
-          collapsedSubgroups,
-          virtualState: guidedVirtualState
-        });
-        setErrors(nextErrors);
-        // For `whenValid` steps: block advancement until the step has no validation errors.
-        if (forwardGate !== 'whenComplete' && Object.keys(nextErrors).length) {
-          onDiagnostic?.('steps.gate.blocked', {
-            stepId: activeGuidedStepId,
-            gate: forwardGate,
-            errorCount: Object.keys(nextErrors).length,
-            requiredMode: 'configured'
-          });
-          errorNavAllowOverlayOpenRef.current = true;
-          errorNavRequestRef.current += 1;
-          errorNavModeRef.current = 'focus';
-          onDiagnostic?.('validation.navigate.request', {
-            attempt: errorNavRequestRef.current,
-            scope: 'guidedStep',
-            mode: errorNavModeRef.current
-          });
-          return;
-        }
-
-        const nextId = guidedStepIds[activeGuidedStepIndex + 1];
-        const milestoneAction = stepCfg?.navigation?.milestoneAction;
-        if (milestoneAction && onGuidedStepMilestone) {
-          const validationScope = (milestoneAction?.validationScope || 'currentStep') as
-            | 'currentStep'
-            | 'throughCurrentStep'
-            | 'fullForm';
-          if (validationScope !== 'currentStep') {
-            const scopeResult = validateGuidedStepScope({
-              scope: validationScope,
-              stepId: activeGuidedStepId,
-              stepIndex: activeGuidedStepIndex
-            });
-            setErrors(scopeResult.errors);
-            if (Object.keys(scopeResult.errors).length) {
-              const targetStepId = scopeResult.firstInvalidStepId || activeGuidedStepId;
-              onDiagnostic?.('steps.gate.blocked', {
-                stepId: targetStepId,
-                gate: validationScope,
-                errorCount: Object.keys(scopeResult.errors).length,
-                requiredMode: 'configured'
-              });
-              if (targetStepId && targetStepId !== activeGuidedStepId) {
-                selectGuidedStep(targetStepId, 'user');
-              }
-              errorNavAllowOverlayOpenRef.current = true;
-              errorNavRequestRef.current += 1;
-              errorNavModeRef.current = 'focus';
-              onDiagnostic?.('validation.navigate.request', {
-                attempt: errorNavRequestRef.current,
-                scope: validationScope,
-                mode: errorNavModeRef.current
-              });
-              return;
-            }
-          }
-          onDiagnostic?.('steps.step.milestone.begin', {
-            stepId: activeGuidedStepId,
-            type: milestoneAction?.type || null,
-            actionCount: Array.isArray(milestoneAction?.actions) ? milestoneAction.actions.length : 0,
-            nextStepId: nextId || null,
-            validationScope
-          });
-          void onGuidedStepMilestone({
-            stepId: activeGuidedStepId || '',
-            action: milestoneAction,
-            nextStepId: nextId || undefined
-          }).then(result => {
-            if (!result?.success) {
-              onDiagnostic?.('steps.step.milestone.failed', {
-                stepId: activeGuidedStepId,
-                message: result?.message || null
-              });
-              return;
-            }
-            const shouldAdvance = result?.advanceToNext !== false && (milestoneAction?.advanceAfterStart ?? true) !== false;
-            if (nextId && shouldAdvance) {
-              setErrors({});
-              onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'milestoneAction' });
-              selectGuidedStep(nextId, 'user');
-            }
-          });
-          return;
-        }
-        if (nextId) {
-          const continueAdvance = async () => {
-            if (onBeforeGuidedStepAdvance) {
-              const outcome = await onBeforeGuidedStepAdvance({
-                stepId: activeGuidedStepId || '',
-                nextStepId: nextId || undefined,
-                trigger: 'next',
-                waitDialog
-              });
-              if (!outcome?.success) {
-                onDiagnostic?.('steps.step.advance.blocked', {
-                  from: activeGuidedStepId,
-                  to: nextId,
-                  reason: 'submitNext',
-                  message: outcome?.message || null
-                });
-                return;
-              }
-            }
-            setErrors({});
-            onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason: 'submitNext' });
-            selectGuidedStep(nextId, 'user');
-          };
-          void continueAdvance();
-        }
+        void advanceGuidedStepFromCurrentStep({ trigger: 'submitNext' });
         return;
       }
 
@@ -3783,7 +3857,6 @@ const FormView: React.FC<FormViewProps> = ({
       const subgroupParentRowId = (subgroupInfo?.parentRowId || '').toString();
       const isPartDishIngredientsOverlay =
         subgroupParentGroupId === 'MP_TYPE_LI' && (subgroupInfo?.subGroupId || '').toString() === 'MP_INGREDIENTS_LI';
-      const overlayFields = (subgroupOverlay.groupOverride as any)?.fields;
       const rowsInOverlay = (() => {
         if (!subgroupKey) return [];
         const rowsAll = lineItemsRef.current[subgroupKey] || [];
@@ -5554,7 +5627,7 @@ const FormView: React.FC<FormViewProps> = ({
           setCollapsedGroups(prev => (prev[groupCardKey] === false ? prev : { ...prev, [groupCardKey]: false }));
         }
       }
-    } catch (_) {
+    } catch {
       // ignore visibility preparation failures
     }
 
@@ -7284,7 +7357,7 @@ const FormView: React.FC<FormViewProps> = ({
           (el as any).blur();
           onDiagnostic?.('ui.blur', { reason, ...(meta || {}) });
         }
-      } catch (_) {
+      } catch {
         // ignore blur failures
       }
     },
@@ -13898,7 +13971,7 @@ const FormView: React.FC<FormViewProps> = ({
         maxReachableIndex={
           guidedForwardNavigationBlocked ? Math.min(maxReachableGuidedIndex, activeGuidedStepIndex) : maxReachableGuidedIndex
         }
-        onSelectStep={id => selectGuidedStep(id, 'user')}
+        onSelectStep={handleGuidedStepSelect}
       />
     );
     const stepsBarPortalEl =

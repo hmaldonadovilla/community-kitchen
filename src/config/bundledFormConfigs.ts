@@ -12646,6 +12646,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Portionering"
             },
             "navigation": {
+              "autoAdvance": "off",
               "submitLabel": {
                 "en": "Finish portioning",
                 "fr": "Terminer le portionnement",
@@ -21604,6 +21605,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Portionering"
             },
             "navigation": {
+              "autoAdvance": "off",
               "submitLabel": {
                 "en": "Finish portioning",
                 "fr": "Terminer le portionnement",
@@ -22039,7 +22041,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "65df7c9e3152e1c0c2928fe6217f1d2f"
+    "cacheFingerprint": "52368d86663e0859b2afe5e4dda6e319"
   },
   {
     "formKey": "Config: Recipes",
