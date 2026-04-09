@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+  <rect width="320" height="240" fill="#f5efe2" />
+  <rect x="24" y="24" width="272" height="192" rx="16" fill="#fffdf8" stroke="#3e3a34" stroke-width="4" />
+  <text x="40" y="72" font-family="Arial, sans-serif" font-size="22" fill="#3e3a34">Ingredient Receipt</text>
+  <text x="40" y="110" font-family="Arial, sans-serif" font-size="16" fill="#3e3a34">Community Kitchen Test Fixture</text>
+  <text x="40" y="146" font-family="Arial, sans-serif" font-size="16" fill="#3e3a34">Tomatoes x 4</text>
+  <text x="40" y="172" font-family="Arial, sans-serif" font-size="16" fill="#3e3a34">Rice x 2</text>
+</svg>

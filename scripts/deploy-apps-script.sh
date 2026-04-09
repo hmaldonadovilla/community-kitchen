@@ -15,6 +15,14 @@ run_clasp() {
   "${CLASP_CMD[@]}" "$@"
 }
 
+emit_github_output() {
+  local key="$1"
+  local value="$2"
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+  fi
+}
+
 run_webapp_type_check() {
   local phase_label="$1"
   if [[ -z "${CLASP_DEPLOYMENT_ID:-}" ]]; then
@@ -151,5 +159,7 @@ else
 fi
 
 if [[ -n "${CLASP_DEPLOYMENT_ID:-}" ]]; then
-  echo "[deploy-apps-script] Web app URL: https://script.google.com/macros/s/${CLASP_DEPLOYMENT_ID}/exec"
+  WEB_APP_URL="https://script.google.com/macros/s/${CLASP_DEPLOYMENT_ID}/exec"
+  echo "[deploy-apps-script] Web app URL: ${WEB_APP_URL}"
+  emit_github_output "webapp_url" "${WEB_APP_URL}"
 fi
