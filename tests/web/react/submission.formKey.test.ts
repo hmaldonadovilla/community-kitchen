@@ -2,7 +2,8 @@ import {
   applyClientDataVersionToPayload,
   chainSerializedSubmissionRequest,
   resolveCurrentClientDataVersion,
-  resolveDraftPayloadFormKey
+  resolveDraftPayloadFormKey,
+  shouldApplyIncomingRecordSnapshot
 } from '../../../src/web/react/app/submission';
 
 describe('resolveDraftPayloadFormKey', () => {
@@ -77,6 +78,41 @@ describe('resolveCurrentClientDataVersion', () => {
 
   it('returns null when no positive candidate exists', () => {
     expect(resolveCurrentClientDataVersion(null, undefined, 0, -1, 'bad')).toBeNull();
+  });
+});
+
+describe('shouldApplyIncomingRecordSnapshot', () => {
+  it('rejects an older snapshot for the currently open record', () => {
+    expect(
+      shouldApplyIncomingRecordSnapshot({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 1,
+        currentDataVersion: 2
+      })
+    ).toBe(false);
+  });
+
+  it('accepts the same version for the current record', () => {
+    expect(
+      shouldApplyIncomingRecordSnapshot({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 2,
+        currentDataVersion: 2
+      })
+    ).toBe(true);
+  });
+
+  it('accepts snapshots for a different record even when the version is lower', () => {
+    expect(
+      shouldApplyIncomingRecordSnapshot({
+        incomingRecordId: 'REC-2',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 1,
+        currentDataVersion: 3
+      })
+    ).toBe(true);
   });
 });
 

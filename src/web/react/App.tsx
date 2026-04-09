@@ -80,6 +80,7 @@ import {
   computeUrlOnlyUploadUpdates,
   resolveExistingRecordId,
   resolveCurrentClientDataVersion,
+  shouldApplyIncomingRecordSnapshot,
   validateForm
 } from './app/submission';
 import { buildValidationContext } from './app/validation';
@@ -4017,6 +4018,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (snapshot: WebFormSubmission) => {
       const id = snapshot?.id;
       if (!snapshot || !id) return;
+      const currentRecordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      const incomingDataVersion = resolveCurrentClientDataVersion((snapshot as any)?.dataVersion);
+      const currentDataVersion = resolveCurrentClientDataVersion(
+        recordDataVersionRef.current,
+        lastSubmissionMetaRef.current?.dataVersion,
+        (selectedRecordSnapshotRef.current as any)?.dataVersion
+      );
+      if (
+        !shouldApplyIncomingRecordSnapshot({
+          incomingRecordId: id,
+          currentRecordId,
+          incomingDataVersion,
+          currentDataVersion
+        })
+      ) {
+        logEvent('record.snapshot.ignored.olderVersion', {
+          recordId: id,
+          incomingDataVersion,
+          currentDataVersion
+        });
+        return;
+      }
       setPrefetchedSummaryHtml(null);
       // Switching records: cancel any in-flight dedup check so stale responses can't affect the new record.
       if (dedupCheckTimerRef.current) {
@@ -4038,15 +4066,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (snapshot && Number.isFinite(Number((snapshot as any).__rowNumber))) {
         recordRowNumberRef.current = Number((snapshot as any).__rowNumber);
       }
-      const currentId =
-        resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        }) || '';
       // Loading a snapshot from the server/list is an "edit existing record" flow,
       // except when we are reloading the CURRENT draft record during create-flow.
-      const isReloadingCurrentCreateFlow = createFlowRef.current && currentId && currentId === id;
+      const isReloadingCurrentCreateFlow = createFlowRef.current && currentRecordId && currentRecordId === id;
       if (!isReloadingCurrentCreateFlow) {
         createFlowRef.current = false;
       }
@@ -10603,10 +10625,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (selectedRecordIdRef.current !== row.id) return true;
         const prefetchedRecord = awaited[row.id];
         if (!prefetchedRecord) return false;
-        setListCache(prev => ({
-          response: prev.response,
-          records: { ...(prev.records || {}), [row.id]: prefetchedRecord }
-        }));
         applyRecordSnapshot(prefetchedRecord);
         if (shouldCopy) {
           logEvent('list.openView.copy', { recordId: row.id, source: 'prefetched' });

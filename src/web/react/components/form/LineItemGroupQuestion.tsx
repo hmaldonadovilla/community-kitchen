@@ -325,12 +325,7 @@ const listRowActionButtonBaseStyle: React.CSSProperties = {
 ): React.CSSProperties => withDisabled({ ...listRowActionButtonBaseStyle, ...(overrides || {}) }, disabled);
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
-  getOptionStateValue(optionState, field.id, parentId) || {
-    en: field.options || [],
-    fr: (field as any).optionsFr || [],
-    nl: (field as any).optionsNl || [],
-    raw: (field as any).optionsRaw
-  };
+  getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
 
 export interface ErrorIndex {
   rowErrors: Set<string>;

@@ -131,12 +131,7 @@ import {
 } from '../app/lineItems';
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
-  getOptionStateValue(optionState, field.id, parentId) || {
-    en: field.options || [],
-    fr: (field as any).optionsFr || [],
-    nl: (field as any).optionsNl || [],
-    raw: (field as any).optionsRaw
-  };
+  getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
 import {

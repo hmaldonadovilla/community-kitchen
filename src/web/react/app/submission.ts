@@ -1163,6 +1163,25 @@ export const resolveCurrentClientDataVersion = (...candidates: Array<number | st
   return next;
 };
 
+export const shouldApplyIncomingRecordSnapshot = (args: {
+  incomingRecordId?: string | null;
+  currentRecordId?: string | null;
+  incomingDataVersion?: number | string | null;
+  currentDataVersion?: number | string | null;
+}): boolean => {
+  const incomingRecordId = ((args.incomingRecordId || '') as any).toString?.().trim?.() || '';
+  const currentRecordId = ((args.currentRecordId || '') as any).toString?.().trim?.() || '';
+  const incomingDataVersion = resolveCurrentClientDataVersion(args.incomingDataVersion);
+  const currentDataVersion = resolveCurrentClientDataVersion(args.currentDataVersion);
+  if (!incomingRecordId || !currentRecordId || incomingRecordId !== currentRecordId) {
+    return true;
+  }
+  if (incomingDataVersion === null || currentDataVersion === null) {
+    return true;
+  }
+  return incomingDataVersion >= currentDataVersion;
+};
+
 export const chainSerializedSubmissionRequest = <T,>(
   previousRequest: Promise<unknown> | null | undefined,
   runner: () => Promise<T>
