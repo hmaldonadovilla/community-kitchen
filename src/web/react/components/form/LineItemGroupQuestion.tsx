@@ -3201,15 +3201,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   };
 
   const buildOptionSetForLineField = (field: any, groupKey: string): OptionSet => {
-    const key = optionKey(field.id, groupKey);
-    const fromState = optionState[key];
-    if (fromState) return fromState;
-    return {
-      en: field.options || [],
-      fr: (field as any).optionsFr || [],
-      nl: (field as any).optionsNl || [],
-      raw: (field as any).optionsRaw
-    };
+    return resolveOptionSetForField(optionState, field, groupKey);
   };
 
   const resolveDependsOnIds = (field: any): string[] => {
@@ -3774,14 +3766,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, q.id, loaded));
                     }
                   }
-                  if (!opts) {
-                    opts = {
-                      en: anchorField.options || [],
-                      fr: (anchorField as any).optionsFr || [],
-                      nl: (anchorField as any).optionsNl || [],
-                      raw: (anchorField as any).optionsRaw
-                    };
-                  }
+                  if (!opts) opts = resolveOptionSetForField(optionState, anchorField, q.id);
                   const dependencyIds = (
                     Array.isArray(anchorField.optionFilter?.dependsOn)
                       ? anchorField.optionFilter?.dependsOn
@@ -7291,13 +7276,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   if (flatField.type === 'CHOICE') {
                     const rawVal = (targetRow.values || {})[flatField.id];
                     const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(flatField.id, targetKey)] || {
-                        en: flatField.options || [],
-                        fr: (flatField as any).optionsFr || [],
-                        nl: (flatField as any).optionsNl || [],
-                        raw: (flatField as any).optionsRaw
-                      };
+                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, flatField, targetKey);
                     const dependencyIds = (
                       Array.isArray(flatField.optionFilter?.dependsOn)
                         ? flatField.optionFilter?.dependsOn
@@ -7348,13 +7327,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   }
 
                   if (flatField.type === 'CHECKBOX') {
-                    const optionSetField: OptionSet =
-                      optionState[optionKey(flatField.id, targetKey)] || {
-                        en: flatField.options || [],
-                        fr: (flatField as any).optionsFr || [],
-                        nl: (flatField as any).optionsNl || [],
-                        raw: (flatField as any).optionsRaw
-                      };
+                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, flatField, targetKey);
                     const dependencyIds = (
                       Array.isArray(flatField.optionFilter?.dependsOn)
                         ? flatField.optionFilter?.dependsOn
@@ -7809,13 +7782,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const rawVal = (row.values || {})[anchorFieldId];
                 if ((anchorField as any).type === 'CHOICE') {
                   ensureLineOptions(q.id, anchorField);
-                  const optionSetField: OptionSet =
-                    optionState[optionKey(anchorField.id, q.id)] || {
-                      en: anchorField.options || [],
-                      fr: (anchorField as any).optionsFr || [],
-                      nl: (anchorField as any).optionsNl || [],
-                      raw: (anchorField as any).optionsRaw
-                    };
+                  const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, q.id);
                   const dependencyIds = (
                     Array.isArray(anchorField.optionFilter?.dependsOn)
                       ? anchorField.optionFilter?.dependsOn
@@ -8636,13 +8603,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     if (flatField.type === 'CHOICE') {
                       const rawVal = (targetRow.values || {})[flatField.id];
                       const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                      const optionSetField: OptionSet =
-                        optionState[optionKey(flatField.id, targetKey)] || {
-                          en: flatField.options || [],
-                          fr: (flatField as any).optionsFr || [],
-                          nl: (flatField as any).optionsNl || [],
-                          raw: (flatField as any).optionsRaw
-                        };
+                      const optionSetField: OptionSet = resolveOptionSetForField(optionState, flatField, targetKey);
                       const dependencyIds = (
                         Array.isArray(flatField.optionFilter?.dependsOn)
                           ? flatField.optionFilter?.dependsOn
@@ -8693,13 +8654,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     }
 
                     if (flatField.type === 'CHECKBOX') {
-                      const optionSetField: OptionSet =
-                        optionState[optionKey(flatField.id, targetKey)] || {
-                          en: flatField.options || [],
-                          fr: (flatField as any).optionsFr || [],
-                          nl: (flatField as any).optionsNl || [],
-                          raw: (flatField as any).optionsRaw
-                        };
+                      const optionSetField: OptionSet = resolveOptionSetForField(optionState, flatField, targetKey);
                       const dependencyIds = (
                         Array.isArray(flatField.optionFilter?.dependsOn)
                           ? flatField.optionFilter?.dependsOn
@@ -9788,13 +9743,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               }
 
                               if (titleField.type === 'CHOICE') {
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(titleField.id, q.id)] || {
-                                    en: titleField.options || [],
-                                    fr: (titleField as any).optionsFr || [],
-                                    nl: (titleField as any).optionsNl || [],
-                                    raw: (titleField as any).optionsRaw
-                                  };
+                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, titleField, q.id);
                                 const dependencyIds = (
                                   Array.isArray(titleField.optionFilter?.dependsOn)
                                     ? titleField.optionFilter?.dependsOn
@@ -9866,13 +9815,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             }
 
                               if (titleField.type === 'CHECKBOX') {
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(titleField.id, q.id)] || {
-                                    en: titleField.options || [],
-                                    fr: (titleField as any).optionsFr || [],
-                                    nl: (titleField as any).optionsNl || [],
-                                    raw: (titleField as any).optionsRaw
-                                  };
+                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, titleField, q.id);
                                 const dependencyIds = (
                                   Array.isArray(titleField.optionFilter?.dependsOn)
                                     ? titleField.optionFilter?.dependsOn
@@ -12021,14 +11964,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                                 }
                               }
-                              if (!opts) {
-                                opts = {
-                                  en: anchorField.options || [],
-                                  fr: (anchorField as any).optionsFr || [],
-                                  nl: (anchorField as any).optionsNl || [],
-                                  raw: (anchorField as any).optionsRaw
-                                };
-                              }
+                              if (!opts) opts = resolveOptionSetForField(optionState, anchorField, subKey);
                               const dependencyIds = (
                                 Array.isArray(anchorField.optionFilter?.dependsOn)
                                   ? anchorField.optionFilter?.dependsOn
@@ -12125,14 +12061,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                               }
                             }
-                            if (!opts) {
-                              opts = {
-                                en: anchorField.options || [],
-                                fr: (anchorField as any).optionsFr || [],
-                                nl: (anchorField as any).optionsNl || [],
-                                raw: (anchorField as any).optionsRaw
-                              };
-                            }
+                            if (!opts) opts = resolveOptionSetForField(optionState, anchorField, subKey);
                             const dependencyIds = (
                               Array.isArray(anchorField.optionFilter?.dependsOn)
                                 ? anchorField.optionFilter?.dependsOn

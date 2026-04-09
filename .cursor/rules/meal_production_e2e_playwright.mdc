@@ -26,8 +26,8 @@ Create or open a Belliard dinner record for today, move through every guided ste
 2. Enter the `userHtmlFrame`.
 3. Click `Meal Production`.
 4. On the date-filtered list for today, prefer `Edit` on `Belliard | Dinner`.
-5. If no row exists for `Belliard | Dinner` today:
-   use `Copy` on another Belliard dinner row, then update the record to today after it opens.
+5. If no row exists for `Belliard | Dinner` today, create a new record by clicking the [+ Belliard] button.
+6. If the `Belliard | Dinner` has already been completed use/create `Belliard | Lunch` or `Hub | Dinner` or `Hub | Lunch` instead.
 
 ## Step-by-step flow
 

@@ -1,5 +1,6 @@
 import { OptionFilter } from '../../types';
 import { LangCode, OptionSet } from '../types';
+import { resolveOptionMapFromRef } from '../core/options';
 
 export interface OptionItem {
   value: string;
@@ -285,6 +286,7 @@ export function computeAllowedOptions(
   dependencyValues: (string | number | null | undefined)[]
 ): string[] {
   if (!filter) return options.en || [];
+  const optionMap = filter.optionMap || resolveOptionMapFromRef(filter.optionMapRef);
 
   const bypassValues = normalizeBypassValues((filter as any).bypassValues);
   if (bypassValues.length) {
@@ -310,7 +312,7 @@ export function computeAllowedOptions(
   const dataSourceAllowed = computeAllowedFromDataSource(filter, options, dependencyValues);
   if (dataSourceAllowed) return dataSourceAllowed;
 
-  if (!filter.optionMap) return options.en || [];
+  if (!optionMap) return options.en || [];
   const depValues = dependencyValues.map(v => normalize(v));
   const matchMode = normalizeMatchMode((filter as any).matchMode);
 
@@ -320,18 +322,18 @@ export function computeAllowedOptions(
   if (depValues.length === 1) {
     const raw = depValues[0] || '';
     if (raw.includes('|')) {
-      if (filter.optionMap[raw] !== undefined) {
-        return filter.optionMap[raw] || [];
+      if (optionMap[raw] !== undefined) {
+        return optionMap[raw] || [];
       }
       const parts = splitMultiValue(raw);
       if (parts.length > 1) {
         if (matchMode === 'or') {
-          return buildOrAllowed(filter, parts);
+          return buildOrAllowed({ ...filter, optionMap }, parts);
         }
-        const fallback = filter.optionMap['*'] || [];
+        const fallback = optionMap['*'] || [];
         let acc: string[] | null = null;
         for (const part of parts) {
-          const next = filter.optionMap[part] || fallback;
+          const next = optionMap[part] || fallback;
           if (acc === null) {
             acc = next;
           } else {
@@ -349,7 +351,7 @@ export function computeAllowedOptions(
       depValues.length === 1 && depValues[0]?.includes('|')
         ? splitMultiValue(depValues[0])
         : depValues.filter(Boolean);
-    return buildOrAllowed(filter, expandDateAwareKeys(keys));
+    return buildOrAllowed({ ...filter, optionMap }, expandDateAwareKeys(keys));
   }
 
   const candidateKeys: string[] = [];
@@ -358,7 +360,7 @@ export function computeAllowedOptions(
   depValues.filter(Boolean).forEach(v => candidateKeys.push(v));
   candidateKeys.push('*');
 
-  const matchedKey = candidateKeys.find(key => filter.optionMap?.[key] !== undefined);
+  const matchedKey = candidateKeys.find(key => optionMap[key] !== undefined);
   if (matchedKey !== undefined) {
     if (compositeKeyMeta.weekdayAliasKeys.has(matchedKey)) {
       const logKey = `${Array.isArray(filter.dependsOn) ? filter.dependsOn.join('||') : filter.dependsOn}::${matchedKey}`;
@@ -371,7 +373,7 @@ export function computeAllowedOptions(
         });
       }
     }
-    return filter.optionMap?.[matchedKey] || [];
+    return optionMap[matchedKey] || [];
   }
   return [];
 }
@@ -382,7 +384,7 @@ export function computeNonMatchOptionKeys(args: {
   selectedValue: string | number | null | undefined;
 }): string[] {
   const { filter, dependencyValues, selectedValue } = args;
-  const optionMap = filter?.optionMap;
+  const optionMap = filter?.optionMap || resolveOptionMapFromRef(filter?.optionMapRef);
   if (!filter || !optionMap) return [];
   const bypassValues = normalizeBypassValues((filter as any).bypassValues);
   if (bypassValues.length) {

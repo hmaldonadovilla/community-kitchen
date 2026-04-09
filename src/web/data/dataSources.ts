@@ -428,6 +428,72 @@ export function peekCachedDataSource(config: DataSourceConfig, language: LangCod
   return loadPersisted(config, language);
 }
 
+const collectCachedDataSourceCandidates = (id: string, language?: LangCode): any[] => {
+  const idPart = (id || 'default').toString();
+  if (!idPart) return [];
+  const preferredLang = (language || '').toString().trim().toUpperCase();
+  const exactPrefix = preferredLang ? `${idPart}::${preferredLang}::` : '';
+  const anyPrefix = `${idPart}::`;
+  const candidates: any[] = [];
+  const seen = new Set<any>();
+  const push = (value: any) => {
+    if (value === undefined || value === null || seen.has(value)) return;
+    seen.add(value);
+    candidates.push(value);
+  };
+
+  if (exactPrefix) {
+    for (const [candidateKey, candidateValue] of cache.entries()) {
+      if (!candidateKey.startsWith(exactPrefix)) continue;
+      push(candidateValue);
+    }
+  }
+  for (const [candidateKey, candidateValue] of cache.entries()) {
+    if (!candidateKey.startsWith(anyPrefix)) continue;
+    if (exactPrefix && candidateKey.startsWith(exactPrefix)) continue;
+    push(candidateValue);
+  }
+
+  if (typeof window === 'undefined' || !window.localStorage) return candidates;
+
+  try {
+    const encodedId = encodeURIComponent(idPart);
+    const exactPersistPrefix = preferredLang ? `ck.ds.${encodedId}.${preferredLang}.v${PERSIST_VERSION}.` : '';
+    const anyPersistPrefix = `ck.ds.${encodedId}.`;
+    const exactPersisted: Array<{ savedAtMs: number; response: any }> = [];
+    const fallbackPersisted: Array<{ savedAtMs: number; response: any }> = [];
+
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const candidateKey = window.localStorage.key(i);
+      if (!candidateKey) continue;
+      const matchesExact = !!exactPersistPrefix && candidateKey.startsWith(exactPersistPrefix);
+      const matchesAny = candidateKey.startsWith(anyPersistPrefix);
+      if (!matchesExact && !matchesAny) continue;
+      const raw = window.localStorage.getItem(candidateKey);
+      if (!raw) continue;
+      const parsed = parsePersistEnvelope(raw);
+      if (!parsed || parsed.response === null || parsed.response === undefined) continue;
+      const savedAtMs = Number.isFinite(parsed.savedAtMs) ? Number(parsed.savedAtMs) : 0;
+      (matchesExact ? exactPersisted : fallbackPersisted).push({ savedAtMs, response: parsed.response });
+    }
+
+    exactPersisted
+      .sort((a, b) => b.savedAtMs - a.savedAtMs)
+      .forEach(entry => push(entry.response));
+    fallbackPersisted
+      .sort((a, b) => b.savedAtMs - a.savedAtMs)
+      .forEach(entry => push(entry.response));
+  } catch {
+    // ignore storage access failures
+  }
+
+  return candidates;
+};
+
+export function peekCachedDataSourcesById(id: string, language?: LangCode): any[] {
+  return collectCachedDataSourceCandidates(id, language);
+}
+
 const resolveCachedItemCount = (cached: any): number | null => {
   if (!cached) return null;
   if (Array.isArray(cached)) return cached.length;

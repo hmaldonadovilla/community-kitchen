@@ -182,7 +182,32 @@ export type OverlayAutoAddGroupsResult = {
   changedCount: number;
 };
 
-export const reconcileOverlayAutoAddModeGroups = (args: {
+type AutoAddGroupFilter = (question: WebQuestionDefinition) => boolean;
+
+const shouldSortRowsByAnchor = (args: { targetKey: string; anchorFieldId: string; desired: string[] }): boolean => {
+  const { targetKey, anchorFieldId, desired } = args;
+  return targetKey === 'MP_MEALS_REQUEST' && anchorFieldId === 'MEAL_TYPE' && Array.isArray(desired) && desired.length > 1;
+};
+
+const sortAutoRowsByAnchor = (args: { rows: any[]; anchorFieldId: string }): any[] => {
+  const { rows, anchorFieldId } = args;
+  const normalized: Array<{ idx: number; key: string; row: any }> = rows.map((row, idx) => ({
+    idx,
+    key: normalizeAnchorKey((row?.values as any)?.[anchorFieldId]).toLowerCase(),
+    row
+  }));
+  normalized.sort((a, b) => {
+    const aKey = a.key;
+    const bKey = b.key;
+    if (aKey === bKey) return a.idx - b.idx;
+    if (!aKey) return 1;
+    if (!bKey) return -1;
+    return aKey.localeCompare(bKey);
+  });
+  return normalized.map(entry => entry.row);
+};
+
+export const reconcileAutoAddModeGroups = (args: {
   definition: WebFormDefinition;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
@@ -190,8 +215,9 @@ export const reconcileOverlayAutoAddModeGroups = (args: {
   language: LangCode;
   ensureLineOptions: (groupId: string, field: any) => void;
   skipGroupId?: string;
+  includeGroup?: AutoAddGroupFilter;
 }): OverlayAutoAddGroupsResult => {
-  const { definition, values, lineItems, optionState, language, ensureLineOptions, skipGroupId } = args;
+  const { definition, values, lineItems, optionState, language, ensureLineOptions, skipGroupId, includeGroup } = args;
 
   let next: any = lineItems;
   let changedCount = 0;
@@ -199,9 +225,9 @@ export const reconcileOverlayAutoAddModeGroups = (args: {
 
   (definition.questions || []).forEach(q => {
     if (q.type !== 'LINE_ITEM_GROUP') return;
+    if (includeGroup && !includeGroup(q)) return;
     const cfg = q.lineItemConfig;
     if (!cfg) return;
-    if (!((cfg as any)?.ui?.openInOverlay)) return;
     if ((cfg as any)?.addMode !== 'auto') return;
     if (!cfg.anchorFieldId) return;
     if (skipGroupId && q.id === skipGroupId) return;
@@ -239,7 +265,9 @@ export const reconcileOverlayAutoAddModeGroups = (args: {
     });
     if (!res.changed) return;
     if (next === lineItems) next = { ...lineItems };
-    (next as any)[q.id] = res.rows;
+    (next as any)[q.id] = shouldSortRowsByAnchor({ targetKey: q.id, anchorFieldId: anchorField.id, desired: valid ? desired : [] })
+      ? sortAutoRowsByAnchor({ rows: res.rows, anchorFieldId: anchorField.id })
+      : res.rows;
     changedCount += 1;
   });
 
@@ -247,6 +275,14 @@ export const reconcileOverlayAutoAddModeGroups = (args: {
   const recomputed = applyValueMapsToForm(definition, values, next, { mode: 'change' });
   return { changed: true, values: recomputed.values, lineItems: recomputed.lineItems, specCount, changedCount };
 };
+
+export const reconcileOverlayAutoAddModeGroups = (
+  args: Omit<Parameters<typeof reconcileAutoAddModeGroups>[0], 'includeGroup'>
+): OverlayAutoAddGroupsResult =>
+  reconcileAutoAddModeGroups({
+    ...args,
+    includeGroup: question => !!((question.lineItemConfig as any)?.ui?.openInOverlay)
+  });
 
 export type OverlayAutoAddSubgroupsResult = {
   changed: boolean;
@@ -256,7 +292,7 @@ export type OverlayAutoAddSubgroupsResult = {
   changedCount: number;
 };
 
-export const reconcileOverlayAutoAddModeSubgroups = (args: {
+export const reconcileAutoAddModeSubgroups = (args: {
   definition: WebFormDefinition;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
@@ -265,8 +301,19 @@ export const reconcileOverlayAutoAddModeSubgroups = (args: {
   subgroupSelectors: Record<string, string>;
   ensureLineOptions: (groupId: string, field: any) => void;
   skipParentGroupId?: string;
+  includeParentGroup?: AutoAddGroupFilter;
 }): OverlayAutoAddSubgroupsResult => {
-  const { definition, values, lineItems, optionState, language, subgroupSelectors, ensureLineOptions, skipParentGroupId } = args;
+  const {
+    definition,
+    values,
+    lineItems,
+    optionState,
+    language,
+    subgroupSelectors,
+    ensureLineOptions,
+    skipParentGroupId,
+    includeParentGroup
+  } = args;
 
   let next: any = lineItems;
   let changedCount = 0;
@@ -274,9 +321,9 @@ export const reconcileOverlayAutoAddModeSubgroups = (args: {
 
   const parentGroups = (definition.questions || []).filter(q => {
     if (q.type !== 'LINE_ITEM_GROUP') return false;
+    if (includeParentGroup && !includeParentGroup(q)) return false;
     const cfg = q.lineItemConfig;
     if (!cfg?.subGroups?.length) return false;
-    if (!((cfg as any)?.ui?.openInOverlay)) return false;
     return cfg.subGroups.some(sub => (sub as any)?.addMode === 'auto' && (sub as any)?.anchorFieldId);
   }) as WebQuestionDefinition[];
 
@@ -343,3 +390,11 @@ export const reconcileOverlayAutoAddModeSubgroups = (args: {
   const recomputed = applyValueMapsToForm(definition, values, next, { mode: 'change' });
   return { changed: true, values: recomputed.values, lineItems: recomputed.lineItems, specCount, changedCount };
 };
+
+export const reconcileOverlayAutoAddModeSubgroups = (
+  args: Omit<Parameters<typeof reconcileAutoAddModeSubgroups>[0], 'includeParentGroup'>
+): OverlayAutoAddSubgroupsResult =>
+  reconcileAutoAddModeSubgroups({
+    ...args,
+    includeParentGroup: question => !!((question.lineItemConfig as any)?.ui?.openInOverlay)
+  });

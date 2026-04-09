@@ -122,6 +122,7 @@ import {
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
+import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
@@ -1395,11 +1396,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const normalizedValues = normalizeRecordValues(definition, valuesRef.current as any);
         const rebuiltLineItems = buildInitialLineItems(definition, normalizedValues);
         const remappedState = applyValueMapsToForm(definition, normalizedValues, rebuiltLineItems, { mode: 'init' });
-        valuesRef.current = remappedState.values;
-        lineItemsRef.current = remappedState.lineItems;
-        rememberAutoSaveSeenState(remappedState.values, remappedState.lineItems);
-        setValues(remappedState.values);
-        setLineItems(remappedState.lineItems);
+        const reconciledState = reconcileAutoAddModeGroups({
+          definition,
+          values: remappedState.values,
+          lineItems: remappedState.lineItems,
+          optionState: optionStateRef.current,
+          language: languageRef.current,
+          ensureLineOptions
+        });
+        const nextRecreatedValues = reconciledState.changed ? reconciledState.values : remappedState.values;
+        const nextRecreatedLineItems = reconciledState.changed ? reconciledState.lineItems : remappedState.lineItems;
+        valuesRef.current = nextRecreatedValues;
+        lineItemsRef.current = nextRecreatedLineItems;
+        rememberAutoSaveSeenState(nextRecreatedValues, nextRecreatedLineItems);
+        setValues(nextRecreatedValues);
+        setLineItems(nextRecreatedLineItems);
         setErrors({});
         setValidationWarnings({ top: [], byField: {} });
         setValidationAttempted(false);
@@ -1431,6 +1442,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('dedupDeleteOnKeyChange.delete.success', {
           source,
           deletedRecordId: existingRecordId,
+          autoAddGroupRebuilds: reconciledState.changedCount,
           forceDelete,
           ...extraMeta
         });

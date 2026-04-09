@@ -1,6 +1,21 @@
+jest.mock('../../src/web/core/options', () => {
+  const actual = jest.requireActual('../../src/web/core/options');
+  return {
+    ...actual,
+    resolveOptionMapFromRef: jest.fn()
+  };
+});
+
 import { buildLocalizedOptions, computeAllowedOptions, computeNonMatchOptionKeys } from '../../src/web/rules/filter';
+import { resolveOptionMapFromRef } from '../../src/web/core/options';
+
+const resolveOptionMapFromRefMock = resolveOptionMapFromRef as jest.Mock;
 
 describe('computeAllowedOptions', () => {
+  beforeEach(() => {
+    resolveOptionMapFromRefMock.mockReset();
+  });
+
   const options = { en: ['A', 'B', 'C'], fr: ['Aa', 'Bb', 'Cc'], nl: ['Aa', 'Bb', 'Cc'] };
   const filter = {
     dependsOn: 'x',
@@ -24,6 +39,28 @@ describe('computeAllowedOptions', () => {
   it('returns base options when no filter', () => {
     const allowed = computeAllowedOptions(undefined as any, options as any, []);
     expect(allowed).toEqual(options.en);
+  });
+
+  it('resolves optionMapRef when optionMap is not materialized', () => {
+    resolveOptionMapFromRefMock.mockReturnValue({
+      'Courgette - frozen': ['kg', 'gr', 'bag'],
+      '*': ['kg']
+    });
+
+    const allowed = computeAllowedOptions(
+      {
+        dependsOn: 'ING',
+        optionMapRef: {
+          ref: 'REF:Ingredients Data',
+          keyColumn: 'INGREDIENT_NAME',
+          lookupColumn: 'ALLOWED_UNIT'
+        }
+      } as any,
+      { en: ['kg', 'gr', 'bag', 'bucket'] } as any,
+      ['Courgette - frozen']
+    );
+
+    expect(allowed).toEqual(['kg', 'gr', 'bag']);
   });
 
   it('supports multi-select dependency values (pipe-joined) by intersecting allowed sets', () => {

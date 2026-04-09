@@ -142,7 +142,12 @@ import {
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { applyExclusiveLineSelection } from '../app/exclusiveLineSelection';
 import { resolveTemplateIdForRecord } from '../app/templateId';
-import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../app/autoAddModeOverlay';
+import {
+  reconcileAutoAddModeGroups,
+  reconcileAutoAddModeSubgroups,
+  reconcileOverlayAutoAddModeGroups,
+  reconcileOverlayAutoAddModeSubgroups
+} from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
 import { isPrimaryActionLabel, resolveButtonTonePrimary } from '../app/buttonTone';
 import { isFieldDisabledByRule, resolveActiveFieldDisableRule } from '../app/fieldDisableRules';
@@ -7300,15 +7305,44 @@ const FormView: React.FC<FormViewProps> = ({
         nextValue,
         orderedFieldIds: clearOnChangeOrderedFieldIds
       });
+      let nextValuesAfterClear = cleared.values;
+      let nextLineItemsAfterClear = cleared.lineItems;
+      const reconciledGroups = reconcileAutoAddModeGroups({
+        definition,
+        values: nextValuesAfterClear,
+        lineItems: nextLineItemsAfterClear,
+        optionState,
+        language,
+        ensureLineOptions
+      });
+      if (reconciledGroups.changed) {
+        nextValuesAfterClear = reconciledGroups.values;
+        nextLineItemsAfterClear = reconciledGroups.lineItems;
+      }
+      const reconciledSubgroups = reconcileAutoAddModeSubgroups({
+        definition,
+        values: nextValuesAfterClear,
+        lineItems: nextLineItemsAfterClear,
+        optionState,
+        language,
+        subgroupSelectors,
+        ensureLineOptions
+      });
+      if (reconciledSubgroups.changed) {
+        nextValuesAfterClear = reconciledSubgroups.values;
+        nextLineItemsAfterClear = reconciledSubgroups.lineItems;
+      }
       onDiagnostic?.('field.clearOnChange', {
         fieldId: q.id,
         clearedFieldCount: cleared.clearedFieldIds.length,
-        clearedGroupCount: cleared.clearedGroupKeys.length
+        clearedGroupCount: cleared.clearedGroupKeys.length,
+        autoAddGroupRebuilds: reconciledGroups.changedCount,
+        autoAddSubgroupRebuilds: reconciledSubgroups.changedCount
       });
-      setValues(cleared.values);
-      setLineItems(cleared.lineItems);
-      valuesRef.current = cleared.values;
-      lineItemsRef.current = cleared.lineItems;
+      setValues(nextValuesAfterClear);
+      setLineItems(nextLineItemsAfterClear);
+      valuesRef.current = nextValuesAfterClear;
+      lineItemsRef.current = nextLineItemsAfterClear;
       setErrors({});
       if (onSelectionEffect) {
         onSelectionEffect(q, nextValue);
@@ -9961,13 +9995,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
                                 }
                               }
-                              if (!opts) {
-                                opts = {
-                                  en: anchorField.options || [],
-                                  fr: (anchorField as any).optionsFr || [],
-                                  nl: (anchorField as any).optionsNl || []
-                                };
-                              }
+                              if (!opts) opts = resolveOptionSetForField(optionState, anchorField, subKey);
                               const dependencyIds = (
                                 Array.isArray(anchorField.optionFilter?.dependsOn)
                                   ? anchorField.optionFilter?.dependsOn
@@ -10418,13 +10446,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
 
                                 ensureLineOptions(subKey, field);
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(field.id, subKey)] || {
-                                    en: field.options || [],
-                                    fr: (field as any).optionsFr || [],
-                                    nl: (field as any).optionsNl || [],
-                                    raw: (field as any).optionsRaw
-                                  };
+                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
                                 const dependencyIds = (
                                   Array.isArray(field.optionFilter?.dependsOn)
                                     ? field.optionFilter?.dependsOn
@@ -11050,13 +11072,7 @@ const FormView: React.FC<FormViewProps> = ({
                             setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, detailSubKey, loaded));
                           }
                         }
-                        if (!opts) {
-                          opts = {
-                            en: anchorField.options || [],
-                            fr: (anchorField as any).optionsFr || [],
-                            nl: (anchorField as any).optionsNl || []
-                          };
-                        }
+                        if (!opts) opts = resolveOptionSetForField(optionState, anchorField, detailSubKey);
 
                         const dependencyIds = (
                           Array.isArray(anchorField.optionFilter?.dependsOn)
@@ -11258,13 +11274,7 @@ const FormView: React.FC<FormViewProps> = ({
                       }
 
                       ensureLineOptions(subKey, field);
-                      const optionSetField: OptionSet =
-                        optionState[optionKey(field.id, subKey)] || {
-                          en: field.options || [],
-                          fr: (field as any).optionsFr || [],
-                          nl: (field as any).optionsNl || [],
-                          raw: (field as any).optionsRaw
-                        };
+                      const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
                       const dependencyIds = (
                         Array.isArray(field.optionFilter?.dependsOn)
                           ? field.optionFilter?.dependsOn
@@ -11731,12 +11741,7 @@ const FormView: React.FC<FormViewProps> = ({
                 const rawVal = (subRow.values || {})[anchorField.id];
                 if (anchorField.type === 'CHOICE') {
                   ensureLineOptions(subKey, anchorField);
-                  const optionSetField: OptionSet =
-                    optionState[optionKey(anchorField.id, subKey)] || {
-                      en: anchorField.options || [],
-                      fr: (anchorField as any).optionsFr || [],
-                      nl: (anchorField as any).optionsNl || []
-                    };
+                  const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, subKey);
                   const dependencyIds = (
                     Array.isArray((anchorField as any).optionFilter?.dependsOn)
                       ? (anchorField as any).optionFilter?.dependsOn
@@ -11804,12 +11809,7 @@ const FormView: React.FC<FormViewProps> = ({
                       // If we’re showing the anchor as the row title, don’t render the anchor control/label too.
                       if (showAnchorTitle && anchorFieldId && field?.id === anchorFieldId) return null;
                                 ensureLineOptions(subKey, field);
-                                const optionSetField: OptionSet =
-                                  optionState[optionKey(field.id, subKey)] || {
-                                    en: field.options || [],
-                                    fr: (field as any).optionsFr || [],
-                                    nl: (field as any).optionsNl || []
-                                  };
+                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
                                 const dependencyIds = (
                                   Array.isArray(field.optionFilter?.dependsOn)
                                     ? field.optionFilter?.dependsOn
@@ -12529,13 +12529,7 @@ const FormView: React.FC<FormViewProps> = ({
                   setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, groupId, loaded));
                 }
               }
-              if (!opts) {
-                opts = {
-                  en: anchorField.options || [],
-                  fr: (anchorField as any).optionsFr || [],
-                  nl: (anchorField as any).optionsNl || []
-                };
-              }
+              if (!opts) opts = resolveOptionSetForField(optionState, anchorField, groupId);
               const dependencyIds = (
                 Array.isArray(anchorField.optionFilter?.dependsOn)
                   ? anchorField.optionFilter?.dependsOn

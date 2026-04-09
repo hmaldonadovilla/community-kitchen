@@ -10,17 +10,20 @@ import {
   toOptionSet,
   toDependencyValue
 } from '../../../src/web/core/options';
-import { fetchDataSource } from '../../../src/web/data/dataSources';
+import { fetchDataSource, peekCachedDataSourcesById } from '../../../src/web/data/dataSources';
 
 jest.mock('../../../src/web/data/dataSources', () => ({
-  fetchDataSource: jest.fn()
+  fetchDataSource: jest.fn(),
+  peekCachedDataSourcesById: jest.fn()
 }));
 
 const fetchDataSourceMock = fetchDataSource as jest.Mock;
+const peekCachedDataSourcesByIdMock = peekCachedDataSourcesById as jest.Mock;
 
 describe('core options helpers', () => {
   beforeEach(() => {
     fetchDataSourceMock.mockReset();
+    peekCachedDataSourcesByIdMock.mockReset();
   });
 
   describe('optionKey', () => {
@@ -120,6 +123,34 @@ describe('core options helpers', () => {
         en: ['kg', 'gr', 'piece', 'Tbsp'],
         fr: ['kg', 'gr', 'piece', 'Tbsp'],
         nl: ['kg', 'gr', 'piece', 'Tbsp']
+      });
+    });
+
+    it('derives a base option set from optionMapRef using cached datasource rows', () => {
+      peekCachedDataSourcesByIdMock.mockReturnValue([
+        {
+          items: [
+            { INGREDIENT_NAME: 'Courgette', ALLOWED_UNIT: 'kg, gr, bucket' },
+            { INGREDIENT_NAME: 'Courgette - frozen', ALLOWED_UNIT: 'kg, gr, bag' }
+          ]
+        }
+      ]);
+
+      const result = toOptionSet({
+        optionFilter: {
+          optionMapRef: {
+            ref: 'REF:Ingredients Data',
+            keyColumn: 'INGREDIENT_NAME',
+            lookupColumn: 'ALLOWED_UNIT'
+          }
+        }
+      });
+
+      expect(peekCachedDataSourcesByIdMock).toHaveBeenCalled();
+      expect(result).toEqual({
+        en: ['kg', 'gr', 'bucket', 'bag'],
+        fr: ['kg', 'gr', 'bucket', 'bag'],
+        nl: ['kg', 'gr', 'bucket', 'bag']
       });
     });
   });

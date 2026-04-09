@@ -1,10 +1,175 @@
-import { DataSourceConfig } from '../../types';
+import { DataSourceConfig, OptionMapRefConfig, SheetColumnRef } from '../../types';
 import { FieldValue, LangCode, OptionSet } from '../types';
-import { fetchDataSource } from '../data/dataSources';
+import { fetchDataSource, peekCachedDataSourcesById } from '../data/dataSources';
+
+const DEFAULT_SPLIT_REGEX = /[,;\n]/;
+const SUPPORTED_LANGUAGES: LangCode[] = ['EN', 'FR', 'NL'];
+
+const splitOptionMapCell = (raw: any, delimiter?: string): string[] => {
+  if (raw === undefined || raw === null) return [];
+  const str = String(raw).trim();
+  if (!str) return [];
+  const delim = delimiter !== undefined && delimiter !== null ? delimiter.toString() : '';
+  if (delim && delim.toLowerCase() !== 'none') {
+    return str
+      .split(delim)
+      .map(part => part.trim())
+      .filter(Boolean);
+  }
+  return str
+    .split(DEFAULT_SPLIT_REGEX)
+    .map(part => part.trim())
+    .filter(Boolean);
+};
+
+const resolveRefDataSourceId = (ref: string): string => {
+  const raw = (ref || '').toString().trim();
+  if (!raw) return '';
+  return raw.startsWith('REF:') ? raw.substring(4).trim() : raw;
+};
+
+const extractRowsFromCachedDataSource = (candidate: any): any[] => {
+  if (Array.isArray(candidate)) return candidate;
+  if (candidate && typeof candidate === 'object' && Array.isArray((candidate as any).items)) {
+    return (candidate as any).items;
+  }
+  return [];
+};
+
+const columnLettersToIndex = (letters: string): number => {
+  let result = 0;
+  for (let i = 0; i < letters.length; i += 1) {
+    const code = letters.charCodeAt(i);
+    if (code < 65 || code > 90) return 0;
+    result = result * 26 + (code - 64);
+  }
+  return result;
+};
+
+const resolveRowColumnKey = (row: Record<string, any>, column: SheetColumnRef): string | null => {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const keys = Object.keys(row);
+  if (!keys.length) return null;
+
+  if (typeof column === 'number' && Number.isFinite(column)) {
+    const idx = Math.max(1, Math.trunc(column)) - 1;
+    return keys[idx] || null;
+  }
+
+  const raw = `${column ?? ''}`.trim();
+  if (!raw) return null;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric) && raw === `${numeric}`) {
+    const idx = Math.max(1, Math.trunc(numeric)) - 1;
+    return keys[idx] || null;
+  }
+
+  const upper = raw.toUpperCase();
+  if (/^[A-Z]+$/.test(upper) && upper.length <= 3) {
+    const idx = columnLettersToIndex(upper);
+    return idx > 0 ? keys[idx - 1] || null : null;
+  }
+
+  const exact = keys.find(key => key === raw);
+  if (exact) return exact;
+
+  const normalized = raw.toLowerCase();
+  return keys.find(key => key.toLowerCase() === normalized) || null;
+};
+
+const getRowColumnValue = (row: Record<string, any>, column: SheetColumnRef): any => {
+  const key = resolveRowColumnKey(row, column);
+  if (!key) return undefined;
+  return row[key];
+};
+
+const buildOptionMapFromRows = (
+  rows: any[],
+  refCfg: OptionMapRefConfig
+): Record<string, string[]> | null => {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const keyColumns = Array.isArray(refCfg.keyColumn) ? refCfg.keyColumn : [refCfg.keyColumn];
+  if (!keyColumns.length) return null;
+  const map: Record<string, string[]> = {};
+
+  rows.forEach(row => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+    const keyParts = keyColumns.map(column => {
+      const value = getRowColumnValue(row, column);
+      return value === undefined || value === null ? '' : value.toString().trim();
+    });
+    if (!keyParts.some(Boolean)) return;
+
+    const lookupValue = getRowColumnValue(row, refCfg.lookupColumn);
+    const values = splitOptionMapCell(lookupValue, refCfg.delimiter);
+    if (!values.length) return;
+
+    if (refCfg.splitKey === true && keyParts.length === 1) {
+      const keys = splitOptionMapCell(keyParts[0], refCfg.keyDelimiter);
+      keys.forEach(key => {
+        if (!map[key]) map[key] = [];
+        map[key].push(...values);
+      });
+      return;
+    }
+
+    const firstEmptyIndex = keyParts.findIndex(part => !part);
+    if (firstEmptyIndex >= 0 && keyParts.slice(firstEmptyIndex).some(Boolean)) return;
+    const usableParts = firstEmptyIndex >= 0 ? keyParts.slice(0, firstEmptyIndex) : keyParts;
+    if (!usableParts.length) return;
+    let key = usableParts.length > 1 ? usableParts.join('||') : usableParts[0];
+    if (usableParts.length > 1 && usableParts.every(part => part === '*')) key = '*';
+    if (!key) return;
+    if (!map[key]) map[key] = [];
+    map[key].push(...values);
+  });
+
+  Object.keys(map).forEach(key => {
+    const seen = new Set<string>();
+    map[key] = map[key]
+      .map(value => `${value ?? ''}`.trim())
+      .filter(value => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      });
+    if (!map[key].length) delete map[key];
+  });
+
+  return Object.keys(map).length ? map : null;
+};
+
+export const resolveOptionMapFromRef = (
+  refCfg?: OptionMapRefConfig,
+  language?: LangCode
+): Record<string, string[]> | null => {
+  if (!refCfg || typeof refCfg !== 'object') return null;
+  const refId = resolveRefDataSourceId(refCfg.ref);
+  if (!refId) return null;
+
+  const candidateLanguages = Array.from(
+    new Set<LangCode>([
+      ...(language ? [normalizeLanguage(language)] : []),
+      ...SUPPORTED_LANGUAGES
+    ])
+  );
+
+  for (const lang of candidateLanguages) {
+    const candidates = peekCachedDataSourcesById(refId, lang);
+    for (const candidate of candidates) {
+      const rows = extractRowsFromCachedDataSource(candidate);
+      const optionMap = buildOptionMapFromRows(rows, refCfg);
+      if (optionMap) return optionMap;
+    }
+  }
+  return null;
+};
 
 export const toOptionSet = (question: any): OptionSet => {
   const deriveOptionSetFromFilterMap = (): OptionSet | null => {
-    const optionMap = question?.optionFilter?.optionMap;
+    const optionMap =
+      question?.optionFilter?.optionMap ||
+      resolveOptionMapFromRef(question?.optionFilter?.optionMapRef);
     if (!optionMap || typeof optionMap !== 'object') return null;
     const values = Object.values(optionMap).flatMap(entry => (Array.isArray(entry) ? entry : []));
     return buildOptionSet(values.map(value => (value === null || value === undefined ? '' : value.toString())));
