@@ -491,7 +491,10 @@ const HTML_PREVIEW_STYLES = `
 
 const HOME_LIST_LOCAL_CACHE_PREFIX = 'ck.homeList.v1';
 const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
-const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 1800;
+// Remaining list pages are purely background enrichment for the home list.
+// Delay them so they do not compete with more valuable boot work such as
+// analytics, data source warmup, and first-record snapshot hydration.
+const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
 const HOME_RECORD_PREFETCH_DELAY_MS = 2400;
 const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
@@ -3400,6 +3403,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   useEffect(() => {
     if (!definition.listView) return;
+    if (view !== 'list') return;
     const key = `${formKey}::${listRefreshToken}`;
     if (listPrefetchKeyRef.current === key) return;
     listPrefetchKeyRef.current = key;
@@ -3753,51 +3757,51 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             total: prev.total,
             pages: prev.pages
           }));
-          const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex =>
-            (async () => {
+          const remainingPageIndexes = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1);
+          await runWithConcurrencyLimit(remainingPageIndexes, 1, async pageIndex => {
+            if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
               const offset = pageIndex * pageSize;
               const token = encodePageTokenClient(offset);
               const pageStartedAt = Date.now();
-              try {
-                const res = await fetchPage({ token, pageIndex, allowConditional: false });
-                if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
-                const items = (res.list.items || []) as ListItem[];
-                itemsByPage.set(pageIndex, items);
-                failedPages.delete(pageIndex);
-                const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
-                Object.keys(newRecords).forEach(id => {
-                  recordsAccum[id] = newRecords[id];
-                });
-                const aggregatedCount = applyProgress();
-                const resolvedPageCount = itemsByPage.size + failedPages.size;
-                logEvent('list.sorted.prefetch.page', {
-                  page: pageIndex + 1,
-                  pageItems: items.length,
-                  aggregated: aggregatedCount,
-                  totalCount: cappedTotalCount,
-                  hasNext: resolvedPageCount < totalPages,
-                  durationMs: Date.now() - startedAt,
-                  pageDurationMs: Date.now() - pageStartedAt
-                });
-              } catch (err: any) {
-                if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
-                const message = resolveLogMessage(err, 'Failed to load list page.');
-                failedPages.set(pageIndex, message);
-                const aggregatedCount = applyProgress();
-                logEvent('list.sorted.prefetch.page.error', {
-                  page: pageIndex + 1,
-                  totalCount: cappedTotalCount,
-                  loadedPages: itemsByPage.size,
-                  loadedItems: aggregatedCount,
-                  message,
-                  durationMs: Date.now() - startedAt,
-                  pageDurationMs: Date.now() - pageStartedAt
-                });
-              }
-            })()
-          );
-
-          await Promise.allSettled(pagePromises);
+            try {
+              const res = await fetchPage({ token, pageIndex, allowConditional: false });
+              if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+              const items = (res.list.items || []) as ListItem[];
+              itemsByPage.set(pageIndex, items);
+              failedPages.delete(pageIndex);
+              const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
+              Object.keys(newRecords).forEach(id => {
+                recordsAccum[id] = newRecords[id];
+              });
+              const aggregatedCount = applyProgress();
+              const resolvedPageCount = itemsByPage.size + failedPages.size;
+              logEvent('list.sorted.prefetch.page', {
+                page: pageIndex + 1,
+                pageItems: items.length,
+                aggregated: aggregatedCount,
+                totalCount: cappedTotalCount,
+                hasNext: resolvedPageCount < totalPages,
+                durationMs: Date.now() - startedAt,
+                pageDurationMs: Date.now() - pageStartedAt,
+                prefetchMode: 'sequential'
+              });
+            } catch (err: any) {
+              if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
+              const message = resolveLogMessage(err, 'Failed to load list page.');
+              failedPages.set(pageIndex, message);
+              const aggregatedCount = applyProgress();
+              logEvent('list.sorted.prefetch.page.error', {
+                page: pageIndex + 1,
+                totalCount: cappedTotalCount,
+                loadedPages: itemsByPage.size,
+                loadedItems: aggregatedCount,
+                message,
+                durationMs: Date.now() - startedAt,
+                pageDurationMs: Date.now() - pageStartedAt,
+                prefetchMode: 'sequential'
+              });
+            }
+          });
           if (backgroundCancelled || seq !== listFetchSeqRef.current) return;
           if (failedPages.size) {
             const partialAggregatedCount = applyProgress('idle');
@@ -3867,7 +3871,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (window as any).cancelIdleCallback(backgroundIdleHandle);
       }
     };
-    // Do NOT cancel on view changes; this prefetch should continue in the background.
+    // Cancel when leaving the list view so opening a record does not keep issuing
+    // background list page requests the user can no longer benefit from.
   }, [
     definition.listView,
     formKey,
@@ -3876,7 +3881,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     listViewProjection,
     logEvent,
     perfMark,
-    perfMeasure
+    perfMeasure,
+    resolveLogMessage,
+    resolveUiErrorMessage,
+    view
   ]);
 
   /**
@@ -4350,7 +4358,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // Best-effort fallback (should be rare): still try to surface the top of the form.
       try {
         globalThis.scrollTo?.({ top: 0, left: 0, behavior: 'smooth' } as any);
-      } catch (_) {
+      } catch {
         try {
           globalThis.scrollTo?.(0, 0);
         } catch {
@@ -5372,7 +5380,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             popup.location.href = objectUrl;
             opened = true;
           }
-        } catch (_) {
+        } catch {
           opened = false;
         }
         if (!opened) {
@@ -5868,7 +5876,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         try {
           const w = globalThis.window?.open?.(href, '_blank');
           opened = Boolean(w);
-        } catch (_) {
+        } catch {
           opened = false;
         }
         if (!opened) {
@@ -7947,8 +7955,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     formDataSourceRefreshKeyRef.current = refreshKey;
     refreshGuidedDataSourcesInBackground({
       reason: 'form.open',
-      forceRefresh: true,
-      retryDelaysMs: [0, 1200]
+      // Keep form-open fetches cache-aware so create/open does not immediately
+      // refetch the same shared data sources that home prefetch just loaded.
+      // Flows that truly require fresh shared data already invalidate caches first.
+      forceRefresh: false,
+      retryDelaysMs: [0]
     });
   }, [formKey, guidedDataSourceConfigs.length, language, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
 
@@ -8341,9 +8352,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const message = buildReservationFailureMessage(
             resolveUserFacingErrorMessage(
               reservationResult,
-              reservationResult.message || 'Failed to update the leftover selection.'
+              reservationResult.message ||
+                tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.')
             ) || '',
-            "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+            tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.'),
+            tSystem(
+              'inventory.reservationUpdateFailedDetail',
+              languageRef.current,
+              "We couldn't update the reservation properly. Please try again."
+            )
           );
           setStatus(message);
           setStatusLevel('error');
@@ -8376,8 +8393,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: true, applied: true };
       } catch (err: any) {
         const message = buildReservationFailureMessage(
-          resolveUserFacingErrorMessage(err, 'Failed to update the leftover selection.') || '',
-          "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+          resolveUserFacingErrorMessage(
+            err,
+            tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.')
+          ) || '',
+          tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.'),
+          tSystem(
+            'inventory.reservationUpdateFailedDetail',
+            languageRef.current,
+            "We couldn't update the reservation properly. Please try again."
+          )
         );
         setStatus(message);
         setStatusLevel('error');
@@ -8647,7 +8672,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const meta = reservationSyncMetaRef.current;
       if (!meta || meta.recordId !== recordId) return { ok: true };
       if (meta.status === 'failed') {
-        const message = meta.message || "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again.";
+        const message =
+          meta.message ||
+          tSystem(
+            'inventory.reservationUpdateFailedDetail',
+            languageRef.current,
+            "We couldn't update the reservation properly. Please try again."
+          );
         logEvent('reservationSync.wait.blocked.failed', {
           reason: args.reason,
           recordId,
@@ -8666,7 +8697,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       const outcome = await reservationSyncPromiseRef.current.catch(() => ({
         success: false,
-        message: meta.message || "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again.",
+        message:
+          meta.message ||
+          tSystem(
+            'inventory.reservationUpdateFailedDetail',
+            languageRef.current,
+            "We couldn't update the reservation properly. Please try again."
+          ),
         recordId,
         stepId: meta.stepId,
         sessionId: meta.sessionId
@@ -8677,7 +8714,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ok: false,
           message:
             outcome.message ||
-            "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+            tSystem(
+              'inventory.reservationUpdateFailedDetail',
+              languageRef.current,
+              "We couldn't update the reservation properly. Please try again."
+            )
         };
       }
       return { ok: true };
@@ -8887,21 +8928,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reason: `${reason}.reservationSync`
           });
           if (!reservationWait.ok) {
-            const message = (reservationWait.message || 'Could not confirm leftover selections.').toString();
+            const message = (
+              reservationWait.message ||
+              tSystem('inventory.reservationConfirmFailed', languageRef.current, 'Could not confirm reservation changes.')
+            ).toString();
             setStatus(message);
             setStatusLevel('error');
             return { success: false, advanceToNext: false, message };
           }
-        }
-
-        const reservationOutcome = await applyGuidedStepReservationPlan({
-          stepId: args.stepId,
-          recordId,
-          logPrefix: 'guidedStep.milestone',
-          dialogKind: 'guidedStepMilestone'
-        });
-        if (!reservationOutcome.success) {
-          return { success: false, advanceToNext: false, message: reservationOutcome.message };
         }
 
         const runBatch = async (
@@ -9114,7 +9148,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyFollowupBatchResults,
-      applyGuidedStepReservationPlan,
       definition,
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
@@ -10058,7 +10091,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             feedback: feedbackConfig,
             baseMessage,
             consumedReservations,
-            releasedReservations
+            releasedReservations,
+            fallbackConsumedSummarySingular: tSystem(
+              'inventory.reservationConsumedSingular',
+              language,
+              '{count} reservation consumed'
+            ),
+            fallbackConsumedSummaryPlural: tSystem(
+              'inventory.reservationConsumedPlural',
+              language,
+              '{count} reservations consumed'
+            ),
+            fallbackReleasedSummarySingular: tSystem(
+              'inventory.reservationReleasedSingular',
+              language,
+              '{count} reservation released'
+            ),
+            fallbackReleasedSummaryPlural: tSystem(
+              'inventory.reservationReleasedPlural',
+              language,
+              '{count} reservations released'
+            )
           });
           setStatus(statusMessage);
           setStatusLevel('success');
@@ -10156,7 +10209,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               feedback: feedbackConfig,
               baseMessage,
               consumedReservations,
-              releasedReservations
+              releasedReservations,
+              fallbackConsumedSummarySingular: tSystem(
+                'inventory.reservationConsumedSingular',
+                language,
+                '{count} reservation consumed'
+              ),
+              fallbackConsumedSummaryPlural: tSystem(
+                'inventory.reservationConsumedPlural',
+                language,
+                '{count} reservations consumed'
+              ),
+              fallbackReleasedSummarySingular: tSystem(
+                'inventory.reservationReleasedSingular',
+                language,
+                '{count} reservation released'
+              ),
+              fallbackReleasedSummaryPlural: tSystem(
+                'inventory.reservationReleasedPlural',
+                language,
+                '{count} reservations released'
+              )
             });
             setStatus(statusMessage);
             setStatusLevel('success');
@@ -10231,6 +10304,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     logEvent('summary.submit.fire', { sourceView: viewRef.current });
     void handleSubmitRef.current();
   }, [finalSubmitButtonLabelConfig, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
+
+  const handleRecordSelectRef = useRef<
+    ((row: ListItem, fullRecord?: WebFormSubmission, opts?: { openView?: 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit'; openButtonId?: string }) => void) | null
+  >(null);
 
   const handleRecordSelect = (
     row: ListItem,
@@ -10646,6 +10723,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setView(resolvedOpenView);
   };
 
+  handleRecordSelectRef.current = handleRecordSelect;
+
   const openRecordByIdForPerf = useCallback(
     (recordId: string, openViewRaw?: string): boolean => {
       if (!perfEnabled) return false;
@@ -10659,10 +10738,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const openView: 'auto' | 'form' | 'summary' | 'submit' =
         lowered === 'form' ? 'form' : lowered === 'summary' ? 'summary' : lowered === 'submit' ? 'submit' : 'auto';
       logEvent('perf.openRecordById.attempt', { recordId: id, openView });
-      handleRecordSelect(row, listCache.records[id], { openView });
+      handleRecordSelectRef.current?.(row, listCache.records[id], { openView });
       return true;
     },
-    [handleRecordSelect, listCache.records, listCache.response?.items, logEvent, perfEnabled]
+    [listCache.records, listCache.response?.items, logEvent, perfEnabled]
   );
 
   useEffect(() => {

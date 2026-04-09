@@ -7,9 +7,13 @@ describe('reservationReconciliationFeedback', () => {
         language: 'EN',
         baseMessage: 'Submitted and closed.',
         consumedReservations: 1,
-        releasedReservations: 2
+        releasedReservations: 2,
+        fallbackConsumedSummarySingular: '{count} reservation consumed',
+        fallbackConsumedSummaryPlural: '{count} reservations consumed',
+        fallbackReleasedSummarySingular: '{count} reservation released',
+        fallbackReleasedSummaryPlural: '{count} reservations released'
       })
-    ).toBe('Submitted and closed. 1 leftover reservation consumed, 2 leftover reservations released.');
+    ).toBe('Submitted and closed. 1 reservation consumed, 2 reservations released.');
   });
 
   it('renders configurable localized feedback templates', () => {

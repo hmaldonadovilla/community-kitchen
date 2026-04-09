@@ -20,7 +20,11 @@ export const shouldDeferReservationSync = (args: {
   return touchesQuantity && !touchesSelection;
 };
 
-export const buildReservationFailureMessage = (rawMessage: string, fallback: string): string => {
+export const buildReservationFailureMessage = (
+  rawMessage: string,
+  fallback: string,
+  lockFailureFallback?: string
+): string => {
   const message = (rawMessage || '').toString().trim();
   const normalized = message.toLowerCase();
   const isLockFailure =
@@ -28,7 +32,7 @@ export const buildReservationFailureMessage = (rawMessage: string, fallback: str
     normalized.includes('record save lock') ||
     normalized.includes('please retry');
   if (isLockFailure) {
-    return "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again.";
+    return (lockFailureFallback || fallback || message).toString().trim();
   }
   return message || fallback;
 };

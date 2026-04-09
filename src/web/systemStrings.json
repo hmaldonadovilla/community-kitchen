@@ -224,6 +224,58 @@
     "show": { "en": "Show", "fr": "Afficher", "nl": "Tonen" },
     "hide": { "en": "Hide", "fr": "Masquer", "nl": "Verbergen" }
   },
+  "inventory": {
+    "reservationUpdateFailed": {
+      "en": "Failed to update the reservation.",
+      "fr": "Impossible de mettre à jour la réservation.",
+      "nl": "De reservering kon niet worden bijgewerkt."
+    },
+    "reservationUpdateFailedDetail": {
+      "en": "We couldn't update the reservation properly. Please try again.",
+      "fr": "Nous n'avons pas pu mettre à jour la réservation correctement. Veuillez réessayer.",
+      "nl": "We konden de reservering niet correct bijwerken. Probeer het opnieuw."
+    },
+    "reservationConfirmFailed": {
+      "en": "Could not confirm reservation changes.",
+      "fr": "Impossible de confirmer les modifications de réservation.",
+      "nl": "Kon de reserveringswijzigingen niet bevestigen."
+    },
+    "reservationConflict": {
+      "en": "This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?",
+      "fr": "Cet élément a été mis à jour par un autre utilisateur. {availableWithUnit} sont maintenant disponibles pour {itemLabel}. Voulez-vous utiliser la quantité disponible ou annuler cette modification ?",
+      "nl": "Dit item werd bijgewerkt door een andere gebruiker. {availableWithUnit} zijn nu beschikbaar voor {itemLabel}. Wil je de beschikbare hoeveelheid gebruiken of deze wijziging annuleren?"
+    },
+    "useAvailable": {
+      "en": "Use available amount",
+      "fr": "Utiliser la quantité disponible",
+      "nl": "Beschikbare hoeveelheid gebruiken"
+    },
+    "cancelAction": {
+      "en": "Cancel action",
+      "fr": "Annuler l'action",
+      "nl": "Actie annuleren"
+    },
+    "reservationConsumedSingular": {
+      "en": "{count} reservation consumed",
+      "fr": "{count} réservation consommée",
+      "nl": "{count} reservering verbruikt"
+    },
+    "reservationConsumedPlural": {
+      "en": "{count} reservations consumed",
+      "fr": "{count} réservations consommées",
+      "nl": "{count} reserveringen verbruikt"
+    },
+    "reservationReleasedSingular": {
+      "en": "{count} reservation released",
+      "fr": "{count} réservation libérée",
+      "nl": "{count} reservering vrijgegeven"
+    },
+    "reservationReleasedPlural": {
+      "en": "{count} reservations released",
+      "fr": "{count} réservations libérées",
+      "nl": "{count} reserveringen vrijgegeven"
+    }
+  },
   "list": {
     "title": { "en": "Records", "fr": "Enregistrements", "nl": "Records" },
     "searchPlaceholder": { "en": "Search records", "fr": "Rechercher", "nl": "Zoeken" },

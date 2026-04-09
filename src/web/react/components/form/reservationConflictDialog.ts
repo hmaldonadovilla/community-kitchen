@@ -48,17 +48,10 @@ const formatQuantity = (value: number): string => {
 
 const resolveUnitLabel = (args: {
   availability?: InventoryAvailabilitySnapshot | null;
-  sourceRow?: Record<string, any> | null;
-  language: LangCode;
+  unit?: string | null;
 }): string => {
-  const explicitUnit = `${args.availability?.unit || args.sourceRow?.LEFTOVER_UNIT || ''}`.trim();
+  const explicitUnit = `${args.availability?.unit || args.unit || ''}`.trim();
   if (explicitUnit) return explicitUnit;
-  const kind = `${args.availability?.resourceKind || args.sourceRow?.LEFTOVER_KIND || ''}`.trim().toLowerCase();
-  if (kind === 'entire dish') {
-    if (args.language === 'FR') return 'portions';
-    if (args.language === 'NL') return 'porties';
-    return 'portions';
-  }
   return '';
 };
 
@@ -66,8 +59,10 @@ export const buildReservationConflictDialogCopy = (args: {
   language: LangCode;
   dialog?: ReservationConflictDialogConfig | null;
   availability?: InventoryAvailabilitySnapshot | null;
-  sourceRow?: Record<string, any> | null;
   requestedQuantity: number;
+  itemId?: string | null;
+  itemLabel?: string | null;
+  unit?: string | null;
   fallbackTitle: string;
   fallbackMessage: string;
   fallbackConfirmLabel: string;
@@ -76,8 +71,8 @@ export const buildReservationConflictDialogCopy = (args: {
   const availableQuantity = computeReservationConflictUsableQuantity(args.availability);
   const currentReservationQuantity = Math.max(0, Number(args.availability?.currentReservationQuantity) || 0);
   const requestedQuantity = Math.max(0, Number(args.requestedQuantity) || 0);
-  const itemId = `${args.availability?.resourceItemId || args.sourceRow?.LEFTOVER_ID || ''}`.trim();
-  const itemLabel = `${args.sourceRow?.LEFTOVER_RECIPE || args.sourceRow?.LEFTOVER_INGREDIENT || itemId || ''}`.trim();
+  const itemId = `${args.itemId || args.availability?.resourceItemId || ''}`.trim();
+  const itemLabel = `${args.itemLabel || itemId || ''}`.trim();
   const unit = resolveUnitLabel(args);
   const available = formatQuantity(availableQuantity);
   const requested = formatQuantity(requestedQuantity);

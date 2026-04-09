@@ -34,20 +34,19 @@ describe('reservationSyncPolicy', () => {
     expect(
       buildReservationFailureMessage(
         'Could not acquire the reservation transaction lock. Please retry.',
-        "We couldn't update the leftover selection."
+        "We couldn't update the reservation.",
+        "We couldn't update the reservation properly. Please try again."
       )
-    ).toBe(
-      "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
-    );
+    ).toBe("We couldn't update the reservation properly. Please try again.");
   });
 
   test('keeps non-lock failures unchanged', () => {
     expect(
       buildReservationFailureMessage(
-        'The selected leftover is no longer available.',
-        "We couldn't update the leftover selection."
+        'The selected reservation is no longer available.',
+        "We couldn't update the reservation."
       )
-    ).toBe('The selected leftover is no longer available.');
+    ).toBe('The selected reservation is no longer available.');
   });
 
   test('detects step-commit reservation mode', () => {
