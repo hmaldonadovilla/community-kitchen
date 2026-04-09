@@ -1126,3 +1126,54 @@ export const resolveExistingRecordId = (args: {
   const { selectedRecordId, selectedRecordSnapshot, lastSubmissionMetaId } = args;
   return selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMetaId || undefined;
 };
+
+export const applyClientDataVersionToPayload = (args: {
+  payload: SubmissionPayload;
+  currentRecordId?: string | null;
+  currentDataVersion?: number | null;
+}): SubmissionPayload => {
+  const payload = args.payload as any;
+  const payloadRecordId = ((payload?.id || payload?.__ckDeleteRecordId || '') as any).toString?.().trim?.() || '';
+  const currentRecordId = ((args.currentRecordId || '') as any).toString?.().trim?.() || '';
+  const currentDataVersion = Number(args.currentDataVersion);
+  const hasCurrentDataVersion = Number.isFinite(currentDataVersion) && currentDataVersion > 0;
+  const shouldApply =
+    !!payloadRecordId &&
+    hasCurrentDataVersion &&
+    (!currentRecordId || payloadRecordId === currentRecordId);
+  if (shouldApply) {
+    payload.__ckClientDataVersion = currentDataVersion;
+    return payload;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, '__ckClientDataVersion')) {
+    delete payload.__ckClientDataVersion;
+  }
+  return payload;
+};
+
+export const resolveCurrentClientDataVersion = (...candidates: Array<number | string | null | undefined>): number | null => {
+  let next: number | null = null;
+  candidates.forEach(candidate => {
+    const value = Number(candidate);
+    if (!Number.isFinite(value) || value <= 0) return;
+    if (next === null || value > next) {
+      next = value;
+    }
+  });
+  return next;
+};
+
+export const chainSerializedSubmissionRequest = <T,>(
+  previousRequest: Promise<unknown> | null | undefined,
+  runner: () => Promise<T>
+): Promise<T> =>
+  (async () => {
+    if (previousRequest) {
+      try {
+        await previousRequest;
+      } catch {
+        // A failed earlier save must not block the next queued mutation.
+      }
+    }
+    return runner();
+  })();

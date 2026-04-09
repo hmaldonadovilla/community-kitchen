@@ -90,6 +90,11 @@ import {
   buildReservationConflictDialogCopy,
   computeReservationConflictUsableQuantity
 } from './reservationConflictDialog';
+import {
+  buildReservationFailureMessage,
+  isStepReservationCommitEnabled,
+  shouldDeferReservationSync
+} from './reservationSyncPolicy';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
@@ -636,6 +641,7 @@ export const LineItemGroupQuestion: React.FC<{
   const stepDataSourceRecordIdRef = React.useRef<string>('');
   const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
+  const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const reservationSyncCounterRef = React.useRef(0);
   const sourceFirstPresentationLoggedRef = React.useRef<string>('');
 
@@ -649,6 +655,7 @@ export const LineItemGroupQuestion: React.FC<{
         clearTimeout(timer);
       });
       reservationDebounceTimersRef.current = {};
+      reservationCommittedValuesRef.current = {};
     };
   }, []);
 
@@ -696,6 +703,7 @@ export const LineItemGroupQuestion: React.FC<{
         });
       }
       reservationRequestVersionRef.current = {};
+      reservationCommittedValuesRef.current = {};
       if (Object.keys(stepDataSourceDraftsRef.current).length) {
         stepDataSourceDraftsRef.current = {};
         setStepDataSourceDrafts({});
@@ -1639,6 +1647,7 @@ export const LineItemGroupQuestion: React.FC<{
         ? args.config.reservation
         : null;
       if (!reservationConfig || reservationConfig.enabled === false) return;
+      if (isStepReservationCommitEnabled(reservationConfig)) return;
       const sourceFormKey = `${formKey || ''}`.trim();
       const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig.resourceFormKey || ''}`.trim();
       const resourceRecordId = `${args.sourceRow?.id || ''}`.trim();
@@ -1675,6 +1684,13 @@ export const LineItemGroupQuestion: React.FC<{
         draftValues: stepDataSourceDraftsRef.current[draftKey] || null,
         parentRowId: args.parentRow.id
       });
+      if (!reservationCommittedValuesRef.current[draftKey]) {
+        const committedValues: Record<string, FieldValue> = {};
+        if (selectedFieldId) committedValues[selectedFieldId] = virtualValues[selectedFieldId];
+        committedValues[quantityFieldId] = virtualValues[quantityFieldId];
+        if (modeFieldId) committedValues[modeFieldId] = virtualValues[modeFieldId];
+        reservationCommittedValuesRef.current[draftKey] = committedValues;
+      }
       const nextVirtualValues = { ...virtualValues, ...args.patch } as Record<string, FieldValue>;
       const selected = selectedFieldId ? nextVirtualValues[selectedFieldId] === true : true;
       const quantity = selected ? toFiniteNumber(nextVirtualValues[quantityFieldId]) : 0;
@@ -1747,7 +1763,10 @@ export const LineItemGroupQuestion: React.FC<{
             freeQuantity: result.availability?.freeQuantity
           });
           if (!result.success) {
-            const message = resolveUserFacingErrorMessage(result, result.message || 'Reservation failed.');
+            const message = buildReservationFailureMessage(
+              resolveUserFacingErrorMessage(result, result.message || 'Reservation failed.') || '',
+              "We couldn't update the leftover selection."
+            );
             if (message) {
               onDiagnostic?.('inventory.reservation.rejected', {
                 groupId: q.id,
@@ -1757,13 +1776,18 @@ export const LineItemGroupQuestion: React.FC<{
                 message
               });
               const rollbackQty = Math.max(0, toFiniteNumber(result.availability?.currentReservationQuantity));
+              const committedValues = reservationCommittedValuesRef.current[draftKey] || {};
+              const committedModeValue =
+                modeFieldId && Object.prototype.hasOwnProperty.call(committedValues, modeFieldId)
+                  ? committedValues[modeFieldId]
+                  : null;
               const usableQty = computeReservationConflictUsableQuantity(result.availability);
               const rollbackPatch: Record<string, FieldValue> = {
                 ...(selectedFieldId ? { [selectedFieldId]: rollbackQty > 0 } : {}),
                 [quantityFieldId]: rollbackQty > 0 ? `${rollbackQty}` : null
               };
-              if (modeFieldId && rollbackQty <= 0) {
-                rollbackPatch[modeFieldId] = null;
+              if (modeFieldId) {
+                rollbackPatch[modeFieldId] = rollbackQty > 0 ? committedModeValue : null;
               }
               const resolvedPatch: Record<string, FieldValue> = {
                 ...(selectedFieldId ? { [selectedFieldId]: usableQty > 0 } : {}),
@@ -1854,15 +1878,68 @@ export const LineItemGroupQuestion: React.FC<{
                 onCancel: () => {}
               });
             }
+          } else {
+            const committedValues: Record<string, FieldValue> = {};
+            if (selectedFieldId) committedValues[selectedFieldId] = selected;
+            committedValues[quantityFieldId] = quantity > 0 ? `${quantity}` : null;
+            if (modeFieldId) committedValues[modeFieldId] = nextVirtualValues[modeFieldId] ?? null;
+            reservationCommittedValuesRef.current[draftKey] = committedValues;
           }
         } catch (error) {
           if (reservationRequestVersionRef.current[timerKey] !== requestVersion) return;
+          const committedValues = reservationCommittedValuesRef.current[draftKey] || {};
+          const rollbackPatch: Record<string, FieldValue> = {
+            ...(selectedFieldId
+              ? {
+                  [selectedFieldId]:
+                    Object.prototype.hasOwnProperty.call(committedValues, selectedFieldId) &&
+                    committedValues[selectedFieldId] === true
+                }
+              : {}),
+            [quantityFieldId]:
+              Object.prototype.hasOwnProperty.call(committedValues, quantityFieldId) &&
+              committedValues[quantityFieldId] !== undefined &&
+              committedValues[quantityFieldId] !== null &&
+              `${committedValues[quantityFieldId]}`.trim() !== ''
+                ? `${committedValues[quantityFieldId]}`
+                : null
+          };
+          if (modeFieldId) {
+            rollbackPatch[modeFieldId] =
+              Object.prototype.hasOwnProperty.call(committedValues, modeFieldId) &&
+              committedValues[modeFieldId] !== undefined &&
+              committedValues[modeFieldId] !== null &&
+              `${committedValues[modeFieldId]}`.trim() !== ''
+                ? committedValues[modeFieldId]
+                : null;
+          }
+          syncStepDataSourceOutputRow({
+            ...args,
+            patch: rollbackPatch
+          });
+          const message = buildReservationFailureMessage(
+            resolveUserFacingErrorMessage(error, 'Reservation failed.') || '',
+            "We couldn't update the leftover selection."
+          );
           onDiagnostic?.('inventory.reservation.error', {
             groupId: q.id,
             parentRowId: args.parentRow.id,
             resourceRecordId,
             resourceItemId: sourceKey,
             message: (error as any)?.message || String(error || '')
+          });
+          openConfirmDialog?.({
+            title: tSystem('common.notice', language, 'Notice'),
+            message,
+            confirmLabel: tSystem('common.ok', language, 'OK'),
+            cancelLabel: tSystem('common.cancel', language, 'Cancel'),
+            showCancel: false,
+            showCloseButton: true,
+            dismissOnBackdrop: true,
+            kind: 'inventoryReservationRejected',
+            refId: `${q.id}::${args.parentRow.id}::${sourceKey}`,
+            onConfirm: () => {},
+            onCancel: () => {}
           });
         }
       };
@@ -1893,6 +1970,71 @@ export const LineItemGroupQuestion: React.FC<{
       ,
       updateStepDataSourceAvailabilityOptimistically
     ]
+  );
+
+  const seedReservationCommittedValues = React.useCallback(
+    (args: {
+      config: any;
+      parentRowId: string;
+      sourceKey: string;
+      virtualValues: Record<string, FieldValue>;
+    }) => {
+      const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+      if (!quantityFieldId || !args.sourceKey) return;
+      const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRowId, args.sourceKey);
+      if (reservationCommittedValuesRef.current[draftKey]) return;
+      const selectedFieldId = `${args.config?.selectedFieldId || ''}`.trim();
+      const modeFieldId = `${args.config?.modeFieldId || ''}`.trim();
+      const committedValues: Record<string, FieldValue> = {};
+      if (selectedFieldId) committedValues[selectedFieldId] = args.virtualValues[selectedFieldId];
+      committedValues[quantityFieldId] = args.virtualValues[quantityFieldId];
+      if (modeFieldId) committedValues[modeFieldId] = args.virtualValues[modeFieldId];
+      reservationCommittedValuesRef.current[draftKey] = committedValues;
+    },
+    [buildStepDataSourceDraftKey]
+  );
+
+  const hasPendingDeferredReservationChange = React.useCallback(
+    (args: {
+      config: any;
+      parentRowId: string;
+      sourceKey: string;
+      patch: Record<string, FieldValue>;
+    }): boolean => {
+      const selectedFieldId = `${args.config?.selectedFieldId || ''}`.trim();
+      const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+      if (
+        !shouldDeferReservationSync({
+          patch: args.patch,
+          selectedFieldId,
+          quantityFieldId
+        })
+      ) {
+        return false;
+      }
+      const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRowId, args.sourceKey);
+      const committedValues = reservationCommittedValuesRef.current[draftKey];
+      if (!committedValues) return true;
+      const normalizeValue = (value: FieldValue): string | null => {
+        if (value === undefined || value === null) return null;
+        const text = `${value}`.trim();
+        return text ? text : null;
+      };
+      const nextSelected = selectedFieldId
+        ? (Object.prototype.hasOwnProperty.call(args.patch, selectedFieldId)
+            ? args.patch[selectedFieldId]
+            : committedValues[selectedFieldId]) === true
+        : true;
+      const committedSelected = selectedFieldId ? committedValues[selectedFieldId] === true : true;
+      const nextQuantity = normalizeValue(
+        Object.prototype.hasOwnProperty.call(args.patch, quantityFieldId)
+          ? args.patch[quantityFieldId]
+          : committedValues[quantityFieldId]
+      );
+      const committedQuantity = normalizeValue(committedValues[quantityFieldId]);
+      return nextSelected !== committedSelected || nextQuantity !== committedQuantity;
+    },
+    [buildStepDataSourceDraftKey]
   );
 
   const stepDataSourceNormalizationSignatureRef = React.useRef<string>('');
@@ -5282,14 +5424,55 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         const normalizedNext =
                           nextValue === null || nextValue === undefined ? null : `${nextValue}`;
                         if (normalizedNext === currentValue) return;
+                        const patch: Record<string, FieldValue> = {
+                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                          [fieldId]: nextValue
+                        };
+                        const deferReservation = shouldDeferReservationSync({
+                          patch,
+                          selectedFieldId: args.selectedFieldId,
+                          quantityFieldId: `${args.config?.quantityFieldId || ''}`.trim()
+                        });
+                        if (deferReservation) {
+                          seedReservationCommittedValues({
+                            config: args.config,
+                            parentRowId: args.parentRow.id,
+                            sourceKey: `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim(),
+                            virtualValues: args.virtualValues as Record<string, FieldValue>
+                          });
+                        }
                         syncStepDataSourceOutputRowWithReservation({
                           config: args.config,
                           parentRow: args.parentRow,
                           sourceRow: args.sourceRow,
-                          patch: {
-                            ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                            [fieldId]: nextValue
-                          }
+                          patch
+                        }, {
+                          skipReservation: deferReservation
+                        });
+                      }}
+                      onBlur={next => {
+                        const nextValue = next === '' ? null : next;
+                        const patch: Record<string, FieldValue> = {
+                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                          [fieldId]: nextValue
+                        };
+                        const sourceKey = `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
+                        if (!sourceKey) return;
+                        if (
+                          !hasPendingDeferredReservationChange({
+                            config: args.config,
+                            parentRowId: args.parentRow.id,
+                            sourceKey,
+                            patch
+                          })
+                        ) {
+                          return;
+                        }
+                        syncStepDataSourceOutputRowWithReservation({
+                          config: args.config,
+                          parentRow: args.parentRow,
+                          sourceRow: args.sourceRow,
+                          patch
                         });
                       }}
                       inputStyle={{
@@ -11322,14 +11505,53 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                       const normalizedNext =
                                                         nextValue === null || nextValue === undefined ? null : `${nextValue}`;
                                                       if (normalizedNext === currentValue) return;
+                                                      const patch: Record<string, FieldValue> = {
+                                                        ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                                        [fieldId]: nextValue
+                                                      };
+                                                      const deferReservation = shouldDeferReservationSync({
+                                                        patch,
+                                                        selectedFieldId,
+                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
+                                                      });
+                                                      if (deferReservation) {
+                                                        seedReservationCommittedValues({
+                                                          config,
+                                                          parentRowId: row.id,
+                                                          sourceKey,
+                                                          virtualValues: virtualValues as Record<string, FieldValue>
+                                                        });
+                                                      }
                                                       syncStepDataSourceOutputRowWithReservation({
                                                         config,
                                                         parentRow: row,
                                                         sourceRow,
-                                                        patch: {
-                                                          ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                          [fieldId]: nextValue
-                                                        }
+                                                        patch
+                                                      }, {
+                                                        skipReservation: deferReservation
+                                                      });
+                                                    }}
+                                                    onBlur={next => {
+                                                      const nextValue = next === '' ? null : next;
+                                                      const patch: Record<string, FieldValue> = {
+                                                        ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                                        [fieldId]: nextValue
+                                                      };
+                                                      if (
+                                                        !hasPendingDeferredReservationChange({
+                                                          config,
+                                                          parentRowId: row.id,
+                                                          sourceKey,
+                                                          patch
+                                                        })
+                                                      ) {
+                                                        return;
+                                                      }
+                                                      syncStepDataSourceOutputRowWithReservation({
+                                                        config,
+                                                        parentRow: row,
+                                                        sourceRow,
+                                                        patch
                                                       });
                                                     }}
                                                     style={{ flex: '0 0 auto' }}

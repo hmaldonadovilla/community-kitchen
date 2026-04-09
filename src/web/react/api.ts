@@ -3,6 +3,8 @@ import {
   DataSourceConfig,
   FollowupActionResult,
   FormConfigExport,
+  InventoryReservationPlanRequest,
+  InventoryReservationPlanResult,
   InventoryReservationMutationRequest,
   InventoryReservationMutationResult,
   InventoryReservationReconciliationRequest,
@@ -602,6 +604,11 @@ export const upsertInventoryReservationApi = (
   request: InventoryReservationMutationRequest
 ): Promise<InventoryReservationMutationResult> =>
   invokeTransport<InventoryReservationMutationResult>('upsertInventoryReservation', request);
+
+export const applyInventoryReservationPlanApi = (
+  request: InventoryReservationPlanRequest
+): Promise<InventoryReservationPlanResult> =>
+  invokeTransport<InventoryReservationPlanResult>('applyInventoryReservationPlan', request);
 
 export const reconcileInventoryReservationsApi = (
   request: InventoryReservationReconciliationRequest

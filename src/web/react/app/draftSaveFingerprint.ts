@@ -44,6 +44,13 @@ export type DraftSaveFingerprint = {
   fingerprint: string;
 };
 
+export type DraftStateFingerprintArgs = {
+  formKey?: string | null;
+  language?: string | null;
+  values?: Record<string, any> | null;
+  lineItems?: Record<string, any> | null;
+};
+
 export const buildDraftSaveFingerprint = (payload: any): DraftSaveFingerprint | null => {
   const recordId = ((payload?.id || '') as any).toString?.().trim?.() || '';
   if (!recordId) return null;
@@ -63,3 +70,13 @@ export const buildDraftSaveFingerprint = (payload: any): DraftSaveFingerprint | 
     fingerprint: fnv1a32(stableStringify(fingerprintPayload))
   };
 };
+
+export const buildDraftStateFingerprint = (args: DraftStateFingerprintArgs): string =>
+  fnv1a32(
+    stableStringify({
+      formKey: (args.formKey || '').toString(),
+      language: (args.language || '').toString(),
+      values: args.values || {},
+      lineItems: args.lineItems || {}
+    })
+  );

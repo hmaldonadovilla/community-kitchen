@@ -20,8 +20,10 @@ import {
   WebQuestionDefinition,
   WebFormSubmission
 } from '../types';
+import type { InventoryReservationPlanRequest, InventoryReservationPlanScope } from '../../types';
 import {
   BootstrapContext,
+  applyInventoryReservationPlanApi,
   submit,
   previewUpdateRecordDependenciesApi,
   applyUpdateRecordWithDependenciesApi,
@@ -70,11 +72,14 @@ import { FieldChangeDialogOverlay } from './features/fieldChangeDialog/FieldChan
 import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fieldChangeDialog/useFieldChangeDialog';
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import {
+  applyClientDataVersionToPayload,
   buildDraftPayload,
   buildSubmissionPayload,
+  chainSerializedSubmissionRequest,
   collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
   resolveExistingRecordId,
+  resolveCurrentClientDataVersion,
   validateForm
 } from './app/submission';
 import { buildValidationContext } from './app/validation';
@@ -118,7 +123,7 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
-import { buildDraftSaveFingerprint } from './app/draftSaveFingerprint';
+import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
 import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
@@ -138,6 +143,10 @@ import { applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
+import {
+  buildInventoryReservationPlanFingerprint,
+  buildStepInventoryReservationPlan
+} from './features/reservations/stepReservationPlan';
 import {
   buildFieldIdMap,
   filterDedupRulesForPrecheck,
@@ -164,6 +173,7 @@ import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
+import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
 import { isEmptyValue } from './utils/values';
 import {
   clearFetchDataSourceCache,
@@ -822,7 +832,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (typeof console !== 'undefined' && typeof console.info === 'function') {
         try {
           console.info('[ReactForm][perf]', name, { durationMs, ...(payload || {}) });
-        } catch (_) {
+        } catch {
           // ignore perf log failures
         }
       }
@@ -1340,7 +1350,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           payload.__ckClientDataVersion = Number(baseVersion);
         }
 
-        const res = await submit(payload);
+        const res = await submitCurrentRecordMutation('dedupDeleteOnKeyChange.delete', payload);
         if (!res?.success) {
           logEvent('dedupDeleteOnKeyChange.delete.failed', {
             source,
@@ -1383,7 +1393,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const remappedState = applyValueMapsToForm(definition, normalizedValues, rebuiltLineItems, { mode: 'init' });
         valuesRef.current = remappedState.values;
         lineItemsRef.current = remappedState.lineItems;
-        lastAutoSaveSeenRef.current = { values: remappedState.values, lineItems: remappedState.lineItems };
+        rememberAutoSaveSeenState(remappedState.values, remappedState.lineItems);
         setValues(remappedState.values);
         setLineItems(remappedState.lineItems);
         setErrors({});
@@ -2242,6 +2252,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const draftSaveRequestPromiseRef = useRef<Promise<any> | null>(null);
   const draftSaveRequestFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastCompletedDraftSaveFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
+  const lastDraftSaveFailureRef = useRef<{ message: string; recordId?: string | null } | null>(null);
   const performAutoSaveRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const autoSaveUserEditedRef = useRef<boolean>(false);
   const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
@@ -2249,6 +2260,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const prevAutoSaveHoldRef = useRef<boolean>(false);
   const lastUserInteractionRef = useRef<number>(0);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
+  const lastAutoSaveStateFingerprintRef = useRef<string>('');
+  const reservationSyncPromiseRef = useRef<
+    Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
+  >(null);
+  const reservationSyncMetaRef = useRef<{
+    recordId: string;
+    stepId: string;
+    sessionId: number;
+    status: 'running' | 'failed' | 'succeeded';
+    fingerprint?: string;
+    message?: string;
+  } | null>(null);
+  const reservationManagedScopesRef = useRef<{ recordId: string; scopes: InventoryReservationPlanScope[] } | null>(null);
+  const guidedStepBackgroundSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const guidedStepBackgroundSyncPendingRef = useRef<{
+    stepId: string;
+    nextStepId?: string;
+    trigger: 'next' | 'auto';
+    sessionId: number;
+    fingerprint: string;
+  } | null>(null);
+  const guidedStepBackgroundSyncActiveFingerprintRef = useRef<string>('');
+  const guidedStepBackgroundSyncPendingFingerprintRef = useRef<string>('');
   /**
    * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
    * after the user switches to a different record/create flow.
@@ -2294,6 +2328,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [logEvent]
   );
 
+  const rememberAutoSaveSeenState = useCallback(
+    (nextValues: Record<string, FieldValue>, nextLineItems: LineItemState) => {
+      lastAutoSaveSeenRef.current = { values: nextValues, lineItems: nextLineItems };
+      lastAutoSaveStateFingerprintRef.current = buildDraftStateFingerprint({
+        formKey,
+        language: languageRef.current,
+        values: nextValues,
+        lineItems: nextLineItems
+      });
+    },
+    [formKey]
+  );
+
   const waitForDraftSaveRequest = useCallback(
     async (reason: string, timeoutMs = 10000): Promise<void> => {
       if (!draftSaveRequestInFlightRef.current || !draftSaveRequestPromiseRef.current) return;
@@ -2303,7 +2350,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const inFlight = draftSaveRequestPromiseRef.current;
         try {
           await inFlight;
-        } catch (_) {
+        } catch {
           // ignore and re-check state below
         }
         if (!draftSaveRequestInFlightRef.current) break;
@@ -2321,23 +2368,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const runDraftSaveRequest = useCallback(
     async <T,>(reason: string, runner: () => Promise<T>): Promise<T> => {
-      let currentPromise: Promise<T> | null = null;
-      const promise = (async () => {
-        draftSaveRequestInFlightRef.current = true;
-        try {
-          return await runner();
-        } finally {
-          if (draftSaveRequestPromiseRef.current === currentPromise) {
-            draftSaveRequestPromiseRef.current = null;
-          }
+      const previousPromise = draftSaveRequestPromiseRef.current;
+      const promise = chainSerializedSubmissionRequest(previousPromise, async () => runner());
+      draftSaveRequestPromiseRef.current = promise as Promise<any>;
+      draftSaveRequestInFlightRef.current = true;
+      if (previousPromise) {
+        logEvent('draftSave.serialized', { reason });
+      }
+      void promise.finally(() => {
+        if (draftSaveRequestPromiseRef.current === promise) {
+          draftSaveRequestPromiseRef.current = null;
           draftSaveRequestInFlightRef.current = false;
         }
-      })();
-      currentPromise = promise;
-      draftSaveRequestPromiseRef.current = promise as Promise<any>;
+      });
       return promise;
     },
-    []
+    [logEvent]
   );
 
   const buildCurrentDraftSaveResponse = useCallback(
@@ -2358,7 +2404,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async <T extends { success?: boolean; meta?: any },>(
       reason: string,
       payload: any,
-      runner: () => Promise<T>
+      runner: (nextPayload: any) => Promise<T>
     ): Promise<T> => {
       const fingerprint = buildDraftSaveFingerprint(payload);
       if (
@@ -2378,24 +2424,37 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (
         fingerprint &&
         lastCompletedDraftSaveFingerprintRef.current?.recordId === fingerprint.recordId &&
-        lastCompletedDraftSaveFingerprintRef.current?.fingerprint === fingerprint.fingerprint &&
-        !autoSaveDirtyRef.current &&
-        !autoSaveQueuedRef.current
+        lastCompletedDraftSaveFingerprintRef.current?.fingerprint === fingerprint.fingerprint
       ) {
         logEvent('draftSave.coalesced.cached', {
           reason,
           recordId: fingerprint.recordId
         });
+        lastDraftSaveFailureRef.current = null;
         return buildCurrentDraftSaveResponse(fingerprint.recordId) as T;
       }
 
       draftSaveRequestFingerprintRef.current = fingerprint;
       try {
-        const result = await runDraftSaveRequest(reason, runner);
+        const result = await runDraftSaveRequest(reason, () => runner(payload));
         if (fingerprint && result?.success) {
           lastCompletedDraftSaveFingerprintRef.current = fingerprint;
         }
+        if ((result as any)?.success === false) {
+          lastDraftSaveFailureRef.current = {
+            recordId: fingerprint?.recordId || ((result as any)?.meta?.id || payload?.id || '').toString().trim() || null,
+            message: (((result as any)?.message || 'Failed to save the current record.') as any).toString()
+          };
+        } else {
+          lastDraftSaveFailureRef.current = null;
+        }
         return result;
+      } catch (err: any) {
+        lastDraftSaveFailureRef.current = {
+          recordId: fingerprint?.recordId || ((payload?.id || '') as any).toString?.().trim?.() || null,
+          message: resolveUiErrorMessage(err, 'Failed to save the current record.') || 'Failed to save the current record.'
+        };
+        throw err;
       } finally {
         if (
           draftSaveRequestFingerprintRef.current?.recordId === fingerprint?.recordId &&
@@ -2405,7 +2464,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
     },
-    [buildCurrentDraftSaveResponse, logEvent, runDraftSaveRequest]
+    [buildCurrentDraftSaveResponse, logEvent, resolveUiErrorMessage, runDraftSaveRequest]
+  );
+
+  const submitCurrentRecordMutation = useCallback(
+    async (reason: string, payload: any, runner?: (nextPayload: any) => Promise<any>): Promise<any> => {
+      const currentRecordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      const currentDataVersionRaw = Number(
+        resolveCurrentClientDataVersion(
+          recordDataVersionRef.current,
+          lastSubmissionMetaRef.current?.dataVersion,
+          (selectedRecordSnapshotRef.current as any)?.dataVersion
+        )
+      );
+      const previousClientDataVersionRaw = Number((payload as any)?.__ckClientDataVersion);
+      const nextPayload = applyClientDataVersionToPayload({
+        payload,
+        currentRecordId,
+        currentDataVersion: Number.isFinite(currentDataVersionRaw) ? currentDataVersionRaw : null
+      });
+      const nextClientDataVersionRaw = Number((nextPayload as any)?.__ckClientDataVersion);
+      const previousClientDataVersion = Number.isFinite(previousClientDataVersionRaw) ? previousClientDataVersionRaw : null;
+      const nextClientDataVersion = Number.isFinite(nextClientDataVersionRaw) ? nextClientDataVersionRaw : null;
+      if (previousClientDataVersion !== nextClientDataVersion) {
+        logEvent('submit.clientDataVersion.sync', {
+          reason,
+          recordId:
+            currentRecordId ||
+            ((nextPayload?.id || nextPayload?.__ckDeleteRecordId || '') as any).toString?.().trim?.() ||
+            null,
+          previousClientDataVersion,
+          nextClientDataVersion
+        });
+      }
+      return runner ? runner(nextPayload) : submit(nextPayload);
+    },
+    [logEvent]
   );
 
   const applyUploadedFieldOverrides = useCallback(
@@ -2690,6 +2789,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
+      reservationSyncPromiseRef.current = null;
+      reservationSyncMetaRef.current = null;
+      reservationManagedScopesRef.current = null;
+      lastDraftSaveFailureRef.current = null;
       logEvent('record.session.bump', {
         reason: (args?.reason || '').toString() || null,
         nextRecordId: args?.nextRecordId ? args.nextRecordId.toString() : null,
@@ -3353,7 +3456,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (typeof globalThis !== 'undefined' && typeof (globalThis as any).btoa === 'function') {
               return (globalThis as any).btoa(text);
             }
-          } catch (_) {
+          } catch {
             // ignore
           }
           return text;
@@ -3839,7 +3942,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       {
         definition,
         formKey,
-        submit,
+        submit: (payload: any) => submitCurrentRecordMutation('readyForProduction.unlock', payload),
         tSystem,
         logEvent,
         refs: {
@@ -3895,6 +3998,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     selectedRecordId,
     selectedRecordSnapshot,
     submitting,
+    submitCurrentRecordMutation,
     updateRecordBusy,
     updateRecordBusyOpen,
     upsertListCacheRow,
@@ -3970,7 +4074,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveTimerRef.current = null;
       }
       setDraftSave({ phase: 'idle' });
-      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
       // Keep refs in sync immediately so any follow-up actions (e.g. list-triggered button previews) can use
       // the freshly loaded record values without waiting for a re-render.
       valuesRef.current = mapped.values;
@@ -4249,7 +4353,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       } catch (_) {
         try {
           globalThis.scrollTo?.(0, 0);
-        } catch (_) {
+        } catch {
           // ignore
         }
       }
@@ -4840,7 +4944,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setRecordStale(null);
       recordDataVersionRef.current = null;
       recordRowNumberRef.current = null;
-      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
@@ -4932,14 +5036,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
       valuesRef.current = nextValues as any;
       lineItemsRef.current = nextLineItems;
-      lastAutoSaveSeenRef.current = { values: nextValues as any, lineItems: nextLineItems };
+      rememberAutoSaveSeenState(nextValues as any, nextLineItems);
       setValues(nextValues as any);
       setLineItems(nextLineItems);
     } else {
       // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
       valuesRef.current = cleared.values as any;
       lineItemsRef.current = cleared.lineItems;
-      lastAutoSaveSeenRef.current = { values: cleared.values, lineItems: cleared.lineItems };
+      rememberAutoSaveSeenState(cleared.values, cleared.lineItems);
       setValues(cleared.values);
       setLineItems(cleared.lineItems);
     }
@@ -5252,7 +5356,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${msg}</pre>`);
               popup.document.close();
             }
-          } catch (_) {
+          } catch {
             // ignore
           }
           logEvent('report.pdfPreview.error', { buttonId, message: msg });
@@ -5300,7 +5404,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${uiMessage}</pre>`);
               popup.document.close();
             }
-          } catch (_) {
+          } catch {
             // ignore
           }
         } else {
@@ -5645,7 +5749,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordDataVersionRef.current = null;
       recordRowNumberRef.current = null;
 
-      lastAutoSaveSeenRef.current = { values: mapped.values, lineItems: mapped.lineItems };
+      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
@@ -5772,7 +5876,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           try {
             globalThis.location?.assign?.(href);
             opened = true;
-          } catch (_) {
+          } catch {
             opened = false;
           }
         }
@@ -5822,8 +5926,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             {
               definition,
               formKey,
-              submit,
-              submitWithDependencies: applyUpdateRecordWithDependenciesApi,
+              submit: (payload: any) => submitCurrentRecordMutation('button.updateRecord', payload),
+              submitWithDependencies: (payload: any) =>
+                submitCurrentRecordMutation('button.updateRecord.dependencyGuard', payload, (nextPayload: any) =>
+                  applyUpdateRecordWithDependenciesApi(nextPayload as any, buttonId)
+                ),
               tSystem,
               logEvent,
               refs: {
@@ -5999,8 +6106,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       customConfirm,
       definition,
       formKey,
-      definition.title,
-      definition.questions,
       logEvent,
       openHtml,
       openMarkdown,
@@ -6009,8 +6114,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       parseButtonRef,
       perfMark,
       perfMeasure,
-      resolveLabel,
       resolveOpenUrlFieldHref,
+      submitCurrentRecordMutation,
       upsertListCacheRow,
       updateRecordBusy
     ]
@@ -6053,7 +6158,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (Array.isArray(parsed)) {
               return parsed.map(item => (item == null ? '' : item.toString())).filter(Boolean);
             }
-          } catch (_) {
+          } catch {
             // fall back to pipe-separated payloads
             try {
               const decoded = decodeURIComponent(payload);
@@ -6061,7 +6166,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 .split('|')
                 .map(part => (part || '').toString().trim())
                 .filter(Boolean);
-            } catch (_) {
+            } catch {
               return [];
             }
           }
@@ -6812,7 +6917,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           payload.__ckClientDataVersion = Number(baseVersion);
         }
 
-        const res = await runCoalescedDraftSaveRequest('autosave', payload, () => submit(payload));
+        const res = await runCoalescedDraftSaveRequest('autosave', payload, (nextPayload: any) =>
+          submitCurrentRecordMutation('autosave', nextPayload)
+        );
         const ok = !!res?.success;
         const msg = (res?.message || '').toString();
         if (!ok) {
@@ -6944,6 +7051,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion)) ? Number((res as any).meta.dataVersion) : prev?.dataVersion,
           status: statusForSave
         }));
+        lastSubmissionMetaRef.current = {
+          ...(lastSubmissionMetaRef.current || {}),
+          id: newId || lastSubmissionMetaRef.current?.id || null,
+          createdAt: (res?.meta?.createdAt || '').toString() || lastSubmissionMetaRef.current?.createdAt,
+          updatedAt: updatedAt || lastSubmissionMetaRef.current?.updatedAt,
+          dataVersion: nextDataVersion ?? lastSubmissionMetaRef.current?.dataVersion,
+          status: statusForSave
+        };
         dedupBaselineSignatureRef.current = (currentDedupSignature || '').toString();
         dedupKeyFingerprintBaselineRef.current = currentDedupFingerprint;
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
@@ -7060,12 +7175,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const sessionAtStart = recordSessionRef.current;
       const startedAt = Date.now();
       const startAutosave = !!autoSaveInFlightRef.current;
+      const startDraftSave = !!draftSaveRequestInFlightRef.current;
       const startUploads = uploadQueueRef.current.size;
-      if (startAutosave || startUploads > 0) {
+      if (startAutosave || startDraftSave || startUploads > 0) {
         logEvent('backgroundQueue.wait.start', {
           reason,
           waitForQueue,
           autosaveInFlight: startAutosave,
+          draftSaveInFlight: startDraftSave,
           uploadsInFlight: startUploads
         });
       }
@@ -7106,6 +7223,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
 
+      if (waitForQueue === 'all' && draftSaveRequestInFlightRef.current) {
+        await waitForDraftSaveRequest(`backgroundQueue:${reason}`);
+      }
+
+      if (waitForQueue === 'all' && lastDraftSaveFailureRef.current) {
+        logEvent('backgroundQueue.wait.blocked.draftSaveFailed', {
+          reason,
+          waitForQueue,
+          recordId: lastDraftSaveFailureRef.current.recordId || null
+        });
+        return {
+          ok: false,
+          message: lastDraftSaveFailureRef.current.message || 'Could not save the latest changes.'
+        };
+      }
+
       if (recordStaleRef.current) {
         logEvent('backgroundQueue.wait.blocked.recordStale', {
           reason,
@@ -7115,12 +7248,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
       }
 
-      if (startAutosave || startUploads > 0) {
+      if (startAutosave || startDraftSave || startUploads > 0) {
         logEvent('backgroundQueue.wait.done', { reason, waitForQueue, durationMs: Date.now() - startedAt });
       }
       return { ok: true };
     },
-    [logEvent]
+    [logEvent, waitForDraftSaveRequest]
   );
 
   const waitForGuidedStepAdvance = useCallback(
@@ -7420,9 +7553,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     if (!autoSaveEnabled) return;
     // Only trigger autosave when the actual form data changes.
-    const prevSeen = lastAutoSaveSeenRef.current;
-    const changed = !prevSeen || prevSeen.values !== values || prevSeen.lineItems !== lineItems;
-    lastAutoSaveSeenRef.current = { values, lineItems };
+    const stateFingerprint = buildDraftStateFingerprint({
+      formKey,
+      language,
+      values,
+      lineItems
+    });
+    const changed = lastAutoSaveStateFingerprintRef.current !== stateFingerprint;
+    rememberAutoSaveSeenState(values, lineItems);
     if (!changed) return;
 
     if (view !== 'form') return;
@@ -7503,7 +7641,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveTimerRef.current = null;
       }
     };
-  }, [autoSaveDebounceMs, autoSaveEnabled, definition, isClosedRecord, performAutoSave, scheduleLatestAutoSave, submitting, view, values, lineItems]);
+  }, [
+    autoSaveDebounceMs,
+    autoSaveEnabled,
+    definition,
+    formKey,
+    isClosedRecord,
+    language,
+    performAutoSave,
+    rememberAutoSaveSeenState,
+    scheduleLatestAutoSave,
+    logEvent,
+    submitting,
+    view,
+    values,
+    lineItems
+  ]);
 
   const ensureDraftRecordId = useCallback(
     async (args?: { reason?: string; fieldPath?: string }): Promise<{ success: boolean; recordId?: string; message?: string }> => {
@@ -7581,7 +7734,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draft.__ckSaveMode = 'draft';
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
-        const res = await runCoalescedDraftSaveRequest('ensureDraftRecordId', draft, () => submit(draft));
+        const res = await runCoalescedDraftSaveRequest('ensureDraftRecordId', draft, (nextPayload: any) =>
+          submitCurrentRecordMutation('ensureDraftRecordId', nextPayload)
+        );
         if (!res?.success) {
           const message = (res?.message || 'Failed to create draft record.').toString();
           setDraftSave({ phase: 'error', message });
@@ -7605,6 +7760,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             : prev?.dataVersion,
           status: draftStatus
         }));
+        lastSubmissionMetaRef.current = {
+          ...(lastSubmissionMetaRef.current || {}),
+          id: recordId,
+          createdAt: (res?.meta?.createdAt || '').toString() || lastSubmissionMetaRef.current?.createdAt,
+          updatedAt: (res?.meta?.updatedAt || '').toString() || lastSubmissionMetaRef.current?.updatedAt,
+          dataVersion: Number.isFinite(Number((res as any)?.meta?.dataVersion))
+            ? Number((res as any).meta.dataVersion)
+            : lastSubmissionMetaRef.current?.dataVersion,
+          status: draftStatus
+        };
         recordStaleRef.current = null;
         setRecordStale(null);
         const dv = Number((res as any)?.meta?.dataVersion);
@@ -7831,6 +7996,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const nextDataVersion = Number(meta?.dataVersion);
       const nextRowNumber = Number(meta?.rowNumber);
       const payloadValues = (((args.payload as any)?.values || {}) as Record<string, any>) || {};
+      const nextMeta = {
+        id: recordId,
+        createdAt: nextCreatedAt,
+        updatedAt: nextUpdatedAt,
+        dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : undefined,
+        status: nextStatus
+      };
 
       setSelectedRecordId(recordId);
       selectedRecordIdRef.current = recordId;
@@ -7841,6 +8013,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : prev?.dataVersion,
         status: nextStatus || prev?.status || null
       }));
+      lastSubmissionMetaRef.current = {
+        ...(lastSubmissionMetaRef.current || {}),
+        id: nextMeta.id,
+        createdAt: nextMeta.createdAt || lastSubmissionMetaRef.current?.createdAt,
+        updatedAt: nextMeta.updatedAt || lastSubmissionMetaRef.current?.updatedAt,
+        dataVersion: nextMeta.dataVersion ?? lastSubmissionMetaRef.current?.dataVersion,
+        status: nextMeta.status || lastSubmissionMetaRef.current?.status || null
+      };
       recordStaleRef.current = null;
       setRecordStale(null);
       if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
@@ -7853,17 +8033,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setSelectedRecordSnapshot(prev => {
         if (prev && prev.id && prev.id !== recordId) return prev;
         if (!prev) return prev;
-        return {
+        const nextSnapshot = {
           ...prev,
           id: recordId,
           createdAt: nextCreatedAt || prev.createdAt,
           updatedAt: nextUpdatedAt || prev.updatedAt,
           status: nextStatus || prev.status,
           pdfUrl: nextPdfUrl || prev.pdfUrl,
+          dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : (prev as any).dataVersion,
+          __rowNumber: Number.isFinite(nextRowNumber) ? nextRowNumber : (prev as any).__rowNumber,
           values: payloadValues && Object.keys(payloadValues).length
             ? { ...(prev.values || {}), ...payloadValues }
             : prev.values
         };
+        selectedRecordSnapshotRef.current = nextSnapshot as WebFormSubmission;
+        return nextSnapshot;
       });
 
       upsertListCacheRow({
@@ -8018,8 +8202,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       const response =
         args.mode === 'draft'
-          ? await runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, () => submit(payload))
-          : await submit(payload);
+          ? await runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
+              submitCurrentRecordMutation(`snapshot:${args.reason}`, nextPayload)
+            )
+          : await submitCurrentRecordMutation(`submit:${args.reason}`, payload);
       const ok = Boolean(response?.success);
       const recordId = (((response as any)?.meta?.id) || args.existingRecordId || '').toString().trim();
       if (!ok) {
@@ -8106,6 +8292,412 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
       }),
     [customConfirm, resolveDialogTemplate]
+  );
+
+  const resolveGuidedStepReservationPlan = useCallback(
+    (args: { stepId: string; recordId: string; mode?: 'step' | 'all' }) =>
+      buildStepInventoryReservationPlan({
+        definition,
+        stepId: args.stepId,
+        formKey,
+        recordId: args.recordId,
+        lineItems: lineItemsRef.current,
+        mode: args.mode || 'all',
+        previousManagedScopes:
+          reservationManagedScopesRef.current?.recordId === args.recordId
+            ? reservationManagedScopesRef.current.scopes
+            : []
+      }),
+    [definition, formKey]
+  );
+
+  const applyGuidedStepReservationPlan = useCallback(
+    async (args: {
+      stepId: string;
+      recordId: string;
+      logPrefix: string;
+      dialogKind: string;
+      plan?: InventoryReservationPlanRequest | null;
+    }): Promise<{ success: boolean; message?: string; applied: boolean }> => {
+      const reservationPlan = args.plan ?? resolveGuidedStepReservationPlan({
+        stepId: args.stepId,
+        recordId: args.recordId
+      });
+      if (!reservationPlan) {
+        return { success: true, applied: false };
+      }
+      try {
+        logEvent(`${args.logPrefix}.reservationPlan.begin`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          reservations: reservationPlan.reservations?.length || 0,
+          managedScopes: reservationPlan.managedScopes?.length || 0
+        });
+        const reservationResult = await applyInventoryReservationPlanApi(reservationPlan);
+        if (!reservationResult.success) {
+          const message = buildReservationFailureMessage(
+            resolveUserFacingErrorMessage(
+              reservationResult,
+              reservationResult.message || 'Failed to update the leftover selection.'
+            ) || '',
+            "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+          );
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent(`${args.logPrefix}.reservationPlan.failed`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            message,
+            conflict: reservationResult.conflict === true
+          });
+          await openConfiguredConfirmDialog({
+            dialog: {
+              title: tSystem('common.notice', languageRef.current, 'Notice'),
+              message,
+              confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
+              showCancel: false,
+              showCloseButton: true,
+              dismissOnBackdrop: true
+            },
+            kind: `${args.dialogKind}.reservationPlan`,
+            refId: args.stepId
+          });
+          return { success: false, message, applied: true };
+        }
+        logEvent(`${args.logPrefix}.reservationPlan.done`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          reservationsApplied: reservationResult.reservationsApplied || 0,
+          reservationsReleased: reservationResult.reservationsReleased || 0
+        });
+        return { success: true, applied: true };
+      } catch (err: any) {
+        const message = buildReservationFailureMessage(
+          resolveUserFacingErrorMessage(err, 'Failed to update the leftover selection.') || '',
+          "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+        );
+        setStatus(message);
+        setStatusLevel('error');
+        logEvent(`${args.logPrefix}.reservationPlan.exception`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          message: resolveLogMessage(err, message)
+        });
+        await openConfiguredConfirmDialog({
+          dialog: {
+            title: tSystem('common.notice', languageRef.current, 'Notice'),
+            message,
+            confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
+            showCancel: false,
+            showCloseButton: true,
+            dismissOnBackdrop: true
+          },
+          kind: `${args.dialogKind}.reservationPlan`,
+          refId: args.stepId
+        });
+        return { success: false, message, applied: true };
+      }
+    },
+    [logEvent, openConfiguredConfirmDialog, resolveGuidedStepReservationPlan, resolveLogMessage]
+  );
+
+  const queueGuidedStepReservationPlan = useCallback(
+    (args: {
+      stepId: string;
+      recordId: string;
+      plan: InventoryReservationPlanRequest;
+      logPrefix: string;
+      dialogKind: string;
+    }): Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> => {
+      const sessionId = recordSessionRef.current;
+      const fingerprint = buildInventoryReservationPlanFingerprint(args.plan);
+      if (
+        fingerprint &&
+        reservationSyncMetaRef.current?.recordId === args.recordId &&
+        reservationSyncMetaRef.current?.fingerprint === fingerprint
+      ) {
+        if (reservationSyncMetaRef.current.status === 'running' && reservationSyncPromiseRef.current) {
+          return reservationSyncPromiseRef.current;
+        }
+        if (reservationSyncMetaRef.current.status === 'succeeded') {
+          return Promise.resolve({
+            success: true,
+            recordId: args.recordId,
+            stepId: args.stepId,
+            sessionId
+          });
+        }
+      }
+      const run = async () => {
+        reservationSyncMetaRef.current = {
+          recordId: args.recordId,
+          stepId: args.stepId,
+          sessionId,
+          status: 'running',
+          fingerprint
+        };
+        const result = await applyGuidedStepReservationPlan({
+          stepId: args.stepId,
+          recordId: args.recordId,
+          logPrefix: args.logPrefix,
+          dialogKind: args.dialogKind,
+          plan: args.plan
+        });
+        const outcome = {
+          success: result.success,
+          message: result.message,
+          recordId: args.recordId,
+          stepId: args.stepId,
+          sessionId
+        };
+        reservationSyncMetaRef.current = {
+          recordId: args.recordId,
+          stepId: args.stepId,
+          sessionId,
+          status: result.success ? 'succeeded' : 'failed',
+          fingerprint,
+          message: result.message
+        };
+        if (result.success) {
+          reservationManagedScopesRef.current = {
+            recordId: args.recordId,
+            scopes: Array.isArray(args.plan.managedScopes) ? args.plan.managedScopes.slice() : []
+          };
+        }
+        if (!result.success) {
+          const sameSession = recordSessionRef.current === sessionId;
+          const sameRecord = (selectedRecordIdRef.current || '').toString().trim() === args.recordId;
+          if (sameSession && sameRecord) {
+            setRequestedGuidedStepId(args.stepId || null);
+          }
+        }
+        return outcome;
+      };
+
+      const prior = reservationSyncPromiseRef.current;
+      const next = (prior
+        ? prior.catch(() => ({
+            success: false,
+            recordId: args.recordId,
+            stepId: args.stepId,
+            sessionId
+          }))
+        : Promise.resolve({
+            success: true,
+            recordId: args.recordId,
+            stepId: args.stepId,
+            sessionId
+          })
+      ).then(run);
+      reservationSyncPromiseRef.current = next;
+      return next;
+    },
+    [applyGuidedStepReservationPlan]
+  );
+
+  const queueGuidedStepBackgroundSync = useCallback(
+    (args: { stepId: string; nextStepId?: string; trigger: 'next' | 'auto' }) => {
+      const sessionId = recordSessionRef.current;
+      const queueFingerprint = [
+        sessionId,
+        args.stepId || '',
+        args.nextStepId || '',
+        args.trigger,
+        buildDraftStateFingerprint({
+          formKey,
+          language: languageRef.current,
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current
+        }),
+        autoSaveDirtyRef.current ? 'dirty' : 'clean',
+        autoSaveQueuedRef.current ? 'queued' : 'idle'
+      ].join('::');
+      if (
+        guidedStepBackgroundSyncActiveFingerprintRef.current === queueFingerprint ||
+        guidedStepBackgroundSyncPendingFingerprintRef.current === queueFingerprint
+      ) {
+        logEvent('guidedStep.advance.backgroundSync.coalesced', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger
+        });
+        return;
+      }
+
+      guidedStepBackgroundSyncPendingRef.current = {
+        ...args,
+        sessionId,
+        fingerprint: queueFingerprint
+      };
+      guidedStepBackgroundSyncPendingFingerprintRef.current = queueFingerprint;
+
+      if (guidedStepBackgroundSyncPromiseRef.current) {
+        logEvent('guidedStep.advance.backgroundSync.queued', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger
+        });
+        return;
+      }
+
+      guidedStepBackgroundSyncPromiseRef.current = (async () => {
+        while (guidedStepBackgroundSyncPendingRef.current) {
+          const next = guidedStepBackgroundSyncPendingRef.current;
+          guidedStepBackgroundSyncPendingRef.current = null;
+          guidedStepBackgroundSyncPendingFingerprintRef.current = '';
+          guidedStepBackgroundSyncActiveFingerprintRef.current = next.fingerprint;
+
+          const reason = `guidedStepAdvance:${next.stepId || 'step'}:${next.trigger}`;
+          let recordId =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+
+          const hadDraftSaveInFlight = draftSaveRequestInFlightRef.current;
+          if (hadDraftSaveInFlight) {
+            await waitForDraftSaveRequest(`${reason}.queued`);
+            if (recordSessionRef.current !== next.sessionId) continue;
+            recordId =
+              resolveExistingRecordId({
+                selectedRecordId: selectedRecordIdRef.current,
+                selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+                lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+              }) || recordId;
+          }
+
+          const needsDraftSave = autoSaveDirtyRef.current || autoSaveQueuedRef.current;
+          if (needsDraftSave) {
+            const snapshotResult = await persistCurrentSnapshot({
+              reason: `${reason}.background`,
+              mode: 'draft',
+              existingRecordId: recordId || undefined
+            });
+            if (recordSessionRef.current !== next.sessionId) continue;
+            if (!snapshotResult.success) {
+              const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
+              setStatus(message);
+              setStatusLevel('error');
+              logEvent('guidedStep.advance.backgroundSnapshot.failed', {
+                stepId: next.stepId,
+                nextStepId: next.nextStepId || null,
+                recordId: recordId || null,
+                message
+              });
+              continue;
+            }
+            recordId = snapshotResult.recordId || recordId;
+          }
+
+          if (!recordId) continue;
+          const reservationPlan = resolveGuidedStepReservationPlan({
+            stepId: next.stepId,
+            recordId,
+            mode: 'all'
+          });
+          if (!reservationPlan) continue;
+          void queueGuidedStepReservationPlan({
+            stepId: next.stepId,
+            recordId,
+            plan: reservationPlan,
+            logPrefix: 'guidedStep.advance',
+            dialogKind: 'guidedStepAdvance'
+          });
+        }
+      })()
+        .catch(err => {
+          logEvent('guidedStep.advance.backgroundSync.exception', {
+            message: resolveLogMessage(err, 'Failed to synchronize guided step changes.')
+          });
+        })
+        .finally(() => {
+          guidedStepBackgroundSyncPromiseRef.current = null;
+          guidedStepBackgroundSyncActiveFingerprintRef.current = '';
+          if (guidedStepBackgroundSyncPendingRef.current) {
+            queueGuidedStepBackgroundSync({
+              stepId: guidedStepBackgroundSyncPendingRef.current.stepId,
+              nextStepId: guidedStepBackgroundSyncPendingRef.current.nextStepId,
+              trigger: guidedStepBackgroundSyncPendingRef.current.trigger
+            });
+          }
+        });
+    },
+    [
+      formKey,
+      logEvent,
+      persistCurrentSnapshot,
+      queueGuidedStepReservationPlan,
+      resolveGuidedStepReservationPlan,
+      resolveLogMessage,
+      waitForDraftSaveRequest
+    ]
+  );
+
+  const waitForPendingReservationSync = useCallback(
+    async (args: {
+      recordId: string;
+      reason: string;
+    }): Promise<{ ok: boolean; message?: string }> => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return { ok: true };
+      const meta = reservationSyncMetaRef.current;
+      if (!meta || meta.recordId !== recordId) return { ok: true };
+      if (meta.status === 'failed') {
+        const message = meta.message || "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again.";
+        logEvent('reservationSync.wait.blocked.failed', {
+          reason: args.reason,
+          recordId,
+          stepId: meta.stepId
+        });
+        setRequestedGuidedStepId(meta.stepId || null);
+        return { ok: false, message };
+      }
+      if (meta.status !== 'running' || !reservationSyncPromiseRef.current) {
+        return { ok: true };
+      }
+      logEvent('reservationSync.wait.start', {
+        reason: args.reason,
+        recordId,
+        stepId: meta.stepId
+      });
+      const outcome = await reservationSyncPromiseRef.current.catch(() => ({
+        success: false,
+        message: meta.message || "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again.",
+        recordId,
+        stepId: meta.stepId,
+        sessionId: meta.sessionId
+      }));
+      if (!outcome.success) {
+        setRequestedGuidedStepId(outcome.stepId || null);
+        return {
+          ok: false,
+          message:
+            outcome.message ||
+            "We couldn't update the leftover selection properly. Please go back to the Leftover bank screen and try again."
+        };
+      }
+      return { ok: true };
+    },
+    [logEvent]
+  );
+
+  const handleBeforeGuidedStepAdvance = useCallback(
+    async (args: {
+      stepId: string;
+      nextStepId?: string;
+      trigger: 'next' | 'auto';
+      waitDialog?: SystemActionGateDialogConfig | null;
+    }): Promise<{ success: boolean; message?: string }> => {
+      const waitResult = await waitForGuidedStepAdvance(args);
+      if (!waitResult.success) return waitResult;
+      queueGuidedStepBackgroundSync(args);
+      return { success: true };
+    },
+    [
+      queueGuidedStepBackgroundSync,
+      waitForGuidedStepAdvance
+    ]
   );
 
   const handleGuidedStepMilestone = useCallback(
@@ -8281,6 +8873,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             return { success: false, message };
           }
           recordId = snapshotResult.recordId;
+        }
+
+        const requiresReservationSyncDrain = [...preActions, ...effectiveBackgroundActions]
+          .map(entry => (entry || '').toString().trim().toUpperCase())
+          .includes('CLOSE_RECORD');
+        if (requiresReservationSyncDrain) {
+          const reservationWait = await waitForPendingReservationSync({
+            recordId,
+            reason: `${reason}.reservationSync`
+          });
+          if (!reservationWait.ok) {
+            const message = (reservationWait.message || 'Could not confirm leftover selections.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            return { success: false, advanceToNext: false, message };
+          }
+        }
+
+        const reservationOutcome = await applyGuidedStepReservationPlan({
+          stepId: args.stepId,
+          recordId,
+          logPrefix: 'guidedStep.milestone',
+          dialogKind: 'guidedStepMilestone'
+        });
+        if (!reservationOutcome.success) {
+          return { success: false, advanceToNext: false, message: reservationOutcome.message };
         }
 
         const runBatch = async (
@@ -8493,6 +9111,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyFollowupBatchResults,
+      applyGuidedStepReservationPlan,
       definition,
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
@@ -8507,6 +9126,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       resolveLogMessage,
       statusTransitions,
       resolveUiErrorMessage,
+      waitForPendingReservationSync,
       waitForBackgroundSaves
     ]
   );
@@ -8791,13 +9411,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             scheduleLatestAutoSave('upload.queue.drained', autoSaveDebounceMs);
             logEvent('autosave.queued.uploadDrained', { debounceMs: autoSaveDebounceMs });
           }
-        } catch (_) {
+        } catch {
           // ignore
         }
       });
       return next;
     },
-    [autoSaveDebounceMs, ensureDraftRecordId, formKey, isClosedRecord, logEvent, performAutoSave, scheduleLatestAutoSave, syncUploadQueueSize]
+    [
+      autoSaveDebounceMs,
+      ensureDraftRecordId,
+      isClosedRecord,
+      language,
+      logEvent,
+      resolveLogMessage,
+      resolveUiErrorMessage,
+      scheduleLatestAutoSave,
+      syncUploadQueueSize
+    ]
   );
 
   useEffect(() => {
@@ -8818,7 +9448,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         normalizedValues,
         initialLineItems
       );
-      lastAutoSaveSeenRef.current = { values: mappedValues, lineItems: mappedLineItems };
+      rememberAutoSaveSeenState(mappedValues, mappedLineItems);
       dedupBaselineSignatureRef.current = computeDedupSignatureFromValues(dedupPrecheckRules, mappedValues as any);
       dedupKeyFingerprintBaselineRef.current = computeDedupKeyFingerprint((definition as any)?.dedupRules, mappedValues as any);
       setValues(mappedValues);
@@ -8841,7 +9471,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       setSelectedRecordSnapshot(record);
     }
-  }, [record, definition]);
+  }, [dedupPrecheckRules, definition, record, rememberAutoSaveSeenState]);
 
   useEffect(() => {
     if (view !== 'summary') return;
@@ -9229,7 +9859,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         formKey,
         recordId: existingRecordId || null
       });
-      const payload = submitResult.payload;
       const res = submitResult.response;
       if (!res) {
         logEvent('submit.emptyResponse', { formKey, existingRecordId: existingRecordId || null });
@@ -11039,7 +11668,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setAutoSaveHold={setAutoSaveHoldFromUi}
           summarySubmitIntentRef={summarySubmitIntentRef}
           ensureRecordId={ensureDraftRecordId}
-          onBeforeGuidedStepAdvance={waitForGuidedStepAdvance}
+          onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
         />
       ) : null}
 

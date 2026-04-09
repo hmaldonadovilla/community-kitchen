@@ -17,6 +17,7 @@ describe('index routing', () => {
     expect(args[0]).toBeUndefined();
     expect((args[1] as any).app).toBe('landing');
     expect((args[1] as any).admin).toBe('true');
+    expect((args[2] as any)?.isEnabled?.()).toBe(true);
   });
 
   it('preserves provided form key and canonicalizes truthy admin param', () => {
@@ -29,6 +30,7 @@ describe('index routing', () => {
     expect(args[0]).toBe('Config: Meal Production');
     expect((args[1] as any).page).toBe('analytics');
     expect((args[1] as any).admin).toBe('true');
+    expect((args[2] as any)?.isEnabled?.()).toBe(true);
   });
 
   it('installs daily analytics and lifecycle triggers alongside existing onEdit triggers', () => {

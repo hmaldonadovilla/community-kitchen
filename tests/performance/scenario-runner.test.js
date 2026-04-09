@@ -1,8 +1,10 @@
 const {
   extractInitialLoadNetworkBuckets,
+  frameLooksLikeApp,
   findPerfDuration,
   isBundleResourceEntry,
   isHomeDataRequestEntry,
+  withFormQuery,
 } = require('../../scripts/performance/scenario-runner.js');
 
 describe('scenario-runner network buckets', () => {
@@ -97,5 +99,30 @@ describe('scenario-runner network buckets', () => {
       'ck.home.timeToData'
     );
     expect(duration).toBe(5123);
+  });
+
+  test('recognizes current home ui markers when recent activity is absent', async () => {
+    const visibleSelectors = new Set(['button[title="View"]']);
+    const frame = {
+      locator(selector) {
+        return {
+          first() {
+            return {
+              isVisible: async () => visibleSelectors.has(selector),
+            };
+          },
+        };
+      },
+    };
+
+    await expect(frameLooksLikeApp(frame)).resolves.toBe(true);
+  });
+
+  test('adds timing=1 when the scenario url has no diagnostics flags', () => {
+    const url = withFormQuery('https://script.google.com/macros/s/abc/exec?app=meal-production', 'Config: Meal Production');
+    const parsed = new URL(url);
+
+    expect(parsed.searchParams.get('form')).toBe('Config: Meal Production');
+    expect(parsed.searchParams.get('timing')).toBe('1');
   });
 });

@@ -2,6 +2,7 @@ import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
 import {
+  InventoryReservationPlanRequest,
   InventoryReservationMutationRequest,
   InventoryReservationReconciliationRequest,
   WebFormDefinition,
@@ -10,7 +11,7 @@ import {
 import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCacheEpoch';
 import { renderReactBundle } from './services/webform/bundles';
 import { getUiEnvTag } from './services/webform/envTag';
-import { ServerTimingRecorder, isServerTimingEnabled } from './services/webform/serverTiming';
+import { ServerTimingRecorder, shouldEnableServerTiming } from './services/webform/serverTiming';
 
 const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
@@ -106,7 +107,7 @@ export function doGet(
   e: GoogleAppsScript.Events.DoGet
 ): GoogleAppsScript.HTML.HtmlOutput | GoogleAppsScript.Content.TextOutput {
   const params = e?.parameter || {};
-  const serverTiming = new ServerTimingRecorder(isServerTimingEnabled(getUiEnvTag()));
+  const serverTiming = new ServerTimingRecorder(shouldEnableServerTiming(getUiEnvTag(), params as any));
   const normalizedParams = serverTiming.measure('doGet.normalizeRequestParamsMs', () => normalizeRequestParams(params as any));
   const bundle = (params.bundle || '').toString().trim().toLowerCase();
   if (bundle === 'react') {
@@ -233,6 +234,12 @@ export function upsertInventoryReservation(request: InventoryReservationMutation
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.upsertInventoryReservation(request);
+}
+
+export function applyInventoryReservationPlan(request: InventoryReservationPlanRequest): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.applyInventoryReservationPlan(request);
 }
 
 export function reconcileInventoryReservations(request: InventoryReservationReconciliationRequest): any {

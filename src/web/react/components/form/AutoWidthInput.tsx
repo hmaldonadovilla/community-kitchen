@@ -5,6 +5,7 @@ import { useAutoWidth } from './useAutoWidth';
 export const AutoWidthInput: React.FC<{
   value: string;
   onChange: (nextValue: string) => void;
+  onBlur?: (nextValue: string) => void;
   disabled?: boolean;
   readOnly?: boolean;
   placeholder?: string;
@@ -23,6 +24,7 @@ export const AutoWidthInput: React.FC<{
 }> = ({
   value,
   onChange,
+  onBlur,
   disabled,
   readOnly,
   placeholder,
@@ -94,6 +96,11 @@ export const AutoWidthInput: React.FC<{
         onChange={e => {
           const raw = e.target.value;
           onChange(sanitize ? sanitize(raw) : raw);
+        }}
+        onBlur={e => {
+          if (!onBlur) return;
+          const raw = e.target.value;
+          onBlur(sanitize ? sanitize(raw) : raw);
         }}
       />
     </span>

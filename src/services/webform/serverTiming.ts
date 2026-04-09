@@ -6,6 +6,12 @@ export type ServerTimingSummary = {
   steps: ServerTimingSteps;
 };
 
+const isTruthyToken = (value: unknown): boolean => {
+  const raw = (value ?? '').toString().trim().toLowerCase();
+  if (!raw) return false;
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+};
+
 export const isServerTimingEnabled = (value: unknown): boolean => {
   const raw = (value ?? '').toString().trim().toLowerCase();
   if (!raw) return false;
@@ -17,6 +23,19 @@ export const isServerTimingEnabled = (value: unknown): boolean => {
     raw.includes('nonprod') ||
     raw.includes('dev')
   );
+};
+
+export const shouldEnableServerTiming = (
+  envTag: unknown,
+  params?: Record<string, unknown> | null
+): boolean => {
+  if (isServerTimingEnabled(envTag)) return true;
+  const request = params || {};
+  if (isTruthyToken((request as any).timing)) return true;
+  if (isTruthyToken((request as any).serverTiming)) return true;
+  if (isTruthyToken((request as any).perf)) return true;
+  if (isTruthyToken((request as any).admin)) return true;
+  return Object.prototype.hasOwnProperty.call(request, 'admin-true');
 };
 
 export class ServerTimingRecorder {

@@ -268,6 +268,20 @@ function msFromKbps(kbps) {
   return (kbps * 1024) / 8;
 }
 
+async function frameLooksLikeApp(frame) {
+  return (
+    (await frame.locator('button:has-text("View")').first().isVisible().catch(() => false)) ||
+    (await frame.locator('button[title="View"]').first().isVisible().catch(() => false)) ||
+    (await frame.locator('button[aria-label="View"]').first().isVisible().catch(() => false)) ||
+    (await frame.locator('text=Meal Productions').first().isVisible().catch(() => false)) ||
+    (await frame.locator('text=Last 7 days').first().isVisible().catch(() => false)) ||
+    (await frame.locator('button:has-text("Open menu")').first().isVisible().catch(() => false)) ||
+    (await frame.locator('[aria-label="Open menu"]').first().isVisible().catch(() => false)) ||
+    (await frame.locator('text=Loading…').first().isVisible().catch(() => false)) ||
+    (await frame.locator('text=Loading...').first().isVisible().catch(() => false))
+  );
+}
+
 async function waitForAppFrame(page, timeoutMs = 60000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -282,12 +296,7 @@ async function waitForAppFrame(page, timeoutMs = 60000) {
     for (const candidate of frames) {
       try {
         await candidate.waitForSelector('body', { timeout: 500 });
-        const looksLikeApp =
-          (await candidate.locator('text=Recent activity').first().isVisible().catch(() => false)) ||
-          (await candidate.locator('button:has-text("View")').first().isVisible().catch(() => false)) ||
-          (await candidate.locator('button:has-text("Open menu")').first().isVisible().catch(() => false)) ||
-          (await candidate.locator('text=Loading…').first().isVisible().catch(() => false)) ||
-          (await candidate.locator('text=Loading...').first().isVisible().catch(() => false));
+        const looksLikeApp = await frameLooksLikeApp(candidate);
         if (looksLikeApp) return candidate;
       } catch (_) {
         // continue scanning
@@ -303,9 +312,12 @@ async function waitForHomeReady(frame, timeoutMs = 90000) {
   while (Date.now() - started < timeoutMs) {
     const ready =
       (await frame.locator('button:has-text("View")').first().isVisible().catch(() => false)) ||
+      (await frame.locator('button[title="View"]').first().isVisible().catch(() => false)) ||
+      (await frame.locator('button[aria-label="View"]').first().isVisible().catch(() => false)) ||
       (await frame.locator('button:has-text("Copy")').first().isVisible().catch(() => false)) ||
       (await frame.locator('table button').first().isVisible().catch(() => false)) ||
-      (await frame.locator('text=Recent activity').first().isVisible().catch(() => false));
+      (await frame.locator('text=Meal Productions').first().isVisible().catch(() => false)) ||
+      (await frame.locator('text=Last 7 days').first().isVisible().catch(() => false));
     if (ready) return;
     await frame.waitForTimeout(300);
   }
@@ -756,6 +768,15 @@ function withFormQuery(urlRaw, formKey) {
   const parsed = new URL(urlRaw);
   const form = (formKey || '').toString().trim();
   if (form) parsed.searchParams.set('form', form);
+  const hasTimingOptIn =
+    parsed.searchParams.has('timing') ||
+    parsed.searchParams.has('serverTiming') ||
+    parsed.searchParams.has('perf') ||
+    parsed.searchParams.has('admin') ||
+    parsed.searchParams.has('admin-true');
+  if (!hasTimingOptIn) {
+    parsed.searchParams.set('timing', '1');
+  }
   return parsed.toString();
 }
 
@@ -1287,9 +1308,11 @@ if (require.main === module) {
 module.exports = {
   buildEntryWindow,
   extractInitialLoadNetworkBuckets,
+  frameLooksLikeApp,
   findPerfDuration,
   findPerfDurationFirst,
   isBundleResourceEntry,
   isHomeDataRequestEntry,
+  withFormQuery,
   summarizeRuns
 };

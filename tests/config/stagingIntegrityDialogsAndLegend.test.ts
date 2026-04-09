@@ -266,6 +266,8 @@ describe('staging integrity dialogs and list legend config', () => {
         })
       );
       expect(leftoverInventoryRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
+      expect(leftoverInventoryRows?.reservation?.commitMode).toBe('step');
+      expect(leftoverInventoryRows?.reservation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
       expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(
         expect.objectContaining({
           LEFTOVER_MEAL_TYPE: 'LEFTOVER_MEAL_TYPE',
@@ -303,7 +305,7 @@ describe('staging integrity dialogs and list legend config', () => {
       ]);
       expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.validationScope).toBe('throughCurrentStep');
-      expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('uploadsOnly');
+      expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('all');
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Background actions started');
@@ -373,7 +375,7 @@ describe('staging integrity dialogs and list legend config', () => {
       ]);
       expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
-      expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('uploadsOnly');
+      expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('all');
       expect(leftovers?.navigation?.milestoneAction?.advanceAfterStart).toBe(false);
       expect(leftovers?.navigation?.milestoneAction?.navigateToAfterSuccess).toBe('list');
       expect(leftovers?.navigation?.milestoneAction?.confirmationDialogCases).toEqual(
@@ -468,6 +470,7 @@ describe('staging integrity dialogs and list legend config', () => {
     assertMealProductionLegend(cfg.definition);
     assertSearchPresets(cfg.questions);
     assertSearchPresets(cfg.definition?.questions || []);
+    expect(cfg.form?.reservationLifecycle?.reconcileOnFinalSubmit?.refreshMode).toBe('revisionOnly');
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
 

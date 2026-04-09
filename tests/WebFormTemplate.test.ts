@@ -49,6 +49,8 @@ describe('WebFormTemplate', () => {
   test('exposes server timings to the client shell when timing is enabled', () => {
     const timing = new ServerTimingRecorder(true);
     timing.measure('renderForm.buildEmbeddedHtmlMs', () => null);
+    timing.measure('renderForm.definition.buildDefinitionFromConfigMs', () => null);
+    timing.measure('renderForm.bootstrap.fetchSortedBatchMs', () => null);
 
     const html = buildWebFormHtml(
       { title: 'Config: Test', questions: [] } as any,
@@ -61,5 +63,7 @@ describe('WebFormTemplate', () => {
 
     expect(html).toContain('window.__CK_SERVER_TIMINGS__ = {');
     expect(html).toContain('"renderForm.buildEmbeddedHtmlMs"');
+    expect(html).toContain('"renderForm.definition.buildDefinitionFromConfigMs"');
+    expect(html).toContain('"renderForm.bootstrap.fetchSortedBatchMs"');
   });
 });

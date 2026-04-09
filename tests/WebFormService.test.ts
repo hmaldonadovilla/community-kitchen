@@ -177,6 +177,24 @@ describe('WebFormService', () => {
     };
   };
 
+  const installDocumentLockMocks = (tryLockImpl?: () => boolean) => {
+    const previousLockService = (global as any).LockService;
+    const lock = {
+      tryLock: jest.fn(() => (tryLockImpl ? tryLockImpl() : true)),
+      releaseLock: jest.fn()
+    };
+    (global as any).LockService = {
+      ...(previousLockService || {}),
+      getDocumentLock: () => lock
+    };
+    return {
+      lock,
+      restore: () => {
+        (global as any).LockService = previousLockService;
+      }
+    };
+  };
+
   afterEach(() => {
     jest.restoreAllMocks();
     (global as any).GmailApp.sendEmail.mockClear();
@@ -1981,6 +1999,45 @@ describe('WebFormService', () => {
     expect(second.availability?.freeQuantity).toBe(3);
   });
 
+  test('upsertInventoryReservation retries transient reservation transaction lock failures', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-UPSERT-RETRY-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 6,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    let tryLockCalls = 0;
+    const docLock = installDocumentLockMocks(() => {
+      tryLockCalls += 1;
+      return tryLockCalls >= 2;
+    });
+    try {
+      const result = service.upsertInventoryReservation({
+        resourceFormKey: inventoryFormKey,
+        resourceRecordId: (inventory.meta?.id || '').toString(),
+        resourceItemId: 'LE-UPSERT-RETRY-1',
+        resourceKind: 'Entire dish',
+        quantity: 3,
+        sourceFormKey: 'Config: Delivery',
+        sourceRecordId: 'REC-UPSERT-RETRY-1',
+        sourceParentGroupId: 'MP_MEALS_REQUEST',
+        sourceParentRowId: 'ROW-UPSERT-RETRY-1',
+        ledgerFormKey
+      });
+
+      expect(result.success).toBe(true);
+      expect(docLock.lock.tryLock).toHaveBeenCalledTimes(2);
+    } finally {
+      docLock.restore();
+    }
+  });
+
   test('upsertInventoryReservation releases a reservation when quantity becomes zero', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const inventory = service.saveSubmissionWithId({
@@ -2031,6 +2088,373 @@ describe('WebFormService', () => {
     expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_QTY).toBe(0);
     const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
     expect((reservation?.values as any)?.STATUS).toBe('released');
+  });
+
+  test('applyInventoryReservationPlan replaces managed-scope reservations in one batch', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventoryA = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-PLAN-A',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    const inventoryB = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-PLAN-B',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventoryA.success).toBe(true);
+    expect(inventoryB.success).toBe(true);
+
+    const firstReservation = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-A',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      ledgerFormKey
+    });
+    expect(firstReservation.success).toBe(true);
+
+    const planResult = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceItemId: 'LE-PLAN-B',
+          resourceKind: 'Entire dish',
+          quantity: 2,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ]
+    });
+
+    expect(planResult.success).toBe(true);
+    expect(planResult.reservationsApplied).toBe(1);
+    expect(planResult.reservationsReleased).toBe(1);
+
+    const updatedInventoryA = service.fetchSubmissionById(inventoryFormKey, (inventoryA.meta?.id || '').toString());
+    const updatedInventoryB = service.fetchSubmissionById(inventoryFormKey, (inventoryB.meta?.id || '').toString());
+    expect((updatedInventoryA?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(2);
+
+    const releasedReservation = service.fetchSubmissionById(ledgerFormKey, (firstReservation.reservationId || '').toString());
+    expect((releasedReservation?.values as any)?.STATUS).toBe('released');
+
+    const expectedNextReservationId = (service as any).buildInventoryReservationId({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryB.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-B',
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-2'
+    });
+    const nextReservation = service.fetchSubmissionById(ledgerFormKey, expectedNextReservationId);
+    expect((nextReservation?.values as any)?.STATUS).toBe('active');
+    expect((nextReservation?.values as any)?.RESERVED_QTY).toBe(2);
+  });
+
+  test('applyInventoryReservationPlan reuses a single active-ledger scan for the batch', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventoryA = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-BATCH-A',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    const inventoryB = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-BATCH-B',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventoryA.success).toBe(true);
+    expect(inventoryB.success).toBe(true);
+
+    const seededReservation = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+      resourceItemId: 'LE-BATCH-A',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-BATCH-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      ledgerFormKey
+    });
+    expect(seededReservation.success).toBe(true);
+
+    const fetchByCriteriaSpy = jest.spyOn(service as any, 'fetchSubmissionRecordsByFieldCriteria');
+    fetchByCriteriaSpy.mockClear();
+
+    const result = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-BATCH-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryA.meta?.id || '').toString(),
+          resourceItemId: 'LE-BATCH-A',
+          resourceKind: 'Entire dish',
+          quantity: 2,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceItemId: 'LE-BATCH-B',
+          resourceKind: 'Entire dish',
+          quantity: 3,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    const criteriaCalls = fetchByCriteriaSpy.mock.calls.map(
+      call => (call[2] || []) as Array<{ fieldId: string; expected: string }>
+    );
+    const activeStatusCalls = criteriaCalls.filter(criteria =>
+      criteria.some(entry => entry.fieldId === 'STATUS' && entry.expected === 'active')
+    );
+    expect(activeStatusCalls).toHaveLength(1);
+    expect(
+      criteriaCalls.some(criteria => criteria.some(entry => entry.fieldId === 'RESOURCE_FORM_KEY' || entry.fieldId === 'RESOURCE_RECORD_ID'))
+    ).toBe(false);
+  });
+
+  test('applyInventoryReservationPlan batches internal ledger and inventory writes', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventoryA = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-BATCH-WRITE-A',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    const inventoryB = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-BATCH-WRITE-B',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventoryA.success).toBe(true);
+    expect(inventoryB.success).toBe(true);
+
+    const firstReservation = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+      resourceItemId: 'LE-BATCH-WRITE-A',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-BATCH-WRITE-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      ledgerFormKey
+    });
+    expect(firstReservation.success).toBe(true);
+
+    const batchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
+
+    const result = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-BATCH-WRITE-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryA.meta?.id || '').toString(),
+          resourceItemId: 'LE-BATCH-WRITE-A',
+          resourceKind: 'Entire dish',
+          quantity: 2,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceItemId: 'LE-BATCH-WRITE-B',
+          resourceKind: 'Entire dish',
+          quantity: 3,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    expect(batchSpy).toHaveBeenCalledTimes(2);
+    const savedCounts = batchSpy.mock.calls.map(call => (Array.isArray(call[0]) ? call[0].length : 0)).sort((a, b) => a - b);
+    expect(savedCounts).toEqual([2, 2]);
+  });
+
+  test('applyInventoryReservationPlan releases deleted output-row reservations within the same parent row', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventoryA = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-DEL-A',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    const inventoryB = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-DEL-B',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventoryA.success).toBe(true);
+    expect(inventoryB.success).toBe(true);
+
+    const reservationA = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+      resourceItemId: 'LE-DEL-A',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-DEL-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-1',
+      ledgerFormKey
+    });
+    const reservationB = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventoryB.meta?.id || '').toString(),
+      resourceItemId: 'LE-DEL-B',
+      resourceKind: 'Entire dish',
+      quantity: 3,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-DEL-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-2',
+      ledgerFormKey
+    });
+    expect(reservationA.success).toBe(true);
+    expect(reservationB.success).toBe(true);
+
+    const result = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-DEL-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceItemId: 'LE-DEL-B',
+          resourceKind: 'Entire dish',
+          quantity: 3,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI',
+          sourceOutputRowId: 'OUT-2',
+          sourceOutputKeyFieldId: 'LEFTOVER_ID'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    const releasedReservation = service.fetchSubmissionById(ledgerFormKey, (reservationA.reservationId || '').toString());
+    const preservedReservation = service.fetchSubmissionById(ledgerFormKey, (reservationB.reservationId || '').toString());
+    expect((releasedReservation?.values as any)?.STATUS).toBe('released');
+    expect((preservedReservation?.values as any)?.STATUS).toBe('active');
+
+    const updatedInventoryA = service.fetchSubmissionById(inventoryFormKey, (inventoryA.meta?.id || '').toString());
+    const updatedInventoryB = service.fetchSubmissionById(inventoryFormKey, (inventoryB.meta?.id || '').toString());
+    expect((updatedInventoryA?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
+    expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
   });
 
   test('reconcileInventoryReservations consumes reserved quantity and closes active ledger rows', () => {
@@ -2726,6 +3150,70 @@ describe('WebFormService', () => {
     expect((updated as any)?.status).toBe('Closed');
   });
 
+  test('saveSubmissionWithId uses revision-only refresh for user draft saves', () => {
+    const refreshMutationSpy = jest.spyOn(service as any, 'refreshMutationCaches');
+    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
+    const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
+
+    const result = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DRAFT-REFRESH',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(refreshMutationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ configSheet: 'Config: Delivery' }),
+      expect.any(Array),
+      'saveSubmissionWithId',
+      'revisionOnly'
+    );
+    expect(refreshAnalyticsSpy).not.toHaveBeenCalled();
+    expect(bumpSpy).toHaveBeenCalledWith('Config: Delivery', 'saveSubmissionWithId');
+  });
+
+  test('saveSubmissionWithId skips post-save refresh on noop updates', () => {
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-REFRESH',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    const refreshMutationSpy = jest.spyOn(service as any, 'refreshMutationCaches');
+    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
+    const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
+
+    const result = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-REFRESH',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.meta?.operation).toBe('noop');
+    expect(refreshMutationSpy).not.toHaveBeenCalled();
+    expect(refreshAnalyticsSpy).not.toHaveBeenCalled();
+    expect(bumpSpy).not.toHaveBeenCalled();
+  });
+
   test('triggerFollowupAction RECONCILE_RESERVATIONS reconciles active reservations without closing the record', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -2885,6 +3373,128 @@ describe('WebFormService', () => {
     expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
     const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
+  });
+
+  test('RECONCILE_RESERVATIONS reuses the outer document lock while saving inventory and ledger rows', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      reservationLifecycle: {
+        ledgerFormKey,
+        reconcileOnFinalSubmit: {
+          enabled: true,
+          ledgerFormKey,
+          refreshMode: 'full'
+        }
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-LOCK-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-LOCK-1',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 4,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-LOCK-1',
+      resourceKind: 'Entire dish',
+      quantity: 2,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-LOCK-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-LOCK-1',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const docLock = installDocumentLockMocks();
+    try {
+      const result = service.triggerFollowupAction('Config: Delivery', 'REC-LOCK-1', 'RECONCILE_RESERVATIONS');
+      expect(result.success).toBe(true);
+      expect(docLock.lock.tryLock).toHaveBeenCalledTimes(1);
+    } finally {
+      docLock.restore();
+    }
+  });
+
+  test('triggerFollowupActions stops the batch after the first failed action', () => {
+    jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+    const actionSpy = jest
+      .spyOn(service as any, 'runFollowupActionWithLifecycle')
+      .mockImplementation((...args: any[]) => {
+        const action = args[4];
+        if (action === 'RECONCILE_RESERVATIONS') {
+          return {
+            success: false,
+            message: 'Reservation reconciliation is not configured for this form.'
+          };
+        }
+        return {
+          success: true,
+          status: `${action} done`,
+          updatedAt: '2026-04-08T10:00:00.000Z'
+        };
+      });
+
+    const result = service.triggerFollowupActions('Config: Delivery', 'REC-STOP-1', [
+      'RECONCILE_RESERVATIONS',
+      'CLOSE_RECORD'
+    ]);
+
+    expect(actionSpy).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    expect(result.results[0].action).toBe('RECONCILE_RESERVATIONS');
+    expect(result.results[0].result?.success).toBe(false);
+    expect(result.results[1].action).toBe('CLOSE_RECORD');
+    expect(result.results[1].result?.success).toBe(false);
+    expect(result.results[1].result?.message).toContain('Skipped because RECONCILE_RESERVATIONS failed.');
+  });
+
+  test('triggerFollowupActions retries transient reservation reconciliation lock failures', () => {
+    jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+    const actionSpy = jest
+      .spyOn(service as any, 'runFollowupActionWithLifecycle')
+      .mockImplementationOnce(() => ({
+        success: false,
+        message: 'Could not acquire the record save lock. Please retry.'
+      }))
+      .mockImplementationOnce(() => ({
+        success: true,
+        updatedAt: '2026-04-08T10:00:00.000Z'
+      }));
+
+    const result = service.triggerFollowupActions('Config: Delivery', 'REC-RETRY-1', ['RECONCILE_RESERVATIONS']);
+
+    expect(actionSpy).toHaveBeenCalledTimes(2);
+    expect(result.success).toBe(true);
+    expect(result.results[0].result?.success).toBe(true);
   });
 
   test('triggerFollowupActions waits for earlier queued batch on the same record', () => {
@@ -3134,9 +3744,11 @@ describe('WebFormService', () => {
     });
     expect(reserved.success).toBe(true);
 
-    const refreshSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
+    const refreshSpy = jest.spyOn(service as any, 'refreshMutationCaches');
+    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
     const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
     refreshSpy.mockClear();
+    refreshAnalyticsSpy.mockClear();
     bumpSpy.mockClear();
 
     const deleted = service.saveSubmissionWithId({
@@ -3148,12 +3760,14 @@ describe('WebFormService', () => {
     } as any);
     expect(deleted.success).toBe(true);
     expect((deleted.meta as any)?.reservationRelease?.releasedReservations).toBe(1);
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
-    expect(refreshSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ configSheet: 'Config: Delivery' }),
-      expect.any(Array),
-      'saveSubmissionWithId'
+    const sourceRefreshCalls = refreshSpy.mock.calls.filter(
+      (call: any[]) => call[2] === 'saveSubmissionWithId'
     );
+    expect(sourceRefreshCalls).toHaveLength(1);
+    expect(sourceRefreshCalls[0][0]).toEqual(expect.objectContaining({ configSheet: 'Config: Delivery' }));
+    expect(sourceRefreshCalls[0][1]).toEqual(expect.any(Array));
+    expect(sourceRefreshCalls[0][3]).toBe('revisionOnly');
+    expect(refreshAnalyticsSpy).not.toHaveBeenCalled();
     const bumpReasons = bumpSpy.mock.calls.map((call: any[]) => call[1]);
     expect(bumpReasons.filter((reason: string) => reason === 'inventoryReservation.reconcile')).toHaveLength(2);
     expect(bumpReasons.filter((reason: string) => reason === 'saveSubmissionWithId')).toHaveLength(1);

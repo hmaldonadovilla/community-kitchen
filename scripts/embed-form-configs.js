@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const root = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
@@ -100,6 +101,19 @@ const parseConfigFile = (configsDir, fileName) => {
   if (!parsed.formKey || !parsed.formKey.toString().trim()) {
     parsed.formKey = fileName.replace(/\.json$/i, '');
   }
+
+  const cacheFingerprint = crypto
+    .createHash('md5')
+    .update(
+      JSON.stringify({
+        form: parsed.form || {},
+        questions: Array.isArray(parsed.questions) ? parsed.questions : [],
+        dedupRules: Array.isArray(parsed.dedupRules) ? parsed.dedupRules : [],
+        definition: parsed.definition || null
+      })
+    )
+    .digest('hex');
+  parsed.cacheFingerprint = cacheFingerprint;
 
   return parsed;
 };

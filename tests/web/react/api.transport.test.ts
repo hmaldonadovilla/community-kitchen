@@ -1,4 +1,5 @@
 import {
+  applyInventoryReservationPlanApi,
   configureBackendTransport,
   consumePrefetchedHomeBootstrapApi,
   fetchBootstrapContextApi,
@@ -103,5 +104,27 @@ describe('react api transport', () => {
     await reconcileInventoryReservationsApi(payload);
 
     expect(invoke).toHaveBeenCalledWith('reconcileInventoryReservations', payload);
+  });
+
+  test('routes inventory reservation plan apply through the backend transport', async () => {
+    const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
+    configureBackendTransport({ invoke });
+
+    const payload: any = {
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'meal-1',
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: []
+    };
+
+    await applyInventoryReservationPlanApi(payload);
+
+    expect(invoke).toHaveBeenCalledWith('applyInventoryReservationPlan', payload);
   });
 });

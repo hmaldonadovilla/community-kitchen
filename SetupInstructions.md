@@ -220,10 +220,14 @@ Use the performance scripts together so you capture both web-vitals metrics and 
    - `listFetchRpcMs`
    - `listRecordsPrefetchRpcMs`
 
+   Notes:
+   - append `?timing=1` to a staging web-app URL, or use an `admin=true` URL, when you want to inspect `window.__CK_SERVER_TIMINGS__` directly in DevTools
+   - `npm run perf:scenario` now auto-adds `timing=1` unless the target URL already includes an explicit timing/admin flag
+
    Current Home load strategy:
    - the first Home request returns a lightweight summary-first payload for recent activity
    - the shell starts the first Home bootstrap RPC inline so it can overlap with the React bundle load
-   - bundled form definitions reuse the embedded exported definition when available, and cache fallback rebuilds otherwise
+   - bundled runtime exports that include `definition` plus `cacheFingerprint` now reuse that embedded definition directly on the initial render path, and only fall back to rebuild/cache when the embedded runtime definition is absent
    - analytics widgets for the Home/List view are fetched only after the first Home data is ready
    - broader recent-activity hydration, row snapshot prefetching, and data-source prefetching are deferred so they do not block the first usable Home state
 
@@ -1132,6 +1136,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - validate the current step, all visible steps through the current step, or the full form before starting (`validationScope`)
           - run the configured `backgroundActions` in background (`runInBackground`)
           - serialize follow-up execution per record on the server so later milestone batches wait behind earlier in-flight batches for the same record
+          - stop the batch after the first failed action so later actions do not run against a partially failed state
+          - retry transient lock-contention failures during reservation upserts and reservation reconciliation before surfacing the error to the user
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - redirect to another view after success (`navigateToAfterSuccess: "current" | "form" | "summary" | "list"`)
           - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
@@ -2665,6 +2671,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Add a dedicated internal form such as `Config: Inventory Reservation Ledger` to track `active`, `released`, and `consumed` reservations per source row
    - Keep the UI read path on the inventory datasource only; do not query the ledger just to render availability
    - Write reservation changes through one atomic server endpoint so the response can return the fresh authoritative availability snapshot after every mutation
+   - For guided leftover-selection steps that should avoid live per-keystroke reservation writes, set `reservation.commitMode: "step"` on the datasource-row config. The app keeps edits local while the user is on the step, then sends one batched reservation plan when they tap `Next`, replacing stale reservations in the managed step scopes.
    - Optional: define `reservation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change
    - Optional source-form cleanup hooks:
      - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted
@@ -2704,6 +2711,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      "reservation": {
        "enabled": true,
        "ledgerFormKey": "Config: Inventory Reservation Ledger",
+       "commitMode": "step",
+       "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
        "allowedStatuses": ["available"],
        "conflictDialog": {
          "title": {

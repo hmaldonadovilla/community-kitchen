@@ -142,6 +142,11 @@ const buildBundledExportWithEmbeddedDefinition = (): FormConfigExport => ({
   validationErrors: []
 });
 
+const buildFingerprintedBundledExportWithEmbeddedDefinition = (): FormConfigExport => ({
+  ...buildBundledExportWithEmbeddedDefinition(),
+  cacheFingerprint: 'bundled-fingerprint-v1'
+});
+
 describe('WebFormService config override', () => {
   const previousCacheService = (global as any).CacheService;
 
@@ -217,5 +222,21 @@ describe('WebFormService config override', () => {
     expect(def.questions[0]?.label).toEqual({ en: 'Leftover ID', fr: 'Leftover ID', nl: 'Leftover ID' });
     expect(def.steps?.items?.map((step: any) => step.id)).toEqual(['bundledStep', 'staleStep', 'insertedStep', 'finalStep']);
     expect(buildSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses embedded bundled definition directly when a runtime cache fingerprint is present', () => {
+    (getBundledFormConfig as jest.Mock).mockReturnValue(buildFingerprintedBundledExportWithEmbeddedDefinition());
+
+    const ss = new MockSpreadsheet();
+    const service = new WebFormService(ss as any);
+    const buildSpy = jest.spyOn((service as any).definitionBuilder, 'buildDefinitionFromConfig');
+
+    const def = service.buildDefinition('Config: Bundled');
+
+    expect(def.title).toBe('Bundled Form');
+    expect(def.destinationTab).toBe('Bundled Responses');
+    expect(def.questions[0]?.label).toBe('Embedded Leftover ID');
+    expect(def.steps?.items?.map((step: any) => step.id)).toEqual(['bundledStep', 'staleStep', 'insertedStep', 'finalStep']);
+    expect(buildSpy).not.toHaveBeenCalled();
   });
 });

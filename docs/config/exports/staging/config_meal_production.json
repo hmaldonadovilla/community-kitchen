@@ -481,7 +481,7 @@
           "Closed"
         ],
         "ledgerFormKey": "Config: Inventory Reservation Ledger",
-        "refreshMode": "full",
+        "refreshMode": "revisionOnly",
         "feedback": {
           "message": {
             "en": "{baseMessage} {reconciliationSummary}.",
@@ -1073,6 +1073,8 @@
                   "reservation": {
                     "enabled": true,
                     "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                    "commitMode": "step",
+                    "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                     "allowedStatuses": [
                       "available"
                     ],
@@ -2579,7 +2581,7 @@
               "ensureRecordId": true,
               "runInBackground": true,
               "validationScope": "throughCurrentStep",
-              "waitForQueue": "uploadsOnly",
+              "waitForQueue": "all",
               "advanceAfterStart": true,
               "confirmationDialog": {
                 "title": {
@@ -2797,7 +2799,7 @@
               "preActions": [
                 "CLOSE_RECORD"
               ],
-              "waitForQueue": "uploadsOnly",
+              "waitForQueue": "all",
               "advanceAfterStart": false,
               "navigateToAfterSuccess": "list",
               "confirmationDialogCases": [
@@ -10046,6 +10048,8 @@
                   "reservation": {
                     "enabled": true,
                     "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                    "commitMode": "step",
+                    "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                     "allowedStatuses": [
                       "available"
                     ],
@@ -11526,7 +11530,7 @@
               "ensureRecordId": true,
               "runInBackground": true,
               "validationScope": "throughCurrentStep",
-              "waitForQueue": "uploadsOnly",
+              "waitForQueue": "all",
               "advanceAfterStart": true,
               "confirmationDialog": {
                 "title": {
@@ -11744,7 +11748,7 @@
               "preActions": [
                 "CLOSE_RECORD"
               ],
-              "waitForQueue": "uploadsOnly",
+              "waitForQueue": "all",
               "advanceAfterStart": false,
               "navigateToAfterSuccess": "list",
               "confirmationDialogCases": [

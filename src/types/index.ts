@@ -528,6 +528,55 @@ export interface InventoryReservationMutationResult {
   availability?: InventoryAvailabilitySnapshot;
 }
 
+export interface InventoryReservationPlanScope {
+  sourceParentGroupId?: string;
+  sourceParentRowId?: string;
+  sourceOutputGroupId?: string;
+}
+
+export interface InventoryReservationPlanEntry {
+  resourceFormKey: string;
+  resourceRecordId: string;
+  resourceItemId?: string;
+  resourceKind?: string;
+  quantity: number | string;
+  unit?: string;
+  sourceParentGroupId?: string;
+  sourceParentRowId?: string;
+  sourceOutputGroupId?: string;
+  sourceOutputRowId?: string;
+  sourceOutputKeyFieldId?: string;
+  quantityFieldId?: string;
+  reservedQuantityFieldId?: string;
+  statusFieldId?: string;
+  unitFieldId?: string;
+  allowedStatuses?: string[];
+}
+
+export interface InventoryReservationPlanRequest {
+  sourceFormKey: string;
+  sourceRecordId: string;
+  ledgerFormKey?: string;
+  managedScopes?: InventoryReservationPlanScope[];
+  reservations?: InventoryReservationPlanEntry[];
+  /**
+   * Controls post-mutation cache work for touched forms.
+   * - `full`: recompute analytics and warm home bootstrap cache
+   * - `revisionOnly`: bump the home revision without warming caches
+   * - `none`: skip all post-mutation cache work
+   */
+  refreshMode?: 'full' | 'revisionOnly' | 'none';
+}
+
+export interface InventoryReservationPlanResult {
+  success: boolean;
+  message: string;
+  conflict?: boolean;
+  reservationsApplied?: number;
+  reservationsReleased?: number;
+  availability?: InventoryAvailabilitySnapshot[];
+}
+
 export interface InventoryReservationReconciliationRequest {
   sourceFormKey: string;
   sourceRecordId: string;
@@ -3362,6 +3411,7 @@ export interface FormConfigExport {
   [key: string]: unknown;
   formKey: string;
   generatedAt: string;
+  cacheFingerprint?: string;
   form: FormConfig;
   questions: QuestionConfig[];
   dedupRules: DedupRule[];

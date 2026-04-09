@@ -21,6 +21,7 @@ import {
 } from './recordIndex';
 import { normalizeToIsoDate } from './followup/utils';
 import { matchesStatusTransition, resolveStatusTransitionValue } from '../../domain/statusTransitions';
+import { DOCUMENT_LOCK_BUSY_MESSAGE, withSharedDocumentLock } from './documentLock';
 
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
@@ -98,39 +99,10 @@ export class SubmissionService {
       form.dedupDeleteOnKeyChange === true || (form as any).dedupRecreateOnKeyChange === true;
     const deleteRecordId = dedupDeleteOnKeyChange ? deleteRecordIdRaw : '';
 
-    const lock = (() => {
-      try {
-        return (typeof LockService !== 'undefined' && (LockService as any).getDocumentLock)
-          ? (LockService as any).getDocumentLock()
-          : null;
-      } catch (_) {
-        return null;
-      }
-    })();
-    let hasLock = false;
     try {
-      try {
-        if (lock && typeof lock.tryLock === 'function') {
-          // Keep short to avoid blocking the UI too long, but do not proceed without the lock.
-          hasLock = !!lock.tryLock(8000);
-          if (!hasLock) {
-            return {
-              success: false,
-              message: 'Could not acquire the record save lock. Please retry.',
-              meta: {}
-            } as any;
-          }
-        }
-      } catch {
-        return {
-          success: false,
-          message: 'Could not acquire the record save lock. Please retry.',
-          meta: {}
-        } as any;
-      }
-
-      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
-      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+      return withSharedDocumentLock('submissions.saveSubmissionWithId', 8000, () => {
+        const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+        const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
 
       if (deleteRecordId) {
         const deleted = this.deleteRecordById(sheet, columns, destinationName, dedupRules, deleteRecordId);
@@ -450,7 +422,7 @@ export class SubmissionService {
                 meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined }
               };
             }
-          } catch (_) {
+          } catch {
             // ignore; proceed
           }
         }
@@ -584,15 +556,408 @@ export class SubmissionService {
       // ignore audit logging failures so primary saves are not blocked
     }
 
-    return { success: true, message: 'Saved to sheet', meta };
-    } finally {
+        return { success: true, message: 'Saved to sheet', meta };
+      }, DOCUMENT_LOCK_BUSY_MESSAGE);
+    } catch (err: any) {
+      return {
+        success: false,
+        message: (err?.message || DOCUMENT_LOCK_BUSY_MESSAGE).toString(),
+        meta: {}
+      };
+    }
+  }
+
+  saveTrustedSubmissionWithId(
+    formObject: WebFormSubmission,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    dedupRules: DedupRule[]
+  ): { success: boolean; message: string; meta: RecordMetadata } {
+    const langValue = Array.isArray((formObject as any).language)
+      ? ((formObject as any).language[(formObject as any).language.length - 1] || (formObject as any).language[0])
+      : (formObject as any).language;
+    const languageRaw = (langValue || 'EN').toString().toUpperCase();
+    const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+    const now = new Date();
+    const incomingId =
+      ((formObject as any).id && (formObject as any).id.trim)
+        ? ((formObject as any).id as any).trim()
+        : (formObject as any).id;
+    const recordId = incomingId || this.generateUuid();
+
+    try {
+      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+
+      let existingRowIdx = -1;
       try {
-        if (lock && hasLock && typeof lock.releaseLock === 'function') {
-          lock.releaseLock();
+        const idx = ensureRecordIndexSheet(this.ss, destinationName, dedupRules);
+        const rowNumber = findRowNumberInRecordIndex(idx.sheet, recordId);
+        if (rowNumber >= 2) {
+          existingRowIdx = rowNumber - 2;
         }
-      } catch (_) {
+      } catch {
+        existingRowIdx = -1;
+      }
+      if (existingRowIdx < 0 && columns.recordId) {
+        const rowIndex = this.findRowIndexById(sheet, columns, recordId);
+        existingRowIdx = rowIndex >= 2 ? rowIndex - 2 : -1;
+      }
+
+      const existingRowValues =
+        existingRowIdx >= 0
+          ? this.normalizeRowValues(
+              sheet.getRange(2 + existingRowIdx, 1, 1, headers.length).getValues()[0] || [],
+              headers.length
+            )
+          : undefined;
+      const valuesArray = existingRowValues ? [...existingRowValues] : new Array(headers.length).fill('');
+      const setIf = (idx: number | undefined, value: any) => {
+        if (!idx) return;
+        valuesArray[idx - 1] = value ?? '';
+      };
+
+      setIf(columns.timestamp, now);
+      setIf(columns.language, language);
+      setIf(columns.recordId, recordId);
+
+      const createdAtVal =
+        existingRowValues && columns.createdAt ? existingRowValues[columns.createdAt - 1] || now : now;
+      const updatedAtVal = existingRowIdx >= 0 ? now : createdAtVal;
+      setIf(columns.createdAt, createdAtVal);
+      setIf(columns.updatedAt, updatedAtVal);
+
+      const previousVersion = (() => {
+        if (!existingRowValues || !columns.dataVersion) return 0;
+        const raw = existingRowValues[columns.dataVersion - 1];
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      })();
+      const nextVersion = previousVersion + 1;
+      setIf(columns.dataVersion, nextVersion);
+
+      const explicitStatusValue = ((formObject as any).__ckStatus || formObject.status || '').toString().trim();
+      if (explicitStatusValue) {
+        setIf(columns.status, explicitStatusValue);
+      }
+
+      const candidateValues: Record<string, any> = {};
+      questions.filter(q => q.type !== 'BUTTON').forEach(q => {
+        const colIdx = columns.fields[q.id];
+        if (!colIdx) return;
+        let value = (formObject.values || {})[q.id];
+        if (value === undefined) {
+          value = (formObject as any)[q.id];
+        }
+        if (q.type === 'LINE_ITEM_GROUP' && value && typeof value !== 'string') {
+          try {
+            value = JSON.stringify(value);
+          } catch {
+            value = '';
+          }
+        } else if (Array.isArray(value)) {
+          value = value.join(', ');
+        }
+        if (q.type === 'DATE') {
+          value = this.normalizeDateOnlyCell(value);
+        }
+        candidateValues[q.id] = value ?? '';
+        setIf(colIdx, value ?? '');
+      });
+
+      const destinationRowNumber = existingRowIdx >= 0 ? 2 + existingRowIdx : sheet.getLastRow() + 1;
+      const hasMeaningfulChanges =
+        existingRowIdx < 0
+          ? true
+          : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
+      if (existingRowIdx >= 0 && !hasMeaningfulChanges) {
+        return {
+          success: true,
+          message: 'No changes to save.',
+          meta: {
+            id: recordId,
+            createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+            updatedAt:
+              this.readRecordMetadataIso(existingRowValues, columns.updatedAt) ||
+              this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+            dataVersion: previousVersion || undefined,
+            rowNumber: destinationRowNumber,
+            operation: 'noop'
+          }
+        };
+      }
+
+      if (existingRowIdx >= 0) {
+        this.writeRowAtomicDelta(sheet, destinationRowNumber, existingRowValues || new Array(headers.length).fill(''), valuesArray);
+      } else {
+        sheet.appendRow(valuesArray);
+      }
+
+      const meta: RecordMetadata = {
+        id: recordId,
+        createdAt: createdAtVal instanceof Date ? createdAtVal.toISOString() : this.asIso(createdAtVal),
+        updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : this.asIso(updatedAtVal),
+        dataVersion: nextVersion,
+        rowNumber: destinationRowNumber,
+        operation: existingRowIdx >= 0 ? 'update' : 'create'
+      };
+
+      const newEtag = this.cacheManager.bumpSheetEtag(
+        sheet,
+        columns,
+        existingRowIdx >= 0 ? 'saveTrustedSubmission.update' : 'saveTrustedSubmission.create'
+      );
+      const cachedRecord = this.buildSubmissionRecord(form.configSheet, questions, columns, valuesArray, recordId);
+      if (cachedRecord) {
+        this.cacheManager.cacheRecord(form.configSheet, newEtag, cachedRecord);
+      }
+
+      try {
+        const idx = ensureRecordIndexSheet(this.ss, destinationName, dedupRules);
+        const effectiveDedupRules = (dedupRules || []).filter(
+          r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form'
+        );
+        const dedupSignatures: Record<string, string> = {};
+        effectiveDedupRules.forEach(rule => {
+          const sig = computeDedupSignature(rule, candidateValues);
+          if (!sig) return;
+          dedupSignatures[(rule.id || '').toString()] = sig;
+        });
+        writeRecordIndexRow({
+          indexSheet: idx.sheet,
+          columns: idx.columns,
+          rowNumber: destinationRowNumber,
+          recordId,
+          dataVersion: nextVersion,
+          updatedAtIso: meta.updatedAt ? meta.updatedAt.toString() : '',
+          createdAtIso: meta.createdAt ? meta.createdAt.toString() : '',
+          dedupSignatures
+        });
+      } catch {
         // ignore
       }
+
+      return { success: true, message: 'Saved to sheet', meta };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: (err?.message || DOCUMENT_LOCK_BUSY_MESSAGE).toString(),
+        meta: {}
+      };
+    }
+  }
+
+  saveTrustedSubmissionBatch(
+    formObjects: WebFormSubmission[],
+    form: FormConfig,
+    questions: QuestionConfig[],
+    dedupRules: DedupRule[]
+  ): { success: boolean; message: string; metaById: Record<string, RecordMetadata> } {
+    const records = Array.isArray(formObjects) ? formObjects.filter(Boolean) : [];
+    if (!records.length) {
+      return { success: true, message: 'No records to save.', metaById: {} };
+    }
+
+    try {
+      const { sheet, headers, columns } = this.ensureDestination(form.destinationTab || `${form.title} Responses`, questions);
+      const destinationName = sheet.getName ? sheet.getName() : (form.destinationTab || `${form.title} Responses`);
+      const effectiveDedupRules = (dedupRules || []).filter(
+        r => r && (r.onConflict || 'reject') === 'reject' && (r.scope || 'form') === 'form'
+      );
+      const idx = ensureRecordIndexSheet(this.ss, destinationName, effectiveDedupRules);
+      const rowNumberById = new Map<string, number>();
+
+      records.forEach(formObject => {
+        const incomingId =
+          ((formObject as any).id && (formObject as any).id.trim)
+            ? ((formObject as any).id as any).trim()
+            : (formObject as any).id;
+        const recordId = (incomingId || '').toString().trim();
+        if (!recordId) return;
+        let rowNumber = -1;
+        try {
+          rowNumber = findRowNumberInRecordIndex(idx.sheet, recordId);
+        } catch {
+          rowNumber = -1;
+        }
+        if (rowNumber < 2 && columns.recordId) {
+          rowNumber = this.findRowIndexById(sheet, columns, recordId);
+        }
+        if (rowNumber >= 2) {
+          rowNumberById.set(recordId, rowNumber);
+        }
+      });
+
+      const existingRowsByNumber = this.readRowsByNumber(
+        sheet,
+        headers.length,
+        Array.from(new Set(Array.from(rowNumberById.values()))).sort((a, b) => a - b)
+      );
+
+      const metaById: Record<string, RecordMetadata> = {};
+      const changedRowsByNumber = new Map<number, any[]>();
+      const indexRowsByNumber = new Map<number, any[]>();
+      const changedRecords: Array<{ recordId: string; rowValues: any[] }> = [];
+      const appendRows: any[][] = [];
+      let nextAppendRowNumber = sheet.getLastRow() + 1;
+
+      records.forEach(formObject => {
+        const langValue = Array.isArray((formObject as any).language)
+          ? ((formObject as any).language[(formObject as any).language.length - 1] || (formObject as any).language[0])
+          : (formObject as any).language;
+        const languageRaw = (langValue || 'EN').toString().toUpperCase();
+        const language = (['EN', 'FR', 'NL'].includes(languageRaw) ? languageRaw : 'EN') as 'EN' | 'FR' | 'NL';
+        const now = new Date();
+        const incomingId =
+          ((formObject as any).id && (formObject as any).id.trim)
+            ? ((formObject as any).id as any).trim()
+            : (formObject as any).id;
+        const recordId = (incomingId || this.generateUuid()).toString().trim();
+        const existingRowNumber = rowNumberById.get(recordId) || -1;
+        const existingRowValues = existingRowNumber >= 2 ? existingRowsByNumber.get(existingRowNumber) : undefined;
+        const valuesArray = existingRowValues ? [...existingRowValues] : new Array(headers.length).fill('');
+        const setIf = (colIndex: number | undefined, value: any) => {
+          if (!colIndex) return;
+          valuesArray[colIndex - 1] = value ?? '';
+        };
+
+        setIf(columns.timestamp, now);
+        setIf(columns.language, language);
+        setIf(columns.recordId, recordId);
+
+        const createdAtVal =
+          existingRowValues && columns.createdAt ? existingRowValues[columns.createdAt - 1] || now : now;
+        const updatedAtVal = existingRowNumber >= 2 ? now : createdAtVal;
+        setIf(columns.createdAt, createdAtVal);
+        setIf(columns.updatedAt, updatedAtVal);
+
+        const previousVersion = (() => {
+          if (!existingRowValues || !columns.dataVersion) return 0;
+          const raw = existingRowValues[columns.dataVersion - 1];
+          const n = Number(raw);
+          return Number.isFinite(n) && n > 0 ? n : 0;
+        })();
+        const nextVersion = previousVersion + 1;
+        setIf(columns.dataVersion, nextVersion);
+
+        const explicitStatusValue = ((formObject as any).__ckStatus || formObject.status || '').toString().trim();
+        if (explicitStatusValue) {
+          setIf(columns.status, explicitStatusValue);
+        }
+
+        const candidateValues: Record<string, any> = {};
+        questions.filter(q => q.type !== 'BUTTON').forEach(q => {
+          const colIdx = columns.fields[q.id];
+          if (!colIdx) return;
+          let value = (formObject.values || {})[q.id];
+          if (value === undefined) {
+            value = (formObject as any)[q.id];
+          }
+          if (q.type === 'LINE_ITEM_GROUP' && value && typeof value !== 'string') {
+            try {
+              value = JSON.stringify(value);
+            } catch {
+              value = '';
+            }
+          } else if (Array.isArray(value)) {
+            value = value.join(', ');
+          }
+          if (q.type === 'DATE') {
+            value = this.normalizeDateOnlyCell(value);
+          }
+          candidateValues[q.id] = value ?? '';
+          setIf(colIdx, value ?? '');
+        });
+
+        const destinationRowNumber = existingRowNumber >= 2 ? existingRowNumber : nextAppendRowNumber;
+        const hasMeaningfulChanges =
+          existingRowNumber < 2
+            ? true
+            : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
+        if (existingRowNumber >= 2 && !hasMeaningfulChanges) {
+          metaById[recordId] = {
+            id: recordId,
+            createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+            updatedAt:
+              this.readRecordMetadataIso(existingRowValues, columns.updatedAt) ||
+              this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+            dataVersion: previousVersion || undefined,
+            rowNumber: destinationRowNumber,
+            operation: 'noop'
+          };
+          return;
+        }
+
+        if (existingRowNumber >= 2) {
+          changedRowsByNumber.set(destinationRowNumber, valuesArray);
+        } else {
+          appendRows.push(valuesArray);
+          nextAppendRowNumber += 1;
+        }
+
+        const meta: RecordMetadata = {
+          id: recordId,
+          createdAt: createdAtVal instanceof Date ? createdAtVal.toISOString() : this.asIso(createdAtVal),
+          updatedAt: updatedAtVal instanceof Date ? updatedAtVal.toISOString() : this.asIso(updatedAtVal),
+          dataVersion: nextVersion,
+          rowNumber: destinationRowNumber,
+          operation: existingRowNumber >= 2 ? 'update' : 'create'
+        };
+        metaById[recordId] = meta;
+        changedRecords.push({ recordId, rowValues: valuesArray });
+
+        const dedupSignatures: Record<string, string> = {};
+        effectiveDedupRules.forEach(rule => {
+          const sig = computeDedupSignature(rule, candidateValues);
+          if (!sig) return;
+          dedupSignatures[(rule.id || '').toString()] = sig;
+        });
+        indexRowsByNumber.set(
+          destinationRowNumber,
+          this.buildRecordIndexRowValues({
+            columns: idx.columns,
+            rowNumber: destinationRowNumber,
+            recordId,
+            dataVersion: nextVersion,
+            updatedAtIso: meta.updatedAt ? meta.updatedAt.toString() : '',
+            createdAtIso: meta.createdAt ? meta.createdAt.toString() : '',
+            dedupSignatures
+          })
+        );
+      });
+
+      if (changedRowsByNumber.size) {
+        this.writeRowsByNumber(sheet, headers.length, changedRowsByNumber);
+      }
+      if (appendRows.length) {
+        const appendStartRow = nextAppendRowNumber - appendRows.length;
+        sheet.getRange(appendStartRow, 1, appendRows.length, headers.length).setValues(appendRows);
+      }
+      if (indexRowsByNumber.size) {
+        this.writeRowsByNumber(idx.sheet, idx.columns.headerWidth, indexRowsByNumber);
+      }
+
+      if (changedRecords.length) {
+        const newEtag = this.cacheManager.bumpSheetEtag(sheet, columns, 'saveTrustedSubmissionBatch');
+        changedRecords.forEach(entry => {
+          const cachedRecord = this.buildSubmissionRecord(form.configSheet, questions, columns, entry.rowValues, entry.recordId);
+          if (cachedRecord) {
+            this.cacheManager.cacheRecord(form.configSheet, newEtag, cachedRecord);
+          }
+        });
+      }
+
+      return {
+        success: true,
+        message: changedRecords.length ? 'Saved to sheet' : 'No changes to save.',
+        metaById
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: (err?.message || DOCUMENT_LOCK_BUSY_MESSAGE).toString(),
+        metaById: {}
+      };
     }
   }
 
@@ -1354,6 +1719,65 @@ export class SubmissionService {
     sheet.getRange(rowNumber, start + 1, 1, patch.length).setValues([patch]);
   }
 
+  private readRowsByNumber(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    width: number,
+    rowNumbers: number[]
+  ): Map<number, any[]> {
+    const rows = new Map<number, any[]>();
+    const targets = Array.from(new Set((rowNumbers || []).filter(row => Number.isFinite(row) && row >= 2))).sort((a, b) => a - b);
+    if (!targets.length || width <= 0) return rows;
+    let start = targets[0];
+    let prev = targets[0];
+    const flush = () => {
+      const count = prev - start + 1;
+      const values = sheet.getRange(start, 1, count, width).getValues();
+      values.forEach((row, idx) => {
+        rows.set(start + idx, this.normalizeRowValues(row || [], width));
+      });
+    };
+    for (let i = 1; i < targets.length; i += 1) {
+      const rowNumber = targets[i];
+      if (rowNumber === prev + 1) {
+        prev = rowNumber;
+        continue;
+      }
+      flush();
+      start = rowNumber;
+      prev = rowNumber;
+    }
+    flush();
+    return rows;
+  }
+
+  private writeRowsByNumber(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    width: number,
+    rowsByNumber: Map<number, any[]>
+  ): void {
+    const rowNumbers = Array.from(rowsByNumber.keys()).filter(row => Number.isFinite(row) && row >= 2).sort((a, b) => a - b);
+    if (!rowNumbers.length || width <= 0) return;
+    let start = rowNumbers[0];
+    let prev = rowNumbers[0];
+    let chunk: any[][] = [this.normalizeRowValues(rowsByNumber.get(start) || [], width)];
+    const flush = () => {
+      sheet.getRange(start, 1, chunk.length, width).setValues(chunk);
+    };
+    for (let i = 1; i < rowNumbers.length; i += 1) {
+      const rowNumber = rowNumbers[i];
+      if (rowNumber === prev + 1) {
+        chunk.push(this.normalizeRowValues(rowsByNumber.get(rowNumber) || [], width));
+        prev = rowNumber;
+        continue;
+      }
+      flush();
+      start = rowNumber;
+      prev = rowNumber;
+      chunk = [this.normalizeRowValues(rowsByNumber.get(rowNumber) || [], width)];
+    }
+    flush();
+  }
+
   private hasMeaningfulRowChanges(previousRowValues: any[], nextRowValues: any[], columns: HeaderColumns): boolean {
     const width = Math.max(previousRowValues.length, nextRowValues.length);
     if (width <= 0) return false;
@@ -1377,6 +1801,30 @@ export class SubmissionService {
     } catch {
       return undefined;
     }
+  }
+
+  private buildRecordIndexRowValues(args: {
+    columns: ReturnType<typeof ensureRecordIndexSheet>['columns'];
+    rowNumber: number;
+    recordId: string;
+    dataVersion: number;
+    updatedAtIso?: string;
+    createdAtIso?: string;
+    dedupSignatures?: Record<string, string>;
+  }): any[] {
+    const rowValues = new Array(args.columns.headerWidth).fill('');
+    rowValues[args.columns.recordId - 1] = (args.recordId || '').toString();
+    rowValues[args.columns.rowNumber - 1] = args.rowNumber;
+    rowValues[args.columns.dataVersion - 1] = Number.isFinite(Number(args.dataVersion)) ? Number(args.dataVersion) : '';
+    rowValues[args.columns.updatedAtIso - 1] = (args.updatedAtIso || '').toString();
+    rowValues[args.columns.createdAtIso - 1] = (args.createdAtIso || '').toString();
+    Object.entries(args.dedupSignatures || {}).forEach(([ruleIdRaw, sig]) => {
+      const ruleId = (ruleIdRaw || '').toString().trim().replace(/\s+/g, '_');
+      const col = args.columns.dedupByRuleId[ruleId];
+      if (!col) return;
+      rowValues[col - 1] = (sig || '').toString();
+    });
+    return rowValues;
   }
 
   private writeAuditRows(args: {

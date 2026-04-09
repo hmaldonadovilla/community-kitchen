@@ -6877,7 +6877,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "nl": "Conceptverslag"
       }
     },
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "c8e04b554f6dfcb241f12f55d911e097"
   },
   {
     "formKey": "Config: Distributor",
@@ -7352,7 +7353,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
       }
     },
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "b8bb64a2559fb5122bbf14ec08bc35d7"
   },
   {
     "formKey": "Config: Ingredients Management",
@@ -8185,7 +8187,8 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     ],
     "definition": {},
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "8ea9855d51bc1fea727f9a375ed273f0"
   },
   {
     "formKey": "Config: Inventory Reservation Ledger",
@@ -8505,7 +8508,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "status": "Active"
       }
     ],
-    "dedupRules": []
+    "dedupRules": [],
+    "cacheFingerprint": "e8cdc910738f82a3669ef2c4693b4f83"
   },
   {
     "formKey": "Config: Leftover Inventory",
@@ -10069,7 +10073,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       ]
     },
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "36d24d82395399cf2750dc3565560305"
   },
   {
     "formKey": "Config: Meal Production",
@@ -10554,7 +10559,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Closed"
           ],
           "ledgerFormKey": "Config: Inventory Reservation Ledger",
-          "refreshMode": "full",
+          "refreshMode": "revisionOnly",
           "feedback": {
             "message": {
               "en": "{baseMessage} {reconciliationSummary}.",
@@ -11146,6 +11151,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "reservation": {
                       "enabled": true,
                       "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                      "commitMode": "step",
+                      "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                       "allowedStatuses": [
                         "available"
                       ],
@@ -12652,7 +12659,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "ensureRecordId": true,
                 "runInBackground": true,
                 "validationScope": "throughCurrentStep",
-                "waitForQueue": "uploadsOnly",
+                "waitForQueue": "all",
                 "advanceAfterStart": true,
                 "confirmationDialog": {
                   "title": {
@@ -12870,7 +12877,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "preActions": [
                   "CLOSE_RECORD"
                 ],
-                "waitForQueue": "uploadsOnly",
+                "waitForQueue": "all",
                 "advanceAfterStart": false,
                 "navigateToAfterSuccess": "list",
                 "confirmationDialogCases": [
@@ -20114,6 +20121,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "reservation": {
                       "enabled": true,
                       "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                      "commitMode": "step",
+                      "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                       "allowedStatuses": [
                         "available"
                       ],
@@ -21594,7 +21603,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "ensureRecordId": true,
                 "runInBackground": true,
                 "validationScope": "throughCurrentStep",
-                "waitForQueue": "uploadsOnly",
+                "waitForQueue": "all",
                 "advanceAfterStart": true,
                 "confirmationDialog": {
                   "title": {
@@ -21812,7 +21821,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "preActions": [
                   "CLOSE_RECORD"
                 ],
-                "waitForQueue": "uploadsOnly",
+                "waitForQueue": "all",
                 "advanceAfterStart": false,
                 "navigateToAfterSuccess": "list",
                 "confirmationDialogCases": [
@@ -22011,7 +22020,8 @@ export const BUNDLED_FORM_CONFIGS = [
         ]
       }
     },
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "bdb175c7afe73de7da677ad13cc8a2a8"
   },
   {
     "formKey": "Config: Recipes",
@@ -24374,6 +24384,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "nl": "Bekijk conceptverslag"
       }
     },
-    "validationErrors": []
+    "validationErrors": [],
+    "cacheFingerprint": "00967501a23c64590a810d4a1229be45"
   }
 ] as FormConfigExport[];

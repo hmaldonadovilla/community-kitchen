@@ -1,4 +1,4 @@
-import { buildDraftSaveFingerprint } from '../../../src/web/react/app/draftSaveFingerprint';
+import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from '../../../src/web/react/app/draftSaveFingerprint';
 
 describe('buildDraftSaveFingerprint', () => {
   test('returns the same fingerprint for equivalent draft payloads despite volatile client metadata', () => {
@@ -42,5 +42,33 @@ describe('buildDraftSaveFingerprint', () => {
         __ckSaveMode: 'draft'
       })
     ).toBeNull();
+  });
+
+  test('buildDraftStateFingerprint stays stable for equivalent form content', () => {
+    const first = buildDraftStateFingerprint({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      values: {
+        Q1: 'Alice',
+        status: 'In progress'
+      },
+      lineItems: {
+        ITEMS: [{ id: 'r1', values: { NAME: 'Beans', QTY: 2 } }]
+      }
+    });
+
+    const second = buildDraftStateFingerprint({
+      language: 'EN',
+      formKey: 'Config: Delivery',
+      values: {
+        status: 'In progress',
+        Q1: 'Alice'
+      },
+      lineItems: {
+        ITEMS: [{ values: { QTY: 2, NAME: 'Beans' }, id: 'r1' }]
+      }
+    });
+
+    expect(first).toBe(second);
   });
 });
