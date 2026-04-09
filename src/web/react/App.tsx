@@ -7117,6 +7117,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       resolveUiErrorMessage,
       runCoalescedDraftSaveRequest,
       scheduleLatestAutoSave,
+      submitCurrentRecordMutation,
       upsertListCacheRow
     ]
   );
@@ -7824,6 +7825,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       resolveLogMessage,
       resolveUiErrorMessage,
       runCoalescedDraftSaveRequest,
+      submitCurrentRecordMutation,
       upsertListCacheRow,
       waitForDraftSaveRequest
     ]
@@ -8250,6 +8252,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       resolveAutoSaveStatus,
       runCoalescedDraftSaveRequest,
+      submitCurrentRecordMutation,
       waitForDraftSaveRequest
     ]
   );
