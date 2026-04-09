@@ -31,6 +31,7 @@ describe('reservationConflictDialog', () => {
         resourceRecordId: 'abc',
         resourceItemId: 'LE-1',
         resourceKind: 'Entire dish',
+        unit: 'portions',
         quantityFieldId: 'LEFTOVER_PORTIONS',
         reservedQuantityFieldId: 'LEFTOVER_RESERVED_PORTIONS',
         remainingQuantity: 5,
@@ -39,12 +40,9 @@ describe('reservationConflictDialog', () => {
         currentReservationQuantity: 0,
         currentRecordReservedQuantity: 0
       },
-      sourceRow: {
-        LEFTOVER_RECIPE: 'Curry & fish (diabetic)',
-        LEFTOVER_ID: 'LE-1',
-        LEFTOVER_KIND: 'Entire dish'
-      },
       requestedQuantity: 4,
+      itemId: 'LE-1',
+      itemLabel: 'Curry & fish (diabetic)',
       fallbackTitle: 'Notice',
       fallbackMessage: 'Fallback {availableWithUnit}',
       fallbackConfirmLabel: 'OK',

@@ -117,6 +117,113 @@ const getByPath = (root: any, path: string): any => {
   }, root);
 };
 
+const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
+
+const inferReservationFieldId = (outputKeyFieldId: string, suffix: 'RECORD_ID' | 'KIND' | 'UNIT'): string => {
+  const base = outputKeyFieldId.endsWith('_ID') ? outputKeyFieldId.slice(0, -3) : outputKeyFieldId;
+  return base ? `${base}_${suffix}` : '';
+};
+
+const hasStructuredValue = (value: unknown): boolean => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+};
+
+const resolveReservationSourceKeyFieldId = (config: any): string =>
+  normalizeIdValue(
+    config?.availability?.sourceKeyFieldId ||
+      config?.dataSource?.rowKeyFieldId ||
+      config?.outputKeyFieldId ||
+      config?.rowKeyFieldId
+  );
+
+const resolveReservationResourceFieldIds = (config: any): {
+  keyFieldId: string;
+  kindFieldId: string;
+  unitFieldId: string;
+} => {
+  const outputKeyFieldId = normalizeIdValue(config?.outputKeyFieldId || config?.rowKeyFieldId);
+  const reservationConfig =
+    config?.reservation && typeof config.reservation === 'object'
+      ? config.reservation
+      : null;
+  return {
+    keyFieldId: resolveReservationSourceKeyFieldId(config),
+    kindFieldId: normalizeIdValue(
+      reservationConfig?.resourceKindFieldId || inferReservationFieldId(outputKeyFieldId, 'KIND')
+    ),
+    unitFieldId: normalizeIdValue(
+      reservationConfig?.resourceUnitFieldId || inferReservationFieldId(outputKeyFieldId, 'UNIT')
+    )
+  };
+};
+
+const resolveReservationSourceItemKey = (config: any, item: Record<string, any> | null | undefined): string => {
+  if (!item || typeof item !== 'object') return '';
+  const keyFieldId = resolveReservationSourceKeyFieldId(config);
+  if (keyFieldId && hasStructuredValue(item[keyFieldId])) {
+    return normalizeIdValue(item[keyFieldId]);
+  }
+  return normalizeIdValue(item.id);
+};
+
+const resolveReservationDisplayLabel = (
+  config: any,
+  sourceRow: Record<string, any> | null | undefined,
+  fallbackItemId: string
+): string => {
+  const reservationConfig =
+    config?.reservation && typeof config.reservation === 'object'
+      ? config.reservation
+      : null;
+  const dialogConfig =
+    reservationConfig?.conflictDialog && typeof reservationConfig.conflictDialog === 'object'
+      ? reservationConfig.conflictDialog
+      : null;
+  const configuredFieldIds = Array.isArray(dialogConfig?.itemLabelFieldIds)
+    ? dialogConfig.itemLabelFieldIds.map((entry: any) => normalizeIdValue(entry)).filter(Boolean)
+    : [];
+  const candidateFieldIds = [
+    ...configuredFieldIds,
+    normalizeIdValue(config?.dataSource?.tooltipField),
+    normalizeIdValue(config?.dataSource?.labelField),
+    resolveReservationSourceKeyFieldId(config)
+  ].filter(Boolean);
+  for (const fieldId of candidateFieldIds) {
+    const value = normalizeIdValue(sourceRow?.[fieldId]);
+    if (value) return value;
+  }
+  return fallbackItemId;
+};
+
+const resolveAvailabilityFieldPair = (
+  availabilityConfig: any,
+  sourceRow: Record<string, any> | null | undefined
+): { remainingFieldId: string; reservedFieldId: string } => {
+  const candidates = [
+    {
+      remainingFieldId: normalizeIdValue(availabilityConfig?.sourcePortionsFieldId),
+      reservedFieldId: normalizeIdValue(availabilityConfig?.sourceReservedPortionsFieldId)
+    },
+    {
+      remainingFieldId: normalizeIdValue(availabilityConfig?.sourceQuantityFieldId),
+      reservedFieldId: normalizeIdValue(availabilityConfig?.sourceReservedQuantityFieldId)
+    }
+  ].filter(candidate => candidate.remainingFieldId && candidate.reservedFieldId);
+
+  if (!candidates.length) {
+    return { remainingFieldId: '', reservedFieldId: '' };
+  }
+
+  return (
+    candidates.find(candidate =>
+      hasStructuredValue(sourceRow?.[candidate.remainingFieldId]) ||
+      hasStructuredValue(sourceRow?.[candidate.reservedFieldId])
+    ) || candidates[0]
+  );
+};
+
 const coerceStructuredItems = (payload: any): Record<string, any>[] => {
   if (!payload) return [];
   if (Array.isArray(payload)) {
@@ -670,7 +777,7 @@ export const LineItemGroupQuestion: React.FC<{
           const matchesRecord = `${item.id ?? ''}`.trim() === `${availability.resourceRecordId || ''}`.trim();
           const matchesItem =
             !availability.resourceItemId ||
-            `${item.LEFTOVER_ID ?? item.id ?? ''}`.trim() === `${availability.resourceItemId}`.trim();
+            resolveReservationSourceItemKey(config, item) === `${availability.resourceItemId}`.trim();
           if (!matchesRecord || !matchesItem) return item;
           return {
             ...item,
@@ -1241,14 +1348,8 @@ export const LineItemGroupQuestion: React.FC<{
         0,
         toFiniteNumberValue((args.sourceRow as any)?.__ckCurrentRecordReservedQuantity)
       );
-      const sourceKind = `${(args.sourceRow as any)?.LEFTOVER_KIND || ''}`.trim();
-      const usePortions = sourceKind === 'Entire dish';
-      const sourceRemainingFieldId = usePortions
-        ? `${availabilityConfig.sourcePortionsFieldId || ''}`.trim()
-        : `${availabilityConfig.sourceQuantityFieldId || ''}`.trim();
-      const sourceReservedFieldId = usePortions
-        ? `${availabilityConfig.sourceReservedPortionsFieldId || ''}`.trim()
-        : `${availabilityConfig.sourceReservedQuantityFieldId || ''}`.trim();
+      const { remainingFieldId: sourceRemainingFieldId, reservedFieldId: sourceReservedFieldId } =
+        resolveAvailabilityFieldPair(availabilityConfig, args.sourceRow);
       if (!sourceRemainingFieldId || !sourceReservedFieldId) return;
 
       const remainingQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceRemainingFieldId]);
@@ -1261,7 +1362,7 @@ export const LineItemGroupQuestion: React.FC<{
         items.map(item => {
           if (!item || typeof item !== 'object') return item;
           const matchesRecord = `${item.id ?? ''}`.trim() === `${args.sourceRow?.id ?? ''}`.trim();
-          const matchesItem = `${item.LEFTOVER_ID ?? item.id ?? ''}`.trim() === args.sourceKey;
+          const matchesItem = resolveReservationSourceItemKey(config, item) === args.sourceKey;
           if (!matchesRecord || !matchesItem) return item;
           return {
             ...item,
@@ -1734,13 +1835,14 @@ export const LineItemGroupQuestion: React.FC<{
           quantity
         });
         try {
+          const { kindFieldId, unitFieldId } = resolveReservationResourceFieldIds(args.config);
           const result = await upsertInventoryReservationApi({
             resourceFormKey,
             resourceRecordId,
             resourceItemId: sourceKey,
-            resourceKind: `${args.sourceRow?.LEFTOVER_KIND || ''}`.trim() || undefined,
+            resourceKind: kindFieldId ? normalizeIdValue(args.sourceRow?.[kindFieldId]) || undefined : undefined,
             quantity,
-            unit: `${args.sourceRow?.LEFTOVER_UNIT || ''}`.trim() || undefined,
+            unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) || undefined : undefined,
             sourceFormKey,
             sourceRecordId,
             sourceParentGroupId: q.id,
@@ -1764,8 +1866,16 @@ export const LineItemGroupQuestion: React.FC<{
           });
           if (!result.success) {
             const message = buildReservationFailureMessage(
-              resolveUserFacingErrorMessage(result, result.message || 'Reservation failed.') || '',
-              "We couldn't update the leftover selection."
+              resolveUserFacingErrorMessage(
+                result,
+                result.message || tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.')
+              ) || '',
+              tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.'),
+              tSystem(
+                'inventory.reservationUpdateFailedDetail',
+                language,
+                "We couldn't update the reservation properly. Please try again."
+              )
             );
             if (message) {
               onDiagnostic?.('inventory.reservation.rejected', {
@@ -1804,13 +1914,15 @@ export const LineItemGroupQuestion: React.FC<{
                     ? reservationConfig.conflictDialog
                     : null,
                 availability: result.availability,
-                sourceRow: args.sourceRow,
                 requestedQuantity: quantity,
+                itemId: sourceKey,
+                itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+                unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : '',
                 fallbackTitle: tSystem('common.notice', language, 'Notice'),
                 fallbackMessage: tSystem(
                   'inventory.reservationConflict',
                   language,
-                  'This leftover was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?'
+                  'This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?'
                 ),
                 fallbackConfirmLabel: tSystem(
                   'inventory.useAvailable',
@@ -1918,8 +2030,16 @@ export const LineItemGroupQuestion: React.FC<{
             patch: rollbackPatch
           });
           const message = buildReservationFailureMessage(
-            resolveUserFacingErrorMessage(error, 'Reservation failed.') || '',
-            "We couldn't update the leftover selection."
+            resolveUserFacingErrorMessage(
+              error,
+              tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.')
+            ) || '',
+            tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.'),
+            tSystem(
+              'inventory.reservationUpdateFailedDetail',
+              language,
+              "We couldn't update the reservation properly. Please try again."
+            )
           );
           onDiagnostic?.('inventory.reservation.error', {
             groupId: q.id,

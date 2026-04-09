@@ -1,0 +1,204 @@
+---
+alwaysApply: false
+description: Meal Production staging end-to-end Playwright flow
+---
+
+# Meal Production E2E Via Playwright
+
+Use this runbook when validating the full Meal Production flow on staging.
+
+## Goal
+
+Create or open a Belliard dinner record for today, move through every guided step, upload required photos with a repo image, finish the report, and watch the HTTP pattern for regressions.
+
+## Environment
+
+- Deploy target: staging only
+- Staging web app:
+  `https://script.google.com/macros/s/AKfycbyYfWti7X-hMAMz7NedQwzlGRtD8188xUulsUzPjd5QFz_zlLSgnSIuU5eUXdgjuVP_/exec`
+- Upload image for all photo gates:
+  `/Users/a57321/.codex/worktrees/5c4b/community-kitchen/docs/images/checks.png`
+- App content is rendered inside the `userHtmlFrame` iframe
+
+## Fast path
+
+1. Open staging.
+2. Enter the `userHtmlFrame`.
+3. Click `Meal Production`.
+4. On the date-filtered list for today, prefer `Edit` on `Belliard | Dinner`.
+5. If no row exists for `Belliard | Dinner` today:
+   use `Copy` on another Belliard dinner row, then update the record to today after it opens.
+
+## Step-by-step flow
+
+### 1. Order
+
+- Confirm:
+  - `Customer = Belliard`
+  - `Date = today`
+  - `Service = Dinner`
+- Ensure `Responsible cook` has a value.
+- For the seeded dinner row, `Standard` is usually already `10`.
+- If the row is empty, enter a minimal valid order:
+  - `Standard = 10`
+  - all other meal types `0`
+- Click `Next`.
+
+Expected result:
+- Move to `Leftover bank`
+- One draft save is expected
+
+### 2. Leftover bank
+
+- If leftover suggestions are shown, leave them unchanged unless the scenario requires testing reservations.
+- Click `Next`.
+
+Expected result:
+- Move to `Production`
+- `fetchDataSource(Leftover Inventory Data)` may fire here
+- `applyInventoryReservationPlan` should only fire if there is an actual reservation plan to apply
+
+### 3. Production
+
+- Ensure the `Standard` cook row has a recipe.
+- Use `Chili` for the standard path if no recipe is selected.
+- Upload the ingredients receipt photo:
+  - set the visible or hidden `input[type=file]` to `docs/images/checks.png`
+- Wait for the field to show `1/10` and `Added`
+- Click `Next`
+
+Expected result:
+- Move to `Food safety`
+- Upload path should:
+  - ensure a draft record id if needed
+  - upload file(s)
+  - persist the URL back with a draft save
+- Do not expect a second blocking save while the upload queue is still draining
+
+### 4. Food safety
+
+- For `Standard`:
+  - check `All pots ≥63°C: Confirm`
+  - upload one photo using `docs/images/checks.png`
+- Wait for `1/10` and `Added`
+- Click `Next`
+
+Expected result:
+- Move to `Portioning`
+
+### 5. Portioning
+
+- Confirm delivered portions match ordered portions.
+- Default seeded value is usually already `10`.
+- Click `Finish portioning`
+- In the confirmation dialog, click `Yes, confirmed`
+
+Expected result:
+- Move to `Leftovers`
+- Background actions notice appears
+- `Finish portioning` should not block on a fresh `applyInventoryReservationPlan`
+- Expected milestone shape:
+  - pre-action: reservation reconciliation only
+  - background actions: PDF + email
+
+### 6. Leftovers
+
+- If there are no leftovers, leave the portions blank.
+- Click `Complete`
+- In the confirmation dialog, click `Yes, confirm`
+
+Expected result:
+- Return to the Meal Production list for today
+- Completed record should no longer reopen as an in-progress guided step
+
+## Network checkpoints
+
+Use DevTools Network or Playwright network inspection and watch these moments.
+
+### Open Meal Production list
+
+Expected:
+- `fetchHomeBootstrap`
+- `fetchFormCatalog`
+- `fetchBootstrapContextWithOptions`
+- first-page list fetch
+
+Avoid:
+- repeated hidden list page fetches before the list is even rendered
+
+### Open existing record
+
+Expected:
+- `fetchSubmissionByRowNumber`
+
+Avoid:
+- continued background `fetchSubmissionsSortedBatch` / `fetchSubmissionsByRowNumbers` after leaving list view
+
+### Order -> Leftover bank
+
+Expected:
+- one draft save
+- optional leftover inventory datasource refresh
+
+Watch for:
+- duplicate `saveSubmissionWithId` with identical payloads
+- stale `__ckClientDataVersion`
+
+### Finish portioning
+
+Expected:
+- queue drain
+- draft snapshot save if dirty
+- milestone confirmation
+- follow-up batch start
+
+Avoid:
+- blocking `applyInventoryReservationPlan`
+- navigation held until PDF/email finish
+
+### Return to list after complete
+
+Expected:
+- first list page refresh
+- background page prefetch may continue, but it should be paced rather than bursty
+
+## Useful Playwright patterns
+
+### Get the form frame
+
+```ts
+const frame = page.frames().find(f => f.name() === 'userHtmlFrame');
+if (!frame) throw new Error('userHtmlFrame not found');
+```
+
+### Upload a repo image
+
+```ts
+await frame
+  .locator('input[type=file]')
+  .first()
+  .setInputFiles('/Users/a57321/.codex/worktrees/5c4b/community-kitchen/docs/images/checks.png');
+```
+
+### Read visible page text quickly
+
+```ts
+const text = await frame.locator('body').innerText();
+```
+
+## Regression checklist
+
+- Opening a record should not keep background list fetches alive.
+- Uploading a photo should end with `Added` and a saved draft state.
+- `saveSubmissionWithId` must send the latest `__ckClientDataVersion`.
+- `Finish portioning` must advance to `Leftovers` without waiting for PDF/email completion.
+- Completing with no leftovers must return to list cleanly.
+
+## Notes
+
+- The seeded staging Belliard dinner row for today is the fastest happy-path entry point.
+- If the list already contains a completed row only, use `Copy` to create a fresh working record.
+- When a flow failure happens, capture:
+  - current step label
+  - last 10 callback requests
+  - the request body for the failing `saveSubmissionWithId` or `applyInventoryReservationPlan`
