@@ -23,36 +23,14 @@ try {
   process.exit(1);
 }
 
-const { chromium, devices } = playwright;
-
-const PRESET_MOBILE_4G = {
-  id: 'mobile-4g',
-  description: 'Mid-tier Android + average 4G (simulated)',
-  cdp: {
-    latencyMs: 150,
-    downloadKbps: 1600,
-    uploadKbps: 750,
-    cpuSlowdownMultiplier: 4,
-    connectionType: 'cellular4g'
-  }
-};
-
-const PRESET_MOBILE_WIFI = {
-  id: 'mobile-wifi',
-  description: 'Mid-tier Android + typical Wi-Fi (simulated)',
-  cdp: {
-    latencyMs: 40,
-    downloadKbps: 10000,
-    uploadKbps: 5000,
-    cpuSlowdownMultiplier: 3,
-    connectionType: 'wifi'
-  }
-};
-
-const PRESETS = {
-  [PRESET_MOBILE_4G.id]: PRESET_MOBILE_4G,
-  [PRESET_MOBILE_WIFI.id]: PRESET_MOBILE_WIFI
-};
+const { chromium } = playwright;
+const {
+  PLAYWRIGHT_CONTEXT_OPTIONS,
+  PRESET_MOBILE_4G,
+  PRESET_MOBILE_WIFI,
+  PRESETS,
+  kbpsToBytesPerSecond
+} = require('./playwrightMobileProfile');
 
 function toFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Number(value) : null;
@@ -262,10 +240,6 @@ function parseArgs(argv) {
 function toPositiveInt(raw, fallback) {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : fallback;
-}
-
-function msFromKbps(kbps) {
-  return (kbps * 1024) / 8;
 }
 
 async function frameLooksLikeApp(frame) {
@@ -756,8 +730,8 @@ async function applyThrottling(context, page, preset) {
   await session.send('Network.emulateNetworkConditions', {
     offline: false,
     latency: preset.cdp.latencyMs,
-    downloadThroughput: msFromKbps(preset.cdp.downloadKbps),
-    uploadThroughput: msFromKbps(preset.cdp.uploadKbps),
+    downloadThroughput: kbpsToBytesPerSecond(preset.cdp.downloadKbps),
+    uploadThroughput: kbpsToBytesPerSecond(preset.cdp.uploadKbps),
     connectionType: preset.cdp.connectionType
   });
   await session.send('Emulation.setCPUThrottlingRate', { rate: preset.cdp.cpuSlowdownMultiplier });
@@ -782,11 +756,7 @@ function withFormQuery(urlRaw, formKey) {
 
 async function runScenarioOnce({ url, formKey, preset, cleanup = true }) {
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
-  const context = await browser.newContext({
-    ...devices['Pixel 5'],
-    locale: 'en-US',
-    timezoneId: 'America/New_York'
-  });
+  const context = await browser.newContext(PLAYWRIGHT_CONTEXT_OPTIONS);
   const page = await context.newPage();
   const consoleEvents = createConsoleCollector(page);
   const createdRecordIds = [];

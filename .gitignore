@@ -3,6 +3,8 @@ node_modules
 src/web/webformBundle.ts
 src/web/react/reactBundle.ts
 perf-results/
+playwright-report/
+test-results/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc

@@ -18,6 +18,11 @@
     "gcp:status": "bash scripts/check-gcp-backend.sh",
     "deploy:cloud-run": "bash scripts/deploy-cloud-run.sh",
     "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:staging": "playwright test --grep @smoke",
+    "test:e2e:nightly": "playwright test",
     "perf:lighthouse": "node scripts/performance/lighthouse-runner.js",
     "perf:scenario": "node scripts/performance/scenario-runner.js",
     "perf:followup-benchmark": "node scripts/performance/followup-rpc-benchmark.js"

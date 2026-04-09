@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+  <rect width="320" height="240" fill="#e7efe3" />
+  <circle cx="160" cy="120" r="72" fill="#6f8772" />
+  <text x="84" y="125" font-family="Arial, sans-serif" font-size="22" fill="#ffffff">Pot 1 ≥ 63C</text>
+</svg>
