@@ -20,9 +20,10 @@
     "test": "jest",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
+    "test:e2e:regression": "playwright test --grep @regression",
     "test:e2e:smoke": "playwright test --grep @smoke",
     "test:e2e:staging": "playwright test --grep @smoke",
-    "test:e2e:nightly": "playwright test",
+    "test:e2e:nightly": "playwright test --project=chromium-mobile --project=firefox-mobile --project=webkit-mobile",
     "perf:lighthouse": "node scripts/performance/lighthouse-runner.js",
     "perf:scenario": "node scripts/performance/scenario-runner.js",
     "perf:followup-benchmark": "node scripts/performance/followup-rpc-benchmark.js"
