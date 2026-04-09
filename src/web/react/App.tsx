@@ -87,6 +87,10 @@ import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
+import {
+  shouldArmAutoSaveHoldForReportAction,
+  shouldHoldAutoSaveForReportOverlay
+} from './app/reportPreviewAutosave';
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
@@ -2641,6 +2645,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (hold: boolean, meta?: { reason?: string }) => {
       const nextHold = !!hold;
       const nextReason = (meta?.reason || '').toString().trim();
+      autoSaveHoldRef.current = { hold: nextHold, reason: nextReason || undefined };
       setAutoSaveHold(prev => {
         if (prev.hold === nextHold && (prev.reason || '') === nextReason) return prev;
         return { hold: nextHold, reason: nextReason || undefined };
@@ -5124,6 +5129,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return { id, qIdx };
   }, []);
 
+  const handleReportButtonPointerDown = useCallback(
+    (buttonId: string) => {
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const action = (((btn as any)?.button?.action || '') as string).toString().trim();
+      if (!shouldArmAutoSaveHoldForReportAction(action)) return;
+      setAutoSaveHoldFromUi(true, { reason: 'reportPreview' });
+    },
+    [definition.questions, parseButtonRef, setAutoSaveHoldFromUi]
+  );
+
   const encodeButtonRef = useCallback(
     (id: string, qIdx?: number) => {
       const base = (id || '').toString();
@@ -6196,6 +6218,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       buttonId: undefined
     }));
   }, []);
+
+  useEffect(() => {
+    const shouldHold = shouldHoldAutoSaveForReportOverlay(reportOverlay);
+    const currentReason = (autoSaveHoldRef.current.reason || '').toString();
+    if (shouldHold) {
+      if (autoSaveHoldRef.current.hold && currentReason === 'reportPreview') return;
+      setAutoSaveHoldFromUi(true, { reason: 'reportPreview' });
+      return;
+    }
+    if (autoSaveHoldRef.current.hold && currentReason === 'reportPreview') {
+      setAutoSaveHoldFromUi(false, { reason: 'reportPreview' });
+    }
+  }, [reportOverlay, setAutoSaveHoldFromUi]);
 
   const closeReadOnlyFilesOverlay = useCallback(() => {
     setReadOnlyFilesOverlay(prev => ({ ...prev, open: false }));
@@ -11900,6 +11935,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onSelectionEffect={runSelectionEffects}
           onUploadFiles={uploadFieldUrls}
           onReportButton={handleCustomButton}
+          onReportButtonPointerDown={handleReportButtonPointerDown}
           reportBusy={reportOverlay.pdfPhase === 'rendering'}
           reportBusyId={reportOverlay.buttonId || null}
           onUserEdit={handleUserEdit}

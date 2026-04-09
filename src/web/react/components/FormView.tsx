@@ -573,6 +573,7 @@ interface FormViewProps {
    * Optional handler for BUTTON fields (Doc template preview / report rendering).
    */
   onReportButton?: (buttonId: string) => void;
+  onReportButtonPointerDown?: (buttonId: string) => void;
   reportBusy?: boolean;
   reportBusyId?: string | null;
   onUserEdit?: (args: {
@@ -660,6 +661,7 @@ const FormView: React.FC<FormViewProps> = ({
   onSelectionEffect,
   onUploadFiles,
   onReportButton,
+  onReportButtonPointerDown,
   reportBusy,
   reportBusyId,
   onUserEdit,
@@ -8327,6 +8329,7 @@ const FormView: React.FC<FormViewProps> = ({
             <label style={buttonLabelStyle}>{label}</label>
             <button
               type="button"
+              onPointerDown={() => onReportButtonPointerDown?.(q.id)}
               onClick={() => onReportButton?.(q.id)}
               disabled={disabled}
               style={withDisabled(primary ? buttonStyles.primary : buttonStyles.secondary, disabled)}
