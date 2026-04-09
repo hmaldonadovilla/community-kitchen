@@ -12,6 +12,11 @@ export function futureDate(daysAhead: number): string {
   return toDateInputValue(date);
 }
 
+export function uniqueFutureDate(seed = 0): string {
+  const salt = Math.floor(Date.now() / 60_000) % 120;
+  return futureDate(30 + salt + seed);
+}
+
 export function nextSunday(): string {
   const date = new Date();
   const day = date.getDay();

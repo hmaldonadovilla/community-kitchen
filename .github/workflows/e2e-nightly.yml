@@ -1,0 +1,62 @@
+name: E2E Nightly Regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      stagingUrl:
+        description: 'Staging web app URL. Falls back to repository variable STAGING_WEBAPP_URL when omitted.'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  e2e-nightly:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - chromium-mobile
+          - firefox-mobile
+          - webkit-mobile
+    env:
+      E2E_BASE_URL: ${{ inputs.stagingUrl || vars.STAGING_WEBAPP_URL }}
+      E2E_FORM_KEY_MEAL_PRODUCTION: Config: Meal Production
+      E2E_MOBILE_PRESET: mobile-4g
+      E2E_HEADLESS: '1'
+    steps:
+      - name: Validate staging target
+        run: |
+          if [ -z "$E2E_BASE_URL" ]; then
+            echo "Missing staging URL. Provide workflow_dispatch input stagingUrl or set repository variable STAGING_WEBAPP_URL." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run nightly regression suite
+        run: npm run test:e2e:nightly -- --project="${{ matrix.project }}"
+
+      - name: Upload nightly Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.project }}-playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore

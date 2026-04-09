@@ -22,7 +22,6 @@ export default defineConfig({
   use: {
     ...PLAYWRIGHT_CONTEXT_OPTIONS,
     baseURL: process.env.E2E_BASE_URL,
-    browserName: 'chromium',
     headless,
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
@@ -32,7 +31,22 @@ export default defineConfig({
   grepInvert: process.env.CI ? /@quarantine/ : undefined,
   projects: [
     {
-      name: 'chromium-mobile'
+      name: 'chromium-mobile',
+      use: {
+        browserName: 'chromium'
+      }
+    },
+    {
+      name: 'firefox-mobile',
+      use: {
+        browserName: 'firefox'
+      }
+    },
+    {
+      name: 'webkit-mobile',
+      use: {
+        browserName: 'webkit'
+      }
     }
   ]
 });

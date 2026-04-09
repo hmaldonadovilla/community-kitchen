@@ -25,9 +25,12 @@ The mobile viewport, locale, timezone, and network throttling are aligned with `
 ```bash
 npm run test:e2e -- --list
 E2E_BASE_URL="https://script.google.com/macros/s/<deployment>/exec" npm run test:e2e:smoke
+E2E_BASE_URL="https://script.google.com/macros/s/<deployment>/exec" npm run test:e2e:regression -- --project=chromium-mobile
+E2E_BASE_URL="https://script.google.com/macros/s/<deployment>/exec" npm run test:e2e:nightly
 ```
 
 ## Notes
 
-- The current checked-in specs are the first staging smoke checks and framework scaffolding.
+- The checked-in suite now separates fast staging smoke coverage from broader `@regression` coverage.
+- `npm run test:e2e:nightly` is intended for non-blocking Chromium, Firefox, and WebKit runs against staging.
 - Business scenario expansion should follow the mapping in `docs/test-automation/automation-backlog.md`.
