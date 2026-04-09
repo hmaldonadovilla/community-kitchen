@@ -9,7 +9,7 @@ import {
   expectMealTypesVisible,
   fillFirstOrderedPortions,
   openNewOrderFromPreset,
-  selectFirstCook,
+  prepareMinimalHubLunchOrder,
   selectService,
   setProductionDate
 } from '../helpers/mealProduction';
@@ -47,11 +47,7 @@ test.describe('Meal Production staging smoke', () => {
   });
 
   test('@smoke opens a new Hub order and shows only the Vegetarian meal type', async ({ page }) => {
-    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.hub);
-
-    await setProductionDate(frame);
-    await selectService(frame, mealProductionFixtures.services.lunch);
-    await selectFirstCook(frame);
+    const frame = await prepareMinimalHubLunchOrder(page);
 
     await expectMealTypesVisible(frame, [mealProductionFixtures.mealTypes.vegetarian]);
     await expectMealTypesHidden(frame, [
@@ -81,11 +77,7 @@ test.describe('Meal Production staging smoke', () => {
   });
 
   test('@smoke detects a duplicate Hub lunch record and offers to open the existing record', async ({ page }) => {
-    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.hub);
-
-    await setProductionDate(frame);
-    await selectService(frame, mealProductionFixtures.services.lunch);
-    await selectFirstCook(frame);
+    const frame = await prepareMinimalHubLunchOrder(page);
     await fillFirstOrderedPortions(frame, '10');
 
     await expect(frame.getByText('Creating duplicate record for the same customer, service and date is not allowed.')).toBeVisible({
@@ -93,5 +85,14 @@ test.describe('Meal Production staging smoke', () => {
     });
     await expect(frame.getByRole('button', { name: 'Change customer, service or date' })).toBeVisible();
     await expect(frame.getByRole('button', { name: 'Open existing record' })).toBeVisible();
+  });
+
+  test('@smoke rejects negative ordered portions for Hub lunch', async ({ page }) => {
+    const frame = await prepareMinimalHubLunchOrder(page);
+
+    await fillFirstOrderedPortions(frame, '-1');
+
+    await expect(frame.getByText('Ordered portions must be 0 or more')).toBeVisible({ timeout: 10_000 });
+    await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 });

@@ -45,6 +45,14 @@ export async function fillFirstOrderedPortions(frame: Frame, value: string): Pro
   await ordered.dispatchEvent('change');
 }
 
+export async function prepareMinimalHubLunchOrder(page: Page): Promise<Frame> {
+  const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.hub);
+  await setProductionDate(frame);
+  await selectService(frame, mealProductionFixtures.services.lunch);
+  await selectFirstCook(frame);
+  return frame;
+}
+
 export async function expectMealTypesVisible(frame: Frame, mealTypes: string[]): Promise<void> {
   const bodyText = await getOrderBodyText(frame);
   for (const mealType of mealTypes) {
