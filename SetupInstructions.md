@@ -3269,6 +3269,7 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
 
 - **Optional: drop fields when copying a record**:
   - In the dashboard “Follow-up Config (JSON)” column, set `"copyCurrentRecordDropFields"` to a list of **field ids** to clear on copy.
+  - Dropped fields stay explicitly blank in the copied draft, so normal `defaultValue` prefills do not immediately restore them.
   - Example (force DATE + SHIFT to be re-entered on the copied record):
 
 ```json
@@ -3277,17 +3278,30 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
 
 - **Optional: copy only a curated subset of values**:
   - If you need “Copy current record” to copy only specific fields (instead of copying everything and then dropping fields), set `"copyCurrentRecordProfile"`.
-  - Example (copy only Customer + Service + requested portions line items):
+  - Nested relative subgroup rows can also be copied via `"subGroups"` when you want to keep selected child rows (for example recipes) without copying deeper ingredient or evidence rows.
+  - Example (copy Customer + Service + Responsible cook + requested portions + selected cook recipes):
 
 ```json
 {
   "copyCurrentRecordProfile": {
-    "values": ["MP_DISTRIBUTOR", "MP_SERVICE"],
+    "values": ["MP_DISTRIBUTOR", "MP_SERVICE", "MP_COOK_NAME"],
     "lineItems": [
       {
         "groupId": "MP_MEALS_REQUEST",
         "fields": ["MEAL_TYPE", "ORD_QTY"],
-        "includeWhen": { "fieldId": "ORD_QTY", "greaterThan": 0 }
+        "includeWhen": { "fieldId": "ORD_QTY", "greaterThan": 0 },
+        "subGroups": [
+          {
+            "groupId": "MP_TYPE_LI",
+            "fields": ["PREP_TYPE", "PREP_QTY", "RECIPE"],
+            "includeWhen": {
+              "all": [
+                { "fieldId": "PREP_TYPE", "equals": ["Cook"] },
+                { "fieldId": "RECIPE", "notEmpty": true }
+              ]
+            }
+          }
+        ]
       }
     ]
   }

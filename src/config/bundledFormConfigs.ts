@@ -10611,15 +10611,39 @@ export const BUNDLED_FORM_CONFIGS = [
       "copyCurrentRecordProfile": {
         "values": [
           "MP_DISTRIBUTOR",
-          "MP_SERVICE"
+          "MP_SERVICE",
+          "MP_COOK_NAME"
         ],
         "lineItems": [
           {
             "groupId": "MP_MEALS_REQUEST",
             "fields": [
               "MEAL_TYPE",
-              "ORD_QTY",
-              "FINAL_QTY"
+              "ORD_QTY"
+            ],
+            "subGroups": [
+              {
+                "groupId": "MP_TYPE_LI",
+                "fields": [
+                  "PREP_TYPE",
+                  "PREP_QTY",
+                  "RECIPE"
+                ],
+                "includeWhen": {
+                  "all": [
+                    {
+                      "fieldId": "PREP_TYPE",
+                      "equals": [
+                        "Cook"
+                      ]
+                    },
+                    {
+                      "fieldId": "RECIPE",
+                      "notEmpty": true
+                    }
+                  ]
+                }
+              }
             ]
           }
         ]
@@ -10631,9 +10655,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": "Record kopiëren"
         },
         "message": {
-          "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
-          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
-          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
+          "en": "Select a future production date and verify the customer, service, responsible cook, ordered portions and selected recipes. Ingredient changes and receipt photos are not copied. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez le client, le service, le cuisinier responsable, les portions demandées et les recettes sélectionnées. Les modifications d'ingrédients et les photos de réception ne sont pas copiées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté dans le futur sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant, service, verantwoordelijke kok, gevraagde porties en geselecteerde recepten. Ingrediëntenwijzigingen en ontvangstfoto's worden niet gekopieerd. Alle wijzigingen worden automatisch opgeslagen en een record met een toekomstige datum wordt aangemaakt."
         },
         "confirmLabel": {
           "en": "OK",
@@ -19616,15 +19640,39 @@ export const BUNDLED_FORM_CONFIGS = [
       "copyCurrentRecordProfile": {
         "values": [
           "MP_DISTRIBUTOR",
-          "MP_SERVICE"
+          "MP_SERVICE",
+          "MP_COOK_NAME"
         ],
         "lineItems": [
           {
             "groupId": "MP_MEALS_REQUEST",
             "fields": [
               "MEAL_TYPE",
-              "ORD_QTY",
-              "FINAL_QTY"
+              "ORD_QTY"
+            ],
+            "subGroups": [
+              {
+                "groupId": "MP_TYPE_LI",
+                "fields": [
+                  "PREP_TYPE",
+                  "PREP_QTY",
+                  "RECIPE"
+                ],
+                "includeWhen": {
+                  "all": [
+                    {
+                      "fieldId": "PREP_TYPE",
+                      "equals": [
+                        "Cook"
+                      ]
+                    },
+                    {
+                      "fieldId": "RECIPE",
+                      "notEmpty": true
+                    }
+                  ]
+                }
+              }
             ]
           }
         ]
@@ -19636,9 +19684,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "nl": "Record kopiëren"
         },
         "message": {
-          "en": "Select a future production date and verify the customer, service and ordered portions information. All changes will be auto-saved and a future dated record will be created.",
-          "fr": "Sélectionnez une date de production future et vérifiez les informations client, service et portions demandées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté future sera créé.",
-          "nl": "Selecteer een toekomstige productiedatum en controleer de klant-, service- en gevraagde portie-informatie. Alle wijzigingen worden automatisch opgeslagen en een toekomstige gedateerde record wordt aangemaakt."
+          "en": "Select a future production date and verify the customer, service, responsible cook, ordered portions and selected recipes. Ingredient changes and receipt photos are not copied. All changes will be auto-saved and a future dated record will be created.",
+          "fr": "Sélectionnez une date de production future et vérifiez le client, le service, le cuisinier responsable, les portions demandées et les recettes sélectionnées. Les modifications d'ingrédients et les photos de réception ne sont pas copiées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté dans le futur sera créé.",
+          "nl": "Selecteer een toekomstige productiedatum en controleer de klant, service, verantwoordelijke kok, gevraagde porties en geselecteerde recepten. Ingrediëntenwijzigingen en ontvangstfoto's worden niet gekopieerd. Alle wijzigingen worden automatisch opgeslagen en een record met een toekomstige datum wordt aangemaakt."
         },
         "confirmLabel": {
           "en": "OK",
@@ -22041,7 +22089,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "52368d86663e0859b2afe5e4dda6e319"
+    "cacheFingerprint": "54b80f3ba0c6c5ac66d2cf02d043498c"
   },
   {
     "formKey": "Config: Recipes",

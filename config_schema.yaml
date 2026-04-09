@@ -3167,6 +3167,7 @@ components:
 
             Notes:
             - These are **question ids** (top-level fields).
+            - Cleared fields are kept as explicit empty values in the copied draft so normal `defaultValue` prefill does not immediately restore them.
             - When omitted or empty, copying preserves all fields (except system/meta fields like id/createdAt/updatedAt).
         createButtonLabel:
           $ref: '#/components/schemas/LocalizedString'
@@ -4548,7 +4549,10 @@ components:
       properties:
         groupId:
           type: string
-          description: LINE_ITEM_GROUP id (group key).
+          description: |
+            LINE_ITEM_GROUP id (group key).
+
+            For nested `subGroups`, this is the subgroup id relative to the copied parent row.
         fields:
           type: array
           description: List of row field ids to keep (all other row values are dropped).
@@ -4557,6 +4561,11 @@ components:
         includeWhen:
           $ref: '#/components/schemas/WhenClause'
           description: Optional row filter to choose which rows to copy.
+        subGroups:
+          type: array
+          description: Optional nested subgroup copy profiles to copy relative subgroup rows for each copied parent row.
+          items:
+            $ref: '#/components/schemas/CopyCurrentRecordLineItemProfile'
       additionalProperties: true
 
     ActionBarTopConfig:

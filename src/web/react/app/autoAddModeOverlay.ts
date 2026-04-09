@@ -254,11 +254,13 @@ export const reconcileAutoAddModeGroups = (args: {
     specCount += 1;
 
     const currentRows = ((next as any)[q.id] || lineItems[q.id] || []) as any[];
+    if (!valid) return;
+
     const res = reconcileAutoRows({
       currentRows,
       targetKey: q.id,
       anchorFieldId: anchorField.id,
-      desired: valid ? desired : [],
+      desired,
       depVals,
       selectorId,
       selectorValue
@@ -369,11 +371,13 @@ export const reconcileAutoAddModeSubgroups = (args: {
 
         specCount += 1;
         const currentRows = ((next as any)[subKey] || lineItems[subKey] || []) as any[];
+        if (!valid) return;
+
         const res = reconcileAutoRows({
           currentRows,
           targetKey: subKey,
           anchorFieldId: anchorField.id,
-          desired: valid ? desired : [],
+          desired,
           depVals,
           selectorId,
           selectorValue

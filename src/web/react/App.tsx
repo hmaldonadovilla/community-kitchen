@@ -146,7 +146,7 @@ import {
   selectMilestoneConfirmationDialog
 } from './features/steps/domain/milestoneDialogs';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
-import { applyCopyCurrentRecordProfile } from './app/copyProfile';
+import { applyCopyCurrentRecordDropFields, applyCopyCurrentRecordProfile } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
@@ -966,6 +966,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const fieldChangeDialog = useFieldChangeDialog({ closeOnKey: view, eventPrefix: 'ui.fieldChangeDialog', onDiagnostic: logEvent });
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
+  const copyRecordBusy = useBlockingOverlay({ eventPrefix: 'record.copy.busy', onDiagnostic: logEvent });
   const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const guidedMilestoneBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.milestone.busy', onDiagnostic: logEvent });
   const guidedStepAdvanceBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.advance.busy', onDiagnostic: logEvent });
@@ -5057,33 +5058,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
       .filter(Boolean);
     if (dropFields.length) {
-      const nextValues: Record<string, any> = { ...(cleared.values as any) };
-      let nextLineItems: any = cleared.lineItems;
-      let lineItemsChanged = false;
-      const droppedValues: string[] = [];
-      dropFields.forEach(fieldId => {
-        if (!fieldId) return;
-        if (Object.prototype.hasOwnProperty.call(nextValues, fieldId)) droppedValues.push(fieldId);
-        delete (nextValues as any)[fieldId];
-
-        // Best-effort: allow dropping entire line item groups (and their subgroups) by id.
-        if (nextLineItems && typeof nextLineItems === 'object') {
-          Object.keys(nextLineItems).forEach(k => {
-            if (k === fieldId || k.startsWith(`${fieldId}__`)) {
-              if (!lineItemsChanged) {
-                nextLineItems = { ...(nextLineItems as any) };
-                lineItemsChanged = true;
-              }
-              (nextLineItems as any)[k] = [];
-            }
-          });
-        }
+      const dropped = applyCopyCurrentRecordDropFields({
+        definition: definition as any,
+        values: cleared.values as any,
+        lineItems: cleared.lineItems,
+        dropFields
       });
+      const nextValues: Record<string, any> = { ...(dropped.values as any) };
+      const nextLineItems: any = dropped.lineItems;
       logEvent('ui.copyCurrent.dropFields', {
         count: dropFields.length,
-        droppedValuesCount: droppedValues.length,
-        droppedValues,
-        lineItemsCleared: lineItemsChanged
+        droppedValuesCount: dropped.droppedValues.length,
+        droppedValues: dropped.droppedValues,
+        lineItemsCleared: dropped.lineItemsCleared
       });
       // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
       valuesRef.current = nextValues as any;
@@ -5486,7 +5473,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('report.pdfPreview.exception', { buttonId, message: logMessage });
       }
     },
-    [base64ToPdfObjectUrl, definition, formKey, logEvent]
+    [base64ToPdfObjectUrl, definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
   );
 
   const openReport = useCallback(
@@ -10707,19 +10694,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const cachedVersion =
       sourceRecord && Number.isFinite(Number((sourceRecord as any).dataVersion)) ? Number((sourceRecord as any).dataVersion) : null;
 
+    const openCopyBusy = () =>
+      copyRecordBusy.lock({
+        title: tSystem('navigation.waitTitle', language, 'Please wait'),
+        message: tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...'),
+        diagnosticMeta: { recordId: row.id }
+      });
+
+    const fetchFullSnapshotThenCopy = (source: string, busySeq: number | null) => {
+      setRecordLoadingId(row.id || (hintedRow ? `row:${hintedRow}` : null));
+      setRecordLoadError(null);
+      const startedAt = Date.now();
+      void (async () => {
+        try {
+          const ok = await loadRecordSnapshot(row.id, hintedRow);
+          if (!ok) return;
+          if (selectedRecordIdRef.current !== row.id) return;
+          logEvent('list.openView.copy', { recordId: row.id, source });
+          handleDuplicateCurrent();
+        } finally {
+          if (busySeq !== null) {
+            copyRecordBusy.unlock(busySeq, {
+              recordId: row.id,
+              source,
+              durationMs: Date.now() - startedAt
+            });
+          }
+        }
+      })();
+    };
+
     // Fast path: show cached record immediately when available.
     // Re-check the server version in the background when we have a cached version; refetch if stale.
     if (sourceRecord) {
+      if (shouldCopy) {
+        fetchFullSnapshotThenCopy('copy.fetchedFromListCache', openCopyBusy());
+        return;
+      }
       applyRecordSnapshot(sourceRecord);
       // If the list requested a button action, don't wait on version checks; render immediately from the cached snapshot.
       // (If the cached snapshot is stale, the user can always refresh; we avoid blocking the UX on a second roundtrip.)
       if (shouldTriggerButton) {
         triggerOpenButtonIfNeeded();
-      }
-      if (shouldCopy) {
-        logEvent('list.openView.copy', { recordId: row.id, source: 'cached' });
-        handleDuplicateCurrent();
-        return;
       }
       if (shouldSubmit) {
         logEvent('list.openView.submit', { recordId: row.id, source: 'cached' });
@@ -10798,6 +10814,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setRecordLoadingId(row.id || (hintedRow ? `row:${hintedRow}` : null));
         setRecordLoadError(null);
       }
+      let copyBusyDelegated = false;
+      const copyBusySeq = shouldCopy ? openCopyBusy() : null;
       const hydrateFromInFlightPrefetch = async (): Promise<boolean> => {
         if (shouldUseCombinedSummaryFetch) return false;
         if (!hintedRow || hintedRow < 2) return false;
@@ -10815,8 +10833,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!prefetchedRecord) return false;
         applyRecordSnapshot(prefetchedRecord);
         if (shouldCopy) {
-          logEvent('list.openView.copy', { recordId: row.id, source: 'prefetched' });
-          handleDuplicateCurrent();
+          copyBusyDelegated = true;
+          fetchFullSnapshotThenCopy('copy.fetchedAfterPrefetch', copyBusySeq);
           return true;
         }
         if (shouldSubmit) {
@@ -10830,6 +10848,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       };
 
       void (async () => {
+        const startedAt = Date.now();
         if (shouldUseCombinedSummaryFetch) {
           const startedAt = Date.now();
           logEvent('summary.fetchCombined.start', { recordId: row.id, rowNumberHint: hintedRow || null });
@@ -10887,23 +10906,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         }
 
-        const resolvedFromPrefetch = await hydrateFromInFlightPrefetch();
-        if (resolvedFromPrefetch) return;
-        const ok = await loadRecordSnapshot(row.id, hintedRow);
-        if (!ok) return;
-        if (selectedRecordIdRef.current !== row.id) return;
-        if (shouldCopy) {
-          logEvent('list.openView.copy', { recordId: row.id, source: 'fetched' });
-          handleDuplicateCurrent();
-          return;
+        try {
+          const resolvedFromPrefetch = await hydrateFromInFlightPrefetch();
+          if (resolvedFromPrefetch) return;
+          const ok = await loadRecordSnapshot(row.id, hintedRow);
+          if (!ok) return;
+          if (selectedRecordIdRef.current !== row.id) return;
+          if (shouldCopy) {
+            logEvent('list.openView.copy', { recordId: row.id, source: 'fetched' });
+            handleDuplicateCurrent();
+            return;
+          }
+          if (shouldSubmit) {
+            logEvent('list.openView.submit', { recordId: row.id, source: 'fetched' });
+            setView('form');
+            scheduleListOpenSubmit({ recordId: row.id, source: 'fetched' });
+            return;
+          }
+          triggerOpenButtonIfNeeded();
+        } finally {
+          if (copyBusySeq !== null && !copyBusyDelegated) {
+            copyRecordBusy.unlock(copyBusySeq, {
+              recordId: row.id,
+              source: 'copy.fetched',
+              durationMs: Date.now() - startedAt
+            });
+          }
         }
-        if (shouldSubmit) {
-          logEvent('list.openView.submit', { recordId: row.id, source: 'fetched' });
-          setView('form');
-          scheduleListOpenSubmit({ recordId: row.id, source: 'fetched' });
-          return;
-        }
-        triggerOpenButtonIfNeeded();
       })();
     }
     // When Summary view is disabled, always open the Form view (closed records are read-only).
@@ -12177,6 +12206,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         title={guidedStepAdvanceBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
         message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
         zIndex={12047}
+      />
+
+      <BlockingOverlay
+        open={copyRecordBusy.state.open}
+        title={copyRecordBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+        message={copyRecordBusy.state.message || tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...')}
+        zIndex={12048}
       />
 
       <ConfirmDialogOverlay

@@ -3400,11 +3400,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
     const selectorId = cfg.sectionSelector?.id;
     const selectorValue = selectorId ? (values as any)[selectorId] : undefined;
+    if (!valid) return;
 
     const spec = {
       targetKey: q.id,
       anchorFieldId: anchorField.id,
-      desired: valid ? desired : [],
+      desired,
       depVals,
       selectorId,
       selectorValue
@@ -3486,11 +3487,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             return (values as any)[depId];
           }
         });
+        if (!valid) return;
 
         specs.push({
           targetKey: subKey,
           anchorFieldId: anchorField.id,
-          desired: valid ? desired : [],
+          desired,
           depVals,
           selectorId,
           selectorValue
