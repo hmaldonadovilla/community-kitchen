@@ -37,7 +37,7 @@ import {
   whenClauseContainsTodayFilter
 } from '../app/listViewFilters';
 import { sortListItems } from '../app/listViewSorting';
-import { groupListItemsByField } from '../app/listViewGrouping';
+import { buildGroupedOverlayTableSections } from '../app/listViewOverlay';
 import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../app/listViewLegend';
 import { ListViewLegend } from './app/ListViewLegend';
 import { resolveLabel } from '../utils/labels';
@@ -2023,10 +2023,15 @@ const ListView: React.FC<ListViewProps> = ({
     [overlayPresetButton]
   );
 
-  const overlayGroupedItems = useMemo(() => {
+  const overlayGroupedSections = useMemo(() => {
     if (overlayPresentation !== 'groupedList' || !overlayGroupByFieldId) return [];
-    return groupListItemsByField(overlayPresetItems, overlayGroupByFieldId, { sort: 'asc' });
-  }, [overlayGroupByFieldId, overlayPresetItems, overlayPresentation]);
+    return buildGroupedOverlayTableSections({
+      items: overlayPresetItems,
+      groupByFieldId: overlayGroupByFieldId,
+      columns: overlayColumns,
+      groupTitleSuffixText: overlayGroupTitleSuffixText
+    });
+  }, [overlayColumns, overlayGroupByFieldId, overlayGroupTitleSuffixText, overlayPresetItems, overlayPresentation]);
 
   const resolvedLegendItems = useMemo(() => {
     if (legendItems) return legendItems;
@@ -2043,9 +2048,10 @@ const ListView: React.FC<ListViewProps> = ({
       buttonId: (overlayPresetButton.q as any)?.id || null,
       presentation: overlayPresentation,
       count: overlayPresetItems.length,
-      groupCount: overlayGroupedItems.length || null
+      groupCount: overlayGroupedSections.length || null,
+      tableColumnCount: overlayGroupedSections[0]?.columns?.length || overlayColumns.length || null
     });
-  }, [onDiagnostic, overlayGroupedItems.length, overlayPresentation, overlayPresetButton, overlayPresetItems.length]);
+  }, [onDiagnostic, overlayColumns.length, overlayGroupedSections, overlayPresentation, overlayPresetButton, overlayPresetItems.length]);
 
   const searchControlClass = `ck-list-search-control${
     (advancedSearchEnabled ? ' ck-has-advanced' : '') + (showClearSearch ? ' ck-has-clear' : '') + ((advancedSearchEnabled || showClearSearch) ? ' ck-has-icons' : '')
@@ -2605,55 +2611,55 @@ const ListView: React.FC<ListViewProps> = ({
     >
       <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {overlayPresentation === 'groupedList' && overlayGroupByFieldId ? (
-          overlayGroupedItems.length ? (
+          overlayGroupedSections.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {overlayGroupedItems.map(group => {
-                const title = [group.label, overlayGroupTitleSuffixText].filter(Boolean).join(' ').trim() || EMPTY_DISPLAY;
-                return (
-                  <details
-                    key={group.key}
-                    open={overlayDefaultExpanded}
-                    style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)' }}
+              {overlayGroupedSections.map(group => (
+                <details
+                  key={group.key}
+                  open={overlayDefaultExpanded}
+                  style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)' }}
+                >
+                  <summary
+                    style={{
+                      cursor: 'pointer',
+                      padding: '12px 14px',
+                      fontWeight: 600,
+                      fontSize: 'var(--ck-font-label)',
+                      listStyle: 'auto'
+                    }}
                   >
-                    <summary
-                      style={{
-                        cursor: 'pointer',
-                        padding: '12px 14px',
-                        fontWeight: 600,
-                        fontSize: 'var(--ck-font-label)',
-                        listStyle: 'auto'
-                      }}
-                    >
-                      {title}
-                    </summary>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px 14px' }}>
-                      {group.items.map(row => (
-                        <div
-                          key={`${group.key}-${row.id}`}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            justifyContent: 'space-between',
-                            gap: 12,
-                            paddingTop: 8,
-                            borderTop: '1px solid var(--border)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minWidth: 0 }}>
-                            {overlayColumns
-                              .filter(col => col.fieldId !== overlayGroupByFieldId)
-                              .map(col => (
-                                <span key={`${row.id}-${col.fieldId}`} style={{ minWidth: 0 }}>
-                                  {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
-                                </span>
-                              ))}
-                          </div>
-                        </div>
-                      ))}
+                    {group.title}
+                  </summary>
+                  <div style={{ padding: '0 14px 14px' }}>
+                    <div className="list-table-wrapper">
+                      <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                        <tbody>
+                          {group.items.length ? (
+                            group.items.map(row => (
+                              <tr key={`${group.key}-${row.id}`}>
+                                {group.columns.map(col => (
+                                  <td
+                                    key={`${group.key}-${row.id}-${col.fieldId}`}
+                                    style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                                  >
+                                    {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={Math.max(1, group.columns.length)} className="muted">
+                                {tSystem('list.noRecords', language, 'No records found.')}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
-                  </details>
-                );
-              })}
+                  </div>
+                </details>
+              ))}
             </div>
           ) : (
             <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
