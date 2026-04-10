@@ -72,14 +72,16 @@ import { FieldChangeDialogOverlay } from './features/fieldChangeDialog/FieldChan
 import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fieldChangeDialog/useFieldChangeDialog';
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import {
-  applyClientDataVersionToPayload,
   buildDraftPayload,
   buildSubmissionPayload,
   chainSerializedSubmissionRequest,
   collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
+  isSubmissionStaleMessage,
+  prepareClientDataVersionDispatch,
   resolveExistingRecordId,
   resolveCurrentClientDataVersion,
+  settleClientDataVersionAfterDispatch,
   shouldApplyIncomingRecordSnapshot,
   validateForm
 } from './app/submission';
@@ -734,7 +736,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     serverVersion?: number;
     serverRow?: number;
   };
+  type SynchronizeStaleRecordFn = (args: {
+    reason: string;
+    recordId: string;
+    cachedVersion?: number | null;
+    serverVersion?: number | null;
+    serverRow?: number | null;
+  }) => Promise<boolean>;
+  type RecordSyncNoticeState = {
+    open: boolean;
+    title: string;
+    message: string;
+  };
   const [recordStale, setRecordStale] = useState<RecordStaleInfo | null>(null);
+  const [recordSyncNotice, setRecordSyncNotice] = useState<RecordSyncNoticeState>({ open: false, title: '', message: '' });
   const recordStaleRef = useRef<RecordStaleInfo | null>(null);
   const submitPrecheckInFlightRef = useRef<boolean>(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
@@ -895,14 +910,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const locationSearch = (() => {
       try {
         return globalAny?.location?.search || '';
-      } catch (_) {
+      } catch {
         return '';
       }
     })();
     const locationHash = (() => {
       try {
         return globalAny?.location?.hash || '';
-      } catch (_) {
+      } catch {
         return '';
       }
     })();
@@ -967,10 +982,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const copyRecordBusy = useBlockingOverlay({ eventPrefix: 'record.copy.busy', onDiagnostic: logEvent });
+  const recordSyncBusy = useBlockingOverlay({ eventPrefix: 'record.sync.busy', onDiagnostic: logEvent });
   const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const guidedMilestoneBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.milestone.busy', onDiagnostic: logEvent });
   const guidedStepAdvanceBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.advance.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
+  const recordSyncBusyOpen = recordSyncBusy.state.open;
 
   useEffect(() => {
     if (typeof document === 'undefined' || !document.body) return;
@@ -1384,6 +1401,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setLastSubmissionMeta(null);
         lastSubmissionMetaRef.current = null;
         recordDataVersionRef.current = null;
+        optimisticClientDataVersionRef.current = null;
         recordRowNumberRef.current = null;
         recordStaleRef.current = null;
         setRecordStale(null);
@@ -2276,6 +2294,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveQueuedRef = useRef<boolean>(false);
   const draftSaveRequestInFlightRef = useRef<boolean>(false);
   const draftSaveRequestPromiseRef = useRef<Promise<any> | null>(null);
+  const submissionRequestPromiseRef = useRef<Promise<any> | null>(null);
+  const optimisticClientDataVersionRef = useRef<number | null>(
+    record && Number.isFinite(Number((record as any).dataVersion)) ? Number((record as any).dataVersion) : null
+  );
+  const recordSyncPromiseRef = useRef<Promise<boolean> | null>(null);
+  const synchronizeStaleRecordRef = useRef<SynchronizeStaleRecordFn>(async () => false);
   const draftSaveRequestFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastCompletedDraftSaveFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastDraftSaveFailureRef = useRef<{ message: string; recordId?: string | null } | null>(null);
@@ -2337,19 +2361,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, []);
 
   const scheduleLatestAutoSave = useCallback(
-    (reason: string, delayMs: number) => {
+    (reason: string, delayMs: number): number | null => {
       const nextDelay = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       autoSaveQueuedRef.current = true;
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
-      autoSaveTimerRef.current = globalThis.setTimeout(() => {
+      const timerId = globalThis.setTimeout(() => {
         autoSaveTimerRef.current = null;
         autoSaveQueuedRef.current = false;
+        logEvent('autosave.timer.fire', {
+          reason,
+          dirty: autoSaveDirtyRef.current,
+          queued: autoSaveQueuedRef.current
+        });
         void performAutoSaveRef.current(reason);
       }, nextDelay) as any;
+      autoSaveTimerRef.current = timerId as any;
       logEvent('autosave.queue.latest', { reason, delayMs: nextDelay });
+      return timerId as any;
     },
     [logEvent]
   );
@@ -2412,18 +2443,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [logEvent]
   );
 
+  const runSerializedSubmissionRequest = useCallback(
+    async <T,>(reason: string, runner: () => Promise<T>): Promise<T> => {
+      const previousPromise = submissionRequestPromiseRef.current;
+      const promise = chainSerializedSubmissionRequest(previousPromise, async () => runner());
+      submissionRequestPromiseRef.current = promise as Promise<any>;
+      if (previousPromise) {
+        logEvent('submit.serialized', { reason });
+      }
+      void promise.finally(() => {
+        if (submissionRequestPromiseRef.current === promise) {
+          submissionRequestPromiseRef.current = null;
+        }
+      });
+      return promise;
+    },
+    [logEvent]
+  );
+
+  const getCurrentKnownClientDataVersion = useCallback(
+    () =>
+      resolveCurrentClientDataVersion(
+        recordDataVersionRef.current,
+        optimisticClientDataVersionRef.current,
+        lastSubmissionMetaRef.current?.dataVersion,
+        (selectedRecordSnapshotRef.current as any)?.dataVersion
+      ),
+    []
+  );
+
   const buildCurrentDraftSaveResponse = useCallback(
     (recordId: string) => ({
       success: true,
       meta: {
         id: recordId,
         updatedAt: lastSubmissionMetaRef.current?.updatedAt || selectedRecordSnapshotRef.current?.updatedAt || '',
-        dataVersion: recordDataVersionRef.current || undefined,
+        dataVersion: getCurrentKnownClientDataVersion() || undefined,
         rowNumber: recordRowNumberRef.current || undefined,
         status: lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || null
       }
     }),
-    []
+    [getCurrentKnownClientDataVersion]
   );
 
   const runCoalescedDraftSaveRequest = useCallback(
@@ -2495,42 +2555,54 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const submitCurrentRecordMutation = useCallback(
     async (reason: string, payload: any, runner?: (nextPayload: any) => Promise<any>): Promise<any> => {
-      const currentRecordId =
-        resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        }) || '';
-      const currentDataVersionRaw = Number(
-        resolveCurrentClientDataVersion(
-          recordDataVersionRef.current,
-          lastSubmissionMetaRef.current?.dataVersion,
-          (selectedRecordSnapshotRef.current as any)?.dataVersion
-        )
-      );
-      const previousClientDataVersionRaw = Number((payload as any)?.__ckClientDataVersion);
-      const nextPayload = applyClientDataVersionToPayload({
-        payload,
-        currentRecordId,
-        currentDataVersion: Number.isFinite(currentDataVersionRaw) ? currentDataVersionRaw : null
-      });
-      const nextClientDataVersionRaw = Number((nextPayload as any)?.__ckClientDataVersion);
-      const previousClientDataVersion = Number.isFinite(previousClientDataVersionRaw) ? previousClientDataVersionRaw : null;
-      const nextClientDataVersion = Number.isFinite(nextClientDataVersionRaw) ? nextClientDataVersionRaw : null;
-      if (previousClientDataVersion !== nextClientDataVersion) {
-        logEvent('submit.clientDataVersion.sync', {
-          reason,
-          recordId:
-            currentRecordId ||
-            ((nextPayload?.id || nextPayload?.__ckDeleteRecordId || '') as any).toString?.().trim?.() ||
-            null,
-          previousClientDataVersion,
-          nextClientDataVersion
+      return runSerializedSubmissionRequest(reason, async () => {
+        const currentRecordId =
+          resolveExistingRecordId({
+            selectedRecordId: selectedRecordIdRef.current,
+            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+          }) || '';
+        const previousClientDataVersion = resolveCurrentClientDataVersion((payload as any)?.__ckClientDataVersion);
+        const prepared = prepareClientDataVersionDispatch({
+          payload,
+          currentRecordId,
+          currentDataVersion: getCurrentKnownClientDataVersion(),
+          optimisticDataVersion: optimisticClientDataVersionRef.current
         });
-      }
-      return runner ? runner(nextPayload) : submit(nextPayload);
+        const nextPayload = prepared.payload;
+        const nextClientDataVersion = resolveCurrentClientDataVersion((nextPayload as any)?.__ckClientDataVersion);
+        if (previousClientDataVersion !== nextClientDataVersion) {
+          logEvent('submit.clientDataVersion.sync', {
+            reason,
+            recordId:
+              currentRecordId ||
+              ((nextPayload?.id || nextPayload?.__ckDeleteRecordId || '') as any).toString?.().trim?.() ||
+              null,
+            previousClientDataVersion,
+            nextClientDataVersion
+          });
+        }
+        optimisticClientDataVersionRef.current = prepared.optimisticDataVersion;
+        try {
+          const response = runner ? await runner(nextPayload) : await submit(nextPayload);
+          optimisticClientDataVersionRef.current = settleClientDataVersionAfterDispatch({
+            success: Boolean(response?.success),
+            confirmedDataVersion: getCurrentKnownClientDataVersion(),
+            optimisticDataVersion: optimisticClientDataVersionRef.current,
+            responseDataVersion: (response as any)?.meta?.dataVersion
+          });
+          return response;
+        } catch (err) {
+          optimisticClientDataVersionRef.current = settleClientDataVersionAfterDispatch({
+            success: false,
+            confirmedDataVersion: getCurrentKnownClientDataVersion(),
+            optimisticDataVersion: optimisticClientDataVersionRef.current
+          });
+          throw err;
+        }
+      });
     },
-    [logEvent]
+    [getCurrentKnownClientDataVersion, logEvent, runSerializedSubmissionRequest]
   );
 
   const applyUploadedFieldOverrides = useCallback(
@@ -2820,13 +2892,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       reservationSyncMetaRef.current = null;
       reservationManagedScopesRef.current = null;
       lastDraftSaveFailureRef.current = null;
+      optimisticClientDataVersionRef.current = null;
+      recordSyncPromiseRef.current = null;
+      recordSyncBusy.forceUnlock();
+      setRecordSyncNotice({ open: false, title: '', message: '' });
       logEvent('record.session.bump', {
         reason: (args?.reason || '').toString() || null,
         nextRecordId: args?.nextRecordId ? args.nextRecordId.toString() : null,
         session: recordSessionRef.current
       });
     },
-    [logEvent, syncUploadQueueSize]
+    [logEvent, recordSyncBusy]
   );
 
   // Arm autosave for create-flow ONLY after the user actually changes a field value.
@@ -3946,7 +4022,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const targetStatus = (readyForProductionUnlockStatus || '').toString().trim();
     if (!unlockRecordId || !targetStatus) return;
     if (view !== 'form') return;
-    if (submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking) return;
+    if (submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking) return;
 
     const recordId =
       resolveExistingRecordId({
@@ -3999,6 +4075,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setValues,
         setView,
         upsertListCacheRow,
+        synchronizeStaleRecord: (args: Parameters<SynchronizeStaleRecordFn>[0]) => synchronizeStaleRecordRef.current(args),
         busy: updateRecordBusy
       } as any,
       {
@@ -4023,6 +4100,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     lastSubmissionMeta,
     logEvent,
     precreateDedupChecking,
+    recordSyncBusyOpen,
     readyForProductionUnlockResolution.source,
     readyForProductionUnlockResolution.unlockRecordId,
     readyForProductionUnlockStatus,
@@ -4050,6 +4128,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const incomingDataVersion = resolveCurrentClientDataVersion((snapshot as any)?.dataVersion);
       const currentDataVersion = resolveCurrentClientDataVersion(
         recordDataVersionRef.current,
+        optimisticClientDataVersionRef.current,
         lastSubmissionMetaRef.current?.dataVersion,
         (selectedRecordSnapshotRef.current as any)?.dataVersion
       );
@@ -4085,6 +4164,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setRecordStale(null);
       recordDataVersionRef.current =
         snapshot && Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : null;
+      optimisticClientDataVersionRef.current = recordDataVersionRef.current;
       // Best-effort: capture rowNumber when present on the snapshot.
       if (snapshot && Number.isFinite(Number((snapshot as any).__rowNumber))) {
         recordRowNumberRef.current = Number((snapshot as any).__rowNumber);
@@ -4303,6 +4383,106 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (!selectedRecordId) return;
     await loadRecordSnapshot(selectedRecordId);
   }, [loadRecordSnapshot, requestListRefresh, selectedRecordId]);
+
+  const synchronizeStaleRecord = useCallback<SynchronizeStaleRecordFn>(
+    async args => {
+      const recordId = (args.recordId || selectedRecordIdRef.current || '').toString().trim();
+      if (!recordId) return false;
+      if (recordSyncPromiseRef.current) {
+        return recordSyncPromiseRef.current;
+      }
+
+      autoSaveDirtyRef.current = false;
+      autoSaveQueuedRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      setStatus(null);
+      setStatusLevel(null);
+
+      const busySeq = recordSyncBusy.lock({
+        title: tSystem('record.syncingTitle', languageRef.current, 'Synchronizing record…'),
+        message: tSystem(
+          'record.syncing',
+          languageRef.current,
+          'This record changed at the source. We are synchronizing the latest version now.'
+        ),
+        kind: 'recordSync',
+        diagnosticMeta: {
+          recordId,
+          cachedVersion: args.cachedVersion ?? null,
+          serverVersion: args.serverVersion ?? null,
+          serverRow: args.serverRow ?? null
+        }
+      });
+
+      const promise = (async () => {
+        logEvent('record.sync.start', {
+          reason: args.reason,
+          recordId,
+          cachedVersion: args.cachedVersion ?? null,
+          serverVersion: args.serverVersion ?? null,
+          serverRow: args.serverRow ?? null
+        });
+        const refreshed = await loadRecordSnapshot(recordId, args.serverRow || undefined);
+        if (refreshed) {
+          recordStaleRef.current = null;
+          setRecordStale(null);
+          setRecordSyncNotice({
+            open: true,
+            title: tSystem('record.syncedTitle', languageRef.current, 'Record synchronized'),
+            message: tSystem(
+              'record.synced',
+              languageRef.current,
+              'The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.'
+            )
+          });
+          logEvent('record.sync.success', {
+            reason: args.reason,
+            recordId,
+            serverRow: args.serverRow ?? null
+          });
+          return true;
+        }
+
+        const fallbackMessage = tSystem(
+          'record.syncFailed',
+          languageRef.current,
+          'We could not synchronize the latest record automatically. Tap Refresh to continue.'
+        );
+        const staleInfo: RecordStaleInfo = {
+          recordId,
+          message: fallbackMessage,
+          cachedVersion: args.cachedVersion ?? undefined,
+          serverVersion: args.serverVersion ?? undefined,
+          serverRow: args.serverRow ?? undefined
+        };
+        recordStaleRef.current = staleInfo;
+        setRecordStale(staleInfo);
+        logEvent('record.sync.failed', {
+          reason: args.reason,
+          recordId,
+          serverRow: args.serverRow ?? null
+        });
+        return false;
+      })().finally(() => {
+        recordSyncBusy.unlock(busySeq, {
+          reason: args.reason,
+          recordId
+        });
+        recordSyncPromiseRef.current = null;
+      });
+
+      recordSyncPromiseRef.current = promise;
+      return promise;
+    },
+    [loadRecordSnapshot, logEvent, recordSyncBusy, setStatus, setStatusLevel]
+  );
+  synchronizeStaleRecordRef.current = synchronizeStaleRecord;
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -4889,6 +5069,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       bumpRecordSession,
       definition.summaryViewEnabled,
       listCache.records,
+      loadRecordSnapshot,
       logEvent,
       resolveStatusAutoView
     ]
@@ -4996,6 +5177,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordStaleRef.current = null;
       setRecordStale(null);
       recordDataVersionRef.current = null;
+      optimisticClientDataVersionRef.current = null;
       recordRowNumberRef.current = null;
       rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
       setValues(mapped.values);
@@ -5039,6 +5221,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     recordStaleRef.current = null;
     setRecordStale(null);
     recordDataVersionRef.current = null;
+    optimisticClientDataVersionRef.current = null;
     recordRowNumberRef.current = null;
     const profiled = applyCopyCurrentRecordProfile({
       definition: definition as any,
@@ -5162,6 +5345,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return firstPick || undefined;
   }, []);
 
+  const resolveOpenUrlFieldHref = useCallback((fieldIdRaw: string): string => {
+    const fieldId = (fieldIdRaw || '').toString().trim();
+    if (!fieldId) return '';
+
+    const splitUrlList = (raw: string): string[] => {
+      const trimmed = (raw || '').toString().trim();
+      if (!trimmed) return [];
+      const commaParts = trimmed
+        .split(',')
+        .map(p => p.trim())
+        .filter(Boolean);
+      if (commaParts.length > 1) return commaParts;
+      const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
+      if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
+      return [trimmed];
+    };
+
+    const recordId =
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '';
+    const current = selectedRecordSnapshotRef.current || null;
+    const raw = (() => {
+      if (fieldId === 'pdfUrl') return (current as any)?.pdfUrl || '';
+      if (fieldId === 'id') return recordId;
+      const v = (valuesRef.current as any)?.[fieldId];
+      if (v === undefined || v === null) return '';
+      if (typeof v === 'string') return v;
+      if (Array.isArray(v)) return v.join(' ');
+      if (typeof v === 'object' && typeof (v as any).url === 'string') return (v as any).url;
+      try {
+        return v.toString();
+      } catch {
+        return '';
+      }
+    })();
+
+    const urls = splitUrlList(raw).filter(u => /^https?:\/\//i.test(u));
+    return urls[0] || '';
+  }, []);
+
   const customButtons = useMemo(() => {
     const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
     const applyVisibility = view !== 'list';
@@ -5279,21 +5505,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any, disabled };
       })
       .filter((b): b is { id: string; label: string; placements: any[]; action: any; disabled: boolean } => !!b);
-  }, [
-    definition.createRecordPresetButtonsEnabled,
-    definition.questions,
-    dataSourceVisibilityVersion,
-    encodeButtonRef,
-    guidedDataSourceConfigMap,
-    language,
-    lastSubmissionMeta,
-    lineItems,
-    resolveOpenUrlFieldHref,
-    selectedRecordId,
-    selectedRecordSnapshot,
-    values,
-    view
-  ]);
+  }, [definition, encodeButtonRef, guidedDataSourceConfigMap, language, lastSubmissionMeta, lineItems, resolveOpenUrlFieldHref, selectedRecordId, selectedRecordSnapshot, values, view]);
 
   const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
     const raw = (pdfBase64 || '').toString();
@@ -5803,6 +6015,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordStaleRef.current = null;
       setRecordStale(null);
       recordDataVersionRef.current = null;
+      optimisticClientDataVersionRef.current = null;
       recordRowNumberRef.current = null;
 
       rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
@@ -5824,51 +6037,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
       });
     },
-    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate, view]
+    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate, rememberAutoSaveSeenState, view]
   );
-
-  function resolveOpenUrlFieldHref(fieldIdRaw: string): string {
-    const fieldId = (fieldIdRaw || '').toString().trim();
-    if (!fieldId) return '';
-
-    const splitUrlList = (raw: string): string[] => {
-      const trimmed = (raw || '').toString().trim();
-      if (!trimmed) return [];
-      const commaParts = trimmed
-        .split(',')
-        .map(p => p.trim())
-        .filter(Boolean);
-      if (commaParts.length > 1) return commaParts;
-      const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
-      if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
-      return [trimmed];
-    };
-
-    const recordId =
-      resolveExistingRecordId({
-        selectedRecordId: selectedRecordIdRef.current,
-        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-      }) || '';
-    const current = selectedRecordSnapshotRef.current || null;
-    const raw = (() => {
-      if (fieldId === 'pdfUrl') return (current as any)?.pdfUrl || '';
-      if (fieldId === 'id') return recordId;
-      const v = (valuesRef.current as any)?.[fieldId];
-      if (v === undefined || v === null) return '';
-      if (typeof v === 'string') return v;
-      if (Array.isArray(v)) return v.join(' ');
-      if (typeof v === 'object' && typeof (v as any).url === 'string') return (v as any).url;
-      try {
-        return v.toString();
-      } catch (_) {
-        return '';
-      }
-    })();
-
-    const urls = splitUrlList(raw).filter(u => /^https?:\/\//i.test(u));
-    return urls[0] || '';
-  }
 
   const handleCustomButton = useCallback(
     (buttonId: string) => {
@@ -6022,6 +6192,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               setValues,
               setView,
               upsertListCacheRow,
+              synchronizeStaleRecord,
               busy: updateRecordBusy
             } as any,
             {
@@ -6184,6 +6355,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       perfMeasure,
       resolveOpenUrlFieldHref,
       submitCurrentRecordMutation,
+      synchronizeStaleRecord,
       upsertListCacheRow,
       updateRecordBusy
     ]
@@ -6867,6 +7039,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     hideDedupProgressDialog,
     loadRecordSnapshot,
     logEvent,
+    resolveLogMessage,
+    resolveUiErrorMessage,
     selectedRecordId,
     selectedRecordSnapshot,
     showDedupProgressDialog,
@@ -6884,6 +7058,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
         logEvent('autosave.blocked.uploadInFlight', { reason, inFlight: uploadQueueRef.current.size });
+        return;
+      }
+
+      if (recordSyncPromiseRef.current) {
+        autoSaveQueuedRef.current = true;
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.recordSyncInFlight', { reason });
         return;
       }
 
@@ -6921,7 +7102,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // If a dedup-key change is being validated (or dedup precheck is running), hold autosave until resolved.
       if (dedupHoldRef.current || dedupCheckingRef.current) return;
 
-      if (!autoSaveDirtyRef.current) return;
+      if (!autoSaveDirtyRef.current) {
+        logEvent('autosave.skip.clean', { reason });
+        return;
+      }
 
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
@@ -6978,7 +7162,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           // Re-attempt autosave shortly; avoids getting stuck in a "dirty" state once the check completes.
           try {
             scheduleLatestAutoSave('dedupPrecheck.wait', 600);
-          } catch (_) {
+          } catch {
             // ignore
           }
           logEvent('autosave.blocked.dedup.checking', { signatureLen: currentDedupSignature.length });
@@ -7006,6 +7190,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       autoSaveQueuedRef.current = false;
       // Clear the dirty flag for this attempt; it will be re-set by the change effect if edits continue.
       autoSaveDirtyRef.current = false;
+      let savedDraftFingerprint: ReturnType<typeof buildDraftSaveFingerprint> | null = null;
 
       setDraftSave({ phase: 'saving' });
       logEvent('autosave.begin', { reason, debounceMs: autoSaveDebounceMs });
@@ -7047,11 +7232,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return;
           }
-          const lower = errText.toLowerCase();
-          const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
+          const isStale = isSubmissionStaleMessage(errText);
           if (isStale) {
             const serverVersionRaw = Number((res as any)?.meta?.dataVersion);
-            markRecordStale({
+            await synchronizeStaleRecord({
               reason: 'autosave.rejected.stale',
               recordId: (existingRecordId || '').toString(),
               cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
@@ -7123,6 +7307,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const nextDataVersion = Number.isFinite(dv) && dv > 0 ? dv : undefined;
         const rn = Number((res as any)?.meta?.rowNumber);
         const nextRowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
+        if (newId) {
+          savedDraftFingerprint = buildDraftSaveFingerprint({
+            ...payload,
+            id: newId
+          });
+        }
         // Keep list view up-to-date without triggering a refetch (even if the user navigated away mid-save).
         upsertListCacheRow({
           recordId: newId,
@@ -7154,6 +7344,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setRecordStale(null);
         if (nextDataVersion) {
           recordDataVersionRef.current = nextDataVersion;
+          optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
+            optimisticClientDataVersionRef.current,
+            nextDataVersion
+          );
         }
         if (nextRowNumber) {
           recordRowNumberRef.current = nextRowNumber;
@@ -7206,7 +7400,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('autosave.exception', { reason, message: logMessage });
       } finally {
         autoSaveInFlightRef.current = false;
-        if (autoSaveQueuedRef.current && !submittingRef.current) {
+        let shouldScheduleQueuedAutoSave = autoSaveQueuedRef.current && !submittingRef.current;
+        if (shouldScheduleQueuedAutoSave && savedDraftFingerprint?.recordId) {
+          const currentRecordId =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || savedDraftFingerprint.recordId;
+          const currentStatusRaw =
+            ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+            '';
+          const currentPayload = applyUploadedFieldPayloadOverrides(
+            buildDraftPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              existingRecordId: currentRecordId
+            }) as any
+          );
+          currentPayload.__ckSaveMode = 'draft';
+          currentPayload.__ckStatus = resolveAutoSaveStatus(currentStatusRaw);
+          currentPayload.__ckCreateFlow = createFlowRef.current ? '1' : '';
+          const currentFingerprint = buildDraftSaveFingerprint(currentPayload);
+          if (
+            currentFingerprint &&
+            currentFingerprint.recordId === savedDraftFingerprint.recordId &&
+            currentFingerprint.fingerprint === savedDraftFingerprint.fingerprint
+          ) {
+            autoSaveQueuedRef.current = false;
+            shouldScheduleQueuedAutoSave = false;
+            logEvent('autosave.queued.cleared.noChanges', {
+              reason,
+              recordId: currentRecordId
+            });
+          }
+        }
+        if (shouldScheduleQueuedAutoSave) {
           scheduleLatestAutoSave('queued', autoSaveDebounceMs);
         }
       }
@@ -7226,13 +7458,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       language,
       logEvent,
-      markRecordStale,
       matchesClosedStatus,
       resolveLogMessage,
       resolveUiErrorMessage,
       runCoalescedDraftSaveRequest,
       scheduleLatestAutoSave,
       submitCurrentRecordMutation,
+      synchronizeStaleRecord,
       upsertListCacheRow
     ]
   );
@@ -7283,8 +7515,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async (reason: string): Promise<{ ok: boolean; message?: string }> => {
       const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
 
-      if (recordStaleRef.current) {
-        return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
+      const currentStaleInfo = recordStaleRef.current as RecordStaleInfo | null;
+      if (currentStaleInfo) {
+        return { ok: false, message: currentStaleInfo.message || 'Record is stale. Please refresh.' };
+      }
+
+      if (recordSyncPromiseRef.current) {
+        await recordSyncPromiseRef.current;
+        const syncedStaleInfo = recordStaleRef.current as RecordStaleInfo | null;
+        if (syncedStaleInfo) {
+          return { ok: false, message: syncedStaleInfo.message || 'Record is stale. Please refresh.' };
+        }
       }
 
       if (dedupCheckingRef.current) {
@@ -7420,13 +7661,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
       }
 
-      if (recordStaleRef.current) {
+      const currentStaleInfo = recordStaleRef.current as RecordStaleInfo | null;
+      if (currentStaleInfo) {
         logEvent('backgroundQueue.wait.blocked.recordStale', {
           reason,
           waitForQueue,
-          recordId: recordStaleRef.current.recordId
+          recordId: currentStaleInfo.recordId
         });
-        return { ok: false, message: recordStaleRef.current.message || 'Record is stale. Please refresh.' };
+        return { ok: false, message: currentStaleInfo.message || 'Record is stale. Please refresh.' };
+      }
+
+      if (recordSyncPromiseRef.current) {
+        await recordSyncPromiseRef.current;
+        const syncedStaleInfo = recordStaleRef.current as RecordStaleInfo | null;
+        if (syncedStaleInfo) {
+          return { ok: false, message: syncedStaleInfo.message || 'Record is stale. Please refresh.' };
+        }
       }
 
       if (startAutosave || startDraftSave || startUploads > 0) {
@@ -7815,10 +8065,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (prev.phase === 'dirty') return prev;
       return { phase: 'dirty' };
     });
-    scheduleLatestAutoSave('debounced', autoSaveDebounceMs);
+    const scheduledTimerId = scheduleLatestAutoSave('debounced', autoSaveDebounceMs);
     return () => {
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
+      if (scheduledTimerId && autoSaveTimerRef.current === scheduledTimerId) {
+        globalThis.clearTimeout(scheduledTimerId);
         autoSaveTimerRef.current = null;
       }
     };
@@ -7980,6 +8230,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const dv = Number((res as any)?.meta?.dataVersion);
         if (Number.isFinite(dv) && dv > 0) {
           recordDataVersionRef.current = dv;
+          optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
+            optimisticClientDataVersionRef.current,
+            dv
+          );
         }
         const rn = Number((res as any)?.meta?.rowNumber);
         if (Number.isFinite(rn) && rn >= 2) {
@@ -8235,6 +8489,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setRecordStale(null);
       if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
         recordDataVersionRef.current = nextDataVersion;
+        optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
+          optimisticClientDataVersionRef.current,
+          nextDataVersion
+        );
       }
       if (Number.isFinite(nextRowNumber) && nextRowNumber >= 2) {
         recordRowNumberRef.current = nextRowNumber;
@@ -9461,7 +9719,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               if (typeof raw === 'string' || isFile(raw)) return [raw];
               return [];
             }
-          } catch (_) {
+          } catch {
             // ignore
           }
           return [];
@@ -9641,8 +9899,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             autoSaveDirtyRef.current &&
             !submittingRef.current
           ) {
-            scheduleLatestAutoSave('upload.queue.drained', autoSaveDebounceMs);
-            logEvent('autosave.queued.uploadDrained', { debounceMs: autoSaveDebounceMs });
+            logEvent('autosave.queued.uploadDrained', {
+              debounceMs: autoSaveDebounceMs,
+              draftSaveInFlight: draftSaveRequestInFlightRef.current
+            });
+            void performAutoSaveRef.current('upload.queue.drained');
           }
         } catch {
           // ignore
@@ -9695,6 +9956,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setSelectedRecordId(record.id);
     }
     if (record) {
+      optimisticClientDataVersionRef.current =
+        record && Number.isFinite(Number((record as any).dataVersion)) ? Number((record as any).dataVersion) : null;
       setLastSubmissionMeta({
         id: record.id,
         createdAt: record.createdAt,
@@ -9820,6 +10083,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('submit.blocked.closed');
       return;
     }
+    if (recordSyncPromiseRef.current) {
+      await recordSyncPromiseRef.current;
+      if (recordStaleRef.current) {
+        logEvent('submit.blocked.recordStale.afterSync', { recordId: recordStaleRef.current.recordId });
+        return;
+      }
+    }
     // If we already know the record is stale, block immediately (no validations).
     if (recordStaleRef.current) {
       logEvent('submit.blocked.recordStale', { recordId: recordStaleRef.current.recordId });
@@ -9892,7 +10162,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 const baselineVersion =
                   Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : Number(baseVersion);
                 if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
-                  markRecordStale({
+                  void synchronizeStaleRecord({
                     reason: 'submit.precheck.stale',
                     recordId: precheckRecordId,
                     cachedVersion: baselineVersion,
@@ -10002,6 +10272,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }
     submitConfirmedRef.current = false;
     summarySubmitIntentRef.current = false;
+    if (recordSyncPromiseRef.current) {
+      await recordSyncPromiseRef.current;
+      const syncedStaleInfo = recordStaleRef.current as RecordStaleInfo | null;
+      if (syncedStaleInfo) {
+        logEvent('submit.blocked.recordStale.beforePipeline', { recordId: syncedStaleInfo.recordId });
+        return;
+      }
+    }
     if (submitPipelineInFlightRef.current) {
       logEvent('submit.blocked.inFlightGuard');
       return;
@@ -10098,24 +10376,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       const ok = Boolean(submitResult.success && res?.success);
       const message = (submitResult.message || res?.message || (ok ? 'Submitted' : 'Submit failed')).toString();
-      setStatus(message);
-      setStatusLevel(ok ? 'success' : 'error');
       if (!ok) {
-        const lower = message.toLowerCase();
-        const isStale = lower.includes('modified by another user') || lower.includes('please refresh');
+        const isStale = isSubmissionStaleMessage(message);
         if (isStale) {
           const serverVersionRaw = Number((res as any)?.meta?.dataVersion);
-          markRecordStale({
+          await synchronizeStaleRecord({
             reason: 'submit.rejected.stale',
             recordId: existingRecordId || selectedRecordId || '',
             cachedVersion: Number.isFinite(Number(submitBaseVersion)) ? Number(submitBaseVersion) : null,
             serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
             serverRow: null
           });
+          logEvent('submit.error.staleRecovered', { message, meta: (res as any)?.meta || null });
+          return;
         }
+        setStatus(message);
+        setStatusLevel('error');
         logEvent('submit.error', { message, meta: (res as any)?.meta || null });
         return;
       }
+      setStatus(message);
+      setStatusLevel('success');
       logEvent('submit.success', { recordId: (res as any)?.meta?.id });
 
       const recordId = ((submitResult.recordId || (res as any)?.meta?.id || existingRecordId || selectedRecordId || '') as string).toString();
@@ -11754,23 +12035,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       create: evalFor('create'),
       home: evalFor('home')
     } as const;
-  }, [
-    definition,
-    guidedUiState,
-    lastSubmissionMeta?.createdAt,
-    lastSubmissionMeta?.id,
-    lastSubmissionMeta?.status,
-    lastSubmissionMeta?.updatedAt,
-    lineItems,
-    selectedRecordId,
-    selectedRecordSnapshot?.createdAt,
-    selectedRecordSnapshot?.id,
-    selectedRecordSnapshot?.status,
-    selectedRecordSnapshot?.updatedAt,
-    systemActionGates,
-    values,
-    view
-  ]);
+  }, [definition, guidedUiState, lastSubmissionMeta?.createdAt, lastSubmissionMeta?.id, lastSubmissionMeta?.status, lastSubmissionMeta?.updatedAt, lineItems, selectedRecordId, selectedRecordSnapshot, systemActionGates, values, view]);
 
   const guidedNextWouldEnable =
     view === 'form' && guidedUiState && !guidedUiState.isFinal ? !!guidedUiState.forwardGateSatisfied && !dedupNavigationBlocked : false;
@@ -11889,7 +12154,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         position="top"
         language={language}
         view={view}
-        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking}
+        disabled={
+          submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking
+        }
         submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}
@@ -11941,6 +12208,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           submitting={
             submitting ||
             updateRecordBusyOpen ||
+            recordSyncBusyOpen ||
             guidedMilestoneBusy.state.open ||
             isClosedRecord ||
             Boolean(recordLoadingId) ||
@@ -12065,6 +12333,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         zIndex={12060}
         onCancel={() => undefined}
         onConfirm={refreshStaleRecord}
+      />
+
+      <ConfirmDialogOverlay
+        open={recordSyncNotice.open}
+        title={recordSyncNotice.title || tSystem('record.syncedTitle', language, 'Record synchronized')}
+        message={
+          recordSyncNotice.message ||
+          tSystem(
+            'record.synced',
+            language,
+            'The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.'
+          )
+        }
+        confirmLabel={tSystem('common.ok', language, 'OK')}
+        cancelLabel={tSystem('common.cancel', language, 'Cancel')}
+        showCancel={false}
+        dismissOnBackdrop={false}
+        showCloseButton={false}
+        zIndex={12061}
+        onCancel={() => undefined}
+        onConfirm={() => setRecordSyncNotice({ open: false, title: '', message: '' })}
       />
 
       <ConfirmDialogOverlay
@@ -12215,6 +12504,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         zIndex={12048}
       />
 
+      <BlockingOverlay
+        open={recordSyncBusy.state.open}
+        title={recordSyncBusy.state.title || tSystem('record.syncingTitle', language, 'Synchronizing record…')}
+        message={
+          recordSyncBusy.state.message ||
+          tSystem(
+            'record.syncing',
+            language,
+            'This record changed at the source. We are synchronizing the latest version now.'
+          )
+        }
+        zIndex={12049}
+      />
+
       <ConfirmDialogOverlay
         open={customConfirm.state.open}
         title={customConfirm.state.title}
@@ -12270,7 +12573,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         position="bottom"
         language={language}
         view={view}
-        disabled={submitting || updateRecordBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking}
+        disabled={
+          submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking
+        }
         submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
         submitDisabledTooltip={submitDisabledTooltip || undefined}
         submitting={submitting}

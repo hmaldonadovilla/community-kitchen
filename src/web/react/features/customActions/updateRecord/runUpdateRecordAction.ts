@@ -1,7 +1,7 @@
 import type { FieldValue, LangCode, WebFormSubmission, WebFormDefinition } from '../../../../types';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { View } from '../../../types';
-import { buildDraftPayload, resolveExistingRecordId } from '../../../app/submission';
+import { buildDraftPayload, isSubmissionStaleMessage, resolveExistingRecordId } from '../../../app/submission';
 import type { LineItemState } from '../../../types';
 import { resolveStatusTransitionValue } from '../../../../../domain/statusTransitions';
 import { isGlobalPerfInstrumentationEnabled } from '../../../perfInstrumentation';
@@ -86,6 +86,13 @@ export type UpdateRecordActionDeps = {
   submitWithDependencies?: (payload: any, buttonRef: string) => Promise<UpdateRecordSubmitResult>;
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
   flushPendingDraftSave?: (reason: string) => Promise<{ ok: boolean; message?: string }>;
+  synchronizeStaleRecord?: (args: {
+    reason: string;
+    recordId: string;
+    cachedVersion?: number | null;
+    serverVersion?: number | null;
+    serverRow?: number | null;
+  }) => Promise<boolean>;
   tSystem: (key: string, language: LangCode, fallback?: string) => string;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 
@@ -340,6 +347,23 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       });
       if (!res?.success) {
         const msg = (res?.message || 'Update failed.').toString();
+        const serverVersion = Number((res as any)?.meta?.dataVersion);
+        if (isSubmissionStaleMessage(msg) && deps.synchronizeStaleRecord) {
+          await deps.synchronizeStaleRecord({
+            reason: `updateRecord.${req.buttonId}.stale`,
+            recordId,
+            cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
+            serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
+            serverRow: null
+          });
+          deps.logEvent('button.updateRecord.error.staleRecovered', {
+            buttonId: req.buttonId,
+            qIdx: req.qIdx ?? null,
+            recordId,
+            message: msg
+          });
+          return;
+        }
         deps.setDraftSave({ phase: 'error', message: msg });
         deps.setStatus(msg);
         deps.setStatusLevel('error');

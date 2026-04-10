@@ -1163,6 +1163,54 @@ export const resolveCurrentClientDataVersion = (...candidates: Array<number | st
   return next;
 };
 
+export const prepareClientDataVersionDispatch = (args: {
+  payload: SubmissionPayload;
+  currentRecordId?: string | null;
+  currentDataVersion?: number | string | null;
+  optimisticDataVersion?: number | string | null;
+}): {
+  payload: SubmissionPayload;
+  appliedClientDataVersion: number | null;
+  optimisticDataVersion: number | null;
+} => {
+  const appliedClientDataVersion = resolveCurrentClientDataVersion(args.currentDataVersion, args.optimisticDataVersion);
+  const payload = applyClientDataVersionToPayload({
+    payload: args.payload,
+    currentRecordId: args.currentRecordId,
+    currentDataVersion: appliedClientDataVersion
+  });
+  const nextAppliedClientDataVersion = resolveCurrentClientDataVersion((payload as any)?.__ckClientDataVersion);
+  return {
+    payload,
+    appliedClientDataVersion: nextAppliedClientDataVersion,
+    optimisticDataVersion:
+      nextAppliedClientDataVersion !== null
+        ? nextAppliedClientDataVersion + 1
+        : resolveCurrentClientDataVersion(args.optimisticDataVersion, args.currentDataVersion)
+  };
+};
+
+export const settleClientDataVersionAfterDispatch = (args: {
+  success?: boolean | null;
+  confirmedDataVersion?: number | string | null;
+  optimisticDataVersion?: number | string | null;
+  responseDataVersion?: number | string | null;
+}): number | null => {
+  const confirmedDataVersion = resolveCurrentClientDataVersion(args.confirmedDataVersion);
+  const optimisticDataVersion = resolveCurrentClientDataVersion(args.optimisticDataVersion);
+  const responseDataVersion = resolveCurrentClientDataVersion(args.responseDataVersion);
+  if (args.success) {
+    return resolveCurrentClientDataVersion(responseDataVersion, optimisticDataVersion, confirmedDataVersion);
+  }
+  return resolveCurrentClientDataVersion(responseDataVersion, confirmedDataVersion);
+};
+
+export const isSubmissionStaleMessage = (message: string | null | undefined): boolean => {
+  const lower = (message || '').toString().trim().toLowerCase();
+  if (!lower) return false;
+  return lower.includes('modified by another user') || lower.includes('please refresh');
+};
+
 export const shouldApplyIncomingRecordSnapshot = (args: {
   incomingRecordId?: string | null;
   currentRecordId?: string | null;

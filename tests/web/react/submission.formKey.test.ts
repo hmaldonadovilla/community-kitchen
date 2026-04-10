@@ -1,8 +1,11 @@
 import {
   applyClientDataVersionToPayload,
   chainSerializedSubmissionRequest,
+  isSubmissionStaleMessage,
+  prepareClientDataVersionDispatch,
   resolveCurrentClientDataVersion,
   resolveDraftPayloadFormKey,
+  settleClientDataVersionAfterDispatch,
   shouldApplyIncomingRecordSnapshot
 } from '../../../src/web/react/app/submission';
 
@@ -78,6 +81,59 @@ describe('resolveCurrentClientDataVersion', () => {
 
   it('returns null when no positive candidate exists', () => {
     expect(resolveCurrentClientDataVersion(null, undefined, 0, -1, 'bad')).toBeNull();
+  });
+});
+
+describe('prepareClientDataVersionDispatch', () => {
+  it('advances the optimistic client version as soon as a request is dispatched', () => {
+    const first = prepareClientDataVersionDispatch({
+      payload: { formKey: 'Config: Meal Production', id: 'REC-1', values: {} } as any,
+      currentRecordId: 'REC-1',
+      currentDataVersion: 1
+    });
+
+    expect((first.payload as any).__ckClientDataVersion).toBe(1);
+    expect(first.optimisticDataVersion).toBe(2);
+
+    const second = prepareClientDataVersionDispatch({
+      payload: { formKey: 'Config: Meal Production', id: 'REC-1', values: {} } as any,
+      currentRecordId: 'REC-1',
+      currentDataVersion: 1,
+      optimisticDataVersion: first.optimisticDataVersion
+    });
+
+    expect((second.payload as any).__ckClientDataVersion).toBe(2);
+    expect(second.optimisticDataVersion).toBe(3);
+  });
+});
+
+describe('settleClientDataVersionAfterDispatch', () => {
+  it('keeps the latest optimistic version after a successful response', () => {
+    expect(
+      settleClientDataVersionAfterDispatch({
+        success: true,
+        confirmedDataVersion: 1,
+        optimisticDataVersion: 3,
+        responseDataVersion: 2
+      })
+    ).toBe(3);
+  });
+
+  it('falls back to the last confirmed version after a failed dispatch', () => {
+    expect(
+      settleClientDataVersionAfterDispatch({
+        success: false,
+        confirmedDataVersion: 2,
+        optimisticDataVersion: 3
+      })
+    ).toBe(2);
+  });
+});
+
+describe('isSubmissionStaleMessage', () => {
+  it('detects optimistic locking errors', () => {
+    expect(isSubmissionStaleMessage('This record was modified by another user. Please refresh.')).toBe(true);
+    expect(isSubmissionStaleMessage('Save failed')).toBe(false);
   });
 });
 

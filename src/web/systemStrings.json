@@ -82,6 +82,31 @@
       "fr": "Vérification des mises à jour…",
       "nl": "Controleren op updates…"
     },
+    "syncingTitle": {
+      "en": "Synchronizing record…",
+      "fr": "Synchronisation de l'enregistrement…",
+      "nl": "Record synchroniseren…"
+    },
+    "syncing": {
+      "en": "This record changed at the source. We are synchronizing the latest version now.",
+      "fr": "Cet enregistrement a changé à la source. Nous synchronisons maintenant la dernière version.",
+      "nl": "Dit record is aan de bron gewijzigd. We synchroniseren nu de nieuwste versie."
+    },
+    "syncedTitle": {
+      "en": "Record synchronized",
+      "fr": "Enregistrement synchronisé",
+      "nl": "Record gesynchroniseerd"
+    },
+    "synced": {
+      "en": "The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.",
+      "fr": "Les données source ont changé pendant votre modification. Nous avons chargé la dernière version. Veuillez vérifier et adapter vos modifications si nécessaire.",
+      "nl": "De brongegevens zijn gewijzigd terwijl je aan het bewerken was. We hebben de nieuwste versie geladen. Controleer en pas je wijzigingen aan waar nodig."
+    },
+    "syncFailed": {
+      "en": "We could not synchronize the latest record automatically. Tap Refresh to continue.",
+      "fr": "Nous n'avons pas pu synchroniser automatiquement le dernier enregistrement. Appuyez sur Actualiser pour continuer.",
+      "nl": "We konden het nieuwste record niet automatisch synchroniseren. Tik op Vernieuwen om verder te gaan."
+    },
     "stale": {
       "en": "This record was updated by another user or automatically by the system, tap Refresh to continue.",
       "fr": "Cet enregistrement a été modifié par un autre utilisateur ou automatiquement par le système, appuyez sur Actualiser pour continuer.",
