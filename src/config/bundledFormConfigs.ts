@@ -10981,10 +10981,6 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
-            "includeWhen": {
-              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-              "greaterThan": 0
-            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -11857,6 +11853,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "No compatible leftovers are available for the current dishes.",
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
+                      },
+                      "noSourceRowsMessage": {
+                        "en": "There is currently no leftover.",
+                        "fr": "Il n’y a actuellement aucun reste.",
+                        "nl": "Er is momenteel geen restant."
                       },
                       "compactActions": [
                         {
@@ -19990,10 +19991,6 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
-            "includeWhen": {
-              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-              "greaterThan": 0
-            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -20840,6 +20837,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "No compatible leftovers are available for the current dishes.",
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
+                      },
+                      "noSourceRowsMessage": {
+                        "en": "There is currently no leftover.",
+                        "fr": "Il n’y a actuellement aucun reste.",
+                        "nl": "Er is momenteel geen restant."
                       },
                       "compactActions": [
                         {
@@ -22089,7 +22091,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "746bdc6d9646dd36f5e6b6caaf2ba6e4"
+    "cacheFingerprint": "6c7553e2ae78d5ecc1e50f88d8cfa5c7"
   },
   {
     "formKey": "Config: Recipes",

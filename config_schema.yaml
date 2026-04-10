@@ -1620,6 +1620,15 @@ components:
 
             Use this when datasource filtering can legitimately remove every compatible source row,
             so the UI explains why the section is empty instead of rendering a blank space.
+        noSourceRowsMessage:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional empty-state copy for datasource-backed compact renderers such as
+            `presentation: "sourceFirstAllocations"` when the datasource itself returns zero rows.
+
+            Use this to distinguish "no source rows exist at all" from `emptyStateMessage`,
+            which is intended for cases where source rows exist but none are compatible with the
+            current parent rows or filters.
         persistRows:
           type: boolean
           description: |
@@ -4792,58 +4801,6 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         onClose:
           $ref: '#/components/schemas/LocalizedString'
-
-    FollowupSubmitEffect:
-      type: object
-      description: Declarative shared-table write that runs after the source record saves.
-      properties:
-        id:
-          type: string
-          description: Optional stable effect id used by milestone dialogs and other follow-up UI.
-        type:
-          type: string
-          enum: [createRecord, updateRecord]
-        targetFormKey:
-          type: string
-          description: Destination form key (dashboard config sheet name or title).
-        when:
-          $ref: '#/components/schemas/WhenClause'
-          description: Optional condition evaluated against the saved source record.
-        runOn:
-          type: string
-          enum: [create, update, both]
-          description: Whether the effect runs on source create, source update, or both.
-        recordId:
-          nullable: true
-          description: |
-            Deterministic downstream record id. Supports the same template values as `values`.
-            - Optional for `createRecord`
-            - Required for `updateRecord`
-            Use this when repeated source saves should update the same downstream record instead of
-            creating duplicates, or when a specific shared-table record must be updated in place.
-        status:
-          type: string
-          nullable: true
-          description: Optional target status written through the destination form's status handling.
-        values:
-          type: object
-          additionalProperties: true
-          description: |
-            Top-level destination field values. Supports template strings such as
-            `{{source.FIELD_ID}}`, `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`,
-            and `{{lineItem.index}}`.
-        forEachLineItem:
-          $ref: '#/components/schemas/FollowupCreateRecordLineItemConfig'
-          description: Optional line-item iterator that writes one downstream record per matched source row.
-        sourceLink:
-          $ref: '#/components/schemas/FollowupSubmitEffectSourceLink'
-          description: |
-            Optional reverse-link metadata describing which target fields store the source record identity.
-            Use this when the UI or templates need to recover downstream records generated from a saved source record.
-        auditAction:
-          type: string
-          description: Optional audit action label written on the downstream save.
-      required: [type, targetFormKey]
 
     FollowupCreateRecordLineItemConfig:
       type: object

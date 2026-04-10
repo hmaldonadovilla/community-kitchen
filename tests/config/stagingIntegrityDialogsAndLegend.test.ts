@@ -184,10 +184,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
 
       expect(leftoverBank?.label?.en).toBe('Leftover bank');
-      expect(leftoverBank?.includeWhen).toEqual({
-        fieldId: '__ckDataSourceCount.Leftover Inventory Data',
-        greaterThan: 0
-      });
+      expect(leftoverBank?.includeWhen).toBeUndefined();
       expect(leftoverBank?.excludeWhen).toEqual({
         fieldId: 'status',
         equals: ['Emailed', 'Closed']
@@ -266,6 +263,7 @@ describe('staging integrity dialogs and list legend config', () => {
         })
       );
       expect(leftoverInventoryRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
+      expect(leftoverInventoryRows?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
       expect(leftoverInventoryRows?.reservation?.commitMode).toBe('step');
       expect(leftoverInventoryRows?.reservation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
       expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(

@@ -903,10 +903,6 @@
         },
         {
           "id": "leftoverForm",
-          "includeWhen": {
-            "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-            "greaterThan": 0
-          },
           "excludeWhen": {
             "fieldId": "status",
             "equals": [
@@ -1779,6 +1775,11 @@
                       "en": "No compatible leftovers are available for the current dishes.",
                       "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                       "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
+                    },
+                    "noSourceRowsMessage": {
+                      "en": "There is currently no leftover.",
+                      "fr": "Il n’y a actuellement aucun reste.",
+                      "nl": "Er is momenteel geen restant."
                     },
                     "compactActions": [
                       {
@@ -9917,10 +9918,6 @@
         },
         {
           "id": "leftoverForm",
-          "includeWhen": {
-            "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-            "greaterThan": 0
-          },
           "excludeWhen": {
             "fieldId": "status",
             "equals": [
@@ -10767,6 +10764,11 @@
                       "en": "No compatible leftovers are available for the current dishes.",
                       "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                       "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
+                    },
+                    "noSourceRowsMessage": {
+                      "en": "There is currently no leftover.",
+                      "fr": "Il n’y a actuellement aucun reste.",
+                      "nl": "Er is momenteel geen restant."
                     },
                     "compactActions": [
                       {

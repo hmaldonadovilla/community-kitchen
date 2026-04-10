@@ -1089,11 +1089,13 @@ export const LineItemGroupQuestion: React.FC<{
         })
         .filter(Boolean) as Array<{ sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }>;
       const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
-      const emptyStateMessage = resolveLocalizedString(
-        (uiCfg as any)?.emptyStateMessage,
-        language,
-        sourceRows.length ? '' : tSystem('datasource.empty', language, 'No records are available.')
-      ).trim();
+      const emptyStateMessage = sourceRows.length
+        ? resolveLocalizedString((uiCfg as any)?.emptyStateMessage, language, '').trim()
+        : resolveLocalizedString(
+            (uiCfg as any)?.noSourceRowsMessage,
+            language,
+            tSystem('datasource.empty', language, 'No records are available.')
+          ).trim();
       return {
         config,
         sourceRows,
