@@ -1,10 +1,26 @@
 import { expect, type Frame, type Page } from 'playwright/test';
 
+import { e2eEnv } from '../fixtures/env';
 import { mealProductionFixtures } from '../fixtures/mealProduction';
-import { today } from './dates';
+import { today, uniqueFutureDate } from './dates';
+import { runAppsScript } from './appsScript';
 import { openMealProductionHome } from './navigation';
 
 const DUPLICATE_CHECK_COPY = 'Checking duplicates…';
+
+type MealProductionRecordKey = {
+  customerValue: string;
+  service: string;
+  date: string;
+};
+
+type SaveSubmissionResult = {
+  success?: boolean;
+  message?: string;
+  meta?: {
+    id?: string;
+  };
+};
 
 export async function dismissIntroIfPresent(frame: Frame): Promise<void> {
   const gotIt = frame.getByRole('button', { name: 'Got it' });
@@ -110,11 +126,91 @@ export async function expectDialogCopy(frame: Frame, copy: string): Promise<void
 }
 
 export async function prepareMinimalHubLunchOrder(page: Page): Promise<Frame> {
+  return prepareHubLunchOrderForDate(page, today());
+}
+
+export async function prepareHubLunchOrderForDate(page: Page, productionDate: string): Promise<Frame> {
   const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.hub);
-  await setProductionDate(frame);
+  await setProductionDate(frame, productionDate);
   await selectService(frame, mealProductionFixtures.services.lunch);
   await selectFirstCook(frame);
   return frame;
+}
+
+function buildMealProductionKeyPayload(args: MealProductionRecordKey): Record<string, unknown> {
+  const payloadFields = {
+    [mealProductionFixtures.fieldIds.customer]: args.customerValue,
+    [mealProductionFixtures.fieldIds.service]: args.service,
+    [mealProductionFixtures.fieldIds.productionDate]: args.date
+  };
+
+  return {
+    formKey: e2eEnv.mealProductionFormKey,
+    language: 'EN',
+    values: payloadFields,
+    ...payloadFields
+  };
+}
+
+export function buildUniqueHubLunchKey(seed = 0): MealProductionRecordKey {
+  return {
+    customerValue: mealProductionFixtures.customerValues.hub,
+    service: mealProductionFixtures.services.lunch,
+    date: uniqueFutureDate(seed)
+  };
+}
+
+export async function createMealProductionDraftRecord(
+  frame: Frame,
+  args: MealProductionRecordKey
+): Promise<{ id: string; key: MealProductionRecordKey }> {
+  const payload = {
+    ...buildMealProductionKeyPayload(args),
+    __ckSaveMode: 'draft',
+    __ckStatus: 'In progress',
+    __ckCreateFlow: '1'
+  };
+
+  const result = await runAppsScript<SaveSubmissionResult>(frame, 'saveSubmissionWithId', payload);
+  const recordId = (result?.meta?.id || '').toString().trim();
+  if (!result?.success || !recordId) {
+    throw new Error(`Failed to create seeded meal production record. ${result?.message || ''}`.trim());
+  }
+
+  return { id: recordId, key: args };
+}
+
+export async function expectDedupConflictForKey(frame: Frame, args: MealProductionRecordKey): Promise<void> {
+  const result = await runAppsScript<{ success?: boolean; conflict?: { existingRecordId?: string } }>(
+    frame,
+    'checkDedupConflict',
+    buildMealProductionKeyPayload(args)
+  );
+
+  expect(result?.success).toBe(true);
+  expect((result?.conflict?.existingRecordId || '').toString().trim()).not.toBe('');
+}
+
+export async function deleteMealProductionRecord(frame: Frame, recordId: string, args: MealProductionRecordKey): Promise<void> {
+  const payload = {
+    formKey: e2eEnv.mealProductionFormKey,
+    language: 'EN',
+    __ckDeleteRecordId: recordId
+  };
+
+  const result = await runAppsScript<SaveSubmissionResult>(frame, 'saveSubmissionWithId', payload);
+  if (!result?.success) {
+    throw new Error(`Failed to delete seeded meal production record ${recordId}. ${result?.message || ''}`.trim());
+  }
+
+  const dedupResult = await runAppsScript<{ success?: boolean; conflict?: { existingRecordId?: string } }>(
+    frame,
+    'checkDedupConflict',
+    buildMealProductionKeyPayload(args)
+  );
+
+  expect(dedupResult?.success).toBe(true);
+  expect((dedupResult?.conflict?.existingRecordId || '').toString().trim()).toBe('');
 }
 
 export async function expectMealTypesVisible(frame: Frame, mealTypes: string[]): Promise<void> {

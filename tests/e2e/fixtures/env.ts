@@ -1,3 +1,7 @@
+import { loadE2eEnv, readBooleanEnv } from '../loadEnv';
+
+loadE2eEnv();
+
 const DEFAULT_FORM_KEY = 'Config: Meal Production';
 const DEFAULT_PRESET = 'mobile-4g';
 
@@ -7,9 +11,8 @@ export const e2eEnv = {
   baseUrl: (process.env.E2E_BASE_URL || '').trim(),
   mealProductionFormKey: (process.env.E2E_FORM_KEY_MEAL_PRODUCTION || DEFAULT_FORM_KEY).trim(),
   mobilePreset: ((process.env.E2E_MOBILE_PRESET || DEFAULT_PRESET).trim() || DEFAULT_PRESET) as MobilePresetId,
-  adminEnabled:
-    ['1', 'true', 'yes', 'on'].includes((process.env.E2E_ADMIN_ENABLED || '').trim().toLowerCase()),
-  debug: ['1', 'true', 'yes', 'on'].includes((process.env.E2E_DEBUG || '').trim().toLowerCase())
+  adminEnabled: readBooleanEnv('E2E_ADMIN_ENABLED'),
+  debug: readBooleanEnv('E2E_DEBUG')
 };
 
 export function requireBaseUrl(): string {

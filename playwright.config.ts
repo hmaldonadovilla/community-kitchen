@@ -1,8 +1,46 @@
 import { defineConfig } from 'playwright/test';
+import { loadE2eEnv, readBooleanEnv, readListEnv } from './tests/e2e/loadEnv';
 
 const { PLAYWRIGHT_CONTEXT_OPTIONS } = require('./scripts/performance/playwrightMobileProfile.js');
 
+loadE2eEnv();
+
+const configuredProjects = [
+  ...readListEnv('E2E_PROJECT'),
+  ...readListEnv('E2E_PROJECTS')
+].filter((projectName, index, allProjects) => allProjects.indexOf(projectName) === index);
 const headless = process.env.E2E_HEADLESS !== '0';
+const captureSuccessfulRuns = readBooleanEnv('E2E_CAPTURE_SUCCESS_ARTIFACTS');
+const traceMode = captureSuccessfulRuns ? 'on' : 'retain-on-failure';
+const videoMode = captureSuccessfulRuns ? 'on' : 'retain-on-failure';
+const projects = [
+  {
+    name: 'chromium-mobile',
+    use: {
+      browserName: 'chromium'
+    }
+  },
+  {
+    name: 'firefox-mobile',
+    use: {
+      browserName: 'firefox'
+    }
+  },
+  {
+    name: 'webkit-mobile',
+    use: {
+      browserName: 'webkit'
+    }
+  }
+];
+const selectedProjects = configuredProjects.length
+  ? projects.filter(project => configuredProjects.includes(project.name))
+  : projects;
+
+if (configuredProjects.length && selectedProjects.length !== configuredProjects.length) {
+  const unknownProjects = configuredProjects.filter(projectName => !projects.some(project => project.name === projectName));
+  throw new Error(`Unknown E2E_PROJECTS value(s): ${unknownProjects.join(', ')}`);
+}
 
 export default defineConfig({
   testDir: './tests/e2e/specs',
@@ -24,29 +62,10 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL,
     headless,
     ignoreHTTPSErrors: true,
-    trace: 'retain-on-failure',
+    trace: traceMode,
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure'
+    video: videoMode
   },
   grepInvert: process.env.CI ? /@quarantine/ : undefined,
-  projects: [
-    {
-      name: 'chromium-mobile',
-      use: {
-        browserName: 'chromium'
-      }
-    },
-    {
-      name: 'firefox-mobile',
-      use: {
-        browserName: 'firefox'
-      }
-    },
-    {
-      name: 'webkit-mobile',
-      use: {
-        browserName: 'webkit'
-      }
-    }
-  ]
+  projects: selectedProjects
 });
