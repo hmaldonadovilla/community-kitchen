@@ -17,19 +17,19 @@ const projects = [
   {
     name: 'chromium-mobile',
     use: {
-      browserName: 'chromium'
+      browserName: 'chromium' as const
     }
   },
   {
     name: 'firefox-mobile',
     use: {
-      browserName: 'firefox'
+      browserName: 'firefox' as const
     }
   },
   {
     name: 'webkit-mobile',
     use: {
-      browserName: 'webkit'
+      browserName: 'webkit' as const
     }
   }
 ];

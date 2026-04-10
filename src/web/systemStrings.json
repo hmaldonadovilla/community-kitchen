@@ -177,6 +177,16 @@
       "fr": "Êtes-vous prêt à envoyer cet enregistrement ?",
       "nl": "Ben je klaar om dit record te verzenden?"
     },
+    "waitPreviousAction": {
+      "en": "Please wait while we finish the previous action...",
+      "fr": "Veuillez patienter pendant que nous terminons l'action précédente...",
+      "nl": "Wacht even terwijl we de vorige actie afronden..."
+    },
+    "previousActionRetry": {
+      "en": "Something went wrong while finishing the previous action. Please click {action} again.",
+      "fr": "Un problème est survenu pendant la finalisation de l'action précédente. Veuillez cliquer à nouveau sur {action}.",
+      "nl": "Er ging iets mis bij het afronden van de vorige actie. Klik opnieuw op {action}."
+    },
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
     "confirm": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" }
   },

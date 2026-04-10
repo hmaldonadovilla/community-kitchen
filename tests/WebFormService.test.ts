@@ -3582,6 +3582,51 @@ describe('WebFormService', () => {
     }
   });
 
+  test('saveSubmissionWithId waits for an earlier same-record mutation lane owner before saving', () => {
+    const lane = installFollowupLaneMocks();
+    try {
+      const mutationLaneKey = (service as any).recordMutationLanePropertyKey('Config: Delivery', 'REC-SAVE-WAIT-1');
+      lane.store.set(
+        mutationLaneKey,
+        JSON.stringify({
+          lastIssuedSeq: 1,
+          nextSeq: 1,
+          owner: {
+            token: 'active-followup',
+            sequence: 1,
+            expiresAtMs: Date.now() + 60_000
+          }
+        })
+      );
+
+      (global as any).Utilities.sleep.mockImplementation(() => {
+        lane.store.set(
+          mutationLaneKey,
+          JSON.stringify({
+            lastIssuedSeq: 2,
+            nextSeq: 2
+          })
+        );
+      });
+
+      const result = service.saveSubmissionWithId({
+        formKey: 'Config: Delivery',
+        language: 'EN',
+        id: 'REC-SAVE-WAIT-1',
+        Q1: 'Alice',
+        Q2_json: JSON.stringify([]),
+        Q3: [],
+        Q4: 'ACME'
+      } as any);
+
+      expect((global as any).Utilities.sleep).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(lane.store.has(mutationLaneKey)).toBe(false);
+    } finally {
+      lane.restore();
+    }
+  });
+
   test('triggerFollowupAction applies close-state submit effects before returning success', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const followupJson = JSON.stringify({

@@ -821,6 +821,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (err: any, fallback: string) => (err?.message || err?.toString?.() || fallback).toString(),
     []
   );
+  const isRetryableRecordBusyMessage = useCallback((value: any): boolean => {
+    const message = (value || '').toString().trim().toLowerCase();
+    if (!message) return false;
+    return (
+      message.includes('record save lock') ||
+      message.includes('record mutation queue') ||
+      message.includes('follow-up queue') ||
+      message.includes('another follow-up batch is still running') ||
+      message.includes('another record mutation is still running') ||
+      message.includes('could not queue follow-up actions') ||
+      message.includes('could not queue record mutation') ||
+      (message.includes('please retry') && (message.includes('follow-up') || message.includes('record')))
+    );
+  }, []);
   const perfEnabled = useMemo(() => {
     return isPerfInstrumentationEnv(envTag);
   }, [envTag]);
@@ -2314,6 +2328,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const reservationSyncPromiseRef = useRef<
     Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
   >(null);
+  const pendingFollowupBatchPromisesRef = useRef<
+    Map<
+      string,
+      Promise<{
+        success: boolean;
+        message?: string;
+        recordId: string;
+        stepId?: string;
+        sessionId: number;
+        reason: string;
+      }>
+    >
+  >(new Map());
   const reservationSyncMetaRef = useRef<{
     recordId: string;
     stepId: string;
@@ -2459,6 +2486,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return promise;
     },
     [logEvent]
+  );
+
+  const runSerializedFollowupBatchRequest = useCallback(
+    async (args: { recordId: string; actions: string[]; reason: string }): Promise<FollowupBatchResponse> => {
+      return runSerializedSubmissionRequest(`followup:${args.reason}`, async () => {
+        return triggerFollowupBatch(formKey, args.recordId, args.actions);
+      });
+    },
+    [formKey, runSerializedSubmissionRequest]
   );
 
   const getCurrentKnownClientDataVersion = useCallback(
@@ -2891,6 +2927,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       reservationSyncPromiseRef.current = null;
       reservationSyncMetaRef.current = null;
       reservationManagedScopesRef.current = null;
+      pendingFollowupBatchPromisesRef.current.clear();
       lastDraftSaveFailureRef.current = null;
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;
@@ -4360,7 +4397,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return false;
       }
     },
-    [applyRecordSnapshot, formKey, logEvent]
+    [applyRecordSnapshot, formKey, logEvent, resolveLogMessage, resolveUiErrorMessage]
   );
 
   const handleGlobalRefresh = useCallback(async () => {
@@ -4382,7 +4419,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     requestListRefresh({ clearResponse: false });
     if (!selectedRecordId) return;
     await loadRecordSnapshot(selectedRecordId);
-  }, [loadRecordSnapshot, requestListRefresh, selectedRecordId]);
+  }, [loadRecordSnapshot, logEvent, requestListRefresh, selectedRecordId]);
 
   const synchronizeStaleRecord = useCallback<SynchronizeStaleRecordFn>(
     async args => {
@@ -5648,7 +5685,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           try {
             globalThis.location?.assign?.(objectUrl);
             opened = true;
-            } catch (_) {
+            } catch {
               // ignore
             }
           }
@@ -6465,6 +6502,79 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         tSystem('submit.confirm', language, tSystem('actions.submit', language, 'Submit'))
       ),
     [finalSubmitButtonLabelConfig, language]
+  );
+  const submitPreviousActionRetryMessage = useCallback(
+    () =>
+      tSystem(
+        'submit.previousActionRetry',
+        languageRef.current,
+        'Something went wrong while finishing the previous action. Please click {action} again.',
+        {
+          action:
+            (submitButtonLabelResolved || '').toString().trim() ||
+            tSystem('actions.submit', languageRef.current, 'Submit')
+        }
+      ),
+    [submitButtonLabelResolved]
+  );
+  const waitForPendingFollowupBatch = useCallback(
+    async (args: {
+      recordId: string;
+      reason: string;
+      timeoutMs?: number;
+    }): Promise<{ ok: boolean; message?: string }> => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return { ok: true };
+      const pending = pendingFollowupBatchPromisesRef.current.get(recordId);
+      if (!pending) return { ok: true };
+      const timeoutMs = Number.isFinite(Number(args.timeoutMs)) && Number(args.timeoutMs) > 0 ? Number(args.timeoutMs) : 60_000;
+      const fallbackMessage = submitPreviousActionRetryMessage();
+      const startedAt = Date.now();
+      logEvent('followup.pending.wait.begin', {
+        reason: args.reason,
+        recordId,
+        timeoutMs
+      });
+      let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
+      try {
+        const timeoutPromise = new Promise<{
+          success: boolean;
+          message?: string;
+          recordId: string;
+          sessionId: number;
+          reason: string;
+        }>(resolve => {
+          timer = globalThis.setTimeout(
+            () =>
+              resolve({
+                success: false,
+                message: fallbackMessage,
+                recordId,
+                sessionId: recordSessionRef.current,
+                reason: args.reason
+              }),
+            timeoutMs
+          );
+        });
+        const outcome = await Promise.race([pending, timeoutPromise]);
+        logEvent('followup.pending.wait.done', {
+          reason: args.reason,
+          recordId,
+          durationMs: Date.now() - startedAt,
+          success: Boolean(outcome?.success)
+        });
+        if (outcome?.success) return { ok: true };
+        return {
+          ok: false,
+          message: fallbackMessage
+        };
+      } finally {
+        if (timer) {
+          globalThis.clearTimeout(timer);
+        }
+      }
+    },
+    [logEvent, submitPreviousActionRetryMessage]
   );
   const submitConfirmationDialogConfig = useMemo(() => {
     const afterSubmitConfig = definition.submissionAfterSubmit;
@@ -9405,7 +9515,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               runInBackground: batchReason.endsWith('.background') && args.action.runInBackground === true,
               nextStepId: args.nextStepId || null
             });
-            const batch = await triggerFollowupBatch(formKey, recordId, actions);
+            const batch = await runSerializedFollowupBatchRequest({
+              recordId,
+              actions,
+              reason: batchReason
+            });
             const batchOutcome = applyFollowupBatchResults({
               recordId,
               actions,
@@ -9514,7 +9628,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (optimisticStatus) {
             applyLocalRecordStatus({ recordId, status: optimisticStatus });
           }
-          void (async () => {
+          const followupSessionId = recordSessionRef.current;
+          const backgroundPromise = (async () => {
             let outcome: { success: boolean; message?: string } = { success: true };
             if (preActions.length) {
               outcome = await runBatch(preActions, `${reason}.pre`);
@@ -9522,12 +9637,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (outcome.success && effectiveBackgroundActions.length) {
               outcome = await runBatch(effectiveBackgroundActions, `${reason}.background`);
             }
-            if (outcome.success) return;
+            if (outcome.success) {
+              return {
+                success: true,
+                recordId,
+                stepId: args.stepId,
+                sessionId: followupSessionId,
+                reason
+              };
+            }
             if (optimisticStatus) {
               applyLocalRecordStatus({ recordId, status: previousStatus || null });
             }
             setRequestedGuidedStepId(args.stepId || null);
-          })();
+            return {
+              success: false,
+              message: outcome.message || '',
+              recordId,
+              stepId: args.stepId,
+              sessionId: followupSessionId,
+              reason
+            };
+          })().finally(() => {
+            const pending = pendingFollowupBatchPromisesRef.current.get(recordId);
+            if (pending === backgroundPromise) {
+              pendingFollowupBatchPromisesRef.current.delete(recordId);
+            }
+            logEvent('followup.pending.settled', {
+              stepId: args.stepId,
+              recordId,
+              nextStepId: args.nextStepId || null
+            });
+          });
+          pendingFollowupBatchPromisesRef.current.set(recordId, backgroundPromise);
+          logEvent('followup.pending.tracked', {
+            stepId: args.stepId,
+            recordId,
+            nextStepId: args.nextStepId || null
+          });
+          void backgroundPromise;
           guidedMilestoneBusy.unlock(busySeq, {
             stepId: args.stepId,
             launchedBackground: true
@@ -9606,7 +9754,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       definition,
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
-      formKey,
       applyLocalRecordStatus,
       guidedUiState,
       guidedMilestoneBusy,
@@ -9615,6 +9762,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       persistCurrentSnapshot,
       refreshAfterFollowupBatch,
       resolveLogMessage,
+      runSerializedFollowupBatchRequest,
       statusTransitions,
       resolveUiErrorMessage,
       waitForPendingReservationSync,
@@ -10290,9 +10438,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setSubmitting(true);
     // Keep ref in sync immediately so background work (autosave/uploads) can't start in the same tick.
     submittingRef.current = true;
+    const submitRecordId =
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '';
+    if (submitRecordId && pendingFollowupBatchPromisesRef.current.has(submitRecordId)) {
+      setStatus(
+        tSystem(
+          'submit.waitPreviousAction',
+          languageRef.current,
+          'Please wait while we finish the previous action...'
+        )
+      );
+      setStatusLevel('info');
+      const followupWait = await waitForPendingFollowupBatch({
+        recordId: submitRecordId,
+        reason: 'submit.previousAction'
+      });
+      if (!followupWait.ok) {
+        const message = (followupWait.message || submitPreviousActionRetryMessage()).toString();
+        setStatus(message);
+        setStatusLevel('error');
+        logEvent('submit.blocked.pendingFollowup', {
+          recordId: submitRecordId,
+          message
+        });
+        return;
+      }
+    }
     setStatus(tSystem('actions.submitting', language, 'Submitting…'));
     setStatusLevel('info');
-    logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length });
+    logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length, recordId: submitRecordId || null });
     // Ensure submission messages are immediately visible, even if the user is scrolled deep in the form.
     try {
       if (typeof globalThis.scrollTo === 'function') {
@@ -10389,9 +10567,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('submit.error.staleRecovered', { message, meta: (res as any)?.meta || null });
           return;
         }
-        setStatus(message);
+        const retryMessage = isRetryableRecordBusyMessage(message) ? submitPreviousActionRetryMessage() : message;
+        setStatus(retryMessage);
         setStatusLevel('error');
-        logEvent('submit.error', { message, meta: (res as any)?.meta || null });
+        logEvent('submit.error', { message, shownMessage: retryMessage, meta: (res as any)?.meta || null });
         return;
       }
       setStatus(message);
@@ -10406,7 +10585,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
         const followupRpcEndMark = `ck.submit.followup.rpc.end.${Date.now()}`;
         perfMark(followupRpcStartMark);
-        const batch = await triggerFollowupBatch(formKey, recordId, args.actions);
+        const batch = await runSerializedFollowupBatchRequest({
+          recordId,
+          actions: args.actions,
+          reason: args.reason
+        });
         perfMark(followupRpcEndMark);
         perfMeasure('ck.submit.followup.rpc', followupRpcStartMark, followupRpcEndMark, {
           formKey,
@@ -10745,13 +10928,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     } catch (err: any) {
       const uiMessage = resolveUiErrorMessage(err, 'Submit failed');
       const logMessage = resolveLogMessage(err, 'Submit failed');
+      const shownMessage =
+        isRetryableRecordBusyMessage(uiMessage || logMessage) ? submitPreviousActionRetryMessage() : uiMessage;
       if (uiMessage) {
-        setStatus(uiMessage);
+        setStatus(shownMessage || uiMessage);
         setStatusLevel('error');
       } else {
         setStatusLevel(null);
       }
-      logEvent('submit.exception', { message: logMessage });
+      logEvent('submit.exception', { message: logMessage, shownMessage: shownMessage || null });
     } finally {
       setSubmitting(false);
       submittingRef.current = false;

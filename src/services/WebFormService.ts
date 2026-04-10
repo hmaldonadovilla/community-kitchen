@@ -4034,7 +4034,24 @@ export class WebFormService {
     actions: string[]
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const { form, questions } = this.getFormContext(formKey);
-    const result = this.runQueuedFollowupActions(formKey, form, questions, recordId, actions);
+    const normalizedRecordId = (recordId || '').toString().trim();
+    const runBatch = () => this.runQueuedFollowupActions(formKey, form, questions, normalizedRecordId, actions);
+    let result: { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> };
+    try {
+      result = normalizedRecordId
+        ? this.withQueuedRecordMutation(formKey, normalizedRecordId, 'triggerFollowupActions', runBatch)
+        : runBatch();
+    } catch (err: any) {
+      debugLog('followup.batch.queue.error', {
+        formKey,
+        recordId: normalizedRecordId || null,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+      return this.buildFollowupBatchFailureResult(
+        Array.isArray(actions) ? actions : [],
+        (err?.message || 'Could not queue follow-up actions.').toString()
+      );
+    }
     if (result?.success) {
       this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupActions');
     }
