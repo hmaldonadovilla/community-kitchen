@@ -9919,7 +9919,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       resolveLogMessage,
       resolveUiErrorMessage,
-      scheduleLatestAutoSave,
       syncUploadQueueSize
     ]
   );

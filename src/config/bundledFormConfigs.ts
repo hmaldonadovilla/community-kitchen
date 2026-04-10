@@ -10981,10 +10981,6 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
-            "includeWhen": {
-              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-              "greaterThan": 0
-            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -11858,6 +11854,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
                       },
+                      "noSourceRowsMessage": {
+                        "en": "There is currently no leftover.",
+                        "fr": "Il n’y a actuellement aucun reste.",
+                        "nl": "Er is momenteel geen restant."
+                      },
                       "compactActions": [
                         {
                           "when": {
@@ -12672,9 +12673,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Finish portioning",
-                "fr": "Terminer le portionnement",
-                "nl": "Portionering afronden"
+                "en": "Create report",
+                "fr": "Creer le rapport",
+                "nl": "Rapport maken"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -12697,31 +12698,31 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Gelieve te bevestigen"
                   },
                   "message": {
-                    "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules.",
-                    "fr": "Ce rapport confirme que le {MP_SERVICE} pour {MP_DISTRIBUTOR} a été produit par {MP_COOK_NAME} le {MP_PREP_DATE}, conformément à la procédure de production de repas et aux règles d'hygiène.",
-                    "nl": "Dit rapport bevestigt dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} is uitgevoerd door {MP_COOK_NAME} op {MP_PREP_DATE}, conform de procedure voor het maken van maaltijden en de hygiëneregels."
+                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.",
+                    "fr": "Confirmez que le {MP_SERVICE} pour {MP_DISTRIBUTOR} du {MP_PREP_DATE} a ete produit par {MP_COOK_NAME} conformement a la procedure de production des repas et aux regles d'hygiene.\n\nToutes les portions commandees sont pretes pour la livraison.",
+                    "nl": "Bevestig dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} op {MP_PREP_DATE} is bereid door {MP_COOK_NAME} volgens de procedure voor maaltijdproductie en de hygieneregels.\n\nAlle bestelde porties zijn klaar voor levering."
                   },
                   "confirmLabel": {
-                    "en": "Yes, confirmed",
-                    "fr": "Oui, c'est confirmé",
-                    "nl": "Ja, bevestigd"
+                    "en": "Yes, create final report",
+                    "fr": "Oui, creer le rapport final",
+                    "nl": "Ja, eindrapport maken"
                   },
                   "cancelLabel": {
-                    "en": "No, continue editing",
-                    "fr": "Non, continuer la modification",
-                    "nl": "Nee, verder bewerken"
+                    "en": "No, go back to portioning",
+                    "fr": "Non, retour au portionnement",
+                    "nl": "Nee, terug naar portionering"
                   }
                 },
                 "feedbackDialog": {
                   "title": {
-                    "en": "Background actions started",
-                    "fr": "Actions en arrière-plan démarrées",
-                    "nl": "Achtergrondacties gestart"
+                    "en": "Leftovers",
+                    "fr": "Restes",
+                    "nl": "Restanten"
                   },
                   "message": {
-                    "en": "The meal production summary is being prepared. PDF creation and email delivery are running in the background while you continue with leftover registration.",
-                    "fr": "Le récapitulatif de production des repas est en cours de préparation. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan pendant que vous continuez l'enregistrement des restes.",
-                    "nl": "De samenvatting van de maaltijdproductie wordt voorbereid. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond terwijl je doorgaat met het registreren van restanten."
+                    "en": "Record any leftovers.\nIf none, click Complete.",
+                    "fr": "Enregistrez les restes.\nS'il n'y en a pas, cliquez sur Terminer.",
+                    "nl": "Registreer eventuele restanten.\nAls er geen zijn, klik op Voltooien."
                   },
                   "confirmLabel": {
                     "en": "OK",
@@ -19990,10 +19991,6 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
-            "includeWhen": {
-              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
-              "greaterThan": 0
-            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -20841,6 +20838,11 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
                       },
+                      "noSourceRowsMessage": {
+                        "en": "There is currently no leftover.",
+                        "fr": "Il n’y a actuellement aucun reste.",
+                        "nl": "Er is momenteel geen restant."
+                      },
                       "compactActions": [
                         {
                           "when": {
@@ -21655,9 +21657,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Finish portioning",
-                "fr": "Terminer le portionnement",
-                "nl": "Portionering afronden"
+                "en": "Create report",
+                "fr": "Creer le rapport",
+                "nl": "Rapport maken"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -21680,31 +21682,31 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Gelieve te bevestigen"
                   },
                   "message": {
-                    "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules.",
-                    "fr": "Ce rapport confirme que le {MP_SERVICE} pour {MP_DISTRIBUTOR} a été produit par {MP_COOK_NAME} le {MP_PREP_DATE}, conformément à la procédure de production de repas et aux règles d'hygiène.",
-                    "nl": "Dit rapport bevestigt dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} is uitgevoerd door {MP_COOK_NAME} op {MP_PREP_DATE}, conform de procedure voor het maken van maaltijden en de hygiëneregels."
+                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.",
+                    "fr": "Confirmez que le {MP_SERVICE} pour {MP_DISTRIBUTOR} du {MP_PREP_DATE} a ete produit par {MP_COOK_NAME} conformement a la procedure de production des repas et aux regles d'hygiene.\n\nToutes les portions commandees sont pretes pour la livraison.",
+                    "nl": "Bevestig dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} op {MP_PREP_DATE} is bereid door {MP_COOK_NAME} volgens de procedure voor maaltijdproductie en de hygieneregels.\n\nAlle bestelde porties zijn klaar voor levering."
                   },
                   "confirmLabel": {
-                    "en": "Yes, confirmed",
-                    "fr": "Oui, c'est confirmé",
-                    "nl": "Ja, bevestigd"
+                    "en": "Yes, create final report",
+                    "fr": "Oui, creer le rapport final",
+                    "nl": "Ja, eindrapport maken"
                   },
                   "cancelLabel": {
-                    "en": "No, continue editing",
-                    "fr": "Non, continuer la modification",
-                    "nl": "Nee, verder bewerken"
+                    "en": "No, go back to portioning",
+                    "fr": "Non, retour au portionnement",
+                    "nl": "Nee, terug naar portionering"
                   }
                 },
                 "feedbackDialog": {
                   "title": {
-                    "en": "Background actions started",
-                    "fr": "Actions en arrière-plan démarrées",
-                    "nl": "Achtergrondacties gestart"
+                    "en": "Leftovers",
+                    "fr": "Restes",
+                    "nl": "Restanten"
                   },
                   "message": {
-                    "en": "The meal production summary is being prepared. PDF creation and email delivery are running in the background while you continue with leftover registration.",
-                    "fr": "Le récapitulatif de production des repas est en cours de préparation. La création du PDF et l'envoi de l'e-mail se poursuivent en arrière-plan pendant que vous continuez l'enregistrement des restes.",
-                    "nl": "De samenvatting van de maaltijdproductie wordt voorbereid. Het aanmaken van de pdf en het verzenden van de e-mail lopen op de achtergrond terwijl je doorgaat met het registreren van restanten."
+                    "en": "Record any leftovers.\nIf none, click Complete.",
+                    "fr": "Enregistrez les restes.\nS'il n'y en a pas, cliquez sur Terminer.",
+                    "nl": "Registreer eventuele restanten.\nAls er geen zijn, klik op Voltooien."
                   },
                   "confirmLabel": {
                     "en": "OK",
@@ -22089,7 +22091,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "54b80f3ba0c6c5ac66d2cf02d043498c"
+    "cacheFingerprint": "8dcf5d0ab949d0b8b45b78bef8fe4047"
   },
   {
     "formKey": "Config: Recipes",

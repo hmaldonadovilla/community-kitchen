@@ -306,7 +306,19 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('all');
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
-      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Background actions started');
+      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
+        'Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.'
+      );
+      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.confirmLabel?.en).toBe(
+        'Yes, create final report'
+      );
+      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.cancelLabel?.en).toBe(
+        'No, go back to portioning'
+      );
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Leftovers');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.message?.en).toBe(
+        'Record any leftovers.\nIf none, click Complete.'
+      );
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
