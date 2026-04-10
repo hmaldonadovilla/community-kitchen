@@ -2594,9 +2594,9 @@
           "navigation": {
             "autoAdvance": "off",
             "submitLabel": {
-              "en": "Finish portioning",
-              "fr": "Terminer le portionnement",
-              "nl": "Portionering afronden"
+              "en": "Create report",
+              "fr": "Creer le rapport",
+              "nl": "Rapport maken"
             },
             "milestoneAction": {
               "type": "followupBatch",
@@ -11582,9 +11582,9 @@
           "navigation": {
             "autoAdvance": "off",
             "submitLabel": {
-              "en": "Finish portioning",
-              "fr": "Terminer le portionnement",
-              "nl": "Portionering afronden"
+              "en": "Create report",
+              "fr": "Creer le rapport",
+              "nl": "Rapport maken"
             },
             "milestoneAction": {
               "type": "followupBatch",

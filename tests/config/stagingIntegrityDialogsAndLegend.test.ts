@@ -294,7 +294,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftovers?.label?.en).toBe('Leftovers');
       expect(leftovers?.excludeWhen).toBeUndefined();
       expect(root?.submitButtonLabel?.en).toBe('Complete');
-      expect(portioning?.navigation?.submitLabel?.en).toBe('Finish portioning');
+      expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([
         'RECONCILE_RESERVATIONS'

@@ -12672,9 +12672,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Finish portioning",
-                "fr": "Terminer le portionnement",
-                "nl": "Portionering afronden"
+                "en": "Create report",
+                "fr": "Creer le rapport",
+                "nl": "Rapport maken"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -21655,9 +21655,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Finish portioning",
-                "fr": "Terminer le portionnement",
-                "nl": "Portionering afronden"
+                "en": "Create report",
+                "fr": "Creer le rapport",
+                "nl": "Rapport maken"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -22089,7 +22089,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "54b80f3ba0c6c5ac66d2cf02d043498c"
+    "cacheFingerprint": "746bdc6d9646dd36f5e6b6caaf2ba6e4"
   },
   {
     "formKey": "Config: Recipes",
