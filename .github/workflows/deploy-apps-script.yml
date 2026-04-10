@@ -130,7 +130,8 @@ jobs:
       - name: Run scenario staging performance audit
         env:
           E2E_BASE_URL: ${{ needs.deploy.outputs.webapp_url }}
-        run: npm run perf:scenario -- --url="$E2E_BASE_URL" --formKey="Config: Meal Production" --runs=3 --preset=mobile-4g --output=perf-results/scenario-staging.json
+        run: |
+          npm run perf:scenario -- --url="$E2E_BASE_URL" --formKey="Config: Meal Production" --runs=3 --preset=mobile-4g --output=perf-results/scenario-staging.json
 
       - name: Upload performance artifacts
         if: always()

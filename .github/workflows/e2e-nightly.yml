@@ -22,9 +22,9 @@ jobs:
           - webkit-mobile
     env:
       E2E_BASE_URL: ${{ inputs.stagingUrl || vars.STAGING_WEBAPP_URL }}
-      E2E_FORM_KEY_MEAL_PRODUCTION: Config: Meal Production
-      E2E_MOBILE_PRESET: mobile-4g
-      E2E_HEADLESS: '1'
+      E2E_FORM_KEY_MEAL_PRODUCTION: "Config: Meal Production"
+      E2E_MOBILE_PRESET: "mobile-4g"
+      E2E_HEADLESS: "1"
     steps:
       - name: Validate staging target
         run: |

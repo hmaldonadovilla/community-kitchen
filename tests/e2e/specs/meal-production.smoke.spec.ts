@@ -4,12 +4,17 @@ import { e2eEnv } from '../fixtures/env';
 import { mealProductionFixtures } from '../fixtures/mealProduction';
 import { runAppsScript } from '../helpers/appsScript';
 import {
+  buildUniqueHubLunchKey,
+  createMealProductionDraftRecord,
+  deleteMealProductionRecord,
   dismissIntroIfPresent,
+  expectDedupConflictForKey,
   expectMealTypesHidden,
   expectMealTypesVisible,
   fillFirstOrderedPortions,
   openNewOrderFromPreset,
   prepareMinimalHubLunchOrder,
+  prepareHubLunchOrderForDate,
   selectService,
   setProductionDate
 } from '../helpers/mealProduction';
@@ -77,14 +82,27 @@ test.describe('Meal Production staging smoke', () => {
   });
 
   test('@smoke detects a duplicate Hub lunch record and offers to open the existing record', async ({ page }) => {
-    const frame = await prepareMinimalHubLunchOrder(page);
-    await fillFirstOrderedPortions(frame, '10');
+    const frame = await openMealProductionHome(page);
+    const seededKey = buildUniqueHubLunchKey(1);
+    const seededRecord = await createMealProductionDraftRecord(frame, seededKey);
 
-    await expect(frame.getByText('Creating duplicate record for the same customer, service and date is not allowed.')).toBeVisible({
-      timeout: 15_000
-    });
-    await expect(frame.getByRole('button', { name: 'Change customer, service or date' })).toBeVisible();
-    await expect(frame.getByRole('button', { name: 'Open existing record' })).toBeVisible();
+    try {
+      await expectDedupConflictForKey(frame, seededKey);
+
+      const duplicateFrame = await prepareHubLunchOrderForDate(page, seededKey.date);
+      await fillFirstOrderedPortions(duplicateFrame, '10');
+
+      await expect(
+        duplicateFrame.getByText('Creating duplicate record for the same customer, service and date is not allowed.')
+      ).toBeVisible({
+        timeout: 15_000
+      });
+      await expect(duplicateFrame.getByRole('button', { name: 'Change customer, service or date' })).toBeVisible();
+      await expect(duplicateFrame.getByRole('button', { name: 'Open existing record' })).toBeVisible();
+    } finally {
+      const cleanupFrame = await openMealProductionHome(page);
+      await deleteMealProductionRecord(cleanupFrame, seededRecord.id, seededKey);
+    }
   });
 
   test('@smoke rejects negative ordered portions for Hub lunch', async ({ page }) => {

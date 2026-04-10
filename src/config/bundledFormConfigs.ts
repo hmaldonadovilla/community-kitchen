@@ -10981,6 +10981,10 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
+            "includeWhen": {
+              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
+              "greaterThan": 0
+            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -11854,11 +11858,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
                       },
-                      "noSourceRowsMessage": {
-                        "en": "There is currently no leftover.",
-                        "fr": "Il n’y a actuellement aucun reste.",
-                        "nl": "Er is momenteel geen restant."
-                      },
                       "compactActions": [
                         {
                           "when": {
@@ -12673,9 +12672,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Create report",
-                "fr": "Creer le rapport",
-                "nl": "Rapport maken"
+                "en": "Finish portioning",
+                "fr": "Terminer le portionnement",
+                "nl": "Portionering afronden"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -19991,6 +19990,10 @@ export const BUNDLED_FORM_CONFIGS = [
           },
           {
             "id": "leftoverForm",
+            "includeWhen": {
+              "fieldId": "__ckDataSourceCount.Leftover Inventory Data",
+              "greaterThan": 0
+            },
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
@@ -20838,11 +20841,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Aucun reste compatible n’est disponible pour les plats actuels.",
                         "nl": "Er zijn geen compatibele restanten beschikbaar voor de huidige gerechten."
                       },
-                      "noSourceRowsMessage": {
-                        "en": "There is currently no leftover.",
-                        "fr": "Il n’y a actuellement aucun reste.",
-                        "nl": "Er is momenteel geen restant."
-                      },
                       "compactActions": [
                         {
                           "when": {
@@ -21657,9 +21655,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off",
               "submitLabel": {
-                "en": "Create report",
-                "fr": "Creer le rapport",
-                "nl": "Rapport maken"
+                "en": "Finish portioning",
+                "fr": "Terminer le portionnement",
+                "nl": "Portionering afronden"
               },
               "milestoneAction": {
                 "type": "followupBatch",
@@ -22091,7 +22089,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "6c7553e2ae78d5ecc1e50f88d8cfa5c7"
+    "cacheFingerprint": "54b80f3ba0c6c5ac66d2cf02d043498c"
   },
   {
     "formKey": "Config: Recipes",
