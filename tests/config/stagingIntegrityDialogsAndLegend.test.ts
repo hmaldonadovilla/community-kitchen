@@ -92,7 +92,7 @@ describe('staging integrity dialogs and list legend config', () => {
     const assertChangeDialogs = (questions: any[]) => {
       const customer = findQuestion(questions, 'MP_DISTRIBUTOR');
       expect(customer?.dataSource?.mapping?.value).toBe('NICKNAME');
-      expect(customer?.dataSource?.mapping?.label).toBe('DIST_NAME');
+      expect(customer?.dataSource?.mapping?.label).toBeUndefined();
       expect(customer?.changeDialog?.when).toEqual({ fieldId: 'MP_PREP_DATE', notEmpty: true });
       expect(hasNonEmptyEnText(customer?.changeDialog?.title)).toBe(true);
       expect(hasNonEmptyEnText(customer?.changeDialog?.message)).toBe(true);
@@ -184,12 +184,20 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftoverBank = items.find((entry: any) => entry?.id === 'leftoverForm');
       const portioning = items.find((entry: any) => entry?.id === 'portioning');
       const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
+      const contextHeaderSteps = items.filter((entry: any) => Array.isArray(entry?.contextHeader?.parts));
 
       expect(leftoverBank?.label?.en).toBe('Leftover bank');
       expect(leftoverBank?.includeWhen).toBeUndefined();
       expect(leftoverBank?.excludeWhen).toEqual({
         fieldId: 'status',
         equals: ['Emailed', 'Closed']
+      });
+      expect(contextHeaderSteps.length).toBeGreaterThan(0);
+      contextHeaderSteps.forEach((step: any) => {
+        expect(step.contextHeader.parts?.[0]).toEqual({
+          id: 'MP_DISTRIBUTOR',
+          displayField: 'DIST_NAME'
+        });
       });
       const leftoverBankMeals = (leftoverBank?.include || []).find(
         (entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST'

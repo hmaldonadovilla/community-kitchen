@@ -1133,6 +1133,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
         - Use `navigation.autoAdvanceWhen` when the step should become locally complete first but should only navigate after an extra runtime condition matches, for example `{ "fieldId": "status", "equals": "In production" }`.
+        - Use `contextHeader.parts` to render a bold title line above the step body. Parts can be field ids or objects like `{ "id": "CUSTOMER", "displayField": "FULL_NAME" }` when the guided title should show a richer datasource field but the rest of the app should keep the stored compact label.
         - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
           - run blocking follow-up actions first (`preActions`), then launch non-blocking ones (`backgroundActions`)
           - ensure a persisted draft record id exists (`ensureRecordId`)

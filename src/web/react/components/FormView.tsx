@@ -13460,14 +13460,26 @@ const FormView: React.FC<FormViewProps> = ({
         : stepContextHeaderKeyedParts.length
           ? stepContextHeaderKeyedParts
         : [];
-    const normalizeStepContextHeaderPartId = (part: any): string => {
-      if (part === undefined || part === null) return '';
-      if (typeof part === 'object') return ((part as any).id ?? (part as any).fieldId ?? '').toString().trim();
-      return part.toString().trim();
+    const normalizeStepContextHeaderPart = (part: any): { id: string; displayField?: string } | null => {
+      if (part === undefined || part === null) return null;
+      if (typeof part === 'object') {
+        const id = ((part as any).id ?? (part as any).fieldId ?? '').toString().trim();
+        if (!id) return null;
+        const displayField = ((part as any).displayField ?? '').toString().trim();
+        return displayField ? { id, displayField } : { id };
+      }
+      const id = part.toString().trim();
+      return id ? { id } : null;
     };
-    const stepContextHeaderPartIds = stepContextHeaderPartsRaw
-      .map(part => normalizeStepContextHeaderPartId(part))
+    const stepContextHeaderParts = stepContextHeaderPartsRaw
+      .map(part => normalizeStepContextHeaderPart(part))
       .filter(Boolean)
+      .filter((part, idx, arr) => {
+        const key = `${part!.id}::${part!.displayField || ''}`;
+        return arr.findIndex(entry => `${entry!.id}::${entry!.displayField || ''}` === key) === idx;
+      }) as Array<{ id: string; displayField?: string }>;
+    const stepContextHeaderPartIds = stepContextHeaderParts
+      .map(part => part.id)
       .filter((id, idx, arr) => arr.indexOf(id) === idx);
     const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
     const guidedContextHeaderSeparator = (() => {
@@ -13490,7 +13502,9 @@ const FormView: React.FC<FormViewProps> = ({
       return { ...(q as any), readOnly: true, ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition;
     };
 
-    const resolveGuidedContextValue = (fieldId: string): string => {
+    const resolveGuidedContextValue = (part: { id: string; displayField?: string }): string => {
+      const fieldId = part.id;
+      const displayField = (part.displayField || '').toString().trim();
       const q = questionById.get(fieldId);
       const raw = values[fieldId];
       if (raw === undefined || raw === null || raw === '') return '';
@@ -13508,6 +13522,20 @@ const FormView: React.FC<FormViewProps> = ({
         const rawList = Array.isArray(raw) ? raw : [raw];
         const ensuredAllowed = Array.from(new Set([...allowed, ...rawList.map(v => (v ?? '').toString()).filter(Boolean)]));
         const opts = buildLocalizedOptions(optionSet, ensuredAllowed, language, { sort: optionSortFor(q) });
+        const rawDisplayByValue = (() => {
+          if (!displayField) return new Map<string, string>();
+          const map = new Map<string, string>();
+          const rows = Array.isArray(optionSet.raw) ? optionSet.raw : [];
+          rows.forEach((row: any) => {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+            const value = row.__ckOptionValue === null || row.__ckOptionValue === undefined ? '' : String(row.__ckOptionValue).trim();
+            const display =
+              row[displayField] === null || row[displayField] === undefined ? '' : String(row[displayField]).trim();
+            if (!value || !display || map.has(value)) return;
+            map.set(value, display);
+          });
+          return map;
+        })();
         const rawLabelByValue = (() => {
           const map = new Map<string, string>();
           const rows = Array.isArray(optionSet.raw) ? optionSet.raw : [];
@@ -13524,7 +13552,7 @@ const FormView: React.FC<FormViewProps> = ({
         const labels = rawList
           .map(v => (v ?? '').toString())
           .filter(Boolean)
-          .map(v => rawLabelByValue.get(v) || opts.find(o => o.value === v)?.label || v);
+          .map(v => rawDisplayByValue.get(v) || rawLabelByValue.get(v) || opts.find(o => o.value === v)?.label || v);
         return labels.filter(Boolean).join(', ');
       }
 
@@ -13532,13 +13560,15 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const guidedContextHeaderNode = (() => {
-      if (!stepContextHeaderPartIds.length) return null;
-      const parts = stepContextHeaderPartIds.map(resolveGuidedContextValue).filter(Boolean);
+      if (!stepContextHeaderParts.length) return null;
+      const parts = stepContextHeaderParts.map(resolveGuidedContextValue).filter(Boolean);
       if (!parts.length) return null;
       return (
         <div role="note" className="ck-guided-context-header">
           {parts.map((part, idx) => (
-            <React.Fragment key={`ctx:${stepContextHeaderPartIds[idx]}:${idx}`}>
+            <React.Fragment
+              key={`ctx:${stepContextHeaderParts[idx]?.id || ''}:${stepContextHeaderParts[idx]?.displayField || ''}:${idx}`}
+            >
               {idx > 0 ? guidedContextHeaderSeparator : ''}
               {part}
             </React.Fragment>

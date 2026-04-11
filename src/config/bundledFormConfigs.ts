@@ -10990,7 +10990,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -12095,7 +12098,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -12536,7 +12542,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -12609,7 +12618,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -12745,7 +12757,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "leftovers",
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -13172,8 +13187,7 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "limit": 100,
           "mapping": {
-            "value": "NICKNAME",
-            "label": "DIST_NAME"
+            "value": "NICKNAME"
           }
         },
         "changeDialog": {
@@ -16148,8 +16162,7 @@ export const BUNDLED_FORM_CONFIGS = [
             ],
             "limit": 100,
             "mapping": {
-              "value": "NICKNAME",
-              "label": "DIST_NAME"
+              "value": "NICKNAME"
             }
           },
           "changeDialog": {
@@ -20002,7 +20015,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -21081,7 +21097,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -21522,7 +21541,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -21595,7 +21617,10 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -21731,7 +21756,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "id": "leftovers",
             "contextHeader": {
               "parts": [
-                "MP_DISTRIBUTOR",
+                {
+                  "id": "MP_DISTRIBUTOR",
+                  "displayField": "DIST_NAME"
+                },
                 "MP_SERVICE",
                 "MP_PREP_DATE"
               ]
@@ -22093,7 +22121,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "3d0a0eae70b41661b1a6c12b57a678f6"
+    "cacheFingerprint": "cb9baf4ac1906656f00f022629ada5cd"
   },
   {
     "formKey": "Config: Recipes",

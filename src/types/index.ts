@@ -4114,6 +4114,14 @@ export interface StepContextHeaderPartConfig {
    * Question id whose value is rendered in the guided step context header.
    */
   id: string;
+  /**
+   * Optional raw datasource/option row field to display in the guided step context header
+   * instead of the stored field value label.
+   *
+   * Use this when the field should keep compact labels elsewhere in the app, but the step title
+   * should show a richer display value.
+   */
+  displayField?: string;
 }
 
 export type StepContextHeaderPartRef = string | StepContextHeaderPartConfig;

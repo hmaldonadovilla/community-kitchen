@@ -1986,7 +1986,11 @@ export class Dashboard {
       }
       if (typeof raw !== 'object') return null;
       const id = normalizeString((raw as any).id ?? (raw as any).fieldId ?? (raw as any).field);
-      return id ? { id } : null;
+      if (!id) return null;
+      const out: any = { id };
+      const displayField = normalizeString((raw as any).displayField);
+      if (displayField) out.displayField = displayField;
+      return out;
     };
 
     const normalizeStepContextHeader = (raw: any): any => {

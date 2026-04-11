@@ -726,6 +726,45 @@ describe('Dashboard', () => {
     expect(target?.subGroups?.include?.[0]?.fields).toEqual([{ id: 'ING', renderAsLabel: true }, 'UNIT']);
   });
 
+  test('getForms preserves guided step contextHeader displayField overrides', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftovers',
+            contextHeader: {
+              parts: [
+                { id: 'CUSTOMER', displayField: 'FULL_NAME' },
+                'SERVICE',
+                'DATE'
+              ]
+            },
+            include: ['Q1']
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms.length).toBe(1);
+    const step = (forms[0].steps as any)?.items?.[0];
+    expect(step?.contextHeader).toEqual({
+      parts: [
+        { id: 'CUSTOMER', displayField: 'FULL_NAME' },
+        'SERVICE',
+        'DATE'
+      ]
+    });
+  });
+
   test('getForms parses guided step milestone action config', () => {
     const configJson = JSON.stringify({
       steps: {

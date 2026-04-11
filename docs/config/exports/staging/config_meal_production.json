@@ -912,7 +912,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -2017,7 +2020,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -2458,7 +2464,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -2531,7 +2540,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -2667,7 +2679,10 @@
           "id": "leftovers",
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -3094,8 +3109,7 @@
         ],
         "limit": 100,
         "mapping": {
-          "value": "NICKNAME",
-          "label": "DIST_NAME"
+          "value": "NICKNAME"
         }
       },
       "changeDialog": {
@@ -6070,8 +6084,7 @@
           ],
           "limit": 100,
           "mapping": {
-            "value": "NICKNAME",
-            "label": "DIST_NAME"
+            "value": "NICKNAME"
           }
         },
         "changeDialog": {
@@ -9929,7 +9942,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -11008,7 +11024,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -11449,7 +11468,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -11522,7 +11544,10 @@
           },
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]
@@ -11658,7 +11683,10 @@
           "id": "leftovers",
           "contextHeader": {
             "parts": [
-              "MP_DISTRIBUTOR",
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
               "MP_SERVICE",
               "MP_PREP_DATE"
             ]

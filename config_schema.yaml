@@ -3385,6 +3385,40 @@ components:
             $ref: '#/components/schemas/StepTargetConfig'
       additionalProperties: false
 
+    StepContextHeaderPartConfig:
+      type: object
+      description: |
+        One value rendered in the guided step context header.
+      properties:
+        id:
+          type: string
+          description: Question id whose value is rendered in the guided step context header.
+        displayField:
+          type: string
+          description: |
+            Optional raw datasource/option row field to display in the guided step context header
+            instead of the stored field value label.
+            Use this when the field should keep compact labels elsewhere in the app, but the
+            guided title should show a richer display value.
+      required: [id]
+      additionalProperties: false
+
+    StepContextHeaderConfig:
+      type: object
+      description: Optional bold context line rendered above the active guided step content.
+      properties:
+        parts:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - $ref: '#/components/schemas/StepContextHeaderPartConfig'
+        separator:
+          type: string
+          description: Optional separator between context header parts (default ` | `).
+      required: [parts]
+      additionalProperties: false
+
     StepConfig:
       type: object
       description: Single step in guided mode.
@@ -3398,6 +3432,9 @@ components:
           description: |
             Optional helper text displayed above the step content (guided mode).
             Use this for step-wide guidance such as food safety confirmations or photo requirements.
+        contextHeader:
+          $ref: '#/components/schemas/StepContextHeaderConfig'
+          description: Optional bold context line rendered above the step content.
         includeWhen:
           $ref: '#/components/schemas/WhenClause'
           description: Optional step-level visibility gate. Hidden steps are removed from the guided stepper and validation flow.
