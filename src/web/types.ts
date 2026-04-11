@@ -36,6 +36,7 @@ import {
   RowFlowReferenceConfig,
   LineItemGroupConfig,
   LineItemGroupConfigOverride,
+  LineItemOverlaySessionConfig,
   LineItemGroupUiConfig,
   LineItemDedupRule,
   LineItemFieldConfig,
@@ -62,6 +63,7 @@ import {
 
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
 export type { SystemActionGateDialogConfig };
+export type { LineItemOverlaySessionConfig };
 
 export type FieldValue =
   | string

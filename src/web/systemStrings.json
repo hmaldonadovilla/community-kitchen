@@ -247,6 +247,8 @@
     "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
     "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
     "saveChanges": { "en": "Save changes", "fr": "Enregistrer les modifications", "nl": "Wijzigingen opslaan" },
+    "selectAll": { "en": "Select all", "fr": "Tout sélectionner", "nl": "Alles selecteren" },
+    "deselectAll": { "en": "Deselect all", "fr": "Tout désélectionner", "nl": "Alles deselecteren" },
     "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
     "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
     "noChange": { "en": "No change.", "fr": "Aucun changement.", "nl": "Geen wijziging." },

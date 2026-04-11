@@ -568,6 +568,34 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-label);
           font-weight: 500;
         }
+        .webform-overlay .ck-line-item-overlay-fill-height {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .webform-overlay .ck-line-item-overlay-fill-height > .ck-line-item-group--table {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .webform-overlay .ck-line-item-overlay-fill-height > .ck-line-item-group--table .ck-line-item-table__scroll {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+        }
+        .webform-overlay .ck-line-item-overlay-fill-height > [data-overlay-scroll-container="true"] {
+          display: flex;
+          flex: 1 1 auto;
+          min-height: 0;
+          flex-direction: column;
+        }
+        .webform-overlay .ck-line-item-overlay-fill-height > [data-overlay-scroll-container="true"] > .ck-line-item-table__scroll {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+        }
         .form-card .ck-line-item-table__total,
         .webform-overlay .ck-line-item-table__total {
           font-weight: 500;

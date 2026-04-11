@@ -2064,6 +2064,11 @@ export interface LineItemGroupUiConfig {
    */
   maxVisibleRows?: number;
   /**
+   * Optional staged overlay session for full-page group editors.
+   * When enabled, edits can be confirmed with Save / reverted with Cancel.
+   */
+  overlaySession?: LineItemOverlaySessionConfig;
+  /**
    * Optional row-header summary template for progressive rows.
    *
    * Use `{FIELD_ID}` placeholders to compose a single compact header line
@@ -2422,6 +2427,38 @@ export interface LineItemOverlayRowFilter {
   excludeWhen?: WhenClause;
 }
 
+export interface LineItemOverlaySessionConfig {
+  /**
+   * Enable staged editing with explicit Save / Cancel controls in the overlay footer.
+   */
+  enabled?: boolean;
+  /**
+   * When true, allow the overlay table editor to stretch and use the available vertical space.
+   */
+  fillAvailableHeight?: boolean;
+  /**
+   * Optional bulk-selection control shown in the overlay header for checkbox-backed row selection.
+   */
+  bulkSelection?: {
+    /**
+     * Checkbox field id that should be toggled for all visible rows.
+     */
+    fieldId: string;
+  };
+  /**
+   * Optional localized footer Save label.
+   */
+  saveLabel?: LocalizedString;
+  /**
+   * Optional localized footer Cancel label.
+   */
+  cancelLabel?: LocalizedString;
+  /**
+   * Optional effects applied when Save is clicked.
+   */
+  onSaveEffects?: RowFlowActionEffect[];
+}
+
 export interface LineItemOverlayOpenActionConfig {
   /**
    * Target line-item group id to open.
@@ -2435,6 +2472,10 @@ export interface LineItemOverlayOpenActionConfig {
    * Optional button label override (defaults to the field label).
    */
   label?: LocalizedString;
+  /**
+   * Visual tone for the opener button.
+   */
+  tone?: 'primary' | 'secondary';
   /**
    * Optional row filter applied to the overlay header rows.
    */
@@ -2466,6 +2507,10 @@ export interface LineItemOverlayOpenActionConfig {
    * When true, hide the close button in the overlay header.
    */
   hideCloseButton?: boolean;
+  /**
+   * Optional staged session controls for the opened overlay.
+   */
+  overlaySession?: LineItemOverlaySessionConfig;
   /**
    * Optional label override for the overlay close button.
    */
@@ -3801,6 +3846,10 @@ export interface RowFlowOutputSegmentFormatConfig {
 export interface RowFlowOutputSegmentConfig {
   type?: 'field' | 'text';
   fieldRef?: string;
+  /**
+   * Optional field reference used when `fieldRef` has no value.
+   */
+  fallbackFieldRef?: string;
   text?: LocalizedString;
   /**
    * Optional tone override for rendered segment text.
@@ -3965,6 +4014,15 @@ export type RowFlowActionEffect =
       count?: number;
     }
   | {
+      type: 'seedLineItemsFromReference';
+      sourceRef: string;
+      targetRef?: string;
+      groupId?: string;
+      fieldMapping?: Record<string, string>;
+      preset?: Record<string, DefaultValue>;
+      whenEmpty?: boolean;
+    }
+  | {
       type: 'closeOverlay';
     }
   | (Omit<LineItemOverlayOpenActionConfig, 'groupId'> & {
@@ -4055,6 +4113,15 @@ export interface StepLineGroupTargetConfig {
    * Optional step-scoped row flow configuration for progressive input/output per row.
    */
   rowFlow?: RowFlowConfig;
+  /**
+   * Optional step-scoped label shown above the rendered group content.
+   * Useful for guided-step sections that reuse a hidden base group label.
+   */
+  label?: LocalizedString;
+  /**
+   * Optional step-scoped helper text shown under the label.
+   */
+  helperText?: LocalizedString;
   /**
    * Optional step-scoped override for the line-item group configuration.
    *

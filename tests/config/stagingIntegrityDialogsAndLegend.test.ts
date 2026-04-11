@@ -190,7 +190,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoverBank?.includeWhen).toBeUndefined();
       expect(leftoverBank?.excludeWhen).toEqual({
         fieldId: 'status',
-        equals: ['Emailed', 'Closed']
+        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
       });
       expect(contextHeaderSteps.length).toBeGreaterThan(0);
       contextHeaderSteps.forEach((step: any) => {
@@ -297,7 +297,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.label?.en).toBe('Portioning');
       expect(portioning?.excludeWhen).toEqual({
         fieldId: 'status',
-        equals: ['Emailed', 'Closed']
+        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
       expect(leftovers?.excludeWhen).toBeUndefined();
@@ -336,7 +336,7 @@ describe('staging integrity dialogs and list legend config', () => {
         const step = items.find((entry: any) => entry?.id === stepId);
         expect(step?.excludeWhen).toEqual({
           fieldId: 'status',
-          equals: ['Emailed', 'Closed']
+          equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
         });
       });
       expect(root?.submissionAfterSubmit?.preActions).toEqual(['CLOSE_RECORD']);
@@ -387,12 +387,31 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoversQuestionIds.has('MP_LEFTOVER_CAPTURE_LI')).toBe(true);
 
       const leftoversMeals = leftoversInclude.find((entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST');
+      expect(leftoversMeals?.label?.en).toBe('Entire Dish Leftovers');
+      expect(leftoversMeals?.helperText?.en).toBe(
+        'Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.'
+      );
+      expect(leftoversMeals?.groupOverride).toEqual(
+        expect.objectContaining({
+          totals: []
+        })
+      );
       expect(leftoversMeals?.presentation).toBe('liftedRowFields');
-      expect((leftoversMeals?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual([
-        'MEAL_TYPE',
-        'FINAL_QTY',
-        'MP_LEFTOVER_PORTIONS_CAPTURE'
-      ]);
+      expect((leftoversMeals?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
+        expect.arrayContaining(['MEAL_TYPE', 'FINAL_QTY', 'MP_LEFTOVER_RECIPE_CAPTURE', 'MP_LEFTOVER_PORTIONS_CAPTURE'])
+      );
+      expect(leftoversMeals?.subGroups?.include).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'MP_TYPE_LI',
+            fields: expect.arrayContaining(['PREP_TYPE', 'RECIPE'])
+          }),
+          expect.objectContaining({
+            id: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+            fields: ['ING_SELECTED', 'ING']
+          })
+        ])
+      );
       expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
       expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('all');
@@ -435,9 +454,21 @@ describe('staging integrity dialogs and list legend config', () => {
       );
 
       const partialLeftovers = findQuestion(questions || [], 'MP_LEFTOVER_CAPTURE_LI');
-      expect(partialLeftovers?.qEn).toBe('Partial leftovers');
+      expect(partialLeftovers?.qEn).toBe('Single-ingredient leftovers');
       expect(partialLeftovers?.visibility).toBeUndefined();
+      expect(partialLeftovers?.ui?.hideLabel).toBe(true);
       expect(partialLeftovers?.lineItemConfig?.ui?.addButtonPlacement).toBe('top');
+      expect(partialLeftovers?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
+      const singleIngredientField = (partialLeftovers?.lineItemConfig?.fields || []).find(
+        (entry: any) => entry?.id === 'LEFTOVER_INGREDIENT'
+      );
+      expect(singleIngredientField?.ui).toEqual(
+        expect.objectContaining({
+          choiceSearchEnabled: true,
+          helperPlacement: 'placeholder',
+          helperText: expect.objectContaining({ en: 'Search ingredients' })
+        })
+      );
 
       const pdfPreview = findQuestion(questions || [], 'PDF_PREVIEW');
       expect(pdfPreview?.button?.disableWhenValueMissing).toBe(true);
@@ -446,6 +477,24 @@ describe('staging integrity dialogs and list legend config', () => {
       const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
       expect(leftoverPortionsField?.defaultValue).toBeUndefined();
+      expect(leftoverPortionsField?.ui?.helperText).toBeUndefined();
+      expect(mealFields.some((entry: any) => entry?.id === 'MP_LEFTOVER_RECIPE_CAPTURE')).toBe(true);
+      expect(mealFields.some((entry: any) => entry?.id === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_READY')).toBe(true);
+      const captureIngredientsGroup = (meals?.lineItemConfig?.subGroups || []).find(
+        (entry: any) => entry?.id === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
+      );
+      expect(captureIngredientsGroup?.ui).toEqual(
+        expect.objectContaining({
+          mode: 'table',
+          tableColumns: ['ING_SELECTED', 'ING'],
+          tableColumnWidths: expect.objectContaining({
+            ING_SELECTED: '44px',
+            ING: 'calc(100% - 44px)'
+          }),
+          hideRemoveColumn: true,
+          addButtonPlacement: 'hidden'
+        })
+      );
 
       const followupEffects = Array.isArray(root?.followupConfig?.submitEffects)
         ? root.followupConfig.submitEffects
@@ -463,11 +512,27 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(entireDishEffect?.values?.DIETARY_APPLICABILITY).toEqual(
         expect.objectContaining({
           op: 'lookupSetIntersection',
-          collectionPath: 'row.MP_INGREDIENTS_LI',
+          collection: expect.objectContaining({
+            op: 'ifPresent',
+            path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY'
+          }),
           itemFieldId: 'ING',
           lookupFormKey: 'Config: Ingredients Management',
           lookupKeyFieldId: 'INGREDIENT_NAME',
-          lookupValueFieldId: 'DIETARY_APPLICABILITY'
+          lookupValueFieldId: 'DIETARY_APPLICABILITY',
+          fallback: '{{parent.MEAL_TYPE}}'
+        })
+      );
+      expect(entireDishEffect?.values?.LEFTOVER_RECIPE).toEqual(
+        expect.objectContaining({
+          op: 'firstNonEmpty',
+          values: ['{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}', '{{row.RECIPE}}']
+        })
+      );
+      expect(entireDishEffect?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
+        expect.objectContaining({
+          op: 'ifPresent',
+          path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY'
         })
       );
       const partialDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedLeftovers');

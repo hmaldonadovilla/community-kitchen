@@ -10129,8 +10129,8 @@ export const BUNDLED_FORM_CONFIGS = [
         ],
         "statusFieldId": "Status",
         "statusTransitions": {
-          "onPdf": "PDF ready",
-          "onEmail": "Emailed",
+          "onPdf": "Final report created",
+          "onEmail": "Final report emailed",
           "onClose": "Closed"
         },
         "submitEffects": [
@@ -10178,21 +10178,62 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
               "DIETARY_APPLICABILITY": {
                 "op": "lookupSetIntersection",
-                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "collection": {
+                  "op": "ifPresent",
+                  "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                  "then": {
+                    "op": "filterCollection",
+                    "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                    "when": {
+                      "fieldId": "ING_SELECTED",
+                      "equals": true
+                    },
+                    "pickFields": [
+                      "ING"
+                    ]
+                  },
+                  "else": "{{row.MP_INGREDIENTS_LI}}"
+                },
                 "itemFieldId": "ING",
                 "lookupFormKey": "Config: Ingredients Management",
                 "lookupKeyFieldId": "INGREDIENT_NAME",
                 "lookupValueFieldId": "DIETARY_APPLICABILITY",
                 "splitOn": ",",
-                "joinWith": ", "
+                "joinWith": ", ",
+                "fallback": "{{parent.MEAL_TYPE}}"
               },
-              "LEFTOVER_RECIPE": "{{row.RECIPE}}",
+              "LEFTOVER_RECIPE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}",
+                  "{{row.RECIPE}}"
+                ]
+              },
               "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
               "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
               "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
-              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_INGREDIENTS_LI}}"
+              "LEFTOVER_INGREDIENTS_LI": {
+                "op": "ifPresent",
+                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                "then": {
+                  "op": "filterCollection",
+                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                  "when": {
+                    "fieldId": "ING_SELECTED",
+                    "equals": true
+                  },
+                  "pickFields": [
+                    "ING",
+                    "QTY",
+                    "UNIT",
+                    "CAT",
+                    "ALLERGEN"
+                  ]
+                },
+                "else": "{{row.MP_INGREDIENTS_LI}}"
+              }
             }
           },
           {
@@ -10924,7 +10965,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -10984,7 +11028,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -12092,7 +12139,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -12536,7 +12586,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -12612,7 +12665,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -12794,7 +12850,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "id": "FINAL_QTY",
                     "renderAsLabel": true
                   },
-                  "MP_LEFTOVER_PORTIONS_CAPTURE"
+                  "MP_LEFTOVER_PORTIONS_CAPTURE",
+                  "MP_LEFTOVER_RECIPE_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -12803,6 +12860,13 @@ export const BUNDLED_FORM_CONFIGS = [
                       "fields": [
                         "PREP_TYPE",
                         "RECIPE"
+                      ]
+                    },
+                    {
+                      "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                      "fields": [
+                        "ING_SELECTED",
+                        "ING"
                       ]
                     }
                   ]
@@ -12826,6 +12890,16 @@ export const BUNDLED_FORM_CONFIGS = [
                       "groupId": "MP_INGREDIENTS_LI",
                       "parentRef": "cookRow",
                       "match": "any"
+                    },
+                    "capturedIngredientsSelected": {
+                      "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "fieldId": "ING_SELECTED",
+                          "equals": true
+                        }
+                      }
                     }
                   },
                   "output": {
@@ -12841,23 +12915,36 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "cookRow.RECIPE",
-                        "label": {
-                          "en": "{{value}} | ",
-                          "fr": "{{value}} | ",
-                          "nl": "{{value}} | "
+                        "fieldRef": "MP_LEFTOVER_RECIPE_CAPTURE",
+                        "fallbackFieldRef": "cookRow.RECIPE",
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 180,
+                        "maxWidth": 280,
+                        "paddingChars": 10
+                      },
+                      {
+                        "type": "text",
+                        "text": {
+                          "en": " | ",
+                          "fr": " | ",
+                          "nl": " | "
                         }
                       },
                       {
                         "fieldRef": "FINAL_QTY",
                         "label": {
                           "en": "{{value}} portions delivered | ",
-                          "fr": "{{value}} portions livrées | ",
-                          "nl": "{{value}} geleverde porties | "
+                          "fr": "{{value}} portions delivered | ",
+                          "nl": "{{value}} portions delivered | "
                         }
                       },
                       {
-                        "fieldRef": "cookIngredients.ING",
+                        "fieldRef": "capturedIngredientsSelected.ING",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                          "notEmpty": true
+                        },
                         "tone": "muted",
                         "label": {
                           "en": "{{value}} | ",
@@ -12871,23 +12958,129 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "MP_LEFTOVER_PORTIONS_CAPTURE",
-                        "renderAs": "control",
-                        "controlStyle": "compact",
-                        "minWidth": 48,
-                        "maxWidth": 96,
-                        "paddingChars": 2.2
+                        "fieldRef": "cookIngredients.ING",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                          "isEmpty": true
+                        },
+                        "tone": "muted",
+                        "label": {
+                          "en": "{{value}} | ",
+                          "fr": "{{value}} | ",
+                          "nl": "{{value}} | "
+                        },
+                        "format": {
+                          "type": "list",
+                          "listDelimiter": ", ",
+                          "unique": true
+                        }
                       },
                       {
                         "type": "text",
                         "text": {
-                          "en": " portions",
-                          "fr": " portions",
-                          "nl": " porties"
+                          "en": "Yield ",
+                          "fr": "Yield ",
+                          "nl": "Yield "
+                        }
+                      },
+                      {
+                        "fieldRef": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 56,
+                        "maxWidth": 96,
+                        "paddingChars": 2.4
+                      },
+                      {
+                        "type": "text",
+                        "text": {
+                          "en": " portions to reheat or combine",
+                          "fr": " portions to reheat or combine",
+                          "nl": " portions to reheat or combine"
                         }
                       }
+                    ],
+                    "actionsLayout": "below",
+                    "actions": [
+                      {
+                        "id": "editIngredients"
+                      }
                     ]
-                  }
+                  },
+                  "actions": [
+                    {
+                      "id": "editIngredients",
+                      "label": {
+                        "en": "Edit ingredients",
+                        "fr": "Edit ingredients",
+                        "nl": "Edit ingredients"
+                      },
+                      "variant": "button",
+                      "tone": "secondary",
+                      "effects": [
+                        {
+                          "type": "seedLineItemsFromReference",
+                          "sourceRef": "cookIngredients",
+                          "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                          "fieldMapping": {
+                            "ING": "ING",
+                            "QTY": "QTY",
+                            "UNIT": "UNIT",
+                            "CAT": "CAT",
+                            "ALLERGEN": "ALLERGEN"
+                          },
+                          "preset": {
+                            "ING_SELECTED": true
+                          },
+                          "whenEmpty": true
+                        },
+                        {
+                          "type": "openOverlay",
+                          "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                          "overlayContextHeader": {
+                            "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
+                            "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
+                            "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          },
+                          "groupOverride": {
+                            "ui": {
+                              "maxVisibleRows": 0,
+                              "tableColumnWidths": {
+                                "ING_SELECTED": "44px",
+                                "ING": "calc(100% - 44px)",
+                                "__remove": "44px"
+                              }
+                            }
+                          },
+                          "hideCloseButton": true,
+                          "overlaySession": {
+                            "enabled": true,
+                            "fillAvailableHeight": true,
+                            "bulkSelection": {
+                              "fieldId": "ING_SELECTED"
+                            },
+                            "saveLabel": {
+                              "en": "Save",
+                              "fr": "Save",
+                              "nl": "Save"
+                            },
+                            "cancelLabel": {
+                              "en": "Cancel",
+                              "fr": "Cancel",
+                              "nl": "Cancel"
+                            },
+                            "onSaveEffects": [
+                              {
+                                "type": "setValue",
+                                "fieldRef": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                                "value": "1"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 },
                 "readOnlyFields": [
                   "MEAL_TYPE"
@@ -12899,11 +13092,34 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 },
                 "collapsedFieldsInHeader": true,
-                "displayMode": "inline"
+                "displayMode": "inline",
+                "label": {
+                  "en": "Entire Dish Leftovers",
+                  "fr": "Entire Dish Leftovers",
+                  "nl": "Entire Dish Leftovers"
+                },
+                "helperText": {
+                  "en": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
+                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
+                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients."
+                },
+                "groupOverride": {
+                  "totals": []
+                }
               },
               {
                 "kind": "lineGroup",
-                "id": "MP_LEFTOVER_CAPTURE_LI"
+                "id": "MP_LEFTOVER_CAPTURE_LI",
+                "label": {
+                  "en": "Single-ingredient leftovers",
+                  "fr": "Single-ingredient leftovers",
+                  "nl": "Single-ingredient leftovers"
+                },
+                "helperText": {
+                  "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.",
+                  "fr": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.",
+                  "nl": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit."
+                }
               }
             ],
             "label": {
@@ -13548,9 +13764,9 @@ export const BUNDLED_FORM_CONFIGS = [
       {
         "id": "MP_LEFTOVER_CAPTURE_LI",
         "type": "LINE_ITEM_GROUP",
-        "qEn": "Partial leftovers",
-        "qFr": "Restes partiels",
-        "qNl": "Gedeeltelijke restanten",
+        "qEn": "Single-ingredient leftovers",
+        "qFr": "Single-ingredient leftovers",
+        "qNl": "Single-ingredient leftovers",
         "required": false,
         "listView": false,
         "options": [],
@@ -13558,7 +13774,7 @@ export const BUNDLED_FORM_CONFIGS = [
         "optionsNl": [],
         "status": "Active",
         "ui": {
-          "hideLabel": false
+          "hideLabel": true
         },
         "lineItemConfig": {
           "ui": {
@@ -13629,9 +13845,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "maxRows": 50,
           "addMode": "inline",
           "addButtonLabel": {
-            "en": "Add partial leftover",
-            "fr": "Ajouter un reste partiel",
-            "nl": "Gedeeltelijk restant toevoegen"
+            "en": "Single-ingredient leftover",
+            "fr": "Single-ingredient leftover",
+            "nl": "Single-ingredient leftover"
           },
           "anchorFieldId": "LEFTOVER_INGREDIENT",
           "fields": [
@@ -13905,7 +14121,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelNl": "Ingrediënt",
               "required": true,
               "ui": {
-                "control": "select"
+                "control": "select",
+                "choiceSearchEnabled": true,
+                "helperText": {
+                  "en": "Search ingredients",
+                  "fr": "Rechercher des ingrédients",
+                  "nl": "Ingrediënten zoeken"
+                },
+                "helperPlacement": "placeholder"
               },
               "dataSource": {
                 "id": "Ingredients Data",
@@ -14999,13 +15222,41 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 }
               ],
+              "ui": {}
+            },
+            {
+              "id": "MP_LEFTOVER_RECIPE_CAPTURE",
+              "type": "TEXT",
+              "labelEn": "Dish name",
+              "labelFr": "Dish name",
+              "labelNl": "Dish name",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "leftovers"
+                  ]
+                }
+              },
               "ui": {
-                "helperText": {
-                  "en": "Leave blank when there are no leftovers for this meal type.",
-                  "fr": "Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.",
-                  "nl": "Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype."
-                },
-                "helperPlacement": "belowLabel"
+                "hideLabel": true
+              }
+            },
+            {
+              "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+              "type": "TEXT",
+              "labelEn": "Ingredients capture ready",
+              "labelFr": "Ingredients capture ready",
+              "labelNl": "Ingredients capture ready",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
               }
             }
           ],
@@ -15487,6 +15738,121 @@ export const BUNDLED_FORM_CONFIGS = [
                   ]
                 }
               ]
+            },
+            {
+              "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+              "label": {
+                "en": "Ingredients",
+                "fr": "Ingredients",
+                "nl": "Ingredients"
+              },
+              "minRows": 0,
+              "maxRows": 200,
+              "fields": [
+                {
+                  "id": "ING_SELECTED",
+                  "type": "CHECKBOX",
+                  "labelEn": "Keep",
+                  "labelFr": "Keep",
+                  "labelNl": "Keep",
+                  "required": false,
+                  "ui": {
+                    "hideLabel": true
+                  }
+                },
+                {
+                  "id": "ING",
+                  "type": "TEXT",
+                  "labelEn": "Ingredient",
+                  "labelFr": "Ingredient",
+                  "labelNl": "Ingredient",
+                  "required": false,
+                  "readOnly": true
+                },
+                {
+                  "id": "QTY",
+                  "type": "NUMBER",
+                  "labelEn": "Quantity",
+                  "labelFr": "Quantity",
+                  "labelNl": "Quantity",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": [
+                        "1"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "UNIT",
+                  "type": "TEXT",
+                  "labelEn": "Unit",
+                  "labelFr": "Unit",
+                  "labelNl": "Unit",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": [
+                        "1"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "CAT",
+                  "type": "TEXT",
+                  "labelEn": "Category",
+                  "labelFr": "Category",
+                  "labelNl": "Category",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": [
+                        "1"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "ALLERGEN",
+                  "type": "TEXT",
+                  "labelEn": "Allergen",
+                  "labelFr": "Allergen",
+                  "labelNl": "Allergen",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": [
+                        "1"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "ui": {
+                "mode": "table",
+                "tableColumns": [
+                  "ING_SELECTED",
+                  "ING"
+                ],
+                "tableColumnWidths": {
+                  "ING_SELECTED": "44px",
+                  "ING": "calc(100% - 44px)",
+                  "__remove": "44px"
+                },
+                "hideRemoveColumn": true,
+                "addButtonPlacement": "hidden",
+                "maxVisibleRows": 10
+              }
             }
           ]
         },
@@ -16523,9 +16889,9 @@ export const BUNDLED_FORM_CONFIGS = [
         {
           "id": "MP_LEFTOVER_CAPTURE_LI",
           "type": "LINE_ITEM_GROUP",
-          "qEn": "Partial leftovers",
-          "qFr": "Restes partiels",
-          "qNl": "Gedeeltelijke restanten",
+          "qEn": "Single-ingredient leftovers",
+          "qFr": "Single-ingredient leftovers",
+          "qNl": "Single-ingredient leftovers",
           "required": false,
           "listView": false,
           "options": [],
@@ -16533,7 +16899,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "optionsNl": [],
           "status": "Active",
           "ui": {
-            "hideLabel": false
+            "hideLabel": true
           },
           "lineItemConfig": {
             "ui": {
@@ -16604,9 +16970,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "maxRows": 50,
             "addMode": "inline",
             "addButtonLabel": {
-              "en": "Add partial leftover",
-              "fr": "Ajouter un reste partiel",
-              "nl": "Gedeeltelijk restant toevoegen"
+              "en": "Single-ingredient leftover",
+              "fr": "Single-ingredient leftover",
+              "nl": "Single-ingredient leftover"
             },
             "anchorFieldId": "LEFTOVER_INGREDIENT",
             "fields": [
@@ -16880,7 +17246,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelNl": "Ingrediënt",
                 "required": true,
                 "ui": {
-                  "control": "select"
+                  "control": "select",
+                  "choiceSearchEnabled": true,
+                  "helperText": {
+                    "en": "Search ingredients",
+                    "fr": "Rechercher des ingrédients",
+                    "nl": "Ingrediënten zoeken"
+                  },
+                  "helperPlacement": "placeholder"
                 },
                 "dataSource": {
                   "id": "Ingredients Data",
@@ -18033,13 +18406,41 @@ export const BUNDLED_FORM_CONFIGS = [
                     }
                   }
                 ],
+                "ui": {}
+              },
+              {
+                "id": "MP_LEFTOVER_RECIPE_CAPTURE",
+                "type": "TEXT",
+                "labelEn": "Dish name",
+                "labelFr": "Dish name",
+                "labelNl": "Dish name",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  }
+                },
                 "ui": {
-                  "helperText": {
-                    "en": "Leave blank when there are no leftovers for this meal type.",
-                    "fr": "Laissez vide lorsqu'il n'y a pas de restes pour ce type de repas.",
-                    "nl": "Laat leeg wanneer er geen restanten zijn voor dit maaltijdtype."
-                  },
-                  "helperPlacement": "belowLabel"
+                  "hideLabel": true
+                }
+              },
+              {
+                "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                "type": "TEXT",
+                "labelEn": "Ingredients capture ready",
+                "labelFr": "Ingredients capture ready",
+                "labelNl": "Ingredients capture ready",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
                 }
               }
             ],
@@ -18521,6 +18922,121 @@ export const BUNDLED_FORM_CONFIGS = [
                     ]
                   }
                 ]
+              },
+              {
+                "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                "label": {
+                  "en": "Ingredients",
+                  "fr": "Ingredients",
+                  "nl": "Ingredients"
+                },
+                "minRows": 0,
+                "maxRows": 200,
+                "fields": [
+                  {
+                    "id": "ING_SELECTED",
+                    "type": "CHECKBOX",
+                    "labelEn": "Keep",
+                    "labelFr": "Keep",
+                    "labelNl": "Keep",
+                    "required": false,
+                    "ui": {
+                      "hideLabel": true
+                    }
+                  },
+                  {
+                    "id": "ING",
+                    "type": "TEXT",
+                    "labelEn": "Ingredient",
+                    "labelFr": "Ingredient",
+                    "labelNl": "Ingredient",
+                    "required": false,
+                    "readOnly": true
+                  },
+                  {
+                    "id": "QTY",
+                    "type": "NUMBER",
+                    "labelEn": "Quantity",
+                    "labelFr": "Quantity",
+                    "labelNl": "Quantity",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": [
+                          "1"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "id": "UNIT",
+                    "type": "TEXT",
+                    "labelEn": "Unit",
+                    "labelFr": "Unit",
+                    "labelNl": "Unit",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": [
+                          "1"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "id": "CAT",
+                    "type": "TEXT",
+                    "labelEn": "Category",
+                    "labelFr": "Category",
+                    "labelNl": "Category",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": [
+                          "1"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "id": "ALLERGEN",
+                    "type": "TEXT",
+                    "labelEn": "Allergen",
+                    "labelFr": "Allergen",
+                    "labelNl": "Allergen",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": [
+                          "1"
+                        ]
+                      }
+                    }
+                  }
+                ],
+                "ui": {
+                  "mode": "table",
+                  "tableColumns": [
+                    "ING_SELECTED",
+                    "ING"
+                  ],
+                  "tableColumnWidths": {
+                    "ING_SELECTED": "44px",
+                    "ING": "calc(100% - 44px)",
+                    "__remove": "44px"
+                  },
+                  "hideRemoveColumn": true,
+                  "addButtonPlacement": "hidden",
+                  "maxVisibleRows": 10
+                }
               }
             ]
           },
@@ -19405,8 +19921,8 @@ export const BUNDLED_FORM_CONFIGS = [
         ],
         "statusFieldId": "Status",
         "statusTransitions": {
-          "onPdf": "PDF ready",
-          "onEmail": "Emailed",
+          "onPdf": "Final report created",
+          "onEmail": "Final report emailed",
           "onClose": "Closed"
         },
         "submitEffects": [
@@ -19454,21 +19970,62 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
               "DIETARY_APPLICABILITY": {
                 "op": "lookupSetIntersection",
-                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "collection": {
+                  "op": "ifPresent",
+                  "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                  "then": {
+                    "op": "filterCollection",
+                    "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                    "when": {
+                      "fieldId": "ING_SELECTED",
+                      "equals": true
+                    },
+                    "pickFields": [
+                      "ING"
+                    ]
+                  },
+                  "else": "{{row.MP_INGREDIENTS_LI}}"
+                },
                 "itemFieldId": "ING",
                 "lookupFormKey": "Config: Ingredients Management",
                 "lookupKeyFieldId": "INGREDIENT_NAME",
                 "lookupValueFieldId": "DIETARY_APPLICABILITY",
                 "splitOn": ",",
-                "joinWith": ", "
+                "joinWith": ", ",
+                "fallback": "{{parent.MEAL_TYPE}}"
               },
-              "LEFTOVER_RECIPE": "{{row.RECIPE}}",
+              "LEFTOVER_RECIPE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}",
+                  "{{row.RECIPE}}"
+                ]
+              },
               "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
               "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
               "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
-              "LEFTOVER_INGREDIENTS_LI": "{{row.MP_INGREDIENTS_LI}}"
+              "LEFTOVER_INGREDIENTS_LI": {
+                "op": "ifPresent",
+                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                "then": {
+                  "op": "filterCollection",
+                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                  "when": {
+                    "fieldId": "ING_SELECTED",
+                    "equals": true
+                  },
+                  "pickFields": [
+                    "ING",
+                    "QTY",
+                    "UNIT",
+                    "CAT",
+                    "ALLERGEN"
+                  ]
+                },
+                "else": "{{row.MP_INGREDIENTS_LI}}"
+              }
             }
           },
           {
@@ -19949,7 +20506,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -20009,7 +20569,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -21091,7 +21654,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -21535,7 +22101,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -21611,7 +22180,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "excludeWhen": {
               "fieldId": "status",
               "equals": [
+                "PDF ready",
                 "Emailed",
+                "Final report created",
+                "Final report emailed",
                 "Closed"
               ]
             },
@@ -21793,7 +22365,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "id": "FINAL_QTY",
                     "renderAsLabel": true
                   },
-                  "MP_LEFTOVER_PORTIONS_CAPTURE"
+                  "MP_LEFTOVER_PORTIONS_CAPTURE",
+                  "MP_LEFTOVER_RECIPE_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -21802,6 +22375,13 @@ export const BUNDLED_FORM_CONFIGS = [
                       "fields": [
                         "PREP_TYPE",
                         "RECIPE"
+                      ]
+                    },
+                    {
+                      "id": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                      "fields": [
+                        "ING_SELECTED",
+                        "ING"
                       ]
                     }
                   ]
@@ -21825,6 +22405,16 @@ export const BUNDLED_FORM_CONFIGS = [
                       "groupId": "MP_INGREDIENTS_LI",
                       "parentRef": "cookRow",
                       "match": "any"
+                    },
+                    "capturedIngredientsSelected": {
+                      "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "fieldId": "ING_SELECTED",
+                          "equals": true
+                        }
+                      }
                     }
                   },
                   "output": {
@@ -21840,23 +22430,36 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "cookRow.RECIPE",
-                        "label": {
-                          "en": "{{value}} | ",
-                          "fr": "{{value}} | ",
-                          "nl": "{{value}} | "
+                        "fieldRef": "MP_LEFTOVER_RECIPE_CAPTURE",
+                        "fallbackFieldRef": "cookRow.RECIPE",
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 180,
+                        "maxWidth": 280,
+                        "paddingChars": 10
+                      },
+                      {
+                        "type": "text",
+                        "text": {
+                          "en": " | ",
+                          "fr": " | ",
+                          "nl": " | "
                         }
                       },
                       {
                         "fieldRef": "FINAL_QTY",
                         "label": {
                           "en": "{{value}} portions delivered | ",
-                          "fr": "{{value}} portions livrées | ",
-                          "nl": "{{value}} geleverde porties | "
+                          "fr": "{{value}} portions delivered | ",
+                          "nl": "{{value}} portions delivered | "
                         }
                       },
                       {
-                        "fieldRef": "cookIngredients.ING",
+                        "fieldRef": "capturedIngredientsSelected.ING",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                          "notEmpty": true
+                        },
                         "tone": "muted",
                         "label": {
                           "en": "{{value}} | ",
@@ -21870,23 +22473,129 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "MP_LEFTOVER_PORTIONS_CAPTURE",
-                        "renderAs": "control",
-                        "controlStyle": "compact",
-                        "minWidth": 48,
-                        "maxWidth": 96,
-                        "paddingChars": 2.2
+                        "fieldRef": "cookIngredients.ING",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                          "isEmpty": true
+                        },
+                        "tone": "muted",
+                        "label": {
+                          "en": "{{value}} | ",
+                          "fr": "{{value}} | ",
+                          "nl": "{{value}} | "
+                        },
+                        "format": {
+                          "type": "list",
+                          "listDelimiter": ", ",
+                          "unique": true
+                        }
                       },
                       {
                         "type": "text",
                         "text": {
-                          "en": " portions",
-                          "fr": " portions",
-                          "nl": " porties"
+                          "en": "Yield ",
+                          "fr": "Yield ",
+                          "nl": "Yield "
+                        }
+                      },
+                      {
+                        "fieldRef": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 56,
+                        "maxWidth": 96,
+                        "paddingChars": 2.4
+                      },
+                      {
+                        "type": "text",
+                        "text": {
+                          "en": " portions to reheat or combine",
+                          "fr": " portions to reheat or combine",
+                          "nl": " portions to reheat or combine"
                         }
                       }
+                    ],
+                    "actionsLayout": "below",
+                    "actions": [
+                      {
+                        "id": "editIngredients"
+                      }
                     ]
-                  }
+                  },
+                  "actions": [
+                    {
+                      "id": "editIngredients",
+                      "label": {
+                        "en": "Edit ingredients",
+                        "fr": "Edit ingredients",
+                        "nl": "Edit ingredients"
+                      },
+                      "variant": "button",
+                      "tone": "secondary",
+                      "effects": [
+                        {
+                          "type": "seedLineItemsFromReference",
+                          "sourceRef": "cookIngredients",
+                          "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                          "fieldMapping": {
+                            "ING": "ING",
+                            "QTY": "QTY",
+                            "UNIT": "UNIT",
+                            "CAT": "CAT",
+                            "ALLERGEN": "ALLERGEN"
+                          },
+                          "preset": {
+                            "ING_SELECTED": true
+                          },
+                          "whenEmpty": true
+                        },
+                        {
+                          "type": "openOverlay",
+                          "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                          "overlayContextHeader": {
+                            "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
+                            "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
+                            "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          },
+                          "groupOverride": {
+                            "ui": {
+                              "maxVisibleRows": 0,
+                              "tableColumnWidths": {
+                                "ING_SELECTED": "44px",
+                                "ING": "calc(100% - 44px)",
+                                "__remove": "44px"
+                              }
+                            }
+                          },
+                          "hideCloseButton": true,
+                          "overlaySession": {
+                            "enabled": true,
+                            "fillAvailableHeight": true,
+                            "bulkSelection": {
+                              "fieldId": "ING_SELECTED"
+                            },
+                            "saveLabel": {
+                              "en": "Save",
+                              "fr": "Save",
+                              "nl": "Save"
+                            },
+                            "cancelLabel": {
+                              "en": "Cancel",
+                              "fr": "Cancel",
+                              "nl": "Cancel"
+                            },
+                            "onSaveEffects": [
+                              {
+                                "type": "setValue",
+                                "fieldRef": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                                "value": "1"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 },
                 "readOnlyFields": [
                   "MEAL_TYPE"
@@ -21898,11 +22607,34 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 },
                 "collapsedFieldsInHeader": true,
-                "displayMode": "inline"
+                "displayMode": "inline",
+                "label": {
+                  "en": "Entire Dish Leftovers",
+                  "fr": "Entire Dish Leftovers",
+                  "nl": "Entire Dish Leftovers"
+                },
+                "helperText": {
+                  "en": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
+                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
+                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients."
+                },
+                "groupOverride": {
+                  "totals": []
+                }
               },
               {
                 "kind": "lineGroup",
-                "id": "MP_LEFTOVER_CAPTURE_LI"
+                "id": "MP_LEFTOVER_CAPTURE_LI",
+                "label": {
+                  "en": "Single-ingredient leftovers",
+                  "fr": "Single-ingredient leftovers",
+                  "nl": "Single-ingredient leftovers"
+                },
+                "helperText": {
+                  "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.",
+                  "fr": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.",
+                  "nl": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit."
+                }
               }
             ],
             "label": {
@@ -22121,7 +22853,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "cb9baf4ac1906656f00f022629ada5cd"
+    "cacheFingerprint": "ded6708b899869500467c3f973ab765b"
   },
   {
     "formKey": "Config: Recipes",

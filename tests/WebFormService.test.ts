@@ -1439,13 +1439,29 @@ describe('WebFormService', () => {
             LEFTOVER_KIND: 'Entire dish',
             LEFTOVER_PREP_TYPE: 'Entire dish',
             LEFTOVER_MEAL_TYPE: '{{parent.MEAL_TYPE}}',
-            LEFTOVER_RECIPE: '{{row.RECIPE}}',
+            LEFTOVER_RECIPE: {
+              op: 'firstNonEmpty',
+              values: ['{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}', '{{row.RECIPE}}']
+            },
             LEFTOVER_PORTIONS: '{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}',
             LEFTOVER_EXP_DATE: '{{source.MP_EXP_DATE}}',
             LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
             LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
-            LEFTOVER_INGREDIENTS_LI: '{{row.MP_INGREDIENTS_LI}}'
+            LEFTOVER_INGREDIENTS_LI: {
+              op: 'ifPresent',
+              path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+              then: {
+                op: 'filterCollection',
+                collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+                when: {
+                  fieldId: 'ING_SELECTED',
+                  equals: true
+                },
+                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
+              },
+              else: '{{row.MP_INGREDIENTS_LI}}'
+            }
           }
         },
         {
@@ -1507,7 +1523,9 @@ describe('WebFormService', () => {
     (mealsRequestSheet as any).setMockData([
       ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
       ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', ''],
-      ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', '']
+      ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', ''],
+      ['MP_LEFTOVER_RECIPE_CAPTURE', 'TEXT', 'Dish name', 'Dish name', 'Dish name', false, '', '', ''],
+      ['MP_LEFTOVER_INGREDIENTS_CAPTURE_READY', 'TEXT', 'Ingredients capture ready', 'Ingredients capture ready', 'Ingredients capture ready', false, '', '', '']
     ]);
 
     const partialLeftoversSheet = ss.insertSheet('LineItems_MP_LEFTOVER_CAPTURE_LI');
@@ -1563,12 +1581,34 @@ describe('WebFormService', () => {
         __ckRowId: 'MEAL-1',
         MEAL_TYPE: 'Diabetic',
         MP_LEFTOVER_PORTIONS_CAPTURE: 2,
+        MP_LEFTOVER_RECIPE_CAPTURE: 'Renamed curry & fish',
+        MP_LEFTOVER_INGREDIENTS_CAPTURE_READY: '1',
         MP_TYPE_LI: [
           {
             __ckRowId: 'COOK-1',
             PREP_TYPE: 'Cook',
             RECIPE: 'Curry & fish',
             MP_INGREDIENTS_LI: [{ ING: 'Salt', QTY: 1, UNIT: 'kg' }]
+          }
+        ],
+        MP_LEFTOVER_INGREDIENTS_CAPTURE_LI: [
+          {
+            __ckRowId: 'CAP-1',
+            ING_SELECTED: true,
+            ING: 'Salt',
+            QTY: 1,
+            UNIT: 'kg',
+            CAT: 'Herbs',
+            ALLERGEN: 'None'
+          },
+          {
+            __ckRowId: 'CAP-2',
+            ING_SELECTED: false,
+            ING: 'Pepper',
+            QTY: 2,
+            UNIT: 'gr',
+            CAT: 'Herbs',
+            ALLERGEN: 'None'
           }
         ]
       },
@@ -1628,7 +1668,8 @@ describe('WebFormService', () => {
           effectId: 'captureProducedEntireDishLeftovers',
           targetFormKey: inventoryFormKey,
           values: expect.objectContaining({
-            LEFTOVER_ID: 'LE-1'
+            LEFTOVER_ID: 'LE-1',
+            LEFTOVER_RECIPE: 'Renamed curry & fish'
           })
         }),
         expect.objectContaining({
@@ -1659,7 +1700,7 @@ describe('WebFormService', () => {
     expect(entireDishRow.LEFTOVER_STATUS).toBe('available');
     expect(entireDishRow.LEFTOVER_PREP_TYPE).toBe('Entire dish');
     expect(entireDishRow.LEFTOVER_MEAL_TYPE).toBe('Diabetic');
-    expect(entireDishRow.LEFTOVER_RECIPE).toBe('Curry & fish');
+    expect(entireDishRow.LEFTOVER_RECIPE).toBe('Renamed curry & fish');
     expect(Number(entireDishRow.LEFTOVER_PORTIONS || 0)).toBe(2);
     expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
     expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);

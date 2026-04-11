@@ -4,6 +4,7 @@ import type { FieldValue, LineItemRowState, VisibilityContext } from '../../../.
 import type { LineItemState } from '../../../types';
 import type {
   LineItemGroupConfigOverride,
+  LineItemOverlaySessionConfig,
   RowFlowActionConfig,
   OverlayCloseConfirmLike,
   RowFlowActionEffect,
@@ -47,6 +48,8 @@ export type RowFlowResolvedSegment = {
   config: RowFlowOutputSegmentConfig;
   target: RowFlowResolvedFieldTarget | null;
   values: FieldValue[];
+  fallbackTarget: RowFlowResolvedFieldTarget | null;
+  fallbackValues: FieldValue[];
 };
 
 export type RowFlowResolvedPrompt = {
@@ -86,6 +89,12 @@ export type RowFlowResolvedEffect =
       count: number;
     }
   | {
+      type: 'seedLineItemsFromReference';
+      groupKey: string;
+      rows: Array<Record<string, FieldValue>>;
+      whenEmpty: boolean;
+    }
+  | {
       type: 'closeOverlay';
     }
   | {
@@ -102,6 +111,7 @@ export type RowFlowResolvedEffect =
       rowFlow?: RowFlowConfig;
       overlayContextHeader?: RowFlowOverlayContextHeaderConfig;
       overlayHelperText?: RowFlowOverlayContextHeaderConfig;
+      overlaySession?: LineItemOverlaySessionConfig;
     };
 
 export type RowFlowResolvedActionPlan = {
@@ -392,6 +402,20 @@ export const resolveRowFlowState = (args: {
               references
             });
       const values = resolveSegmentValues(segment, target);
+      const fallbackTarget =
+        segmentType === 'text' || !segment.fallbackFieldRef
+          ? null
+          : resolveRowFlowFieldTarget({
+              fieldRef: segment.fallbackFieldRef || '',
+              groupId,
+              rowId,
+              rowValues,
+              references
+            });
+      const fallbackValues = resolveSegmentValues(
+        { ...segment, fieldRef: segment.fallbackFieldRef || '' } as RowFlowOutputSegmentConfig,
+        fallbackTarget
+      );
       const showWhenOk = resolveWhenMatch({
         when: segment.showWhen,
         target,
@@ -404,6 +428,7 @@ export const resolveRowFlowState = (args: {
         segmentType !== 'text' &&
         config.output?.hideEmpty &&
         values.length === 0 &&
+        fallbackValues.length === 0 &&
         `${segment?.renderAs || ''}`.trim().toLowerCase() !== 'control'
       ) {
         return null;
@@ -412,7 +437,14 @@ export const resolveRowFlowState = (args: {
         segmentType === 'text'
           ? `text:${textSegmentCounter++}`
           : (segment.fieldRef || '').toString();
-      return { id: segmentId, config: segment, target, values } as RowFlowResolvedSegment;
+      return {
+        id: segmentId,
+        config: segment,
+        target,
+        values,
+        fallbackTarget,
+        fallbackValues
+      } as RowFlowResolvedSegment;
     })
     .filter(Boolean) as RowFlowResolvedSegment[];
 
@@ -583,6 +615,55 @@ export const resolveRowFlowActionPlan = (args: {
           : undefined;
       effects.push({ type: 'addLineItems', groupKey, preset, count });
     }
+    if (effect.type === 'seedLineItemsFromReference') {
+      const sourceRefId = effect.sourceRef ? effect.sourceRef.toString().trim() : '';
+      if (!sourceRefId || !references[sourceRefId]) return;
+      const sourceRows = references[sourceRefId].rows || [];
+      if (!sourceRows.length) return;
+      const targetRefId = effect.targetRef ? effect.targetRef.toString().trim() : '';
+      const groupIdRaw = effect.groupId ? effect.groupId.toString().trim() : '';
+      const subgroupSet = new Set((subGroupIds || []).map(id => id.toString().trim()).filter(Boolean));
+      let groupKey = '';
+      if (targetRefId && references[targetRefId]) {
+        const ref = references[targetRefId];
+        groupKey = ref.rows[0]?.groupKey || '';
+        if (!groupKey) {
+          const refGroupId = ref.groupId ? ref.groupId.toString().trim() : '';
+          if (refGroupId) {
+            const isSubgroup = subgroupSet.has(refGroupId);
+            groupKey = isSubgroup ? buildSubgroupKey(groupId, rowId, refGroupId) : refGroupId;
+          }
+        }
+      } else if (groupIdRaw) {
+        const isSubgroup = subgroupSet.has(groupIdRaw);
+        groupKey = isSubgroup ? buildSubgroupKey(groupId, rowId, groupIdRaw) : groupIdRaw;
+      }
+      if (!groupKey) return;
+      const fieldMapping =
+        effect.fieldMapping && typeof effect.fieldMapping === 'object' && !Array.isArray(effect.fieldMapping)
+          ? (effect.fieldMapping as Record<string, string>)
+          : {};
+      const preset =
+        effect.preset && typeof effect.preset === 'object' && !Array.isArray(effect.preset)
+          ? (effect.preset as Record<string, FieldValue>)
+          : undefined;
+      const rows = sourceRows.map(entry => {
+        const rowPreset: Record<string, FieldValue> = { ...(preset || {}) };
+        Object.entries(fieldMapping).forEach(([targetFieldId, sourceFieldId]) => {
+          const sourceKey = (sourceFieldId || '').toString().trim();
+          if (!sourceKey) return;
+          rowPreset[targetFieldId] = (entry.row?.values || {})[sourceKey];
+        });
+        return rowPreset;
+      });
+      if (!rows.length) return;
+      effects.push({
+        type: 'seedLineItemsFromReference',
+        groupKey,
+        rows,
+        whenEmpty: effect.whenEmpty !== false
+      });
+    }
     if (effect.type === 'closeOverlay') {
       effects.push({ type: 'closeOverlay' });
     }
@@ -614,7 +695,8 @@ export const resolveRowFlowActionPlan = (args: {
         groupOverride: (effect as any).groupOverride as LineItemGroupConfigOverride | undefined,
         rowFlow: (effect as any).rowFlow as RowFlowConfig | undefined,
         overlayContextHeader: (effect as any).overlayContextHeader as RowFlowOverlayContextHeaderConfig | undefined,
-        overlayHelperText: (effect as any).overlayHelperText as RowFlowOverlayContextHeaderConfig | undefined
+        overlayHelperText: (effect as any).overlayHelperText as RowFlowOverlayContextHeaderConfig | undefined,
+        overlaySession: (effect as any).overlaySession
       });
     }
   });

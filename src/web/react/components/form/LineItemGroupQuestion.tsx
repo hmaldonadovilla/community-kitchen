@@ -27,6 +27,7 @@ import {
   LangCode,
   LineItemGroupConfigOverride,
   LineItemRowState,
+  LineItemOverlaySessionConfig,
   OptionSet,
   RowFlowActionRef,
   RowFlowConfig,
@@ -313,16 +314,20 @@ import {
 } from '../../features/steps/domain/rowFlow';
 
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
-const listRowActionButtonBaseStyle: React.CSSProperties = {
-  ...buttonStyles.primary,
+const listRowActionButtonWidthStyle: React.CSSProperties = {
   width: 'fit-content',
   minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
   maxWidth: '100%'
 };
-  const withListRowActionButtonStyle = (
+const listRowActionButtonBaseStyle: React.CSSProperties = {
+  ...buttonStyles.primary,
+  ...listRowActionButtonWidthStyle
+};
+const withListRowActionButtonStyle = (
   disabled?: boolean,
-  overrides?: React.CSSProperties
-): React.CSSProperties => withDisabled({ ...listRowActionButtonBaseStyle, ...(overrides || {}) }, disabled);
+  overrides?: React.CSSProperties,
+  baseStyle: React.CSSProperties = listRowActionButtonBaseStyle
+): React.CSSProperties => withDisabled({ ...baseStyle, ...listRowActionButtonWidthStyle, ...(overrides || {}) }, disabled);
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
@@ -348,6 +353,7 @@ export interface ChoiceControlArgs {
   value: string;
   options: Array<{ value: string; label: string; tooltip?: string; searchText?: string }>;
   required: boolean;
+  placeholder?: string;
   searchEnabled?: boolean;
   override?: string | null;
   disabled?: boolean;
@@ -407,6 +413,7 @@ export interface LineItemGroupQuestionCtx {
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
       closeConfirm?: OverlayCloseConfirmLike;
+      overlaySession?: LineItemOverlaySessionConfig;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -422,6 +429,7 @@ export interface LineItemGroupQuestionCtx {
       hideCloseButton?: boolean;
       closeButtonLabel?: string;
       closeConfirm?: OverlayCloseConfirmLike;
+      overlaySession?: LineItemOverlaySessionConfig;
       label?: string;
       contextHeader?: string;
       helperText?: string;
@@ -2076,15 +2084,16 @@ export const LineItemGroupQuestion: React.FC<{
       buildVirtualDataSourceRowValues,
       ensureRecordId,
       formKey,
+      language,
       lineItems,
       onDiagnostic,
+      openConfirmDialog,
       q.id,
       recordId,
       resolveDataSourceOutputGroup,
       syncStepDataSourceOutputRow,
       toFiniteNumber,
-      updateStepDataSourceAvailability
-      ,
+      updateStepDataSourceAvailability,
       updateStepDataSourceAvailabilityOptimistically
     ]
   );
@@ -2447,28 +2456,39 @@ export const LineItemGroupQuestion: React.FC<{
       segment: RowFlowResolvedSegment,
       targetGroupKey: string,
       field: any,
-      parentValues?: Record<string, FieldValue>
+      parentValues?: Record<string, FieldValue>,
+      fallbackGroupKey?: string,
+      fallbackField?: any,
+      fallbackParentValues?: Record<string, FieldValue>
     ): { text: string; hasValue: boolean } => {
-      const valuesForField = segment.values;
+      const primaryValues = segment.values;
+      const fallbackValuesForField = segment.fallbackValues || [];
+      const useFallback = !primaryValues.length && !!fallbackValuesForField.length && !!fallbackField;
+      const valuesForField = useFallback ? fallbackValuesForField : primaryValues;
+      const effectiveField = useFallback ? fallbackField : field;
+      const effectiveTargetGroupKey = useFallback ? (fallbackGroupKey || targetGroupKey) : targetGroupKey;
+      const effectiveParentValues = useFallback ? fallbackParentValues : parentValues;
       const formatType = segment.config?.format?.type === 'list' ? 'list' : 'text';
       const listDelimiter = segment.config?.format?.listDelimiter || ', ';
       const uniqueValues = segment.config?.format?.unique !== false;
-      const rowValues = segment.target?.primaryRow?.row?.values || {};
-      const mapped = field?.valueMap
+      const rowValues = useFallback
+        ? segment.fallbackTarget?.primaryRow?.row?.values || {}
+        : segment.target?.primaryRow?.row?.values || {};
+      const mapped = effectiveField?.valueMap
         ? resolveValueMapValue(
-            field.valueMap,
-            (fid: string) => (rowValues as any)[fid] ?? (parentValues as any)?.[fid] ?? resolveTopValue(fid),
-            { language, targetOptions: toOptionSet(field as any) }
+            effectiveField.valueMap,
+            (fid: string) => (rowValues as any)[fid] ?? (effectiveParentValues as any)?.[fid] ?? resolveTopValue(fid),
+            { language, targetOptions: toOptionSet(effectiveField as any) }
           )
         : undefined;
-      const rawValues = field?.valueMap ? normalizeValueList(mapped as FieldValue) : valuesForField;
+      const rawValues = effectiveField?.valueMap ? normalizeValueList(mapped as FieldValue) : valuesForField;
       if (!rawValues.length) return { text: '', hasValue: false };
 
-      if (field?.type === 'CHOICE' || field?.type === 'CHECKBOX') {
-        ensureLineOptions(targetGroupKey, field);
-        const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, targetGroupKey);
+      if (effectiveField?.type === 'CHOICE' || effectiveField?.type === 'CHECKBOX') {
+        ensureLineOptions(effectiveTargetGroupKey, effectiveField);
+        const optionSetField: OptionSet = resolveOptionSetForField(optionState, effectiveField, effectiveTargetGroupKey);
         const localized = buildLocalizedOptions(optionSetField, optionSetField.en || [], language, {
-          sort: optionSortFor(field)
+          sort: optionSortFor(effectiveField)
         });
         const labels = rawValues.map(val => {
           const raw = Array.isArray(val) ? val[0] : val;
@@ -2482,7 +2502,7 @@ export const LineItemGroupQuestion: React.FC<{
 
       const labels = rawValues.map(val => {
         if (val === undefined || val === null) return '';
-        if (field?.type === 'DATE') return formatDateEeeDdMmmYyyy(val, language) || val.toString();
+        if (effectiveField?.type === 'DATE') return formatDateEeeDdMmmYyyy(val, language) || val.toString();
         if (typeof val === 'boolean') {
           return val ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
         }
@@ -2502,8 +2522,9 @@ export const LineItemGroupQuestion: React.FC<{
       rowValues: Record<string, FieldValue>;
       rowFlowState: RowFlowResolvedState;
     }): string => {
+      const simpleText = resolveLocalizedString(args.config as any, language, '').trim();
       const fields = args.config?.fields || [];
-      if (!fields.length) return '';
+      if (!fields.length) return simpleText;
       const parts = fields
         .map(entry => {
           const fieldRef = (entry?.fieldRef || '').toString().trim();
@@ -2570,7 +2591,7 @@ export const LineItemGroupQuestion: React.FC<{
             : `${label}: ${displayText}`;
         })
         .filter(Boolean);
-      return parts.join(' ');
+      return parts.join(' ') || simpleText;
     },
     [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig, resolveTopValue]
   );
@@ -2690,12 +2711,74 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           effectCount: plan.effects.length
         });
       };
-        const applyEffects = () => {
+      const openResolvedOverlay = (effect: Extract<RowFlowResolvedEffect, { type: 'openOverlay' }>) => {
+        const contextHeader = resolveOverlayContextHeader(effect);
+        const hasContextHeader = Boolean(contextHeader);
+        const helperText = resolveOverlayHelperText(effect);
+        const hasHelperText = Boolean(helperText);
+        if (effect.targetKind === 'line') {
+          const baseGroup = definition.questions.find(q => q.id === effect.key && q.type === 'LINE_ITEM_GROUP') as
+            | WebQuestionDefinition
+            | undefined;
+          const overrideGroup =
+            baseGroup && effect.groupOverride ? buildOverlayGroupOverride(baseGroup, effect.groupOverride) : undefined;
+          if (!baseGroup && effect.groupOverride) {
+            onDiagnostic?.('lineItems.rowFlow.overlay.missingGroup', {
+              groupId: q.id,
+              rowId: row.id,
+              targetKey: effect.key
+            });
+          }
+          const groupOrId = overrideGroup || effect.key;
+          openLineItemGroupOverlay(groupOrId, {
+            rowFilter: effect.rowFilter || null,
+            hideInlineSubgroups: effect.hideInlineSubgroups,
+            hideCloseButton: effect.hideCloseButton,
+            closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
+            closeConfirm: effect.closeConfirm,
+            overlaySession: effect.overlaySession,
+            source: 'overlayOpenAction',
+            label: resolveLocalizedString(effect.label as any, language, ''),
+            contextHeader: contextHeader || undefined,
+            helperText: helperText || undefined,
+            rowFlow: effect.rowFlow
+          });
+        } else {
+          openSubgroupOverlay(effect.key, {
+            rowFilter: effect.rowFilter || null,
+            hideInlineSubgroups: effect.hideInlineSubgroups,
+            groupOverride: effect.groupOverride,
+            hideCloseButton: effect.hideCloseButton,
+            closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
+            closeConfirm: effect.closeConfirm,
+            overlaySession: effect.overlaySession,
+            source: 'overlayOpenAction',
+            label: resolveLocalizedString(effect.label as any, language, ''),
+            contextHeader: contextHeader || undefined,
+            helperText: helperText || undefined,
+            rowFlow: effect.rowFlow
+          });
+        }
+        onDiagnostic?.('lineItems.rowFlow.overlay.open', {
+          groupId: q.id,
+          rowId: row.id,
+          targetKey: effect.key,
+          targetKind: effect.targetKind,
+          hasOverride: !!effect.groupOverride,
+          hasRowFlow: !!effect.rowFlow,
+          hasContextHeader,
+          hasHelperText,
+          hideCloseButton: !!effect.hideCloseButton,
+          hasOverlaySession: !!effect.overlaySession
+        });
+      };
+      const applyEffects = () => {
         const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
         const setEffects = plan.effects.filter(effect => effect.type === 'setValue');
         const deleteEffects = plan.effects.filter(effect => effect.type === 'deleteLineItems');
         const deleteRowEffects = plan.effects.filter(effect => effect.type === 'deleteRow');
         const addEffects = plan.effects.filter(effect => effect.type === 'addLineItems');
+        const seedEffects = plan.effects.filter(effect => effect.type === 'seedLineItemsFromReference');
         const openEffects = plan.effects.filter(effect => effect.type === 'openOverlay');
         const closeEffects = plan.effects.filter(effect => effect.type === 'closeOverlay');
 
@@ -2710,78 +2793,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             groupId: q.id,
             rowId: row.id,
             count: deleteRowEffects.length
-          });
-        }
-
-        if (openEffects.length) {
-          openEffects.forEach(effect => {
-            const contextHeader = resolveOverlayContextHeader(effect);
-            const hasContextHeader = Boolean(contextHeader);
-            const helperText = resolveOverlayHelperText(effect);
-            const hasHelperText = Boolean(helperText);
-            if (effect.targetKind === 'line') {
-              const baseGroup = definition.questions.find(q => q.id === effect.key && q.type === 'LINE_ITEM_GROUP') as
-                | WebQuestionDefinition
-                | undefined;
-              const overrideGroup =
-                baseGroup && effect.groupOverride ? buildOverlayGroupOverride(baseGroup, effect.groupOverride) : undefined;
-              if (!baseGroup && effect.groupOverride) {
-                onDiagnostic?.('lineItems.rowFlow.overlay.missingGroup', {
-                  groupId: q.id,
-                  rowId: row.id,
-                  targetKey: effect.key
-                });
-              }
-              const groupOrId = overrideGroup || effect.key;
-              openLineItemGroupOverlay(groupOrId, {
-                rowFilter: effect.rowFilter || null,
-                hideInlineSubgroups: effect.hideInlineSubgroups,
-                hideCloseButton: effect.hideCloseButton,
-                closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
-                closeConfirm: effect.closeConfirm,
-                source: 'overlayOpenAction',
-                label: resolveLocalizedString(effect.label as any, language, ''),
-                contextHeader: contextHeader || undefined,
-                helperText: helperText || undefined,
-                rowFlow: effect.rowFlow
-              });
-              onDiagnostic?.('lineItems.rowFlow.overlay.open', {
-                groupId: q.id,
-                rowId: row.id,
-                targetKey: effect.key,
-                targetKind: effect.targetKind,
-                hasOverride: !!effect.groupOverride,
-                hasRowFlow: !!effect.rowFlow,
-                hasContextHeader,
-                hasHelperText,
-                hideCloseButton: !!effect.hideCloseButton
-              });
-              return;
-            }
-            openSubgroupOverlay(effect.key, {
-              rowFilter: effect.rowFilter || null,
-              hideInlineSubgroups: effect.hideInlineSubgroups,
-              groupOverride: effect.groupOverride,
-              hideCloseButton: effect.hideCloseButton,
-              closeButtonLabel: resolveLocalizedString(effect.closeButtonLabel as any, language, ''),
-              closeConfirm: effect.closeConfirm,
-              source: 'overlayOpenAction',
-              label: resolveLocalizedString(effect.label as any, language, ''),
-              contextHeader: contextHeader || undefined,
-              helperText: helperText || undefined,
-              rowFlow: effect.rowFlow
-            });
-            onDiagnostic?.('lineItems.rowFlow.overlay.open', {
-              groupId: q.id,
-              rowId: row.id,
-              targetKey: effect.key,
-              targetKind: effect.targetKind,
-              hasOverride: !!effect.groupOverride,
-              hasRowFlow: !!effect.rowFlow,
-              hasContextHeader,
-              hasHelperText,
-              hideCloseButton: !!effect.hideCloseButton
-            });
           });
         }
 
@@ -2800,8 +2811,32 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             });
           });
         }
+        if (seedEffects.length) {
+          seedEffects.forEach(effect => {
+            const existingRows = lineItems[effect.groupKey] || [];
+            if (effect.whenEmpty && existingRows.length) {
+              onDiagnostic?.('lineItems.rowFlow.action.seedLineItems.skip', {
+                groupId: q.id,
+                rowId: row.id,
+                targetKey: effect.groupKey,
+                reason: 'notEmpty',
+                existingCount: existingRows.length
+              });
+              return;
+            }
+            effect.rows.forEach(preset => addLineItemRowManual(effect.groupKey, preset));
+            onDiagnostic?.('lineItems.rowFlow.action.seedLineItems', {
+              groupId: q.id,
+              rowId: row.id,
+              targetKey: effect.groupKey,
+              count: effect.rows.length,
+              whenEmpty: effect.whenEmpty
+            });
+          });
+        }
 
         if (!setEffects.length && !deleteRoots.length) {
+          openEffects.forEach(effect => openResolvedOverlay(effect as Extract<RowFlowResolvedEffect, { type: 'openOverlay' }>));
           if (closeEffects.length && ctx.closeOverlay) {
             ctx.closeOverlay();
             onDiagnostic?.('lineItems.rowFlow.action.closeOverlay', { groupId: q.id, rowId: row.id });
@@ -2856,6 +2891,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               topValues: nextValues
             });
           });
+          openEffects.forEach(effect => openResolvedOverlay(effect as Extract<RowFlowResolvedEffect, { type: 'openOverlay' }>));
           return recomputed;
         });
         if (closeEffects.length && ctx.closeOverlay) {
@@ -2932,6 +2968,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       const label = resolveLocalizedString(action.label, language, action.id);
       const iconKey = (action.icon || '').toString().trim().toLowerCase();
       const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
+      const tone = ((action.tone || 'primary').toString().trim().toLowerCase() === 'secondary') ? 'secondary' : 'primary';
+      const toneStyle = tone === 'secondary' ? buttonStyles.secondary : buttonStyles.primary;
       const disabled = submitting;
       const onClick = () => {
         if (disabled) return;
@@ -2957,7 +2995,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             title={label || action.id}
             onClick={onClick}
             disabled={disabled}
-            style={withDisabled(buttonStyles.primary, disabled)}
+            style={withDisabled(toneStyle, disabled)}
           >
             {iconNode}
           </button>
@@ -2971,7 +3009,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           className="ck-list-row-action-btn"
           onClick={onClick}
           disabled={disabled}
-          style={withListRowActionButtonStyle(disabled)}
+          style={withListRowActionButtonStyle(disabled, undefined, toneStyle)}
         >
           {label || action.id}
         </button>
@@ -4559,6 +4597,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     value: choiceVal || '',
                     options: optsField,
                     required: !!field.required,
+                    placeholder,
                     searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? groupChoiceSearchDefault,
                     override: (field as any)?.ui?.control,
                     disabled: fieldInputDisabled,
@@ -5014,6 +5053,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               id: field.id,
               label: (() => {
                 const labelText = resolveFieldLabel(field, language, field.id);
+                const hideHeaderLabel = Boolean((field as any)?.hideLabel || (field as any)?.ui?.hideLabel);
+                if (hideHeaderLabel) {
+                  return <span style={srOnly}>{labelText}</span>;
+                }
                 const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
                 const isEditableField =
                   !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
@@ -6616,10 +6659,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const outputSegments = rowFlowState.segments.filter(segment => {
                   const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
                   if (segmentType === 'text') return true;
-                  const target = segment.target;
-                  if (!target?.fieldId) return false;
-                  const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
-                  if (!field) return false;
+                  const target = segment.target?.fieldId ? segment.target : segment.fallbackTarget;
+                  const field = target?.fieldId ? resolveRowFlowFieldConfig(target.groupKey, target.fieldId) : null;
+                  if (!target?.fieldId || !field) return false;
                   const ctxForVisibility = buildRowFlowFieldCtx({
                     rowValues: target.primaryRow?.row?.values || {},
                     parentValues: target.parentValues
@@ -6658,9 +6700,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     );
                   }
                   const target = segment.target;
-                  if (!target || !target.fieldId) return null;
-                  const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
-                  if (!field) return null;
+                  const fallbackTarget = segment.fallbackTarget;
+                  const field = target?.fieldId ? resolveRowFlowFieldConfig(target.groupKey, target.fieldId) : null;
+                  const fallbackField =
+                    fallbackTarget?.fieldId ? resolveRowFlowFieldConfig(fallbackTarget.groupKey, fallbackTarget.fieldId) : null;
+                  const displayTarget = target?.fieldId ? target : fallbackTarget;
+                  const displayField = field || fallbackField;
+                  if (!displayTarget || !displayField) return null;
                   const label = segment.config.label
                     ? resolveLocalizedString(segment.config.label, language, '')
                     : '';
@@ -6678,7 +6724,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       {separator}
                     </span>
                   ) : null;
-                  if (segment.config.renderAs === 'control' && target.primaryRow) {
+                  if (segment.config.renderAs === 'control' && target?.primaryRow && field) {
                     const groupInfo = resolveRowFlowGroupConfig(target.primaryRow.groupKey);
                     if (!groupInfo?.config) return null;
                     const groupDef = buildRowFlowGroupDefinition(target.primaryRow.groupKey, groupInfo.config);
@@ -6800,6 +6846,68 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           </span>
                         );
                       }
+                      if (field.type === 'TEXT' || field.type === 'PARAGRAPH') {
+                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
+                        const valueText = rawValue === undefined || rawValue === null ? '' : `${rawValue}`;
+                        const fallbackDisplay = resolveRowFlowDisplayValue(
+                          segment,
+                          target.groupKey,
+                          field,
+                          target.parentValues,
+                          fallbackTarget?.groupKey,
+                          fallbackField,
+                          fallbackTarget?.parentValues
+                        ).text;
+                        const displayValue = valueText || fallbackDisplay || '';
+                        return (
+                          <span
+                            key={`${segment.config.fieldRef}-${idx}`}
+                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            data-field-path={fieldPath}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
+                              <AutoWidthInput
+                                className="ck-compact-control ck-compact-control--text"
+                                value={displayValue}
+                                disabled={isLineFieldInteractionBlocked(field)}
+                                readOnly={field?.readOnly === true}
+                                ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                selectAllOnFocus
+                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 120}
+                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 320}
+                                extraWidth={Math.max(
+                                  32,
+                                  Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 3) * 8)
+                                )}
+                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
+                                inputStyle={{
+                                  boxSizing: 'border-box',
+                                  minHeight: 34,
+                                  paddingInlineStart: 8,
+                                  paddingInlineEnd: 8,
+                                  textAlign: 'left',
+                                  fontSize: 'var(--ck-font-control)',
+                                  fontWeight: 500,
+                                  lineHeight: 1,
+                                  ...(segmentHasError
+                                    ? {
+                                        borderColor: 'var(--danger)',
+                                        boxShadow: '0 0 0 1px var(--danger)'
+                                      }
+                                    : {})
+                                }}
+                              />
+                              {segmentActions}
+                              {separatorNode}
+                            </span>
+                            {segmentHasError && (errors as any)?.[fieldPath] ? (
+                              <div className="error" style={{ marginTop: 0 }}>
+                                {(errors as any)[fieldPath]}
+                              </div>
+                            ) : null}
+                          </span>
+                        );
+                      }
                     }
                     return (
                       <span
@@ -6821,7 +6929,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       </span>
                     );
                   }
-                  const display = resolveRowFlowDisplayValue(segment, target.groupKey, field, target.parentValues);
+                  const display = resolveRowFlowDisplayValue(
+                    segment,
+                    displayTarget.groupKey,
+                    displayField,
+                    displayTarget.parentValues,
+                    fallbackTarget?.groupKey,
+                    fallbackField,
+                    fallbackTarget?.parentValues
+                  );
                   const text = display.text || '—';
                   const formatted = label
                     ? label.includes('{{value}}')
@@ -7116,6 +7232,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   closeConfirm: (match as any).closeConfirm as OverlayCloseConfirmLike | undefined,
                   renderMode,
                   label,
+                  tone: ((match as any).tone || 'primary').toString().trim().toLowerCase() === 'secondary' ? 'secondary' : 'primary',
                   flattenFields,
                   flattenPlacement,
                   hideTrashIcon: (match as any).hideTrashIcon === true,
@@ -8362,6 +8479,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
                 const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
                 const overlayOpenDisabled = submitting || rowLocked;
+                const overlayActionTone =
+                  (overlayOpenAction?.tone || 'primary').toString().trim().toLowerCase() === 'secondary'
+                    ? 'secondary'
+                    : 'primary';
+                const overlayActionButtonBaseStyle =
+                  overlayActionTone === 'secondary' ? buttonStyles.secondary : buttonStyles.primary;
                 const overlayOpenButtonText = (displayValue?: string | null) => {
                   if (!overlayOpenAction) return '';
                   const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
@@ -9013,7 +9136,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
 	                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
 	                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                  const baseStyle = buttonStyles.primary;
 	                  const actionRow = (
 	                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
 	                      <button
@@ -9023,7 +9145,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         disabled={overlayOpenDisabled}
                         style={withListRowActionButtonStyle(
                           overlayOpenDisabled,
-                          showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined
+                          showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined,
+                          overlayActionButtonBaseStyle
                         )}
                       >
                         {overlayOpenButtonText(displayValue)}
@@ -9036,7 +9159,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                          aria-label={tSystem('lineItems.remove', language, 'Remove')}
 	                          style={withDisabled(
 	                            {
-	                              ...baseStyle,
+	                              ...overlayActionButtonBaseStyle,
 	                              borderTopLeftRadius: 0,
 	                              borderBottomLeftRadius: 0,
 	                              padding: '0 14px',
@@ -9144,7 +9267,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           className="ck-list-row-action-btn"
 	                        onClick={handleOverlayOpenAction}
 	                        disabled={overlayOpenDisabled}
-	                        style={withListRowActionButtonStyle(overlayOpenDisabled)}
+	                        style={withListRowActionButtonStyle(overlayOpenDisabled, undefined, overlayActionButtonBaseStyle)}
 	                      >
 	                        {overlayOpenButtonText(displayValue)}
 	                      </button>
@@ -10108,6 +10231,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       const overlayOpenAction = overlayActionSuppressed ? null : resolveOverlayOpenActionForField(field, row, overlayActionCtx);
                       const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
                       const overlayOpenDisabled = submitting || rowLocked;
+                      const overlayActionTone =
+                        (overlayOpenAction?.tone || 'primary').toString().trim().toLowerCase() === 'secondary'
+                          ? 'secondary'
+                          : 'primary';
+                      const overlayActionButtonBaseStyle =
+                        overlayActionTone === 'secondary' ? buttonStyles.secondary : buttonStyles.primary;
                       const overlayOpenButtonText = (displayValue?: string | null) => {
                         if (!overlayOpenAction) return '';
                         const baseLabel = overlayOpenAction.label || resolveFieldLabel(field, language, field.id);
@@ -10280,7 +10409,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
 	                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
 	                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                        const baseStyle = buttonStyles.primary;
 	                        const actionRow = (
 	                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
 	                            <button
@@ -10290,7 +10418,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               disabled={overlayOpenDisabled}
                               style={withListRowActionButtonStyle(
                                 overlayOpenDisabled,
-                                showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined
+                                showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined,
+                                overlayActionButtonBaseStyle
                               )}
                             >
                               {overlayOpenButtonText(displayValue)}
@@ -10303,7 +10432,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 	                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
 	                                style={withDisabled(
 	                                  {
-	                                    ...baseStyle,
+	                                    ...overlayActionButtonBaseStyle,
 	                                    borderTopLeftRadius: 0,
 	                                    borderBottomLeftRadius: 0,
 	                                    padding: '0 14px',
@@ -10414,7 +10543,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 className="ck-list-row-action-btn"
 	                              onClick={handleOverlayOpenAction}
 	                              disabled={overlayOpenDisabled}
-	                              style={withListRowActionButtonStyle(overlayOpenDisabled)}
+	                              style={withListRowActionButtonStyle(overlayOpenDisabled, undefined, overlayActionButtonBaseStyle)}
 	                            >
 	                              {overlayOpenButtonText(displayValue)}
 	                            </button>
@@ -12357,6 +12486,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             value: choiceVal || '',
                                             options: optsField,
                                             required: !!field.required,
+                                            placeholder: resolveFieldHelperText({ ui: (field as any)?.ui, language }).placeholderText || undefined,
                                             searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? (subUi as any)?.choiceSearchEnabled,
                                             override: (field as any)?.ui?.control,
                                             disabled: isLineFieldInputDisabled(field),
@@ -12900,6 +13030,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             value: choiceVal || '',
                                             options: optsField,
                                             required: !!field.required,
+                                            placeholder: resolveFieldHelperText({ ui: (field as any)?.ui, language }).placeholderText || undefined,
                                             searchEnabled:
                                               (field as any)?.ui?.choiceSearchEnabled ??
                                               (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),
@@ -13581,6 +13712,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         value: choiceVal || '',
                                         options: optsFieldForCompact(field),
                                         required: !!field.required,
+                                        placeholder,
                                         searchEnabled:
                                           (field as any)?.ui?.choiceSearchEnabled ??
                                           (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),

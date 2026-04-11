@@ -223,11 +223,22 @@ describe('meal production leftover selection config', () => {
     const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');
     const target = leftoversStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
 
+    expect(target?.label?.en).toBe('Entire Dish Leftovers');
+    expect(target?.helperText?.en).toBe(
+      'Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.'
+    );
+    expect((target?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
+      expect.arrayContaining(['MEAL_TYPE', 'FINAL_QTY', 'MP_LEFTOVER_RECIPE_CAPTURE', 'MP_LEFTOVER_PORTIONS_CAPTURE'])
+    );
     expect(target?.subGroups?.include).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'MP_TYPE_LI',
           fields: expect.arrayContaining(['PREP_TYPE', 'RECIPE'])
+        }),
+        expect.objectContaining({
+          id: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+          fields: ['ING_SELECTED', 'ING']
         })
       ])
     );
@@ -242,22 +253,59 @@ describe('meal production leftover selection config', () => {
             groupId: 'MP_INGREDIENTS_LI',
             parentRef: 'cookRow',
             match: 'any'
+          }),
+          capturedIngredientsSelected: expect.objectContaining({
+            groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+            match: 'any',
+            rowFilter: expect.objectContaining({
+              includeWhen: expect.objectContaining({
+                fieldId: 'ING_SELECTED',
+                equals: true
+              })
+            })
           })
         }),
         output: expect.objectContaining({
           separator: '',
           hideEmpty: true,
+          actionsLayout: 'below',
+          actions: [{ id: 'editIngredients' }],
           segments: expect.arrayContaining([
             expect.objectContaining({ fieldRef: 'MEAL_TYPE' }),
-            expect.objectContaining({ fieldRef: 'cookRow.RECIPE' }),
             expect.objectContaining({
-              fieldRef: 'cookIngredients.ING',
+              fieldRef: 'MP_LEFTOVER_RECIPE_CAPTURE',
+              fallbackFieldRef: 'cookRow.RECIPE',
+              renderAs: 'control'
+            }),
+            expect.objectContaining({
+              fieldRef: 'capturedIngredientsSelected.ING',
               tone: 'muted',
+              showWhen: expect.objectContaining({
+                fieldId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+                notEmpty: true
+              }),
               format: expect.objectContaining({
                 type: 'list',
                 listDelimiter: ', ',
                 unique: true
               })
+            }),
+            expect.objectContaining({
+              fieldRef: 'cookIngredients.ING',
+              tone: 'muted',
+              showWhen: expect.objectContaining({
+                fieldId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+                isEmpty: true
+              }),
+              format: expect.objectContaining({
+                type: 'list',
+                listDelimiter: ', ',
+                unique: true
+              })
+            }),
+            expect.objectContaining({
+              type: 'text',
+              text: expect.objectContaining({ en: 'Yield ' })
             }),
             expect.objectContaining({
               fieldRef: 'MP_LEFTOVER_PORTIONS_CAPTURE',
@@ -266,11 +314,93 @@ describe('meal production leftover selection config', () => {
             }),
             expect.objectContaining({
               type: 'text',
-              text: expect.objectContaining({ en: ' portions' })
+              text: expect.objectContaining({ en: ' portions to reheat or combine' })
             })
           ])
-        })
+        }),
+        actions: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'editIngredients',
+            label: expect.objectContaining({ en: 'Edit ingredients' }),
+            variant: 'button',
+            tone: 'secondary',
+            effects: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'seedLineItemsFromReference',
+                sourceRef: 'cookIngredients',
+                groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+                whenEmpty: true
+              }),
+              expect.objectContaining({
+                type: 'openOverlay',
+                groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+                overlayContextHeader: expect.objectContaining({
+                  en: 'Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.'
+                }),
+                groupOverride: expect.objectContaining({
+                  ui: expect.objectContaining({
+                    maxVisibleRows: 0
+                  })
+                }),
+                hideCloseButton: true,
+                overlaySession: expect.objectContaining({
+                  enabled: true,
+                  fillAvailableHeight: true,
+                  bulkSelection: expect.objectContaining({
+                    fieldId: 'ING_SELECTED'
+                  })
+                })
+              })
+            ])
+          })
+        ])
       })
     );
+  });
+
+  it('renames and reconfigures the single-ingredient leftovers section', () => {
+    const definition = getDefinition();
+    const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');
+    const target = leftoversStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_LEFTOVER_CAPTURE_LI') as any;
+    const question = definition.questions.find(q => q.id === 'MP_LEFTOVER_CAPTURE_LI') as any;
+    const meals = definition.questions.find(q => q.id === 'MP_MEALS_REQUEST') as any;
+    const ingredientCaptureGroup = (meals?.lineItemConfig?.subGroups || []).find(
+      (entry: any) => entry?.id === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
+    );
+
+    expect(target?.label?.en).toBe('Single-ingredient leftovers');
+    expect(target?.helperText?.en).toBe(
+      'To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.'
+    );
+    expect(question?.qEn).toBe('Single-ingredient leftovers');
+    expect(question?.ui?.hideLabel).toBe(true);
+    expect(question?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
+    const ingredientField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_INGREDIENT');
+    expect(ingredientField?.ui).toEqual(
+      expect.objectContaining({
+        choiceSearchEnabled: true,
+        helperPlacement: 'placeholder',
+        helperText: expect.objectContaining({ en: 'Search ingredients' })
+      })
+    );
+    expect(ingredientCaptureGroup?.ui).toEqual(
+      expect.objectContaining({
+        tableColumns: ['ING_SELECTED', 'ING'],
+        tableColumnWidths: expect.objectContaining({
+          ING_SELECTED: '44px',
+          ING: 'calc(100% - 44px)'
+        }),
+        hideRemoveColumn: true,
+        addButtonPlacement: 'hidden'
+      })
+    );
+    expect((ingredientCaptureGroup?.fields || []).map((entry: any) => entry?.id)).toEqual([
+      'ING_SELECTED',
+      'ING',
+      'QTY',
+      'UNIT',
+      'CAT',
+      'ALLERGEN'
+    ]);
   });
 });

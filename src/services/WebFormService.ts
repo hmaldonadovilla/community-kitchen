@@ -1954,6 +1954,92 @@ export class WebFormService {
     return [];
   }
 
+  private hasResolvedComputedValue(value: any): boolean {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+  }
+
+  private resolveFirstNonEmptyComputedValue(value: Record<string, any>, vars: Record<string, any>): any {
+    const candidates = Array.isArray(value.values) ? value.values : [];
+    for (const candidate of candidates) {
+      const resolved = this.resolveConfigComputedValue(resolveTemplateValue(candidate, vars), vars);
+      if (this.hasResolvedComputedValue(resolved)) return resolved;
+    }
+    return '';
+  }
+
+  private resolveComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const resolvedCollection = this.resolveConfigComputedValue(resolveTemplateValue(value.collection, vars), vars);
+    if (Array.isArray(resolvedCollection)) return resolvedCollection;
+    const normalizedResolvedCollection = this.normalizeLookupCollection(resolvedCollection);
+    if (normalizedResolvedCollection.length) return normalizedResolvedCollection;
+    const collectionPaths = [
+      `${value.collectionPath || ''}`.trim(),
+      ...(Array.isArray(value.collectionPathAlternatives)
+        ? value.collectionPathAlternatives.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+        : [])
+    ].filter(Boolean);
+    return collectionPaths.reduce<any[]>((resolved, path) => {
+      if (resolved.length) return resolved;
+      return this.normalizeLookupCollection(this.readTemplatePathValue(path, vars));
+    }, []);
+  }
+
+  private filterComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const collection = this.resolveComputedCollection(value, vars);
+    if (!collection.length) return [];
+    const sourceRecord =
+      vars.source && typeof vars.source === 'object' && (vars.source as WebFormSubmission).values
+        ? (vars.source as WebFormSubmission)
+        : ({ values: {} } as WebFormSubmission);
+    const topCtx = buildRecordVisibilityContext(sourceRecord, []).ctx;
+    const when = value.when ? resolveTemplateValue(value.when, vars) : undefined;
+    const rowFilter =
+      value.rowFilter && typeof value.rowFilter === 'object' && !Array.isArray(value.rowFilter)
+        ? (resolveTemplateValue(value.rowFilter, vars) as { includeWhen?: any; excludeWhen?: any })
+        : undefined;
+    const pickFields = Array.isArray(value.pickFields)
+      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+      : [];
+    return collection
+      .filter(entry => {
+        if (!entry || typeof entry !== 'object') return false;
+        const rowCtx = buildRowVisibilityContext({
+          row: entry as Record<string, any>,
+          groupKey: `${value.groupId || value.collectionGroupId || 'collection'}`.trim() || 'collection',
+          parentValues: undefined,
+          topCtx
+        });
+        if (rowFilter?.includeWhen && !matchesWhenClause(rowFilter.includeWhen as any, rowCtx.ctx, { now: new Date() })) {
+          return false;
+        }
+        if (rowFilter?.excludeWhen && matchesWhenClause(rowFilter.excludeWhen as any, rowCtx.ctx, { now: new Date() })) {
+          return false;
+        }
+        if (when && !matchesWhenClause(when as any, rowCtx.ctx, { now: new Date() })) return false;
+        return true;
+      })
+      .map(entry => {
+        if (!pickFields.length || !entry || typeof entry !== 'object') return entry;
+        const next: Record<string, any> = {};
+        pickFields.forEach(fieldId => {
+          next[fieldId] = (entry as Record<string, any>)[fieldId];
+        });
+        return next;
+      });
+  }
+
+  private resolveIfPresentComputedValue(value: Record<string, any>, vars: Record<string, any>): any {
+    const path = `${value.path || ''}`.trim();
+    const resolved = path ? this.readTemplatePathValue(path, vars) : '';
+    if (this.hasResolvedComputedValue(resolved)) {
+      return this.resolveConfigComputedValue(resolveTemplateValue(value.then, vars), vars);
+    }
+    return this.resolveConfigComputedValue(resolveTemplateValue(value.else, vars), vars);
+  }
+
   private splitDelimitedValues(value: any, delimiterRaw?: any): string[] {
     const raw = `${value ?? ''}`.trim();
     if (!raw) return [];
@@ -2010,7 +2096,7 @@ export class WebFormService {
   }
 
   private resolveLookupSetIntersection(value: Record<string, any>, vars: Record<string, any>): string {
-    const collection = this.normalizeLookupCollection(this.readTemplatePathValue(value.collectionPath, vars));
+    const collection = this.resolveComputedCollection(value, vars);
     const itemFieldId = `${value.itemFieldId || ''}`.trim();
     const itemValues = collection
       .map(entry => {
@@ -2074,6 +2160,15 @@ export class WebFormService {
     const op = `${(value as Record<string, any>).op || ''}`.trim();
     if (op === 'lookupSetIntersection') {
       return this.resolveLookupSetIntersection(value as Record<string, any>, vars);
+    }
+    if (op === 'firstNonEmpty') {
+      return this.resolveFirstNonEmptyComputedValue(value as Record<string, any>, vars);
+    }
+    if (op === 'filterCollection') {
+      return this.filterComputedCollection(value as Record<string, any>, vars);
+    }
+    if (op === 'ifPresent') {
+      return this.resolveIfPresentComputedValue(value as Record<string, any>, vars);
     }
     const out: Record<string, any> = {};
     Object.keys(value as Record<string, any>).forEach(key => {
