@@ -1132,6 +1132,22 @@ export interface QuestionUiConfig {
    */
   helperPlacement?: 'belowLabel' | 'placeholder';
   /**
+   * Optional lower bound for DATE inputs.
+   *
+   * Supported values:
+   * - `today`: the current local date
+   * - explicit `YYYY-MM-DD`
+   */
+  minDate?: string;
+  /**
+   * Optional upper bound for DATE inputs.
+   *
+   * Supported values:
+   * - `today`: the current local date
+   * - explicit `YYYY-MM-DD`
+   */
+  maxDate?: string;
+  /**
    * When true, render the field value as a read-only label in the edit view.
    */
   renderAsLabel?: boolean;

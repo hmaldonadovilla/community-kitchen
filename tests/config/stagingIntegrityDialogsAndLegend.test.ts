@@ -100,6 +100,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(customer?.changeDialog?.cancelLabel)).toBe(true);
 
       const prepDate = findQuestion(questions, 'MP_PREP_DATE');
+      expect(prepDate?.ui?.minDate).toBe('today');
       expect(prepDate?.changeDialog?.when).toEqual({
         all: [
           { fieldId: 'MP_SERVICE', notEmpty: true },
@@ -156,6 +157,8 @@ describe('staging integrity dialogs and list legend config', () => {
           : [];
       expect(legend.length).toBe(4);
       containsIcons(legend, ['edit', 'view', 'copy', 'warning']);
+      const copyLegend = legend.find((entry: any) => (entry?.icon || '').toString().trim().toLowerCase() === 'copy');
+      expect(copyLegend?.text?.en).toBe('Copy order and recipe information');
 
       const columnsRaw = Number(root?.listViewLegendColumns ?? root?.listView?.legendColumns);
       expect(columnsRaw).toBe(2);
@@ -174,6 +177,16 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(future?.button?.action).toBe('listViewSearchPreset');
       expect(future?.button?.lookaheadDays).toBe(7);
       expect(future?.button?.includeToday).toBe(true);
+    };
+
+    const assertUnlockDialog = (questions: any[]) => {
+      const unlock = findQuestion(questions, 'MP_UNLOCK_FOR_EDIT');
+      const confirm = unlock?.button?.confirm;
+      expect(confirm?.message?.en).toBe(
+        'Unlocking record will allow any user to edit Order information. Do you wish to continue?'
+      );
+      expect(confirm?.confirmLabel?.en).toBe('Unlock record for editing');
+      expect(confirm?.cancelLabel?.en).toBe('Cancel, keep the record locked');
     };
 
     const assertGuidedStepLayout = (root: any, questions: any[]) => {
@@ -555,6 +568,8 @@ describe('staging integrity dialogs and list legend config', () => {
     assertMealProductionLegend(cfg.definition);
     assertSearchPresets(cfg.questions);
     assertSearchPresets(cfg.definition?.questions || []);
+    assertUnlockDialog(cfg.questions);
+    assertUnlockDialog(cfg.definition?.questions || []);
     expect(cfg.form?.reservationLifecycle?.reconcileOnFinalSubmit?.refreshMode).toBe('revisionOnly');
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);

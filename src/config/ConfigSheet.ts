@@ -2713,6 +2713,27 @@ export class ConfigSheet {
         rawUi.helperLocation ??
         rawUi.helper_location
     );
+    const normalizeDateBound = (raw: any): string | undefined => {
+      if (raw === undefined || raw === null) return undefined;
+      const candidate = raw.toString().trim();
+      return candidate || undefined;
+    };
+    const minDate = normalizeDateBound(
+      rawUi.minDate ??
+        rawUi.min_date ??
+        rawUi.dateMin ??
+        rawUi.date_min ??
+        rawUi.minimumDate ??
+        rawUi.minimum_date
+    );
+    const maxDate = normalizeDateBound(
+      rawUi.maxDate ??
+        rawUi.max_date ??
+        rawUi.dateMax ??
+        rawUi.date_max ??
+        rawUi.maximumDate ??
+        rawUi.maximum_date
+    );
 
     const normalizeBool = (v: any): boolean | undefined => {
       if (v === undefined || v === null) return undefined;
@@ -2786,6 +2807,8 @@ export class ConfigSheet {
     if (helperTextBelowLabel !== undefined) (cfg as any).helperTextBelowLabel = helperTextBelowLabel;
     if (helperTextPlaceholder !== undefined) (cfg as any).helperTextPlaceholder = helperTextPlaceholder;
     if (helperPlacement !== undefined) (cfg as any).helperPlacement = helperPlacement;
+    if (minDate !== undefined) (cfg as any).minDate = minDate;
+    if (maxDate !== undefined) (cfg as any).maxDate = maxDate;
     if (hideLabel === true) cfg.hideLabel = true;
     if (summaryHideLabel !== undefined) cfg.summaryHideLabel = summaryHideLabel;
     if (summaryVisibility) cfg.summaryVisibility = summaryVisibility;

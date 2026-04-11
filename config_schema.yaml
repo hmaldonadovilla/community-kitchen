@@ -1306,6 +1306,22 @@ components:
             Where to render `helperText`.
             - `belowLabel`: render as supporting text below the field control (default)
             - `placeholder`: render inside the control as a placeholder (when supported; falls back to belowLabel)
+        minDate:
+          type: string
+          description: |
+            Optional lower bound for DATE inputs.
+
+            Supported values:
+            - `today`: use the current local date
+            - explicit `YYYY-MM-DD`
+        maxDate:
+          type: string
+          description: |
+            Optional upper bound for DATE inputs.
+
+            Supported values:
+            - `today`: use the current local date
+            - explicit `YYYY-MM-DD`
         renderAsLabel:
           type: boolean
           description: |

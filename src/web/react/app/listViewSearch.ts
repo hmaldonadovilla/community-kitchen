@@ -34,11 +34,15 @@ export const normalizeToIsoDateLocal = (value: any): string | null => {
 };
 
 /**
- * The list search clear icon is used to clear text entry only in text/advanced modes.
- * For date mode, it must also clear the applied filter so the list resets immediately.
+ * The list search clear icon clears the input box only.
+ *
+ * In date mode we intentionally keep the applied query until the user selects a new
+ * date or explicitly clears results, so the list does not suddenly expand to "all records"
+ * while the user is preparing the next date search.
  */
 export const shouldClearAppliedQueryOnInputClear = (mode: string | null | undefined): boolean => {
-  return (mode || '').toString().trim().toLowerCase() === 'date';
+  void mode;
+  return false;
 };
 
 export const resolveOldestPrefetchedIsoDate = (items: Array<Record<string, any>> | undefined | null, fieldId: string): string | null => {

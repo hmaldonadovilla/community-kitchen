@@ -113,6 +113,37 @@ describe('ConfigSheet', () => {
     });
   });
 
+  test('getQuestions preserves ui.minDate and ui.maxDate', () => {
+    const sheet = mockSS.insertSheet('Config: DateBounds');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'Q1',
+        'DATE',
+        'Production date',
+        'Production date',
+        'Production date',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"ui":{"minDate":"today","maxDate":"2026-12-31"}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: DateBounds');
+    expect(questions.length).toBe(1);
+    expect(questions[0].ui).toEqual({
+      minDate: 'today',
+      maxDate: '2026-12-31'
+    });
+  });
+
   test('getQuestions parses changeDialog.cancelAction', () => {
     const sheet = mockSS.insertSheet('Config: ChangeDialogCancelAction');
     const exampleRows = [

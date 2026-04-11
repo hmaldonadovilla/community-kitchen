@@ -369,6 +369,19 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
         ```
 
+    - **DATE input bounds**: Constrain date entry with `ui.minDate` / `ui.maxDate`.
+      - Supported values:
+        - `today`
+        - explicit `YYYY-MM-DD`
+
+        ```json
+        {
+          "ui": {
+            "minDate": "today"
+          }
+        }
+        ```
+
     - **Custom required-field message (localized)**: For required fields, you can override the default required error message by adding `requiredMessage` to the field’s Config JSON. The message supports `{field}` (resolved to the localized field label).
       - For `FILE_UPLOAD` fields, this is used when the effective minimum is 1 (i.e., `required: true` with no `minFiles`, or `uploadConfig.minFiles: 1`). For higher minimums, use `uploadConfig.errorMessages.minFiles`.
 

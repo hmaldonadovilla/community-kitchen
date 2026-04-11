@@ -29,9 +29,9 @@ describe('listViewSearch', () => {
     expect(normalizeToIsoDateLocal(iso)).toBe(expected);
   });
 
-  it('only clears applied query via clear-input in date mode', () => {
-    expect(shouldClearAppliedQueryOnInputClear('date')).toBe(true);
-    expect(shouldClearAppliedQueryOnInputClear('DATE')).toBe(true);
+  it('keeps the applied query when clearing the input in date mode', () => {
+    expect(shouldClearAppliedQueryOnInputClear('date')).toBe(false);
+    expect(shouldClearAppliedQueryOnInputClear('DATE')).toBe(false);
     expect(shouldClearAppliedQueryOnInputClear('text')).toBe(false);
     expect(shouldClearAppliedQueryOnInputClear('advanced')).toBe(false);
     expect(shouldClearAppliedQueryOnInputClear(undefined)).toBe(false);

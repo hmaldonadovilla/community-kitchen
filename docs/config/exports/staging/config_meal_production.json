@@ -332,9 +332,9 @@
               },
               {
                 "text": {
-                  "en": "Copy",
-                  "fr": "Copier",
-                  "nl": "Kopieren"
+                  "en": "Copy order and recipe information",
+                  "fr": "Copier les informations de commande et de recette",
+                  "nl": "Bestel- en receptinformatie kopiëren"
                 },
                 "hideText": true,
                 "style": "link",
@@ -376,9 +376,9 @@
       {
         "icon": "copy",
         "text": {
-          "en": "Copy",
-          "fr": "Copier",
-          "nl": "Kopieren"
+          "en": "Copy order and recipe information",
+          "fr": "Copier les informations de commande et de recette",
+          "nl": "Bestel- en receptinformatie kopiëren"
         }
       },
       {
@@ -3562,7 +3562,8 @@
       "required": true,
       "listView": false,
       "ui": {
-        "labelLayout": "inline"
+        "labelLayout": "inline",
+        "minDate": "today"
       },
       "options": [],
       "optionsFr": [],
@@ -6263,13 +6264,13 @@
         "navigateTo": "form",
         "confirm": {
           "message": {
-            "en": "Unlock this record to return it to In progress so you can edit order details again?"
+            "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
           },
           "confirmLabel": {
-            "en": "Unlock and edit"
+            "en": "Unlock record for editing"
           },
           "cancelLabel": {
-            "en": "Cancel"
+            "en": "Cancel, keep the record locked"
           }
         }
       }
@@ -6687,7 +6688,8 @@
         "required": true,
         "listView": false,
         "ui": {
-          "labelLayout": "inline"
+          "labelLayout": "inline",
+          "minDate": "today"
         },
         "options": [],
         "optionsFr": [],
@@ -9447,13 +9449,13 @@
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "Unlock this record to return it to In progress so you can edit order details again?"
+              "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
             },
             "confirmLabel": {
-              "en": "Unlock and edit"
+              "en": "Unlock record for editing"
             },
             "cancelLabel": {
-              "en": "Cancel"
+              "en": "Cancel, keep the record locked"
             }
           }
         }
@@ -9674,9 +9676,9 @@
                 },
                 {
                   "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
+                    "en": "Copy order and recipe information",
+                    "fr": "Copier les informations de commande et de recette",
+                    "nl": "Bestel- en receptinformatie kopiëren"
                   },
                   "hideText": true,
                   "style": "link",
@@ -9727,9 +9729,9 @@
         {
           "icon": "copy",
           "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
+            "en": "Copy order and recipe information",
+            "fr": "Copier les informations de commande et de recette",
+            "nl": "Bestel- en receptinformatie kopiëren"
           }
         },
         {

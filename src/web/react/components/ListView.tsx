@@ -2103,7 +2103,9 @@ const ListView: React.FC<ListViewProps> = ({
               ariaLabel={tSystem('list.searchDateLabel', language, 'Filter by date')}
               onChange={next => {
                 setSearchInputValue(next);
-                setSearchQueryValue(next);
+                if ((next || '').trim()) {
+                  setSearchQueryValue(next);
+                }
                 if (!advancedSearchEnabled && advancedHasSearched) {
                   setAdvancedFieldFilters({});
                   setAdvancedHasSearched(false);

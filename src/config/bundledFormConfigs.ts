@@ -10410,9 +10410,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 {
                   "text": {
-                    "en": "Copy",
-                    "fr": "Copier",
-                    "nl": "Kopieren"
+                    "en": "Copy order and recipe information",
+                    "fr": "Copier les informations de commande et de recette",
+                    "nl": "Bestel- en receptinformatie kopiëren"
                   },
                   "hideText": true,
                   "style": "link",
@@ -10454,9 +10454,9 @@ export const BUNDLED_FORM_CONFIGS = [
         {
           "icon": "copy",
           "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
+            "en": "Copy order and recipe information",
+            "fr": "Copier les informations de commande et de recette",
+            "nl": "Bestel- en receptinformatie kopiëren"
           }
         },
         {
@@ -13640,7 +13640,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": true,
         "listView": false,
         "ui": {
-          "labelLayout": "inline"
+          "labelLayout": "inline",
+          "minDate": "today"
         },
         "options": [],
         "optionsFr": [],
@@ -16341,13 +16342,13 @@ export const BUNDLED_FORM_CONFIGS = [
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "Unlock this record to return it to In progress so you can edit order details again?"
+              "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
             },
             "confirmLabel": {
-              "en": "Unlock and edit"
+              "en": "Unlock record for editing"
             },
             "cancelLabel": {
-              "en": "Cancel"
+              "en": "Cancel, keep the record locked"
             }
           }
         }
@@ -16765,7 +16766,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": true,
           "listView": false,
           "ui": {
-            "labelLayout": "inline"
+            "labelLayout": "inline",
+            "minDate": "today"
           },
           "options": [],
           "optionsFr": [],
@@ -19525,13 +19527,13 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigateTo": "form",
             "confirm": {
               "message": {
-                "en": "Unlock this record to return it to In progress so you can edit order details again?"
+                "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
               },
               "confirmLabel": {
-                "en": "Unlock and edit"
+                "en": "Unlock record for editing"
               },
               "cancelLabel": {
-                "en": "Cancel"
+                "en": "Cancel, keep the record locked"
               }
             }
           }
@@ -19752,9 +19754,9 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   {
                     "text": {
-                      "en": "Copy",
-                      "fr": "Copier",
-                      "nl": "Kopieren"
+                      "en": "Copy order and recipe information",
+                      "fr": "Copier les informations de commande et de recette",
+                      "nl": "Bestel- en receptinformatie kopiëren"
                     },
                     "hideText": true,
                     "style": "link",
@@ -19805,9 +19807,9 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "icon": "copy",
             "text": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopieren"
+              "en": "Copy order and recipe information",
+              "fr": "Copier les informations de commande et de recette",
+              "nl": "Bestel- en receptinformatie kopiëren"
             }
           },
           {
@@ -22853,7 +22855,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "ded6708b899869500467c3f973ab765b"
+    "cacheFingerprint": "08eaa75a1503511dbd9f8dff2a387a6b"
   },
   {
     "formKey": "Config: Recipes",

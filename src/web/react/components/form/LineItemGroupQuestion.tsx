@@ -4979,6 +4979,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   <DateInput
                     value={fieldValue}
                     language={language}
+                    min={(field as any)?.ui?.minDate}
+                    max={(field as any)?.ui?.maxDate}
                     readOnly={!!field.valueMap || fieldInputDisabled}
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
@@ -6317,6 +6319,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={dateValue}
                             language={language}
+                            min={(field as any)?.ui?.minDate}
+                            max={(field as any)?.ui?.maxDate}
                             readOnly={field?.readOnly === true}
                             ariaLabel={labelText}
                             ariaDescribedBy={helperId}
@@ -7641,6 +7645,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={fieldValue}
                             language={language}
+                            min={(flatField as any)?.ui?.minDate}
+                            max={(flatField as any)?.ui?.maxDate}
                             readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
@@ -9001,6 +9007,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={fieldValue}
                             language={language}
+                            min={(flatField as any)?.ui?.minDate}
+                            max={(flatField as any)?.ui?.maxDate}
                             readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             ariaDescribedBy={helperId}
@@ -9762,6 +9770,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <DateInput
                             value={fieldValue}
                             language={language}
+                            min={(field as any)?.ui?.minDate}
+                            max={(field as any)?.ui?.maxDate}
                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                             ariaDescribedBy={helperId}
@@ -11078,6 +11088,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <DateInput
                                 value={fieldValue}
                                 language={language}
+                                min={(field as any)?.ui?.minDate}
+                                max={(field as any)?.ui?.maxDate}
                                 readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 ariaDescribedBy={helperId}
@@ -12743,6 +12755,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
+                                            min={(field as any)?.ui?.minDate}
+                                            max={(field as any)?.ui?.maxDate}
                                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
@@ -13378,6 +13392,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           <DateInput
                                             value={fieldValue}
                                             language={language}
+                                            min={(field as any)?.ui?.minDate}
+                                            max={(field as any)?.ui?.maxDate}
                                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             ariaDescribedBy={helperId}
@@ -13760,6 +13776,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                         <DateInput
                                           value={toDateInputValue((subRow.values[field.id] as any) ?? '')}
                                           language={language}
+                                          min={(field as any)?.ui?.minDate}
+                                          max={(field as any)?.ui?.maxDate}
                                           readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                           ariaLabel={labelText}
                                           ariaDescribedBy={helperId}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { LangCode } from '../../../types';
 import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
+import { isDateInputValueWithinBounds, resolveDateInputBound } from './dateInputBounds';
 
 /**
  * DATE input wrapper that keeps the native calendar, but overlays a formatted display value
@@ -13,12 +14,16 @@ export const DateInput: React.FC<{
   language: LangCode;
   readOnly?: boolean;
   disabled?: boolean;
+  min?: string;
+  max?: string;
   ariaLabel?: string;
   ariaDescribedBy?: string;
-}> = ({ id, value, onChange, language, readOnly, disabled, ariaLabel, ariaDescribedBy }) => {
+}> = ({ id, value, onChange, language, readOnly, disabled, min, max, ariaLabel, ariaDescribedBy }) => {
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
   const isDisabled = Boolean(disabled || readOnly);
+  const resolvedMin = useMemo(() => resolveDateInputBound(min), [min]);
+  const resolvedMax = useMemo(() => resolveDateInputBound(max), [max]);
 
   const isValidYmd = /^\d{4}-\d{2}-\d{2}$/.test((value || '').trim());
   // Show overlay when:
@@ -40,10 +45,14 @@ export const DateInput: React.FC<{
         value={value}
         onChange={e => {
           if (isDisabled) return;
-          onChange(e.target.value);
+          const next = e.target.value;
+          if (!isDateInputValueWithinBounds(next, { min: resolvedMin, max: resolvedMax })) return;
+          onChange(next);
         }}
         readOnly={readOnly}
         disabled={isDisabled}
+        min={resolvedMin}
+        max={resolvedMax}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         onFocus={() => {
@@ -68,4 +77,3 @@ export const DateInput: React.FC<{
     </div>
   );
 };
-

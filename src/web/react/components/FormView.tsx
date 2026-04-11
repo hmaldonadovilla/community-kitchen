@@ -9047,6 +9047,8 @@ const FormView: React.FC<FormViewProps> = ({
               <DateInput
                 value={inputValue}
                 language={language}
+                min={(q as any)?.ui?.minDate}
+                max={(q as any)?.ui?.maxDate}
                 readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
                 ariaLabel={resolveLabel(q, language)}
@@ -11398,6 +11400,8 @@ const FormView: React.FC<FormViewProps> = ({
                                       <DateInput
                                         value={fieldValue}
                                         language={language}
+                                        min={(field as any)?.ui?.minDate}
+                                        max={(field as any)?.ui?.maxDate}
                                         readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                         ariaLabel={resolveFieldLabel(field, language, field.id)}
                                         onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
@@ -12226,6 +12230,8 @@ const FormView: React.FC<FormViewProps> = ({
                             <DateInput
                               value={fieldValue}
                               language={language}
+                              min={(field as any)?.ui?.minDate}
+                              max={(field as any)?.ui?.maxDate}
                               readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               ariaLabel={resolveFieldLabel(field, language, field.id)}
                               onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
@@ -12837,6 +12843,8 @@ const FormView: React.FC<FormViewProps> = ({
                                 <DateInput
                                   value={fieldValue}
                                   language={language}
+                                  min={(field as any)?.ui?.minDate}
+                                  max={(field as any)?.ui?.maxDate}
                                   readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                   ariaLabel={resolveFieldLabel(field, language, field.id)}
                                   onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
