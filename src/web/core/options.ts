@@ -361,13 +361,24 @@ export const loadOptionsFromDataSource = async (
 
     const valueKey = pickValueKey();
     if (!valueKey) return null;
+    const labelKey = (() => {
+      const mappedLabelKey = findMappingKey('label');
+      if (!mappedLabelKey) return '';
+      return candidateKeys.includes(mappedLabelKey) ? mappedLabelKey : '';
+    })();
     const tooltips: Record<string, string> = {};
     const rawWithValue = items.map((row: any) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
       const rawVal = row?.[valueKey];
       const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
       if (!val) return row;
-      return { ...row, __ckOptionValue: val };
+      const rawLabel = labelKey ? row?.[labelKey] : undefined;
+      const label = rawLabel === null || rawLabel === undefined ? '' : rawLabel.toString().trim();
+      return {
+        ...row,
+        __ckOptionValue: val,
+        ...(label ? { __ckOptionLabel: label } : {})
+      };
     });
     const mappedValues = items
       .map((row: any) => {

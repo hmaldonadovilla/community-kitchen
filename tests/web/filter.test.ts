@@ -273,4 +273,5 @@ describe('buildLocalizedOptions (optionSort)', () => {
     const res = buildLocalizedOptions(options, options.en, 'EN', { sort: 'source' });
     expect(res.map(r => r.value)).toEqual(['B', 'A', 'C']);
   });
+
 });

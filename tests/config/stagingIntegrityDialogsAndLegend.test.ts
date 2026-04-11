@@ -91,6 +91,8 @@ describe('staging integrity dialogs and list legend config', () => {
 
     const assertChangeDialogs = (questions: any[]) => {
       const customer = findQuestion(questions, 'MP_DISTRIBUTOR');
+      expect(customer?.dataSource?.mapping?.value).toBe('NICKNAME');
+      expect(customer?.dataSource?.mapping?.label).toBe('DIST_NAME');
       expect(customer?.changeDialog?.when).toEqual({ fieldId: 'MP_PREP_DATE', notEmpty: true });
       expect(hasNonEmptyEnText(customer?.changeDialog?.title)).toBe(true);
       expect(hasNonEmptyEnText(customer?.changeDialog?.message)).toBe(true);

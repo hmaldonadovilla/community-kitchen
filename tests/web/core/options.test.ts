@@ -195,6 +195,24 @@ describe('core options helpers', () => {
       expect(result?.en).toEqual(['First', 'Second']);
     });
 
+    it('stores the mapped label on raw option rows when mapping.label is provided', async () => {
+      fetchDataSourceMock.mockResolvedValue({
+        items: [
+          { nickname: 'LP', fullName: 'Le Phare' },
+          { nickname: 'BEL', fullName: 'Belliard' }
+        ]
+      });
+      const result = await loadOptionsFromDataSource(
+        { id: 'CUSTOMERS', mapping: { value: 'nickname', label: 'fullName' } } as any,
+        'EN'
+      );
+      expect(result?.en).toEqual(['LP', 'BEL']);
+      expect(result?.raw).toEqual([
+        expect.objectContaining({ __ckOptionValue: 'LP', __ckOptionLabel: 'Le Phare' }),
+        expect.objectContaining({ __ckOptionValue: 'BEL', __ckOptionLabel: 'Belliard' })
+      ]);
+    });
+
     it('swallows fetch errors and returns null', async () => {
       fetchDataSourceMock.mockRejectedValue(new Error('boom'));
       await expect(loadOptionsFromDataSource({ id: 'ERR' } as any, 'EN')).resolves.toBeNull();

@@ -3094,7 +3094,8 @@
         ],
         "limit": 100,
         "mapping": {
-          "value": "NICKNAME"
+          "value": "NICKNAME",
+          "label": "DIST_NAME"
         }
       },
       "changeDialog": {
@@ -6069,7 +6070,8 @@
           ],
           "limit": 100,
           "mapping": {
-            "value": "NICKNAME"
+            "value": "NICKNAME",
+            "label": "DIST_NAME"
           }
         },
         "changeDialog": {

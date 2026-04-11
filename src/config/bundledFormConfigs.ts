@@ -13172,7 +13172,8 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "limit": 100,
           "mapping": {
-            "value": "NICKNAME"
+            "value": "NICKNAME",
+            "label": "DIST_NAME"
           }
         },
         "changeDialog": {
@@ -16147,7 +16148,8 @@ export const BUNDLED_FORM_CONFIGS = [
             ],
             "limit": 100,
             "mapping": {
-              "value": "NICKNAME"
+              "value": "NICKNAME",
+              "label": "DIST_NAME"
             }
           },
           "changeDialog": {
@@ -22091,7 +22093,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "8dcf5d0ab949d0b8b45b78bef8fe4047"
+    "cacheFingerprint": "3d0a0eae70b41661b1a6c12b57a678f6"
   },
   {
     "formKey": "Config: Recipes",

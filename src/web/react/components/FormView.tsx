@@ -13508,10 +13508,23 @@ const FormView: React.FC<FormViewProps> = ({
         const rawList = Array.isArray(raw) ? raw : [raw];
         const ensuredAllowed = Array.from(new Set([...allowed, ...rawList.map(v => (v ?? '').toString()).filter(Boolean)]));
         const opts = buildLocalizedOptions(optionSet, ensuredAllowed, language, { sort: optionSortFor(q) });
+        const rawLabelByValue = (() => {
+          const map = new Map<string, string>();
+          const rows = Array.isArray(optionSet.raw) ? optionSet.raw : [];
+          rows.forEach((row: any) => {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+            const value = row.__ckOptionValue === null || row.__ckOptionValue === undefined ? '' : String(row.__ckOptionValue).trim();
+            const label =
+              row.__ckOptionLabel === null || row.__ckOptionLabel === undefined ? '' : String(row.__ckOptionLabel).trim();
+            if (!value || !label || map.has(value)) return;
+            map.set(value, label);
+          });
+          return map;
+        })();
         const labels = rawList
           .map(v => (v ?? '').toString())
           .filter(Boolean)
-          .map(v => opts.find(o => o.value === v)?.label || v);
+          .map(v => rawLabelByValue.get(v) || opts.find(o => o.value === v)?.label || v);
         return labels.filter(Boolean).join(', ');
       }
 

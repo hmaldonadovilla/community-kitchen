@@ -2736,6 +2736,9 @@ components:
           description: |
             Optional map from source column -> target field id (used for prefill/line-item injection).
 
+            For `mode: options`, the mapping may also define special targets such as `value` and `label`
+            so the UI can store one field while displaying another.
+
             Source column keys can reference either the raw header text or a bracket key when the source header uses `Label [KEY]`.
         tooltipField:
           type: string

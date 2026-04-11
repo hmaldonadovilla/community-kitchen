@@ -111,9 +111,7 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
                 <span style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, lineHeight: 1 }}>›</span>
               )}
             </span>
-            <span>
-              {idx + 1}. {label || step.id}
-            </span>
+            <span>{label || step.id}</span>
           </button>
         );
       })}

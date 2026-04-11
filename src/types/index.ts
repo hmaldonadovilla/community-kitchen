@@ -2921,7 +2921,7 @@ export interface DataSourceConfig {
   statusAllowList?: string[];
   projection?: string[]; // limit columns returned
   limit?: number; // optional max rows
-  mapping?: Record<string, string>; // optional map from source column -> target field id
+  mapping?: Record<string, string>; // optional map from source column -> target field id / special keys like value or label
   tooltipField?: string; // optional column used for option tooltips
   tooltipLabel?: LocalizedString | string; // optional localized label for tooltip trigger/header
   /**

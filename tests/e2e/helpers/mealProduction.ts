@@ -49,7 +49,7 @@ export async function openNewOrderFromPreset(page: Page, customer: string): Prom
   const frame = await openMealProductionHome(page);
   await dismissIntroIfPresent(frame);
   await frame.getByRole('button', { name: customer }).click();
-  await expect(frame.getByText('1. Order', { exact: false })).toBeVisible({ timeout: 10_000 });
+  await expect(frame.getByText('Order', { exact: false })).toBeVisible({ timeout: 10_000 });
   await dismissIntroIfPresent(frame);
   await waitForDuplicateCheckToFinish(frame);
   return frame;
