@@ -2124,7 +2124,20 @@
               },
               "collapsedFieldsInHeader": true,
               "displayMode": "inline",
-              "groupOverride": {},
+              "groupOverride": {
+                "totals": [
+                  {
+                    "type": "sum",
+                    "fieldId": "ORD_QTY",
+                    "label": {
+                      "en": "Total ordered",
+                      "fr": "Total commandé",
+                      "nl": "Totaal besteld"
+                    },
+                    "decimalPlaces": 0
+                  }
+                ]
+              },
               "rowFlow": {
                 "mode": "progressive",
                 "references": {
@@ -3562,13 +3575,25 @@
       "required": true,
       "listView": false,
       "ui": {
-        "labelLayout": "inline",
-        "minDate": "today"
+        "labelLayout": "inline"
       },
       "options": [],
       "optionsFr": [],
       "optionsNl": [],
       "status": "Active",
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "MP_PREP_DATE",
+            "isInPast": true
+          },
+          "message": {
+            "en": "Dates in the past are not allowed. Please select today or a future date.",
+            "fr": "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
+            "nl": "Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum."
+          }
+        }
+      ],
       "changeDialog": {
         "when": {
           "all": [
@@ -6688,13 +6713,25 @@
         "required": true,
         "listView": false,
         "ui": {
-          "labelLayout": "inline",
-          "minDate": "today"
+          "labelLayout": "inline"
         },
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "MP_PREP_DATE",
+              "isInPast": true
+            },
+            "message": {
+              "en": "Dates in the past are not allowed. Please select today or a future date.",
+              "fr": "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
+              "nl": "Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum."
+            }
+          }
+        ],
         "changeDialog": {
           "when": {
             "all": [
@@ -11641,7 +11678,20 @@
               },
               "collapsedFieldsInHeader": true,
               "displayMode": "inline",
-              "groupOverride": {},
+              "groupOverride": {
+                "totals": [
+                  {
+                    "type": "sum",
+                    "fieldId": "ORD_QTY",
+                    "label": {
+                      "en": "Total ordered",
+                      "fr": "Total commandé",
+                      "nl": "Totaal besteld"
+                    },
+                    "decimalPlaces": 0
+                  }
+                ]
+              },
               "rowFlow": {
                 "mode": "progressive",
                 "references": {

@@ -373,6 +373,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Supported values:
         - `today`
         - explicit `YYYY-MM-DD`
+      - If the user enters a date outside the allowed range, the client automatically snaps it back to the nearest allowed date and shows a short notice below the field.
+      - Use `ui.dateCorrectionMessages.min` / `ui.dateCorrectionMessages.max` when a form needs custom helper copy after that automatic correction.
 
         ```json
         {

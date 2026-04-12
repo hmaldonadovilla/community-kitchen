@@ -1148,6 +1148,14 @@ export interface QuestionUiConfig {
    */
   maxDate?: string;
   /**
+   * Optional localized helper text overrides shown when the client corrects a DATE value
+   * back within `minDate` / `maxDate`.
+   */
+  dateCorrectionMessages?: {
+    min?: LocalizedString;
+    max?: LocalizedString;
+  };
+  /**
    * When true, render the field value as a read-only label in the edit view.
    */
   renderAsLabel?: boolean;

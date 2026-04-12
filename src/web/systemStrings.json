@@ -76,6 +76,18 @@
       "nl": "Controleer deze wijziging voordat u doorgaat."
     }
   },
+  "dateInput": {
+    "correctedToMin": {
+      "en": "This date is no longer allowed. We set the earliest allowed date for you.",
+      "fr": "Cette date n'est plus autorisée. Nous avons défini pour vous la date autorisée la plus proche.",
+      "nl": "Deze datum is niet meer toegestaan. We hebben de eerst toegestane datum voor je ingesteld."
+    },
+    "correctedToMax": {
+      "en": "This date is no longer allowed. We set the latest allowed date for you.",
+      "fr": "Cette date n'est plus autorisée. Nous avons défini pour vous la dernière date autorisée.",
+      "nl": "Deze datum is niet meer toegestaan. We hebben de laatst toegestane datum voor je ingesteld."
+    }
+  },
   "record": {
     "checking": {
       "en": "Checking for updates…",

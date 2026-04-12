@@ -100,7 +100,21 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(customer?.changeDialog?.cancelLabel)).toBe(true);
 
       const prepDate = findQuestion(questions, 'MP_PREP_DATE');
-      expect(prepDate?.ui?.minDate).toBe('today');
+      expect(prepDate?.ui?.minDate).toBeUndefined();
+      expect(prepDate?.ui?.dateCorrectionMessages).toBeUndefined();
+      expect(prepDate?.validationRules).toEqual([
+        {
+          when: {
+            fieldId: 'MP_PREP_DATE',
+            isInPast: true
+          },
+          message: {
+            en: 'Dates in the past are not allowed. Please select today or a future date.',
+            fr: "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
+            nl: 'Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum.'
+          }
+        }
+      ]);
       expect(prepDate?.changeDialog?.when).toEqual({
         all: [
           { fieldId: 'MP_SERVICE', notEmpty: true },
@@ -307,6 +321,22 @@ describe('staging integrity dialogs and list legend config', () => {
           })
         ])
       );
+      const deliveryForm = items.find((entry: any) => entry?.id === 'deliveryForm');
+      const deliveryMeals = (deliveryForm?.include || []).find(
+        (entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST'
+      );
+      expect(deliveryMeals?.groupOverride?.totals).toEqual([
+        {
+          type: 'sum',
+          fieldId: 'ORD_QTY',
+          label: {
+            en: 'Total ordered',
+            fr: 'Total commandé',
+            nl: 'Totaal besteld'
+          },
+          decimalPlaces: 0
+        }
+      ]);
       expect(portioning?.label?.en).toBe('Portioning');
       expect(portioning?.excludeWhen).toEqual({
         fieldId: 'status',

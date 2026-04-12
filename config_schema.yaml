@@ -1314,6 +1314,8 @@ components:
             Supported values:
             - `today`: use the current local date
             - explicit `YYYY-MM-DD`
+
+            When a user enters a date before this bound, the client snaps the value back to the nearest allowed date and shows a short helper notice below the field.
         maxDate:
           type: string
           description: |
@@ -1322,6 +1324,21 @@ components:
             Supported values:
             - `today`: use the current local date
             - explicit `YYYY-MM-DD`
+
+            When a user enters a date after this bound, the client snaps the value back to the nearest allowed date and shows a short helper notice below the field.
+        dateCorrectionMessages:
+          type: object
+          description: |
+            Optional localized copy overrides for the temporary helper notice shown when the client corrects a DATE value back within `minDate` / `maxDate`.
+
+            Use this when a specific form needs a more explanatory message than the generic system fallback.
+          properties:
+            min:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown after correcting a value below `minDate`.
+            max:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown after correcting a value above `maxDate`.
         renderAsLabel:
           type: boolean
           description: |

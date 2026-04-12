@@ -68,3 +68,19 @@ export const buildBundledLandingCatalog = (configs: FormConfigExport[]): FormCat
   items.sort((a, b) => a.title.localeCompare(b.title));
   return items;
 };
+
+export const filterNavigableLandingItems = (items: FormCatalogItem[], adminEnabled: boolean): FormCatalogItem[] => {
+  const next = (Array.isArray(items) ? items : [])
+    .map(item => {
+      const rawTargetUrl = (item?.targetUrl || '').toString().trim();
+      if (!rawTargetUrl) return null;
+      return {
+        ...item,
+        targetUrl: appendAdminQuery(rawTargetUrl, adminEnabled)
+      } satisfies FormCatalogItem;
+    })
+    .filter(Boolean) as FormCatalogItem[];
+
+  next.sort((a, b) => a.title.localeCompare(b.title));
+  return next;
+};

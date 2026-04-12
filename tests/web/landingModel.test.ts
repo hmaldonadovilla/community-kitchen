@@ -1,4 +1,10 @@
-import { appendAdminQuery, buildBundledLandingCatalog, pickLandingLogoUrl, resolveLandingHeaderTitle } from '../../src/web/react/landing/model';
+import {
+  appendAdminQuery,
+  buildBundledLandingCatalog,
+  filterNavigableLandingItems,
+  pickLandingLogoUrl,
+  resolveLandingHeaderTitle
+} from '../../src/web/react/landing/model';
 
 describe('landing model helpers', () => {
   test('appendAdminQuery appends admin=true without disturbing hash fragments', () => {
@@ -98,6 +104,30 @@ describe('landing model helpers', () => {
         description: undefined,
         targetUrl: undefined,
         logoUrl: undefined
+      }
+    ]);
+  });
+
+  test('filterNavigableLandingItems keeps only resolvable targets and applies admin query', () => {
+    expect(
+      filterNavigableLandingItems(
+        [
+          { formKey: 'a', title: 'Zeta', targetUrl: 'https://example.test/zeta' },
+          { formKey: 'b', title: 'Alpha', targetUrl: '' },
+          { formKey: 'c', title: 'Beta', targetUrl: 'https://example.test/beta?x=1' }
+        ] as any,
+        true
+      )
+    ).toEqual([
+      {
+        formKey: 'c',
+        title: 'Beta',
+        targetUrl: 'https://example.test/beta?x=1&admin=true'
+      },
+      {
+        formKey: 'a',
+        title: 'Zeta',
+        targetUrl: 'https://example.test/zeta?admin=true'
       }
     ]);
   });

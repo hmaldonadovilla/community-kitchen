@@ -12202,7 +12202,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
-                "groupOverride": {},
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {
@@ -13640,13 +13653,25 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": true,
         "listView": false,
         "ui": {
-          "labelLayout": "inline",
-          "minDate": "today"
+          "labelLayout": "inline"
         },
         "options": [],
         "optionsFr": [],
         "optionsNl": [],
         "status": "Active",
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "MP_PREP_DATE",
+              "isInPast": true
+            },
+            "message": {
+              "en": "Dates in the past are not allowed. Please select today or a future date.",
+              "fr": "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
+              "nl": "Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum."
+            }
+          }
+        ],
         "changeDialog": {
           "when": {
             "all": [
@@ -16766,13 +16791,25 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": true,
           "listView": false,
           "ui": {
-            "labelLayout": "inline",
-            "minDate": "today"
+            "labelLayout": "inline"
           },
           "options": [],
           "optionsFr": [],
           "optionsNl": [],
           "status": "Active",
+          "validationRules": [
+            {
+              "when": {
+                "fieldId": "MP_PREP_DATE",
+                "isInPast": true
+              },
+              "message": {
+                "en": "Dates in the past are not allowed. Please select today or a future date.",
+                "fr": "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
+                "nl": "Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum."
+              }
+            }
+          ],
           "changeDialog": {
             "when": {
               "all": [
@@ -21719,7 +21756,20 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
-                "groupOverride": {},
+                "groupOverride": {
+                  "totals": [
+                    {
+                      "type": "sum",
+                      "fieldId": "ORD_QTY",
+                      "label": {
+                        "en": "Total ordered",
+                        "fr": "Total commandé",
+                        "nl": "Totaal besteld"
+                      },
+                      "decimalPlaces": 0
+                    }
+                  ]
+                },
                 "rowFlow": {
                   "mode": "progressive",
                   "references": {
@@ -22855,7 +22905,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "08eaa75a1503511dbd9f8dff2a387a6b"
+    "cacheFingerprint": "160afc0d22de158af56920378ceb168b"
   },
   {
     "formKey": "Config: Recipes",

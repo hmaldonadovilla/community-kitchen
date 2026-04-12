@@ -58,7 +58,7 @@ Meal Production (Steps UI) | Recipes (Home Page) | Storage and cleaning checks (
 - **System UI strings (i18n)**: App/system copy (menus, autosave banners, expand/collapse, etc.) is stored in `src/web/systemStrings.json` with defaults for EN/FR/NL.
 - **Hide labels (per field)**: Hide any field label with `ui.hideLabel: true` (top-level questions and line-item fields). By default this hides labels in both the Edit view and the native React Summary view; override Summary behavior with `ui.summaryHideLabel: true|false`.
 - **Helper text (per field)**: Add localized helper text with `ui.helperText` (legacy single text + `ui.helperPlacement`) or use dual helper copy with `ui.helperTextBelowLabel` and `ui.helperTextPlaceholder` to render both below-label help and in-control placeholder text at the same time.
-- **Date bounds (per DATE field)**: Constrain date entry with `ui.minDate` / `ui.maxDate`. Supported values are `today` and explicit `YYYY-MM-DD` strings.
+- **Date bounds (per DATE field)**: Constrain date entry with `ui.minDate` / `ui.maxDate`. Supported values are `today` and explicit `YYYY-MM-DD` strings. If a user types an out-of-range date, the client snaps it to the nearest allowed date and shows a short neutral notice below the field. Use `ui.dateCorrectionMessages.min` / `ui.dateCorrectionMessages.max` when a form needs custom explanatory copy for that temporary note.
 
 ### Line items and workflows
 

@@ -1788,11 +1788,15 @@ export const FORM_VIEW_STYLES = `
 
         /* DATE overlay: keep native picker, but show formatted text on top when not focused. */
         .ck-date-input-wrap {
+          width: 100%;
+          min-width: 0;
+        }
+        .ck-date-input-control {
           position: relative;
           width: 100%;
           min-width: 0;
         }
-        .ck-date-input-wrap > input.ck-date-input {
+        .ck-date-input-control > input.ck-date-input {
           width: 100%;
           min-width: 0;
         }
@@ -1819,6 +1823,13 @@ export const FORM_VIEW_STYLES = `
           text-overflow: clip;
           color: var(--text);
           font-size: var(--ck-font-control);
+        }
+        .ck-date-input-feedback {
+          margin-top: 6px;
+          color: var(--muted);
+          font-size: var(--ck-font-label);
+          line-height: 1.35;
+          white-space: normal;
         }
         .ck-line-grid > .field,
         .ck-pair-grid > .field {

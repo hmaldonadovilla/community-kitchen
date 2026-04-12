@@ -22,3 +22,26 @@ export const isDateInputValueWithinBounds = (value: string, bounds: { min?: stri
   if (bounds.max && normalized > bounds.max) return false;
   return true;
 };
+
+export type DateInputBoundCorrection = 'min' | 'max' | null;
+
+export type DateInputBoundResolution = {
+  value: string;
+  corrected: boolean;
+  correction: DateInputBoundCorrection;
+};
+
+export const resolveDateInputValueWithinBounds = (
+  value: string,
+  bounds: { min?: string; max?: string }
+): DateInputBoundResolution => {
+  const normalized = (value || '').trim();
+  if (!normalized) return { value: '', corrected: false, correction: null };
+  if (bounds.min && normalized < bounds.min) {
+    return { value: bounds.min, corrected: true, correction: 'min' };
+  }
+  if (bounds.max && normalized > bounds.max) {
+    return { value: bounds.max, corrected: true, correction: 'max' };
+  }
+  return { value: normalized, corrected: false, correction: null };
+};
