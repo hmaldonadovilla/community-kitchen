@@ -344,6 +344,7 @@ describe('staging integrity dialogs and list legend config', () => {
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
       expect(leftovers?.excludeWhen).toBeUndefined();
+      expect(leftovers?.helpText).toBeUndefined();
       expect(root?.submitButtonLabel?.en).toBe('Complete');
       expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');

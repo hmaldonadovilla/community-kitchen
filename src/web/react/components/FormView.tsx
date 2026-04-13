@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   computeAllowedOptions,
@@ -826,7 +826,7 @@ const FormView: React.FC<FormViewProps> = ({
   const paragraphDisclaimerSyncRef = useRef<((source?: string) => void) | null>(null);
   const paragraphDisclaimerTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     valuesRef.current = values;
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);

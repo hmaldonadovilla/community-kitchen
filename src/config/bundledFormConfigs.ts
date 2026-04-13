@@ -13140,11 +13140,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Restes",
               "nl": "Restanten"
             },
-            "helpText": {
-              "en": "Enter leftover portions for each meal type only when leftovers exist. Add any partial leftovers below before you complete the meal production report.",
-              "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
-              "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
-            },
             "navigation": {
               "milestoneAction": {
                 "type": "followupBatch",
@@ -22694,11 +22689,6 @@ export const BUNDLED_FORM_CONFIGS = [
               "fr": "Restes",
               "nl": "Restanten"
             },
-            "helpText": {
-              "en": "Enter leftover portions for each meal type only when leftovers exist. Add any partial leftovers below before you complete the meal production report.",
-              "fr": "Saisissez le nombre de portions restantes pour chaque type de repas et utilisez 0 s'il n'y en a pas. Ajoutez ensuite les restes partiels avant de finaliser le rapport de production des repas.",
-              "nl": "Voer het aantal resterende porties per maaltijdtype in en gebruik 0 als er geen zijn. Voeg daarna eventuele gedeeltelijke restanten hieronder toe voordat je het maaltijdproductierapport afrondt."
-            },
             "navigation": {
               "milestoneAction": {
                 "type": "followupBatch",
@@ -22905,7 +22895,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "160afc0d22de158af56920378ceb168b"
+    "cacheFingerprint": "2f7dcddf33632dd8cfa015ddf8f769d9"
   },
   {
     "formKey": "Config: Recipes",

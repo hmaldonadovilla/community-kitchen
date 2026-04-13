@@ -79,9 +79,14 @@ export const shouldSuppressInitialDateChangeDialog = (args: {
   const fieldType = normalizeId(args.fieldType).toUpperCase();
   if (args.scope !== 'top' || fieldType !== 'DATE') return false;
   if (args.initialEntryCompletedByFieldPath[fieldPath]) return false;
-  void args.baselineValues;
-  void args.fieldId;
-  if (isDialogEmptyValue(args.prevValue) && !isDialogEmptyValue(args.nextValue)) {
+  const baselineValue =
+    args.baselineValues && typeof args.baselineValues === 'object'
+      ? (args.baselineValues as Record<string, FieldValue>)[normalizeId(args.fieldId) || fieldPath]
+      : undefined;
+  const hasFirstEntryValue = !isDialogEmptyValue(args.nextValue);
+  const previousLooksEmpty = isDialogEmptyValue(args.prevValue);
+  const baselineLooksEmpty = isDialogEmptyValue(baselineValue as FieldValue);
+  if (hasFirstEntryValue && (previousLooksEmpty || baselineLooksEmpty)) {
     args.initialEntryInProgressByFieldPath[fieldPath] = true;
   }
   return args.initialEntryInProgressByFieldPath[fieldPath] === true;

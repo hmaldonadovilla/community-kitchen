@@ -75,6 +75,25 @@ describe('initial DATE change-dialog guard', () => {
     expect(suppress).toBe(false);
   });
 
+  it('suppresses copied draft date entry when the baseline is empty even if the previous ref value is stale', () => {
+    const inProgress: Record<string, boolean> = {};
+    const completed: Record<string, boolean> = {};
+
+    const suppress = shouldSuppressInitialDateChangeDialog({
+      scope: 'top',
+      fieldType: 'DATE',
+      fieldPath: 'MP_PREP_DATE',
+      fieldId: 'MP_PREP_DATE',
+      prevValue: '2026-04-12',
+      nextValue: '2026-04-15',
+      baselineValues: { MP_PREP_DATE: '' } as any,
+      initialEntryInProgressByFieldPath: inProgress,
+      initialEntryCompletedByFieldPath: completed
+    });
+
+    expect(suppress).toBe(true);
+  });
+
   it('does not suppress for non-top or non-date fields', () => {
     const inProgress: Record<string, boolean> = {};
     const completed: Record<string, boolean> = {};

@@ -1148,6 +1148,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
   const fieldChangeDateInitialEntryInProgressRef = useRef<Record<string, boolean>>({});
   const fieldChangeDateInitialEntryCompletedRef = useRef<Record<string, boolean>>({});
+  const resetFieldChangeTransientState = useCallback(() => {
+    fieldChangePendingRef.current = {};
+    fieldChangeActiveRef.current = null;
+    fieldChangeDateInitialEntryInProgressRef.current = {};
+    fieldChangeDateInitialEntryCompletedRef.current = {};
+  }, []);
   const pendingDeletedRecordIdsRef = useRef<string[]>([]);
   const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
   const [pendingDeletedRecordApplyTick, setPendingDeletedRecordApplyTick] = useState(0);
@@ -4196,6 +4202,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setDedupChecking(false);
       setDedupConflict(null);
       setDedupNotice(null);
+      resetFieldChangeTransientState();
       // Applying a fresh snapshot clears any "stale record" banner and updates our base dataVersion.
       recordStaleRef.current = null;
       setRecordStale(null);
@@ -4296,7 +4303,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
 
     },
-    [dedupPrecheckRules, definition, formKey, logEvent, upsertListCacheRow]
+    [dedupPrecheckRules, definition, logEvent, rememberAutoSaveSeenState, resetFieldChangeTransientState, upsertListCacheRow]
   );
 
   const markRecordStale = useCallback(
@@ -5196,6 +5203,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       createFlowUserEditedRef.current = false;
       autoSaveUserEditedRef.current = false;
       dedupHoldRef.current = false;
+      resetFieldChangeTransientState();
       autoSaveDirtyRef.current = false;
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -5231,7 +5239,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setView('form');
       logEvent('form.reset', { reason: 'submitAnother' });
     })();
-  }, [bumpRecordSession, definition, logEvent, precheckCreateDedupAndMaybeNavigate]);
+  }, [
+    bumpRecordSession,
+    definition,
+    logEvent,
+    precheckCreateDedupAndMaybeNavigate,
+    rememberAutoSaveSeenState,
+    resetFieldChangeTransientState
+  ]);
 
   const handleDuplicateCurrent = useCallback(() => {
     bumpRecordSession({ reason: 'duplicateCurrent', nextRecordId: null });
@@ -5239,6 +5254,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     createFlowUserEditedRef.current = false;
     autoSaveUserEditedRef.current = false;
     dedupHoldRef.current = false;
+    resetFieldChangeTransientState();
     // Preserve current values/line items but clear record context so the next submit creates a new record.
     autoSaveDirtyRef.current = false;
     if (autoSaveTimerRef.current) {
@@ -5322,7 +5338,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setStatusLevel(null);
     setView('form');
     openCopyCurrentRecordDialogIfConfigured();
-  }, [bumpRecordSession, definition, logEvent, openCopyCurrentRecordDialogIfConfigured]);
+  }, [
+    bumpRecordSession,
+    definition,
+    logEvent,
+    openCopyCurrentRecordDialogIfConfigured,
+    rememberAutoSaveSeenState,
+    resetFieldChangeTransientState
+  ]);
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
@@ -6033,6 +6056,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       createFlowRef.current = true;
       createFlowUserEditedRef.current = false;
       dedupHoldRef.current = false;
+      resetFieldChangeTransientState();
       // Creating a preset record is a "new record" flow: clear draft autosave and record context.
       autoSaveDirtyRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -6074,7 +6098,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
       });
     },
-    [definition, logEvent, parseButtonRef, precheckCreateDedupAndMaybeNavigate, rememberAutoSaveSeenState, view]
+    [
+      definition,
+      logEvent,
+      parseButtonRef,
+      precheckCreateDedupAndMaybeNavigate,
+      rememberAutoSaveSeenState,
+      resetFieldChangeTransientState,
+      view
+    ]
   );
 
   const handleCustomButton = useCallback(
