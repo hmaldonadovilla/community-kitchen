@@ -12933,7 +12933,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "renderAs": "control",
                         "controlStyle": "compact",
                         "minWidth": 180,
-                        "maxWidth": 280,
+                        "maxWidth": 999,
                         "paddingChars": 10
                       },
                       {
@@ -22482,7 +22482,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "renderAs": "control",
                         "controlStyle": "compact",
                         "minWidth": 180,
-                        "maxWidth": 280,
+                        "maxWidth": 999,
                         "paddingChars": 10
                       },
                       {
@@ -22895,7 +22895,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "2f7dcddf33632dd8cfa015ddf8f769d9"
+    "cacheFingerprint": "832b570a36dd04376d268d6e425274fb"
   },
   {
     "formKey": "Config: Recipes",

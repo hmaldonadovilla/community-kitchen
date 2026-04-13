@@ -2855,7 +2855,7 @@
                       "renderAs": "control",
                       "controlStyle": "compact",
                       "minWidth": 180,
-                      "maxWidth": 280,
+                      "maxWidth": 999,
                       "paddingChars": 10
                     },
                     {
@@ -12404,7 +12404,7 @@
                       "renderAs": "control",
                       "controlStyle": "compact",
                       "minWidth": 180,
-                      "maxWidth": 280,
+                      "maxWidth": 999,
                       "paddingChars": 10
                     },
                     {

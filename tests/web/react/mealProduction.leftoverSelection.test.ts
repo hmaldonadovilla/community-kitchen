@@ -275,7 +275,8 @@ describe('meal production leftover selection config', () => {
             expect.objectContaining({
               fieldRef: 'MP_LEFTOVER_RECIPE_CAPTURE',
               fallbackFieldRef: 'cookRow.RECIPE',
-              renderAs: 'control'
+              renderAs: 'control',
+              maxWidth: 999
             }),
             expect.objectContaining({
               fieldRef: 'capturedIngredientsSelected.ING',

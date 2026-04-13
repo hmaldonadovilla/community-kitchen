@@ -21,6 +21,7 @@ export const AutoWidthInput: React.FC<{
   sanitize?: (raw: string) => string;
   selectAllOnFocus?: boolean;
   visible?: boolean;
+  constrainToContainer?: boolean;
 }> = ({
   value,
   onChange,
@@ -39,7 +40,8 @@ export const AutoWidthInput: React.FC<{
   pattern,
   sanitize,
   selectAllOnFocus,
-  visible
+  visible,
+  constrainToContainer
 }) => {
   const display = `${value || placeholder || ''}` || '0';
   const { width, rootRef, mirrorRef } = useAutoWidth(display, {
@@ -48,6 +50,7 @@ export const AutoWidthInput: React.FC<{
     extra: extraWidth,
     visible
   });
+  const widthStyle = constrainToContainer ? (`min(100%, ${width}px)` as const) : width;
 
   return (
     <span
@@ -57,10 +60,11 @@ export const AutoWidthInput: React.FC<{
         ...style,
         display: 'inline-flex',
         alignItems: 'center',
-        flex: '0 0 auto',
+        flex: constrainToContainer ? '0 1 auto' : '0 0 auto',
         minWidth: 0,
-        width,
-        inlineSize: width
+        maxWidth: constrainToContainer ? '100%' : 'none',
+        width: widthStyle,
+        inlineSize: widthStyle
       }}
     >
       <span ref={mirrorRef} className="ck-auto-width-measure">
@@ -79,18 +83,21 @@ export const AutoWidthInput: React.FC<{
         style={{
           ...inputStyle,
           boxSizing: 'border-box',
-          flex: '0 0 auto',
+          flex: constrainToContainer ? '1 1 auto' : '0 0 auto',
           minWidth: 0,
-          maxWidth: 'none',
-          width,
-          inlineSize: width
+          maxWidth: constrainToContainer ? '100%' : 'none',
+          width: widthStyle,
+          inlineSize: widthStyle,
+          overflow: constrainToContainer ? 'hidden' : undefined,
+          textOverflow: constrainToContainer ? 'ellipsis' : undefined,
+          whiteSpace: constrainToContainer ? 'nowrap' : undefined
         }}
         onFocus={e => {
           if (!selectAllOnFocus) return;
           globalThis.setTimeout(() => {
             try {
               e.currentTarget.select();
-            } catch (_) {}
+            } catch {}
           }, 0);
         }}
         onChange={e => {

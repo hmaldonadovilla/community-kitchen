@@ -78,6 +78,7 @@ import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
 import { AutoWidthInput } from './AutoWidthInput';
 import { AutoWidthSelect } from './AutoWidthSelect';
+import { resolveCompactTextControlDisplayValue } from './compactControlValue';
 import { PairedRowGrid } from './PairedRowGrid';
 import {
   computeAvailableFromAggregate,
@@ -6854,7 +6855,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       }
                       if (field.type === 'TEXT' || field.type === 'PARAGRAPH') {
                         const rawValue = (target.primaryRow.row?.values || {})[field.id];
-                        const valueText = rawValue === undefined || rawValue === null ? '' : `${rawValue}`;
                         const fallbackDisplay = resolveRowFlowDisplayValue(
                           segment,
                           target.groupKey,
@@ -6864,14 +6864,36 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           fallbackField,
                           fallbackTarget?.parentValues
                         ).text;
-                        const displayValue = valueText || fallbackDisplay || '';
+                        const displayValue = resolveCompactTextControlDisplayValue({
+                          explicitValue: rawValue as FieldValue,
+                          fallbackValue: fallbackDisplay,
+                          preserveEmptyWhileEditing: activeFieldMeta.path === fieldPath
+                        });
                         return (
                           <span
                             key={`${segment.config.fieldRef}-${idx}`}
-                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'stretch',
+                              gap: 4,
+                              minWidth: 0,
+                              maxWidth: '100%',
+                              flex: '1 1 220px'
+                            }}
                             data-field-path={fieldPath}
                           >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                minWidth: 0,
+                                maxWidth: '100%',
+                                width: '100%',
+                                flex: '1 1 auto'
+                              }}
+                            >
                               <AutoWidthInput
                                 className="ck-compact-control ck-compact-control--text"
                                 value={displayValue}
@@ -6879,6 +6901,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 readOnly={field?.readOnly === true}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 selectAllOnFocus
+                                constrainToContainer
                                 minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 120}
                                 maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 320}
                                 extraWidth={Math.max(
@@ -6886,6 +6909,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 3) * 8)
                                 )}
                                 onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
+                                onBlur={next => {
+                                  if (next !== '') return;
+                                  handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, null);
+                                }}
                                 inputStyle={{
                                   boxSizing: 'border-box',
                                   minHeight: 34,
@@ -6895,6 +6922,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   fontSize: 'var(--ck-font-control)',
                                   fontWeight: 500,
                                   lineHeight: 1,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
                                   ...(segmentHasError
                                     ? {
                                         borderColor: 'var(--danger)',
