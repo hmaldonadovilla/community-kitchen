@@ -61,6 +61,8 @@ export type ListSort = {
   direction?: 'asc' | 'desc';
   __ifNoneMatch?: boolean;
   __clientEtag?: string;
+  dateFieldId?: string;
+  dateEquals?: string;
 };
 
 export interface DataSourceRequest {
@@ -491,6 +493,13 @@ export const fetchSortedBatch = (
   sort?: ListSort | null
 ): Promise<BatchResponse> =>
   runAppsScript<BatchResponse>('fetchSubmissionsSortedBatch', formKey, projection, pageSize, pageToken, includePageRecords, recordIds, sort || null);
+
+export const fetchSearchIndex = (
+  formKey: string,
+  projection?: string[],
+  pageSize?: number,
+  pageToken?: string
+): Promise<ListResponse> => runAppsScript<ListResponse>('fetchSubmissionsSearchIndex', formKey, projection, pageSize, pageToken);
 
 export const fetchRecordById = (formKey: string, id: string): Promise<WebFormSubmission | null> =>
   runAppsScript<WebFormSubmission | null>('fetchSubmissionById', formKey, id);

@@ -4,7 +4,7 @@ import { collectStatusTransitionValues } from '../../../domain/statusTransitions
 import { LangCode, ListViewColumnConfig, ListViewRuleColumnConfig, WebFormDefinition, WebFormSubmission } from '../../types';
 import { toOptionSet } from '../../core';
 import { tSystem } from '../../systemStrings';
-import { fetchBatch, fetchList, ListItem, ListResponse, resolveUserFacingErrorMessage } from '../api';
+import { fetchBatch, fetchList, fetchSortedBatch, ListItem, ListResponse, ListSort, resolveUserFacingErrorMessage } from '../api';
 import { EMPTY_DISPLAY, formatDateEeeDdMmmYyyy, formatDisplayText } from '../utils/valueDisplay';
 import { collectListViewRuleColumnDependencies, evaluateListViewRuleColumnCell } from '../app/listViewRuleColumns';
 import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/listViewAdvancedSearch';
@@ -12,6 +12,11 @@ import { collectListViewMetricDependencies, computeListViewMetricValue } from '.
 import { normalizeToIsoDateLocal, shouldClearAppliedQueryOnInputClear } from '../app/listViewSearch';
 import { paginateItemsForListViewUi } from '../app/listViewPagination';
 import { resolveListViewUiState } from '../app/listViewUiState';
+import {
+  buildListViewDateSearchCacheKey,
+  readCachedListViewDateSearch,
+  writeCachedListViewDateSearch
+} from '../app/listViewDateSearchCache';
 import { ListViewIcon } from './ListViewIcon';
 import { DateInput } from './form/DateInput';
 import { resolveStatusPillKey } from '../utils/statusPill';
@@ -27,6 +32,10 @@ interface ListViewProps {
     opts?: { openView?: 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit'; openButtonId?: string }
   ) => void;
   cachedResponse?: ListResponse | null;
+  searchIndexResponse?: ListResponse | null;
+  searchIndexComplete?: boolean;
+  searchIndexLoading?: boolean;
+  searchIndexError?: string | null;
   cachedRecords?: Record<string, WebFormSubmission>;
   refreshToken?: number;
   onCache?: (payload: { response: ListResponse; records: Record<string, WebFormSubmission> }) => void;
@@ -42,6 +51,14 @@ interface ListViewProps {
   error?: string | null;
 }
 
+type RemoteDateSearchState = {
+  query: string;
+  items: ListItem[];
+  totalCount: number;
+  loading: boolean;
+  error: string | null;
+};
+
 const ListView: React.FC<ListViewProps> = ({
   formKey,
   definition,
@@ -49,6 +66,10 @@ const ListView: React.FC<ListViewProps> = ({
   disabled,
   onSelect,
   cachedResponse,
+  searchIndexResponse,
+  searchIndexComplete = false,
+  searchIndexLoading = false,
+  searchIndexError = null,
   cachedRecords,
   refreshToken = 0,
   onCache,
@@ -90,6 +111,21 @@ const ListView: React.FC<ListViewProps> = ({
   const [advancedFieldFilters, setAdvancedFieldFilters] = useState<Record<string, string | string[]>>({});
   const [advancedHasSearched, setAdvancedHasSearched] = useState(false);
   const [advancedKeyword, setAdvancedKeyword] = useState('');
+  const [remoteDateSearch, setRemoteDateSearch] = useState<RemoteDateSearchState>({
+    query: '',
+    items: [],
+    totalCount: 0,
+    loading: false,
+    error: null
+  });
+  const dateSearchRequestRef = useRef(0);
+  const dateSearchCacheVersion = useMemo(() => {
+    try {
+      return (((globalThis as any)?.__CK_CACHE_VERSION__ ?? '') || '').toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }, []);
 
   const viewToggleEnabled = Boolean(definition.listView?.view?.toggleEnabled);
   const viewModeConfigured: 'table' | 'cards' = definition.listView?.view?.mode === 'cards' ? 'cards' : 'table';
@@ -107,6 +143,12 @@ const ListView: React.FC<ListViewProps> = ({
   const uiPrefetching = prefetchingProp !== undefined ? Boolean(prefetchingProp) : prefetching;
   const uiError = errorProp !== undefined ? errorProp : error;
   const uiNotice = noticeProp !== undefined ? noticeProp : null;
+  const trimmedDateSearchQuery = dateSearchEnabled ? searchQueryValue.trim() : '';
+  const remoteDateSearchActive = Boolean(dateSearchEnabled && /^\d{4}-\d{2}-\d{2}$/.test(trimmedDateSearchQuery));
+  const searchIndexItems = useMemo(() => {
+    return Array.isArray(searchIndexResponse?.items) ? (searchIndexResponse?.items as ListItem[]) : [];
+  }, [searchIndexResponse]);
+  const effectivePrefetching = remoteDateSearchActive ? false : uiPrefetching;
   const hasExternalLoadingSignal = loadingProp !== undefined;
   const assumeInitialLoad = autoFetch || hasExternalLoadingSignal;
   const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(() => (cachedResponse !== undefined ? cachedResponse !== null : false));
@@ -220,9 +262,13 @@ const ListView: React.FC<ListViewProps> = ({
     if (dateSearchEnabled && dateSearchFieldId) {
       add(dateSearchFieldId);
     }
+    const sortFieldIsRuleColumn = columnsAll.some(col => col.fieldId === sortField && isRuleColumn(col));
+    if (!sortFieldIsRuleColumn && sortField) {
+      add(sortField);
+    }
     metricDependencies.forEach(add);
     return Array.from(ids);
-  }, [columnsAll, dateSearchEnabled, dateSearchFieldId, metricDependencies]);
+  }, [columnsAll, dateSearchEnabled, dateSearchFieldId, metricDependencies, sortField]);
 
   const activeFetchRef = useRef(0);
 
@@ -694,6 +740,187 @@ const ListView: React.FC<ListViewProps> = ({
     onDiagnostic('list.search.mode', { mode: 'text' });
   }, [dateSearchFieldId, listSearchMode, onDiagnostic]);
 
+  useEffect(() => {
+    const trimmed = dateSearchEnabled ? searchQueryValue.trim() : '';
+    if (!dateSearchEnabled || !trimmed || !dateSearchFieldId) {
+      dateSearchRequestRef.current += 1;
+      setRemoteDateSearch(prev =>
+        prev.query || prev.items.length || prev.loading || prev.error
+          ? { query: '', items: [], totalCount: 0, loading: false, error: null }
+          : prev
+      );
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      dateSearchRequestRef.current += 1;
+      setRemoteDateSearch(prev =>
+        prev.query === trimmed && !prev.items.length && !prev.loading && !prev.error
+          ? prev
+          : { query: trimmed, items: [], totalCount: 0, loading: false, error: null }
+      );
+      return;
+    }
+
+    const requestId = ++dateSearchRequestRef.current;
+    const sortFieldIsRuleColumn = columnsAll.some(col => col.fieldId === sortField && isRuleColumn(col));
+    const requestSort: ListSort = {
+      ...(sortFieldIsRuleColumn ? {} : { fieldId: sortField, direction: sortDirection }),
+      dateFieldId: dateSearchFieldId,
+      dateEquals: trimmed
+    };
+    const cacheKey = buildListViewDateSearchCacheKey({
+      formKey,
+      dateFieldId: dateSearchFieldId,
+      dateValue: trimmed,
+      projection,
+      sortField: sortFieldIsRuleColumn ? '' : sortField,
+      sortDirection: sortFieldIsRuleColumn ? null : sortDirection,
+      etag: ((cachedResponse?.etag ?? '') || '').toString().trim(),
+      cacheVersion: dateSearchCacheVersion
+    });
+    const cachedDateSearch = readCachedListViewDateSearch(cacheKey);
+    if (cachedDateSearch) {
+      setRemoteDateSearch({
+        query: trimmed,
+        items: cachedDateSearch.items || [],
+        totalCount: Number(cachedDateSearch.totalCount || (cachedDateSearch.items || []).length),
+        loading: false,
+        error: null
+      });
+      onDiagnostic?.('list.search.date.remote.cacheHit', {
+        query: trimmed,
+        fieldId: dateSearchFieldId,
+        items: (cachedDateSearch.items || []).length,
+        totalCount: Number(cachedDateSearch.totalCount || (cachedDateSearch.items || []).length),
+        etag: cachedDateSearch.etag || null
+      });
+      return;
+    }
+
+    setRemoteDateSearch(prev => ({
+      query: trimmed,
+      items: prev.query === trimmed ? prev.items : [],
+      totalCount: prev.query === trimmed ? prev.totalCount : 0,
+      loading: true,
+      error: null
+    }));
+    onDiagnostic?.('list.search.date.remote.start', {
+      query: trimmed,
+      fieldId: dateSearchFieldId,
+      sortField: sortFieldIsRuleColumn ? null : sortField,
+      sortDirection: sortFieldIsRuleColumn ? null : sortDirection
+    });
+
+    void (async () => {
+      try {
+        let token: string | undefined = undefined;
+        let pages = 0;
+        let aggregated: ListItem[] = [];
+
+        while (true) {
+          let batch: any = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            batch = await fetchSortedBatch(
+              formKey,
+              projection.length ? projection : undefined,
+              50,
+              token,
+              false,
+              undefined,
+              requestSort
+            );
+            if (requestId !== dateSearchRequestRef.current) return;
+            const list = (batch as any)?.list as ListResponse | undefined;
+            if (list && Array.isArray((list as any).items)) {
+              break;
+            }
+            onDiagnostic?.('list.search.date.remote.retry', {
+              query: trimmed,
+              fieldId: dateSearchFieldId,
+              attempt: attempt + 1,
+              token: token || null,
+              resType: batch === null ? 'null' : typeof batch
+            });
+            await new Promise(resolve => globalThis.setTimeout(resolve, 250 * (attempt + 1)));
+          }
+          if (requestId !== dateSearchRequestRef.current) return;
+
+          const list = (batch as any)?.list as ListResponse | undefined;
+          if (!list || !Array.isArray((list as any).items)) {
+            const err: any = new Error('Failed to search by date.');
+            err.__ckResType = list === null ? 'null' : typeof list;
+            throw err;
+          }
+
+          pages += 1;
+          aggregated = aggregated.concat((list.items || []) as ListItem[]);
+          token = list.nextPageToken;
+
+          setRemoteDateSearch({
+            query: trimmed,
+            items: aggregated,
+            totalCount: Number((list as any).totalCount || aggregated.length),
+            loading: Boolean(token),
+            error: null
+          });
+
+          if (!token) {
+            writeCachedListViewDateSearch(cacheKey, {
+              items: aggregated,
+              totalCount: Number((list as any).totalCount || aggregated.length),
+              etag: ((list as any)?.etag || (cachedResponse as any)?.etag || '').toString().trim() || undefined
+            });
+            onDiagnostic?.('list.search.date.remote.cacheStore', {
+              query: trimmed,
+              fieldId: dateSearchFieldId,
+              pages,
+              items: aggregated.length,
+              totalCount: Number((list as any).totalCount || aggregated.length),
+              etag: ((list as any)?.etag || (cachedResponse as any)?.etag || '').toString().trim() || null
+            });
+            onDiagnostic?.('list.search.date.remote.done', {
+              query: trimmed,
+              fieldId: dateSearchFieldId,
+              pages,
+              items: aggregated.length,
+              totalCount: Number((list as any).totalCount || aggregated.length)
+            });
+            return;
+          }
+        }
+      } catch (err: any) {
+        if (requestId !== dateSearchRequestRef.current) return;
+        const message = resolveUserFacingErrorMessage(err, 'Failed to search by date.') || 'Failed to search by date.';
+        setRemoteDateSearch({
+          query: trimmed,
+          items: [],
+          totalCount: 0,
+          loading: false,
+          error: message
+        });
+        onDiagnostic?.('list.search.date.remote.error', {
+          query: trimmed,
+          fieldId: dateSearchFieldId,
+          message: (err?.message || err?.toString?.() || message).toString(),
+          resType: (err as any)?.__ckResType || null
+        });
+      }
+    })();
+  }, [
+    cachedResponse,
+    columnsAll,
+    dateSearchCacheVersion,
+    dateSearchEnabled,
+    dateSearchFieldId,
+    formKey,
+    onDiagnostic,
+    projection,
+    refreshToken,
+    searchQueryValue,
+    sortDirection,
+    sortField
+  ]);
+
   const searchableFieldIds = useMemo(() => {
     const ids = new Set<string>();
     columnsAll.forEach(col => {
@@ -742,6 +969,10 @@ const ListView: React.FC<ListViewProps> = ({
     return Array.from(ids);
   }, [advancedSearchFieldIds, searchableFieldIds]);
 
+  const searchUniverseItems = useMemo(() => {
+    return searchIndexItems.length ? searchIndexItems : allItems || [];
+  }, [allItems, searchIndexItems]);
+
   useEffect(() => {
     if (!onDiagnostic) return;
     if (!ruleColumns.length) return;
@@ -782,8 +1013,35 @@ const ListView: React.FC<ListViewProps> = ({
     return `${a}`.localeCompare(`${b}`);
   };
 
+  const loadedCount = (allItems || []).length;
+  const advancedQuery = useMemo(() => ({ keyword: advancedKeyword, fieldFilters: advancedFieldFilters }), [advancedFieldFilters, advancedKeyword]);
+  const advancedActive = advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
+  const textSearchActive = !advancedSearchEnabled && !dateSearchEnabled && Boolean(searchQueryValue.trim());
+  const activeSearch =
+    listSearchMode === 'date'
+      ? Boolean(searchQueryValue.trim())
+      : listSearchMode === 'advanced'
+        ? advancedActive
+        : advancedActive || Boolean(searchQueryValue.trim());
+  const fullSearchDatasetAvailable = searchIndexComplete || totalCount <= 0 || loadedCount >= totalCount;
+  const localSearchNeedsFullDataset = !remoteDateSearchActive && (advancedActive || textSearchActive);
+  const localSearchWaitingForIndex = localSearchNeedsFullDataset && !fullSearchDatasetAvailable && !searchIndexError;
+  const localSearchError =
+    localSearchNeedsFullDataset && !fullSearchDatasetAvailable && !searchIndexLoading ? searchIndexError : null;
+  const effectiveLoading = uiLoading || (remoteDateSearchActive && remoteDateSearch.loading) || localSearchWaitingForIndex;
+  const effectiveError = (remoteDateSearchActive ? remoteDateSearch.error : null) || localSearchError || uiError;
+  const effectiveNotice = remoteDateSearchActive || localSearchNeedsFullDataset ? null : uiNotice;
+  const effectiveTotalCount =
+    searchIndexComplete && searchIndexResponse ? Math.max(totalCount, Number(searchIndexResponse.totalCount || 0)) : totalCount;
+
   const visibleItems = useMemo(() => {
-    const baseItems = allItems || [];
+    const baseItems = remoteDateSearchActive
+      ? remoteDateSearch.items || []
+      : localSearchNeedsFullDataset
+        ? fullSearchDatasetAvailable
+          ? searchUniverseItems
+          : []
+        : allItems || [];
     const items: ListItem[] =
       ruleColumns.length
         ? baseItems.map(row => {
@@ -798,15 +1056,14 @@ const ListView: React.FC<ListViewProps> = ({
           })
         : baseItems;
     const trimmed = searchQueryValue.trim();
-    const advancedQuery = { keyword: advancedKeyword, fieldFilters: advancedFieldFilters };
-    const advancedActive = advancedHasSearched && hasActiveAdvancedSearch(advancedQuery);
-    const applyAdvanced = advancedActive;
     const filtered =
-      dateSearchEnabled && trimmed
+      remoteDateSearchActive
+        ? items
+        : dateSearchEnabled && trimmed
         ? items.filter(row => normalizeToIsoDateLocal((row as any)[dateSearchFieldId]) === trimmed)
         : dateSearchEnabled
           ? items
-          : applyAdvanced
+          : advancedActive
             ? filterItemsByAdvancedSearch(items, advancedQuery, { keywordFieldIds: keywordSearchFieldIds, fieldTypeById })
             : !advancedSearchEnabled && trimmed
             ? (() => {
@@ -836,10 +1093,15 @@ const ListView: React.FC<ListViewProps> = ({
     dateSearchEnabled,
     dateSearchFieldId,
     fieldTypeById,
+    fullSearchDatasetAvailable,
     keywordSearchFieldIds,
     language,
+    localSearchNeedsFullDataset,
+    remoteDateSearch.items,
+    remoteDateSearchActive,
     ruleColumns,
     searchQueryValue,
+    searchUniverseItems,
     searchableFieldIds,
     sortField,
     sortDirection
@@ -852,22 +1114,13 @@ const ListView: React.FC<ListViewProps> = ({
   const totalPages = paginationEnabled ? Math.max(1, Math.ceil(visibleItems.length / pageSize)) : 1;
   const showPrev = paginationEnabled && pageIndex > 0;
   const showNext = paginationEnabled && pageIndex < totalPages - 1;
-  const loadedCount = (allItems || []).length;
-  const advancedActive =
-    advancedHasSearched && hasActiveAdvancedSearch({ keyword: advancedKeyword, fieldFilters: advancedFieldFilters });
-  const activeSearch =
-    listSearchMode === 'date'
-      ? Boolean(searchQueryValue.trim())
-      : listSearchMode === 'advanced'
-        ? advancedActive
-        : advancedActive || Boolean(searchQueryValue.trim());
-  const showLoadedOfTotal = !activeSearch && totalCount > 0 && loadedCount > 0 && loadedCount < totalCount;
+  const showLoadedOfTotal = !activeSearch && effectiveTotalCount > 0 && loadedCount > 0 && loadedCount < effectiveTotalCount;
   const { showNoRecords, showLoadingStatus } = resolveListViewUiState({
     visibleCount: pagedItems.length,
     hasLoadedOnce,
-    loading: uiLoading,
-    prefetching: uiPrefetching,
-    error: uiError,
+    loading: effectiveLoading,
+    prefetching: effectivePrefetching,
+    error: effectiveError,
     assumeInitialLoad
   });
 
@@ -1367,11 +1620,11 @@ const ListView: React.FC<ListViewProps> = ({
 
     add(definition.autoSave?.status);
 
-    // Include any statuses already present in the fetched list results (covers legacy/hand-edited statuses).
-    (allItems || []).forEach(row => add((row as any)?.status));
+    // Include any statuses already present in the locally available search universe (covers legacy/hand-edited statuses).
+    searchUniverseItems.forEach(row => add((row as any)?.status));
 
     return out;
-  }, [allItems, definition.autoSave?.status, definition.followup?.statusTransitions]);
+  }, [definition.autoSave?.status, definition.followup?.statusTransitions, searchUniverseItems]);
 
   useEffect(() => {
     if (!onDiagnostic) return;
@@ -1469,8 +1722,8 @@ const ListView: React.FC<ListViewProps> = ({
     return resolveLocalizedString(listMetricCfg.label, language, '');
   }, [language, listMetricCfg?.label]);
   const listMetricComputed = useMemo(
-    () => computeListViewMetricValue(allItems || [], listMetricCfg),
-    [allItems, listMetricCfg]
+    () => computeListViewMetricValue(searchIndexComplete ? searchUniverseItems : allItems || [], listMetricCfg),
+    [allItems, listMetricCfg, searchIndexComplete, searchUniverseItems]
   );
   const listMetricMaximumFractionDigits = useMemo(() => {
     const raw = Number((listMetricCfg as any)?.maximumFractionDigits);
@@ -1482,7 +1735,7 @@ const ListView: React.FC<ListViewProps> = ({
     return new Intl.NumberFormat(locale, { maximumFractionDigits: listMetricMaximumFractionDigits });
   }, [language, listMetricMaximumFractionDigits]);
   const listMetricCompleteData =
-    !!listMetricCfg && !uiLoading && !uiPrefetching && (totalCount <= 0 || loadedCount >= totalCount);
+    !!listMetricCfg && !effectiveLoading && !effectivePrefetching && (effectiveTotalCount <= 0 || loadedCount >= effectiveTotalCount || searchIndexComplete);
   const listMetricDisplayText = useMemo(() => {
     if (!listMetricCfg) return '';
     const valueText = listMetricCompleteData ? listMetricNumberFormatter.format(listMetricComputed.value) : '…';
@@ -1508,9 +1761,9 @@ const ListView: React.FC<ListViewProps> = ({
       matchedLineItems: listMetricComputed.matchedLineItems,
       completeData: listMetricCompleteData,
       loadedCount,
-      totalCount
+      totalCount: effectiveTotalCount
     });
-  }, [listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic, totalCount]);
+  }, [effectiveTotalCount, listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic]);
 
   const metricNode = listMetricCfg ? (
     <div className="ck-list-metric" aria-live="polite">
@@ -1842,17 +2095,17 @@ const ListView: React.FC<ListViewProps> = ({
 
         {showLoadingStatus ? (
           <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
-        ) : uiPrefetching ? (
+        ) : effectivePrefetching ? (
           <div className="status muted" style={{ opacity: 0.9 }}>
             {tSystem('list.loadingMore', language, 'Loading more…')}
           </div>
-        ) : uiNotice ? (
+        ) : effectiveNotice ? (
           <div className="status muted" style={{ opacity: 0.9 }} role="note">
-            {uiNotice}
+            {effectiveNotice}
           </div>
         ) : null}
 
-        {uiError && <div className="error">{uiError}</div>}
+        {effectiveError && <div className="error">{effectiveError}</div>}
 
         {viewMode === 'table' ? (
           <div className="list-table-wrapper">

@@ -182,6 +182,17 @@ export function fetchSubmissionsSortedBatch(
   return service.fetchSubmissionsSortedBatch(formKey, projection, pageSize, pageToken, includePageRecords, recordIds, sort);
 }
 
+export function fetchSubmissionsSearchIndex(
+  formKey: string,
+  projection?: string[],
+  pageSize: number = 250,
+  pageToken?: string
+): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchSubmissionsSearchIndex(formKey, projection, pageSize, pageToken);
+}
+
 export function fetchSubmissionById(formKey: string, id: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
