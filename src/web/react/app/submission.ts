@@ -950,8 +950,7 @@ export const buildSubmissionPayload = async (args: {
   const submission: SubmissionPayload = {
     formKey,
     language,
-    values: payloadValues,
-    ...payloadValues
+    values: payloadValues
   };
   (submission as any).__ckDeviceInfo = getClientDeviceInfo();
 
@@ -1063,8 +1062,7 @@ export const buildDraftPayload = (args: {
   const submission: SubmissionPayload = {
     formKey,
     language,
-    values: payloadValues,
-    ...payloadValues
+    values: payloadValues
   };
   (submission as any).__ckDeviceInfo = getClientDeviceInfo();
 

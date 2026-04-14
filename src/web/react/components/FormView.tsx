@@ -628,6 +628,11 @@ interface FormViewProps {
    * before calling the server.
    */
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
+  /**
+   * Optional guided-step hook that applies step-managed inventory reservations and persists
+   * the latest draft immediately after a valid datasource-row change.
+   */
+  queueGuidedStepReservationDraftSync?: (args: { stepId: string; reason: string }) => void;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -678,7 +683,8 @@ const FormView: React.FC<FormViewProps> = ({
   dedupNavigationBlocked,
   openConfirmDialog,
   setAutoSaveHold,
-  ensureRecordId
+  ensureRecordId,
+  queueGuidedStepReservationDraftSync
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -9770,7 +9776,8 @@ const FormView: React.FC<FormViewProps> = ({
               isOverlayOpenActionSuppressed,
               suppressOverlayOpenAction,
               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
-              ensureRecordId
+              ensureRecordId,
+              queueGuidedStepReservationDraftSync
             }}
           />
         );
@@ -11042,6 +11049,7 @@ const FormView: React.FC<FormViewProps> = ({
                 suppressOverlayOpenAction,
                 runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                 ensureRecordId,
+                queueGuidedStepReservationDraftSync,
                 closeOverlay: closeSubgroupOverlay
               }}
             />
@@ -11870,7 +11878,8 @@ const FormView: React.FC<FormViewProps> = ({
                             isOverlayOpenActionSuppressed,
                             suppressOverlayOpenAction,
                             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
-                            ensureRecordId
+                            ensureRecordId,
+                            queueGuidedStepReservationDraftSync
                           }}
                         />
                       </div>
@@ -13979,6 +13988,7 @@ const FormView: React.FC<FormViewProps> = ({
                               suppressOverlayOpenAction,
                               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                               ensureRecordId,
+                              queueGuidedStepReservationDraftSync,
                               closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                             }}
                           />
@@ -14052,6 +14062,7 @@ const FormView: React.FC<FormViewProps> = ({
                     suppressOverlayOpenAction,
                     runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                     ensureRecordId,
+                    queueGuidedStepReservationDraftSync,
                     closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                   }}
                 />
@@ -14691,7 +14702,8 @@ const FormView: React.FC<FormViewProps> = ({
             isOverlayOpenActionSuppressed,
             suppressOverlayOpenAction,
             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
-            ensureRecordId
+            ensureRecordId,
+            queueGuidedStepReservationDraftSync
           }}
         />
       );

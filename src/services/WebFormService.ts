@@ -77,6 +77,7 @@ const RECORD_MUTATION_LANE_PROPERTY_PREFIX = 'CK_RECORD_MUTATION_LANE_';
 const RECORD_MUTATION_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const RECORD_MUTATION_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
 const RECORD_MUTATION_LANE_POLL_MS = 250;
+const USER_RECORD_SAVE_RETRY_DELAYS_MS = [0, 900];
 const INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS = [0, 500, 1500];
 const RESERVATION_FOLLOWUP_RETRY_DELAYS_MS = [0, 750, 2000];
 const RESERVATION_TRANSACTION_LOCK_RETRY_DELAYS_MS = [0, 750, 2000];
@@ -2415,25 +2416,6 @@ export class WebFormService {
         let appliedCount = 0;
         let releasedCount = 0;
 
-        for (const entry of desiredByReservationId.values()) {
-          const result = this.upsertInventoryReservationDirect(entry, {
-            refreshMode: 'none',
-            touchedForms,
-            batchCache,
-            pendingSaves
-          });
-          if (!result.success) {
-            return {
-              success: false,
-              message: result.message || 'Failed to update inventory reservations.',
-              conflict: result.conflict === true,
-              availability: result.availability ? [result.availability] : undefined
-            };
-          }
-          appliedCount += 1;
-          if (result.availability) availabilitySnapshots.push(result.availability);
-        }
-
         for (const record of releaseCandidates) {
           const releaseResult = this.upsertInventoryReservationDirect(
             this.buildInventoryReservationReleaseRequest(record, ledgerFormKey),
@@ -2454,6 +2436,25 @@ export class WebFormService {
           }
           releasedCount += 1;
           if (releaseResult.availability) availabilitySnapshots.push(releaseResult.availability);
+        }
+
+        for (const entry of desiredByReservationId.values()) {
+          const result = this.upsertInventoryReservationDirect(entry, {
+            refreshMode: 'none',
+            touchedForms,
+            batchCache,
+            pendingSaves
+          });
+          if (!result.success) {
+            return {
+              success: false,
+              message: result.message || 'Failed to update inventory reservations.',
+              conflict: result.conflict === true,
+              availability: result.availability ? [result.availability] : undefined
+            };
+          }
+          appliedCount += 1;
+          if (result.availability) availabilitySnapshots.push(result.availability);
         }
 
         const flushResult = this.flushInternalRecordSaveQueue(pendingSaves);
@@ -2758,6 +2759,20 @@ export class WebFormService {
     return value === 'full' || value === 'revisionOnly' || value === 'none' ? value : fallback;
   }
 
+  private normalizeReservationOutputGroupId(rawOutputGroupId: any, rawOutputRowId?: any): string {
+    const outputGroupId = (rawOutputGroupId || '').toString().trim();
+    if (!outputGroupId) return '';
+    const outputRowId = (rawOutputRowId || '').toString().trim();
+    if (outputRowId && outputGroupId === outputRowId) {
+      const suffixIndex = outputGroupId.lastIndexOf('_');
+      if (suffixIndex > 0) {
+        const candidate = outputGroupId.slice(0, suffixIndex).trim();
+        if (candidate) return candidate;
+      }
+    }
+    return outputGroupId;
+  }
+
   private normalizeReservationPlanScopes(raw: InventoryReservationPlanScope[] | undefined | null): InventoryReservationPlanScope[] {
     const seen = new Set<string>();
     return (Array.isArray(raw) ? raw : [])
@@ -2829,7 +2844,10 @@ export class WebFormService {
         if (value !== scope.sourceParentRowId) return false;
       }
       if (scope.sourceOutputGroupId) {
-        const value = this.readRecordFieldString(record, 'SOURCE_OUTPUT_GROUP_ID');
+        const value = this.normalizeReservationOutputGroupId(
+          this.readRecordFieldString(record, 'SOURCE_OUTPUT_GROUP_ID'),
+          this.readRecordFieldString(record, 'SOURCE_OUTPUT_ROW_ID')
+        );
         if (value !== scope.sourceOutputGroupId) return false;
       }
       return true;
@@ -3042,17 +3060,17 @@ export class WebFormService {
   private collectUniqueReservationAvailabilitySnapshots(
     snapshots: InventoryAvailabilitySnapshot[]
   ): InventoryAvailabilitySnapshot[] | undefined {
-    const seen = new Set<string>();
-    const items = (snapshots || []).filter(snapshot => {
+    const byKey = new Map<string, InventoryAvailabilitySnapshot>();
+    (snapshots || []).forEach(snapshot => {
       const key = [
         snapshot.resourceFormKey || '',
         snapshot.resourceRecordId || '',
         snapshot.resourceItemId || ''
       ].join('::');
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
+      if (!key) return;
+      byKey.set(key, snapshot);
     });
+    const items = Array.from(byKey.values());
     return items.length ? items : undefined;
   }
 
@@ -3306,8 +3324,19 @@ export class WebFormService {
     const parentGroupId = this.readRecordFieldString(reservationRecord, 'SOURCE_PARENT_GROUP_ID');
     const parentRowId = this.readRecordFieldString(reservationRecord, 'SOURCE_PARENT_ROW_ID');
     const outputGroupId = this.readRecordFieldString(reservationRecord, 'SOURCE_OUTPUT_GROUP_ID');
+    const outputRowId = this.readRecordFieldString(reservationRecord, 'SOURCE_OUTPUT_ROW_ID');
+    const outputGroupIds = Array.from(
+      new Set(
+        [
+          outputGroupId,
+          this.normalizeReservationOutputGroupId(outputGroupId, outputRowId)
+        ]
+          .map(value => (value || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
     const resourceItemId = this.readRecordFieldString(reservationRecord, 'RESOURCE_ITEM_ID');
-    if (!parentGroupId || !outputGroupId || !resourceItemId) return true;
+    if (!parentGroupId || !outputGroupIds.length || !resourceItemId) return true;
 
     const parentRows = this.parseFollowupLineItemRows(
       (sourceRecord.values || {})[parentGroupId] || (sourceRecord.values || {})[`${parentGroupId}_json`]
@@ -3329,7 +3358,9 @@ export class WebFormService {
     const rowsToSearch = candidateParentRows.length ? candidateParentRows : parentRows;
 
     return rowsToSearch.some(parentRow => {
-      const outputRows = this.parseFollowupLineItemRows(parentRow[outputGroupId] || parentRow[`${outputGroupId}_json`]);
+      const outputRows = outputGroupIds.flatMap(groupId =>
+        this.parseFollowupLineItemRows(parentRow[groupId] || parentRow[`${groupId}_json`])
+      );
       if (!outputRows.length) return false;
       return outputRows.some(row =>
         candidateKeyFieldIds.some(fieldId => `${(row || {})[fieldId] ?? ''}`.trim() === resourceItemId)
@@ -3652,9 +3683,18 @@ export class WebFormService {
 
   private saveSubmissionWithIdDirect(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
+    const recordId = this.ensureMutationRecordId(formObject);
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
-    const result = this.submissions.saveSubmissionWithId(formObject, form, questions, dedupRules);
+    const result = this.saveSubmissionRecordWithRetry({
+      formKey,
+      recordId,
+      reason: 'saveSubmissionWithId',
+      formObject,
+      form,
+      questions,
+      dedupRules
+    });
     if (result?.success) {
       const operation = (result.meta?.operation || '').toString().trim().toLowerCase();
       if (operation === 'noop') {
@@ -3779,6 +3819,44 @@ export class WebFormService {
     return result;
   }
 
+  private saveSubmissionRecordWithRetry(args: {
+    formKey: string;
+    recordId: string;
+    reason: string;
+    formObject: WebFormSubmission;
+    form: FormConfig;
+    questions: QuestionConfig[];
+    dedupRules: DedupRule[];
+  }): { success: boolean; message: string; meta: any } {
+    let lastResult: { success: boolean; message: string; meta: any } | null = null;
+    for (let attemptIndex = 0; attemptIndex < USER_RECORD_SAVE_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+      const delayMs = USER_RECORD_SAVE_RETRY_DELAYS_MS[attemptIndex];
+      if (delayMs > 0) {
+        sleepWithUtilities(delayMs);
+      }
+      const result = this.submissions.saveSubmissionWithId(args.formObject, args.form, args.questions, args.dedupRules);
+      lastResult = result;
+      if (result.success || !isRetryableMutationLockErrorMessage(result.message)) {
+        return result;
+      }
+      debugLog('saveSubmission.retry', {
+        formKey: args.formKey,
+        recordId: args.recordId || null,
+        reason: args.reason,
+        attempt: attemptIndex + 1,
+        attempts: USER_RECORD_SAVE_RETRY_DELAYS_MS.length,
+        message: result.message || 'retryable failure'
+      });
+    }
+    return lastResult || {
+      success: false,
+      message: 'Failed to save record.',
+      meta: {
+        id: args.recordId || undefined
+      }
+    };
+  }
+
   private resolveSaveSubmissionRefreshMode(
     formObject: WebFormSubmission,
     result: { success: boolean; message: string; meta: any }
@@ -3814,7 +3892,15 @@ export class WebFormService {
     const recordId = this.ensureMutationRecordId(args.formObject);
     try {
       return this.withQueuedRecordMutation(formKey, recordId, args.reason, () =>
-        this.submissions.saveSubmissionWithId(args.formObject, args.form, args.questions, args.dedupRules)
+        this.saveSubmissionRecordWithRetry({
+          formKey,
+          recordId,
+          reason: args.reason,
+          formObject: args.formObject,
+          form: args.form,
+          questions: args.questions,
+          dedupRules: args.dedupRules
+        })
       );
     } catch (err: any) {
       const message = (err?.message || 'Could not queue record save.').toString();

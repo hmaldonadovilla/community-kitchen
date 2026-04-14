@@ -81,10 +81,12 @@ import { AutoWidthSelect } from './AutoWidthSelect';
 import { resolveCompactTextControlDisplayValue } from './compactControlValue';
 import { PairedRowGrid } from './PairedRowGrid';
 import {
+  computeOptimisticAggregateReservedQuantity,
   computeAvailableFromAggregate,
   ensureEditableMaxIncludesCurrentValue,
   computeOptimisticFreeQuantity,
   computeOptimisticRowMaxQuantity,
+  resolveServerCurrentRecordReservedQuantity,
   sanitizeNumericDraft,
   toFiniteNumberValue
 } from './quantityConstraints';
@@ -95,8 +97,14 @@ import {
 import {
   buildReservationFailureMessage,
   isStepReservationCommitEnabled,
+  normalizeStepReservationAvailabilityForDisplay,
+  shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from './reservationSyncPolicy';
+import {
+  GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+  type GuidedStepReservationAvailabilityEventDetail
+} from '../../features/reservations/liveSyncEvents';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
@@ -451,6 +459,7 @@ export interface LineItemGroupQuestionCtx {
     options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
   ) => void;
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
+  queueGuidedStepReservationDraftSync?: (args: { stepId: string; reason: string }) => void;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
   collapsedGroups: Record<string, boolean>;
@@ -558,6 +567,7 @@ export const LineItemGroupQuestion: React.FC<{
     removeLineRow,
     runSelectionEffectsForAncestors,
     ensureRecordId,
+    queueGuidedStepReservationDraftSync,
     handleLineFieldChange,
     collapsedGroups,
     toggleGroupCollapsed,
@@ -693,6 +703,72 @@ export const LineItemGroupQuestion: React.FC<{
     return { groupKey, fieldId, rowId };
   }
 
+  const resolveRowFlowGroupConfig = React.useCallback(
+    (groupKey: string): { groupId: string; config: any } | null => {
+      if (!groupKey) return null;
+      const baseParsed = parseSubgroupKey(q.id);
+      const baseRootId = baseParsed?.rootGroupId || q.id;
+      if (groupKey === q.id && q.lineItemConfig) {
+        return { groupId: q.id, config: q.lineItemConfig };
+      }
+      const rootQuestion = definition.questions.find(question => question.id === baseRootId);
+      const rootConfig =
+        baseRootId === q.id && q.lineItemConfig
+          ? q.lineItemConfig
+          : rootQuestion?.lineItemConfig;
+      const fallbackRootConfig = rootQuestion?.lineItemConfig;
+      if (!rootConfig && !fallbackRootConfig) return null;
+
+      const resolveFromConfig = (config: any, path: string[]): any | null => {
+        if (!config) return null;
+        if (!path.length) return config;
+        let current: any = config;
+        for (let i = 0; i < path.length; i += 1) {
+          const subId = path[i];
+          const next = (current?.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
+          if (!next) return null;
+          current = next;
+        }
+        return current;
+      };
+
+      const resolveFromRoot = (path: string[]): any | null =>
+        resolveFromConfig(rootConfig, path) || resolveFromConfig(fallbackRootConfig, path);
+
+      if (groupKey === baseRootId) {
+        return { groupId: baseRootId, config: rootConfig || fallbackRootConfig };
+      }
+
+      const parsed = parseSubgroupKey(groupKey);
+      if (parsed && parsed.rootGroupId === baseRootId) {
+        const cfg = resolveFromRoot(parsed.path);
+        return cfg ? { groupId: groupKey, config: cfg } : null;
+      }
+
+      if (groupKey === q.id && baseParsed?.path?.length) {
+        const cfg = resolveFromRoot(baseParsed.path);
+        return cfg ? { groupId: q.id, config: cfg } : null;
+      }
+
+      if (groupKey === q.id && !baseParsed) {
+        return { groupId: q.id, config: rootConfig };
+      }
+
+      return null;
+    },
+    [definition.questions, q.id, q.lineItemConfig]
+  );
+
+  const resolveRowFlowFieldConfig = React.useCallback(
+    (groupKey: string, fieldId: string): any | null => {
+      if (!groupKey || !fieldId) return null;
+      const info = resolveRowFlowGroupConfig(groupKey);
+      if (!info?.config) return null;
+      return (info.config.fields || []).find((field: any) => field?.id === fieldId) || null;
+    },
+    [resolveRowFlowGroupConfig]
+  );
+
   const activeFieldMeta = (() => {
     if (typeof document === 'undefined') return { path: '', type: '' };
     const active = document.activeElement as HTMLElement | null;
@@ -747,6 +823,7 @@ export const LineItemGroupQuestion: React.FC<{
     [stepDataSourceRows, topLevelVisibilityContext]
   );
   const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
+  const [stepDataSourceLoadingCounts, setStepDataSourceLoadingCounts] = React.useState<Record<string, number>>({});
   const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceRecordIdRef = React.useRef<string>('');
@@ -755,6 +832,11 @@ export const LineItemGroupQuestion: React.FC<{
   const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const reservationSyncCounterRef = React.useRef(0);
   const sourceFirstPresentationLoggedRef = React.useRef<string>('');
+  const pendingStepReservationDraftSyncRef = React.useRef<{
+    stepId: string;
+    reason: string;
+  } | null>(null);
+  const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
 
   React.useEffect(() => {
     stepDataSourceDraftsRef.current = stepDataSourceDrafts;
@@ -771,6 +853,88 @@ export const LineItemGroupQuestion: React.FC<{
   }, []);
 
   const toFiniteNumber = React.useCallback((value: any): number => toFiniteNumberValue(value), []);
+
+  const buildStepDataSourceLoadKey = React.useCallback(
+    (config: any): string => {
+      const dataSource = config?.dataSource && typeof config.dataSource === 'object' ? config.dataSource : config;
+      return JSON.stringify({
+        sourceId: `${dataSource?.id || ''}`.trim(),
+        sourceFormKey: `${dataSource?.formKey || ''}`.trim(),
+        projection: Array.isArray(dataSource?.projection)
+          ? dataSource.projection.map((entry: any) => `${entry ?? ''}`.trim()).filter(Boolean)
+          : [],
+        language: `${language || 'EN'}`.trim().toUpperCase()
+      });
+    },
+    [language]
+  );
+
+  const mutateStepDataSourceLoading = React.useCallback(
+    (configs: any[], delta: 1 | -1) => {
+      const candidates = Array.isArray(configs) ? configs.filter(Boolean) : [];
+      if (!candidates.length) return;
+      setStepDataSourceLoadingCounts(prev => {
+        let changed = false;
+        const next = { ...prev };
+        candidates.forEach(config => {
+          const key = buildStepDataSourceLoadKey(config);
+          const current = Number(next[key] || 0);
+          const nextValue = Math.max(0, current + delta);
+          if (nextValue === current) return;
+          changed = true;
+          if (nextValue > 0) next[key] = nextValue;
+          else delete next[key];
+        });
+        return changed ? next : prev;
+      });
+    },
+    [buildStepDataSourceLoadKey]
+  );
+
+  const beginStepDataSourceLoading = React.useCallback(
+    (configs: any[]) => mutateStepDataSourceLoading(configs, 1),
+    [mutateStepDataSourceLoading]
+  );
+
+  const endStepDataSourceLoading = React.useCallback(
+    (configs: any[]) => mutateStepDataSourceLoading(configs, -1),
+    [mutateStepDataSourceLoading]
+  );
+
+  const isStepDataSourceLoading = React.useCallback(
+    (config: any): boolean => {
+      const key = buildStepDataSourceLoadKey(config);
+      return Number(stepDataSourceLoadingCounts[key] || 0) > 0;
+    },
+    [buildStepDataSourceLoadKey, stepDataSourceLoadingCounts]
+  );
+
+  const queueImmediateStepReservationDraftSync = React.useCallback(
+    (args: {
+      config: any;
+      parentRowId: string;
+      sourceKey: string;
+      patch: Record<string, FieldValue>;
+    }) => {
+      if (!queueGuidedStepReservationDraftSync) return;
+      const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
+      const stepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
+      if (!stepId) return;
+      pendingStepReservationDraftSyncRef.current = {
+        stepId,
+        reason: `lineItem:${q.id}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`
+      };
+      onDiagnostic?.('guidedStep.reservationSync.queued', {
+        groupId: q.id,
+        stepId,
+        parentRowId: args.parentRowId,
+        sourceKey: args.sourceKey,
+        patchFields: Object.keys(args.patch).sort()
+      });
+      setPendingStepReservationDraftSyncTick(prev => prev + 1);
+    },
+    [definition, onDiagnostic, q.id, queueGuidedStepReservationDraftSync, resolveTopValue]
+  );
 
   const updateStepDataSourceAvailability = React.useCallback(
     (config: any, availability: InventoryAvailabilitySnapshot | null | undefined): void => {
@@ -797,6 +961,22 @@ export const LineItemGroupQuestion: React.FC<{
       setStepDataSourceRefreshTick(prev => prev + 1);
     },
     [language]
+  );
+
+  const applyStepDataSourceAvailabilitySnapshots = React.useCallback(
+    (snapshots: InventoryAvailabilitySnapshot[] | null | undefined): void => {
+      const entries = Array.isArray(snapshots) ? snapshots.filter(Boolean) : [];
+      if (!entries.length || !stepDataSourceRows.length) return;
+      stepDataSourceRows.forEach(config => {
+        const dataSourceFormKey = `${config?.dataSource?.formKey || ''}`.trim();
+        entries.forEach(snapshot => {
+          if (!snapshot) return;
+          if (dataSourceFormKey && dataSourceFormKey !== `${snapshot.resourceFormKey || ''}`.trim()) return;
+          updateStepDataSourceAvailability(config, normalizeStepReservationAvailabilityForDisplay(snapshot));
+        });
+      });
+    },
+    [stepDataSourceRows, updateStepDataSourceAvailability]
   );
 
   React.useEffect(() => {
@@ -838,20 +1018,26 @@ export const LineItemGroupQuestion: React.FC<{
 
     const pendingFetches = configEntries
       .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
-      .map(({ dataSource, shouldForceRefresh }) =>
-        fetchDataSource(dataSource, language, shouldForceRefresh ? { forceRefresh: true } : undefined).catch(() => null)
-      );
+      .map(({ dataSource, shouldForceRefresh }) => ({
+        config: dataSource,
+        promise: fetchDataSource(dataSource, language, shouldForceRefresh ? { forceRefresh: true } : undefined).catch(() => null)
+      }));
     if (!pendingFetches.length) return;
 
-    Promise.all(pendingFetches).then(() => {
-      if (cancelled) return;
-      setStepDataSourceRefreshTick(prev => prev + 1);
-    });
+    beginStepDataSourceLoading(pendingFetches.map(entry => ({ dataSource: entry.config, id: entry.config?.id })));
+    Promise.all(pendingFetches.map(entry => entry.promise))
+      .then(() => {
+        if (cancelled) return;
+        setStepDataSourceRefreshTick(prev => prev + 1);
+      })
+      .finally(() => {
+        endStepDataSourceLoading(pendingFetches.map(entry => ({ dataSource: entry.config, id: entry.config?.id })));
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [language, recordId, stepDataSourceRows]);
+  }, [beginStepDataSourceLoading, endStepDataSourceLoading, language, recordId, stepDataSourceRows]);
 
   React.useEffect(() => {
     if (!stepDataSourceRows.length) return;
@@ -866,10 +1052,15 @@ export const LineItemGroupQuestion: React.FC<{
         setStepDataSourceRefreshTick(prev => prev + 1);
         return;
       }
-      Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null))).then(() => {
-        if (cancelled) return;
-        setStepDataSourceRefreshTick(prev => prev + 1);
-      });
+      beginStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
+      Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null)))
+        .then(() => {
+          if (cancelled) return;
+          setStepDataSourceRefreshTick(prev => prev + 1);
+        })
+        .finally(() => {
+          endStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
+        });
     };
 
     window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
@@ -877,7 +1068,47 @@ export const LineItemGroupQuestion: React.FC<{
       cancelled = true;
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
     };
-  }, [language, stepDataSourceRows]);
+  }, [beginStepDataSourceLoading, endStepDataSourceLoading, language, stepDataSourceRows]);
+
+  React.useEffect(() => {
+    const pending = pendingStepReservationDraftSyncRef.current;
+    if (!pending || !queueGuidedStepReservationDraftSync) return;
+    pendingStepReservationDraftSyncRef.current = null;
+    queueGuidedStepReservationDraftSync({
+      stepId: pending.stepId,
+      reason: pending.reason
+    });
+  }, [
+    lineItems,
+    pendingStepReservationDraftSyncTick,
+    queueGuidedStepReservationDraftSync,
+    stepDataSourceDrafts,
+    values
+  ]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    const currentRecordId = `${recordId || ''}`.trim();
+    const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
+    const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
+    const handleAvailability = (event: Event) => {
+      const detail = (event as CustomEvent<GuidedStepReservationAvailabilityEventDetail>)?.detail;
+      if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
+      if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
+      if (currentStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentStepId) return;
+      applyStepDataSourceAvailabilitySnapshots(detail.availability);
+    };
+    window.addEventListener(
+      GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+      handleAvailability as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+        handleAvailability as EventListener
+      );
+    };
+  }, [applyStepDataSourceAvailabilitySnapshots, definition, recordId, resolveTopValue]);
 
   React.useEffect(() => {
     if (!sourceFirstDataSourceRows.length) {
@@ -916,7 +1147,7 @@ export const LineItemGroupQuestion: React.FC<{
       getLineItems: (groupId: string) => lineItems[groupId] || [],
       getLineItemKeys: () => Object.keys(lineItems)
     }),
-    [lineItems]
+    [lineItems, resolveTopValue]
   );
 
   const validateVirtualFieldRules = React.useCallback(
@@ -1039,12 +1270,15 @@ export const LineItemGroupQuestion: React.FC<{
 
   const resolveStepDataSourceRows = React.useCallback(
     (config: any): any[] => {
+      const refreshTick = stepDataSourceRefreshTick;
+      void refreshTick;
       if (!config?.dataSource || typeof config.dataSource !== 'object') return [];
+      if (isStepDataSourceLoading(config)) return [];
       const cached = peekCachedDataSource(config.dataSource, language);
       const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
       return items.length ? items : [];
     },
-    [language, stepDataSourceRefreshTick]
+    [isStepDataSourceLoading, language, stepDataSourceRefreshTick]
   );
 
   const resolveStepDataSourceRowsForParent = React.useCallback(
@@ -1074,6 +1308,7 @@ export const LineItemGroupQuestion: React.FC<{
 
   const sourceFirstPresentationEntries = React.useMemo(() => {
     return sourceFirstDataSourceRows.map((config: any) => {
+      const loading = isStepDataSourceLoading(config);
       const sourceRows = resolveStepDataSourceRows(config);
       const visibleSourceRows = sourceRows
         .map((sourceRow: Record<string, any>) => {
@@ -1098,7 +1333,9 @@ export const LineItemGroupQuestion: React.FC<{
         })
         .filter(Boolean) as Array<{ sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }>;
       const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
-      const emptyStateMessage = sourceRows.length
+      const emptyStateMessage = loading
+        ? tSystem('common.loading', language, 'Loading…').trim()
+        : sourceRows.length
         ? resolveLocalizedString((uiCfg as any)?.emptyStateMessage, language, '').trim()
         : resolveLocalizedString(
             (uiCfg as any)?.noSourceRowsMessage,
@@ -1107,17 +1344,18 @@ export const LineItemGroupQuestion: React.FC<{
           ).trim();
       return {
         config,
+        loading,
         sourceRows,
         visibleSourceRows,
         emptyStateMessage
       };
     });
-  }, [language, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows]);
+  }, [isStepDataSourceLoading, language, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows]);
 
   React.useEffect(() => {
     if (!sourceFirstPresentationEntries.length) return;
     sourceFirstPresentationEntries.forEach(entry => {
-      if (entry.visibleSourceRows.length || !entry.sourceRows.length) return;
+      if (entry.loading || entry.visibleSourceRows.length || !entry.sourceRows.length) return;
       onDiagnostic?.('dataSourceRows.sourceFirst.empty', {
         groupId: q.id,
         configId: `${entry.config?.id || ''}`.trim(),
@@ -1148,8 +1386,29 @@ export const LineItemGroupQuestion: React.FC<{
     [q.id]
   );
 
-  const resolveCurrentRecordReservationStateForSource = React.useCallback(
-    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } => {
+  const resolveReservationQuantityFromValues = React.useCallback(
+    (
+      values: Record<string, FieldValue> | null | undefined,
+      selectedFieldId: string,
+      quantityFieldId: string
+    ): number => {
+      if (!values || !quantityFieldId) return 0;
+      const selected =
+        !selectedFieldId ||
+        !Object.prototype.hasOwnProperty.call(values, selectedFieldId) ||
+        values[selectedFieldId] === true;
+      return selected ? toFiniteNumberValue(values[quantityFieldId]) : 0;
+    },
+    []
+  );
+
+  const resolveReservationStateForSource = React.useCallback(
+    (
+      config: any,
+      sourceKey: string,
+      currentParentRowId?: string,
+      mode: 'local' | 'committed' = 'local'
+    ): { totalReservedQuantity: number; currentRowQuantity: number } => {
       const outputGroupId = `${config?.outputGroupId || ''}`.trim();
       const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
       const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
@@ -1163,22 +1422,18 @@ export const LineItemGroupQuestion: React.FC<{
 
       parentRows.forEach(parentRow => {
         const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
+        const output = resolveDataSourceOutputGroup(config, parentRow.id);
+        const outputRows = output ? lineItems[output.key] || [] : [];
+        const existingOutputRow =
+          outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
+        const outputValues = existingOutputRow?.values as Record<string, FieldValue> | undefined;
         const draftValues = stepDataSourceDraftsRef.current[draftKey] || null;
-        let quantity = 0;
-
-        if (draftValues) {
-          const selected =
-            !selectedFieldId ||
-            !Object.prototype.hasOwnProperty.call(draftValues, selectedFieldId) ||
-            draftValues[selectedFieldId] === true;
-          quantity = selected ? toFiniteNumberValue(draftValues[quantityFieldId]) : 0;
-        } else {
-          const output = resolveDataSourceOutputGroup(config, parentRow.id);
-          const outputRows = output ? lineItems[output.key] || [] : [];
-          const existingOutputRow =
-            outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
-          quantity = existingOutputRow ? toFiniteNumberValue((existingOutputRow.values as any)?.[quantityFieldId]) : 0;
-        }
+        const committedValues = reservationCommittedValuesRef.current[draftKey] || null;
+        const quantity = resolveReservationQuantityFromValues(
+          mode === 'committed' ? committedValues || outputValues || null : draftValues || outputValues || null,
+          selectedFieldId,
+          quantityFieldId
+        );
 
         totalReservedQuantity += quantity;
         if (parentRow.id === currentParentRowId) {
@@ -1188,7 +1443,25 @@ export const LineItemGroupQuestion: React.FC<{
 
       return { totalReservedQuantity, currentRowQuantity };
     },
-    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, resolveDataSourceOutputGroup]
+    [
+      buildStepDataSourceDraftKey,
+      lineItems,
+      parentRows,
+      resolveReservationQuantityFromValues,
+      resolveDataSourceOutputGroup
+    ]
+  );
+
+  const resolveCurrentReservationStateForSource = React.useCallback(
+    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } =>
+      resolveReservationStateForSource(config, sourceKey, currentParentRowId, 'local'),
+    [resolveReservationStateForSource]
+  );
+
+  const resolveCommittedReservationStateForSource = React.useCallback(
+    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } =>
+      resolveReservationStateForSource(config, sourceKey, currentParentRowId, 'committed'),
+    [resolveReservationStateForSource]
   );
 
   const buildVirtualDataSourceRowValues = React.useCallback(
@@ -1239,12 +1512,20 @@ export const LineItemGroupQuestion: React.FC<{
         const sourceKeyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
         const sourceKey = sourceKeyFieldId ? `${(args.sourceRow as any)?.[sourceKeyFieldId] ?? ''}`.trim() : '';
         const localReservationState = sourceKey
-          ? resolveCurrentRecordReservationStateForSource(args.config, sourceKey, args.parentRowId)
+          ? resolveCurrentReservationStateForSource(args.config, sourceKey, args.parentRowId)
+          : { totalReservedQuantity: 0, currentRowQuantity: 0 };
+        const committedReservationState = sourceKey
+          ? resolveCommittedReservationStateForSource(args.config, sourceKey, args.parentRowId)
           : { totalReservedQuantity: 0, currentRowQuantity: 0 };
         const localCurrentRecordReservedQuantity = localReservationState.totalReservedQuantity;
-        const serverCurrentRecordReservedQuantity = toFiniteNumberValue(
-          (args.sourceRow as any)?.__ckCurrentRecordReservedQuantity
-        );
+        const serverCurrentRecordReservedQuantity = resolveServerCurrentRecordReservedQuantity({
+          hasExplicitServerCurrentRecordReservedQuantity: Object.prototype.hasOwnProperty.call(
+            args.sourceRow || {},
+            '__ckCurrentRecordReservedQuantity'
+          ),
+          serverCurrentRecordReservedQuantity: (args.sourceRow as any)?.__ckCurrentRecordReservedQuantity,
+          fallbackCurrentRecordReservedQuantity: committedReservationState.totalReservedQuantity
+        });
         const currentRowQuantity = Math.max(
           localReservationState.currentRowQuantity,
           toFiniteNumberValue(next[`${args.config?.quantityFieldId || ''}`.trim()])
@@ -1331,7 +1612,7 @@ export const LineItemGroupQuestion: React.FC<{
       }
       return next;
     },
-    [resolveCurrentRecordReservationStateForSource]
+    [resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
   );
 
   const updateStepDataSourceAvailabilityOptimistically = React.useCallback(
@@ -1341,6 +1622,8 @@ export const LineItemGroupQuestion: React.FC<{
         sourceRow: Record<string, any>;
         sourceKey: string;
         parentRowId: string;
+        serverCurrentRecordReservedQuantity?: number;
+        localCurrentRecordReservedQuantity?: number;
       }
     ): void => {
       const availabilityConfig = config?.availability && typeof config.availability === 'object'
@@ -1349,19 +1632,33 @@ export const LineItemGroupQuestion: React.FC<{
       const dataSourceConfig = config?.dataSource;
       if (!availabilityConfig || !dataSourceConfig || !args.sourceKey) return;
 
-      const localReservationState = resolveCurrentRecordReservationStateForSource(config, args.sourceKey, args.parentRowId);
-      const serverCurrentRecordReservedQuantity = Math.max(
-        0,
-        toFiniteNumberValue((args.sourceRow as any)?.__ckCurrentRecordReservedQuantity)
-      );
+      const committedReservationState = resolveCommittedReservationStateForSource(config, args.sourceKey, args.parentRowId);
+      const localCurrentRecordReservedQuantity = Object.prototype.hasOwnProperty.call(
+        args,
+        'localCurrentRecordReservedQuantity'
+      )
+        ? Math.max(0, toFiniteNumberValue(args.localCurrentRecordReservedQuantity))
+        : resolveCurrentReservationStateForSource(config, args.sourceKey, args.parentRowId).totalReservedQuantity;
+      const serverCurrentRecordReservedQuantity = resolveServerCurrentRecordReservedQuantity({
+        hasExplicitServerCurrentRecordReservedQuantity:
+          Object.prototype.hasOwnProperty.call(args, 'serverCurrentRecordReservedQuantity') ||
+          Object.prototype.hasOwnProperty.call(args.sourceRow || {}, '__ckCurrentRecordReservedQuantity'),
+        serverCurrentRecordReservedQuantity: Object.prototype.hasOwnProperty.call(args, 'serverCurrentRecordReservedQuantity')
+          ? args.serverCurrentRecordReservedQuantity
+          : (args.sourceRow as any)?.__ckCurrentRecordReservedQuantity,
+        fallbackCurrentRecordReservedQuantity: committedReservationState.totalReservedQuantity
+      });
       const { remainingFieldId: sourceRemainingFieldId, reservedFieldId: sourceReservedFieldId } =
         resolveAvailabilityFieldPair(availabilityConfig, args.sourceRow);
       if (!sourceRemainingFieldId || !sourceReservedFieldId) return;
 
       const remainingQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceRemainingFieldId]);
       const currentReservedQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceReservedFieldId]);
-      const reservedByOthers = Math.max(0, currentReservedQuantity - serverCurrentRecordReservedQuantity);
-      const nextReservedQuantity = Math.max(0, reservedByOthers + localReservationState.totalReservedQuantity);
+      const nextReservedQuantity = computeOptimisticAggregateReservedQuantity({
+        reservedQuantity: currentReservedQuantity,
+        serverCurrentRecordReservedQuantity,
+        localCurrentRecordReservedQuantity
+      });
       const nextFreeQuantity = computeAvailableFromAggregate(remainingQuantity, nextReservedQuantity);
 
       mutateCachedDataSource(dataSourceConfig, language, items =>
@@ -1373,14 +1670,14 @@ export const LineItemGroupQuestion: React.FC<{
           return {
             ...item,
             [sourceReservedFieldId]: nextReservedQuantity,
-            __ckCurrentRecordReservedQuantity: localReservationState.totalReservedQuantity,
+            __ckCurrentRecordReservedQuantity: localCurrentRecordReservedQuantity,
             __ckFreeQuantity: nextFreeQuantity
           };
         })
       );
       setStepDataSourceRefreshTick(prev => prev + 1);
     },
-    [language, resolveCurrentRecordReservationStateForSource]
+    [language, resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
   );
 
   function coerceNestedLineItemPresetRows(payload: any): Record<string, FieldValue>[] {
@@ -1724,12 +2021,12 @@ export const LineItemGroupQuestion: React.FC<{
       definition,
       q.id,
       resolveDataSourceOutputGroup,
-      resolveTopValue,
       resolveVirtualPreset,
-      resolveVirtualMaxFieldId,
       resolveVirtualPresetValue,
       resolveVirtualRowWhenContext,
+      resolveRowFlowGroupConfig,
       runSelectionEffectsForAncestors,
+      setLineItems,
       setValues,
       validateVirtualFieldRules,
       values
@@ -1746,61 +2043,139 @@ export const LineItemGroupQuestion: React.FC<{
       },
       options?: { skipReservation?: boolean }
     ) => {
-      syncStepDataSourceOutputRow(args);
-
-      if (options?.skipReservation) return;
-
+      const patchTouchesLine = Object.keys(args.patch || {}).length > 0;
+      if (!patchTouchesLine) return;
       const reservationConfig = args.config?.reservation && typeof args.config.reservation === 'object'
         ? args.config.reservation
         : null;
-      if (!reservationConfig || reservationConfig.enabled === false) return;
-      if (isStepReservationCommitEnabled(reservationConfig)) return;
       const sourceFormKey = `${formKey || ''}`.trim();
-      const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig.resourceFormKey || ''}`.trim();
+      const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig?.resourceFormKey || ''}`.trim();
       const resourceRecordId = `${args.sourceRow?.id || ''}`.trim();
-      if (!sourceFormKey || !resourceFormKey || !resourceRecordId) return;
-
       const keyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
       const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
       const outputKeyFieldId = `${args.config?.outputKeyFieldId || keyFieldId}`.trim();
       const selectedFieldId = `${args.config?.selectedFieldId || ''}`.trim();
       const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
       const modeFieldId = `${args.config?.modeFieldId || ''}`.trim();
-      if (!quantityFieldId || !keyFieldId || !output || !outputKeyFieldId) return;
       const sourceKey = `${args.sourceRow?.[keyFieldId] ?? ''}`.trim();
-      if (!sourceKey) return;
-      const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey);
       const patchTouchesReservation =
         Object.prototype.hasOwnProperty.call(args.patch, selectedFieldId) ||
         Object.prototype.hasOwnProperty.call(args.patch, quantityFieldId);
-      if (!patchTouchesReservation) return;
+      const canManageReservation =
+        !!reservationConfig &&
+        reservationConfig.enabled !== false &&
+        !!sourceFormKey &&
+        !!resourceFormKey &&
+        !!resourceRecordId &&
+        !!quantityFieldId &&
+        !!keyFieldId &&
+        !!output &&
+        !!outputKeyFieldId &&
+        !!sourceKey;
+      const draftKey = canManageReservation
+        ? buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey)
+        : '';
 
-      updateStepDataSourceAvailabilityOptimistically(args.config, {
-        sourceRow: args.sourceRow,
-        sourceKey,
-        parentRowId: args.parentRow.id
-      });
+      let virtualValues: Record<string, FieldValue> | null = null;
+      let nextVirtualValues: Record<string, FieldValue> | null = null;
+      let optimisticServerCurrentRecordReservedQuantity: number | undefined;
+      let optimisticLocalCurrentRecordReservedQuantity: number | undefined;
 
-      const outputRows = lineItems[output.key] || [];
-      const existingOutputRow =
-        outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
-      const virtualValues = buildVirtualDataSourceRowValues({
-        config: args.config,
-        sourceRow: args.sourceRow,
-        outputRow: existingOutputRow,
-        draftValues: stepDataSourceDraftsRef.current[draftKey] || null,
-        parentRowId: args.parentRow.id
-      });
+      if (canManageReservation) {
+        const outputRows = lineItems[output.key] || [];
+        const existingOutputRow =
+          outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
+        virtualValues = buildVirtualDataSourceRowValues({
+          config: args.config,
+          sourceRow: args.sourceRow,
+          outputRow: existingOutputRow,
+          draftValues: stepDataSourceDraftsRef.current[draftKey] || null,
+          parentRowId: args.parentRow.id
+        });
+        if (!reservationCommittedValuesRef.current[draftKey]) {
+          const committedValues: Record<string, FieldValue> = {};
+          if (selectedFieldId) committedValues[selectedFieldId] = virtualValues[selectedFieldId];
+          committedValues[quantityFieldId] = virtualValues[quantityFieldId];
+          if (modeFieldId) committedValues[modeFieldId] = virtualValues[modeFieldId];
+          reservationCommittedValuesRef.current[draftKey] = committedValues;
+        }
+        nextVirtualValues = { ...virtualValues, ...args.patch } as Record<string, FieldValue>;
+        const currentSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
+        const nextSelected = selectedFieldId ? nextVirtualValues[selectedFieldId] === true : true;
+        const currentRowQuantity = currentSelected ? toFiniteNumber(virtualValues[quantityFieldId]) : 0;
+        const nextRowQuantity = nextSelected ? toFiniteNumber(nextVirtualValues[quantityFieldId]) : 0;
+        const currentReservationState = resolveCurrentReservationStateForSource(args.config, sourceKey, args.parentRow.id);
+        const committedReservationState = resolveCommittedReservationStateForSource(args.config, sourceKey, args.parentRow.id);
+        optimisticLocalCurrentRecordReservedQuantity = Math.max(
+          0,
+          currentReservationState.totalReservedQuantity - currentRowQuantity + nextRowQuantity
+        );
+        optimisticServerCurrentRecordReservedQuantity = resolveServerCurrentRecordReservedQuantity({
+          hasExplicitServerCurrentRecordReservedQuantity: Object.prototype.hasOwnProperty.call(
+            args.sourceRow || {},
+            '__ckCurrentRecordReservedQuantity'
+          ),
+          serverCurrentRecordReservedQuantity: (args.sourceRow as any)?.__ckCurrentRecordReservedQuantity,
+          fallbackCurrentRecordReservedQuantity: committedReservationState.totalReservedQuantity
+        });
+      }
+
+      syncStepDataSourceOutputRow(args);
+
+      if (options?.skipReservation) return;
+      if (!canManageReservation) return;
+
+      if (patchTouchesReservation) {
+        updateStepDataSourceAvailabilityOptimistically(args.config, {
+          sourceRow: args.sourceRow,
+          sourceKey,
+          parentRowId: args.parentRow.id,
+          serverCurrentRecordReservedQuantity: optimisticServerCurrentRecordReservedQuantity,
+          localCurrentRecordReservedQuantity: optimisticLocalCurrentRecordReservedQuantity
+        });
+      }
+
+      const resolvedVirtualValues = virtualValues || {};
       if (!reservationCommittedValuesRef.current[draftKey]) {
         const committedValues: Record<string, FieldValue> = {};
-        if (selectedFieldId) committedValues[selectedFieldId] = virtualValues[selectedFieldId];
-        committedValues[quantityFieldId] = virtualValues[quantityFieldId];
-        if (modeFieldId) committedValues[modeFieldId] = virtualValues[modeFieldId];
+        if (selectedFieldId) committedValues[selectedFieldId] = resolvedVirtualValues[selectedFieldId];
+        committedValues[quantityFieldId] = resolvedVirtualValues[quantityFieldId];
+        if (modeFieldId) committedValues[modeFieldId] = resolvedVirtualValues[modeFieldId];
         reservationCommittedValuesRef.current[draftKey] = committedValues;
       }
-      const nextVirtualValues = { ...virtualValues, ...args.patch } as Record<string, FieldValue>;
-      const selected = selectedFieldId ? nextVirtualValues[selectedFieldId] === true : true;
-      const quantity = selected ? toFiniteNumber(nextVirtualValues[quantityFieldId]) : 0;
+      const resolvedNextVirtualValues = (nextVirtualValues || { ...resolvedVirtualValues, ...args.patch }) as Record<string, FieldValue>;
+      const quantityField = quantityFieldId ? fieldByIdSafe(args.config?.fields, quantityFieldId) : null;
+      const modeField = modeFieldId ? fieldByIdSafe(args.config?.fields, modeFieldId) : null;
+      const hasValidationErrors =
+        (quantityField
+          ? validateVirtualFieldRules(quantityField, resolvedNextVirtualValues, args.parentRow.values as Record<string, FieldValue>).length > 0
+          : false) ||
+        (modeField
+          ? validateVirtualFieldRules(modeField, resolvedNextVirtualValues, args.parentRow.values as Record<string, FieldValue>).length > 0
+          : false);
+      if (isStepReservationCommitEnabled(reservationConfig)) {
+        if (
+          shouldImmediatelySyncStepReservationChange({
+            patch: args.patch,
+            selectedFieldId,
+            quantityFieldId,
+            selectedValue: selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] : true,
+            quantityValue: resolvedNextVirtualValues[quantityFieldId],
+            hasValidationErrors
+          })
+        ) {
+          queueImmediateStepReservationDraftSync({
+            config: args.config,
+            parentRowId: args.parentRow.id,
+            sourceKey,
+            patch: args.patch
+          });
+        }
+        return;
+      }
+      if (!patchTouchesReservation) return;
+      const selected = selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] === true : true;
+      const quantity = selected ? toFiniteNumber(resolvedNextVirtualValues[quantityFieldId]) : 0;
       const debounceMs = Number.isFinite(Number(reservationConfig.debounceMs))
         ? Number(reservationConfig.debounceMs)
         : 250;
@@ -2000,7 +2375,7 @@ export const LineItemGroupQuestion: React.FC<{
             const committedValues: Record<string, FieldValue> = {};
             if (selectedFieldId) committedValues[selectedFieldId] = selected;
             committedValues[quantityFieldId] = quantity > 0 ? `${quantity}` : null;
-            if (modeFieldId) committedValues[modeFieldId] = nextVirtualValues[modeFieldId] ?? null;
+            if (modeFieldId) committedValues[modeFieldId] = resolvedNextVirtualValues[modeFieldId] ?? null;
             reservationCommittedValuesRef.current[draftKey] = committedValues;
           }
         } catch (error) {
@@ -2090,12 +2465,16 @@ export const LineItemGroupQuestion: React.FC<{
       onDiagnostic,
       openConfirmDialog,
       q.id,
+      queueImmediateStepReservationDraftSync,
       recordId,
+      resolveCommittedReservationStateForSource,
+      resolveCurrentReservationStateForSource,
       resolveDataSourceOutputGroup,
       syncStepDataSourceOutputRow,
       toFiniteNumber,
       updateStepDataSourceAvailability,
-      updateStepDataSourceAvailabilityOptimistically
+      updateStepDataSourceAvailabilityOptimistically,
+      validateVirtualFieldRules
     ]
   );
 
@@ -2315,13 +2694,17 @@ export const LineItemGroupQuestion: React.FC<{
   }, [
     buildStepDataSourceDraftKey,
     buildVirtualDataSourceRowValues,
+    childRowsMatchEntries,
     coerceNestedLineItemPresetRows,
     lineItems,
     parentRows,
+    q.id,
     resolveDataSourceOutputGroup,
+    resolveRowFlowGroupConfig,
     resolveStepDataSourceRowsForParent,
     resolveVirtualPreset,
     resolveVirtualRowWhenContext,
+    setLineItems,
     stepDataSourceDrafts,
     stepDataSourceRows
   ]);
@@ -2334,7 +2717,7 @@ export const LineItemGroupQuestion: React.FC<{
       try {
         const parsed = JSON.parse(trimmed);
         return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-      } catch (_) {
+      } catch {
         return [];
       }
     }
@@ -2375,66 +2758,6 @@ export const LineItemGroupQuestion: React.FC<{
     });
     return Array.from(grouped.values());
   }, []);
-
-  function resolveRowFlowGroupConfig(groupKey: string): { groupId: string; config: any } | null {
-    if (!groupKey) return null;
-    const baseParsed = parseSubgroupKey(q.id);
-    const baseRootId = baseParsed?.rootGroupId || q.id;
-    if (groupKey === q.id && q.lineItemConfig) {
-      return { groupId: q.id, config: q.lineItemConfig };
-    }
-    const rootQuestion = definition.questions.find(question => question.id === baseRootId);
-    const rootConfig =
-      baseRootId === q.id && q.lineItemConfig
-        ? q.lineItemConfig
-        : rootQuestion?.lineItemConfig;
-    const fallbackRootConfig = rootQuestion?.lineItemConfig;
-    if (!rootConfig && !fallbackRootConfig) return null;
-
-    const resolveFromConfig = (config: any, path: string[]): any | null => {
-      if (!config) return null;
-      if (!path.length) return config;
-      let current: any = config;
-      for (let i = 0; i < path.length; i += 1) {
-        const subId = path[i];
-        const next = (current?.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
-        if (!next) return null;
-        current = next;
-      }
-      return current;
-    };
-
-    const resolveFromRoot = (path: string[]): any | null =>
-      resolveFromConfig(rootConfig, path) || resolveFromConfig(fallbackRootConfig, path);
-
-    if (groupKey === baseRootId) {
-      return { groupId: baseRootId, config: rootConfig || fallbackRootConfig };
-    }
-
-    const parsed = parseSubgroupKey(groupKey);
-    if (parsed && parsed.rootGroupId === baseRootId) {
-      const cfg = resolveFromRoot(parsed.path);
-      return cfg ? { groupId: groupKey, config: cfg } : null;
-    }
-
-    if (groupKey === q.id && baseParsed?.path?.length) {
-      const cfg = resolveFromRoot(baseParsed.path);
-      return cfg ? { groupId: q.id, config: cfg } : null;
-    }
-
-    if (groupKey === q.id && !baseParsed) {
-      return { groupId: q.id, config: rootConfig };
-    }
-
-    return null;
-  }
-
-  function resolveRowFlowFieldConfig(groupKey: string, fieldId: string): any | null {
-    if (!groupKey || !fieldId) return null;
-    const info = resolveRowFlowGroupConfig(groupKey);
-    if (!info?.config) return null;
-    return (info.config.fields || []).find((field: any) => field?.id === fieldId) || null;
-  }
 
   const buildRowFlowFieldCtx = React.useCallback(
     (args: { rowValues: Record<string, FieldValue>; parentValues?: Record<string, FieldValue> }): VisibilityContext => ({
@@ -7733,7 +8056,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       return acc;
                     }, new Set<string>())
                   : new Set<string>();
-              const hasFieldTriggeredSubgroup = fieldTriggeredSubgroupIdSet.size > 0;
               const fallbackSubIds =
                 !rowCollapsed && subIds.length
                   ? (ui?.inlineSubgroupsWhenExpanded === true

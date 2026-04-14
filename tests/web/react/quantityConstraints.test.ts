@@ -1,8 +1,10 @@
 import {
+  computeOptimisticAggregateReservedQuantity,
   computeAvailableFromAggregate,
   ensureEditableMaxIncludesCurrentValue,
   computeOptimisticFreeQuantity,
   computeOptimisticRowMaxQuantity,
+  resolveServerCurrentRecordReservedQuantity,
   sanitizeNumericDraft,
   toFiniteNumberValue
 } from '../../../src/web/react/components/form/quantityConstraints';
@@ -31,6 +33,33 @@ describe('quantityConstraints', () => {
         localCurrentRecordReservedQuantity: 5
       })
     ).toBe(0);
+  });
+
+  it('falls back to committed current-record reservations when datasource rows have no explicit metadata', () => {
+    expect(
+      resolveServerCurrentRecordReservedQuantity({
+        hasExplicitServerCurrentRecordReservedQuantity: false,
+        serverCurrentRecordReservedQuantity: undefined,
+        fallbackCurrentRecordReservedQuantity: 3
+      })
+    ).toBe(3);
+    expect(
+      resolveServerCurrentRecordReservedQuantity({
+        hasExplicitServerCurrentRecordReservedQuantity: true,
+        serverCurrentRecordReservedQuantity: 0,
+        fallbackCurrentRecordReservedQuantity: 3
+      })
+    ).toBe(0);
+  });
+
+  it('computes optimistic aggregate reserved stock by replacing the current record quantity only once', () => {
+    expect(
+      computeOptimisticAggregateReservedQuantity({
+        reservedQuantity: 3,
+        serverCurrentRecordReservedQuantity: 3,
+        localCurrentRecordReservedQuantity: 2
+      })
+    ).toBe(2);
   });
 
   it('computes per-row editable max quantity from optimistic free quantity plus current row quantity', () => {

@@ -1,3 +1,5 @@
+import type { InventoryAvailabilitySnapshot } from '../../../../types';
+
 export const getReservationCommitMode = (reservationConfig: any): 'immediate' | 'step' => {
   const raw = (reservationConfig?.commitMode || '').toString().trim().toLowerCase();
   return raw === 'step' ? 'step' : 'immediate';
@@ -20,6 +22,42 @@ export const shouldDeferReservationSync = (args: {
   return touchesQuantity && !touchesSelection;
 };
 
+const normalizeReservationValue = (value: unknown): string | null => {
+  if (value === undefined || value === null) return null;
+  const text = `${value}`.trim();
+  return text ? text : null;
+};
+
+export const shouldImmediatelySyncStepReservationChange = (args: {
+  patch: Record<string, any>;
+  selectedFieldId?: string;
+  quantityFieldId?: string;
+  selectedValue?: unknown;
+  quantityValue?: unknown;
+  hasValidationErrors?: boolean;
+}): boolean => {
+  const patch = args.patch || {};
+  if (!Object.keys(patch).length) return false;
+  if (args.hasValidationErrors) return false;
+
+  const selectedFieldId = (args.selectedFieldId || '').toString().trim();
+  const quantityFieldId = (args.quantityFieldId || '').toString().trim();
+  const selected = selectedFieldId
+    ? (Object.prototype.hasOwnProperty.call(patch, selectedFieldId) ? patch[selectedFieldId] : args.selectedValue) === true
+    : true;
+
+  if (!selected) return true;
+  if (!quantityFieldId) return true;
+
+  const quantityText = normalizeReservationValue(
+    Object.prototype.hasOwnProperty.call(patch, quantityFieldId) ? patch[quantityFieldId] : args.quantityValue
+  );
+  if (quantityText === null) return false;
+
+  const quantity = Number(quantityText);
+  return Number.isFinite(quantity) && quantity >= 0;
+};
+
 export const buildReservationFailureMessage = (
   rawMessage: string,
   fallback: string,
@@ -36,3 +74,12 @@ export const buildReservationFailureMessage = (
   }
   return message || fallback;
 };
+
+export const normalizeStepReservationAvailabilityForDisplay = (
+  snapshot: InventoryAvailabilitySnapshot
+): InventoryAvailabilitySnapshot => ({
+  ...snapshot,
+  // Step-managed rows already account for the current record through local line-item state.
+  // Reapplying the server-reported current reservation quantity here would double-count it.
+  currentRecordReservedQuantity: 0
+});

@@ -2498,6 +2498,194 @@ describe('WebFormService', () => {
     expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
   });
 
+  test('applyInventoryReservationPlan releases legacy reservations whose output group id was stored as the output row id', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-LEGACY-SCOPE',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 5,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const legacyOutputRowId = 'MP_TYPE_LI_legacy123';
+    const legacyReservation = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-LEGACY-SCOPE',
+      resourceKind: 'Entire dish',
+      quantity: 5,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-LEGACY-SCOPE-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: legacyOutputRowId,
+      sourceOutputRowId: legacyOutputRowId,
+      sourceOutputKeyFieldId: 'LEFTOVER_ID',
+      ledgerFormKey
+    });
+    expect(legacyReservation.success).toBe(true);
+
+    const nextOutputRowId = 'MP_TYPE_LI_next456';
+    const result = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-LEGACY-SCOPE-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventory.meta?.id || '').toString(),
+          resourceItemId: 'LE-LEGACY-SCOPE',
+          resourceKind: 'Entire dish',
+          quantity: 5,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI',
+          sourceOutputRowId: nextOutputRowId,
+          sourceOutputKeyFieldId: 'LEFTOVER_ID'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.conflict).not.toBe(true);
+    expect(result.reservationsApplied).toBe(1);
+    expect(result.reservationsReleased).toBe(1);
+
+    const releasedLegacyReservation = service.fetchSubmissionById(
+      ledgerFormKey,
+      (legacyReservation.reservationId || '').toString()
+    );
+    expect((releasedLegacyReservation?.values as any)?.STATUS).toBe('released');
+
+    const nextReservationId = (service as any).buildInventoryReservationId({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-LEGACY-SCOPE',
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-LEGACY-SCOPE-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputRowId: nextOutputRowId
+    });
+    const nextReservation = service.fetchSubmissionById(ledgerFormKey, nextReservationId);
+    expect((nextReservation?.values as any)?.STATUS).toBe('active');
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(5);
+  });
+
+  test('applyInventoryReservationPlan reports the final availability snapshot after releases and re-applies on the same resource', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-PLAN-FINAL',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 5,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reservationA = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-FINAL',
+      resourceKind: 'Entire dish',
+      quantity: 3,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-FINAL-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-1',
+      sourceOutputKeyFieldId: 'LEFTOVER_ID',
+      ledgerFormKey
+    });
+    const reservationB = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-FINAL',
+      resourceKind: 'Entire dish',
+      quantity: 2,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-FINAL-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-2',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-2',
+      sourceOutputKeyFieldId: 'LEFTOVER_ID',
+      ledgerFormKey
+    });
+    expect(reservationA.success).toBe(true);
+    expect(reservationB.success).toBe(true);
+
+    const result = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-FINAL-1',
+      ledgerFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        },
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      reservations: [
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventory.meta?.id || '').toString(),
+          resourceItemId: 'LE-PLAN-FINAL',
+          resourceKind: 'Entire dish',
+          quantity: 2,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI',
+          sourceOutputRowId: 'OUT-1',
+          sourceOutputKeyFieldId: 'LEFTOVER_ID'
+        },
+        {
+          resourceFormKey: inventoryFormKey,
+          resourceRecordId: (inventory.meta?.id || '').toString(),
+          resourceItemId: 'LE-PLAN-FINAL',
+          resourceKind: 'Entire dish',
+          quantity: 2,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-2',
+          sourceOutputGroupId: 'MP_TYPE_LI',
+          sourceOutputRowId: 'OUT-2',
+          sourceOutputKeyFieldId: 'LEFTOVER_ID'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.availability).toEqual([
+      expect.objectContaining({
+        resourceItemId: 'LE-PLAN-FINAL',
+        reservedQuantity: 4,
+        currentRecordReservedQuantity: 4,
+        freeQuantity: 1
+      })
+    ]);
+  });
+
   test('reconcileInventoryReservations consumes reserved quantity and closes active ledger rows', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const inventory = service.saveSubmissionWithId({
@@ -3255,6 +3443,26 @@ describe('WebFormService', () => {
     expect(bumpSpy).not.toHaveBeenCalled();
   });
 
+  test('saveSubmissionWithId accepts compact values-only payloads', () => {
+    const result = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-COMPACT-PAYLOAD-1',
+      values: {
+        Q1: 'Alice',
+        Q2_json: JSON.stringify([]),
+        Q3: [],
+        Q4: 'ACME'
+      }
+    } as any);
+
+    expect(result.success).toBe(true);
+    const saved = service.fetchSubmissionById('Config: Delivery', 'REC-COMPACT-PAYLOAD-1');
+    expect(saved?.values?.Q1).toBe('Alice');
+    expect(saved?.values?.Q4).toBe('ACME');
+    expect(Array.isArray((saved?.values as any)?.Q2)).toBe(true);
+  });
+
   test('triggerFollowupAction RECONCILE_RESERVATIONS reconciles active reservations without closing the record', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -3666,6 +3874,34 @@ describe('WebFormService', () => {
     } finally {
       lane.restore();
     }
+  });
+
+  test('saveSubmissionWithId retries transient record save lock failures', () => {
+    const submissions = (service as any).submissions;
+    const actualSave = submissions.saveSubmissionWithId.bind(submissions);
+    const saveSpy = jest
+      .spyOn(submissions, 'saveSubmissionWithId')
+      .mockImplementationOnce(() => ({
+        success: false,
+        message: 'Could not acquire the record save lock. Please retry.',
+        meta: {}
+      }))
+      .mockImplementation((...args: any[]) => actualSave(...args));
+
+    const result = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-SAVE-RETRY-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    expect(saveSpy).toHaveBeenCalledTimes(2);
+    expect((global as any).Utilities.sleep).toHaveBeenCalledWith(900);
+    expect(result.success).toBe(true);
+    expect(service.fetchSubmissionById('Config: Delivery', 'REC-SAVE-RETRY-1')?.values?.Q1).toBe('Alice');
   });
 
   test('triggerFollowupAction applies close-state submit effects before returning success', () => {

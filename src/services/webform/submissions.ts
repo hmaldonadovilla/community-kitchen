@@ -82,6 +82,26 @@ export class SubmissionService {
     });
   }
 
+  private readSubmissionFieldValue(formObject: WebFormSubmission | Record<string, any>, fieldId: string): any {
+    if ((formObject as any)?.values && typeof (formObject as any).values === 'object') {
+      const values = (formObject as any).values as Record<string, any>;
+      if (Object.prototype.hasOwnProperty.call(values, fieldId)) {
+        return values[fieldId];
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(formObject || {}, fieldId)) {
+      return (formObject as any)[fieldId];
+    }
+    return undefined;
+  }
+
+  private readSubmissionLineItemGroupValue(formObject: WebFormSubmission | Record<string, any>, fieldId: string): any {
+    const jsonKey = `${fieldId}_json`;
+    const jsonValue = this.readSubmissionFieldValue(formObject, jsonKey);
+    if (jsonValue !== undefined) return jsonValue;
+    return this.readSubmissionFieldValue(formObject, fieldId);
+  }
+
   saveSubmissionWithId(
     formObject: WebFormSubmission,
     form: FormConfig,
@@ -297,7 +317,7 @@ export class SubmissionService {
     const candidateValues: Record<string, any> = {};
     questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       if (q.type === 'TEXT' && q.autoIncrement) {
-        const currentVal = (formObject as any)[q.id];
+        const currentVal = this.readSubmissionFieldValue(formObject, q.id);
         if (!currentVal) {
           const existingAutoIncrementValue = (() => {
             if (existingRowIdx < 0) return '';
@@ -324,7 +344,7 @@ export class SubmissionService {
       let value: any = '';
 
       if (q.type === 'LINE_ITEM_GROUP') {
-        const rawLineItems = (formObject as any)[`${q.id}_json`] || (formObject as any)[q.id];
+        const rawLineItems = this.readSubmissionLineItemGroupValue(formObject, q.id);
         let parsed: any = null;
         if (rawLineItems && typeof rawLineItems === 'string') {
           try {
@@ -357,9 +377,9 @@ export class SubmissionService {
           }
         }
       } else if (q.type === 'FILE_UPLOAD') {
-        value = this.uploadService.saveFiles((formObject as any)[q.id], q.uploadConfig);
+        value = this.uploadService.saveFiles(this.readSubmissionFieldValue(formObject, q.id), q.uploadConfig);
       } else {
-        value = (formObject as any)[q.id];
+        value = this.readSubmissionFieldValue(formObject, q.id);
         if (Array.isArray(value)) {
           value = value.join(', ');
         }
@@ -552,7 +572,7 @@ export class SubmissionService {
         deviceInfo: (formObject as any).__ckDeviceInfo,
         auditAction: (formObject as any).__ckAuditAction
       });
-    } catch (_) {
+    } catch {
       // ignore audit logging failures so primary saves are not blocked
     }
 
