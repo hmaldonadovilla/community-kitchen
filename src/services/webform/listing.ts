@@ -12,6 +12,17 @@ import { SubmissionService } from './submissions';
 import { debugLog } from './debug';
 
 const LIST_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6h max supported by CacheService
+const LIST_SCAN_MAX_ROWS = 200;
+const SEARCH_INDEX_PAGE_SIZE_MAX = 250;
+
+type SortedBatchRequest = {
+  fieldId?: string;
+  direction?: string;
+  __ifNoneMatch?: boolean;
+  __clientEtag?: string;
+  dateFieldId?: string;
+  dateEquals?: string;
+};
 
 export class ListingService {
   private readonly submissionService: SubmissionService;
@@ -64,6 +75,7 @@ export class ListingService {
    * - The default list endpoint returns rows in sheet order; the React client sorts locally.
    * - When loading pages progressively, local sorting can cause the "first page" to shift as more rows arrive.
    * - This endpoint sorts on the server (within the 200-row cap) so page 1 is stable from the first response.
+   * - For "recent first" sorts (DATE/DATETIME/updatedAt/createdAt desc), the scan window follows the newest rows.
    *
    * Notes:
    * - Sorting is limited to a single field (fieldId) + direction.
@@ -77,7 +89,7 @@ export class ListingService {
     pageToken?: string,
     includePageRecords: boolean = true,
     recordIds?: string[],
-    sort?: { fieldId?: string; direction?: string; __ifNoneMatch?: boolean; __clientEtag?: string }
+    sort?: SortedBatchRequest
   ): SubmissionBatchResult<Record<string, any>> {
     const startedAt = Date.now();
     const sortFieldOverride = (sort?.fieldId || '').toString().trim();
@@ -94,10 +106,29 @@ export class ListingService {
     const etag = this.cacheManager.getSheetEtag(sheet, columns);
 
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
-    const cappedTotal = Math.min(maxRows, 200);
+    const cappedTotal = Math.min(maxRows, LIST_SCAN_MAX_ROWS);
     const size = Math.max(1, Math.min(pageSize || 10, 50));
     const offset = decodePageToken(pageToken);
+    const fieldIds = projection && projection.length ? projection : questions.map(q => q.id);
+    const questionTypeById: Record<string, string> = {};
+    (questions || []).forEach(q => {
+      const id = (q?.id || '').toString();
+      if (!id) return;
+      questionTypeById[id] = (q.type || '').toString();
+    });
+    const exactDateFieldIdRaw = (((sort as any)?.dateFieldId ?? '') || '').toString().trim();
+    const exactDateValueRaw = (((sort as any)?.dateEquals ?? '') || '').toString().trim();
+    const exactDateValue = this.normalizeToIsoDateOnly(exactDateValueRaw);
+    const exactDateFilter = (() => {
+      if (!exactDateFieldIdRaw || !exactDateValue) return null;
+      const type = (questionTypeById[exactDateFieldIdRaw] || '').toString().trim().toUpperCase();
+      if (type !== 'DATE' && type !== 'DATETIME') return null;
+      const columnIndex = Number(columns.fields[exactDateFieldIdRaw] || 0);
+      if (!Number.isFinite(columnIndex) || columnIndex <= 0) return null;
+      return { fieldId: exactDateFieldIdRaw, value: exactDateValue, columnIndex };
+    })();
     const canReturnNotModified =
+      !exactDateFilter &&
       ifNoneMatch &&
       !!clientEtag &&
       offset <= 0 &&
@@ -112,12 +143,10 @@ export class ListingService {
       (notModifiedList as any).notModified = true;
       return { list: notModifiedList, records: {} };
     }
-    if (offset >= cappedTotal) {
+    if (!exactDateFilter && offset >= cappedTotal) {
       const emptyList: PaginatedResult<Record<string, any>> = { items: [], totalCount: cappedTotal, etag };
       return { list: emptyList, records: {} };
     }
-
-    const fieldIds = projection && projection.length ? projection : questions.map(q => q.id);
 
     // Multi-key sorting:
     // - Primary is the caller-provided `sort` (when present)
@@ -188,7 +217,8 @@ export class ListingService {
       size.toString(),
       pageToken || '',
       includePageRecords ? 'R1' : 'R0',
-      sortKey
+      sortKey,
+      exactDateFilter ? `${exactDateFilter.fieldId}:${exactDateFilter.value}` : ''
     ]);
     const cached = this.cacheManager.cacheGet<SubmissionBatchResult<Record<string, any>>>(cacheKey);
     if (cached && cached.list && Array.isArray((cached.list as any).items)) {
@@ -196,12 +226,47 @@ export class ListingService {
       return { list: cachedList, records: cached.records || {} };
     }
 
-    const questionTypeById: Record<string, string> = {};
-    (questions || []).forEach(q => {
-      const id = (q?.id || '').toString();
-      if (!id) return;
-      questionTypeById[id] = (q.type || '').toString();
-    });
+    const shouldUseTailWindow = (() => {
+      if (exactDateFilter) return false;
+      if (!effectiveSorts.length || cappedTotal <= 0 || maxRows <= cappedTotal) return false;
+      const primary = effectiveSorts[0];
+      if (!primary || primary.direction !== 'desc') return false;
+      const fieldId = (primary.fieldId || '').toString().trim();
+      if (!fieldId) return false;
+      if (fieldId === 'createdAt' || fieldId === 'updatedAt') return true;
+      const type = (questionTypeById[fieldId] || '').toString().trim().toUpperCase();
+      return type === 'DATE' || type === 'DATETIME';
+    })();
+    const scanStartRow = shouldUseTailWindow ? Math.max(2, 2 + (maxRows - cappedTotal)) : 2;
+    const scanRowNumbers: number[] = exactDateFilter
+      ? (() => {
+          if (maxRows <= 0) return [];
+          const dateScanStartedAt = Date.now();
+          const dateRead = this.readColumnsForRows(sheet, 2, maxRows, [exactDateFilter.columnIndex]);
+          const values = dateRead.valuesByColumn[exactDateFilter.columnIndex] || [];
+          const matches: number[] = [];
+          for (let idx = 0; idx < maxRows; idx += 1) {
+            if (this.normalizeToIsoDateOnly(values[idx]) === exactDateFilter.value) {
+              matches.push(2 + idx);
+            }
+          }
+          debugLog('listing.sorted.dateScan', {
+            formKey: form.configSheet,
+            fieldId: exactDateFilter.fieldId,
+            value: exactDateFilter.value,
+            rowsScanned: maxRows,
+            matchedRows: matches.length,
+            segments: dateRead.segmentCount,
+            durationMs: Date.now() - dateScanStartedAt
+          });
+          return matches;
+        })()
+      : Array.from({ length: cappedTotal }, (_, idx) => scanStartRow + idx);
+    const scanCount = scanRowNumbers.length;
+    if (offset >= scanCount) {
+      const emptyList: PaginatedResult<Record<string, any>> = { items: [], totalCount: scanCount, etag };
+      return { list: emptyList, records: {} };
+    }
 
     const colIndexByKey: Record<string, number> = {};
     const addColumnIndex = (key: string, colIdx?: number) => {
@@ -232,15 +297,17 @@ export class ListingService {
       addColumnIndex(f, columns.fields[f]);
     });
     const columnReadStartedAt = Date.now();
-    const columnRead = this.readColumnsForRows(sheet, 2, cappedTotal, Object.values(colIndexByKey));
+    const columnRead = exactDateFilter
+      ? this.readColumnsForSpecificRows(sheet, scanRowNumbers, Object.values(colIndexByKey))
+      : this.readColumnsForRows(sheet, scanStartRow, scanCount, Object.values(colIndexByKey));
     const colValuesByKey: Record<string, any[]> = {};
     Object.keys(colIndexByKey).forEach(key => {
       const idx = colIndexByKey[key];
-      colValuesByKey[key] = columnRead.valuesByColumn[idx] || new Array(cappedTotal).fill(undefined);
+      colValuesByKey[key] = columnRead.valuesByColumn[idx] || new Array(scanCount).fill(undefined);
     });
     debugLog('listing.sorted.readColumns', {
       formKey: form.configSheet,
-      rows: cappedTotal,
+      rows: scanCount,
       columns: Object.keys(colIndexByKey).length,
       segments: columnRead.segmentCount,
       durationMs: Date.now() - columnReadStartedAt
@@ -302,10 +369,10 @@ export class ListingService {
       return questionTypeById[fieldId] || '';
     };
 
-    // Build list rows for all items (up to 200) so we can sort deterministically.
+    // Build list rows for the active scan window so we can sort deterministically.
     const entries: Array<{ idx: number; rowNumber: number; item: Record<string, any> }> = [];
-    for (let idx = 0; idx < cappedTotal; idx += 1) {
-      const rowNumber = 2 + idx;
+    for (let idx = 0; idx < scanCount; idx += 1) {
+      const rowNumber = scanRowNumbers[idx];
       const rowIdValue = colValuesByKey.__id ? colValuesByKey.__id[idx] : '';
       const rowId = rowIdValue !== undefined && rowIdValue !== null ? rowIdValue.toString() : '';
       if (!rowId) continue;
@@ -404,11 +471,127 @@ export class ListingService {
     this.cacheManager.cachePut(cacheKey, result, LIST_CACHE_TTL_SECONDS);
     debugLog('listing.sorted.completed', {
       formKey: form.configSheet,
-      totalRows: cappedTotal,
+      scanWindow: exactDateFilter ? 'exact-date' : shouldUseTailWindow ? 'tail' : 'head',
+      scanStartRow: exactDateFilter ? null : scanStartRow,
+      totalRows: scanCount,
       pageSize: size,
       pageOffset: offset,
       returnedItems: listResult.items.length,
       sortKey: sortKey || null,
+      exactDateFieldId: exactDateFilter?.fieldId || null,
+      exactDateValue: exactDateFilter?.value || null,
+      durationMs: Date.now() - startedAt
+    });
+    return result;
+  }
+
+  fetchSubmissionsSearchIndex(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    projection?: string[],
+    pageSize: number = SEARCH_INDEX_PAGE_SIZE_MAX,
+    pageToken?: string
+  ): PaginatedResult<Record<string, any>> {
+    const startedAt = Date.now();
+    const { sheet, columns } = this.submissionService.ensureDestination(
+      form.destinationTab || `${form.title} Responses`,
+      questions
+    );
+    const etag = this.cacheManager.getSheetEtag(sheet, columns);
+    const maxRows = Math.max(0, sheet.getLastRow() - 1);
+    const totalCount = maxRows;
+    const size = Math.max(1, Math.min(pageSize || SEARCH_INDEX_PAGE_SIZE_MAX, SEARCH_INDEX_PAGE_SIZE_MAX));
+    const offset = decodePageToken(pageToken);
+    if (offset >= totalCount) {
+      return { items: [], totalCount, etag };
+    }
+
+    const fieldIds = projection && projection.length ? projection : questions.map(q => q.id);
+    const cacheKey = this.cacheManager.makeCacheKey('LIST_SEARCH_INDEX', [
+      form.configSheet || '',
+      etag || '',
+      fieldIds.join('|'),
+      size.toString(),
+      pageToken || ''
+    ]);
+    const cached = this.cacheManager.cacheGet<PaginatedResult<Record<string, any>>>(cacheKey);
+    if (cached && Array.isArray((cached as any).items)) {
+      return { ...(cached as any), etag: (cached as any).etag || etag };
+    }
+
+    const readCount = Math.min(size, totalCount - offset);
+    const startRow = 2 + offset;
+    const colIndexByKey: Record<string, number> = {};
+    const addColumnIndex = (key: string, colIdx?: number) => {
+      const idx = Number(colIdx || 0);
+      if (!key || !Number.isFinite(idx) || idx <= 0) return;
+      colIndexByKey[key] = idx;
+    };
+
+    addColumnIndex('__id', columns.recordId);
+    addColumnIndex('__createdAt', columns.createdAt);
+    addColumnIndex('__updatedAt', columns.updatedAt);
+    addColumnIndex('__status', columns.status);
+    addColumnIndex('__pdfUrl', columns.pdfUrl);
+    fieldIds.forEach(fid => {
+      const key = (fid || '').toString().trim();
+      if (!key) return;
+      addColumnIndex(key, columns.fields[key]);
+    });
+
+    const columnReadStartedAt = Date.now();
+    const read = this.readColumnsForRows(sheet, startRow, readCount, Object.values(colIndexByKey));
+    const colValuesByKey: Record<string, any[]> = {};
+    Object.keys(colIndexByKey).forEach(key => {
+      const idx = colIndexByKey[key];
+      colValuesByKey[key] = read.valuesByColumn[idx] || new Array(readCount).fill(undefined);
+    });
+    debugLog('listing.searchIndex.readColumns', {
+      formKey: form.configSheet,
+      rows: readCount,
+      columns: Object.keys(colIndexByKey).length,
+      segments: read.segmentCount,
+      durationMs: Date.now() - columnReadStartedAt
+    });
+
+    const items = Array.from({ length: readCount }, (_, idx) => {
+      const item: Record<string, any> = {};
+      item.__rowNumber = startRow + idx;
+      const rowIdValue = colValuesByKey.__id ? colValuesByKey.__id[idx] : '';
+      const rowId = rowIdValue !== undefined && rowIdValue !== null ? rowIdValue.toString() : '';
+      item.id = rowId;
+
+      const createdAtRaw = colValuesByKey.__createdAt ? colValuesByKey.__createdAt[idx] : undefined;
+      const updatedAtRaw = colValuesByKey.__updatedAt ? colValuesByKey.__updatedAt[idx] : undefined;
+      item.createdAt = createdAtRaw !== undefined ? this.asIso(createdAtRaw) : undefined;
+      item.updatedAt = updatedAtRaw !== undefined ? this.asIso(updatedAtRaw) : undefined;
+      item.status = colValuesByKey.__status ? colValuesByKey.__status[idx] : undefined;
+      item.pdfUrl = colValuesByKey.__pdfUrl ? colValuesByKey.__pdfUrl[idx] : undefined;
+
+      fieldIds.forEach(fid => {
+        const key = (fid || '').toString().trim();
+        if (!key) return;
+        item[key] = colValuesByKey[key] ? colValuesByKey[key][idx] : undefined;
+      });
+      return item;
+    });
+
+    const nextOffset = offset + readCount;
+    const nextPageToken = nextOffset < totalCount ? encodePageToken(nextOffset) : undefined;
+    const result: PaginatedResult<Record<string, any>> = {
+      items,
+      nextPageToken,
+      totalCount,
+      etag
+    };
+    this.cacheManager.cachePut(cacheKey, result, LIST_CACHE_TTL_SECONDS);
+    debugLog('listing.searchIndex.completed', {
+      formKey: form.configSheet,
+      pageSize: size,
+      pageOffset: offset,
+      returnedItems: items.length,
+      totalCount,
+      hasNextPage: Boolean(nextPageToken),
       durationMs: Date.now() - startedAt
     });
     return result;
@@ -673,7 +856,7 @@ export class ListingService {
     );
     const etag = this.cacheManager.getSheetEtag(sheet, columns);
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
-    const cappedTotal = Math.min(maxRows, 200);
+    const cappedTotal = Math.min(maxRows, LIST_SCAN_MAX_ROWS);
     const size = Math.max(1, Math.min(pageSize || 10, 50));
     const offset = decodePageToken(pageToken);
     if (offset >= cappedTotal) {
@@ -838,6 +1021,91 @@ export class ListingService {
     });
 
     return { valuesByColumn, segmentCount: segments.length };
+  }
+
+  private readColumnsForSpecificRows(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    rowNumbers: number[],
+    colIndexes: number[]
+  ): { valuesByColumn: Record<number, any[]>; segmentCount: number } {
+    const normalizedRows = Array.from(
+      new Set(
+        (Array.isArray(rowNumbers) ? rowNumbers : [])
+          .map(row => Number(row))
+          .filter(row => Number.isFinite(row) && row >= 2)
+          .map(row => Math.floor(row))
+      )
+    ).sort((a, b) => a - b);
+
+    const normalizedCols = Array.from(
+      new Set(
+        (Array.isArray(colIndexes) ? colIndexes : [])
+          .map(col => Number(col))
+          .filter(col => Number.isFinite(col) && col > 0)
+      )
+    ).sort((a, b) => a - b);
+
+    const valuesByColumn: Record<number, any[]> = {};
+    normalizedCols.forEach(col => {
+      valuesByColumn[col] = normalizedRows.length ? new Array(normalizedRows.length).fill(undefined) : [];
+    });
+
+    if (!normalizedRows.length || !normalizedCols.length) {
+      return { valuesByColumn, segmentCount: 0 };
+    }
+
+    let segmentCount = 0;
+    let segmentStartIndex = 0;
+    while (segmentStartIndex < normalizedRows.length) {
+      let segmentEndIndex = segmentStartIndex;
+      let prevRow = normalizedRows[segmentStartIndex];
+      while (segmentEndIndex + 1 < normalizedRows.length && normalizedRows[segmentEndIndex + 1] === prevRow + 1) {
+        segmentEndIndex += 1;
+        prevRow = normalizedRows[segmentEndIndex];
+      }
+
+      const startRow = normalizedRows[segmentStartIndex];
+      const rowCount = segmentEndIndex - segmentStartIndex + 1;
+      const read = this.readColumnsForRows(sheet, startRow, rowCount, normalizedCols);
+      segmentCount += read.segmentCount;
+
+      normalizedCols.forEach(col => {
+        const columnValues = valuesByColumn[col];
+        const readValues = read.valuesByColumn[col] || [];
+        for (let offset = 0; offset < rowCount; offset += 1) {
+          columnValues[segmentStartIndex + offset] = readValues[offset];
+        }
+      });
+
+      segmentStartIndex = segmentEndIndex + 1;
+    }
+
+    return { valuesByColumn, segmentCount };
+  }
+
+  private normalizeToIsoDateOnly(value: any): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    if (value instanceof Date) {
+      if (isNaN(value.getTime())) return null;
+      const year = value.getFullYear();
+      const month = (value.getMonth() + 1).toString().padStart(2, '0');
+      const day = value.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const raw = value?.toString ? value.toString().trim() : `${value}`.trim();
+    if (!raw) return null;
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+    try {
+      const parsed = new Date(raw);
+      if (isNaN(parsed.getTime())) return null;
+      const year = parsed.getFullYear();
+      const month = (parsed.getMonth() + 1).toString().padStart(2, '0');
+      const day = parsed.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (_) {
+      return null;
+    }
   }
 
   private asIso(value: any): string | undefined {

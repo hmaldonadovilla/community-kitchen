@@ -28,6 +28,7 @@ import {
   renderSummaryHtmlTemplateApi,
   clearHtmlRenderClientCache,
   fetchHomeBootstrapApi,
+  fetchSearchIndex,
   fetchSortedBatch,
   ListSort,
   ListResponse,
@@ -2394,6 +2395,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
     // back to the list does not reintroduce slow record fetches.
     setListCache(prev => ({ response: opts?.clearResponse ? null : prev.response, records: prev.records }));
+    setListSearchIndex({ response: null, complete: false, loading: false, error: null });
+    listSearchIndexKeyRef.current = '';
+    listSearchIndexSeqRef.current += 1;
     setListRefreshToken(token => token + 1);
   }, []);
 
@@ -2405,8 +2409,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     pages?: number;
   }>(() => ({ phase: 'idle' }));
   const [listFetchNotice, setListFetchNotice] = useState<string | null>(null);
+  const [listSearchIndex, setListSearchIndex] = useState<{
+    response: ListResponse | null;
+    complete: boolean;
+    loading: boolean;
+    error: string | null;
+  }>({ response: null, complete: false, loading: false, error: null });
   const listFetchSeqRef = useRef(0);
   const listPrefetchKeyRef = useRef<string>('');
+  const listSearchIndexSeqRef = useRef(0);
+  const listSearchIndexKeyRef = useRef<string>('');
   const listRecordsRef = useRef<Record<string, WebFormSubmission>>({});
   const dataSourcePrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
@@ -2704,6 +2716,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     logEvent
   ]);
 
+  const listViewSearchMode = ((definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced');
+  const listSearchIndexEnabled = listViewSearchMode === 'text' || listViewSearchMode === 'advanced';
+
   const listViewProjection = useMemo(() => {
     const cols = (definition.listView?.columns || []) as any[];
     const meta = new Set(['id', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
@@ -2722,12 +2737,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       }
       add(fid);
     });
-    const listSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
     const dateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
-    if (listSearchMode === 'date' && dateSearchFieldId) {
+    if (listViewSearchMode === 'date' && dateSearchFieldId) {
       add(dateSearchFieldId);
     }
-    if (listSearchMode === 'advanced') {
+    if (listViewSearchMode === 'advanced') {
       const fieldsRaw = (definition.listView?.search as any)?.fields;
       const fields: string[] = (() => {
         if (fieldsRaw === undefined || fieldsRaw === null) return [];
@@ -2743,7 +2757,152 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     }
     collectListViewMetricDependencies(definition.listView?.metric).forEach(add);
     return Array.from(ids);
-  }, [definition.listView]);
+  }, [definition.listView, listViewSearchMode]);
+
+  useEffect(() => {
+    const reset = () => {
+      listSearchIndexKeyRef.current = '';
+      listSearchIndexSeqRef.current += 1;
+      setListSearchIndex(prev =>
+        prev.response || prev.complete || prev.loading || prev.error
+          ? { response: null, complete: false, loading: false, error: null }
+          : prev
+      );
+    };
+
+    if (!definition.listView || !listSearchIndexEnabled) {
+      reset();
+      return;
+    }
+
+    const firstPage = listCache.response;
+    if (!firstPage || !Array.isArray((firstPage as any).items)) return;
+
+    const firstPageItems = (firstPage.items || []) as ListItem[];
+    const firstPageCount = firstPageItems.length;
+    const firstPageTotal = Number((firstPage as any).totalCount || firstPageCount);
+    const key = `${formKey}::${listRefreshToken}::${listViewSearchMode}::${listViewProjection.join('|')}`;
+    if (listSearchIndexKeyRef.current === key) return;
+    if (firstPageCount >= firstPageTotal) {
+      listSearchIndexKeyRef.current = key;
+      listSearchIndexSeqRef.current += 1;
+      setListSearchIndex(prev =>
+        prev.response || prev.complete || prev.loading || prev.error
+          ? { response: null, complete: false, loading: false, error: null }
+          : prev
+      );
+      logEvent('list.searchIndex.prefetch.skip', {
+        formKey,
+        mode: listViewSearchMode,
+        reason: 'firstPageAlreadyComplete',
+        loaded: firstPageCount,
+        totalCount: firstPageTotal
+      });
+      return;
+    }
+
+    listSearchIndexKeyRef.current = key;
+
+    const seq = ++listSearchIndexSeqRef.current;
+    const startedAt = Date.now();
+    const pageSize = 250;
+    const projection = listViewProjection.length ? listViewProjection : undefined;
+    setListSearchIndex(prev => ({ response: prev.response, complete: false, loading: true, error: null }));
+    logEvent('list.searchIndex.prefetch.start', {
+      formKey,
+      mode: listViewSearchMode,
+      pageSize,
+      projectionCount: projection ? projection.length : 0,
+      firstPageItems: firstPageCount,
+      firstPageTotal
+    });
+
+    void (async () => {
+      try {
+        const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
+        let token: string | undefined = undefined;
+        let pages = 0;
+        let aggregated: ListItem[] = [];
+        let finalEtag = (firstPage.etag || '').toString().trim() || undefined;
+
+        while (true) {
+          let page: ListResponse | null = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            page = await fetchSearchIndex(formKey, projection, pageSize, token);
+            if (seq !== listSearchIndexSeqRef.current) return;
+            if (page && Array.isArray((page as any).items)) break;
+            logEvent('list.searchIndex.prefetch.retry', {
+              formKey,
+              mode: listViewSearchMode,
+              attempt: attempt + 1,
+              token: token || null,
+              resType: page === null ? 'null' : typeof page
+            });
+            await sleep(250 * (attempt + 1));
+          }
+          if (seq !== listSearchIndexSeqRef.current) return;
+          if (!page || !Array.isArray((page as any).items)) {
+            throw new Error('Failed to load search data.');
+          }
+
+          pages += 1;
+          aggregated = aggregated.concat((page.items || []) as ListItem[]);
+          token = page.nextPageToken;
+          finalEtag = (page.etag || finalEtag || '').toString().trim() || undefined;
+
+          setListSearchIndex({
+            response: { ...page, items: aggregated, etag: finalEtag, nextPageToken: token },
+            complete: !token,
+            loading: Boolean(token),
+            error: null
+          });
+          logEvent('list.searchIndex.prefetch.page', {
+            formKey,
+            mode: listViewSearchMode,
+            page: pages,
+            pageItems: (page.items || []).length,
+            aggregated: aggregated.length,
+            totalCount: Number((page as any).totalCount || aggregated.length),
+            hasNext: Boolean(token),
+            durationMs: Date.now() - startedAt
+          });
+
+          if (!token) {
+            logEvent('list.searchIndex.prefetch.done', {
+              formKey,
+              mode: listViewSearchMode,
+              pages,
+              items: aggregated.length,
+              totalCount: Number((page as any).totalCount || aggregated.length),
+              durationMs: Date.now() - startedAt
+            });
+            return;
+          }
+        }
+      } catch (err: any) {
+        if (seq !== listSearchIndexSeqRef.current) return;
+        const uiMessage =
+          resolveUserFacingErrorMessage(err, 'Search data is temporarily unavailable. Please try again in a moment.') ||
+          'Search data is temporarily unavailable. Please try again in a moment.';
+        const logMessage = (err?.message || err?.toString?.() || uiMessage).toString();
+        setListSearchIndex(prev => ({ response: prev.response, complete: false, loading: false, error: uiMessage }));
+        logEvent('list.searchIndex.prefetch.error', {
+          formKey,
+          mode: listViewSearchMode,
+          message: logMessage
+        });
+      }
+    })();
+  }, [
+    definition.listView,
+    formKey,
+    listCache.response,
+    listRefreshToken,
+    listSearchIndexEnabled,
+    listViewProjection,
+    listViewSearchMode,
+    logEvent
+  ]);
 
   useEffect(() => {
     if (!definition.listView) return;
@@ -2770,7 +2929,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
     setListFetchNotice(null);
     setListFetch({
-      phase: hasExisting ? 'prefetching' : 'loading',
+      phase: hasExisting ? 'idle' : 'loading',
       loaded: hasExisting ? (listCache.response?.items?.length || 0) : 0,
       total: listCache.response?.totalCount || undefined,
       pages: 0
@@ -2791,19 +2950,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
 
     void (async () => {
       try {
-        const encodePageTokenClient = (offset: number): string => {
-          const n = Math.max(0, Math.floor(Number(offset) || 0));
-          const text = n.toString();
-          try {
-            if (typeof globalThis !== 'undefined' && typeof (globalThis as any).btoa === 'function') {
-              return (globalThis as any).btoa(text);
-            }
-          } catch (_) {
-            // ignore
-          }
-          return text;
-        };
-
         const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
         const fetchPage = async (args: {
           token?: string;
@@ -2920,10 +3066,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             const keys = batch && typeof batch === 'object' ? Object.keys(batch as any).slice(0, 15) : [];
             logEvent('list.sorted.prefetch.invalidResponse', { resType, keys, token: args.token || null, pageIndex: args.pageIndex });
             const err: any = new Error(
-              'Recent activity is temporarily unavailable. Your data is safe. Please refresh the page or try again in a moment'
+              hasExisting
+                ? 'Recent activity is temporarily unavailable. Your data is safe. Please refresh the page or try again in a moment'
+                : 'Failed to load recent activity. Please refresh the page or try again in a moment.'
             );
-            err.__ckUiTone = 'info';
-            err.__ckUiKind = 'list_prefetch_unavailable';
+            if (hasExisting) {
+              err.__ckUiTone = 'info';
+              err.__ckUiKind = 'list_prefetch_unavailable';
+            }
             throw err;
           }
           return {
@@ -2989,99 +3139,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
             : hasNextToken
               ? 200
               : Math.min((firstList.items || []).length, 200);
-        const totalPages = Math.max(1, Math.ceil(cappedTotalCount / pageSize));
-
-        const itemsByPage = new Map<number, ListItem[]>();
+        const firstItems = (firstList.items || []) as ListItem[];
         const recordsAccum: Record<string, WebFormSubmission> = {
           ...((listCache.records || {}) as Record<string, WebFormSubmission>),
           ...((((first as any).batch as any)?.records as Record<string, WebFormSubmission>) || {})
         };
-        itemsByPage.set(0, (firstList.items || []) as ListItem[]);
-
-        const buildAggregated = (): ListItem[] => {
-          const aggregated: ListItem[] = [];
-          for (let page = 0; page < totalPages; page += 1) {
-            if (!itemsByPage.has(page)) break;
-            aggregated.push(...(itemsByPage.get(page) || []));
-          }
-          return aggregated;
-        };
-
-        const applyProgress = (loadedPages: number) => {
-          const aggregated = buildAggregated();
-          const hasMore = loadedPages < totalPages;
-          setListCache(prev => ({
-            response: {
-              ...firstList,
-              notModified: undefined,
-              items: aggregated,
-              nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined
-            },
-            records: { ...(prev.records || {}), ...recordsAccum }
-          }));
-          setListFetch({
-            phase: hasMore ? 'prefetching' : 'idle',
-            loaded: aggregated.length,
-            total: cappedTotalCount || aggregated.length,
-            pages: loadedPages
-          });
-          return aggregated.length;
-        };
-
-        let loadedPages = 1;
-        applyProgress(loadedPages);
+        setListCache(prev => ({
+          response: {
+            ...firstList,
+            notModified: undefined,
+            items: firstItems
+          },
+          records: { ...(prev.records || {}), ...recordsAccum }
+        }));
+        setListFetch({
+          phase: 'idle',
+          loaded: firstItems.length,
+          total: cappedTotalCount || firstItems.length,
+          pages: 1
+        });
         logEvent('list.sorted.prefetch.page', {
           page: 1,
-          pageItems: (itemsByPage.get(0) || []).length,
-          aggregated: (itemsByPage.get(0) || []).length,
+          pageItems: firstItems.length,
+          aggregated: firstItems.length,
           totalCount: cappedTotalCount,
-          hasNext: totalPages > 1,
+          hasNext: Boolean((firstList as any).nextPageToken),
           durationMs: Date.now() - startedAt
         });
-
-        if (totalPages <= 1) {
-          if (seq !== listFetchSeqRef.current) return;
-          logEvent('list.sorted.prefetch.done', {
-            pages: 1,
-            items: (itemsByPage.get(0) || []).length,
-            durationMs: Date.now() - startedAt
-          });
-          return;
-        }
-
-        const pagePromises = Array.from({ length: totalPages - 1 }, (_, idx) => idx + 1).map(pageIndex => {
-          const offset = pageIndex * pageSize;
-          const token = encodePageTokenClient(offset);
-          const pageStartedAt = Date.now();
-          return fetchPage({ token, pageIndex, allowConditional: false })
-            .then(res => {
-              if (seq !== listFetchSeqRef.current) return;
-              const items = (res.list.items || []) as ListItem[];
-              itemsByPage.set(pageIndex, items);
-              const newRecords = (((res.batch as any)?.records as Record<string, WebFormSubmission>) || {}) as Record<string, WebFormSubmission>;
-              Object.keys(newRecords).forEach(id => {
-                recordsAccum[id] = newRecords[id];
-              });
-              loadedPages += 1;
-              const aggregatedCount = applyProgress(loadedPages);
-              logEvent('list.sorted.prefetch.page', {
-                page: pageIndex + 1,
-                pageItems: items.length,
-                aggregated: aggregatedCount,
-                totalCount: cappedTotalCount,
-                hasNext: loadedPages < totalPages,
-                durationMs: Date.now() - startedAt,
-                pageDurationMs: Date.now() - pageStartedAt
-              });
-            });
-        });
-
-        await Promise.all(pagePromises);
         if (seq !== listFetchSeqRef.current) return;
-        const finalAggregatedCount = applyProgress(totalPages);
         logEvent('list.sorted.prefetch.done', {
-          pages: totalPages,
-          items: finalAggregatedCount,
+          pages: 1,
+          items: firstItems.length,
+          totalCount: cappedTotalCount,
+          deferredRemainingPages: Math.max(0, Math.ceil(Math.max(cappedTotalCount - firstItems.length, 0) / pageSize)),
+          mode: 'firstPageOnly',
           durationMs: Date.now() - startedAt
         });
       } catch (err: any) {
@@ -3105,7 +3196,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
         logEvent('list.sorted.prefetch.error', { message: logMessage });
       }
     })();
-    // Do NOT cancel on view changes; this prefetch should continue in the background.
+    // Keep the first page stable across list/form navigation; only rerun when the list inputs change.
   }, [
     definition.listView,
     formKey,
@@ -8955,6 +9046,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           language={language}
           disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
+          searchIndexResponse={listSearchIndex.response}
+          searchIndexComplete={listSearchIndex.complete}
+          searchIndexLoading={listSearchIndex.loading}
+          searchIndexError={listSearchIndex.error}
           cachedRecords={listCache.records}
           refreshToken={listRefreshToken}
           onDiagnostic={logEvent}
