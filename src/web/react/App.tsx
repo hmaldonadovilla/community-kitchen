@@ -99,6 +99,12 @@ import {
   resolveRecordFreshnessTimerDelay
 } from './app/recordFreshness';
 import {
+  buildDataSourceFreshnessSnapshotSignature,
+  resolveActiveDataSourceFreshnessWatches,
+  resolveDataSourceFreshnessTimerDelay,
+  resolveDataSourceFreshnessWatches
+} from './app/dataSourceFreshness';
+import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
 } from './app/reportPreviewAutosave';
@@ -203,7 +209,9 @@ import {
   clearFetchDataSourceCache,
   DATA_SOURCE_CACHE_CLEARED_EVENT,
   DATA_SOURCE_CACHE_UPDATED_EVENT,
+  fetchDataSource,
   getCachedDataSourceItemCount,
+  peekCachedDataSource,
   prefetchDataSources
 } from '../data/dataSources';
 import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
@@ -2432,6 +2440,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const recordFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
   const performRecordFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const pendingDeferredRecordFreshnessSyncRef = useRef<Parameters<SynchronizeStaleRecordFn>[0] | null>(null);
+  const dataSourceFreshnessTimerRef = useRef<number | null>(null);
+  const dataSourceFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
+  const performDataSourceFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
+  const lastDataSourceFreshnessServerActivityAtByWatchKeyRef = useRef<Record<string, number>>({});
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
   const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
@@ -2480,6 +2492,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const guidedStepImmediateSyncActiveFingerprintRef = useRef<string>('');
   const guidedStepImmediateSyncPendingFingerprintRef = useRef<string>('');
   const recordFreshnessConfigRef = useRef(resolveRecordFreshnessConfig((definition as any)?.recordFreshness));
+  const dataSourceFreshnessWatchesRef = useRef(resolveDataSourceFreshnessWatches((definition as any)?.recordFreshness));
+  const activeGuidedStepIdRef = useRef<string>((guidedUiState?.activeStepId || '').toString().trim());
   const recordLoadingIdRef = useRef<string | null>(recordLoadingId);
   /**
    * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
@@ -3024,6 +3038,311 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   performRecordFreshnessCheckRef.current = performRecordFreshnessCheck;
 
+  const resolveWatchedDataSourceConfig = useCallback(
+    (dataSourceId: string) => {
+      const normalizedId = normalizeDataSourceVisibilityKey(dataSourceId);
+      return (
+        collectDataSourceConfigsForPrefetch(definition).find(cfg => {
+          const id = `${cfg?.id || ''}`.trim();
+          return id === dataSourceId || normalizeDataSourceVisibilityKey(id) === normalizedId;
+        }) || null
+      );
+    },
+    [definition]
+  );
+
+  const clearDataSourceFreshnessTimer = useCallback(() => {
+    if (dataSourceFreshnessTimerRef.current) {
+      globalThis.clearTimeout(dataSourceFreshnessTimerRef.current);
+      dataSourceFreshnessTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleDataSourceFreshnessCheck = useCallback(
+    (reason: string) => {
+      clearDataSourceFreshnessTimer();
+      const activeWatches = resolveActiveDataSourceFreshnessWatches({
+        watches: dataSourceFreshnessWatchesRef.current,
+        stepId: activeGuidedStepIdRef.current
+      });
+      const delayMs = resolveDataSourceFreshnessTimerDelay({
+        watches: activeWatches,
+        view: viewRef.current,
+        recordId: getCurrentOpenRecordId(),
+        recordLoading: Boolean(recordLoadingIdRef.current),
+        now: Date.now(),
+        lastServerActivityAtByWatchKey: lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current
+      });
+      if (delayMs === null) return;
+      const nextDelayMs = Math.max(1000, Math.floor(delayMs));
+      dataSourceFreshnessTimerRef.current = globalThis.setTimeout(() => {
+        dataSourceFreshnessTimerRef.current = null;
+        void performDataSourceFreshnessCheckRef.current('heartbeat');
+      }, nextDelayMs) as unknown as number;
+      logEvent('datasource.freshness.schedule', {
+        reason,
+        recordId: getCurrentOpenRecordId() || null,
+        stepId: activeGuidedStepIdRef.current || null,
+        delayMs: nextDelayMs,
+        watchKeys: activeWatches.map(watch => watch.key),
+        dataSourceIds: Array.from(new Set(activeWatches.flatMap(watch => watch.dataSourceIds)))
+      });
+    },
+    [clearDataSourceFreshnessTimer, getCurrentOpenRecordId, logEvent]
+  );
+
+  const markDataSourceFreshnessServerTouch = useCallback(
+    (args: { reason: string; stepId?: string | null; dataSourceIds?: string[] | null }) => {
+      const activeWatches = resolveActiveDataSourceFreshnessWatches({
+        watches: dataSourceFreshnessWatchesRef.current,
+        stepId: (args.stepId || activeGuidedStepIdRef.current || '').toString().trim()
+      });
+      const normalizedRequestedIds = new Set(
+        (Array.isArray(args.dataSourceIds) ? args.dataSourceIds : [])
+          .map(id => normalizeDataSourceVisibilityKey(`${id || ''}`))
+          .filter(Boolean)
+      );
+      const watches = activeWatches.filter(
+        watch =>
+          !normalizedRequestedIds.size ||
+          watch.dataSourceIds.some(id => normalizedRequestedIds.has(normalizeDataSourceVisibilityKey(id)))
+      );
+      if (!watches.length) return;
+      const touchedAt = Date.now();
+      watches.forEach(watch => {
+        lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current[watch.key] = touchedAt;
+      });
+      logEvent('datasource.freshness.touch', {
+        reason: args.reason,
+        recordId: getCurrentOpenRecordId() || null,
+        stepId: (args.stepId || activeGuidedStepIdRef.current || '').toString().trim() || null,
+        watchKeys: watches.map(watch => watch.key),
+        dataSourceIds: Array.from(new Set(watches.flatMap(watch => watch.dataSourceIds)))
+      });
+      scheduleDataSourceFreshnessCheck(args.reason);
+    },
+    [getCurrentOpenRecordId, logEvent, scheduleDataSourceFreshnessCheck]
+  );
+
+  const performDataSourceFreshnessCheck = useCallback(
+    async (reason: string): Promise<void> => {
+      const recordId = getCurrentOpenRecordId();
+      const stepId = activeGuidedStepIdRef.current;
+      const activeWatches = resolveActiveDataSourceFreshnessWatches({
+        watches: dataSourceFreshnessWatchesRef.current,
+        stepId
+      });
+      const delayMs = resolveDataSourceFreshnessTimerDelay({
+        watches: activeWatches,
+        view: viewRef.current,
+        recordId,
+        recordLoading: Boolean(recordLoadingIdRef.current),
+        now: Date.now(),
+        lastServerActivityAtByWatchKey: lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current
+      });
+      if (delayMs === null) {
+        clearDataSourceFreshnessTimer();
+        return;
+      }
+      const dueWatches = activeWatches.filter(watch => {
+        const watchDelayMs = resolveDataSourceFreshnessTimerDelay({
+          watches: [watch],
+          view: viewRef.current,
+          recordId,
+          recordLoading: Boolean(recordLoadingIdRef.current),
+          now: Date.now(),
+          lastServerActivityAtByWatchKey: lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current
+        });
+        return watchDelayMs !== null && watchDelayMs <= 0;
+      });
+      if (!dueWatches.length) {
+        scheduleDataSourceFreshnessCheck(`${reason}.waiting`);
+        return;
+      }
+      if (dataSourceFreshnessCheckPromiseRef.current) {
+        logEvent('datasource.freshness.check.skipped', {
+          reason,
+          recordId,
+          stepId,
+          skipReason: 'inFlight'
+        });
+        scheduleDataSourceFreshnessCheck(`${reason}.inFlight`);
+        return;
+      }
+      if (
+        autoSaveInFlightRef.current ||
+        draftSaveRequestInFlightRef.current ||
+        Boolean(submissionRequestPromiseRef.current) ||
+        uploadQueueRef.current.size > 0 ||
+        Boolean(recordSyncPromiseRef.current) ||
+        Boolean(guidedStepImmediateSyncPromiseRef.current) ||
+        Boolean(guidedStepBackgroundSyncPromiseRef.current) ||
+        submittingRef.current ||
+        Boolean(recordLoadingIdRef.current)
+      ) {
+        logEvent('datasource.freshness.check.skipped', {
+          reason,
+          recordId,
+          stepId,
+          skipReason: 'serverWorkInFlight',
+          uploadsInFlight: uploadQueueRef.current.size,
+          autoSaveInFlight: autoSaveInFlightRef.current,
+          draftSaveInFlight: draftSaveRequestInFlightRef.current,
+          submissionInFlight: Boolean(submissionRequestPromiseRef.current),
+          recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+          guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
+          guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
+        });
+        scheduleDataSourceFreshnessCheck(`${reason}.serverWorkInFlight`);
+        return;
+      }
+
+      const startedAt = Date.now();
+      dueWatches.forEach(watch => {
+        lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current[watch.key] = startedAt;
+      });
+      logEvent('datasource.freshness.check.start', {
+        reason,
+        recordId,
+        stepId,
+        watchKeys: dueWatches.map(watch => watch.key),
+        dataSourceIds: Array.from(new Set(dueWatches.flatMap(watch => watch.dataSourceIds)))
+      });
+      const promise = (async () => {
+        try {
+          const changedWatches: typeof dueWatches = [];
+          for (const watch of dueWatches) {
+            let watchChanged = false;
+
+            for (const dataSourceId of watch.dataSourceIds) {
+              const config = resolveWatchedDataSourceConfig(dataSourceId);
+              if (!config) {
+                logEvent('datasource.freshness.check.skipped', {
+                  reason,
+                  recordId,
+                  stepId,
+                  watchKey: watch.key,
+                  dataSourceId,
+                  skipReason: 'missingConfig'
+                });
+                continue;
+              }
+              const beforeSignature = buildDataSourceFreshnessSnapshotSignature(
+                peekCachedDataSource(config, languageRef.current)
+              );
+              const refreshed = await fetchDataSource(config, languageRef.current, { forceRefresh: true }).catch(() => null);
+              if (selectedRecordIdRef.current !== recordId) return;
+              if (viewRef.current !== 'form') return;
+              if (activeGuidedStepIdRef.current !== stepId) return;
+              if (!refreshed) {
+                logEvent('datasource.freshness.check.error', {
+                  reason,
+                  recordId,
+                  stepId,
+                  watchKey: watch.key,
+                  dataSourceId,
+                  message: 'failed',
+                  durationMs: Date.now() - startedAt
+                });
+                continue;
+              }
+              const afterSignature = buildDataSourceFreshnessSnapshotSignature(refreshed);
+              if (beforeSignature !== afterSignature) {
+                watchChanged = true;
+              }
+            }
+
+            lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current[watch.key] = Date.now();
+            if (watchChanged) {
+              changedWatches.push(watch);
+              logEvent('datasource.freshness.check.changed', {
+                reason,
+                recordId,
+                stepId,
+                watchKey: watch.key,
+                dataSourceIds: watch.dataSourceIds,
+                durationMs: Date.now() - startedAt
+              });
+            } else {
+              logEvent('datasource.freshness.check.match', {
+                reason,
+                recordId,
+                stepId,
+                watchKey: watch.key,
+                dataSourceIds: watch.dataSourceIds,
+                durationMs: Date.now() - startedAt
+              });
+            }
+          }
+
+          if (selectedRecordIdRef.current !== recordId) return;
+          if (viewRef.current !== 'form') return;
+          if (activeGuidedStepIdRef.current !== stepId) return;
+
+          const changedWatch = changedWatches[0];
+          if (!changedWatch) return;
+          const dialog = changedWatch.dialog;
+          await new Promise<void>(resolve => {
+            customConfirm.openConfirm({
+              title: resolveLocalizedString(
+                dialog?.title,
+                languageRef.current,
+                tSystem('common.notice', languageRef.current, 'Notice')
+              ),
+              message:
+                resolveLocalizedString(
+                  dialog?.message,
+                  languageRef.current,
+                  'The available source data changed while you were editing. We loaded the latest availability. Please review this step before continuing.'
+                ) ||
+                'The available source data changed while you were editing. We loaded the latest availability. Please review this step before continuing.',
+              confirmLabel: resolveLocalizedString(
+                dialog?.confirmLabel,
+                languageRef.current,
+                tSystem('common.ok', languageRef.current, 'OK')
+              ),
+              cancelLabel: resolveLocalizedString(
+                dialog?.cancelLabel,
+                languageRef.current,
+                tSystem('common.cancel', languageRef.current, 'Cancel')
+              ),
+              primaryAction: dialog?.primaryAction,
+              showCancel: dialog?.showCancel === true,
+              showCloseButton: dialog?.showCloseButton === true,
+              dismissOnBackdrop: dialog?.dismissOnBackdrop === true,
+              kind: 'datasourceFreshness.changed',
+              refId: changedWatch.stepId || 'datasource',
+              onConfirm: () => resolve(),
+              onCancel: () => resolve()
+            });
+          });
+        } catch (err: any) {
+          logEvent('datasource.freshness.check.exception', {
+            reason,
+            recordId,
+            stepId,
+            message: err?.message || err?.toString?.() || 'failed',
+            durationMs: Date.now() - startedAt
+          });
+        } finally {
+          dataSourceFreshnessCheckPromiseRef.current = null;
+          scheduleDataSourceFreshnessCheck(`${reason}.complete`);
+        }
+      })();
+      dataSourceFreshnessCheckPromiseRef.current = promise;
+      return promise;
+    },
+    [
+      clearDataSourceFreshnessTimer,
+      customConfirm,
+      getCurrentOpenRecordId,
+      logEvent,
+      resolveWatchedDataSourceConfig,
+      scheduleDataSourceFreshnessCheck
+    ]
+  );
+  performDataSourceFreshnessCheckRef.current = performDataSourceFreshnessCheck;
+
   const applyUploadedFieldOverrides = useCallback(
     (args: {
       values: Record<string, FieldValue>;
@@ -3300,15 +3619,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     recordLoadingIdRef.current = recordLoadingId;
   }, [recordLoadingId]);
+  useEffect(() => {
+    activeGuidedStepIdRef.current = (guidedUiState?.activeStepId || '').toString().trim();
+  }, [guidedUiState?.activeStepId]);
 
   const resolvedRecordFreshness = useMemo(
     () => resolveRecordFreshnessConfig((definition as any)?.recordFreshness),
+    [definition]
+  );
+  const resolvedDataSourceFreshnessWatches = useMemo(
+    () => resolveDataSourceFreshnessWatches((definition as any)?.recordFreshness),
     [definition]
   );
 
   useEffect(() => {
     recordFreshnessConfigRef.current = resolvedRecordFreshness;
   }, [resolvedRecordFreshness]);
+  useEffect(() => {
+    dataSourceFreshnessWatchesRef.current = resolvedDataSourceFreshnessWatches;
+  }, [resolvedDataSourceFreshnessWatches]);
+  useEffect(() => {
+    scheduleDataSourceFreshnessCheck('stateChange');
+  }, [guidedUiState?.activeStepId, recordLoadingId, resolvedDataSourceFreshnessWatches, scheduleDataSourceFreshnessCheck, selectedRecordId, view]);
 
   const bumpRecordSession = useCallback(
     (args: { reason: string; nextRecordId?: string | null }) => {
@@ -3327,12 +3659,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedStepImmediateSyncActiveFingerprintRef.current = '';
       guidedStepImmediateSyncPendingFingerprintRef.current = '';
       pendingDeferredRecordFreshnessSyncRef.current = null;
+      dataSourceFreshnessCheckPromiseRef.current = null;
+      lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current = {};
       pendingFollowupBatchPromisesRef.current.clear();
       lastDraftSaveFailureRef.current = null;
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;
       recordFreshnessCheckPromiseRef.current = null;
       lastRecordServerActivityAtRef.current = args?.nextRecordId ? Date.now() : 0;
+      if (dataSourceFreshnessTimerRef.current) {
+        globalThis.clearTimeout(dataSourceFreshnessTimerRef.current);
+        dataSourceFreshnessTimerRef.current = null;
+      }
       if (recordFreshnessTimerRef.current) {
         globalThis.clearTimeout(recordFreshnessTimerRef.current);
         recordFreshnessTimerRef.current = null;
@@ -9542,6 +9880,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reservationsReleased: reservationResult.reservationsReleased || 0
         });
         markRecordFreshnessServerTouch({ reason: 'record.reservationPlan', recordId: args.recordId });
+        markDataSourceFreshnessServerTouch({ reason: 'datasource.reservationPlan', stepId: args.stepId });
         const availability = Array.isArray(reservationResult.availability)
           ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
           : [];
@@ -9599,7 +9938,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: false, message, applied: true };
       }
     },
-    [logEvent, markRecordFreshnessServerTouch, openConfiguredConfirmDialog, resolveGuidedStepReservationPlan, resolveLogMessage]
+    [
+      logEvent,
+      markDataSourceFreshnessServerTouch,
+      markRecordFreshnessServerTouch,
+      openConfiguredConfirmDialog,
+      resolveGuidedStepReservationPlan,
+      resolveLogMessage
+    ]
   );
 
   const queueGuidedStepReservationPlan = useCallback(

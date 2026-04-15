@@ -105,6 +105,7 @@ import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
   type GuidedStepReservationAvailabilityEventDetail
 } from '../../features/reservations/liveSyncEvents';
+import { applyInventoryAvailabilitySnapshotToRow } from '../../features/reservations/availabilitySnapshots';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
@@ -256,7 +257,7 @@ const coerceStructuredItems = (payload: any): Record<string, any>[] => {
       if (parsed && typeof parsed === 'object') {
         return [parsed as Record<string, any>];
       }
-    } catch (_) {
+    } catch {
       return [];
     }
     return [];
@@ -265,6 +266,89 @@ const coerceStructuredItems = (payload: any): Record<string, any>[] => {
     return [payload as Record<string, any>];
   }
   return [];
+};
+
+const coerceNestedLineItemPresetRows = (payload: any): Record<string, FieldValue>[] => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) {
+    return payload.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
+  }
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
+      }
+      if (parsed && typeof parsed === 'object') {
+        return [parsed as Record<string, FieldValue>];
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }
+  if (typeof payload === 'object') {
+    return [payload as Record<string, FieldValue>];
+  }
+  return [];
+};
+
+const stripAutoRowMetadata = (values: Record<string, FieldValue> | undefined): Record<string, FieldValue> => {
+  if (!values || typeof values !== 'object') return {};
+  const next: Record<string, FieldValue> = {};
+  Object.entries(values).forEach(([key, value]) => {
+    if (
+      key === ROW_ID_KEY ||
+      key === ROW_SOURCE_KEY ||
+      key === ROW_HIDE_REMOVE_KEY ||
+      key === ROW_PARENT_GROUP_ID_KEY ||
+      key === ROW_PARENT_ROW_ID_KEY ||
+      key === ROW_SELECTION_EFFECT_ID_KEY
+    ) {
+      return;
+    }
+    next[key] = value;
+  });
+  return next;
+};
+
+const childRowsMatchEntries = (
+  rows: LineItemRowState[],
+  entries: Record<string, FieldValue>[]
+): boolean => {
+  if (rows.length !== entries.length) return false;
+  return rows.every((row, index) => {
+    const expected = stripAutoRowMetadata(entries[index]);
+    const actual = stripAutoRowMetadata((row?.values || {}) as Record<string, FieldValue>);
+    const expectedKeys = Object.keys(expected);
+    const actualKeys = Object.keys(actual);
+    if (expectedKeys.length !== actualKeys.length) return false;
+    return expectedKeys.every(key => {
+      const left = expected[key];
+      const right = actual[key];
+      if (Array.isArray(left) || Array.isArray(right)) {
+        try {
+          return JSON.stringify(left) === JSON.stringify(right);
+        } catch {
+          return false;
+        }
+      }
+      return left === right;
+    });
+  });
+};
+
+const fieldByIdSafe = (fields: any, fieldId: string): any | null => {
+  if (!Array.isArray(fields) || !fieldId) return null;
+  return fields.find((field: any) => `${field?.id || ''}`.trim() === fieldId) || null;
+};
+
+const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
+  const raw = (field as any)?.optionSort;
+  const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return normalized === 'source' ? 'source' : 'alphabetical';
 };
 
 const resolveCompactPartType = (part: any): string => {
@@ -685,12 +769,6 @@ export const LineItemGroupQuestion: React.FC<{
   const rowFlowPromptRef = React.useRef<Record<string, string>>({});
   const rowFlowPromptCompleteRef = React.useRef<Record<string, Record<string, boolean>>>({});
   const rowFlowSelectorOverlayAutoOpenedRef = React.useRef<Record<string, boolean>>({});
-  const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
-    const raw = (field as any)?.optionSort;
-    const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-    return s === 'source' ? 'source' : 'alphabetical';
-  };
-
   const rowFlowEnabled = Boolean(
     rowFlow &&
       ((rowFlow.mode || '').toString().trim().toLowerCase() === '' ||
@@ -982,15 +1060,7 @@ export const LineItemGroupQuestion: React.FC<{
             !availability.resourceItemId ||
             resolveReservationSourceItemKey(config, item) === `${availability.resourceItemId}`.trim();
           if (!matchesRecord || !matchesItem) return item;
-          return {
-            ...item,
-            ...(availability.statusFieldId ? { [availability.statusFieldId]: availability.status || item?.[availability.statusFieldId] } : {}),
-            ...(availability.reservedQuantityFieldId
-              ? { [availability.reservedQuantityFieldId]: availability.reservedQuantity }
-              : {}),
-            __ckCurrentRecordReservedQuantity: availability.currentRecordReservedQuantity,
-            __ckFreeQuantity: availability.freeQuantity
-          };
+          return applyInventoryAvailabilitySnapshotToRow(item, availability);
         })
       );
       setStepDataSourceRefreshTick(prev => prev + 1);
@@ -1755,83 +1825,6 @@ export const LineItemGroupQuestion: React.FC<{
     },
     [language, resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
   );
-
-  function coerceNestedLineItemPresetRows(payload: any): Record<string, FieldValue>[] {
-    if (!payload) return [];
-    if (Array.isArray(payload)) {
-      return payload.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
-    }
-    if (typeof payload === 'string') {
-      const trimmed = payload.trim();
-      if (!trimmed) return [];
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(entry => entry && typeof entry === 'object') as Record<string, FieldValue>[];
-        }
-        if (parsed && typeof parsed === 'object') {
-          return [parsed as Record<string, FieldValue>];
-        }
-      } catch (_) {
-        return [];
-      }
-      return [];
-    }
-    if (typeof payload === 'object') {
-      return [payload as Record<string, FieldValue>];
-    }
-    return [];
-  }
-
-  function stripAutoRowMetadata(values: Record<string, FieldValue> | undefined): Record<string, FieldValue> {
-    if (!values || typeof values !== 'object') return {};
-    const next: Record<string, FieldValue> = {};
-    Object.entries(values).forEach(([key, value]) => {
-      if (
-        key === ROW_ID_KEY ||
-        key === ROW_SOURCE_KEY ||
-        key === ROW_HIDE_REMOVE_KEY ||
-        key === ROW_PARENT_GROUP_ID_KEY ||
-        key === ROW_PARENT_ROW_ID_KEY ||
-        key === ROW_SELECTION_EFFECT_ID_KEY
-      ) {
-        return;
-      }
-      next[key] = value;
-    });
-    return next;
-  }
-
-  function childRowsMatchEntries(
-    rows: LineItemRowState[],
-    entries: Record<string, FieldValue>[]
-  ): boolean {
-    if (rows.length !== entries.length) return false;
-    return rows.every((row, index) => {
-      const expected = stripAutoRowMetadata(entries[index]);
-      const actual = stripAutoRowMetadata((row?.values || {}) as Record<string, FieldValue>);
-      const expectedKeys = Object.keys(expected);
-      const actualKeys = Object.keys(actual);
-      if (expectedKeys.length !== actualKeys.length) return false;
-      return expectedKeys.every(key => {
-        const left = expected[key];
-        const right = actual[key];
-        if (Array.isArray(left) || Array.isArray(right)) {
-          try {
-            return JSON.stringify(left) === JSON.stringify(right);
-          } catch (_) {
-            return false;
-          }
-        }
-        return left === right;
-      });
-    });
-  }
-
-  function fieldByIdSafe(fields: any, fieldId: string): any | null {
-    if (!Array.isArray(fields) || !fieldId) return null;
-    return fields.find((field: any) => `${field?.id || ''}`.trim() === fieldId) || null;
-  }
 
   const resolveVirtualMaxFieldId = React.useCallback(
     (
@@ -2770,8 +2763,6 @@ export const LineItemGroupQuestion: React.FC<{
   }, [
     buildStepDataSourceDraftKey,
     buildVirtualDataSourceRowValues,
-    childRowsMatchEntries,
-    coerceNestedLineItemPresetRows,
     lineItems,
     parentRows,
     q.id,
@@ -2912,7 +2903,7 @@ export const LineItemGroupQuestion: React.FC<{
       const text = formatType === 'list' ? normalizedLabels.join(listDelimiter) : normalizedLabels[0] || '';
       return { text, hasValue: text.trim() !== '' };
     },
-    [ensureLineOptions, language, optionState, optionSortFor, resolveTopValue]
+    [ensureLineOptions, language, optionState, resolveTopValue]
   );
 
   const buildRowFlowContextHeader = React.useCallback(

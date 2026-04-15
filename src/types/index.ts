@@ -269,6 +269,61 @@ export interface ButtonConfirmConfig {
   cancelLabel?: LocalizedString | string;
 }
 
+export interface DataSourceFreshnessDialogConfig extends ButtonConfirmConfig {
+  /**
+   * When false, hides the cancel button (single-action message dialog).
+   * Default: false
+   */
+  showCancel?: boolean;
+  /**
+   * When true, shows the close (x) button.
+   * Default: false
+   */
+  showCloseButton?: boolean;
+  /**
+   * When true, clicking the backdrop dismisses the dialog.
+   * Default: false
+   */
+  dismissOnBackdrop?: boolean;
+  /**
+   * Controls which action is visually primary / default.
+   * - confirm (default): confirm button uses the primary accent style
+   * - cancel: cancel button uses the primary accent style
+   */
+  primaryAction?: 'confirm' | 'cancel';
+}
+
+export interface DataSourceFreshnessWatchConfig {
+  /**
+   * Enable/disable this background datasource freshness watch.
+   *
+   * Default: true
+   */
+  enabled?: boolean;
+  /**
+   * Guided step id where this watch becomes active.
+   */
+  stepId: string;
+  /**
+   * Single datasource id to refresh while the watched step stays open.
+   */
+  dataSourceId?: string;
+  /**
+   * Multiple datasource ids to refresh while the watched step stays open.
+   */
+  dataSourceIds?: string[];
+  /**
+   * Quiet window (ms) after the last successful datasource-related server activity before the client refreshes the watched datasource(s).
+   *
+   * Default: 30000
+   */
+  quietWindowMs?: number;
+  /**
+   * Optional dialog shown when a background refresh changes the watched datasource rows.
+   */
+  dialog?: DataSourceFreshnessDialogConfig;
+}
+
 export interface UpdateRecordDependencySetRecordMutation {
   /**
    * Update top-level fields on each impacted target record.
@@ -2933,6 +2988,13 @@ export interface RecordFreshnessConfig {
    * Default: 30000
    */
   quietWindowMs?: number;
+  /**
+   * Optional background datasource freshness watches scoped to guided steps.
+   *
+   * When active, the client refreshes the configured datasource(s) in the background without triggering step loading states.
+   * If a refresh changes the cached datasource rows, the UI updates in place and can show a configurable dialog.
+   */
+  dataSourceWatches?: DataSourceFreshnessWatchConfig[];
 }
 
 export interface DedupCheckDialogConfig {

@@ -3177,6 +3177,7 @@ components:
             - After the current record has had no successful record-related server activity for `quietWindowMs`,
               the client calls `getRecordVersion`.
             - When the server version changed, the app reloads the latest record snapshot automatically and asks the user to review it.
+            - `dataSourceWatches` can also refresh guided-step datasource rows in the background without triggering visible loading notices.
           properties:
             enabled:
               type: boolean
@@ -3184,6 +3185,64 @@ components:
             quietWindowMs:
               type: number
               description: Quiet window (ms) before the client revalidates the open record. Default 30000.
+            dataSourceWatches:
+              type: array
+              description: |
+                Optional guided-step datasource freshness watches.
+
+                Each watch becomes active only while its `stepId` is the current guided step.
+                The client waits until the watched datasource has had no successful datasource-related server activity
+                for `quietWindowMs`, then refreshes the configured datasource(s) in the background with no loading overlay.
+                If the refreshed rows differ from the cached rows, the UI updates in place and can show a message dialog.
+              items:
+                type: object
+                required:
+                  - stepId
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Enable this datasource freshness watch. Defaults to true.
+                  stepId:
+                    type: string
+                    description: Guided step id where this watch becomes active.
+                  dataSourceId:
+                    type: string
+                    description: Single datasource id to refresh while the watched step stays open.
+                  dataSourceIds:
+                    type: array
+                    description: Multiple datasource ids to refresh while the watched step stays open.
+                    items:
+                      type: string
+                  quietWindowMs:
+                    type: number
+                    description: Quiet window (ms) before the client refreshes the watched datasource(s). Default 30000.
+                  dialog:
+                    type: object
+                    description: Optional dialog shown when the background refresh changes the watched datasource rows.
+                    properties:
+                      title:
+                        $ref: '#/components/schemas/LocalizedString'
+                      message:
+                        $ref: '#/components/schemas/LocalizedString'
+                      confirmLabel:
+                        $ref: '#/components/schemas/LocalizedString'
+                      cancelLabel:
+                        $ref: '#/components/schemas/LocalizedString'
+                      showCancel:
+                        type: boolean
+                        description: When false, hides the cancel button. Defaults to false.
+                      showCloseButton:
+                        type: boolean
+                        description: When true, shows the close button. Defaults to false.
+                      dismissOnBackdrop:
+                        type: boolean
+                        description: When true, clicking the backdrop dismisses the dialog. Defaults to false.
+                      primaryAction:
+                        type: string
+                        enum:
+                          - confirm
+                          - cancel
+                        description: Controls which button is styled as the primary action.
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
           description: |
@@ -6852,6 +6911,45 @@ components:
               type: boolean
             quietWindowMs:
               type: number
+            dataSourceWatches:
+              type: array
+              items:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  stepId:
+                    type: string
+                  dataSourceId:
+                    type: string
+                  dataSourceIds:
+                    type: array
+                    items:
+                      type: string
+                  quietWindowMs:
+                    type: number
+                  dialog:
+                    type: object
+                    properties:
+                      title:
+                        $ref: '#/components/schemas/LocalizedString'
+                      message:
+                        $ref: '#/components/schemas/LocalizedString'
+                      confirmLabel:
+                        $ref: '#/components/schemas/LocalizedString'
+                      cancelLabel:
+                        $ref: '#/components/schemas/LocalizedString'
+                      showCancel:
+                        type: boolean
+                      showCloseButton:
+                        type: boolean
+                      dismissOnBackdrop:
+                        type: boolean
+                      primaryAction:
+                        type: string
+                        enum:
+                          - confirm
+                          - cancel
           additionalProperties: true
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'

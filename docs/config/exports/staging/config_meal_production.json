@@ -428,6 +428,28 @@
       "debounceMs": 2000,
       "status": "In progress"
     },
+    "recordFreshness": {
+      "enabled": true,
+      "quietWindowMs": 30000,
+      "dataSourceWatches": [
+        {
+          "stepId": "leftoverForm",
+          "dataSourceIds": [
+            "Leftover Inventory Data"
+          ],
+          "quietWindowMs": 30000,
+          "dialog": {
+            "message": {
+              "en": "The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing."
+            },
+            "confirmLabel": {
+              "en": "OK"
+            },
+            "showCancel": false
+          }
+        }
+      ]
+    },
     "submissionAfterSubmit": {
       "preActions": [
         "CLOSE_RECORD"
@@ -10071,6 +10093,28 @@
       "enabled": true,
       "debounceMs": 2000,
       "status": "In progress"
+    },
+    "recordFreshness": {
+      "enabled": true,
+      "quietWindowMs": 30000,
+      "dataSourceWatches": [
+        {
+          "stepId": "leftoverForm",
+          "dataSourceIds": [
+            "Leftover Inventory Data"
+          ],
+          "quietWindowMs": 30000,
+          "dialog": {
+            "message": {
+              "en": "The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing."
+            },
+            "confirmLabel": {
+              "en": "OK"
+            },
+            "showCancel": false
+          }
+        }
+      ]
     },
     "submissionAfterSubmit": {
       "preActions": [

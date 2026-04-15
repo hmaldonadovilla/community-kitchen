@@ -37,6 +37,32 @@ describe('meal production leftover selection config', () => {
     ).toEqual([]);
   });
 
+  it('configures a background freshness watch for the leftover inventory datasource', () => {
+    const definition = getDefinition();
+    const exported = getExport();
+    const formWatches = Array.isArray(exported.form?.recordFreshness?.dataSourceWatches)
+      ? exported.form.recordFreshness.dataSourceWatches
+      : [];
+    const definitionWatches = Array.isArray(definition.recordFreshness?.dataSourceWatches)
+      ? definition.recordFreshness?.dataSourceWatches
+      : [];
+
+    expect(formWatches).toEqual([
+      expect.objectContaining({
+        stepId: 'leftoverForm',
+        dataSourceIds: ['Leftover Inventory Data'],
+        quietWindowMs: 30000,
+        dialog: expect.objectContaining({
+          message: expect.objectContaining({
+            en: 'The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing.'
+          }),
+          showCancel: false
+        })
+      })
+    ]);
+    expect(definitionWatches).toEqual(formWatches);
+  });
+
   it('defines direct MP_TYPE_LI output rules for part dish, reheat, and combine', () => {
     const definition = getDefinition();
     const leftoverStep = definition.steps?.items?.find((step: any) => step.id === 'leftoverForm');

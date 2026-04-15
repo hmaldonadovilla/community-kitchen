@@ -2603,6 +2603,11 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `enabled` (optional): set to `false` to disable background freshness checks for the form.
    - `quietWindowMs` (optional): wait this long after the last successful record-related server activity before calling `getRecordVersion`. Minimum `5000`, maximum `600000`.
    - When the server version changes and there is no local record mutation in flight, the app reloads the latest snapshot automatically and shows a synchronization notice so the user can review the updated step.
+   - `dataSourceWatches` (optional): guided-step datasource freshness watches that refresh datasource-backed rows in the background without triggering visible loading notices.
+     - `stepId`: guided step id where the watch becomes active.
+     - `dataSourceId` / `dataSourceIds`: datasource id(s) to refresh while that step stays open.
+     - `quietWindowMs` (optional): background refresh quiet window for this watch. Defaults to `30000` and follows the same min/max bounds as record freshness.
+     - `dialog` (optional): message shown when the refreshed datasource rows differ from the cached rows. Supports `title`, `message`, `confirmLabel`, `cancelLabel`, `showCancel`, `showCloseButton`, `dismissOnBackdrop`, and `primaryAction`.
  - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
 - `submitEffects` (optional): declarative shared-table writes that run after the source record saves.
   - Supported types: `createRecord`, `updateRecord`

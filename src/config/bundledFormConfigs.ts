@@ -10509,6 +10509,28 @@ export const BUNDLED_FORM_CONFIGS = [
         "debounceMs": 2000,
         "status": "In progress"
       },
+      "recordFreshness": {
+        "enabled": true,
+        "quietWindowMs": 30000,
+        "dataSourceWatches": [
+          {
+            "stepId": "leftoverForm",
+            "dataSourceIds": [
+              "Leftover Inventory Data"
+            ],
+            "quietWindowMs": 30000,
+            "dialog": {
+              "message": {
+                "en": "The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing."
+              },
+              "confirmLabel": {
+                "en": "OK"
+              },
+              "showCancel": false
+            }
+          }
+        ]
+      },
       "submissionAfterSubmit": {
         "preActions": [
           "CLOSE_RECORD"
@@ -20153,6 +20175,28 @@ export const BUNDLED_FORM_CONFIGS = [
         "debounceMs": 2000,
         "status": "In progress"
       },
+      "recordFreshness": {
+        "enabled": true,
+        "quietWindowMs": 30000,
+        "dataSourceWatches": [
+          {
+            "stepId": "leftoverForm",
+            "dataSourceIds": [
+              "Leftover Inventory Data"
+            ],
+            "quietWindowMs": 30000,
+            "dialog": {
+              "message": {
+                "en": "The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing."
+              },
+              "confirmLabel": {
+                "en": "OK"
+              },
+              "showCancel": false
+            }
+          }
+        ]
+      },
       "submissionAfterSubmit": {
         "preActions": [
           "CLOSE_RECORD"
@@ -22900,7 +22944,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "3a879d25e84ee4ac59cf0de152f54326"
+    "cacheFingerprint": "b6ee3f3b312dae6a47d5e2736e34b1d6"
   },
   {
     "formKey": "Config: Recipes",
