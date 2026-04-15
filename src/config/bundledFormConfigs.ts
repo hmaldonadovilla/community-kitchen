@@ -10543,7 +10543,7 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "dialog": {
               "title": {
-                "en": "Please confirm"
+                "en": "Leftovers"
               },
               "message": {
                 "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -10552,14 +10552,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Yes, confirm"
               },
               "cancelLabel": {
-                "en": "No, continue editing"
+                "en": "No, go back to Leftovers"
               }
             }
           }
         ],
         "confirmationDialog": {
           "title": {
-            "en": "Please confirm"
+            "en": "Leftovers"
           },
           "message": {
             "en": "Please confirm there is no leftover."
@@ -10568,7 +10568,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Yes, confirm"
           },
           "cancelLabel": {
-            "en": "No, continue editing"
+            "en": "No, go back to Leftovers"
           }
         },
         "generatedRecordsDialog": {
@@ -10578,10 +10578,10 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "targetFormKey": "Config: Leftover Inventory",
           "title": {
-            "en": "Generated leftovers"
+            "en": "Label and store Leftovers"
           },
           "message": {
-            "en": "Use this list to label the physical leftovers before storing them:"
+            "en": "Use the ID and name below to label leftover container so it can be easily identified later."
           },
           "itemTemplate": {
             "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -11065,6 +11065,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "fields": [],
+                "helperText": {
+                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                },
                 "rows": {
                   "includeWhen": {
                     "fieldId": "ORD_QTY",
@@ -12122,9 +12125,6 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "autoAdvance": "off"
             },
-            "helpText": {
-              "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
-            },
             "render": {
               "subGroups": {
                 "mode": "inline"
@@ -13180,7 +13180,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "dialog": {
                       "title": {
-                        "en": "Please confirm"
+                        "en": "Leftovers"
                       },
                       "message": {
                         "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -13189,14 +13189,14 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "Yes, confirm"
                       },
                       "cancelLabel": {
-                        "en": "No, continue editing"
+                        "en": "No, go back to Leftovers"
                       }
                     }
                   }
                 ],
                 "confirmationDialog": {
                   "title": {
-                    "en": "Please confirm"
+                    "en": "Leftovers"
                   },
                   "message": {
                     "en": "Please confirm there is no leftover."
@@ -13205,7 +13205,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "en": "Yes, confirm"
                   },
                   "cancelLabel": {
-                    "en": "No, continue editing"
+                    "en": "No, go back to Leftovers"
                   }
                 },
                 "generatedRecordsDialog": {
@@ -13215,10 +13215,10 @@ export const BUNDLED_FORM_CONFIGS = [
                   ],
                   "targetFormKey": "Config: Leftover Inventory",
                   "title": {
-                    "en": "Generated leftovers"
+                    "en": "Label and store Leftovers"
                   },
                   "message": {
-                    "en": "Use this list to label the physical leftovers before storing them:"
+                    "en": "Use the ID and name below to label leftover container so it can be easily identified later."
                   },
                   "itemTemplate": {
                     "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -20186,7 +20186,7 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "dialog": {
               "title": {
-                "en": "Please confirm"
+                "en": "Leftovers"
               },
               "message": {
                 "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -20195,14 +20195,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "Yes, confirm"
               },
               "cancelLabel": {
-                "en": "No, continue editing"
+                "en": "No, go back to Leftovers"
               }
             }
           }
         ],
         "confirmationDialog": {
           "title": {
-            "en": "Please confirm"
+            "en": "Leftovers"
           },
           "message": {
             "en": "Please confirm there is no leftover."
@@ -20211,7 +20211,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Yes, confirm"
           },
           "cancelLabel": {
-            "en": "No, continue editing"
+            "en": "No, go back to Leftovers"
           }
         },
         "generatedRecordsDialog": {
@@ -20221,10 +20221,10 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "targetFormKey": "Config: Leftover Inventory",
           "title": {
-            "en": "Generated leftovers"
+            "en": "Label and store Leftovers"
           },
           "message": {
-            "en": "Use this list to label the physical leftovers before storing them:"
+            "en": "Use the ID and name below to label leftover container so it can be easily identified later."
           },
           "itemTemplate": {
             "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -20640,6 +20640,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
                 "fields": [],
+                "helperText": {
+                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                },
                 "rows": {
                   "includeWhen": {
                     "fieldId": "ORD_QTY",
@@ -21670,9 +21673,6 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "navigation": {
               "autoAdvance": "off"
-            },
-            "helpText": {
-              "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
             },
             "render": {
               "subGroups": {
@@ -22729,7 +22729,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "dialog": {
                       "title": {
-                        "en": "Please confirm"
+                        "en": "Leftovers"
                       },
                       "message": {
                         "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -22738,14 +22738,14 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "Yes, confirm"
                       },
                       "cancelLabel": {
-                        "en": "No, continue editing"
+                        "en": "No, go back to Leftovers"
                       }
                     }
                   }
                 ],
                 "confirmationDialog": {
                   "title": {
-                    "en": "Please confirm"
+                    "en": "Leftovers"
                   },
                   "message": {
                     "en": "Please confirm there is no leftover."
@@ -22754,7 +22754,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "en": "Yes, confirm"
                   },
                   "cancelLabel": {
-                    "en": "No, continue editing"
+                    "en": "No, go back to Leftovers"
                   }
                 },
                 "generatedRecordsDialog": {
@@ -22764,10 +22764,10 @@ export const BUNDLED_FORM_CONFIGS = [
                   ],
                   "targetFormKey": "Config: Leftover Inventory",
                   "title": {
-                    "en": "Generated leftovers"
+                    "en": "Label and store Leftovers"
                   },
                   "message": {
-                    "en": "Use this list to label the physical leftovers before storing them:"
+                    "en": "Use the ID and name below to label leftover container so it can be easily identified later."
                   },
                   "itemTemplate": {
                     "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -22895,7 +22895,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "832b570a36dd04376d268d6e425274fb"
+    "cacheFingerprint": "977c9bc0a1c14242fd4f712ad65e1dbe"
   },
   {
     "formKey": "Config: Recipes",

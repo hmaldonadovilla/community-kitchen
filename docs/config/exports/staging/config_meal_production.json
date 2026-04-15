@@ -465,7 +465,7 @@
           },
           "dialog": {
             "title": {
-              "en": "Please confirm"
+              "en": "Leftovers"
             },
             "message": {
               "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -474,14 +474,14 @@
               "en": "Yes, confirm"
             },
             "cancelLabel": {
-              "en": "No, continue editing"
+              "en": "No, go back to Leftovers"
             }
           }
         }
       ],
       "confirmationDialog": {
         "title": {
-          "en": "Please confirm"
+          "en": "Leftovers"
         },
         "message": {
           "en": "Please confirm there is no leftover."
@@ -490,7 +490,7 @@
           "en": "Yes, confirm"
         },
         "cancelLabel": {
-          "en": "No, continue editing"
+          "en": "No, go back to Leftovers"
         }
       },
       "generatedRecordsDialog": {
@@ -500,10 +500,10 @@
         ],
         "targetFormKey": "Config: Leftover Inventory",
         "title": {
-          "en": "Generated leftovers"
+          "en": "Label and store Leftovers"
         },
         "message": {
-          "en": "Use this list to label the physical leftovers before storing them:"
+          "en": "Use the ID and name below to label leftover container so it can be easily identified later."
         },
         "itemTemplate": {
           "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -987,6 +987,9 @@
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
               "fields": [],
+              "helperText": {
+                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+              },
               "rows": {
                 "includeWhen": {
                   "fieldId": "ORD_QTY",
@@ -2044,9 +2047,6 @@
           "navigation": {
             "autoAdvance": "off"
           },
-          "helpText": {
-            "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
-          },
           "render": {
             "subGroups": {
               "mode": "inline"
@@ -3099,52 +3099,52 @@
                         }
                       }
                     ]
-                  },
-                  "dialog": {
-                    "title": {
-                      "en": "Please confirm"
                     },
-                    "message": {
-                      "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
-                    },
-                    "confirmLabel": {
-                      "en": "Yes, confirm"
-                    },
-                    "cancelLabel": {
-                      "en": "No, continue editing"
+                    "dialog": {
+                      "title": {
+                        "en": "Leftovers"
+                      },
+                      "message": {
+                        "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+                      },
+                      "confirmLabel": {
+                        "en": "Yes, confirm"
+                      },
+                      "cancelLabel": {
+                        "en": "No, go back to Leftovers"
+                      }
                     }
                   }
-                }
-              ],
-              "confirmationDialog": {
-                "title": {
-                  "en": "Please confirm"
-                },
-                "message": {
-                  "en": "Please confirm there is no leftover."
-                },
-                "confirmLabel": {
-                  "en": "Yes, confirm"
-                },
-                "cancelLabel": {
-                  "en": "No, continue editing"
-                }
-              },
-              "generatedRecordsDialog": {
-                "submitEffectIds": [
-                  "captureProducedEntireDishLeftovers",
-                  "captureProducedLeftovers"
                 ],
-                "targetFormKey": "Config: Leftover Inventory",
-                "title": {
-                  "en": "Generated leftovers"
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Leftovers"
+                  },
+                  "message": {
+                    "en": "Please confirm there is no leftover."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirm"
+                  },
+                  "cancelLabel": {
+                    "en": "No, go back to Leftovers"
+                  }
                 },
-                "message": {
-                  "en": "Use this list to label the physical leftovers before storing them:"
-                },
-                "itemTemplate": {
-                  "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
-                },
+                "generatedRecordsDialog": {
+                  "submitEffectIds": [
+                    "captureProducedEntireDishLeftovers",
+                    "captureProducedLeftovers"
+                  ],
+                  "targetFormKey": "Config: Leftover Inventory",
+                  "title": {
+                    "en": "Label and store Leftovers"
+                  },
+                  "message": {
+                    "en": "Use the ID and name below to label leftover container so it can be easily identified later."
+                  },
+                  "itemTemplate": {
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                  },
                 "confirmLabel": {
                   "en": "OK"
                 }
@@ -10108,7 +10108,7 @@
           },
           "dialog": {
             "title": {
-              "en": "Please confirm"
+              "en": "Leftovers"
             },
             "message": {
               "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
@@ -10117,14 +10117,14 @@
               "en": "Yes, confirm"
             },
             "cancelLabel": {
-              "en": "No, continue editing"
+              "en": "No, go back to Leftovers"
             }
           }
         }
       ],
       "confirmationDialog": {
         "title": {
-          "en": "Please confirm"
+          "en": "Leftovers"
         },
         "message": {
           "en": "Please confirm there is no leftover."
@@ -10133,7 +10133,7 @@
           "en": "Yes, confirm"
         },
         "cancelLabel": {
-          "en": "No, continue editing"
+          "en": "No, go back to Leftovers"
         }
       },
       "generatedRecordsDialog": {
@@ -10143,10 +10143,10 @@
         ],
         "targetFormKey": "Config: Leftover Inventory",
         "title": {
-          "en": "Generated leftovers"
+          "en": "Label and store Leftovers"
         },
         "message": {
-          "en": "Use this list to label the physical leftovers before storing them:"
+          "en": "Use the ID and name below to label leftover container so it can be easily identified later."
         },
         "itemTemplate": {
           "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
@@ -10562,6 +10562,9 @@
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
               "fields": [],
+              "helperText": {
+                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+              },
               "rows": {
                 "includeWhen": {
                   "fieldId": "ORD_QTY",
@@ -11592,9 +11595,6 @@
           },
           "navigation": {
             "autoAdvance": "off"
-          },
-          "helpText": {
-            "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
           },
           "render": {
             "subGroups": {
@@ -12648,52 +12648,52 @@
                         }
                       }
                     ]
-                  },
-                  "dialog": {
-                    "title": {
-                      "en": "Please confirm"
                     },
-                    "message": {
-                      "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
-                    },
-                    "confirmLabel": {
-                      "en": "Yes, confirm"
-                    },
-                    "cancelLabel": {
-                      "en": "No, continue editing"
+                    "dialog": {
+                      "title": {
+                        "en": "Leftovers"
+                      },
+                      "message": {
+                        "en": "Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure."
+                      },
+                      "confirmLabel": {
+                        "en": "Yes, confirm"
+                      },
+                      "cancelLabel": {
+                        "en": "No, go back to Leftovers"
+                      }
                     }
                   }
-                }
-              ],
-              "confirmationDialog": {
-                "title": {
-                  "en": "Please confirm"
-                },
-                "message": {
-                  "en": "Please confirm there is no leftover."
-                },
-                "confirmLabel": {
-                  "en": "Yes, confirm"
-                },
-                "cancelLabel": {
-                  "en": "No, continue editing"
-                }
-              },
-              "generatedRecordsDialog": {
-                "submitEffectIds": [
-                  "captureProducedEntireDishLeftovers",
-                  "captureProducedLeftovers"
                 ],
-                "targetFormKey": "Config: Leftover Inventory",
-                "title": {
-                  "en": "Generated leftovers"
+                "confirmationDialog": {
+                  "title": {
+                    "en": "Leftovers"
+                  },
+                  "message": {
+                    "en": "Please confirm there is no leftover."
+                  },
+                  "confirmLabel": {
+                    "en": "Yes, confirm"
+                  },
+                  "cancelLabel": {
+                    "en": "No, go back to Leftovers"
+                  }
                 },
-                "message": {
-                  "en": "Use this list to label the physical leftovers before storing them:"
-                },
-                "itemTemplate": {
-                  "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
-                },
+                "generatedRecordsDialog": {
+                  "submitEffectIds": [
+                    "captureProducedEntireDishLeftovers",
+                    "captureProducedLeftovers"
+                  ],
+                  "targetFormKey": "Config: Leftover Inventory",
+                  "title": {
+                    "en": "Label and store Leftovers"
+                  },
+                  "message": {
+                    "en": "Use the ID and name below to label leftover container so it can be easily identified later."
+                  },
+                  "itemTemplate": {
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                  },
                 "confirmLabel": {
                   "en": "OK"
                 }

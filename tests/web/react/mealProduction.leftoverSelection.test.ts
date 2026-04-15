@@ -20,8 +20,16 @@ describe('meal production leftover selection config', () => {
     const target = leftoverStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
     const formTarget = formStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
 
+    expect(leftoverStep?.helpText).toBeUndefined();
+    expect(formStep?.helpText).toBeUndefined();
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
+    expect(target?.helperText?.en).toBe(
+      'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+    );
+    expect(formTarget?.helperText?.en).toBe(
+      'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+    );
     expect(target?.subGroups).toBeUndefined();
     expect((question.lineItemConfig.subGroups || []).map((group: any) => group.id)).not.toContain('MP_LEFTOVER_SELECTION_LI');
     expect(

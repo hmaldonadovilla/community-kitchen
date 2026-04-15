@@ -75,7 +75,7 @@ describe('milestoneDialogs', () => {
     ).toBe('LP-1 | Part dish | Rice');
   });
 
-  test('renders entire dish leftovers with portions and bullet formatting', () => {
+  test('renders entire dish leftovers with portions and expiry formatting', () => {
     expect(
       renderGeneratedLeftoverLine(
         {
@@ -86,15 +86,15 @@ describe('milestoneDialogs', () => {
             LEFTOVER_ID: 'LE-8',
             LEFTOVER_KIND: 'Entire dish',
             LEFTOVER_RECIPE: 'Chicken & vegetable sauce',
-            LEFTOVER_PORTIONS: 5
+            LEFTOVER_PORTIONS: 5,
+            LEFTOVER_EXP_DATE: '2026-04-17'
           }
-        },
-        { bullet: true }
+        }
       )
-    ).toBe('• LE-8 | Entire dish | Chicken & vegetable sauce | 5 portions');
+    ).toBe('LE-8 | Chicken & vegetable sauce | 5 portions | Expires 17-Apr-2026');
   });
 
-  test('renders part dish leftovers with quantity and unit formatting', () => {
+  test('renders part dish leftovers with quantity and unit expiry formatting', () => {
     expect(
       renderGeneratedLeftoverLine({
         effectId: 'captureProducedLeftovers',
@@ -105,10 +105,11 @@ describe('milestoneDialogs', () => {
           LEFTOVER_KIND: 'Part dish',
           LEFTOVER_INGREDIENT: 'Basmati rice',
           LEFTOVER_QTY: 5000,
-          LEFTOVER_UNIT: 'gr'
+          LEFTOVER_UNIT: 'gr',
+          LEFTOVER_EXP_DATE: '2026-04-18T00:00:00.000Z'
         }
       })
-    ).toBe('LP-4 | Part dish | Basmati rice | 5000 gr');
+    ).toBe('LP-4 | Basmati rice | 5000 gr | Expires 18-Apr-2026');
   });
 
   test('identifies leftover inventory generated records', () => {

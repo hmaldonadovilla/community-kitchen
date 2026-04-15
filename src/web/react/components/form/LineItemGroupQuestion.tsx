@@ -115,6 +115,7 @@ import {
   collectSelectionEffectInitTargets,
   collectSubgroupSeedInitTargets
 } from './selectionEffectInit';
+import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -537,7 +538,26 @@ export const LineItemGroupQuestion: React.FC<{
    * When true, suppress the top/bottom add/selector toolbars (used by overlay headers).
    */
   hideToolbars?: boolean;
-}> = ({ q, ctx, rowFlow, rowFilter, dataSourceRows, hideInlineSubgroups, hideToolbars }) => {
+  /**
+   * Optional step-scoped helper text rendered above the group body.
+   * Useful for guided steps that need contextual instructions without mutating the base question config.
+   */
+  supplementalHelperText?: string;
+  /**
+   * When true, hide the supplemental helper when every active datasource-backed source-first config has zero source rows.
+   */
+  hideSupplementalHelperWhenNoSourceRows?: boolean;
+}> = ({
+  q,
+  ctx,
+  rowFlow,
+  rowFilter,
+  dataSourceRows,
+  hideInlineSubgroups,
+  hideToolbars,
+  supplementalHelperText,
+  hideSupplementalHelperWhenNoSourceRows
+}) => {
   const {
     formKey,
     recordId,
@@ -1351,6 +1371,27 @@ export const LineItemGroupQuestion: React.FC<{
       };
     });
   }, [isStepDataSourceLoading, language, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows]);
+
+  const hideSupplementalHelper = React.useMemo(
+    () =>
+      shouldHideSupplementalHelperTextForDataSourceRows({
+        hideWhenNoSourceRows: hideSupplementalHelperWhenNoSourceRows,
+        entries: sourceFirstPresentationEntries
+      }),
+    [hideSupplementalHelperWhenNoSourceRows, sourceFirstPresentationEntries]
+  );
+
+  const supplementalHelperTextTrimmed = (supplementalHelperText || '').toString().trim();
+  const supplementalHelperNode =
+    supplementalHelperTextTrimmed &&
+    !hideSupplementalHelper &&
+    !submitting &&
+    q.readOnly !== true &&
+    q.ui?.renderAsLabel !== true ? (
+      <div className="muted" style={{ whiteSpace: 'pre-line', fontSize: 'var(--ck-font-label)', lineHeight: 1.4 }}>
+        {supplementalHelperTextTrimmed}
+      </div>
+    ) : null;
 
   React.useEffect(() => {
     if (!sourceFirstPresentationEntries.length) return;
@@ -3267,8 +3308,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       }
     },
     [
+      addLineItemRowManual,
       buildOverlayGroupOverride,
       buildRowFlowContextHeader,
+      ctx,
       definition,
       language,
       lineItems,
@@ -3505,6 +3548,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       });
     });
   }, [
+    applyLineItemGroupOverride,
+    buildOverlayGroupOverride,
     definition.questions,
     ensureLineOptions,
     language,
@@ -5478,6 +5523,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
               </div>
               {groupHelperNode}
+              {supplementalHelperNode}
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
               {shouldRenderTopToolbar ? (
@@ -6372,6 +6418,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               <h3 style={hideGroupLabel ? { ...srOnly, margin: 0 } : { margin: 0 }}>{resolveLabel(q, language)}</h3>
             </div>
               {groupHelperNode}
+              {supplementalHelperNode}
               {errors[q.id] ? <div className="error">{errors[q.id]}</div> : null}
               {renderWarnings(q.id)}
               {shouldRenderTopToolbar ? (

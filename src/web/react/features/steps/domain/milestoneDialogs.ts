@@ -5,6 +5,7 @@ import { VisibilityContext } from '../../../../../web/types';
 const trimLower = (value: unknown): string => (value === undefined || value === null ? '' : value.toString().trim().toLowerCase());
 const toText = (value: unknown): string => (value === undefined || value === null ? '' : value.toString().trim());
 const LEFTOVER_INVENTORY_FORM_KEY = 'Config: Leftover Inventory';
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export const selectMilestoneConfirmationDialog = (args: {
   action: StepMilestoneActionConfig;
@@ -110,6 +111,35 @@ const formatGeneratedLeftoverQuantity = (values: Record<string, unknown>): strin
   return unit ? `${quantity} ${unit}` : quantity;
 };
 
+const formatGeneratedLeftoverExpiry = (raw: unknown): string => {
+  const value = toText(raw);
+  if (!value) return '';
+  const alreadyFormatted = value.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+  if (alreadyFormatted) return `Expires ${value}`;
+
+  const ymd = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    const monthLabel = EN_MONTHS[month - 1];
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day) && monthLabel) {
+      return `Expires ${day.toString().padStart(2, '0')}-${monthLabel}-${year}`;
+    }
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    const monthLabel = EN_MONTHS[date.getMonth()];
+    if (monthLabel) {
+      return `Expires ${date.getDate().toString().padStart(2, '0')}-${monthLabel}-${date.getFullYear()}`;
+    }
+  }
+
+  return `Expires ${value}`;
+};
+
 export const isGeneratedLeftoverRecord = (record: SubmitEffectGeneratedRecord): boolean =>
   toText(record.targetFormKey || '') === LEFTOVER_INVENTORY_FORM_KEY;
 
@@ -125,7 +155,8 @@ export const renderGeneratedLeftoverLine = (
   const recipe = toText(values.LEFTOVER_RECIPE || '');
   const ingredient = toText(values.LEFTOVER_INGREDIENT || '');
   const quantity = formatGeneratedLeftoverQuantity(values);
-  const segments = [leftoverId, kind, recipe || ingredient, quantity].filter(Boolean);
+  const expiry = formatGeneratedLeftoverExpiry(values.LEFTOVER_EXP_DATE || '');
+  const segments = [leftoverId, recipe || ingredient || kind, quantity, expiry].filter(Boolean);
   const line = segments.join(' | ');
   return options?.bullet && line ? `• ${line}` : line;
 };

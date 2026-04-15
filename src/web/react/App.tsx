@@ -10226,7 +10226,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
           const lines = generatedRecords
             .map(record =>
-              isGeneratedLeftoverRecord(record) ? renderGeneratedLeftoverLine(record, { bullet: true }) : renderGeneratedRecordLine(record, itemTemplate)
+              isGeneratedLeftoverRecord(record) ? renderGeneratedLeftoverLine(record) : renderGeneratedRecordLine(record, itemTemplate)
             )
             .filter(Boolean);
           const message = [intro, ...lines].filter(Boolean).join('\n');
@@ -11268,7 +11268,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
         const lines = generatedRecords
           .map(entry =>
-            isGeneratedLeftoverRecord(entry) ? renderGeneratedLeftoverLine(entry, { bullet: true }) : renderGeneratedRecordLine(entry, itemTemplate)
+            isGeneratedLeftoverRecord(entry) ? renderGeneratedLeftoverLine(entry) : renderGeneratedRecordLine(entry, itemTemplate)
           )
           .filter(Boolean);
         const message = [intro, ...lines].filter(Boolean).join('\n');

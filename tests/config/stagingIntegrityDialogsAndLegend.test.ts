@@ -214,6 +214,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const contextHeaderSteps = items.filter((entry: any) => Array.isArray(entry?.contextHeader?.parts));
 
       expect(leftoverBank?.label?.en).toBe('Leftover bank');
+      expect(leftoverBank?.helpText).toBeUndefined();
       expect(leftoverBank?.includeWhen).toBeUndefined();
       expect(leftoverBank?.excludeWhen).toEqual({
         fieldId: 'status',
@@ -233,6 +234,9 @@ describe('staging integrity dialogs and list legend config', () => {
         ? leftoverBankMeals.dataSourceRows
         : [];
       const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
+      expect(leftoverBankMeals?.helperText?.en).toBe(
+        'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+      );
       expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverInventoryRows?.presentationWhen).toEqual({
         fieldId: '__ckStep',
@@ -406,18 +410,29 @@ describe('staging integrity dialogs and list legend config', () => {
               ])
             }),
             dialog: expect.objectContaining({
+              title: expect.objectContaining({
+                en: 'Leftovers'
+              }),
               message: expect.objectContaining({
                 en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
+              }),
+              cancelLabel: expect.objectContaining({
+                en: 'No, go back to Leftovers'
               })
             })
           })
         ])
       );
+      expect(root?.submissionAfterSubmit?.confirmationDialog?.title?.en).toBe('Leftovers');
       expect(root?.submissionAfterSubmit?.confirmationDialog?.message?.en).toBe('Please confirm there is no leftover.');
+      expect(root?.submissionAfterSubmit?.confirmationDialog?.cancelLabel?.en).toBe('No, go back to Leftovers');
       expect(root?.submissionAfterSubmit?.generatedRecordsDialog).toEqual(
         expect.objectContaining({
           targetFormKey: 'Config: Leftover Inventory',
-          title: expect.objectContaining({ en: 'Generated leftovers' })
+          title: expect.objectContaining({ en: 'Label and store Leftovers' }),
+          message: expect.objectContaining({
+            en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
+          })
         })
       );
 
@@ -480,20 +495,31 @@ describe('staging integrity dialogs and list legend config', () => {
               ])
             }),
             dialog: expect.objectContaining({
+              title: expect.objectContaining({
+                en: 'Leftovers'
+              }),
               message: expect.objectContaining({
                 en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
+              }),
+              cancelLabel: expect.objectContaining({
+                en: 'No, go back to Leftovers'
               })
             })
           })
         ])
       );
+      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Leftovers');
       expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
         'Please confirm there is no leftover.'
       );
+      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.cancelLabel?.en).toBe('No, go back to Leftovers');
       expect(leftovers?.navigation?.milestoneAction?.generatedRecordsDialog).toEqual(
         expect.objectContaining({
           targetFormKey: 'Config: Leftover Inventory',
-          title: expect.objectContaining({ en: 'Generated leftovers' })
+          title: expect.objectContaining({ en: 'Label and store Leftovers' }),
+          message: expect.objectContaining({
+            en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
+          })
         })
       );
 

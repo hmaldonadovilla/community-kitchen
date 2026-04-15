@@ -14367,8 +14367,10 @@ const FormView: React.FC<FormViewProps> = ({
         (target as any).helperText !== undefined && (target as any).helperText !== null
           ? resolveLocalizedString((target as any).helperText, language, '').trim()
           : '';
+      let delegateTargetHelperText = false;
       const wrapLineGroupContent = (content: React.ReactNode): React.ReactNode => {
-        if (!targetLabel && !targetHelperText) return content;
+        const wrapperHelperText = delegateTargetHelperText ? '' : targetHelperText;
+        if (!targetLabel && !wrapperHelperText) return content;
         return (
           <div
             key={`${keyPrefix}:lg:${id}:section`}
@@ -14377,9 +14379,9 @@ const FormView: React.FC<FormViewProps> = ({
             {targetLabel ? (
               <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', lineHeight: 1.3 }}>{targetLabel}</div>
             ) : null}
-            {targetHelperText ? (
+            {wrapperHelperText ? (
               <div className="muted" style={{ whiteSpace: 'pre-line', fontSize: 'var(--ck-font-label)', lineHeight: 1.4 }}>
-                {targetHelperText}
+                {wrapperHelperText}
               </div>
             ) : null}
             {content}
@@ -14512,6 +14514,7 @@ const FormView: React.FC<FormViewProps> = ({
 
       const subGroupsCfgPresent = !!target.subGroups && typeof target.subGroups === 'object';
       const hasStepDataSourceRows = Array.isArray((target as any).dataSourceRows) && ((target as any).dataSourceRows as any[]).length > 0;
+      delegateTargetHelperText = effectiveLineMode === 'inline' && hasStepDataSourceRows && !!targetHelperText;
       const subIncludeRaw = subGroupsCfgPresent ? (target.subGroups as any)?.include : undefined;
       const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
       const allowedSubIds = subIncludeList
@@ -14648,6 +14651,8 @@ const FormView: React.FC<FormViewProps> = ({
           rowFilter={rowFilter}
           dataSourceRows={Array.isArray((target as any).dataSourceRows) ? ((target as any).dataSourceRows as any[]) : undefined}
           hideInlineSubgroups={hideInlineSubgroups}
+          supplementalHelperText={delegateTargetHelperText ? targetHelperText : undefined}
+          hideSupplementalHelperWhenNoSourceRows={delegateTargetHelperText}
           ctx={{
             formKey,
             recordId: recordMeta?.id || null,
