@@ -56,6 +56,28 @@ export const hasIncompleteConfiguredFields = (fieldIds: string[], valuesRaw: Rec
   return fieldIds.some(fieldId => isEmptyValue(getValueByFieldId(valuesRaw || {}, fieldId) as FieldValue));
 };
 
+export const resolveDebouncedAutoSaveDelay = (args: {
+  debounceMs: number;
+  lastUserInteractionAt?: number | null;
+  now?: number;
+}): number => {
+  const debounceMs = Number.isFinite(Number(args.debounceMs)) ? Math.max(0, Math.floor(Number(args.debounceMs))) : 0;
+  const interactionAt = Number(args.lastUserInteractionAt);
+  const now = Number.isFinite(Number(args.now)) ? Number(args.now) : Date.now();
+  if (!Number.isFinite(interactionAt) || interactionAt <= 0) return debounceMs;
+  const elapsedMs = Math.max(0, now - interactionAt);
+  return Math.max(0, debounceMs - elapsedMs);
+};
+
+export const shouldRetainPendingDebouncedAutoSave = (args: {
+  scheduledFingerprint?: string | null;
+  latestFingerprint?: string | null;
+}): boolean => {
+  const scheduledFingerprint = normalizeStringId(args.scheduledFingerprint);
+  const latestFingerprint = normalizeStringId(args.latestFingerprint);
+  return Boolean(scheduledFingerprint && scheduledFingerprint === latestFingerprint);
+};
+
 export const shouldForceAutoSaveOnConfiguredBlur = (args: {
   autoSaveEnabled: boolean;
   isCreateFlow: boolean;

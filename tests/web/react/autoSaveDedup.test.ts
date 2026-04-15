@@ -4,7 +4,9 @@ import {
   getValueByFieldId,
   hasIncompleteConfiguredFields,
   normalizeFieldIdList,
+  resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
 } from '../../../src/web/react/app/autoSaveDedup';
 
@@ -33,6 +35,55 @@ describe('autoSaveDedup helpers', () => {
   it('checks incomplete configured autosave fields', () => {
     expect(hasIncompleteConfiguredFields(['CREATED_BY'], { CREATED_BY: '' })).toBe(true);
     expect(hasIncompleteConfiguredFields(['CREATED_BY'], { CREATED_BY: 'Alice' })).toBe(false);
+  });
+
+  it('keeps debounced autosave anchored to the last real user interaction', () => {
+    expect(
+      resolveDebouncedAutoSaveDelay({
+        debounceMs: 2000,
+        lastUserInteractionAt: 10_000,
+        now: 10_600
+      })
+    ).toBe(1400);
+
+    expect(
+      resolveDebouncedAutoSaveDelay({
+        debounceMs: 2000,
+        lastUserInteractionAt: 10_000,
+        now: 12_500
+      })
+    ).toBe(0);
+
+    expect(
+      resolveDebouncedAutoSaveDelay({
+        debounceMs: 2000,
+        lastUserInteractionAt: null,
+        now: 10_600
+      })
+    ).toBe(2000);
+  });
+
+  it('keeps a pending debounced autosave through callback-only rerenders', () => {
+    expect(
+      shouldRetainPendingDebouncedAutoSave({
+        scheduledFingerprint: 'draft:v1',
+        latestFingerprint: 'draft:v1'
+      })
+    ).toBe(true);
+
+    expect(
+      shouldRetainPendingDebouncedAutoSave({
+        scheduledFingerprint: 'draft:v1',
+        latestFingerprint: 'draft:v2'
+      })
+    ).toBe(false);
+
+    expect(
+      shouldRetainPendingDebouncedAutoSave({
+        scheduledFingerprint: '',
+        latestFingerprint: 'draft:v1'
+      })
+    ).toBe(false);
   });
 
   it('filters dedup rules using trigger fields', () => {

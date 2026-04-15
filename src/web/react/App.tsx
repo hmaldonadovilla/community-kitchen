@@ -174,7 +174,9 @@ import {
   hasEnteredTopLevelValues,
   hasIncompleteConfiguredFields,
   normalizeFieldIdList,
+  resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
 } from './app/autoSaveDedup';
 import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
@@ -2357,6 +2359,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const pendingDeferredRecordFreshnessSyncRef = useRef<Parameters<SynchronizeStaleRecordFn>[0] | null>(null);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
+  const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
   const reservationSyncPromiseRef = useRef<
     Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
   >(null);
@@ -7255,6 +7258,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }
     return 'In progress';
   })();
+  const renderedAutoSaveStateFingerprint = useMemo(
+    () =>
+      buildDraftStateFingerprint({
+        formKey,
+        language,
+        values,
+        lineItems
+      }),
+    [formKey, language, lineItems, values]
+  );
+  latestRenderedAutoSaveStateFingerprintRef.current = renderedAutoSaveStateFingerprint;
   const resolveAutoSaveStatus = useCallback(
     (rawStatus: any): string => {
       const trimmed = rawStatus === undefined || rawStatus === null ? '' : rawStatus.toString().trim();
@@ -8539,21 +8553,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   // Debounced autosave trigger on edits.
   useEffect(() => {
-    if (!autoSaveEnabled) return;
+    if (!autoSaveEnabled) {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return;
+    }
     // Only trigger autosave when the actual form data changes.
-    const stateFingerprint = buildDraftStateFingerprint({
-      formKey,
-      language,
-      values,
-      lineItems
-    });
+    const stateFingerprint = renderedAutoSaveStateFingerprint;
     const changed = lastAutoSaveStateFingerprintRef.current !== stateFingerprint;
     rememberAutoSaveSeenState(values, lineItems);
     if (!changed) return;
 
-    if (view !== 'form') return;
-    if (submitting) return;
+    if (view !== 'form') {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return;
+    }
+    if (submitting) {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      return;
+    }
     if (isClosedRecord) {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
       setDraftSave(prev => (prev.phase === 'paused' ? prev : { phase: 'paused', message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') }));
       return;
     }
@@ -8622,9 +8653,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (prev.phase === 'dirty') return prev;
       return { phase: 'dirty' };
     });
-    const scheduledTimerId = scheduleLatestAutoSave('debounced', autoSaveDebounceMs);
+    const scheduledTimerId = scheduleLatestAutoSave(
+      'debounced',
+      resolveDebouncedAutoSaveDelay({
+        debounceMs: autoSaveDebounceMs,
+        lastUserInteractionAt: lastUserInteractionRef.current,
+        now: Date.now()
+      })
+    );
     return () => {
       if (scheduledTimerId && autoSaveTimerRef.current === scheduledTimerId) {
+        if (
+          shouldRetainPendingDebouncedAutoSave({
+            scheduledFingerprint: stateFingerprint,
+            latestFingerprint: latestRenderedAutoSaveStateFingerprintRef.current
+          })
+        ) {
+          return;
+        }
         globalThis.clearTimeout(scheduledTimerId);
         autoSaveTimerRef.current = null;
       }
@@ -8636,7 +8682,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     formKey,
     isClosedRecord,
     language,
-    performAutoSave,
+    renderedAutoSaveStateFingerprint,
     rememberAutoSaveSeenState,
     scheduleLatestAutoSave,
     logEvent,
@@ -8645,6 +8691,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     values,
     lineItems
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const ensureDraftRecordId = useCallback(
     async (args?: { reason?: string; fieldPath?: string }): Promise<{ success: boolean; recordId?: string; message?: string }> => {
