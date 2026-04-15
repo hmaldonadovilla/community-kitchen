@@ -3671,7 +3671,9 @@ components:
             - type: string
           description: |
             Template used to render each generated record line. Supports `{{recordId}}`,
-            `{{targetFormKey}}`, `{{effectId}}`, and direct target field ids such as `{{LEFTOVER_ID}}`.
+            `{{targetFormKey}}`, `{{effectId}}`, direct target field ids such as `{{LEFTOVER_ID}}`,
+            first-non-empty fallbacks like `{{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT}}`, and
+            formatters like `label`, `appendField`, `pluralize`, `date`, `prefix`, and `suffix`.
         confirmLabel:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'

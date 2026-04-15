@@ -4,7 +4,6 @@ import { VisibilityContext } from '../../../../../web/types';
 
 const trimLower = (value: unknown): string => (value === undefined || value === null ? '' : value.toString().trim().toLowerCase());
 const toText = (value: unknown): string => (value === undefined || value === null ? '' : value.toString().trim());
-const LEFTOVER_INVENTORY_FORM_KEY = 'Config: Leftover Inventory';
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export const selectMilestoneConfirmationDialog = (args: {
@@ -89,74 +88,144 @@ const resolveRecordToken = (record: SubmitEffectGeneratedRecord, path: string): 
   return '';
 };
 
-export const renderGeneratedRecordLine = (record: SubmitEffectGeneratedRecord, template: string): string =>
-  (template || '')
-    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, token) => resolveRecordToken(record, token))
-    .trim();
-
-const formatPortionsLabel = (value: string): string => {
-  if (!value) return '';
-  const normalized = value.replace(/,/g, '.');
-  const numericValue = Number(normalized);
-  const unit = Number.isFinite(numericValue) && numericValue === 1 ? 'portion' : 'portions';
-  return `${value} ${unit}`;
+const resolveTemplateLiteral = (value: string): string | null => {
+  const trimmed = (value || '').toString().trim();
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2)
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return null;
 };
 
-const formatGeneratedLeftoverQuantity = (values: Record<string, unknown>): string => {
-  const portions = toText(values.LEFTOVER_PORTIONS || '');
-  if (portions) return formatPortionsLabel(portions);
-  const quantity = toText(values.LEFTOVER_QTY || '');
-  if (!quantity) return '';
-  const unit = toText(values.LEFTOVER_UNIT || '');
-  return unit ? `${quantity} ${unit}` : quantity;
+const resolveTemplateExpressionValue = (record: SubmitEffectGeneratedRecord, expression: string): string => {
+  const literal = resolveTemplateLiteral(expression);
+  if (literal !== null) return literal;
+  return resolveRecordToken(record, expression);
 };
 
-const formatGeneratedLeftoverExpiry = (raw: unknown): string => {
+const parseTemplateDateParts = (
+  raw: string
+):
+  | {
+      year: number;
+      month: number;
+      day: number;
+    }
+  | null => {
   const value = toText(raw);
-  if (!value) return '';
+  if (!value) return null;
+
   const alreadyFormatted = value.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
-  if (alreadyFormatted) return `Expires ${value}`;
+  if (alreadyFormatted) {
+    const month = EN_MONTHS.findIndex(label => label.toLowerCase() === alreadyFormatted[2].toLowerCase());
+    if (month >= 0) {
+      return {
+        day: Number(alreadyFormatted[1]),
+        month: month + 1,
+        year: Number(alreadyFormatted[3])
+      };
+    }
+  }
 
   const ymd = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
   if (ymd) {
-    const year = Number(ymd[1]);
-    const month = Number(ymd[2]);
-    const day = Number(ymd[3]);
-    const monthLabel = EN_MONTHS[month - 1];
-    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day) && monthLabel) {
-      return `Expires ${day.toString().padStart(2, '0')}-${monthLabel}-${year}`;
-    }
+    return {
+      year: Number(ymd[1]),
+      month: Number(ymd[2]),
+      day: Number(ymd[3])
+    };
   }
 
   const parsed = Date.parse(value);
-  if (!Number.isNaN(parsed)) {
-    const date = new Date(parsed);
-    const monthLabel = EN_MONTHS[date.getMonth()];
-    if (monthLabel) {
-      return `Expires ${date.getDate().toString().padStart(2, '0')}-${monthLabel}-${date.getFullYear()}`;
+  if (Number.isNaN(parsed)) return null;
+  const date = new Date(parsed);
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate()
+  };
+};
+
+const formatTemplateDate = (raw: string, pattern: string): string => {
+  const value = toText(raw);
+  if (!value) return '';
+  const parts = parseTemplateDateParts(value);
+  if (!parts) return value;
+  const replacements: Record<string, string> = {
+    yyyy: parts.year.toString().padStart(4, '0'),
+    MMM: EN_MONTHS[parts.month - 1] || '',
+    MM: parts.month.toString().padStart(2, '0'),
+    M: parts.month.toString(),
+    dd: parts.day.toString().padStart(2, '0'),
+    d: parts.day.toString()
+  };
+  return (pattern || 'yyyy-MM-dd').replace(/yyyy|MMM|MM|M|dd|d/g, token => replacements[token] || token);
+};
+
+const applyGeneratedRecordFormatter = (args: {
+  record: SubmitEffectGeneratedRecord;
+  value: string;
+  formatter: string;
+}): string => {
+  const raw = (args.formatter || '').toString();
+  const [nameRaw, ...rawArgs] = raw.split(':');
+  const name = trimLower(nameRaw);
+  const argText = rawArgs.join(':').trim();
+
+  if (!name) return args.value;
+  if (!toText(args.value)) return '';
+
+  if (name === 'prefix') return argText ? `${argText}${args.value}` : args.value;
+  if (name === 'suffix') return argText ? `${args.value}${argText}` : args.value;
+  if (name === 'label') return argText ? `${argText} ${args.value}` : args.value;
+
+  if (name === 'appendfield') {
+    const fieldId = rawArgs[0] ? rawArgs[0].trim() : '';
+    const separator = rawArgs.length > 1 ? rawArgs.slice(1).join(':').trim() || ' ' : ' ';
+    const appended = resolveTemplateExpressionValue(args.record, fieldId);
+    return appended ? `${args.value}${separator}${appended}` : args.value;
+  }
+
+  if (name === 'pluralize') {
+    const singular = rawArgs[0] ? rawArgs[0].trim() : '';
+    const plural = rawArgs[1] ? rawArgs[1].trim() : singular ? `${singular}s` : '';
+    const numericValue = Number(args.value.replace(/,/g, '.'));
+    if (!singular && !plural) return args.value;
+    return `${args.value} ${Number.isFinite(numericValue) && numericValue === 1 ? singular : plural}`.trim();
+  }
+
+  if (name === 'date') {
+    return formatTemplateDate(args.value, argText || 'yyyy-MM-dd');
+  }
+
+  return args.value;
+};
+
+const renderGeneratedRecordExpression = (record: SubmitEffectGeneratedRecord, expression: string): string => {
+  const alternatives = (expression || '')
+    .split(/\s*\|\|\s*/g)
+    .map(entry => entry.trim())
+    .filter(Boolean);
+
+  for (const alternative of alternatives) {
+    const segments = alternative
+      .split(/\s*\|\s*/g)
+      .map(entry => entry.trim())
+      .filter(Boolean);
+    if (!segments.length) continue;
+    let value = resolveTemplateExpressionValue(record, segments[0]);
+    for (const formatter of segments.slice(1)) {
+      value = applyGeneratedRecordFormatter({ record, value, formatter });
     }
+    if (toText(value)) return value;
   }
 
-  return `Expires ${value}`;
+  return '';
 };
 
-export const isGeneratedLeftoverRecord = (record: SubmitEffectGeneratedRecord): boolean =>
-  toText(record.targetFormKey || '') === LEFTOVER_INVENTORY_FORM_KEY;
-
-export const renderGeneratedLeftoverLine = (
-  record: SubmitEffectGeneratedRecord,
-  options?: {
-    bullet?: boolean;
-  }
-): string => {
-  const values = record.values && typeof record.values === 'object' ? (record.values as Record<string, unknown>) : {};
-  const leftoverId = toText(values.LEFTOVER_ID || record.recordId || '');
-  const kind = toText(values.LEFTOVER_KIND || '');
-  const recipe = toText(values.LEFTOVER_RECIPE || '');
-  const ingredient = toText(values.LEFTOVER_INGREDIENT || '');
-  const quantity = formatGeneratedLeftoverQuantity(values);
-  const expiry = formatGeneratedLeftoverExpiry(values.LEFTOVER_EXP_DATE || '');
-  const segments = [leftoverId, recipe || ingredient || kind, quantity, expiry].filter(Boolean);
-  const line = segments.join(' | ');
-  return options?.bullet && line ? `• ${line}` : line;
-};
+export const renderGeneratedRecordLine = (record: SubmitEffectGeneratedRecord, template: string): string =>
+  (template || '')
+    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, token) => renderGeneratedRecordExpression(record, token))
+    .trim();

@@ -1221,7 +1221,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `navigateTo`: `auto` | `form` | `summary` | `list`
       - `confirmationDialog`: optional confirmation dialog shown before final submit starts
       - `confirmationDialogCases[]`: ordered conditional confirmation dialogs; first match wins and falls back to `confirmationDialog`
-      - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records
+      - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records; `itemTemplate` supports `{{FIELD_ID}}`, `{{A || B}}` fallbacks, and formatters such as `label`, `appendField`, `pluralize`, and `date`
       - `feedbackDialog`: optional acknowledgement dialog shown after background actions start
       - same-record follow-up batches are serialized on the server, so final-submit `preActions` wait behind any earlier in-flight milestone batch for that record
 

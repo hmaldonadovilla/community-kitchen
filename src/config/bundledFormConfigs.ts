@@ -10584,7 +10584,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Use the ID and name below to label leftover container so it can be easily identified later."
           },
           "itemTemplate": {
-            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}"
           },
           "confirmLabel": {
             "en": "OK"
@@ -13221,7 +13221,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "en": "Use the ID and name below to label leftover container so it can be easily identified later."
                   },
                   "itemTemplate": {
-                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}"
                   },
                   "confirmLabel": {
                     "en": "OK"
@@ -20227,7 +20227,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "en": "Use the ID and name below to label leftover container so it can be easily identified later."
           },
           "itemTemplate": {
-            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+            "en": "{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}"
           },
           "confirmLabel": {
             "en": "OK"
@@ -22770,7 +22770,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "en": "Use the ID and name below to label leftover container so it can be easily identified later."
                   },
                   "itemTemplate": {
-                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_RECIPE}}{{LEFTOVER_INGREDIENT}}"
+                    "en": "{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}"
                   },
                   "confirmLabel": {
                     "en": "OK"
@@ -22895,7 +22895,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "977c9bc0a1c14242fd4f712ad65e1dbe"
+    "cacheFingerprint": "e5301576b9537900f42990840c8d24ad"
   },
   {
     "formKey": "Config: Recipes",

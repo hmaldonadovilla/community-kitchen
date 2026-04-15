@@ -10,13 +10,13 @@ describe('shouldHideSupplementalHelperTextForDataSourceRows', () => {
     ).toBe(true);
   });
 
-  test('returns false while datasource rows are still loading', () => {
+  test('returns true while datasource rows are still loading', () => {
     expect(
       shouldHideSupplementalHelperTextForDataSourceRows({
         hideWhenNoSourceRows: true,
         entries: [{ loading: true, sourceRows: [] }]
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test('returns false when any datasource config still has source rows', () => {
@@ -29,5 +29,14 @@ describe('shouldHideSupplementalHelperTextForDataSourceRows', () => {
         ]
       })
     ).toBe(false);
+  });
+
+  test('returns true when no datasource entries are active yet', () => {
+    expect(
+      shouldHideSupplementalHelperTextForDataSourceRows({
+        hideWhenNoSourceRows: true,
+        entries: []
+      })
+    ).toBe(true);
   });
 });

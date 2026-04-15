@@ -1,8 +1,6 @@
 import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
-  isGeneratedLeftoverRecord,
-  renderGeneratedLeftoverLine,
   renderGeneratedRecordLine,
   selectMilestoneConfirmationDialog
 } from '../../../src/web/react/features/steps/domain/milestoneDialogs';
@@ -75,9 +73,9 @@ describe('milestoneDialogs', () => {
     ).toBe('LP-1 | Part dish | Rice');
   });
 
-  test('renders entire dish leftovers with portions and expiry formatting', () => {
+  test('renders generated record lines with fallback, pluralization, and date formatting', () => {
     expect(
-      renderGeneratedLeftoverLine(
+      renderGeneratedRecordLine(
         {
           effectId: 'captureProducedEntireDishLeftovers',
           targetFormKey: 'Config: Leftover Inventory',
@@ -89,44 +87,31 @@ describe('milestoneDialogs', () => {
             LEFTOVER_PORTIONS: 5,
             LEFTOVER_EXP_DATE: '2026-04-17'
           }
-        }
+        },
+        '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
       )
     ).toBe('LE-8 | Chicken & vegetable sauce | 5 portions | Expires 17-Apr-2026');
   });
 
-  test('renders part dish leftovers with quantity and unit expiry formatting', () => {
+  test('renders generated record lines with alternate quantity fields', () => {
     expect(
-      renderGeneratedLeftoverLine({
-        effectId: 'captureProducedLeftovers',
-        targetFormKey: 'Config: Leftover Inventory',
-        recordId: 'inv-2',
-        values: {
-          LEFTOVER_ID: 'LP-4',
-          LEFTOVER_KIND: 'Part dish',
-          LEFTOVER_INGREDIENT: 'Basmati rice',
-          LEFTOVER_QTY: 5000,
-          LEFTOVER_UNIT: 'gr',
-          LEFTOVER_EXP_DATE: '2026-04-18T00:00:00.000Z'
-        }
-      })
+      renderGeneratedRecordLine(
+        {
+          effectId: 'captureProducedLeftovers',
+          targetFormKey: 'Config: Leftover Inventory',
+          recordId: 'inv-2',
+          values: {
+            LEFTOVER_ID: 'LP-4',
+            LEFTOVER_KIND: 'Part dish',
+            LEFTOVER_INGREDIENT: 'Basmati rice',
+            LEFTOVER_QTY: 5000,
+            LEFTOVER_UNIT: 'gr',
+            LEFTOVER_EXP_DATE: '2026-04-18T00:00:00.000Z'
+          }
+        },
+        '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
+      )
     ).toBe('LP-4 | Basmati rice | 5000 gr | Expires 18-Apr-2026');
-  });
-
-  test('identifies leftover inventory generated records', () => {
-    expect(
-      isGeneratedLeftoverRecord({
-        effectId: 'captureProducedLeftovers',
-        targetFormKey: 'Config: Leftover Inventory',
-        recordId: 'inv-2'
-      } as any)
-    ).toBe(true);
-    expect(
-      isGeneratedLeftoverRecord({
-        effectId: 'captureProducedLeftovers',
-        targetFormKey: 'Config: Other',
-        recordId: 'inv-2'
-      } as any)
-    ).toBe(false);
   });
 
   test('extracts generated records from follow-up action results', () => {

@@ -432,6 +432,9 @@ describe('staging integrity dialogs and list legend config', () => {
           title: expect.objectContaining({ en: 'Label and store Leftovers' }),
           message: expect.objectContaining({
             en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
+          }),
+          itemTemplate: expect.objectContaining({
+            en: '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
           })
         })
       );
@@ -519,6 +522,9 @@ describe('staging integrity dialogs and list legend config', () => {
           title: expect.objectContaining({ en: 'Label and store Leftovers' }),
           message: expect.objectContaining({
             en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
+          }),
+          itemTemplate: expect.objectContaining({
+            en: '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
           })
         })
       );

@@ -150,8 +150,6 @@ import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVir
 import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
-  isGeneratedLeftoverRecord,
-  renderGeneratedLeftoverLine,
   renderGeneratedRecordLine,
   selectConditionalDialog,
   selectMilestoneConfirmationDialog
@@ -10224,11 +10222,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const itemTemplate =
             resolveLocalizedString(dialogConfig.itemTemplate, languageRef.current, '{{recordId}}') || '{{recordId}}';
           const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
-          const lines = generatedRecords
-            .map(record =>
-              isGeneratedLeftoverRecord(record) ? renderGeneratedLeftoverLine(record) : renderGeneratedRecordLine(record, itemTemplate)
-            )
-            .filter(Boolean);
+          const lines = generatedRecords.map(record => renderGeneratedRecordLine(record, itemTemplate)).filter(Boolean);
           const message = [intro, ...lines].filter(Boolean).join('\n');
           logEvent('guidedStep.milestone.generatedRecords.open', {
             stepId: args.stepId,
@@ -11266,11 +11260,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const itemTemplate =
           resolveLocalizedString(dialogConfig.itemTemplate, languageRef.current, '{{recordId}}') || '{{recordId}}';
         const intro = resolveLocalizedString(dialogConfig.message, languageRef.current, '');
-        const lines = generatedRecords
-          .map(entry =>
-            isGeneratedLeftoverRecord(entry) ? renderGeneratedLeftoverLine(entry) : renderGeneratedRecordLine(entry, itemTemplate)
-          )
-          .filter(Boolean);
+        const lines = generatedRecords.map(entry => renderGeneratedRecordLine(entry, itemTemplate)).filter(Boolean);
         const message = [intro, ...lines].filter(Boolean).join('\n');
         logEvent('submit.afterSubmit.generatedRecords.open', {
           recordId,

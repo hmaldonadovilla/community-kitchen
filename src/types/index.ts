@@ -3790,7 +3790,8 @@ export interface StepGeneratedRecordsDialogConfig {
   message?: LocalizedString;
   /**
    * Template used to render each generated record on its own line.
-   * Supports `{{FIELD_ID}}` placeholders and common meta fields like `{{id}}`.
+   * Supports `{{FIELD_ID}}` placeholders, `{{A || B}}` first-non-empty fallbacks, and
+   * formatters such as `label`, `appendField`, `pluralize`, `date`, `prefix`, and `suffix`.
    */
   itemTemplate?: LocalizedString;
   /**
