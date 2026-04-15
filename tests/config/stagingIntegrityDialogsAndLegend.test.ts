@@ -244,6 +244,7 @@ describe('staging integrity dialogs and list legend config', () => {
       });
       expect(leftoverInventoryRows?.hideParentRowsWhenPresentationActive).toBe(true);
       expect(leftoverInventoryRows?.allocationLabelFieldId).toBe('MEAL_TYPE');
+      expect(leftoverInventoryRows?.ui?.allocationLabelVisibility).toBe('always');
       expect(leftoverInventoryRows?.sourceMatchFieldId).toBe('DIETARY_APPLICABILITY');
       expect(leftoverInventoryRows?.parentMatchFieldId).toBe('MEAL_TYPE');
       expect(leftoverInventoryRows?.sourceMatchMode).toBe('includesDelimited');

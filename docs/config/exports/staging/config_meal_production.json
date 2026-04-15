@@ -1834,6 +1834,7 @@
                       "fr": "Il n’y a actuellement aucun reste.",
                       "nl": "Er is momenteel geen restant."
                     },
+                    "allocationLabelVisibility": "always",
                     "compactActions": [
                       {
                         "when": {
@@ -11383,6 +11384,7 @@
                       "fr": "Il n’y a actuellement aucun reste.",
                       "nl": "Er is momenteel geen restant."
                     },
+                    "allocationLabelVisibility": "always",
                     "compactActions": [
                       {
                         "when": {

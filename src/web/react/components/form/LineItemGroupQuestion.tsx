@@ -116,6 +116,10 @@ import {
   collectSubgroupSeedInitTargets
 } from './selectionEffectInit';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
+import {
+  resolveSourceFirstAllocationLabelVisibility,
+  shouldShowSourceFirstAllocationLabel
+} from '../../app/sourceFirstAllocations';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -1149,6 +1153,12 @@ export const LineItemGroupQuestion: React.FC<{
     onDiagnostic?.('dataSourceRows.sourceFirst.enabled', {
       groupId: q.id,
       configIds: sourceFirstDataSourceRows.map(config => `${(config as any)?.id || ''}`.trim()).filter(Boolean),
+      allocationLabelVisibilityByConfig: sourceFirstDataSourceRows.map(config => ({
+        id: `${(config as any)?.id || ''}`.trim() || 'datasource',
+        visibility: resolveSourceFirstAllocationLabelVisibility(
+          (config as any)?.allocationLabelVisibility ?? (config as any)?.ui?.allocationLabelVisibility
+        )
+      })),
       sourceRowCount: sourceFirstDataSourceRows.reduce((count, config) => count + countRows(config), 0),
       parentRowCount: parentRows.length
     });
@@ -6129,16 +6139,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
                 const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
                 const allocationLabelFieldId = `${config?.allocationLabelFieldId || uiCfg?.allocationLabelFieldId || ''}`.trim();
-                const distinctAllocationLabels = allocationLabelFieldId
-                  ? Array.from(
-                      new Set(
-                        parentRows
-                          .map(parentRow => `${parentRow.values?.[allocationLabelFieldId] ?? ''}`.trim())
-                          .filter(Boolean)
-                      )
-                    )
-                  : [];
-                const showAllocationLabel = distinctAllocationLabels.length > 1;
+                const showAllocationLabel = shouldShowSourceFirstAllocationLabel({
+                  allocationLabelFieldId,
+                  allocationLabelVisibility: config?.allocationLabelVisibility ?? uiCfg?.allocationLabelVisibility,
+                  parentRows
+                });
                 const listScrollStyle =
                   Number.isFinite(Number(uiCfg?.maxVisibleRows)) && Number(uiCfg.maxVisibleRows) > 0
                     ? ({

@@ -2051,6 +2051,16 @@ export interface LineItemGroupUiConfig {
    */
   compactSentenceRows?: CompactRowRuleConfig[];
   /**
+   * Controls when `sourceFirstAllocations` renders the per-parent allocation label
+   * (for example the dietary category shown beside each allocation row).
+   *
+   * - `multiple`: show the label only when more than one distinct parent label is present
+   * - `always`: keep the label visible even when the current source row maps to just one parent
+   *
+   * Default: `multiple`.
+   */
+  allocationLabelVisibility?: 'multiple' | 'always';
+  /**
    * Optional compact-row actions rendered alongside the headline for `compactRows` renderers.
    * The first matching rule wins.
    */

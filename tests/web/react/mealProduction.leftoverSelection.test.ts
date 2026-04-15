@@ -98,6 +98,7 @@ describe('meal production leftover selection config', () => {
     });
     expect(config?.hideParentRowsWhenPresentationActive).toBe(true);
     expect(config?.allocationLabelFieldId).toBe('MEAL_TYPE');
+    expect(config?.ui?.allocationLabelVisibility).toBe('always');
     expect(config?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
     expect(config?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
     expect(config?.exclusiveSelection).toBeUndefined();

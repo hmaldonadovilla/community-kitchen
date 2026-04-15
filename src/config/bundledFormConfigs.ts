@@ -11915,6 +11915,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Il n’y a actuellement aucun reste.",
                         "nl": "Er is momenteel geen restant."
                       },
+                      "allocationLabelVisibility": "always",
                       "compactActions": [
                         {
                           "when": {
@@ -21464,6 +21465,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Il n’y a actuellement aucun reste.",
                         "nl": "Er is momenteel geen restant."
                       },
+                      "allocationLabelVisibility": "always",
                       "compactActions": [
                         {
                           "when": {
@@ -22898,7 +22900,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "e5301576b9537900f42990840c8d24ad"
+    "cacheFingerprint": "3a879d25e84ee4ac59cf0de152f54326"
   },
   {
     "formKey": "Config: Recipes",

@@ -1662,6 +1662,17 @@ components:
             Use this to distinguish "no source rows exist at all" from `emptyStateMessage`,
             which is intended for cases where source rows exist but none are compatible with the
             current parent rows or filters.
+        allocationLabelVisibility:
+          type: string
+          enum: [multiple, always]
+          description: |
+            Controls when `sourceFirstAllocations` renders the per-parent allocation label
+            (for example the dietary category shown beside each allocation row).
+
+            - `multiple`: show the label only when more than one distinct parent label is present
+            - `always`: keep the label visible even when the current source row maps to a single parent label
+
+            Default: `multiple`.
         persistRows:
           type: boolean
           description: |
