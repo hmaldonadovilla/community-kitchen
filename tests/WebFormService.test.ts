@@ -295,7 +295,7 @@ describe('WebFormService', () => {
     ]);
   });
 
-  test('fetchDataSource preserves source totalCount for paginated form-backed datasources after status filtering', () => {
+  test('fetchDataSource auto-pages form-backed options datasources and returns filtered rows in one response', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     (dashboardSheet as any).setMockData([
       [],
@@ -312,28 +312,56 @@ describe('WebFormService', () => {
       ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
     ]);
 
-    jest.spyOn((service as any).listing, 'fetchSubmissions').mockReturnValue({
-      items: [
-        { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' },
-        { id: 'rec-2', LEFTOVER_ID: 'LE-2', LEFTOVER_STATUS: 'used' }
-      ],
-      nextPageToken: 'NTA=',
-      totalCount: 50
-    });
+    const fetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissions');
+    fetchSpy
+      .mockReturnValueOnce({
+        items: [
+          { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'used' },
+          { id: 'rec-2', LEFTOVER_ID: 'LE-2', LEFTOVER_STATUS: 'used' }
+        ],
+        nextPageToken: 'NTA=',
+        totalCount: 62
+      })
+      .mockReturnValueOnce({
+        items: [
+          { id: 'rec-3', LEFTOVER_ID: 'LE-43', LEFTOVER_STATUS: 'available' },
+          { id: 'rec-4', LEFTOVER_ID: 'LE-44', LEFTOVER_STATUS: 'available' }
+        ],
+        totalCount: 62
+      });
 
     const res = service.fetchDataSource({
       id: 'Leftover Inventory Data',
       formKey: 'Config: Inventory',
+      mode: 'options',
       projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
       statusFieldId: 'LEFTOVER_STATUS',
       statusAllowList: ['available']
     } as any, 'EN');
 
     expect(res.items).toEqual([
-      { id: 'rec-1', LEFTOVER_ID: 'LE-1', LEFTOVER_STATUS: 'available' }
+      { id: 'rec-3', LEFTOVER_ID: 'LE-43', LEFTOVER_STATUS: 'available' },
+      { id: 'rec-4', LEFTOVER_ID: 'LE-44', LEFTOVER_STATUS: 'available' }
     ]);
-    expect(res.nextPageToken).toBe('NTA=');
-    expect(res.totalCount).toBe(50);
+    expect(res.nextPageToken).toBeUndefined();
+    expect(res.totalCount).toBe(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Object),
+      expect.any(Array),
+      ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
+      250,
+      undefined
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Object),
+      expect.any(Array),
+      ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
+      250,
+      'NTA='
+    );
   });
 
   test('fetchDataSource backfills legacy entire-dish leftover fields from the source meal row only when missing', () => {

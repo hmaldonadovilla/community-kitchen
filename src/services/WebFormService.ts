@@ -81,6 +81,7 @@ const USER_RECORD_SAVE_RETRY_DELAYS_MS = [0, 900];
 const INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS = [0, 500, 1500];
 const RESERVATION_FOLLOWUP_RETRY_DELAYS_MS = [0, 750, 2000];
 const RESERVATION_TRANSACTION_LOCK_RETRY_DELAYS_MS = [0, 750, 2000];
+const FORM_BACKED_OPTIONS_AUTO_PAGE_MAX_PAGES = 8;
 const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
 const toPlainData = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
@@ -1601,7 +1602,6 @@ export class WebFormService {
     const configProjection = Array.isArray(config?.projection) ? config.projection : undefined;
     const effectiveProjection = configProjection?.length ? configProjection : projection;
     const fetchProjection = this.extendProjectionForDataSourceBackfill(config, effectiveProjection);
-    const response = this.listing.fetchSubmissions(form, questions, fetchProjection, pageSize, pageToken);
     const localeKey = (config?.localeKey || '').toString().trim();
     const localeNeedle = (locale || '').toString().trim().toLowerCase();
     const statusFieldId = ((config?.statusFieldId || 'status') || '').toString().trim();
@@ -1616,38 +1616,77 @@ export class WebFormService {
         .filter(Boolean)
     );
     const mapping = config?.mapping && typeof config.mapping === 'object' ? config.mapping : undefined;
-    const items = (Array.isArray(response.items) ? response.items : [])
-      .filter(item => {
-        if (!item || typeof item !== 'object') return false;
-        if (localeKey && localeNeedle) {
-          const rawLocale = (item as any)[localeKey];
-          const itemLocale = rawLocale === undefined || rawLocale === null ? '' : rawLocale.toString().trim().toLowerCase();
-          if (itemLocale && itemLocale !== localeNeedle) return false;
-        }
-        if (statusAllowSet.size > 0) {
-          const rawStatus = (item as any)[statusFieldId];
-          const itemStatus = rawStatus === undefined || rawStatus === null ? '' : rawStatus.toString().trim().toLowerCase();
-          if (!itemStatus || !statusAllowSet.has(itemStatus)) return false;
-        }
-        return true;
-      })
-      .map(item => {
-        if (!mapping) return item;
-        const next = { ...(item as Record<string, any>) };
-        Object.entries(mapping).forEach(([sourceKeyRaw, targetKeyRaw]) => {
-          const sourceKey = (sourceKeyRaw || '').toString().trim();
-          const targetKey = (targetKeyRaw || '').toString().trim();
-          if (!sourceKey || !targetKey) return;
-          if (next[targetKey] === undefined && next[sourceKey] !== undefined) {
-            next[targetKey] = next[sourceKey];
+    const normalizeItems = (sourceItems: any[]): any[] => {
+      const filteredItems = (Array.isArray(sourceItems) ? sourceItems : [])
+        .filter(item => {
+          if (!item || typeof item !== 'object') return false;
+          if (localeKey && localeNeedle) {
+            const rawLocale = (item as any)[localeKey];
+            const itemLocale = rawLocale === undefined || rawLocale === null ? '' : rawLocale.toString().trim().toLowerCase();
+            if (itemLocale && itemLocale !== localeNeedle) return false;
           }
-          if (next[sourceKey] === undefined && next[targetKey] !== undefined) {
-            next[sourceKey] = next[targetKey];
+          if (statusAllowSet.size > 0) {
+            const rawStatus = (item as any)[statusFieldId];
+            const itemStatus = rawStatus === undefined || rawStatus === null ? '' : rawStatus.toString().trim().toLowerCase();
+            if (!itemStatus || !statusAllowSet.has(itemStatus)) return false;
           }
+          return true;
+        })
+        .map(item => {
+          if (!mapping) return item;
+          const next = { ...(item as Record<string, any>) };
+          Object.entries(mapping).forEach(([sourceKeyRaw, targetKeyRaw]) => {
+            const sourceKey = (sourceKeyRaw || '').toString().trim();
+            const targetKey = (targetKeyRaw || '').toString().trim();
+            if (!sourceKey || !targetKey) return;
+            if (next[targetKey] === undefined && next[sourceKey] !== undefined) {
+              next[targetKey] = next[sourceKey];
+            }
+            if (next[sourceKey] === undefined && next[targetKey] !== undefined) {
+              next[sourceKey] = next[targetKey];
+            }
+          });
+          return next;
         });
-        return next;
+      return this.backfillFormBackedDataSourceItems(config, formKey, effectiveProjection, filteredItems);
+    };
+    const shouldAggregateAllPages = mode === 'options' && !pageToken;
+    if (shouldAggregateAllPages) {
+      const mergedItems: any[] = [];
+      let nextCursor: string | undefined;
+      let pages = 0;
+      while (pages < FORM_BACKED_OPTIONS_AUTO_PAGE_MAX_PAGES) {
+        const response = this.listing.fetchSubmissions(form, questions, fetchProjection, pageSize, nextCursor);
+        pages += 1;
+        mergedItems.push(...normalizeItems(Array.isArray(response.items) ? response.items : []));
+        const nextToken =
+          typeof response.nextPageToken === 'string' && response.nextPageToken.trim()
+            ? response.nextPageToken.trim()
+            : undefined;
+        if (!nextToken) {
+          return toPlainData({
+            items: mergedItems,
+            nextPageToken: undefined,
+            totalCount: mergedItems.length
+          });
+        }
+        nextCursor = nextToken;
+      }
+      debugLog('dataSource.formBacked.autoPage.maxPagesReached', {
+        id: config?.id || null,
+        formKey,
+        pages,
+        itemCount: mergedItems.length
       });
-    const normalizedItems = this.backfillFormBackedDataSourceItems(config, formKey, effectiveProjection, items);
+      return toPlainData({
+        items: mergedItems,
+        nextPageToken: nextCursor,
+        totalCount: mergedItems.length
+      });
+    }
+
+    const response = this.listing.fetchSubmissions(form, questions, fetchProjection, pageSize, pageToken);
+    const normalizedItems = normalizeItems(Array.isArray(response.items) ? response.items : []);
     const rawTotalCount = Number(response.totalCount);
     const totalCount =
       Number.isFinite(rawTotalCount) && rawTotalCount > 0
@@ -1948,7 +1987,7 @@ export class WebFormService {
       try {
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
-      } catch (_) {
+      } catch {
         return [];
       }
     }
