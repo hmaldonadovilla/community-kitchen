@@ -158,6 +158,50 @@ const resolveEffectTargetGroupKey = (question: WebQuestionDefinition, rowId: str
   return groupId;
 };
 
+const buildNestedGroupQuestion = (groupKey: string, subGroup: any, fallbackQuestion: WebQuestionDefinition): WebQuestionDefinition =>
+  ({
+    ...(fallbackQuestion as any),
+    id: groupKey,
+    lineItemConfig: {
+      ...(subGroup as any),
+      fields: (subGroup as any)?.fields || [],
+      subGroups: (subGroup as any)?.subGroups || []
+    }
+  }) as WebQuestionDefinition;
+
+const visitLineItemGroups = (args: {
+  question: WebQuestionDefinition;
+  lineItems: LineItemState;
+  groupKey?: string;
+  rows?: any[];
+  visit: (entry: { question: WebQuestionDefinition; groupKey: string; rows: any[] }) => void;
+}): void => {
+  const groupKey = args.groupKey || args.question.id;
+  const rows = Array.isArray(args.rows) ? args.rows : ((args.lineItems[groupKey] || []) as any[]);
+  args.visit({ question: args.question, groupKey, rows });
+
+  const subGroups = (((args.question as any)?.lineItemConfig?.subGroups || []) as any[]).filter(Boolean);
+  if (!rows.length || !subGroups.length) return;
+
+  rows.forEach(row => {
+    const parentRowId = normalizeString((row as any)?.id);
+    if (!parentRowId) return;
+
+    subGroups.forEach(subGroup => {
+      const subGroupId = resolveSubgroupKey(subGroup);
+      if (!subGroupId) return;
+      const subGroupKey = buildSubgroupKey(groupKey, parentRowId, subGroupId);
+      visitLineItemGroups({
+        question: buildNestedGroupQuestion(subGroupKey, subGroup, args.question),
+        groupKey: subGroupKey,
+        rows: (args.lineItems[subGroupKey] || []) as any[],
+        lineItems: args.lineItems,
+        visit: args.visit
+      });
+    });
+  });
+};
+
 const buildEffectOwnedOutputSignature = (args: {
   question: WebQuestionDefinition;
   rowId: string;
@@ -262,34 +306,13 @@ export const collectSelectionEffectInitTargets = (
   lineItems: LineItemState
 ): SelectionEffectInitTarget[] => {
   const targets: SelectionEffectInitTarget[] = [];
-  const currentRows = (lineItems[question.id] || []) as any[];
-
-  targets.push(...collectSelectionEffectTargetsForGroup(question, question.id, currentRows, lineItems));
-
-  const subGroups = ((question.lineItemConfig as any)?.subGroups || []) as any[];
-  if (!currentRows.length || !subGroups.length) return targets;
-
-  subGroups.forEach(sub => {
-    const subId = resolveSubgroupKey(sub);
-    if (!subId) return;
-    currentRows.forEach(parentRow => {
-      if (!parentRow?.id) return;
-      const subKey = buildSubgroupKey(question.id, parentRow.id, subId);
-      const subRows = (lineItems[subKey] || []) as any[];
-      if (!subRows.length) return;
-      const subGroupQuestion: WebQuestionDefinition = {
-        ...(question as any),
-        id: subKey,
-        lineItemConfig: {
-          ...(sub as any),
-          fields: (sub as any)?.fields || [],
-          subGroups: (sub as any)?.subGroups || []
-        }
-      } as WebQuestionDefinition;
-      targets.push(...collectSelectionEffectTargetsForGroup(subGroupQuestion, subKey, subRows, lineItems));
-    });
+  visitLineItemGroups({
+    question,
+    lineItems,
+    visit: entry => {
+      targets.push(...collectSelectionEffectTargetsForGroup(entry.question, entry.groupKey, entry.rows, lineItems));
+    }
   });
-
   return targets;
 };
 
@@ -298,59 +321,64 @@ export const collectSubgroupSeedInitTargets = (
   lineItems: LineItemState
 ): SelectionEffectInitTarget[] => {
   const targets: SelectionEffectInitTarget[] = [];
-  const currentRows = (lineItems[question.id] || []) as any[];
-  const rootFields = (((question as any)?.lineItemConfig?.fields || []) as any[]).filter(
-    (field: any) =>
-      shouldRunSelectionEffectsOnInit(field) &&
-      Array.isArray(field?.selectionEffects) &&
-      field.selectionEffects.length > 0
-  );
-  const subGroups = (((question as any)?.lineItemConfig?.subGroups || []) as any[]).filter(Boolean);
-  if (!currentRows.length || !rootFields.length || !subGroups.length) return targets;
+  visitLineItemGroups({
+    question,
+    lineItems,
+    visit: entry => {
+      const currentRows = entry.rows;
+      const fields = (((entry.question as any)?.lineItemConfig?.fields || []) as any[]).filter(
+        (field: any) =>
+          shouldRunSelectionEffectsOnInit(field) &&
+          Array.isArray(field?.selectionEffects) &&
+          field.selectionEffects.length > 0
+      );
+      const subGroups = (((entry.question as any)?.lineItemConfig?.subGroups || []) as any[]).filter(Boolean);
+      if (!currentRows.length || !fields.length || !subGroups.length) return;
 
-  currentRows.forEach(row => {
-    const rowValues = (row?.values || {}) as Record<string, FieldValue>;
-    rootFields.forEach((field: any) => {
-      const rawValue = rowValues[field.id];
-      if (!hasSelectionEffectInitialValue(rawValue)) return;
-      const effects = (field.selectionEffects || []) as any[];
-      effects.forEach((effect: any) => {
-        if (effect?.type !== 'addLineItemsFromDataSource') return;
-        const rawTargetGroupId = effect?.groupId;
-        const targetGroupId = rawTargetGroupId === undefined || rawTargetGroupId === null
-          ? ''
-          : rawTargetGroupId.toString().trim();
-        if (!targetGroupId) return;
-        const subGroup = subGroups.find((candidate: any) => resolveSubgroupKey(candidate) === targetGroupId);
-        if (!subGroup || !row?.id) return;
-        const subKey = buildSubgroupKey(question.id, row.id, targetGroupId);
-        const subRows = (lineItems[subKey] || []) as any[];
-        const hasHydratedSeedRows = subgroupHasHydratedSeedRows({
-          effect,
-          subGroup,
-          subRows
-        });
-        if (hasHydratedSeedRows) return;
-        targets.push({
-          group: question,
-          groupKey: question.id,
-          rowId: row?.id || '',
-          field,
-          rawValue,
-          signature: [
-            question.id,
-            row?.id || '',
-            field.id,
-            'seedSubgroup',
-            targetGroupId,
-            toStableSignatureValue(rawValue),
-            buildSeedStateSignature({ effect, subGroup, subRows })
-          ].join('::')
+      currentRows.forEach(row => {
+        const rowId = normalizeString((row as any)?.id);
+        if (!rowId) return;
+        const rowValues = (row?.values || {}) as Record<string, FieldValue>;
+
+        fields.forEach((field: any) => {
+          const rawValue = rowValues[field.id];
+          if (!hasSelectionEffectInitialValue(rawValue)) return;
+          const effects = (field.selectionEffects || []) as any[];
+          effects.forEach((effect: any) => {
+            if (effect?.type !== 'addLineItemsFromDataSource') return;
+            const targetGroupId = normalizeString(effect?.groupId);
+            if (!targetGroupId) return;
+            const subGroup = subGroups.find((candidate: any) => resolveSubgroupKey(candidate) === targetGroupId);
+            if (!subGroup) return;
+            const subKey = buildSubgroupKey(entry.groupKey, rowId, targetGroupId);
+            const subRows = (lineItems[subKey] || []) as any[];
+            const hasHydratedSeedRows = subgroupHasHydratedSeedRows({
+              effect,
+              subGroup,
+              subRows
+            });
+            if (hasHydratedSeedRows) return;
+            targets.push({
+              group: entry.question,
+              groupKey: entry.groupKey,
+              rowId,
+              field,
+              rawValue,
+              signature: [
+                entry.groupKey,
+                rowId,
+                field.id,
+                'seedSubgroup',
+                targetGroupId,
+                toStableSignatureValue(rawValue),
+                buildSeedStateSignature({ effect, subGroup, subRows })
+              ].join('::')
+            });
+          });
         });
       });
-    });
+    }
   });
-
   return targets;
 };
 
@@ -360,45 +388,58 @@ export const collectComputedSelectionEffectInitTargets = (
   topValues: Record<string, FieldValue>
 ): SelectionEffectInitTarget[] => {
   const targets: SelectionEffectInitTarget[] = [];
-  const currentRows = (lineItems[question.id] || []) as any[];
-  const groupFields = (((question as any)?.lineItemConfig?.fields || []) as any[]).filter(Boolean);
-  const effectFields = groupFields.filter(
-    (field: any) =>
-      shouldRunSelectionEffectsOnInit(field) &&
-      Array.isArray(field?.selectionEffects) &&
-      field.selectionEffects.length > 0
-  );
-  if (!currentRows.length || !effectFields.length) return targets;
+  visitLineItemGroups({
+    question,
+    lineItems,
+    visit: entry => {
+      const currentRows = entry.rows;
+      const groupFields = (((entry.question as any)?.lineItemConfig?.fields || []) as any[]).filter(Boolean);
+      const effectFields = groupFields.filter(
+        (field: any) =>
+          shouldRunSelectionEffectsOnInit(field) &&
+          Array.isArray(field?.selectionEffects) &&
+          field.selectionEffects.length > 0
+      );
+      if (!currentRows.length || !effectFields.length) return;
 
-  currentRows.forEach(row => {
-    const computedValues = applyValueMapsToLineRow(groupFields, (row?.values || {}) as Record<string, FieldValue>, topValues, { mode: 'change' }, {
-      groupKey: question.id,
-      rowId: row?.id || '',
-      lineItems
-    });
-    effectFields.forEach((field: any) => {
-      const rawValue = (computedValues as Record<string, FieldValue>)[field.id];
-      if (!hasSelectionEffectInitialValue(rawValue)) return;
-      if (
-        fieldHasEffectOwnedOutputRows({
-          question,
-          rowId: row?.id || '',
-          field,
-          lineItems
-        })
-      ) {
-        return;
-      }
-      targets.push({
-        group: question,
-        groupKey: question.id,
-        rowId: row?.id || '',
-        field,
-        rawValue,
-        signature: [question.id, row?.id || '', field.id, 'computed', toStableSignatureValue(rawValue)].join('::')
+      currentRows.forEach(row => {
+        const rowId = normalizeString((row as any)?.id);
+        if (!rowId) return;
+        const computedValues = applyValueMapsToLineRow(
+          groupFields,
+          (row?.values || {}) as Record<string, FieldValue>,
+          topValues,
+          { mode: 'change' },
+          {
+            groupKey: entry.groupKey,
+            rowId,
+            lineItems
+          }
+        );
+        effectFields.forEach((field: any) => {
+          const rawValue = (computedValues as Record<string, FieldValue>)[field.id];
+          if (!hasSelectionEffectInitialValue(rawValue)) return;
+          if (
+            fieldHasEffectOwnedOutputRows({
+              question: entry.question,
+              rowId,
+              field,
+              lineItems
+            })
+          ) {
+            return;
+          }
+          targets.push({
+            group: entry.question,
+            groupKey: entry.groupKey,
+            rowId,
+            field,
+            rawValue,
+            signature: [entry.groupKey, rowId, field.id, 'computed', toStableSignatureValue(rawValue)].join('::')
+          });
+        });
       });
-    });
+    }
   });
-
   return targets;
 };

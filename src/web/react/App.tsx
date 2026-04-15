@@ -7892,10 +7892,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setRecordStale(null);
         if (nextDataVersion) {
           recordDataVersionRef.current = nextDataVersion;
-          optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
-            optimisticClientDataVersionRef.current,
-            nextDataVersion
-          );
+          optimisticClientDataVersionRef.current = nextDataVersion;
         }
         if (nextRowNumber) {
           recordRowNumberRef.current = nextRowNumber;
@@ -8792,10 +8789,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const dv = Number((res as any)?.meta?.dataVersion);
         if (Number.isFinite(dv) && dv > 0) {
           recordDataVersionRef.current = dv;
-          optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
-            optimisticClientDataVersionRef.current,
-            dv
-          );
+          optimisticClientDataVersionRef.current = dv;
         }
         const rn = Number((res as any)?.meta?.rowNumber);
         if (Number.isFinite(rn) && rn >= 2) {
@@ -9054,10 +9048,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setRecordStale(null);
       if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
         recordDataVersionRef.current = nextDataVersion;
-        optimisticClientDataVersionRef.current = resolveCurrentClientDataVersion(
-          optimisticClientDataVersionRef.current,
-          nextDataVersion
-        );
+        optimisticClientDataVersionRef.current = nextDataVersion;
       }
       if (Number.isFinite(nextRowNumber) && nextRowNumber >= 2) {
         recordRowNumberRef.current = nextRowNumber;

@@ -114,9 +114,20 @@ describe('settleClientDataVersionAfterDispatch', () => {
         success: true,
         confirmedDataVersion: 1,
         optimisticDataVersion: 3,
-        responseDataVersion: 2
+        responseDataVersion: 3
       })
     ).toBe(3);
+  });
+
+  it('snaps back to the confirmed server version after a successful noop-style response', () => {
+    expect(
+      settleClientDataVersionAfterDispatch({
+        success: true,
+        confirmedDataVersion: 2,
+        optimisticDataVersion: 3,
+        responseDataVersion: 2
+      })
+    ).toBe(2);
   });
 
   it('falls back to the last confirmed version after a failed dispatch', () => {

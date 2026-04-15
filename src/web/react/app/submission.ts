@@ -1198,6 +1198,13 @@ export const settleClientDataVersionAfterDispatch = (args: {
   const optimisticDataVersion = resolveCurrentClientDataVersion(args.optimisticDataVersion);
   const responseDataVersion = resolveCurrentClientDataVersion(args.responseDataVersion);
   if (args.success) {
+    if (
+      responseDataVersion !== null &&
+      confirmedDataVersion !== null &&
+      responseDataVersion <= confirmedDataVersion
+    ) {
+      return resolveCurrentClientDataVersion(responseDataVersion, confirmedDataVersion);
+    }
     return resolveCurrentClientDataVersion(responseDataVersion, optimisticDataVersion, confirmedDataVersion);
   }
   return resolveCurrentClientDataVersion(responseDataVersion, confirmedDataVersion);

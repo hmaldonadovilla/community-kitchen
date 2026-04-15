@@ -126,6 +126,80 @@ describe('collectSelectionEffectInitTargets', () => {
     ]);
   });
 
+  it('re-seeds nested subgroup rows from subgroup field selection effects after copy-style hydration', () => {
+    const question: any = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }],
+        subGroups: [
+          {
+            id: 'COOK_ROWS',
+            fields: [
+              { id: 'PREP_TYPE', type: 'CHOICE' },
+              { id: 'PREP_QTY', type: 'NUMBER' },
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                selectionEffects: [
+                  {
+                    id: 'seed_ingredients',
+                    type: 'addLineItemsFromDataSource',
+                    groupId: 'INGREDIENTS',
+                    dataSource: { id: 'Recipes Data' },
+                    lineItemMapping: {
+                      ING: 'ING',
+                      QTY: 'QTY'
+                    }
+                  }
+                ]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                anchorFieldId: 'ING',
+                fields: [
+                  { id: 'ING', type: 'CHOICE' },
+                  { id: 'QTY', type: 'NUMBER' }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const cookRowsKey = buildSubgroupKey('MEALS', 'meal-1', 'COOK_ROWS');
+    const ingredientsKey = buildSubgroupKey(cookRowsKey, 'cook-1', 'INGREDIENTS');
+    const lineItems: any = {
+      MEALS: [{ id: 'meal-1', values: { MEAL_TYPE: 'Standard' } }],
+      [cookRowsKey]: [
+        {
+          id: 'cook-1',
+          values: {
+            PREP_TYPE: 'Cook',
+            PREP_QTY: 50,
+            RECIPE: 'Chili',
+            __ckRowSource: 'auto'
+          }
+        }
+      ],
+      [ingredientsKey]: []
+    };
+
+    const targets = collectSubgroupSeedInitTargets(question, lineItems);
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        groupKey: cookRowsKey,
+        rowId: 'cook-1',
+        rawValue: 'Chili',
+        signature: `${cookRowsKey}::cook-1::RECIPE::seedSubgroup::INGREDIENTS::"Chili"::__empty__`
+      })
+    ]);
+  });
+
   it('does not replay subgroup seed fields through the generic init collector', () => {
     const question: any = {
       id: 'MEALS',
