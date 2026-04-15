@@ -122,6 +122,7 @@ import {
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
+  shouldDeferFieldChangeMutation,
   shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
@@ -138,6 +139,7 @@ import {
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
+import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange';
 import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
@@ -1167,6 +1169,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const fieldChangePendingRef = useRef<Record<string, FieldChangePending>>({});
   const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
+  const ensureLineOptionsRef = useRef<(groupId: string, field: any) => void>(() => {});
   const fieldChangeDateInitialEntryInProgressRef = useRef<Record<string, boolean>>({});
   const fieldChangeDateInitialEntryCompletedRef = useRef<Record<string, boolean>>({});
   const resetFieldChangeTransientState = useCallback(() => {
@@ -1546,178 +1549,234 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         diagnosticMeta: { fieldPath: pending.fieldPath, fieldId: pending.fieldId }
       });
       try {
-      const dialogCfg = pending.dialog;
-      const baseTargetScope: 'top' | 'row' = pending.scope === 'top' ? 'top' : 'row';
-      const updates: FieldChangeDialogTargetUpdate[] = [
-        {
-          target: { scope: baseTargetScope, fieldId: pending.fieldId },
-          value: pending.nextValue
-        }
-      ];
-      (dialogCfg.inputs || []).forEach(inputCfg => {
-        const inputId = (inputCfg?.id || '').toString().trim();
-        if (!inputId) return;
-        if (!inputCfg?.target) return;
-        const value = inputValues[inputId];
-        if (value === undefined) return;
-        updates.push({ target: inputCfg.target, value });
-      });
+        const dialogCfg = pending.dialog;
+        const baseTargetScope: 'top' | 'row' = pending.scope === 'top' ? 'top' : 'row';
+        const updates: FieldChangeDialogTargetUpdate[] = [
+          {
+            target: { scope: baseTargetScope, fieldId: pending.fieldId },
+            value: pending.nextValue
+          }
+        ];
+        (dialogCfg.inputs || []).forEach(inputCfg => {
+          const inputId = (inputCfg?.id || '').toString().trim();
+          if (!inputId) return;
+          if (!inputCfg?.target) return;
+          const value = inputValues[inputId];
+          if (value === undefined) return;
+          updates.push({ target: inputCfg.target, value });
+        });
 
-      const applied = applyFieldChangeDialogTargets({
-        values: valuesRef.current,
-        lineItems: lineItemsRef.current,
-        updates,
-        context: { scope: pending.scope, groupId: pending.groupId, rowId: pending.rowId }
-      });
-      const mapped = applyValueMapsToForm(definition, applied.values, applied.lineItems, { mode: 'change' });
-      const dedupDeleteEnabled =
-        (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
-      const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
-      const isTopDedupKeyChange = Boolean(
-        topFieldId &&
-          (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
-          dedupDeleteEnabled
-      );
+        const sourceQuestion =
+          pending.scope === 'top'
+            ? definition.questions.find(question => `${question?.id || ''}`.trim() === `${pending.fieldId || ''}`.trim()) || null
+            : null;
+        const shouldApplyClearOnChange =
+          pending.scope === 'top' &&
+          isClearOnChangeEnabled((sourceQuestion as any)?.clearOnChange) &&
+          !isEmptyValue((valuesRef.current as any)?.[pending.fieldId]) &&
+          !isEmptyValue(pending.nextValue) &&
+          (valuesRef.current as any)?.[pending.fieldId] !== pending.nextValue;
 
-      const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
-      const hasDedupKeyUpdate = updates.some(update => {
-        if (update.target.scope !== 'top') return false;
-        const fid = (update.target.fieldId || '').toString();
-        if (!fid) return false;
-        return Boolean(dedupTriggerFieldIdsRef.current[fid] || dedupTriggerFieldIdsRef.current[fid.toLowerCase()]);
-      });
-      const shouldRunFieldDedup =
-        !isTopDedupKeyChange && (dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate));
+        let nextBaseValues = valuesRef.current;
+        let nextBaseLineItems = lineItemsRef.current;
+        let remainingUpdates = updates;
 
-      if (shouldRunFieldDedup) {
-        const signature = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
-        if (signature) {
-          const startedAt = Date.now();
-          setDedupChecking(true);
-          logEvent('dedup.fieldChange.check.start', {
-            source: 'fieldChangeDialog',
+        if (shouldApplyClearOnChange) {
+          const cleared = applyClearOnChange({
+            definition,
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current,
             fieldId: pending.fieldId,
-            signatureLen: signature.length
+            nextValue: pending.nextValue,
+            orderedFieldIds: (definition.questions || [])
+              .map(question => `${question?.id || ''}`.trim())
+              .filter(Boolean)
           });
-          try {
-            const payload = buildDraftPayload({
-              definition,
-              formKey,
-              language: languageRef.current,
-              values: mapped.values,
-              lineItems: mapped.lineItems
-            }) as any;
-            const res = await checkDedupConflictApi(payload);
-            if (res?.success) {
-              const conflict: any = (res as any)?.conflict || null;
-              if (conflict?.existingRecordId) {
-                const info: DedupConflictInfo = {
-                  ruleId: conflict.ruleId,
-                  message: conflict.message,
-                  existingRecordId: conflict.existingRecordId,
-                  existingRowNumber: conflict.existingRowNumber
-                };
-                setDedupNotice(info);
-                setDedupConflict(info);
-                setDedupChecking(false);
-                logEvent('dedup.fieldChange.rejected', {
-                  fieldPath: pending.fieldPath,
-                  fieldId: pending.fieldId,
-                  ruleId: info.ruleId || null,
-                  existingRecordId: info.existingRecordId || null
-                });
-                revertFieldChangePending(pending, 'dedupConflict', { ruleId: info.ruleId || null });
-                return;
-              }
-            }
-            logEvent('dedup.fieldChange.check.ok', { source: 'fieldChangeDialog', fieldId: pending.fieldId });
-          } catch (err: any) {
-            const msg = (err?.message || err?.toString?.() || 'Failed').toString();
-            logEvent('dedup.fieldChange.check.exception', {
+          const reconciledState = reconcileAutoAddModeGroups({
+            definition,
+            values: cleared.values,
+            lineItems: cleared.lineItems,
+            optionState: optionStateRef.current,
+            language: languageRef.current,
+            ensureLineOptions: ensureLineOptionsRef.current
+          });
+          nextBaseValues = reconciledState.changed ? reconciledState.values : cleared.values;
+          nextBaseLineItems = reconciledState.changed ? reconciledState.lineItems : cleared.lineItems;
+          remainingUpdates = updates.slice(1);
+          logEvent('fieldChangeDialog.clearOnChange.applied', {
+            fieldPath: pending.fieldPath,
+            fieldId: pending.fieldId,
+            clearedFieldCount: cleared.clearedFieldIds.length,
+            clearedGroupCount: cleared.clearedGroupKeys.length,
+            autoAddGroupRebuilds: reconciledState.changedCount
+          });
+        }
+
+        const applied = applyFieldChangeDialogTargets({
+          values: nextBaseValues,
+          lineItems: nextBaseLineItems,
+          updates: remainingUpdates,
+          context: { scope: pending.scope, groupId: pending.groupId, rowId: pending.rowId }
+        });
+        const mapped = applyValueMapsToForm(definition, applied.values, applied.lineItems, { mode: 'change' });
+        const dedupDeleteEnabled =
+          (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
+        const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
+        const isTopDedupKeyChange = Boolean(
+          topFieldId &&
+            (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
+            dedupDeleteEnabled
+        );
+
+        const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
+        const hasDedupKeyUpdate = updates.some(update => {
+          if (update.target.scope !== 'top') return false;
+          const fid = (update.target.fieldId || '').toString();
+          if (!fid) return false;
+          return Boolean(dedupTriggerFieldIdsRef.current[fid] || dedupTriggerFieldIdsRef.current[fid.toLowerCase()]);
+        });
+        const shouldRunFieldDedup =
+          !isTopDedupKeyChange && (dedupMode === 'always' || (dedupMode === 'auto' && hasDedupKeyUpdate));
+
+        if (shouldRunFieldDedup) {
+          const signature = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
+          if (signature) {
+            const startedAt = Date.now();
+            setDedupChecking(true);
+            logEvent('dedup.fieldChange.check.start', {
               source: 'fieldChangeDialog',
               fieldId: pending.fieldId,
-              message: msg
+              signatureLen: signature.length
             });
-          } finally {
-            setDedupChecking(false);
-            logEvent('dedup.fieldChange.check.end', {
-              source: 'fieldChangeDialog',
-              durationMs: Date.now() - startedAt
-            });
-          }
-        }
-      } else if (isTopDedupKeyChange && hasDedupKeyUpdate) {
-        logEvent('dedup.fieldChange.check.skipped', {
-          source: 'fieldChangeDialog',
-          fieldId: pending.fieldId,
-          reason: 'dedupDeleteOnKeyChange'
-        });
-      }
-
-      setValues(mapped.values);
-      setLineItems(mapped.lineItems);
-      valuesRef.current = mapped.values;
-      lineItemsRef.current = mapped.lineItems;
-      dedupHoldRef.current = isTopDedupKeyChange;
-      if (isTopDedupKeyChange) {
-        autoSaveDirtyRef.current = false;
-        autoSaveQueuedRef.current = false;
-        setDraftSave({ phase: 'paused' });
-      } else {
-        autoSaveDirtyRef.current = true;
-        if (pending.fieldPath) {
-          uploadedFieldValueOverridesRef.current.delete(pending.fieldPath);
-        }
-        setDraftSave({ phase: 'dirty' });
-      }
-
-      const selectionEffects = pending.selectionEffects || [];
-      if (selectionEffects.length && pending.effectQuestion) {
-        const lineItemContext =
-          pending.scope === 'line' && pending.groupId && pending.rowId
-            ? {
-                groupId: pending.groupId,
-                rowId: pending.rowId,
-                rowValues:
-                  (mapped.lineItems[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
-                  (lineItemsRef.current[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
-                  {}
+            try {
+              const payload = buildDraftPayload({
+                definition,
+                formKey,
+                language: languageRef.current,
+                values: mapped.values,
+                lineItems: mapped.lineItems
+              }) as any;
+              const res = await checkDedupConflictApi(payload);
+              if (res?.success) {
+                const conflict: any = (res as any)?.conflict || null;
+                if (conflict?.existingRecordId) {
+                  const info: DedupConflictInfo = {
+                    ruleId: conflict.ruleId,
+                    message: conflict.message,
+                    existingRecordId: conflict.existingRecordId,
+                    existingRowNumber: conflict.existingRowNumber
+                  };
+                  setDedupNotice(info);
+                  setDedupConflict(info);
+                  setDedupChecking(false);
+                  logEvent('dedup.fieldChange.rejected', {
+                    fieldPath: pending.fieldPath,
+                    fieldId: pending.fieldId,
+                    ruleId: info.ruleId || null,
+                    existingRecordId: info.existingRecordId || null
+                  });
+                  revertFieldChangePending(pending, 'dedupConflict', { ruleId: info.ruleId || null });
+                  return;
+                }
               }
-            : undefined;
-        runSelectionEffectsHelper({
-          definition,
-          question: pending.effectQuestion,
-          value: pending.nextValue,
-          language,
-          values: mapped.values,
-          lineItems: mapped.lineItems,
-          setValues,
-          setLineItems,
-          logEvent,
-          opts: lineItemContext ? { lineItem: lineItemContext } : undefined,
-          effectOverrides: applied.effectOverrides,
-          onRowAppended: ({ anchor, targetKey, rowId, source }) => {
-            setExternalScrollAnchor(anchor);
-            logEvent('ui.selectionEffect.rowAppended', { anchor, targetKey, rowId, source: source || null });
+              logEvent('dedup.fieldChange.check.ok', { source: 'fieldChangeDialog', fieldId: pending.fieldId });
+            } catch (err: any) {
+              const msg = (err?.message || err?.toString?.() || 'Failed').toString();
+              logEvent('dedup.fieldChange.check.exception', {
+                source: 'fieldChangeDialog',
+                fieldId: pending.fieldId,
+                message: msg
+              });
+            } finally {
+              setDedupChecking(false);
+              logEvent('dedup.fieldChange.check.end', {
+                source: 'fieldChangeDialog',
+                durationMs: Date.now() - startedAt
+              });
+            }
           }
-        });
-      }
+        } else if (isTopDedupKeyChange && hasDedupKeyUpdate) {
+          logEvent('dedup.fieldChange.check.skipped', {
+            source: 'fieldChangeDialog',
+            fieldId: pending.fieldId,
+            reason: 'dedupDeleteOnKeyChange'
+          });
+        }
 
-      if (isTopDedupKeyChange) {
-        await triggerDedupDeleteOnKeyChange('fieldChangeDialog.confirm', {
-          fieldId: topFieldId,
-          fieldPath: pending.fieldPath
-        });
-      }
+        setValues(mapped.values);
+        setLineItems(mapped.lineItems);
+        valuesRef.current = mapped.values;
+        lineItemsRef.current = mapped.lineItems;
+        if (shouldApplyClearOnChange) {
+          setErrors({});
+        } else {
+          setErrors(prev => {
+            const next = { ...(prev || {}) };
+            delete next[pending.fieldPath];
+            delete next[pending.fieldId];
+            return next;
+          });
+        }
+        dedupHoldRef.current = isTopDedupKeyChange;
+        if (isTopDedupKeyChange) {
+          autoSaveDirtyRef.current = false;
+          autoSaveQueuedRef.current = false;
+          setDraftSave({ phase: 'paused' });
+        } else {
+          autoSaveDirtyRef.current = true;
+          if (pending.fieldPath) {
+            uploadedFieldValueOverridesRef.current.delete(pending.fieldPath);
+          }
+          setDraftSave({ phase: 'dirty' });
+        }
 
-      fieldChangeActiveRef.current = null;
-      delete fieldChangePendingRef.current[pending.fieldPath];
-      logEvent('fieldChangeDialog.applied', {
-        fieldPath: pending.fieldPath,
-        fieldId: pending.fieldId,
-        groupId: pending.groupId || null,
-        rowId: pending.rowId || null
-      });
+        const selectionEffects = pending.selectionEffects || [];
+        if (selectionEffects.length && pending.effectQuestion) {
+          const lineItemContext =
+            pending.scope === 'line' && pending.groupId && pending.rowId
+              ? {
+                  groupId: pending.groupId,
+                  rowId: pending.rowId,
+                  rowValues:
+                    (mapped.lineItems[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
+                    (lineItemsRef.current[pending.groupId] || []).find(r => r.id === pending.rowId)?.values ||
+                    {}
+                }
+              : undefined;
+          runSelectionEffectsHelper({
+            definition,
+            question: pending.effectQuestion,
+            value: pending.nextValue,
+            language,
+            values: mapped.values,
+            lineItems: mapped.lineItems,
+            setValues,
+            setLineItems,
+            logEvent,
+            opts: lineItemContext ? { lineItem: lineItemContext } : undefined,
+            effectOverrides: applied.effectOverrides,
+            onRowAppended: ({ anchor, targetKey, rowId, source }) => {
+              setExternalScrollAnchor(anchor);
+              logEvent('ui.selectionEffect.rowAppended', { anchor, targetKey, rowId, source: source || null });
+            }
+          });
+        }
+
+        if (isTopDedupKeyChange) {
+          await triggerDedupDeleteOnKeyChange('fieldChangeDialog.confirm', {
+            fieldId: topFieldId,
+            fieldPath: pending.fieldPath
+          });
+        }
+
+        fieldChangeActiveRef.current = null;
+        delete fieldChangePendingRef.current[pending.fieldPath];
+        logEvent('fieldChangeDialog.applied', {
+          fieldPath: pending.fieldPath,
+          fieldId: pending.fieldId,
+          groupId: pending.groupId || null,
+          rowId: pending.rowId || null
+        });
       } finally {
         destructiveChangeBusy.unlock(lockSeq, { source: 'fieldChangeDialog' });
       }
@@ -1733,7 +1792,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setExternalScrollAnchor,
       setLineItems,
       setValues,
-      triggerDedupDeleteOnKeyChange
+      triggerDedupDeleteOnKeyChange,
+      setErrors
     ]
   );
 
@@ -1827,7 +1887,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       tag?: string;
       inputType?: string;
       nextValue?: FieldValue;
-    }) => {
+    }): { deferMutation?: boolean } | void => {
       try {
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
@@ -1930,10 +1990,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 groupId: args.groupId || null,
                 rowId: args.rowId || null
               });
-              const openOnChange =
-                changeType === 'CHOICE' || changeType === 'CHECKBOX' || changeType === 'FILE_UPLOAD';
-              if (openOnChange) {
+              if (
+                shouldDeferFieldChangeMutation({
+                  dialog: dialogCfg,
+                  fieldType: changeType,
+                  shouldTrigger,
+                  prevValue: prevValue as FieldValue,
+                  nextValue: args.nextValue as FieldValue,
+                  suppressInitialDateDialog
+                })
+              ) {
+                logEvent('fieldChangeDialog.mutation.deferred', {
+                  fieldPath: fieldKey,
+                  fieldId,
+                  groupId: args.groupId || null,
+                  rowId: args.rowId || null,
+                  fieldType: changeType
+                });
                 openFieldChangeDialog(pending);
+                return { deferMutation: true };
               }
             } else if (fieldChangePendingRef.current[fieldKey]) {
               delete fieldChangePendingRef.current[fieldKey];
@@ -4979,6 +5054,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [loadOptionsForField]
   );
+  useEffect(() => {
+    ensureLineOptionsRef.current = ensureLineOptions;
+  }, [ensureLineOptions]);
 
   const preloadSummaryTooltips = useCallback(() => {
     const tasks: Promise<void>[] = [];

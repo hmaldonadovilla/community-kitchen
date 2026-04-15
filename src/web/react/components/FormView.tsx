@@ -589,7 +589,7 @@ interface FormViewProps {
     tag?: string;
     inputType?: string;
     nextValue?: FieldValue;
-  }) => void;
+  }) => { deferMutation?: boolean } | void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onFormValidityChange?: (isValid: boolean) => void;
   onGuidedUiChange?: (state: {
@@ -7859,9 +7859,10 @@ const FormView: React.FC<FormViewProps> = ({
         ? normalizeIngredientNameIfAllCaps(value)
         : value;
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue });
+    const userEditResult = onUserEdit?.({ scope: 'top', fieldPath: q.id, fieldId: q.id, event: 'change', nextValue });
     clearOverlayOpenActionSuppression(q.id);
     if (onStatusClear) onStatusClear();
+    if (userEditResult?.deferMutation) return;
     const currentValues = valuesRef.current;
     const currentLineItems = lineItemsRef.current;
     if (
@@ -8010,7 +8011,7 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
     guidedLastUserEditAtRef.current = Date.now();
-    onUserEdit?.({
+    const userEditResult = onUserEdit?.({
       scope: 'line',
       fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
       fieldId: (field?.id || '').toString(),
@@ -8021,6 +8022,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
+    if (userEditResult?.deferMutation) return;
     const currentLineItems = lineItemsRef.current;
     const currentValues = valuesRef.current;
     const existingRows = currentLineItems[group.id] || [];

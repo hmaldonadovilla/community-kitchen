@@ -120,6 +120,7 @@ import {
   resolveSourceFirstAllocationLabelVisibility,
   shouldShowSourceFirstAllocationLabel
 } from '../../app/sourceFirstAllocations';
+import { buildStepDataSourceBootstrapSignature } from '../../app/stepDataSourceBootstrap';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -851,6 +852,7 @@ export const LineItemGroupQuestion: React.FC<{
   const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceRecordIdRef = React.useRef<string>('');
+  const stepDataSourceBootstrapSignatureRef = React.useRef<string>('');
   const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
   const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
@@ -861,6 +863,15 @@ export const LineItemGroupQuestion: React.FC<{
     reason: string;
   } | null>(null);
   const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
+  const stepDataSourceBootstrapSignature = React.useMemo(
+    () =>
+      buildStepDataSourceBootstrapSignature({
+        recordId,
+        language,
+        configs: stepDataSourceRows
+      }),
+    [language, recordId, stepDataSourceRows]
+  );
 
   React.useEffect(() => {
     stepDataSourceDraftsRef.current = stepDataSourceDrafts;
@@ -1004,7 +1015,10 @@ export const LineItemGroupQuestion: React.FC<{
   );
 
   React.useEffect(() => {
-    if (!stepDataSourceRows.length) return;
+    if (!stepDataSourceRows.length) {
+      stepDataSourceBootstrapSignatureRef.current = '';
+      return;
+    }
     const normalizedRecordId = `${recordId || ''}`.trim();
     const recordChanged = stepDataSourceRecordIdRef.current !== normalizedRecordId;
     stepDataSourceRecordIdRef.current = normalizedRecordId;
@@ -1023,6 +1037,9 @@ export const LineItemGroupQuestion: React.FC<{
         stepDataSourceDraftsRef.current = {};
         setStepDataSourceDrafts({});
       }
+    }
+    if (!recordChanged && stepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
+      return;
     }
     let cancelled = false;
     const configEntries = stepDataSourceRows
@@ -1046,6 +1063,7 @@ export const LineItemGroupQuestion: React.FC<{
         config: dataSource,
         promise: fetchDataSource(dataSource, language, shouldForceRefresh ? { forceRefresh: true } : undefined).catch(() => null)
       }));
+    stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
     if (!pendingFetches.length) return;
 
     beginStepDataSourceLoading(pendingFetches.map(entry => ({ dataSource: entry.config, id: entry.config?.id })));
@@ -1061,7 +1079,14 @@ export const LineItemGroupQuestion: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [beginStepDataSourceLoading, endStepDataSourceLoading, language, recordId, stepDataSourceRows]);
+  }, [
+    beginStepDataSourceLoading,
+    endStepDataSourceLoading,
+    language,
+    recordId,
+    stepDataSourceBootstrapSignature,
+    stepDataSourceRows
+  ]);
 
   React.useEffect(() => {
     if (!stepDataSourceRows.length) return;

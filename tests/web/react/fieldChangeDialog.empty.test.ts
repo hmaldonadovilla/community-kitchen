@@ -1,6 +1,7 @@
 import {
   evaluateFieldChangeDialogWhen,
-  evaluateFieldChangeDialogWhenWithFallback
+  evaluateFieldChangeDialogWhenWithFallback,
+  shouldDeferFieldChangeMutation
 } from '../../../src/web/react/app/fieldChangeDialog';
 
 describe('evaluateFieldChangeDialogWhen', () => {
@@ -66,5 +67,44 @@ describe('evaluateFieldChangeDialogWhenWithFallback', () => {
     });
 
     expect(result).toEqual({ matches: false, matchedOn: null });
+  });
+});
+
+describe('shouldDeferFieldChangeMutation', () => {
+  it('defers guarded choice changes until the dialog is confirmed', () => {
+    expect(
+      shouldDeferFieldChangeMutation({
+        dialog: { when: { fieldId: 'MP_SERVICE', notEmpty: true } as any } as any,
+        fieldType: 'CHOICE',
+        shouldTrigger: true,
+        prevValue: 'Belliard',
+        nextValue: 'Hub'
+      })
+    ).toBe(true);
+  });
+
+  it('defers guarded date changes until the dialog is confirmed', () => {
+    expect(
+      shouldDeferFieldChangeMutation({
+        dialog: { when: { fieldId: 'MP_SERVICE', notEmpty: true } as any } as any,
+        fieldType: 'DATE',
+        shouldTrigger: true,
+        prevValue: '2026-04-15',
+        nextValue: '2026-04-16'
+      })
+    ).toBe(true);
+  });
+
+  it('does not defer initial date entry when the first date-change dialog is suppressed', () => {
+    expect(
+      shouldDeferFieldChangeMutation({
+        dialog: { when: { fieldId: 'MP_SERVICE', notEmpty: true } as any } as any,
+        fieldType: 'DATE',
+        shouldTrigger: true,
+        prevValue: '',
+        nextValue: '2026-04-16',
+        suppressInitialDateDialog: true
+      })
+    ).toBe(false);
   });
 });
