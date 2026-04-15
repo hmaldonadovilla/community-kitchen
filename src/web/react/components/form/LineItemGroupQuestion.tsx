@@ -97,7 +97,6 @@ import {
 import {
   buildReservationFailureMessage,
   isStepReservationCommitEnabled,
-  normalizeStepReservationAvailabilityForDisplay,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from './reservationSyncPolicy';
@@ -105,7 +104,16 @@ import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
   type GuidedStepReservationAvailabilityEventDetail
 } from '../../features/reservations/liveSyncEvents';
-import { applyInventoryAvailabilitySnapshotToRow } from '../../features/reservations/availabilitySnapshots';
+import {
+  applyInventoryAvailabilitySnapshotToRow,
+  normalizeInventoryAvailabilitySnapshotForDisplay
+} from '../../features/reservations/availabilitySnapshots';
+import {
+  hasStructuredValue,
+  resolveReservationResourceFieldIds,
+  resolveReservationSourceItemKey,
+  resolveReservationSourceKeyFieldId
+} from '../../features/reservations/sourceFields';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
@@ -135,55 +143,6 @@ const getByPath = (root: any, path: string): any => {
 };
 
 const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
-
-const inferReservationFieldId = (outputKeyFieldId: string, suffix: 'RECORD_ID' | 'KIND' | 'UNIT'): string => {
-  const base = outputKeyFieldId.endsWith('_ID') ? outputKeyFieldId.slice(0, -3) : outputKeyFieldId;
-  return base ? `${base}_${suffix}` : '';
-};
-
-const hasStructuredValue = (value: unknown): boolean => {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
-  return true;
-};
-
-const resolveReservationSourceKeyFieldId = (config: any): string =>
-  normalizeIdValue(
-    config?.availability?.sourceKeyFieldId ||
-      config?.dataSource?.rowKeyFieldId ||
-      config?.outputKeyFieldId ||
-      config?.rowKeyFieldId
-  );
-
-const resolveReservationResourceFieldIds = (config: any): {
-  keyFieldId: string;
-  kindFieldId: string;
-  unitFieldId: string;
-} => {
-  const outputKeyFieldId = normalizeIdValue(config?.outputKeyFieldId || config?.rowKeyFieldId);
-  const reservationConfig =
-    config?.reservation && typeof config.reservation === 'object'
-      ? config.reservation
-      : null;
-  return {
-    keyFieldId: resolveReservationSourceKeyFieldId(config),
-    kindFieldId: normalizeIdValue(
-      reservationConfig?.resourceKindFieldId || inferReservationFieldId(outputKeyFieldId, 'KIND')
-    ),
-    unitFieldId: normalizeIdValue(
-      reservationConfig?.resourceUnitFieldId || inferReservationFieldId(outputKeyFieldId, 'UNIT')
-    )
-  };
-};
-
-const resolveReservationSourceItemKey = (config: any, item: Record<string, any> | null | undefined): string => {
-  if (!item || typeof item !== 'object') return '';
-  const keyFieldId = resolveReservationSourceKeyFieldId(config);
-  if (keyFieldId && hasStructuredValue(item[keyFieldId])) {
-    return normalizeIdValue(item[keyFieldId]);
-  }
-  return normalizeIdValue(item.id);
-};
 
 const resolveReservationDisplayLabel = (
   config: any,
@@ -365,20 +324,6 @@ const resolveCompactPartType = (part: any): string => {
   return 'text';
 };
 
-const coerceDelimitedValues = (raw: any, delimiter: string): string[] => {
-  if (Array.isArray(raw)) {
-    return raw
-      .map(entry => `${entry ?? ''}`.trim())
-      .filter(Boolean);
-  }
-  const text = `${raw ?? ''}`.trim();
-  if (!text) return [];
-  if (!delimiter) return [text];
-  return text
-    .split(delimiter)
-    .map(entry => entry.trim())
-    .filter(Boolean);
-};
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_ID_KEY,
@@ -688,13 +633,13 @@ export const LineItemGroupQuestion: React.FC<{
     setSubgroupSelectors,
     subgroupBottomRefs,
     fileInputsRef,
-    dragState,
-    incrementDrag,
-    decrementDrag,
+    dragState: _dragState,
+    incrementDrag: _incrementDrag,
+    decrementDrag: _decrementDrag,
     uploadAnnouncements,
     openConfirmDialog,
     handleLineFileInputChange,
-    handleLineFileDrop,
+    handleLineFileDrop: _handleLineFileDrop,
     removeLineFile,
     clearLineFiles,
     errorIndex,
@@ -1077,7 +1022,7 @@ export const LineItemGroupQuestion: React.FC<{
         entries.forEach(snapshot => {
           if (!snapshot) return;
           if (dataSourceFormKey && dataSourceFormKey !== `${snapshot.resourceFormKey || ''}`.trim()) return;
-          updateStepDataSourceAvailability(config, normalizeStepReservationAvailabilityForDisplay(snapshot));
+          updateStepDataSourceAvailability(config, normalizeInventoryAvailabilitySnapshotForDisplay(snapshot));
         });
       });
     },
@@ -2987,7 +2932,7 @@ export const LineItemGroupQuestion: React.FC<{
     [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig, resolveTopValue]
   );
 
-  const mergeOverlayDetailConfig = (base: any, override: any) => {
+  const mergeOverlayDetailConfig = React.useCallback((base: any, override: any) => {
     if (!base && !override) return undefined;
     if (!base) return override;
     if (!override) return base;
@@ -3003,31 +2948,34 @@ export const LineItemGroupQuestion: React.FC<{
       },
       rowActions: { ...(base.rowActions || {}), ...(override.rowActions || {}) }
     };
-  };
+  }, []);
 
-const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemGroupConfigOverride) => {
-  if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
-  const mergedConfig = { ...baseConfig, ...override } as any;
-  mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
-  if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
-    const baseUi = baseConfig.ui || {};
-    const overrideUi = (override as any).ui || {};
-    const mergedUi = {
-      ...baseUi,
-      ...overrideUi
-    };
-  const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
-  if (mergedOverlayDetail) {
-    (mergedUi as any).overlayDetail = mergedOverlayDetail;
-  }
-  mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
-  const baseAddOverlay = (baseConfig as any)?.addOverlay || {};
-  const overrideAddOverlay = (override as any)?.addOverlay || {};
-  if (Object.keys(baseAddOverlay).length || Object.keys(overrideAddOverlay).length) {
-    (mergedConfig as any).addOverlay = { ...baseAddOverlay, ...overrideAddOverlay };
-  }
-  return mergedConfig;
-};
+  const applyLineItemGroupOverride = React.useCallback(
+    (baseConfig: any, override?: LineItemGroupConfigOverride) => {
+      if (!baseConfig || !override || typeof override !== 'object') return baseConfig;
+      const mergedConfig = { ...baseConfig, ...override } as any;
+      mergedConfig.fields = Array.isArray(override.fields) && override.fields.length ? override.fields : baseConfig.fields;
+      if (override.subGroups !== undefined) mergedConfig.subGroups = override.subGroups;
+      const baseUi = baseConfig.ui || {};
+      const overrideUi = (override as any).ui || {};
+      const mergedUi = {
+        ...baseUi,
+        ...overrideUi
+      };
+      const mergedOverlayDetail = mergeOverlayDetailConfig(baseUi?.overlayDetail, overrideUi?.overlayDetail);
+      if (mergedOverlayDetail) {
+        (mergedUi as any).overlayDetail = mergedOverlayDetail;
+      }
+      mergedConfig.ui = Object.keys(mergedUi).length ? mergedUi : undefined;
+      const baseAddOverlay = (baseConfig as any)?.addOverlay || {};
+      const overrideAddOverlay = (override as any)?.addOverlay || {};
+      if (Object.keys(baseAddOverlay).length || Object.keys(overrideAddOverlay).length) {
+        (mergedConfig as any).addOverlay = { ...baseAddOverlay, ...overrideAddOverlay };
+      }
+      return mergedConfig;
+    },
+    [mergeOverlayDetailConfig]
+  );
 
 const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   const cfg = groupCfg?.addOverlay || {};
@@ -3626,18 +3574,19 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     ));
   };
 
-  const normalizeAnchorKey = (raw: any): string => {
+  const normalizeAnchorKey = React.useCallback((raw: any): string => {
     if (raw === undefined || raw === null) return '';
     if (Array.isArray(raw)) {
       const first = raw[0];
       return first === undefined || first === null ? '' : first.toString().trim();
     }
     return raw.toString().trim();
-  };
+  }, []);
 
-  const buildOptionSetForLineField = (field: any, groupKey: string): OptionSet => {
-    return resolveOptionSetForField(optionState, field, groupKey);
-  };
+  const buildOptionSetForLineField = React.useCallback(
+    (field: any, groupKey: string): OptionSet => resolveOptionSetForField(optionState, field, groupKey),
+    [optionState]
+  );
 
   const resolveDependsOnIds = (field: any): string[] => {
     const raw = field?.optionFilter?.dependsOn;
@@ -3665,153 +3614,157 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     autoAnchorIsChoice && autoAnchorField ? optionKey((autoAnchorField as any).id, q.id) : '';
   const autoAnchorOptionSet = autoAnchorOptionSetKey ? optionState[autoAnchorOptionSetKey] : undefined;
 
-  const isValidDependencyValue = (raw: any): boolean => {
+  const isValidDependencyValue = React.useCallback((raw: any): boolean => {
     const dep = toDependencyValue(raw as any);
     if (dep === undefined || dep === null) return false;
     if (typeof dep === 'number') return Number.isFinite(dep);
     return dep.toString().trim() !== '';
-  };
+  }, []);
 
-  const computeAutoDesired = (args: {
-    groupKey: string;
-    anchorField: any;
-    dependencyIds: string[];
-    getDependencyRaw: (depId: string) => any;
-  }): { valid: boolean; desired: string[]; depVals: (string | number | null | undefined)[] } => {
-    const { groupKey, anchorField, dependencyIds, getDependencyRaw } = args;
-    const depRawVals = dependencyIds.map(depId => getDependencyRaw(depId));
-    const depVals = depRawVals.map(v => toDependencyValue(v as any));
-    const valid = dependencyIds.length === 0 || depRawVals.every(isValidDependencyValue);
-    if (!valid) return { valid: false, desired: [], depVals };
-    const opts = buildOptionSetForLineField(anchorField, groupKey);
-    const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-    const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
-    const seen = new Set<string>();
-    const desired: string[] = [];
-    localized.forEach(opt => {
-      const key = (opt?.value ?? '').toString().trim();
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      desired.push(key);
-    });
-    return { valid: true, desired, depVals };
-  };
+  const computeAutoDesired = React.useCallback(
+    (args: {
+      groupKey: string;
+      anchorField: any;
+      dependencyIds: string[];
+      getDependencyRaw: (depId: string) => any;
+    }): { valid: boolean; desired: string[]; depVals: (string | number | null | undefined)[] } => {
+      const { groupKey, anchorField, dependencyIds, getDependencyRaw } = args;
+      const depRawVals = dependencyIds.map(depId => getDependencyRaw(depId));
+      const depVals = depRawVals.map(v => toDependencyValue(v as any));
+      const valid = dependencyIds.length === 0 || depRawVals.every(isValidDependencyValue);
+      if (!valid) return { valid: false, desired: [], depVals };
+      const opts = buildOptionSetForLineField(anchorField, groupKey);
+      const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
+      const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
+      const seen = new Set<string>();
+      const desired: string[] = [];
+      localized.forEach(opt => {
+        const key = (opt?.value ?? '').toString().trim();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        desired.push(key);
+      });
+      return { valid: true, desired, depVals };
+    },
+    [buildOptionSetForLineField, isValidDependencyValue, language]
+  );
 
-  const reconcileAutoRows = (args: {
-    currentRows: any[];
-    targetKey: string;
-    anchorFieldId: string;
-    desired: string[];
-    depVals: (string | number | null | undefined)[];
-    selectorId?: string;
-    selectorValue?: FieldValue;
-  }): {
-    rows: any[];
-    changed: boolean;
-    contextId: string;
-    desiredCount: number;
-  } => {
-    const { currentRows, targetKey, anchorFieldId, desired, depVals, selectorId, selectorValue } = args;
-    const autoPrefix = `${AUTO_CONTEXT_PREFIX}:${targetKey}:`;
-    const contextId = `${autoPrefix}${depVals.map(v => (v === undefined || v === null ? '' : v.toString())).join('||')}`;
-    const shouldSortRowsByAnchor =
-      targetKey === 'MP_MEALS_REQUEST' && anchorFieldId === 'MEAL_TYPE' && Array.isArray(desired) && desired.length > 1;
+  const reconcileAutoRows = React.useCallback(
+    (args: {
+      currentRows: any[];
+      targetKey: string;
+      anchorFieldId: string;
+      desired: string[];
+      depVals: (string | number | null | undefined)[];
+      selectorId?: string;
+      selectorValue?: FieldValue;
+    }): {
+      rows: any[];
+      changed: boolean;
+      contextId: string;
+      desiredCount: number;
+    } => {
+      const { currentRows, targetKey, anchorFieldId, desired, depVals, selectorId, selectorValue } = args;
+      const autoPrefix = `${AUTO_CONTEXT_PREFIX}:${targetKey}:`;
+      const contextId = `${autoPrefix}${depVals.map(v => (v === undefined || v === null ? '' : v.toString())).join('||')}`;
+      const shouldSortRowsByAnchor =
+        targetKey === 'MP_MEALS_REQUEST' && anchorFieldId === 'MEAL_TYPE' && Array.isArray(desired) && desired.length > 1;
 
-    const remaining = new Set(desired);
+      const remaining = new Set(desired);
 
-    const nextRows: any[] = [];
-    const addedRows: any[] = [];
-    currentRows.forEach(row => {
-      const isAutoContext =
-        (typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix)) ||
-        parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]) === 'auto';
-      if (!isAutoContext) {
-        nextRows.push(row);
-        return;
-      }
+      const nextRows: any[] = [];
+      const addedRows: any[] = [];
+      currentRows.forEach(row => {
+        const isAutoContext =
+          (typeof row.effectContextId === 'string' && row.effectContextId.startsWith(autoPrefix)) ||
+          parseRowSource((row.values as any)?.[ROW_SOURCE_KEY]) === 'auto';
+        if (!isAutoContext) {
+          nextRows.push(row);
+          return;
+        }
 
-      const key = normalizeAnchorKey((row.values as any)?.[anchorFieldId]);
-      if (!key || !remaining.has(key)) {
-        // Drop auto rows that are no longer desired.
-        return;
-      }
-      remaining.delete(key);
+        const key = normalizeAnchorKey((row.values as any)?.[anchorFieldId]);
+        if (!key || !remaining.has(key)) {
+          return;
+        }
+        remaining.delete(key);
 
-      const nextValues: Record<string, FieldValue> = { ...(row.values || {}) };
-      let valuesChanged = false;
-      if (normalizeAnchorKey((nextValues as any)[anchorFieldId]) !== key) {
-        nextValues[anchorFieldId] = key;
-        valuesChanged = true;
-      }
-      if (parseRowSource((nextValues as any)[ROW_SOURCE_KEY]) !== 'auto') {
-        nextValues[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
-        valuesChanged = true;
-      }
-      if (
-        selectorId &&
-        selectorValue !== undefined &&
-        selectorValue !== null &&
-        (nextValues as any)[selectorId] === undefined
-      ) {
-        nextValues[selectorId] = selectorValue;
-        valuesChanged = true;
-      }
+        const nextValues: Record<string, FieldValue> = { ...(row.values || {}) };
+        let valuesChanged = false;
+        if (normalizeAnchorKey((nextValues as any)[anchorFieldId]) !== key) {
+          nextValues[anchorFieldId] = key;
+          valuesChanged = true;
+        }
+        if (parseRowSource((nextValues as any)[ROW_SOURCE_KEY]) !== 'auto') {
+          nextValues[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
+          valuesChanged = true;
+        }
+        if (
+          selectorId &&
+          selectorValue !== undefined &&
+          selectorValue !== null &&
+          (nextValues as any)[selectorId] === undefined
+        ) {
+          nextValues[selectorId] = selectorValue;
+          valuesChanged = true;
+        }
 
-      const metaChanged = row.autoGenerated !== true || row.effectContextId !== contextId;
-      if (valuesChanged || metaChanged) {
-        nextRows.push({
-          ...row,
+        const metaChanged = row.autoGenerated !== true || row.effectContextId !== contextId;
+        if (valuesChanged || metaChanged) {
+          nextRows.push({
+            ...row,
+            values: nextValues,
+            autoGenerated: true,
+            effectContextId: contextId
+          });
+        } else {
+          nextRows.push(row);
+        }
+      });
+
+      desired.forEach(key => {
+        if (!remaining.has(key)) return;
+        remaining.delete(key);
+        const nextValues: Record<string, FieldValue> = {
+          [anchorFieldId]: key,
+          [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO
+        };
+        if (selectorId && selectorValue !== undefined && selectorValue !== null) {
+          nextValues[selectorId] = selectorValue;
+        }
+        addedRows.unshift({
+          id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
           values: nextValues,
           autoGenerated: true,
           effectContextId: contextId
         });
-      } else {
-        nextRows.push(row);
-      }
-    });
-
-    // Prepend missing desired keys so newest additions show first.
-    desired.forEach(key => {
-      if (!remaining.has(key)) return;
-      remaining.delete(key);
-      const nextValues: Record<string, FieldValue> = {
-        [anchorFieldId]: key,
-        [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO
-      };
-      if (selectorId && selectorValue !== undefined && selectorValue !== null) {
-        nextValues[selectorId] = selectorValue;
-      }
-      addedRows.unshift({
-        id: `${targetKey}_${Math.random().toString(16).slice(2)}`,
-        values: nextValues,
-        autoGenerated: true,
-        effectContextId: contextId
       });
-    });
 
-    const combinedRows = addedRows.length ? [...addedRows, ...nextRows] : nextRows;
-    const combinedSorted = shouldSortRowsByAnchor
-      ? (() => {
-          const normalized: Array<{ idx: number; key: string; row: any }> = combinedRows.map((row, idx) => ({
-            idx,
-            key: normalizeAnchorKey((row?.values as any)?.[anchorFieldId]).toLowerCase(),
-            row
-          }));
-          normalized.sort((a, b) => {
-            const aKey = a.key;
-            const bKey = b.key;
-            if (aKey === bKey) return a.idx - b.idx;
-            if (!aKey) return 1;
-            if (!bKey) return -1;
-            return aKey.localeCompare(bKey);
-          });
-          return normalized.map(entry => entry.row);
-        })()
-      : combinedRows;
-    const changed =
-      combinedSorted.length !== currentRows.length || combinedSorted.some((row, idx) => row !== currentRows[idx]);
-    return { rows: combinedSorted, changed, contextId, desiredCount: desired.length };
-  };
+      const combinedRows = addedRows.length ? [...addedRows, ...nextRows] : nextRows;
+      const combinedSorted = shouldSortRowsByAnchor
+        ? (() => {
+            const normalized: Array<{ idx: number; key: string; row: any }> = combinedRows.map((row, idx) => ({
+              idx,
+              key: normalizeAnchorKey((row?.values as any)?.[anchorFieldId]).toLowerCase(),
+              row
+            }));
+            normalized.sort((a, b) => {
+              const aKey = a.key;
+              const bKey = b.key;
+              if (aKey === bKey) return a.idx - b.idx;
+              if (!aKey) return 1;
+              if (!bKey) return -1;
+              return aKey.localeCompare(bKey);
+            });
+            return normalized.map(entry => entry.row);
+          })()
+        : combinedRows;
+      const changed =
+        combinedSorted.length !== currentRows.length || combinedSorted.some((row, idx) => row !== currentRows[idx]);
+      return { rows: combinedSorted, changed, contextId, desiredCount: desired.length };
+    },
+    [normalizeAnchorKey]
+  );
 
   // Auto addMode: when dependency fields are valid, or when there is no dependency filter,
   // auto-create one row per allowed anchor option.
@@ -3866,16 +3819,22 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       return recomputed;
     });
   }, [
+    computeAutoDesired,
+    definition,
     submitting,
     q.id,
+    q.lineItemConfig,
     q.lineItemConfig?.addMode,
     q.lineItemConfig?.anchorFieldId,
     // Only re-run when controlling dependency values change (or when the anchor options set changes)
     autoDepSignature,
     autoAnchorOptionSet,
     ensureLineOptions,
+    onDiagnostic,
+    reconcileAutoRows,
     setLineItems,
-    setValues
+    setValues,
+    values
   ]);
 
   // Auto addMode for subgroups (per parent row).
@@ -3961,6 +3920,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       return recomputed;
     });
   }, [
+    computeAutoDesired,
+    definition,
+    onDiagnostic,
+    reconcileAutoRows,
     submitting,
     q,
     values,

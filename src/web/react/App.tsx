@@ -175,6 +175,7 @@ import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
   type GuidedStepReservationAvailabilityEventDetail
 } from './features/reservations/liveSyncEvents';
+import { applyInventoryAvailabilitySnapshotsToCachedDataSources } from './features/reservations/availabilityCache';
 import {
   buildFieldIdMap,
   filterDedupRulesForPrecheck,
@@ -767,13 +768,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     serverVersion?: number | null;
     serverRow?: number | null;
   }) => Promise<boolean>;
-  type MarkRecordStaleFn = (args: {
-    reason: string;
-    recordId: string;
-    cachedVersion?: number | null;
-    serverVersion?: number | null;
-    serverRow?: number | null;
-  }) => void;
   type RecordSyncNoticeState = {
     open: boolean;
     title: string;
@@ -1190,27 +1184,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
   const [pendingDeletedRecordApplyTick, setPendingDeletedRecordApplyTick] = useState(0);
 
-  const resolveOptionGroupKey = (args: {
-    targetScope: 'top' | 'row' | 'parent' | 'effect';
-    contextGroupId?: string;
-    effectGroupId?: string;
-  }): string | undefined => {
-    const contextGroupId = (args.contextGroupId || '').toString().trim();
-    if (args.targetScope === 'top') return undefined;
-    if (args.targetScope === 'effect' && args.effectGroupId) {
-      const effectGroupId = args.effectGroupId.toString().trim();
-      if (effectGroupId.includes('::')) return effectGroupId;
-      if (!contextGroupId) return effectGroupId || undefined;
+  const resolveOptionGroupKey = useCallback(
+    (args: {
+      targetScope: 'top' | 'row' | 'parent' | 'effect';
+      contextGroupId?: string;
+      effectGroupId?: string;
+    }): string | undefined => {
+      const contextGroupId = (args.contextGroupId || '').toString().trim();
+      if (args.targetScope === 'top') return undefined;
+      if (args.targetScope === 'effect' && args.effectGroupId) {
+        const effectGroupId = args.effectGroupId.toString().trim();
+        if (effectGroupId.includes('::')) return effectGroupId;
+        if (!contextGroupId) return effectGroupId || undefined;
+        const parsed = parseSubgroupKey(contextGroupId);
+        if (parsed) return `${parsed.parentGroupId}::${effectGroupId}`;
+        return effectGroupId || undefined;
+      }
+      if (!contextGroupId) return undefined;
       const parsed = parseSubgroupKey(contextGroupId);
-      if (parsed) return `${parsed.parentGroupId}::${effectGroupId}`;
-      return effectGroupId || undefined;
-    }
-    if (!contextGroupId) return undefined;
-    const parsed = parseSubgroupKey(contextGroupId);
-    if (!parsed) return contextGroupId;
-    if (args.targetScope === 'parent') return parsed.parentGroupId;
-    return `${parsed.parentGroupId}::${parsed.subGroupId}`;
-  };
+      if (!parsed) return contextGroupId;
+      if (args.targetScope === 'parent') return parsed.parentGroupId;
+      return `${parsed.parentGroupId}::${parsed.subGroupId}`;
+    },
+    []
+  );
 
   const buildFieldChangeDialogInputs = useCallback(
     (pending: FieldChangePending): { inputs: FieldChangeDialogInputState[]; values: Record<string, FieldValue> } => {
@@ -2424,7 +2421,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   const recordSyncPromiseRef = useRef<Promise<boolean> | null>(null);
   const synchronizeStaleRecordRef = useRef<SynchronizeStaleRecordFn>(async () => false);
-  const markRecordStaleRef = useRef<MarkRecordStaleFn>(() => undefined);
   const draftSaveRequestFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastCompletedDraftSaveFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastDraftSaveFailureRef = useRef<{ message: string; recordId?: string | null } | null>(null);
@@ -2983,13 +2979,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 serverVersion,
                 serverRow
               };
-              markRecordStaleRef.current({
-                reason: 'recordFreshness.stale.deferred',
+              logEvent('record.freshness.check.stale.deferred', {
+                reason,
                 recordId,
                 cachedVersion: effectiveBaseline,
                 serverVersion,
-                serverRow
+                serverRow,
+                draftSavePhase: draftSave.phase,
+                autoSaveQueued: autoSaveQueuedRef.current,
+                blockers: syncBlockers
               });
+              scheduleRecordFreshnessCheck(`${reason}.staleDeferred`);
               return;
             }
             pendingDeferredRecordFreshnessSyncRef.current = null;
@@ -5045,57 +5045,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [dedupPrecheckRules, definition, logEvent, rememberAutoSaveSeenState, resetFieldChangeTransientState, upsertListCacheRow]
   );
 
-  const markRecordStale = useCallback(
-    (args: {
-      reason: string;
-      recordId: string;
-      cachedVersion?: number | null;
-      serverVersion?: number | null;
-      serverRow?: number | null;
-    }) => {
-      const currentId = (selectedRecordIdRef.current || '').toString().trim();
-      const targetId = (args.recordId || '').toString().trim();
-      if (currentId && targetId && currentId !== targetId) return;
-      const id = currentId || targetId;
-      if (!id) return;
-
-      const toNum = (v: any): number | undefined => {
-        const n = v === undefined || v === null ? Number.NaN : Number(v);
-        return Number.isFinite(n) ? n : undefined;
-      };
-      const cachedVersion = args.cachedVersion !== undefined ? toNum(args.cachedVersion) : undefined;
-      const serverVersion = args.serverVersion !== undefined ? toNum(args.serverVersion) : undefined;
-      const serverRow = args.serverRow !== undefined ? toNum(args.serverRow) : undefined;
-
-      const message = tSystem(
-        'record.stale',
-        languageRef.current,
-        'This record was updated by another user or automatically by the system, tap Refresh to continue.'
-      );
-      const next: RecordStaleInfo = { recordId: id, message, cachedVersion, serverVersion, serverRow };
-      recordStaleRef.current = next;
-      setRecordStale(next);
-
-      // Cancel draft autosave so we don't overwrite remote changes.
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-
-      logEvent('record.stale.detected', {
-        reason: args.reason,
-        recordId: id,
-        cachedVersion: cachedVersion ?? null,
-        serverVersion: serverVersion ?? null,
-        serverRow: serverRow ?? null
-      });
-    },
-    [logEvent]
-  );
-  markRecordStaleRef.current = markRecordStale;
-
   const loadRecordSnapshot = useCallback(
     async (recordId: string, rowNumberHint?: number): Promise<boolean> => {
       const candidateRow = rowNumberHint && Number.isFinite(rowNumberHint) && rowNumberHint >= 2 ? rowNumberHint : undefined;
@@ -5270,7 +5219,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const fallbackMessage = tSystem(
           'record.syncFailed',
           languageRef.current,
-          'We could not synchronize the latest record automatically. Tap Refresh to continue.'
+          'We could not synchronize the latest record automatically. Use Refresh in the header to continue.'
         );
         const staleInfo: RecordStaleInfo = {
           recordId,
@@ -5281,6 +5230,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
         recordStaleRef.current = staleInfo;
         setRecordStale(staleInfo);
+        setStatus(fallbackMessage);
+        setStatusLevel('error');
         logEvent('record.sync.failed', {
           reason: args.reason,
           recordId,
@@ -5313,7 +5264,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       pendingDeferredRecordFreshnessSyncRef.current = null;
       return;
     }
-    if (!recordStaleRef.current) return;
     if (recordLoadingId || submitting || recordSyncPromiseRef.current) return;
     const blockers = getRecordFreshnessSyncBlockers();
     if (blockers.length > 0) return;
@@ -5329,7 +5279,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ...pending,
       reason: `${pending.reason}.resume`
     });
-  }, [draftSave.phase, getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent, recordLoadingId, recordStale?.recordId, submitting, view]);
+  }, [draftSave.phase, getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent, recordLoadingId, submitting, view]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -7501,7 +7451,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             month: 'long',
             day: 'numeric'
           }).format(new Date());
-        } catch (_) {
+        } catch {
           return new Date().toISOString().slice(0, 10);
         }
       })();
@@ -9884,6 +9834,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const availability = Array.isArray(reservationResult.availability)
           ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
           : [];
+        if (availability.length) {
+          const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+            dataSourceConfigs: guidedDataSourceConfigs,
+            language,
+            availability
+          });
+          logEvent(`${args.logPrefix}.reservationPlan.cacheSync`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            updatedRows: cacheSync.updatedRows,
+            updatedDataSourceIds: cacheSync.updatedDataSourceIds
+          });
+        }
         if (
           availability.length &&
           typeof window !== 'undefined' &&
@@ -9939,6 +9902,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [
+      guidedDataSourceConfigs,
+      language,
       logEvent,
       markDataSourceFreshnessServerTouch,
       markRecordFreshnessServerTouch,
@@ -10903,7 +10868,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             tSystem(
               'record.stale',
               languageRef.current,
-              'This record was updated by another user or automatically by the system, tap Refresh to continue.'
+              'This record was updated by another user or automatically by the system. Use Refresh in the header to continue.'
             )
         };
       }
@@ -12372,13 +12337,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                     serverVersion,
                     serverRow: serverRow || hintedRow || null
                   };
-                  markRecordStale({
-                    reason: 'versionCheck.stale.deferred',
-                    recordId,
-                    cachedVersion: baselineVersion,
-                    serverVersion,
-                    serverRow: serverRow || hintedRow || null
-                  });
                   logEvent('record.versionCheck.stale.deferred', {
                     recordId,
                     cachedVersion: baselineVersion,
@@ -12388,6 +12346,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                     autoSaveQueued: autoSaveQueuedRef.current,
                     blockers: syncBlockers
                   });
+                  scheduleRecordFreshnessCheck('record.versionCheck.staleDeferred');
                   return;
                 }
                 pendingDeferredRecordFreshnessSyncRef.current = null;
@@ -13190,22 +13149,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       </div>
     ) : null;
 
-  const refreshStaleRecord = useCallback(async () => {
-    const stale = recordStaleRef.current || recordStale;
-    const id = (stale?.recordId || selectedRecordIdRef.current || '').toString().trim();
-    if (!id) return;
-    const row = stale?.serverRow;
-    // Cancel any pending autosave while we refresh.
-    autoSaveDirtyRef.current = false;
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    setDraftSave({ phase: 'idle' });
-    logEvent('record.stale.refresh.click', { recordId: id, rowNumberHint: row || null, source: 'dialog' });
-    await loadRecordSnapshot(id, row || undefined);
-  }, [loadRecordSnapshot, logEvent, recordStale]);
-
   const submitTopErrorMessage = resolveLocalizedString(
     definition.submitValidation?.submitTopErrorMessage,
     language,
@@ -13636,27 +13579,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         message={dedupProgress.message}
         mode={dedupProgress.phase === 'checking' ? 'loading' : dedupProgress.phase === 'available' ? 'success' : 'error'}
         zIndex={12019}
-      />
-
-      <ConfirmDialogOverlay
-        open={(view === 'form' || view === 'summary') && Boolean(recordStale)}
-        title={tSystem('record.stale.title', language, 'Refresh to continue')}
-        message={
-          (recordStale?.message ||
-            tSystem(
-              'record.stale',
-              language,
-              'This record was updated by another user or automatically by the system, tap Refresh to continue.'
-            )) as any
-        }
-        confirmLabel={tSystem('record.refresh.short', language, 'Refresh')}
-        cancelLabel={tSystem('common.cancel', language, 'Cancel')}
-        showCancel={false}
-        dismissOnBackdrop={false}
-        showCloseButton={false}
-        zIndex={12060}
-        onCancel={() => undefined}
-        onConfirm={refreshStaleRecord}
       />
 
       <ConfirmDialogOverlay

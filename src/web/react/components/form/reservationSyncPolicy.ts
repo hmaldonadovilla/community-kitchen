@@ -1,5 +1,3 @@
-import type { InventoryAvailabilitySnapshot } from '../../../../types';
-
 export const getReservationCommitMode = (reservationConfig: any): 'immediate' | 'step' => {
   const raw = (reservationConfig?.commitMode || '').toString().trim().toLowerCase();
   return raw === 'step' ? 'step' : 'immediate';
@@ -74,12 +72,3 @@ export const buildReservationFailureMessage = (
   }
   return message || fallback;
 };
-
-export const normalizeStepReservationAvailabilityForDisplay = (
-  snapshot: InventoryAvailabilitySnapshot
-): InventoryAvailabilitySnapshot => ({
-  ...snapshot,
-  // Step-managed rows already account for the current record through local line-item state.
-  // Reapplying the server-reported current reservation quantity here would double-count it.
-  currentRecordReservedQuantity: 0
-});

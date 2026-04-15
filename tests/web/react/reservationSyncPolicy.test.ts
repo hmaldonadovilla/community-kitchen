@@ -1,10 +1,10 @@
 import {
   buildReservationFailureMessage,
   getReservationCommitMode,
-  normalizeStepReservationAvailabilityForDisplay,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from '../../../src/web/react/components/form/reservationSyncPolicy';
+import { normalizeInventoryAvailabilitySnapshotForDisplay } from '../../../src/web/react/features/reservations/availabilitySnapshots';
 
 describe('reservationSyncPolicy', () => {
   test('defers reservation sync for quantity-only patches', () => {
@@ -115,7 +115,7 @@ describe('reservationSyncPolicy', () => {
 
   test('does not double-count the current record when applying step-sync availability snapshots', () => {
     expect(
-      normalizeStepReservationAvailabilityForDisplay({
+      normalizeInventoryAvailabilitySnapshotForDisplay({
         resourceFormKey: 'Config: Leftover Inventory',
         resourceRecordId: 'leftover-1',
         resourceItemId: 'LE-43',
