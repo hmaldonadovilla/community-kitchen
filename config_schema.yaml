@@ -3157,6 +3157,22 @@ components:
                 Notes:
                 - Shows a blocking "checking" state while dedup runs.
                 - Then transitions in-place to `available` or `duplicate` and auto-closes after the configured delay.
+        recordFreshness:
+          type: object
+          description: |
+            Optional lightweight background freshness checks for existing records in the React edit view.
+
+            - Enabled by default when omitted.
+            - After the current record has had no successful record-related server activity for `quietWindowMs`,
+              the client calls `getRecordVersion`.
+            - When the server version changed, the app reloads the latest record snapshot automatically and asks the user to review it.
+          properties:
+            enabled:
+              type: boolean
+              description: Enable background freshness checks. Defaults to true.
+            quietWindowMs:
+              type: number
+              description: Quiet window (ms) before the client revalidates the open record. Default 30000.
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
           description: |
@@ -6814,6 +6830,15 @@ components:
                 type: string
             dedupCheckDialog:
               $ref: '#/components/schemas/DedupCheckDialogConfig'
+          additionalProperties: true
+        recordFreshness:
+          type: object
+          description: Lightweight background freshness checks for existing records in the React edit view.
+          properties:
+            enabled:
+              type: boolean
+            quietWindowMs:
+              type: number
           additionalProperties: true
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'

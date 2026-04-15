@@ -31,6 +31,7 @@ import {
   ListViewSearchConfig,
   ListViewViewConfig,
   LocalizedString,
+  RecordFreshnessConfig,
   SubmissionAfterSubmitConfig,
   SystemActionGateDialogConfig,
   SubmitValidationConfig,
@@ -158,6 +159,7 @@ export class Dashboard {
       const lifecycle = dashboardConfig?.lifecycle;
       const reservationLifecycle = dashboardConfig?.reservationLifecycle;
       const autoSave = dashboardConfig?.autoSave;
+      const recordFreshness = dashboardConfig?.recordFreshness;
       const auditLogging = dashboardConfig?.auditLogging;
       const summaryViewEnabled = dashboardConfig?.summaryViewEnabled;
       const summaryHtmlTemplateId = dashboardConfig?.summaryHtmlTemplateId;
@@ -221,6 +223,7 @@ export class Dashboard {
           listViewMetric,
           analytics,
           autoSave,
+          recordFreshness,
           auditLogging,
           summaryViewEnabled,
           summaryHtmlTemplateId,
@@ -302,6 +305,7 @@ export class Dashboard {
     listViewMetric?: ListViewMetricConfig;
     analytics?: AnalyticsConfig;
     autoSave?: AutoSaveConfig;
+    recordFreshness?: RecordFreshnessConfig;
     auditLogging?: AuditLoggingConfig;
     summaryViewEnabled?: boolean;
     summaryHtmlTemplateId?: FollowupConfig['pdfTemplateId'];
@@ -825,6 +829,15 @@ export class Dashboard {
       return [{ when: whenShorthand, bypassFields }];
     })();
     const autoSave = this.normalizeAutoSave(parsed.autoSave || parsed.autosave || parsed.draftSave);
+    const recordFreshness = this.normalizeRecordFreshness(
+      parsed.recordFreshness !== undefined
+        ? parsed.recordFreshness
+        : parsed.freshness !== undefined
+          ? parsed.freshness
+          : parsed.recordVersionCheck !== undefined
+            ? parsed.recordVersionCheck
+            : parsed.staleRefresh
+    );
     const auditLogging = this.normalizeAuditLogging(
       parsed.auditLogging !== undefined
         ? parsed.auditLogging
@@ -1431,6 +1444,7 @@ export class Dashboard {
       !analytics?.widgets?.length &&
       !lifecycle?.rules?.length &&
       !autoSave &&
+      !recordFreshness &&
       !auditLogging &&
       summaryViewEnabled === undefined &&
       !summaryHtmlTemplateId &&
@@ -1488,6 +1502,7 @@ export class Dashboard {
       listViewMetric,
       analytics,
       autoSave,
+      recordFreshness,
       auditLogging,
       summaryViewEnabled,
       summaryHtmlTemplateId,
@@ -2498,6 +2513,29 @@ export class Dashboard {
         if (Number.isFinite(n)) dialog.duplicateAutoCloseMs = Math.max(0, Math.min(15000, Math.floor(n)));
       }
       if (Object.keys(dialog).length) cfg.dedupCheckDialog = dialog;
+    }
+    return Object.keys(cfg).length ? cfg : undefined;
+  }
+
+  private normalizeRecordFreshness(value: any): RecordFreshnessConfig | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'boolean') return { enabled: value };
+    if (typeof value !== 'object') return undefined;
+    const cfg: RecordFreshnessConfig = {};
+    if ((value as any).enabled !== undefined) cfg.enabled = Boolean((value as any).enabled);
+    const quietWindowRaw =
+      (value as any).quietWindowMs !== undefined
+        ? (value as any).quietWindowMs
+        : (value as any).intervalMs !== undefined
+          ? (value as any).intervalMs
+          : (value as any).checkEveryMs !== undefined
+            ? (value as any).checkEveryMs
+            : (value as any).idleWindowMs;
+    if (quietWindowRaw !== undefined && quietWindowRaw !== null) {
+      const n = Number(quietWindowRaw);
+      if (Number.isFinite(n)) {
+        cfg.quietWindowMs = Math.max(5000, Math.min(10 * 60 * 1000, Math.floor(n)));
+      }
     }
     return Object.keys(cfg).length ? cfg : undefined;
   }

@@ -144,6 +144,7 @@ export class DefinitionBuilder {
       startRoute: listView ? 'list' : 'form',
       followup: form.followupConfig,
       autoSave: form.autoSave,
+      recordFreshness: form.recordFreshness,
       summaryViewEnabled: form.summaryViewEnabled,
       summaryHtmlTemplateId: form.summaryHtmlTemplateId,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,

@@ -2910,6 +2910,21 @@ export interface AutoSaveConfig {
   dedupCheckDialog?: DedupCheckDialogConfig;
 }
 
+export interface RecordFreshnessConfig {
+  /**
+   * Enable lightweight background record freshness checks while an existing record stays open.
+   *
+   * Default: true
+   */
+  enabled?: boolean;
+  /**
+   * Quiet window (ms) after the last record-related server activity before the client pings `getRecordVersion`.
+   *
+   * Default: 30000
+   */
+  quietWindowMs?: number;
+}
+
 export interface DedupCheckDialogConfig {
   /**
    * Enable/disable the dedup check popup (when object is present). Default: true.
@@ -3305,6 +3320,11 @@ export interface FormConfig {
    * Configured via the dashboard “Follow-up Config (JSON)” column.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Optional background freshness behavior for existing records in the web edit view.
+   * Configured via the dashboard “Follow-up Config (JSON)” column.
+   */
+  recordFreshness?: RecordFreshnessConfig;
   /**
    * Optional audit logging behavior for this form.
    * Configured via the dashboard “Follow-up Config (JSON)” column.
@@ -4361,6 +4381,10 @@ export interface WebFormDefinition {
    * Optional draft autosave behavior for the web edit view.
    */
   autoSave?: AutoSaveConfig;
+  /**
+   * Optional background freshness behavior for existing records in the web edit view.
+   */
+  recordFreshness?: RecordFreshnessConfig;
   /**
    * Optional reservation lifecycle hooks for source forms that own inventory reservations.
    */

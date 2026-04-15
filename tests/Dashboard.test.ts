@@ -1333,6 +1333,35 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses record freshness config and aliases from dashboard config', () => {
+    const configJson = JSON.stringify({
+      staleRefresh: {
+        enabled: true,
+        intervalMs: 30000
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
+      ],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].recordFreshness).toEqual({
+      enabled: true,
+      quietWindowMs: 30000
+    });
+  });
+
   test('getForms parses dedup delete-on-key-change setting from dashboard config aliases', () => {
     const configJson = JSON.stringify({
       recreateOnDedupKeyChange: true

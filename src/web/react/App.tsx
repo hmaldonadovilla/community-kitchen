@@ -94,6 +94,11 @@ import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bun
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
 import {
+  resolveRecordFreshnessConfig,
+  resolveRecordFreshnessSyncBlockers,
+  resolveRecordFreshnessTimerDelay
+} from './app/recordFreshness';
+import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
 } from './app/reportPreviewAutosave';
@@ -752,6 +757,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     serverVersion?: number | null;
     serverRow?: number | null;
   }) => Promise<boolean>;
+  type MarkRecordStaleFn = (args: {
+    reason: string;
+    recordId: string;
+    cachedVersion?: number | null;
+    serverVersion?: number | null;
+    serverRow?: number | null;
+  }) => void;
   type RecordSyncNoticeState = {
     open: boolean;
     title: string;
@@ -2329,6 +2341,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   const recordSyncPromiseRef = useRef<Promise<boolean> | null>(null);
   const synchronizeStaleRecordRef = useRef<SynchronizeStaleRecordFn>(async () => false);
+  const markRecordStaleRef = useRef<MarkRecordStaleFn>(() => undefined);
   const draftSaveRequestFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastCompletedDraftSaveFingerprintRef = useRef<{ recordId: string; fingerprint: string } | null>(null);
   const lastDraftSaveFailureRef = useRef<{ message: string; recordId?: string | null } | null>(null);
@@ -2339,6 +2352,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
   const prevAutoSaveHoldRef = useRef<boolean>(false);
   const lastUserInteractionRef = useRef<number>(0);
+  const lastRecordServerActivityAtRef = useRef<number>(record && (record as any).id ? Date.now() : 0);
+  const recordFreshnessTimerRef = useRef<number | null>(null);
+  const recordFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
+  const performRecordFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
+  const pendingDeferredRecordFreshnessSyncRef = useRef<Parameters<SynchronizeStaleRecordFn>[0] | null>(null);
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
   const reservationSyncPromiseRef = useRef<
@@ -2385,6 +2403,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   } | null>(null);
   const guidedStepImmediateSyncActiveFingerprintRef = useRef<string>('');
   const guidedStepImmediateSyncPendingFingerprintRef = useRef<string>('');
+  const recordFreshnessConfigRef = useRef(resolveRecordFreshnessConfig((definition as any)?.recordFreshness));
+  const recordLoadingIdRef = useRef<string | null>(recordLoadingId);
   /**
    * Monotonic session counter used to ignore late async results (autosave, uploads, etc)
    * after the user switches to a different record/create flow.
@@ -2687,6 +2707,247 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [getCurrentKnownClientDataVersion, logEvent, runSerializedSubmissionRequest]
   );
 
+  const getCurrentOpenRecordId = useCallback(
+    () =>
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '',
+    []
+  );
+
+  const clearRecordFreshnessTimer = useCallback(() => {
+    if (recordFreshnessTimerRef.current) {
+      globalThis.clearTimeout(recordFreshnessTimerRef.current);
+      recordFreshnessTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRecordFreshnessCheck = useCallback(
+    (reason: string) => {
+      clearRecordFreshnessTimer();
+      const currentDataVersion = getCurrentKnownClientDataVersion();
+      const delayMs = resolveRecordFreshnessTimerDelay({
+        config: recordFreshnessConfigRef.current,
+        view: viewRef.current,
+        recordId: getCurrentOpenRecordId(),
+        hasServerVersion: Number.isFinite(Number(currentDataVersion)) && Number(currentDataVersion) > 0,
+        recordLoading: Boolean(recordLoadingIdRef.current),
+        now: Date.now(),
+        lastServerActivityAt: lastRecordServerActivityAtRef.current || null
+      });
+      if (delayMs === null) return;
+      const nextDelayMs = Math.max(1000, Math.floor(delayMs));
+      recordFreshnessTimerRef.current = globalThis.setTimeout(() => {
+        recordFreshnessTimerRef.current = null;
+        void performRecordFreshnessCheckRef.current('heartbeat');
+      }, nextDelayMs) as unknown as number;
+      logEvent('record.freshness.schedule', {
+        reason,
+        recordId: getCurrentOpenRecordId() || null,
+        delayMs: nextDelayMs,
+        quietWindowMs: recordFreshnessConfigRef.current.quietWindowMs
+      });
+    },
+    [clearRecordFreshnessTimer, getCurrentKnownClientDataVersion, getCurrentOpenRecordId, logEvent]
+  );
+
+  const markRecordFreshnessServerTouch = useCallback(
+    (args: { reason: string; recordId?: string | null }) => {
+      const currentRecordId = getCurrentOpenRecordId();
+      const targetRecordId = (args.recordId || currentRecordId || '').toString().trim();
+      if (currentRecordId && targetRecordId && currentRecordId !== targetRecordId) return;
+      lastRecordServerActivityAtRef.current = Date.now();
+      logEvent('record.freshness.touch', {
+        reason: args.reason,
+        recordId: targetRecordId || currentRecordId || null,
+        quietWindowMs: recordFreshnessConfigRef.current.quietWindowMs
+      });
+      scheduleRecordFreshnessCheck(args.reason);
+    },
+    [getCurrentOpenRecordId, logEvent, scheduleRecordFreshnessCheck]
+  );
+
+  const getRecordFreshnessSyncBlockers = useCallback(
+    () =>
+      resolveRecordFreshnessSyncBlockers({
+        dirty: autoSaveDirtyRef.current,
+        draftSavePhase: draftSave.phase,
+        autoSaveQueued: autoSaveQueuedRef.current,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        submissionInFlight: Boolean(submissionRequestPromiseRef.current) || submittingRef.current,
+        uploadInFlight: uploadQueueRef.current.size > 0,
+        recordSyncInFlight: Boolean(recordSyncPromiseRef.current) || Boolean(recordLoadingIdRef.current),
+        guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
+        guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
+        lastUserInteractionAt: lastUserInteractionRef.current || null,
+        now: Date.now()
+      }),
+    [draftSave.phase]
+  );
+
+  const performRecordFreshnessCheck = useCallback(
+    async (reason: string): Promise<void> => {
+      const recordId = getCurrentOpenRecordId();
+      const baselineVersionRaw = getCurrentKnownClientDataVersion();
+      const baselineVersion =
+        Number.isFinite(Number(baselineVersionRaw)) && Number(baselineVersionRaw) > 0 ? Number(baselineVersionRaw) : null;
+      const delayMs = resolveRecordFreshnessTimerDelay({
+        config: recordFreshnessConfigRef.current,
+        view: viewRef.current,
+        recordId,
+        hasServerVersion: baselineVersion !== null,
+        recordLoading: Boolean(recordLoadingIdRef.current),
+        now: Date.now(),
+        lastServerActivityAt: lastRecordServerActivityAtRef.current || null
+      });
+      if (delayMs === null || !recordId || baselineVersion === null) {
+        clearRecordFreshnessTimer();
+        return;
+      }
+      if (recordFreshnessCheckPromiseRef.current) {
+        logEvent('record.freshness.check.skipped', { reason, recordId, skipReason: 'inFlight' });
+        scheduleRecordFreshnessCheck(`${reason}.inFlight`);
+        return;
+      }
+      if (
+        autoSaveInFlightRef.current ||
+        draftSaveRequestInFlightRef.current ||
+        Boolean(submissionRequestPromiseRef.current) ||
+        uploadQueueRef.current.size > 0 ||
+        Boolean(recordSyncPromiseRef.current) ||
+        Boolean(guidedStepImmediateSyncPromiseRef.current) ||
+        Boolean(guidedStepBackgroundSyncPromiseRef.current) ||
+        submittingRef.current
+      ) {
+        logEvent('record.freshness.check.skipped', {
+          reason,
+          recordId,
+          skipReason: 'serverWorkInFlight',
+          uploadsInFlight: uploadQueueRef.current.size,
+          autoSaveInFlight: autoSaveInFlightRef.current,
+          draftSaveInFlight: draftSaveRequestInFlightRef.current,
+          submissionInFlight: Boolean(submissionRequestPromiseRef.current),
+          recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+          guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
+          guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
+        });
+        scheduleRecordFreshnessCheck(`${reason}.serverWorkInFlight`);
+        return;
+      }
+
+      const startedAt = Date.now();
+      lastRecordServerActivityAtRef.current = startedAt;
+      logEvent('record.freshness.check.start', {
+        reason,
+        recordId,
+        cachedVersion: baselineVersion,
+        rowNumberHint: recordRowNumberRef.current || null
+      });
+      const promise = (async () => {
+        try {
+          const result = await getRecordVersionApi(formKey, recordId, recordRowNumberRef.current || null);
+          if (selectedRecordIdRef.current !== recordId) return;
+          if (!result?.success) {
+            logEvent('record.freshness.check.error', {
+              reason,
+              recordId,
+              message: result?.message || 'failed',
+              durationMs: Date.now() - startedAt
+            });
+            scheduleRecordFreshnessCheck(`${reason}.error`);
+            return;
+          }
+
+          const serverVersion = Number(result.dataVersion);
+          const serverRow = Number.isFinite(Number(result.rowNumber)) ? Number(result.rowNumber) : null;
+          if (serverRow && serverRow >= 2) {
+            recordRowNumberRef.current = serverRow;
+          }
+          markRecordFreshnessServerTouch({ reason: `recordFreshness.${reason}`, recordId });
+          const localVersionNow = Number(getCurrentKnownClientDataVersion());
+          const effectiveBaseline =
+            Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : baselineVersion;
+          if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== effectiveBaseline) {
+            const syncBlockers = getRecordFreshnessSyncBlockers();
+            const shouldDeferSync = syncBlockers.length > 0;
+            logEvent('record.freshness.check.stale', {
+              reason,
+              recordId,
+              cachedVersion: effectiveBaseline,
+              serverVersion,
+              serverRow,
+              deferred: shouldDeferSync,
+              dirty: autoSaveDirtyRef.current,
+              draftSavePhase: draftSave.phase,
+              autoSaveQueued: autoSaveQueuedRef.current,
+              blockers: syncBlockers
+            });
+            if (shouldDeferSync) {
+              pendingDeferredRecordFreshnessSyncRef.current = {
+                reason: 'recordFreshness.stale',
+                recordId,
+                cachedVersion: effectiveBaseline,
+                serverVersion,
+                serverRow
+              };
+              markRecordStaleRef.current({
+                reason: 'recordFreshness.stale.deferred',
+                recordId,
+                cachedVersion: effectiveBaseline,
+                serverVersion,
+                serverRow
+              });
+              return;
+            }
+            pendingDeferredRecordFreshnessSyncRef.current = null;
+            await synchronizeStaleRecordRef.current({
+              reason: 'recordFreshness.stale',
+              recordId,
+              cachedVersion: effectiveBaseline,
+              serverVersion,
+              serverRow
+            });
+            return;
+          }
+
+          logEvent('record.freshness.check.match', {
+            reason,
+            recordId,
+            serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
+            durationMs: Date.now() - startedAt
+          });
+        } catch (err: any) {
+          logEvent('record.freshness.check.exception', {
+            reason,
+            recordId,
+            message: err?.message || err?.toString?.() || 'failed',
+            durationMs: Date.now() - startedAt
+          });
+          scheduleRecordFreshnessCheck(`${reason}.exception`);
+        } finally {
+          recordFreshnessCheckPromiseRef.current = null;
+        }
+      })();
+      recordFreshnessCheckPromiseRef.current = promise;
+      return promise;
+    },
+    [
+      clearRecordFreshnessTimer,
+      draftSave.phase,
+      formKey,
+      getCurrentKnownClientDataVersion,
+      getCurrentOpenRecordId,
+      getRecordFreshnessSyncBlockers,
+      logEvent,
+      markRecordFreshnessServerTouch,
+      scheduleRecordFreshnessCheck
+    ]
+  );
+  performRecordFreshnessCheckRef.current = performRecordFreshnessCheck;
+
   const applyUploadedFieldOverrides = useCallback(
     (args: {
       values: Record<string, FieldValue>;
@@ -2960,6 +3221,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     lastSubmissionMetaRef.current = lastSubmissionMeta;
   }, [lastSubmissionMeta]);
+  useEffect(() => {
+    recordLoadingIdRef.current = recordLoadingId;
+  }, [recordLoadingId]);
+
+  const resolvedRecordFreshness = useMemo(
+    () => resolveRecordFreshnessConfig((definition as any)?.recordFreshness),
+    [definition]
+  );
+
+  useEffect(() => {
+    recordFreshnessConfigRef.current = resolvedRecordFreshness;
+  }, [resolvedRecordFreshness]);
 
   const bumpRecordSession = useCallback(
     (args: { reason: string; nextRecordId?: string | null }) => {
@@ -2977,10 +3250,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedStepImmediateSyncPendingRef.current = null;
       guidedStepImmediateSyncActiveFingerprintRef.current = '';
       guidedStepImmediateSyncPendingFingerprintRef.current = '';
+      pendingDeferredRecordFreshnessSyncRef.current = null;
       pendingFollowupBatchPromisesRef.current.clear();
       lastDraftSaveFailureRef.current = null;
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;
+      recordFreshnessCheckPromiseRef.current = null;
+      lastRecordServerActivityAtRef.current = args?.nextRecordId ? Date.now() : 0;
+      if (recordFreshnessTimerRef.current) {
+        globalThis.clearTimeout(recordFreshnessTimerRef.current);
+        recordFreshnessTimerRef.current = null;
+      }
       recordSyncBusy.forceUnlock();
       setRecordSyncNotice({ open: false, title: '', message: '' });
       logEvent('record.session.bump', {
@@ -4250,6 +4530,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // Applying a fresh snapshot clears any "stale record" banner and updates our base dataVersion.
       recordStaleRef.current = null;
       setRecordStale(null);
+      pendingDeferredRecordFreshnessSyncRef.current = null;
       recordDataVersionRef.current =
         snapshot && Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : null;
       optimisticClientDataVersionRef.current = recordDataVersionRef.current;
@@ -4399,6 +4680,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [logEvent]
   );
+  markRecordStaleRef.current = markRecordStale;
 
   const loadRecordSnapshot = useCallback(
     async (recordId: string, rowNumberHint?: number): Promise<boolean> => {
@@ -4436,6 +4718,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (seq !== recordFetchSeqRef.current) return false;
         if (!snapshot) throw new Error('Record not found.');
         applyRecordSnapshot(snapshot);
+        markRecordFreshnessServerTouch({ reason: 'record.load', recordId: snapshot.id || recordId });
         logEvent('record.fetch.done', { recordId: snapshot.id || recordId, durationMs: Date.now() - startedAt });
         return true;
       } catch (err: any) {
@@ -4448,8 +4731,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return false;
       }
     },
-    [applyRecordSnapshot, formKey, logEvent, resolveLogMessage, resolveUiErrorMessage]
+    [applyRecordSnapshot, formKey, logEvent, markRecordFreshnessServerTouch, resolveLogMessage, resolveUiErrorMessage]
   );
+
+  useEffect(() => {
+    const currentDataVersion = getCurrentKnownClientDataVersion();
+    const delayMs = resolveRecordFreshnessTimerDelay({
+      config: resolvedRecordFreshness,
+      view,
+      recordId: getCurrentOpenRecordId(),
+      hasServerVersion: Number.isFinite(Number(currentDataVersion)) && Number(currentDataVersion) > 0,
+      recordLoading: Boolean(recordLoadingId),
+      now: Date.now(),
+      lastServerActivityAt: lastRecordServerActivityAtRef.current || null
+    });
+    if (delayMs === null) {
+      clearRecordFreshnessTimer();
+      return;
+    }
+    scheduleRecordFreshnessCheck('stateChange');
+    return clearRecordFreshnessTimer;
+  }, [
+    clearRecordFreshnessTimer,
+    getCurrentKnownClientDataVersion,
+    getCurrentOpenRecordId,
+    lastSubmissionMeta?.dataVersion,
+    lastSubmissionMeta?.id,
+    recordLoadingId,
+    resolvedRecordFreshness,
+    scheduleRecordFreshnessCheck,
+    selectedRecordId,
+    selectedRecordSnapshot?.id,
+    selectedRecordSnapshot?.dataVersion,
+    view
+  ]);
 
   const handleGlobalRefresh = useCallback(async () => {
     // Clear client caches (data sources + rendered HTML) to avoid stale derived content without requiring a full reload.
@@ -4480,6 +4795,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return recordSyncPromiseRef.current;
       }
 
+      pendingDeferredRecordFreshnessSyncRef.current = null;
       autoSaveDirtyRef.current = false;
       autoSaveQueuedRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -4571,6 +4887,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [loadRecordSnapshot, logEvent, recordSyncBusy, setStatus, setStatusLevel]
   );
   synchronizeStaleRecordRef.current = synchronizeStaleRecord;
+
+  useEffect(() => {
+    const pending = pendingDeferredRecordFreshnessSyncRef.current;
+    if (!pending) return;
+    if (view !== 'form') return;
+    const pendingRecordId = (pending.recordId || '').toString().trim();
+    const currentRecordId = getCurrentOpenRecordId();
+    if (!pendingRecordId || !currentRecordId) return;
+    if (pendingRecordId !== currentRecordId) {
+      pendingDeferredRecordFreshnessSyncRef.current = null;
+      return;
+    }
+    if (!recordStaleRef.current) return;
+    if (recordLoadingId || submitting || recordSyncPromiseRef.current) return;
+    const blockers = getRecordFreshnessSyncBlockers();
+    if (blockers.length > 0) return;
+    pendingDeferredRecordFreshnessSyncRef.current = null;
+    logEvent('record.freshness.deferred.resume', {
+      reason: pending.reason,
+      recordId: pendingRecordId,
+      cachedVersion: pending.cachedVersion ?? null,
+      serverVersion: pending.serverVersion ?? null,
+      serverRow: pending.serverRow ?? null
+    });
+    void synchronizeStaleRecordRef.current({
+      ...pending,
+      reason: `${pending.reason}.resume`
+    });
+  }, [draftSave.phase, getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent, recordLoadingId, recordStale?.recordId, submitting, view]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -7576,6 +7921,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         retryableAutoSaveFailureCountRef.current = 0;
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
         uploadedFieldValueOverridesRef.current.clear();
+        markRecordFreshnessServerTouch({ reason: 'record.autosave', recordId: newId || existingRecordId || null });
         logEvent('autosave.success', {
           reason,
           recordId: newId || null,
@@ -7671,6 +8017,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       language,
       logEvent,
+      markRecordFreshnessServerTouch,
       matchesClosedStatus,
       isRetryableRecordBusyMessage,
       resolveLogMessage,
@@ -8455,6 +8802,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordRowNumberRef.current = rn;
         }
         setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
+        markRecordFreshnessServerTouch({ reason: 'record.ensureDraftId', recordId });
         upsertListCacheRow({
           recordId,
           values: (draft as any).values as any,
@@ -8494,6 +8842,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       definition,
       formKey,
       logEvent,
+      markRecordFreshnessServerTouch,
       resolveAutoSaveStatus,
       resolveLogMessage,
       resolveUiErrorMessage,
@@ -8529,6 +8878,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           status: (result.status || null) as any,
           pdfUrl: (result.pdfUrl || '').toString() || undefined
         });
+        markRecordFreshnessServerTouch({ reason: 'record.followupBatch', recordId: args.recordId });
         logEvent('followup.batch.success', {
           action,
           recordId: args.recordId,
@@ -8554,7 +8904,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       return { followupErrors, byAction };
     },
-    [logEvent, upsertListCacheRow]
+    [logEvent, markRecordFreshnessServerTouch, upsertListCacheRow]
   );
 
   const refreshGuidedDataSourcesInBackground = useCallback(
@@ -8743,8 +9093,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : undefined,
         rowNumber: Number.isFinite(nextRowNumber) ? nextRowNumber : undefined
       });
+      markRecordFreshnessServerTouch({ reason: 'record.persist', recordId });
     },
-    [upsertListCacheRow]
+    [markRecordFreshnessServerTouch, upsertListCacheRow]
   );
 
   const applyLocalRecordStatus = useCallback(
@@ -9068,6 +9419,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reservationsApplied: reservationResult.reservationsApplied || 0,
           reservationsReleased: reservationResult.reservationsReleased || 0
         });
+        markRecordFreshnessServerTouch({ reason: 'record.reservationPlan', recordId: args.recordId });
         const availability = Array.isArray(reservationResult.availability)
           ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
           : [];
@@ -9125,7 +9477,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { success: false, message, applied: true };
       }
     },
-    [logEvent, openConfiguredConfirmDialog, resolveGuidedStepReservationPlan, resolveLogMessage]
+    [logEvent, markRecordFreshnessServerTouch, openConfiguredConfirmDialog, resolveGuidedStepReservationPlan, resolveLogMessage]
   );
 
   const queueGuidedStepReservationPlan = useCallback(
@@ -10399,6 +10751,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (record) {
       optimisticClientDataVersionRef.current =
         record && Number.isFinite(Number((record as any).dataVersion)) ? Number((record as any).dataVersion) : null;
+      lastRecordServerActivityAtRef.current = record.id ? Date.now() : 0;
       setLastSubmissionMeta({
         id: record.id,
         createdAt: record.createdAt,
@@ -10407,6 +10760,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         status: record.status || null
       });
       setSelectedRecordSnapshot(record);
+    } else {
+      lastRecordServerActivityAtRef.current = 0;
     }
   }, [dedupPrecheckRules, definition, record, rememberAutoSaveSeenState]);
 
@@ -10599,6 +10954,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 const serverVersion = Number(v.dataVersion);
                 const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : null;
                 if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+                markRecordFreshnessServerTouch({ reason: 'record.submitPrecheck', recordId: precheckRecordId });
                 const localVersionNow = Number(recordDataVersionRef.current);
                 const baselineVersion =
                   Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : Number(baseVersion);
@@ -11531,6 +11887,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               const serverVersion = Number(v.dataVersion);
               const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : undefined;
               if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
+              markRecordFreshnessServerTouch({ reason: 'record.versionCheck', recordId });
               const localVersionNow = Number(recordDataVersionRef.current);
               const baselineVersion =
                 Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : cachedVersion;
@@ -11544,9 +11901,37 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
                 serverRow: serverRow || null
               });
-              // Do NOT auto-refresh: show a banner so the user can explicitly refresh (avoids losing local changes).
               if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
-                markRecordStale({
+                const syncBlockers = getRecordFreshnessSyncBlockers();
+                const shouldDeferSync = syncBlockers.length > 0;
+                if (shouldDeferSync) {
+                  pendingDeferredRecordFreshnessSyncRef.current = {
+                    reason: 'versionCheck.stale',
+                    recordId,
+                    cachedVersion: baselineVersion,
+                    serverVersion,
+                    serverRow: serverRow || hintedRow || null
+                  };
+                  markRecordStale({
+                    reason: 'versionCheck.stale.deferred',
+                    recordId,
+                    cachedVersion: baselineVersion,
+                    serverVersion,
+                    serverRow: serverRow || hintedRow || null
+                  });
+                  logEvent('record.versionCheck.stale.deferred', {
+                    recordId,
+                    cachedVersion: baselineVersion,
+                    serverVersion,
+                    serverRow: serverRow || hintedRow || null,
+                    draftSavePhase: draftSave.phase,
+                    autoSaveQueued: autoSaveQueuedRef.current,
+                    blockers: syncBlockers
+                  });
+                  return;
+                }
+                pendingDeferredRecordFreshnessSyncRef.current = null;
+                void synchronizeStaleRecordRef.current({
                   reason: 'versionCheck.stale',
                   recordId,
                   cachedVersion: baselineVersion,
