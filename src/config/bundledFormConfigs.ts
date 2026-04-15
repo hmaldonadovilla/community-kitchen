@@ -7797,6 +7797,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "Dry carbohydrates",
           "Fresh vegetables",
           "Frozen vegetables",
+          "Grains & Cereals",
           "Herbs - spices - condiments",
           "Tins/Pots",
           "Vegan protein"
@@ -7808,6 +7809,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "Dry carbohydrates",
           "Fresh vegetables",
           "Frozen vegetables",
+          "Grains & Cereals",
           "Herbs - spices - condiments",
           "Tins/Pots",
           "Vegan protein"
@@ -7819,6 +7821,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "Dry carbohydrates",
           "Fresh vegetables",
           "Frozen vegetables",
+          "Grains & Cereals",
           "Herbs - spices - condiments",
           "Tins/Pots",
           "Vegan protein"
@@ -8188,7 +8191,7 @@ export const BUNDLED_FORM_CONFIGS = [
     ],
     "definition": {},
     "validationErrors": [],
-    "cacheFingerprint": "8ea9855d51bc1fea727f9a375ed273f0"
+    "cacheFingerprint": "c1251d141468907dff792003717b6b35"
   },
   {
     "formKey": "Config: Inventory Reservation Ledger",
