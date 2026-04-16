@@ -298,7 +298,8 @@ export const resolveRowFlowFieldTarget = (args: {
 };
 
 const resolveSegmentValues = (segment: RowFlowOutputSegmentConfig, target: RowFlowResolvedFieldTarget | null): FieldValue[] => {
-  if (((segment?.type || 'field').toString().trim().toLowerCase() === 'text')) return [];
+  const segmentType = ((segment?.type || 'field').toString().trim().toLowerCase() || 'field').trim();
+  if (segmentType === 'text' || segmentType === 'spacer') return [];
   if (!target || !segment?.fieldRef) return [];
   const fieldId = target.fieldId;
   if (!fieldId) return [];
@@ -307,7 +308,8 @@ const resolveSegmentValues = (segment: RowFlowOutputSegmentConfig, target: RowFl
 
 export const resolveRowFlowSegmentActionIds = (segment?: RowFlowOutputSegmentConfig | null): string[] => {
   if (!segment) return [];
-  if (((segment?.type || 'field').toString().trim().toLowerCase() === 'text')) return [];
+  const segmentType = ((segment?.type || 'field').toString().trim().toLowerCase() || 'field').trim();
+  if (segmentType === 'text' || segmentType === 'spacer') return [];
   const results: string[] = [];
   const seen = new Set<string>();
   const pushAction = (value?: unknown) => {
@@ -388,11 +390,12 @@ export const resolveRowFlowState = (args: {
   if (!config) return null;
   const references = resolveRowFlowReferences({ config, groupId, rowId, lineItems, subGroupIds });
   let textSegmentCounter = 0;
+  let spacerSegmentCounter = 0;
   const segments = (config.output?.segments || [])
     .map(segment => {
       const segmentType = ((segment?.type || 'field').toString() || 'field').trim().toLowerCase();
       const target =
-        segmentType === 'text'
+        segmentType === 'text' || segmentType === 'spacer'
           ? null
           : resolveRowFlowFieldTarget({
               fieldRef: segment.fieldRef || '',
@@ -403,7 +406,7 @@ export const resolveRowFlowState = (args: {
             });
       const values = resolveSegmentValues(segment, target);
       const fallbackTarget =
-        segmentType === 'text' || !segment.fallbackFieldRef
+        segmentType === 'text' || segmentType === 'spacer' || !segment.fallbackFieldRef
           ? null
           : resolveRowFlowFieldTarget({
               fieldRef: segment.fallbackFieldRef || '',
@@ -426,6 +429,7 @@ export const resolveRowFlowState = (args: {
       if (!showWhenOk) return null;
       if (
         segmentType !== 'text' &&
+        segmentType !== 'spacer' &&
         config.output?.hideEmpty &&
         values.length === 0 &&
         fallbackValues.length === 0 &&
@@ -436,6 +440,8 @@ export const resolveRowFlowState = (args: {
       const segmentId =
         segmentType === 'text'
           ? `text:${textSegmentCounter++}`
+          : segmentType === 'spacer'
+            ? `spacer:${spacerSegmentCounter++}`
           : (segment.fieldRef || '').toString();
       return {
         id: segmentId,

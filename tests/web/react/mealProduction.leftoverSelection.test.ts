@@ -374,9 +374,9 @@ describe('meal production leftover selection config', () => {
     const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');
     const target = leftoversStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
 
-    expect(target?.label?.en).toBe('Entire Dish Leftovers');
+    expect(target?.label?.en).toBe('Multi-ingredient leftovers');
     expect(target?.helperText?.en).toBe(
-      'Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.'
+      'Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.'
     );
     expect((target?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
       expect.arrayContaining([
@@ -384,7 +384,7 @@ describe('meal production leftover selection config', () => {
         'FINAL_QTY',
         'MP_LEFTOVER_RECIPE_CAPTURE',
         'MP_LEFTOVER_PORTIONS_CAPTURE',
-        'MP_LEFTOVER_STORAGE_CAPTURE'
+        'MP_LEFTOVER_FROZEN_CAPTURE'
       ])
     );
     expect(target?.subGroups?.include).toEqual(
@@ -471,17 +471,26 @@ describe('meal production leftover selection config', () => {
               controlStyle: 'compact'
             }),
             expect.objectContaining({
-              type: 'text',
-              text: expect.objectContaining({ en: ' | Store ' }),
+              type: 'spacer',
               showWhen: expect.objectContaining({
                 fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
                 greaterThan: 0
               })
             }),
             expect.objectContaining({
-              fieldRef: 'MP_LEFTOVER_STORAGE_CAPTURE',
+              type: 'text',
+              text: expect.objectContaining({ en: '❄️' }),
+              showWhen: expect.objectContaining({
+                fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
+                greaterThan: 0
+              })
+            }),
+            expect.objectContaining({
+              fieldRef: 'MP_LEFTOVER_FROZEN_CAPTURE',
               renderAs: 'control',
               controlStyle: 'compact',
+              minWidth: 32,
+              maxWidth: 32,
               showWhen: expect.objectContaining({
                 fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
                 greaterThan: 0
@@ -552,13 +561,14 @@ describe('meal production leftover selection config', () => {
     expect(question?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
     expect(question?.lineItemConfig?.ui).toEqual(
       expect.objectContaining({
-        tableColumns: ['LEFTOVER_INGREDIENT', 'LEFTOVER_QTY', 'LEFTOVER_UNIT', 'LEFTOVER_STORAGE'],
+        tableColumns: ['LEFTOVER_INGREDIENT', 'LEFTOVER_QTY', 'LEFTOVER_UNIT', 'LEFTOVER_FROZEN'],
         tableColumnWidths: expect.objectContaining({
-          LEFTOVER_STORAGE: '26%'
+          LEFTOVER_FROZEN: '18%'
         })
       })
     );
     const ingredientField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_INGREDIENT');
+    const frozenField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_FROZEN');
     const storageField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_STORAGE');
     const chilledExpiryField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_EXP_DATE_CHILLED');
     const frozenExpiryField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_EXP_DATE_FROZEN');
@@ -573,7 +583,43 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         defaultValue: 'Chilled',
         options: ['Chilled', 'Frozen'],
+        visibility: expect.objectContaining({
+          showWhen: expect.objectContaining({
+            fieldId: 'NEVER_SHOW'
+          })
+        }),
         selectionEffects: expect.arrayContaining([
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_FROZEN',
+            value: false
+          }),
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_FROZEN',
+            value: true
+          }),
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_EXP_DATE',
+            value: '$row.LEFTOVER_EXP_DATE_CHILLED'
+          }),
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_EXP_DATE',
+            value: '$row.LEFTOVER_EXP_DATE_FROZEN'
+          })
+        ])
+      })
+    );
+    expect(frozenField).toEqual(
+      expect.objectContaining({
+        labelEn: '❄️',
+        selectionEffects: expect.arrayContaining([
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_STORAGE',
+            value: 'Chilled'
+          }),
+          expect.objectContaining({
+            fieldId: 'LEFTOVER_STORAGE',
+            value: 'Frozen'
+          }),
           expect.objectContaining({
             fieldId: 'LEFTOVER_EXP_DATE',
             value: '$row.LEFTOVER_EXP_DATE_CHILLED'

@@ -7246,6 +7246,19 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     maxWidth: '100%',
                     ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 1 auto' })
                   };
+                  if (segmentType === 'spacer') {
+                    return (
+                      <span
+                        key={`${segment.id}-${idx}`}
+                        aria-hidden="true"
+                        style={{
+                          flex: '1 1 auto',
+                          minWidth: isBlockLayout ? '100%' : 0,
+                          width: isBlockLayout ? '100%' : undefined
+                        }}
+                      />
+                    );
+                  }
                   if (segmentType === 'text') {
                     const text = resolveLocalizedString(segment.config?.text, language, '');
                     if (!text) return null;
@@ -7513,6 +7526,63 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     : {})
                                 }}
                               />
+                              {segmentActions}
+                              {separatorNode}
+                            </span>
+                            {segmentHasError && (errors as any)?.[fieldPath] ? (
+                              <div className="error" style={{ marginTop: 0 }}>
+                                {(errors as any)[fieldPath]}
+                              </div>
+                            ) : null}
+                          </span>
+                        );
+                      }
+                      if (field.type === 'CHECKBOX') {
+                        const optionSet = toOptionSet(field);
+                        const hasAnyOption =
+                          !!((optionSet.en && optionSet.en.length) ||
+                            ((optionSet as any).fr && (optionSet as any).fr.length) ||
+                            ((optionSet as any).nl && (optionSet as any).nl.length));
+                        const isConsentCheckbox = !(field as any)?.dataSource && !hasAnyOption;
+                        if (!isConsentCheckbox) return null;
+                        const checked = !!(target.primaryRow.row?.values || {})[field.id];
+                        return (
+                          <span
+                            key={`${segment.config.fieldRef}-${idx}`}
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 4,
+                              minWidth: 0,
+                              maxWidth: '100%',
+                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
+                            }}
+                            data-field-path={fieldPath}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
+                              <label
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                  cursor: isLineFieldInputDisabled(field) ? 'default' : 'pointer'
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={isLineFieldInputDisabled(field)}
+                                  aria-label={resolveFieldLabel(field, language, field.id)}
+                                  onChange={e => {
+                                    if (isLineFieldInputDisabled(field)) return;
+                                    handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, e.target.checked);
+                                  }}
+                                  style={{ width: 20, height: 20, margin: 0 }}
+                                />
+                              </label>
                               {segmentActions}
                               {separatorNode}
                             </span>

@@ -13037,7 +13037,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   "MP_LEFTOVER_PORTIONS_CAPTURE",
                   "MP_LEFTOVER_RECIPE_CAPTURE",
-                  "MP_LEFTOVER_STORAGE_CAPTURE"
+                  "MP_LEFTOVER_FROZEN_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -13186,27 +13186,34 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
+                        "type": "spacer",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        }
+                      },
+                      {
                         "type": "text",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": " | Store ",
-                          "fr": " | Stocker ",
-                          "nl": " | Bewaar "
+                          "en": "❄️",
+                          "fr": "❄️",
+                          "nl": "❄️"
                         }
                       },
                       {
-                        "fieldRef": "MP_LEFTOVER_STORAGE_CAPTURE",
+                        "fieldRef": "MP_LEFTOVER_FROZEN_CAPTURE",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
                           "greaterThan": 0
                         },
                         "renderAs": "control",
                         "controlStyle": "compact",
-                        "minWidth": 110,
-                        "maxWidth": 150
+                        "minWidth": 32,
+                        "maxWidth": 32
                       }
                     ],
                     "actionsLayout": "below",
@@ -13303,14 +13310,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
                 "label": {
-                  "en": "Entire Dish Leftovers",
-                  "fr": "Entire Dish Leftovers",
-                  "nl": "Entire Dish Leftovers"
+                  "en": "Multi-ingredient leftovers",
+                  "fr": "Multi-ingredient leftovers",
+                  "nl": "Multi-ingredient leftovers"
                 },
                 "helperText": {
-                  "en": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
-                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
-                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients."
+                  "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
+                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
+                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage."
                 },
                 "groupOverride": {
                   "totals": []
@@ -14000,14 +14007,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_INGREDIENT",
               "LEFTOVER_QTY",
               "LEFTOVER_UNIT",
-              "LEFTOVER_STORAGE"
+              "LEFTOVER_FROZEN"
             ],
             "addButtonPlacement": "top",
             "tableColumnWidths": {
-              "LEFTOVER_INGREDIENT": "42%",
+              "LEFTOVER_INGREDIENT": "46%",
               "LEFTOVER_QTY": "18%",
-              "LEFTOVER_UNIT": "14%",
-              "LEFTOVER_STORAGE": "26%",
+              "LEFTOVER_UNIT": "18%",
+              "LEFTOVER_FROZEN": "18%",
               "__remove": "44px"
             },
             "openInOverlay": false,
@@ -14301,6 +14308,56 @@ export const BUNDLED_FORM_CONFIGS = [
               ]
             },
             {
+              "id": "LEFTOVER_FROZEN",
+              "type": "CHECKBOX",
+              "labelEn": "❄️",
+              "labelFr": "❄️",
+              "labelNl": "❄️",
+              "required": false,
+              "selectionEffects": [
+                {
+                  "id": "set_leftover_storage_from_checkbox_chilled",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_STORAGE",
+                  "when": {
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "equals": false
+                  },
+                  "value": "Chilled"
+                },
+                {
+                  "id": "set_leftover_storage_from_checkbox_frozen",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_STORAGE",
+                  "when": {
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "equals": true
+                  },
+                  "value": "Frozen"
+                },
+                {
+                  "id": "set_leftover_exp_date_from_checkbox_chilled",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_EXP_DATE",
+                  "when": {
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "equals": false
+                  },
+                  "value": "$row.LEFTOVER_EXP_DATE_CHILLED"
+                },
+                {
+                  "id": "set_leftover_exp_date_from_checkbox_frozen",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_EXP_DATE",
+                  "when": {
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "equals": true
+                  },
+                  "value": "$row.LEFTOVER_EXP_DATE_FROZEN"
+                }
+              ]
+            },
+            {
               "id": "LEFTOVER_STORAGE",
               "type": "CHOICE",
               "labelEn": "Storage",
@@ -14308,6 +14365,14 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelNl": "Bewaring",
               "required": false,
               "defaultValue": "Chilled",
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
               "ui": {
                 "control": "select"
               },
@@ -14341,6 +14406,30 @@ export const BUNDLED_FORM_CONFIGS = [
                 }
               ],
               "selectionEffects": [
+                {
+                  "id": "set_leftover_checkbox_from_storage_chilled",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_FROZEN",
+                  "when": {
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "equals": [
+                      "Chilled"
+                    ]
+                  },
+                  "value": false
+                },
+                {
+                  "id": "set_leftover_checkbox_from_storage_frozen",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_FROZEN",
+                  "when": {
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "equals": [
+                      "Frozen"
+                    ]
+                  },
+                  "value": true
+                },
                 {
                   "id": "set_leftover_exp_date_chilled",
                   "type": "setValue",
@@ -15578,6 +15667,64 @@ export const BUNDLED_FORM_CONFIGS = [
               }
             },
             {
+              "id": "MP_LEFTOVER_FROZEN_CAPTURE",
+              "type": "CHECKBOX",
+              "labelEn": "❄️",
+              "labelFr": "❄️",
+              "labelNl": "❄️",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "leftovers"
+                  ]
+                }
+              },
+              "selectionEffects": [
+                {
+                  "id": "set_mp_leftover_storage_from_checkbox_chilled",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "equals": false
+                  },
+                  "value": "Chilled"
+                },
+                {
+                  "id": "set_mp_leftover_storage_from_checkbox_frozen",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "equals": true
+                  },
+                  "value": "Frozen"
+                },
+                {
+                  "id": "set_mp_leftover_exp_date_from_checkbox_chilled",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "equals": false
+                  },
+                  "value": "$row.MP_LEFTOVER_EXP_DATE_CHILLED"
+                },
+                {
+                  "id": "set_mp_leftover_exp_date_from_checkbox_frozen",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "equals": true
+                  },
+                  "value": "$row.MP_LEFTOVER_EXP_DATE_FROZEN"
+                }
+              ]
+            },
+            {
               "id": "MP_LEFTOVER_STORAGE_CAPTURE",
               "type": "CHOICE",
               "labelEn": "Storage",
@@ -15587,9 +15734,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "defaultValue": "Chilled",
               "visibility": {
                 "showWhen": {
-                  "fieldId": "__ckStep",
+                  "fieldId": "NEVER_SHOW",
                   "equals": [
-                    "leftovers"
+                    "1"
                   ]
                 }
               },
@@ -15636,6 +15783,30 @@ export const BUNDLED_FORM_CONFIGS = [
                 }
               ],
               "selectionEffects": [
+                {
+                  "id": "set_mp_leftover_checkbox_from_storage_chilled",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": [
+                      "Chilled"
+                    ]
+                  },
+                  "value": false
+                },
+                {
+                  "id": "set_mp_leftover_checkbox_from_storage_frozen",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": [
+                      "Frozen"
+                    ]
+                  },
+                  "value": true
+                },
                 {
                   "id": "set_mp_leftover_exp_date_capture_chilled",
                   "type": "setValue",
@@ -17558,14 +17729,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "LEFTOVER_INGREDIENT",
                 "LEFTOVER_QTY",
                 "LEFTOVER_UNIT",
-                "LEFTOVER_STORAGE"
+                "LEFTOVER_FROZEN"
               ],
               "addButtonPlacement": "top",
               "tableColumnWidths": {
-                "LEFTOVER_INGREDIENT": "42%",
+                "LEFTOVER_INGREDIENT": "46%",
                 "LEFTOVER_QTY": "18%",
-                "LEFTOVER_UNIT": "14%",
-                "LEFTOVER_STORAGE": "26%",
+                "LEFTOVER_UNIT": "18%",
+                "LEFTOVER_FROZEN": "18%",
                 "__remove": "44px"
               },
               "openInOverlay": false,
@@ -17859,6 +18030,56 @@ export const BUNDLED_FORM_CONFIGS = [
                 ]
               },
               {
+                "id": "LEFTOVER_FROZEN",
+                "type": "CHECKBOX",
+                "labelEn": "❄️",
+                "labelFr": "❄️",
+                "labelNl": "❄️",
+                "required": false,
+                "selectionEffects": [
+                  {
+                    "id": "set_leftover_storage_from_checkbox_chilled",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "when": {
+                      "fieldId": "LEFTOVER_FROZEN",
+                      "equals": false
+                    },
+                    "value": "Chilled"
+                  },
+                  {
+                    "id": "set_leftover_storage_from_checkbox_frozen",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "when": {
+                      "fieldId": "LEFTOVER_FROZEN",
+                      "equals": true
+                    },
+                    "value": "Frozen"
+                  },
+                  {
+                    "id": "set_leftover_exp_date_from_checkbox_chilled",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_EXP_DATE",
+                    "when": {
+                      "fieldId": "LEFTOVER_FROZEN",
+                      "equals": false
+                    },
+                    "value": "$row.LEFTOVER_EXP_DATE_CHILLED"
+                  },
+                  {
+                    "id": "set_leftover_exp_date_from_checkbox_frozen",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_EXP_DATE",
+                    "when": {
+                      "fieldId": "LEFTOVER_FROZEN",
+                      "equals": true
+                    },
+                    "value": "$row.LEFTOVER_EXP_DATE_FROZEN"
+                  }
+                ]
+              },
+              {
                 "id": "LEFTOVER_STORAGE",
                 "type": "CHOICE",
                 "labelEn": "Storage",
@@ -17866,6 +18087,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelNl": "Bewaring",
                 "required": false,
                 "defaultValue": "Chilled",
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
                 "ui": {
                   "control": "select"
                 },
@@ -17899,6 +18128,30 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 ],
                 "selectionEffects": [
+                  {
+                    "id": "set_leftover_checkbox_from_storage_chilled",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "when": {
+                      "fieldId": "LEFTOVER_STORAGE",
+                      "equals": [
+                        "Chilled"
+                      ]
+                    },
+                    "value": false
+                  },
+                  {
+                    "id": "set_leftover_checkbox_from_storage_frozen",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_FROZEN",
+                    "when": {
+                      "fieldId": "LEFTOVER_STORAGE",
+                      "equals": [
+                        "Frozen"
+                      ]
+                    },
+                    "value": true
+                  },
                   {
                     "id": "set_leftover_exp_date_chilled",
                     "type": "setValue",
@@ -19195,6 +19448,64 @@ export const BUNDLED_FORM_CONFIGS = [
                 }
               },
               {
+                "id": "MP_LEFTOVER_FROZEN_CAPTURE",
+                "type": "CHECKBOX",
+                "labelEn": "❄️",
+                "labelFr": "❄️",
+                "labelNl": "❄️",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  }
+                },
+                "selectionEffects": [
+                  {
+                    "id": "set_mp_leftover_storage_from_checkbox_chilled",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                      "equals": false
+                    },
+                    "value": "Chilled"
+                  },
+                  {
+                    "id": "set_mp_leftover_storage_from_checkbox_frozen",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                      "equals": true
+                    },
+                    "value": "Frozen"
+                  },
+                  {
+                    "id": "set_mp_leftover_exp_date_from_checkbox_chilled",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                      "equals": false
+                    },
+                    "value": "$row.MP_LEFTOVER_EXP_DATE_CHILLED"
+                  },
+                  {
+                    "id": "set_mp_leftover_exp_date_from_checkbox_frozen",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                      "equals": true
+                    },
+                    "value": "$row.MP_LEFTOVER_EXP_DATE_FROZEN"
+                  }
+                ]
+              },
+              {
                 "id": "MP_LEFTOVER_STORAGE_CAPTURE",
                 "type": "CHOICE",
                 "labelEn": "Storage",
@@ -19204,9 +19515,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 "defaultValue": "Chilled",
                 "visibility": {
                   "showWhen": {
-                    "fieldId": "__ckStep",
+                    "fieldId": "NEVER_SHOW",
                     "equals": [
-                      "leftovers"
+                      "1"
                     ]
                   }
                 },
@@ -19253,6 +19564,30 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 ],
                 "selectionEffects": [
+                  {
+                    "id": "set_mp_leftover_checkbox_from_storage_chilled",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                      "equals": [
+                        "Chilled"
+                      ]
+                    },
+                    "value": false
+                  },
+                  {
+                    "id": "set_mp_leftover_checkbox_from_storage_frozen",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_FROZEN_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                      "equals": [
+                        "Frozen"
+                      ]
+                    },
+                    "value": true
+                  },
                   {
                     "id": "set_mp_leftover_exp_date_capture_chilled",
                     "type": "setValue",
@@ -23561,7 +23896,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   "MP_LEFTOVER_PORTIONS_CAPTURE",
                   "MP_LEFTOVER_RECIPE_CAPTURE",
-                  "MP_LEFTOVER_STORAGE_CAPTURE"
+                  "MP_LEFTOVER_FROZEN_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -23710,27 +24045,34 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
+                        "type": "spacer",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        }
+                      },
+                      {
                         "type": "text",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": " | Store ",
-                          "fr": " | Stocker ",
-                          "nl": " | Bewaar "
+                          "en": "❄️",
+                          "fr": "❄️",
+                          "nl": "❄️"
                         }
                       },
                       {
-                        "fieldRef": "MP_LEFTOVER_STORAGE_CAPTURE",
+                        "fieldRef": "MP_LEFTOVER_FROZEN_CAPTURE",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
                           "greaterThan": 0
                         },
                         "renderAs": "control",
                         "controlStyle": "compact",
-                        "minWidth": 110,
-                        "maxWidth": 150
+                        "minWidth": 32,
+                        "maxWidth": 32
                       }
                     ],
                     "actionsLayout": "below",
@@ -23827,14 +24169,14 @@ export const BUNDLED_FORM_CONFIGS = [
                 "collapsedFieldsInHeader": true,
                 "displayMode": "inline",
                 "label": {
-                  "en": "Entire Dish Leftovers",
-                  "fr": "Entire Dish Leftovers",
-                  "nl": "Entire Dish Leftovers"
+                  "en": "Multi-ingredient leftovers",
+                  "fr": "Multi-ingredient leftovers",
+                  "nl": "Multi-ingredient leftovers"
                 },
                 "helperText": {
-                  "en": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
-                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.",
-                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients."
+                  "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
+                  "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
+                  "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage."
                 },
                 "groupOverride": {
                   "totals": []
@@ -24066,7 +24408,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "48708264f187f8135a7596379ee7751a"
+    "cacheFingerprint": "d543ad3553917fa4507699a7ccd86864"
   },
   {
     "formKey": "Config: Recipes",

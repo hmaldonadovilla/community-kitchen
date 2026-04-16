@@ -3998,10 +3998,11 @@ components:
       properties:
         type:
           type: string
-          enum: [field, text]
+          enum: [field, text, spacer]
           description: |
             - field: resolve `fieldRef` against the current row or a named reference (default)
             - text: render a static localized text segment from `text`
+            - spacer: render a flexible blank inline segment that pushes later content toward the row end
         fieldRef:
           type: string
           description: Parent field id or reference field (e.g., "childRef.RECIPE").

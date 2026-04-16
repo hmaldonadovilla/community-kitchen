@@ -482,9 +482,9 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoversQuestionIds.has('MP_LEFTOVER_CAPTURE_LI')).toBe(true);
 
       const leftoversMeals = leftoversInclude.find((entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST');
-      expect(leftoversMeals?.label?.en).toBe('Entire Dish Leftovers');
+      expect(leftoversMeals?.label?.en).toBe('Multi-ingredient leftovers');
       expect(leftoversMeals?.helperText?.en).toBe(
-        'Leave empty if no leftover.\nEnter a value > 0 for full dish leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.'
+        'Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.'
       );
       expect(leftoversMeals?.groupOverride).toEqual(
         expect.objectContaining({
@@ -498,7 +498,7 @@ describe('staging integrity dialogs and list legend config', () => {
           'FINAL_QTY',
           'MP_LEFTOVER_RECIPE_CAPTURE',
           'MP_LEFTOVER_PORTIONS_CAPTURE',
-          'MP_LEFTOVER_STORAGE_CAPTURE'
+          'MP_LEFTOVER_FROZEN_CAPTURE'
         ])
       );
       expect(leftoversMeals?.subGroups?.include).toEqual(
@@ -577,11 +577,14 @@ describe('staging integrity dialogs and list legend config', () => {
         'LEFTOVER_INGREDIENT',
         'LEFTOVER_QTY',
         'LEFTOVER_UNIT',
-        'LEFTOVER_STORAGE'
+        'LEFTOVER_FROZEN'
       ]);
       expect(partialLeftovers?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
       const singleIngredientField = (partialLeftovers?.lineItemConfig?.fields || []).find(
         (entry: any) => entry?.id === 'LEFTOVER_INGREDIENT'
+      );
+      const singleIngredientFrozenField = (partialLeftovers?.lineItemConfig?.fields || []).find(
+        (entry: any) => entry?.id === 'LEFTOVER_FROZEN'
       );
       const singleIngredientStorageField = (partialLeftovers?.lineItemConfig?.fields || []).find(
         (entry: any) => entry?.id === 'LEFTOVER_STORAGE'
@@ -593,10 +596,20 @@ describe('staging integrity dialogs and list legend config', () => {
           helperText: expect.objectContaining({ en: 'Search ingredients' })
         })
       );
+      expect(singleIngredientFrozenField).toEqual(
+        expect.objectContaining({
+          labelEn: '❄️'
+        })
+      );
       expect(singleIngredientStorageField).toEqual(
         expect.objectContaining({
           defaultValue: 'Chilled',
-          options: ['Chilled', 'Frozen']
+          options: ['Chilled', 'Frozen'],
+          visibility: expect.objectContaining({
+            showWhen: expect.objectContaining({
+              fieldId: 'NEVER_SHOW'
+            })
+          })
         })
       );
 
@@ -606,15 +619,26 @@ describe('staging integrity dialogs and list legend config', () => {
       const meals = findQuestion(questions || [], 'MP_MEALS_REQUEST');
       const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
+      const leftoverFrozenField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_FROZEN_CAPTURE');
       const leftoverStorageField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_STORAGE_CAPTURE');
       const leftoverFrozenExpiryField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_EXP_DATE_FROZEN');
       expect(leftoverPortionsField?.defaultValue).toBeUndefined();
       expect(leftoverPortionsField?.ui?.helperText).toBeUndefined();
       expect(mealFields.some((entry: any) => entry?.id === 'MP_LEFTOVER_RECIPE_CAPTURE')).toBe(true);
+      expect(leftoverFrozenField).toEqual(
+        expect.objectContaining({
+          labelEn: '❄️'
+        })
+      );
       expect(leftoverStorageField).toEqual(
         expect.objectContaining({
           defaultValue: 'Chilled',
-          options: ['Chilled', 'Frozen']
+          options: ['Chilled', 'Frozen'],
+          visibility: expect.objectContaining({
+            showWhen: expect.objectContaining({
+              fieldId: 'NEVER_SHOW'
+            })
+          })
         })
       );
       expect(leftoverFrozenExpiryField?.derivedValue).toEqual(

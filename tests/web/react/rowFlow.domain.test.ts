@@ -106,6 +106,48 @@ describe('rowFlow domain', () => {
     ]);
   });
 
+  it('keeps spacer segments in the resolved output order', () => {
+    const lineItems: any = {
+      MEALS: [{ id: 'r1', values: { MEAL_TYPE: 'Vegetarian', MP_LEFTOVER_PORTIONS_CAPTURE: 5, MP_LEFTOVER_FROZEN_CAPTURE: true } }]
+    };
+
+    const rowFlow: any = {
+      output: {
+        separator: '',
+        hideEmpty: true,
+        segments: [
+          { fieldRef: 'MEAL_TYPE', label: { en: '{{value}} | ' } },
+          { type: 'text', text: { en: 'Yield ' } },
+          { fieldRef: 'MP_LEFTOVER_PORTIONS_CAPTURE', renderAs: 'control', controlStyle: 'compact' },
+          { type: 'text', text: { en: ' portions' } },
+          { type: 'spacer' },
+          { type: 'text', text: { en: '❄️' } },
+          { fieldRef: 'MP_LEFTOVER_FROZEN_CAPTURE', renderAs: 'control', controlStyle: 'compact' }
+        ]
+      },
+      prompts: []
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MEAL_TYPE: 'Vegetarian', MP_LEFTOVER_PORTIONS_CAPTURE: 5, MP_LEFTOVER_FROZEN_CAPTURE: true },
+      lineItems,
+      subGroupIds: []
+    });
+
+    expect(state?.segments.map(segment => segment.id)).toEqual([
+      'MEAL_TYPE',
+      'text:0',
+      'MP_LEFTOVER_PORTIONS_CAPTURE',
+      'text:1',
+      'spacer:0',
+      'text:2',
+      'MP_LEFTOVER_FROZEN_CAPTURE'
+    ]);
+  });
+
   it('selects the first incomplete prompt while keeping completed prompts visible', () => {
     const lineItems: any = {
       MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'No' } }],

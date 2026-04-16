@@ -4029,7 +4029,7 @@ export interface RowFlowOutputSegmentFormatConfig {
 }
 
 export interface RowFlowOutputSegmentConfig {
-  type?: 'field' | 'text';
+  type?: 'field' | 'text' | 'spacer';
   /**
    * Optional segment layout.
    * - inline: render in the current output line (default)
