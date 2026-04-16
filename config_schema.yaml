@@ -4005,6 +4005,12 @@ components:
         fieldRef:
           type: string
           description: Parent field id or reference field (e.g., "childRef.RECIPE").
+        layout:
+          type: string
+          enum: [inline, block]
+          description: |
+            - inline: render in the current output line (default)
+            - block: render on a new full-width line within the row output
         fallbackFieldRef:
           type: string
           description: Optional field/reference used when `fieldRef` resolves to no value.

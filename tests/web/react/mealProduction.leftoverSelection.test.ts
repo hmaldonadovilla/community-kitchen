@@ -147,6 +147,10 @@ describe('meal production leftover selection config', () => {
             PREP_TYPE: 'Part dish',
             PREP_QTY: '$row.LEFTOVER_USE_QTY',
             LEFTOVER_ID: '$row.LEFTOVER_ID',
+            LEFTOVER_DISPLAY_UNIT: '$source.LEFTOVER_UNIT',
+            LEFTOVER_SUMMARY_ACTION: '',
+            LEFTOVER_SUMMARY_AMOUNT_SOURCE: '$row.LEFTOVER_USE_QTY',
+            LEFTOVER_SUMMARY_UNIT_PREFIX: ' ',
             RECIPE: '$source.LEFTOVER_INGREDIENT',
             LEFTOVER_RECORD_ID: '$source.id',
             MP_INGREDIENTS_LI: [
@@ -166,7 +170,11 @@ describe('meal production leftover selection config', () => {
             PREP_TYPE: 'Entire dish',
             PREP_QTY: '$row.LEFTOVER_USE_QTY',
             LEFTOVER_ID: '$row.LEFTOVER_ID',
+            LEFTOVER_DISPLAY_UNIT: 'portions',
             LEFTOVER_USAGE_MODE: '$row.LEFTOVER_USAGE_MODE',
+            LEFTOVER_SUMMARY_ACTION: 'reheat ',
+            LEFTOVER_SUMMARY_AMOUNT_SOURCE: '$row.LEFTOVER_USE_QTY',
+            LEFTOVER_SUMMARY_UNIT_PREFIX: ' ',
             RECIPE: '$source.LEFTOVER_RECIPE',
             LEFTOVER_RECORD_ID: '$source.id',
             MP_INGREDIENTS_LI: '$source.LEFTOVER_INGREDIENTS_LI'
@@ -178,7 +186,11 @@ describe('meal production leftover selection config', () => {
             PREP_TYPE: 'Entire dish',
             PREP_QTY: 0,
             LEFTOVER_ID: '$row.LEFTOVER_ID',
+            LEFTOVER_DISPLAY_UNIT: '',
             LEFTOVER_USAGE_MODE: '$row.LEFTOVER_USAGE_MODE',
+            LEFTOVER_SUMMARY_ACTION: 'combine',
+            LEFTOVER_SUMMARY_AMOUNT_SOURCE: '',
+            LEFTOVER_SUMMARY_UNIT_PREFIX: '',
             RECIPE: '$source.LEFTOVER_RECIPE',
             LEFTOVER_RECORD_ID: '$source.id',
             MP_INGREDIENTS_LI: '$source.LEFTOVER_INGREDIENTS_LI'
@@ -259,6 +271,100 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         enabled: true,
         ledgerFormKey: 'Config: Inventory Reservation Ledger'
+      })
+    );
+  });
+
+  it('configures the Production step to show selected leftovers below the to-cook summary', () => {
+    const definition = getDefinition();
+    const exported = getExport();
+    const definitionStep = definition.steps?.items?.find((step: any) => step.id === 'deliveryForm');
+    const formStep = exported.form?.steps?.items?.find((step: any) => step.id === 'deliveryForm');
+    const definitionTarget = definitionStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
+    const formTarget = formStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
+    const question = definition.questions.find(q => q.id === 'MP_MEALS_REQUEST') as any;
+    const typeGroup = (question?.lineItemConfig?.subGroups || []).find((entry: any) => entry?.id === 'MP_TYPE_LI');
+    const fieldIds = (typeGroup?.fields || []).map((entry: any) => entry?.id);
+    const summaryField = (typeGroup?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_SUMMARY');
+
+    expect(definitionTarget?.rowFlow?.references).toEqual(
+      expect.objectContaining({
+        cookRow: expect.objectContaining({
+          groupId: 'MP_TYPE_LI',
+          match: 'first'
+        }),
+        leftoverRows: expect.objectContaining({
+          groupId: 'MP_TYPE_LI',
+          match: 'any',
+          rowFilter: expect.objectContaining({
+            includeWhen: expect.objectContaining({
+              all: expect.arrayContaining([
+                expect.objectContaining({ fieldId: 'LEFTOVER_ID', notEmpty: true }),
+                expect.objectContaining({ fieldId: 'PREP_TYPE', equals: ['Entire dish', 'Part dish'] })
+              ])
+            })
+          })
+        })
+      })
+    );
+    expect(definitionTarget?.rowFlow?.output).toEqual(
+      expect.objectContaining({
+        separator: ' | ',
+        hideEmpty: true,
+        segments: [
+          expect.objectContaining({ fieldRef: 'MEAL_TYPE' }),
+          expect.objectContaining({
+            fieldRef: 'MP_TO_COOK',
+            label: expect.objectContaining({ en: 'To cook' })
+          }),
+          expect.objectContaining({
+            fieldRef: 'leftoverRows.LEFTOVER_SUMMARY',
+            layout: 'block',
+            format: expect.objectContaining({
+              type: 'list',
+              listDelimiter: '\n',
+              unique: false
+            })
+          })
+        ]
+      })
+    );
+    expect(formTarget?.rowFlow?.output).toEqual(definitionTarget?.rowFlow?.output);
+    expect(fieldIds).toEqual(
+      expect.arrayContaining([
+        'LEFTOVER_DISPLAY_UNIT',
+        'LEFTOVER_SUMMARY_ACTION',
+        'LEFTOVER_SUMMARY_AMOUNT_SOURCE',
+        'LEFTOVER_SUMMARY_UNIT_PREFIX',
+        'LEFTOVER_SUMMARY_UNIT',
+        'LEFTOVER_SUMMARY_AMOUNT',
+        'LEFTOVER_SUMMARY'
+      ])
+    );
+    const summaryUnitField = (typeGroup?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_SUMMARY_UNIT');
+    const summaryAmountField = (typeGroup?.fields || []).find((entry: any) => entry?.id === 'LEFTOVER_SUMMARY_AMOUNT');
+    expect(summaryUnitField?.derivedValue).toEqual(
+      expect.objectContaining({
+        op: 'template',
+        template: '{LEFTOVER_SUMMARY_UNIT_PREFIX}{LEFTOVER_DISPLAY_UNIT}',
+        when: 'always',
+        hidden: true
+      })
+    );
+    expect(summaryAmountField?.derivedValue).toEqual(
+      expect.objectContaining({
+        op: 'template',
+        template: '{LEFTOVER_SUMMARY_AMOUNT_SOURCE}{LEFTOVER_SUMMARY_UNIT}',
+        when: 'always',
+        hidden: true
+      })
+    );
+    expect(summaryField?.derivedValue).toEqual(
+      expect.objectContaining({
+        op: 'template',
+        template: '{LEFTOVER_ID} | {RECIPE} | {LEFTOVER_SUMMARY_ACTION}{LEFTOVER_SUMMARY_AMOUNT}',
+        when: 'always',
+        hidden: true
       })
     );
   });

@@ -11397,6 +11397,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
+                          "LEFTOVER_SUMMARY_ACTION": "",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "$row.LEFTOVER_USE_QTY",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": " ",
                           "MP_INGREDIENTS_LI": [
                             {
                               "ING": "$source.LEFTOVER_INGREDIENT",
@@ -11405,7 +11408,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "CAT": "$source.LEFTOVER_CAT",
                               "ALLERGEN": "$source.LEFTOVER_ALLERGEN"
                             }
-                          ]
+                          ],
+                          "LEFTOVER_DISPLAY_UNIT": "$source.LEFTOVER_UNIT"
                         },
                         "skipTargetOptionFilters": true
                       },
@@ -11447,7 +11451,11 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
-                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI"
+                          "LEFTOVER_SUMMARY_ACTION": "reheat ",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "$row.LEFTOVER_USE_QTY",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": " ",
+                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI",
+                          "LEFTOVER_DISPLAY_UNIT": "portions"
                         },
                         "skipTargetOptionFilters": true
                       },
@@ -11489,7 +11497,11 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
-                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI"
+                          "LEFTOVER_SUMMARY_ACTION": "combine",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": "",
+                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI",
+                          "LEFTOVER_DISPLAY_UNIT": ""
                         },
                         "skipTargetOptionFilters": true
                       }
@@ -12332,6 +12344,27 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         }
                       }
+                    },
+                    "leftoverRows": {
+                      "groupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "all": [
+                            {
+                              "fieldId": "LEFTOVER_ID",
+                              "notEmpty": true
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish"
+                              ]
+                            }
+                          ]
+                        }
+                      }
                     }
                   },
                   "output": {
@@ -12342,9 +12375,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fieldRef": "MEAL_TYPE"
                       },
                       {
-                        "fieldRef": "ORD_QTY"
-                      },
-                      {
                         "fieldRef": "MP_TO_COOK",
                         "label": {
                           "en": "To cook"
@@ -12352,6 +12382,15 @@ export const BUNDLED_FORM_CONFIGS = [
                         "showWhen": {
                           "fieldId": "MP_TO_COOK",
                           "greaterThan": 0
+                        }
+                      },
+                      {
+                        "fieldRef": "leftoverRows.LEFTOVER_SUMMARY",
+                        "layout": "block",
+                        "format": {
+                          "type": "list",
+                          "listDelimiter": "\n",
+                          "unique": false
                         }
                       }
                     ]
@@ -15881,6 +15920,129 @@ export const BUNDLED_FORM_CONFIGS = [
                   "options": [],
                   "optionsFr": [],
                   "optionsNl": []
+                },
+                {
+                  "id": "LEFTOVER_DISPLAY_UNIT",
+                  "type": "TEXT",
+                  "labelEn": "Leftover display unit",
+                  "labelFr": "Unité affichée du reste",
+                  "labelNl": "Weergegeven eenheid restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY_ACTION",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary action",
+                  "labelFr": "Action du résumé du reste",
+                  "labelNl": "Samenvattingsactie restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY_AMOUNT_SOURCE",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary amount source",
+                  "labelFr": "Source de quantité du résumé du reste",
+                  "labelNl": "Hoeveelheidsbron samenvatting restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY_UNIT_PREFIX",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary unit prefix",
+                  "labelFr": "Préfixe d'unité du résumé du reste",
+                  "labelNl": "Eenheidsvoorvoegsel samenvatting restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY_UNIT",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary unit",
+                  "labelFr": "Unité du résumé du reste",
+                  "labelNl": "Eenheid samenvatting restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  },
+                  "derivedValue": {
+                    "op": "template",
+                    "template": "{LEFTOVER_SUMMARY_UNIT_PREFIX}{LEFTOVER_DISPLAY_UNIT}",
+                    "when": "always",
+                    "hidden": true
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY_AMOUNT",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary amount",
+                  "labelFr": "Quantité du résumé du reste",
+                  "labelNl": "Hoeveelheid samenvatting restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  },
+                  "derivedValue": {
+                    "op": "template",
+                    "template": "{LEFTOVER_SUMMARY_AMOUNT_SOURCE}{LEFTOVER_SUMMARY_UNIT}",
+                    "when": "always",
+                    "hidden": true
+                  }
+                },
+                {
+                  "id": "LEFTOVER_SUMMARY",
+                  "type": "TEXT",
+                  "labelEn": "Leftover summary",
+                  "labelFr": "Résumé du reste",
+                  "labelNl": "Samenvatting restant",
+                  "required": false,
+                  "readOnly": true,
+                  "visibility": {
+                    "showWhen": {
+                      "fieldId": "NEVER_SHOW",
+                      "equals": "1"
+                    }
+                  },
+                  "derivedValue": {
+                    "op": "template",
+                    "template": "{LEFTOVER_ID} | {RECIPE} | {LEFTOVER_SUMMARY_ACTION}{LEFTOVER_SUMMARY_AMOUNT}",
+                    "when": "always",
+                    "hidden": true
+                  }
                 }
               ],
               "id": "MP_TYPE_LI",
@@ -19375,6 +19537,129 @@ export const BUNDLED_FORM_CONFIGS = [
                     "options": [],
                     "optionsFr": [],
                     "optionsNl": []
+                  },
+                  {
+                    "id": "LEFTOVER_DISPLAY_UNIT",
+                    "type": "TEXT",
+                    "labelEn": "Leftover display unit",
+                    "labelFr": "Unité affichée du reste",
+                    "labelNl": "Weergegeven eenheid restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY_ACTION",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary action",
+                    "labelFr": "Action du résumé du reste",
+                    "labelNl": "Samenvattingsactie restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY_AMOUNT_SOURCE",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary amount source",
+                    "labelFr": "Source de quantité du résumé du reste",
+                    "labelNl": "Hoeveelheidsbron samenvatting restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY_UNIT_PREFIX",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary unit prefix",
+                    "labelFr": "Préfixe d'unité du résumé du reste",
+                    "labelNl": "Eenheidsvoorvoegsel samenvatting restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY_UNIT",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary unit",
+                    "labelFr": "Unité du résumé du reste",
+                    "labelNl": "Eenheid samenvatting restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    },
+                    "derivedValue": {
+                      "op": "template",
+                      "template": "{LEFTOVER_SUMMARY_UNIT_PREFIX}{LEFTOVER_DISPLAY_UNIT}",
+                      "when": "always",
+                      "hidden": true
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY_AMOUNT",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary amount",
+                    "labelFr": "Quantité du résumé du reste",
+                    "labelNl": "Hoeveelheid samenvatting restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    },
+                    "derivedValue": {
+                      "op": "template",
+                      "template": "{LEFTOVER_SUMMARY_AMOUNT_SOURCE}{LEFTOVER_SUMMARY_UNIT}",
+                      "when": "always",
+                      "hidden": true
+                    }
+                  },
+                  {
+                    "id": "LEFTOVER_SUMMARY",
+                    "type": "TEXT",
+                    "labelEn": "Leftover summary",
+                    "labelFr": "Résumé du reste",
+                    "labelNl": "Samenvatting restant",
+                    "required": false,
+                    "readOnly": true,
+                    "visibility": {
+                      "showWhen": {
+                        "fieldId": "NEVER_SHOW",
+                        "equals": "1"
+                      }
+                    },
+                    "derivedValue": {
+                      "op": "template",
+                      "template": "{LEFTOVER_ID} | {RECIPE} | {LEFTOVER_SUMMARY_ACTION}{LEFTOVER_SUMMARY_AMOUNT}",
+                      "when": "always",
+                      "hidden": true
+                    }
                   }
                 ],
                 "id": "MP_TYPE_LI",
@@ -21636,6 +21921,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
+                          "LEFTOVER_SUMMARY_ACTION": "",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "$row.LEFTOVER_USE_QTY",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": " ",
                           "MP_INGREDIENTS_LI": [
                             {
                               "ING": "$source.LEFTOVER_INGREDIENT",
@@ -21644,7 +21932,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "CAT": "$source.LEFTOVER_CAT",
                               "ALLERGEN": "$source.LEFTOVER_ALLERGEN"
                             }
-                          ]
+                          ],
+                          "LEFTOVER_DISPLAY_UNIT": "$source.LEFTOVER_UNIT"
                         },
                         "skipTargetOptionFilters": true
                       },
@@ -21686,7 +21975,11 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
-                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI"
+                          "LEFTOVER_SUMMARY_ACTION": "reheat ",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "$row.LEFTOVER_USE_QTY",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": " ",
+                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI",
+                          "LEFTOVER_DISPLAY_UNIT": "portions"
                         },
                         "skipTargetOptionFilters": true
                       },
@@ -21728,7 +22021,11 @@ export const BUNDLED_FORM_CONFIGS = [
                           "LEFTOVER_KIND": "$row.LEFTOVER_KIND",
                           "LEFTOVER_ID": "$row.LEFTOVER_ID",
                           "LEFTOVER_USAGE_MODE": "$row.LEFTOVER_USAGE_MODE",
-                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI"
+                          "LEFTOVER_SUMMARY_ACTION": "combine",
+                          "LEFTOVER_SUMMARY_AMOUNT_SOURCE": "",
+                          "LEFTOVER_SUMMARY_UNIT_PREFIX": "",
+                          "MP_INGREDIENTS_LI": "$source.LEFTOVER_INGREDIENTS_LI",
+                          "LEFTOVER_DISPLAY_UNIT": ""
                         },
                         "skipTargetOptionFilters": true
                       }
@@ -22571,6 +22868,27 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         }
                       }
+                    },
+                    "leftoverRows": {
+                      "groupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "all": [
+                            {
+                              "fieldId": "LEFTOVER_ID",
+                              "notEmpty": true
+                            },
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Entire dish",
+                                "Part dish"
+                              ]
+                            }
+                          ]
+                        }
+                      }
                     }
                   },
                   "output": {
@@ -22581,9 +22899,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fieldRef": "MEAL_TYPE"
                       },
                       {
-                        "fieldRef": "ORD_QTY"
-                      },
-                      {
                         "fieldRef": "MP_TO_COOK",
                         "label": {
                           "en": "To cook"
@@ -22591,6 +22906,15 @@ export const BUNDLED_FORM_CONFIGS = [
                         "showWhen": {
                           "fieldId": "MP_TO_COOK",
                           "greaterThan": 0
+                        }
+                      },
+                      {
+                        "fieldRef": "leftoverRows.LEFTOVER_SUMMARY",
+                        "layout": "block",
+                        "format": {
+                          "type": "list",
+                          "listDelimiter": "\n",
+                          "unique": false
                         }
                       }
                     ]
@@ -23742,7 +24066,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "1d3ad25f9a0a188b29de6fa31aff39c9"
+    "cacheFingerprint": "48708264f187f8135a7596379ee7751a"
   },
   {
     "formKey": "Config: Recipes",

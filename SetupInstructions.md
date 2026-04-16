@@ -1142,7 +1142,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
         ```
 
-        - `output.segments` defines the text line (supports labels, list formatting, `format.unique`, static `type: "text"` segments, and `showWhen`).
+        - `output.segments` defines the text line (supports labels, list formatting, `format.unique`, static `type: "text"` segments, `layout: "block"` for full-width lines, display-only references to hidden helper / derived fields, and `showWhen`).
+        - Newlines in row-flow text, labels, and list delimiters are preserved, so `format.listDelimiter: "\n"` can render one referenced value per line.
         - Use `renderAs: "control"` to place a field inline in the output row; combine with `controlStyle: "compact"` plus `minWidth` / `maxWidth` / `paddingChars` when the control should read like part of a sentence.
         - `output.segments[].editAction` (single) or `editActions` (array) renders one or more action icons next to a segment.
         - `output.actions` lets you place row actions at the start/end of the output line; use `output.actionsLayout: "below"` to render them on a separate row. Use `output.actionsScope: "group"` (or per-action `scope: "group"`) to render actions once after all rows.

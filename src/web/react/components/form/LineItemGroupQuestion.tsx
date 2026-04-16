@@ -332,6 +332,7 @@ import {
   type RowFlowResolvedSegment,
   type RowFlowResolvedState
 } from '../../features/steps/domain/rowFlow';
+import { shouldRenderRowFlowOutputField } from '../../features/steps/domain/rowFlowOutputVisibility';
 
 const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
 const listRowActionButtonWidthStyle: React.CSSProperties = {
@@ -5803,6 +5804,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           }
         }
         if (rowFlowEnabled && (rowFlow?.output?.segments || []).length) {
+          const segmentLayouts = (rowFlow?.output?.segments || []).map(segment => ({
+            fieldRef: segment?.fieldRef || '',
+            type: (segment?.type || 'field').toString(),
+            layout: (segment?.layout || 'inline').toString()
+          }));
+          const blockSegments = segmentLayouts.filter(segment => segment.layout.toLowerCase() === 'block');
+          if (blockSegments.length) {
+            const layoutLogKey = `${q.id}::rowFlow::segmentLayouts`;
+            if (!rowFlowLoggedRef.current.has(layoutLogKey)) {
+              rowFlowLoggedRef.current.add(layoutLogKey);
+              onDiagnostic?.('lineItems.rowFlow.output.segmentLayouts', {
+                groupId: q.id,
+                blockSegments: blockSegments.length,
+                segmentLayouts
+              });
+            }
+          }
           const segmentLogKey = `${q.id}::rowFlow::segmentActions`;
           if (!rowFlowLoggedRef.current.has(segmentLogKey)) {
             const segmentActions = (rowFlow?.output?.segments || []).map(segment =>
@@ -5815,7 +5833,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               onDiagnostic?.('lineItems.rowFlow.output.segmentActions', {
                 groupId: q.id,
                 segmentsWithActions: segmentsWithActions.length,
-                multiActionSegments
+                multiActionSegments,
+                segmentLayouts
               });
             }
           }
@@ -7199,7 +7218,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     rowValues: target.primaryRow?.row?.values || {},
                     parentValues: target.parentValues
                   });
-                  return !shouldHideField(field.visibility, ctxForVisibility, {
+                  return shouldRenderRowFlowOutputField({
+                    segment,
+                    field,
+                    ctx: ctxForVisibility,
                     rowId: target.primaryRow?.row?.id || row.id,
                     linePrefix: target.groupKey
                   });
@@ -7207,6 +7229,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
                 const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
                   const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
+                  const segmentLayout = ((segment.config?.layout || 'inline').toString() || 'inline').trim().toLowerCase();
+                  const isBlockLayout = segmentLayout === 'block';
                   const tone = ((segment.config?.tone || 'default').toString() || 'default').trim().toLowerCase();
                   const segmentTextStyle: React.CSSProperties =
                     tone === 'muted'
@@ -7214,6 +7238,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       : tone === 'strong'
                         ? { fontWeight: 600 }
                         : {};
+                  const segmentContainerStyle: React.CSSProperties = {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 1 auto' })
+                  };
                   if (segmentType === 'text') {
                     const text = resolveLocalizedString(segment.config?.text, language, '');
                     if (!text) return null;
@@ -7223,11 +7255,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       </span>
                     ) : null;
                     return (
-                      <span
-                        key={`${segment.id}-${idx}`}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
-                      >
-                        <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', ...segmentTextStyle }}>{text}</span>
+                      <span key={`${segment.id}-${idx}`} style={segmentContainerStyle}>
+                        <span
+                          style={{
+                            overflowWrap: 'anywhere',
+                            wordBreak: 'break-word',
+                            whiteSpace: text.includes('\n') ? 'pre-wrap' : undefined,
+                            ...segmentTextStyle
+                          }}
+                        >
+                          {text}
+                        </span>
                         {separatorNode}
                       </span>
                     );
@@ -7274,7 +7312,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         return (
                           <span
                             key={`${segment.config.fieldRef}-${idx}`}
-                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 4,
+                              minWidth: 0,
+                              maxWidth: '100%',
+                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
+                            }}
                             data-field-path={fieldPath}
                           >
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
@@ -7341,7 +7387,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         return (
                           <span
                             key={`${segment.config.fieldRef}-${idx}`}
-                            style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 4,
+                              minWidth: 0,
+                              maxWidth: '100%',
+                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
+                            }}
                             data-field-path={fieldPath}
                           >
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
@@ -7405,7 +7459,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               gap: 4,
                               minWidth: 0,
                               maxWidth: '100%',
-                              flex: '1 1 220px'
+                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '1 1 220px' })
                             }}
                             data-field-path={fieldPath}
                           >
@@ -7472,10 +7526,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       }
                     }
                     return (
-                      <span
-                        key={`${segment.config.fieldRef}-${idx}`}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
-                      >
+                      <span key={`${segment.config.fieldRef}-${idx}`} style={{ ...segmentContainerStyle, gap: 8 }}>
                         {label ? (
                           <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}:</span>
                         ) : null}
@@ -7507,11 +7558,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       : `${label}: ${text}`
                     : text;
                   return (
-                    <span
-                      key={`${segment.config.fieldRef}-${idx}`}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
-                    >
-                      <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', ...segmentTextStyle }}>{formatted}</span>
+                    <span key={`${segment.config.fieldRef}-${idx}`} style={segmentContainerStyle}>
+                      <span
+                        style={{
+                          overflowWrap: 'anywhere',
+                          wordBreak: 'break-word',
+                          whiteSpace: formatted.includes('\n') ? 'pre-wrap' : undefined,
+                          ...segmentTextStyle
+                        }}
+                      >
+                        {formatted}
+                      </span>
                       {segmentActions}
                       {separatorNode}
                     </span>

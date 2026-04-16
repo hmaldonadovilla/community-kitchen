@@ -4030,6 +4030,12 @@ export interface RowFlowOutputSegmentFormatConfig {
 
 export interface RowFlowOutputSegmentConfig {
   type?: 'field' | 'text';
+  /**
+   * Optional segment layout.
+   * - inline: render in the current output line (default)
+   * - block: render on a new full-width line within the row output
+   */
+  layout?: 'inline' | 'block';
   fieldRef?: string;
   /**
    * Optional field reference used when `fieldRef` has no value.
