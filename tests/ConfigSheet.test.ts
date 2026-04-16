@@ -295,6 +295,39 @@ describe('ConfigSheet', () => {
     expect(questions[0].ui).toEqual({ hideLabel: true });
   });
 
+  test('getQuestions parses derivedValue.addMonths', () => {
+    const sheet = mockSS.insertSheet('Config: DerivedAddMonths');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'EXP',
+        'DATE',
+        'Expiration',
+        'Expiration',
+        'Expiration',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        '{"derivedValue":{"op":"addMonths","dependsOn":"MP_PREP_DATE","offsetMonths":6,"hidden":true}}',
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: DerivedAddMonths');
+    expect(questions).toHaveLength(1);
+    expect(questions[0].derivedValue).toEqual({
+      op: 'addMonths',
+      dependsOn: 'MP_PREP_DATE',
+      offsetMonths: 6,
+      hidden: true
+    });
+  });
+
   test('getQuestions parses group.pageSection (visual page sections in edit view)', () => {
     const sheet = mockSS.insertSheet('Config: PageSections');
     const exampleRows = [

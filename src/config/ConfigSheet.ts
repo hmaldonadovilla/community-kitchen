@@ -3585,6 +3585,22 @@ export class ConfigSheet {
       return cfg as DerivedValueConfig;
     }
 
+    if (op === 'addmonths' || opRaw === 'addMonths') {
+      const dependsOn = raw.dependsOn ? raw.dependsOn.toString().trim() : '';
+      if (!dependsOn) return undefined;
+      const cfg: any = { op: 'addMonths', dependsOn };
+      if (raw.offsetMonths !== undefined && raw.offsetMonths !== null) {
+        const num = Number(raw.offsetMonths);
+        if (!isNaN(num)) cfg.offsetMonths = num;
+      } else if (raw.months !== undefined && raw.months !== null) {
+        const num = Number(raw.months);
+        if (!isNaN(num)) cfg.offsetMonths = num;
+      }
+      if (when) cfg.when = when;
+      if (hidden !== undefined) cfg.hidden = hidden;
+      return cfg as DerivedValueConfig;
+    }
+
     if (op === 'today') {
       const cfg: any = { op: 'today' };
       if (when) cfg.when = when;

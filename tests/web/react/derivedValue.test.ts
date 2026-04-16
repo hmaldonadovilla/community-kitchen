@@ -108,6 +108,18 @@ describe('derivedValue', () => {
     expect(values.EXP).toBe('2025-01-03');
   });
 
+  it('addMonths still applies always by default', () => {
+    const definition: any = {
+      questions: [
+        { id: 'BASE', type: 'DATE' },
+        { id: 'EXP', type: 'DATE', derivedValue: { op: 'addMonths', dependsOn: 'BASE', offsetMonths: 6 } }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(definition, { BASE: '2025-04-16', EXP: '2025-04-18' } as any, {} as any);
+    expect(values.EXP).toBe('2025-10-16');
+  });
+
   it('copy prefills from dependsOn when empty (default when=empty)', () => {
     const definition: any = {
       questions: [
@@ -272,4 +284,3 @@ describe('derivedValue', () => {
     expect(updatedRow?.values?.MP_TO_COOK).toBe(7);
   });
 });
-

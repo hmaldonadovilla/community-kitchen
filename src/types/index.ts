@@ -1904,6 +1904,29 @@ export interface DerivedValueAddDaysConfig {
   hidden?: boolean;
 }
 
+export interface DerivedValueAddMonthsConfig {
+  op: 'addMonths';
+  /**
+   * Field ID whose value is used as the base date.
+   */
+  dependsOn: string;
+  /**
+   * Number of months to add (can be negative).
+   */
+  offsetMonths?: number;
+  /**
+   * When to apply the derived value:
+   * - always: recompute on every change (default for addMonths)
+   * - empty: only set when the target field is empty (allows user overrides)
+   */
+  when?: DerivedValueWhen;
+  /**
+   * Optional flag to indicate the field is system-managed and may be hidden in UI.
+   * (Hiding still uses existing visibility config; this flag is informational.)
+   */
+  hidden?: boolean;
+}
+
 export interface DerivedValueTodayConfig {
   op: 'today';
   /**
@@ -2054,6 +2077,7 @@ export interface DerivedValueCalcConfig {
 
 export type DerivedValueConfig =
   | DerivedValueAddDaysConfig
+  | DerivedValueAddMonthsConfig
   | DerivedValueTodayConfig
   | DerivedValueTimeOfDayMapConfig
   | DerivedValueCopyConfig

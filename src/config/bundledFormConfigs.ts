@@ -8984,6 +8984,35 @@ export const BUNDLED_FORM_CONFIGS = [
         ]
       },
       {
+        "id": "LEFTOVER_STORAGE",
+        "type": "CHOICE",
+        "qEn": "Storage",
+        "qFr": "Stockage",
+        "qNl": "Bewaring",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "options": [
+          "Chilled",
+          "Frozen"
+        ],
+        "optionsFr": [
+          "Réfrigéré",
+          "Congelé"
+        ],
+        "optionsNl": [
+          "Gekoeld",
+          "Ingevroren"
+        ],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
+      },
+      {
         "id": "LEFTOVER_PORTIONS",
         "type": "NUMBER",
         "qEn": "Portions",
@@ -9741,6 +9770,35 @@ export const BUNDLED_FORM_CONFIGS = [
           ]
         },
         {
+          "id": "LEFTOVER_STORAGE",
+          "type": "CHOICE",
+          "qEn": "Storage",
+          "qFr": "Stockage",
+          "qNl": "Bewaring",
+          "required": false,
+          "readOnly": true,
+          "listView": false,
+          "options": [
+            "Chilled",
+            "Frozen"
+          ],
+          "optionsFr": [
+            "Réfrigéré",
+            "Congelé"
+          ],
+          "optionsNl": [
+            "Gekoeld",
+            "Ingevroren"
+          ],
+          "status": "Active",
+          "visibility": {
+            "showWhen": {
+              "fieldId": "NEVER_SHOW",
+              "equals": "1"
+            }
+          }
+        },
+        {
           "id": "LEFTOVER_PORTIONS",
           "type": "NUMBER",
           "qEn": "Portions",
@@ -10077,7 +10135,7 @@ export const BUNDLED_FORM_CONFIGS = [
       ]
     },
     "validationErrors": [],
-    "cacheFingerprint": "36d24d82395399cf2750dc3565560305"
+    "cacheFingerprint": "92a2297d65adf792eb32b935195bcc36"
   },
   {
     "formKey": "Config: Meal Production",
@@ -10213,7 +10271,13 @@ export const BUNDLED_FORM_CONFIGS = [
                 ]
               },
               "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
-              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_EXP_DATE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}",
+                  "{{source.MP_EXP_DATE}}"
+                ]
+              },
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
               "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
@@ -10236,7 +10300,8 @@ export const BUNDLED_FORM_CONFIGS = [
                   ]
                 },
                 "else": "{{row.MP_INGREDIENTS_LI}}"
-              }
+              },
+              "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
             }
           },
           {
@@ -10273,10 +10338,17 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_ALLERGEN": "{{row.LEFTOVER_ALLERGEN}}",
               "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
               "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
-              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_EXP_DATE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{row.LEFTOVER_EXP_DATE}}",
+                  "{{source.MP_EXP_DATE}}"
+                ]
+              },
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
-              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}"
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
+              "LEFTOVER_STORAGE": "{{row.LEFTOVER_STORAGE}}"
             }
           }
         ]
@@ -12925,7 +12997,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "renderAsLabel": true
                   },
                   "MP_LEFTOVER_PORTIONS_CAPTURE",
-                  "MP_LEFTOVER_RECIPE_CAPTURE"
+                  "MP_LEFTOVER_RECIPE_CAPTURE",
+                  "MP_LEFTOVER_STORAGE_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -13072,6 +13145,29 @@ export const BUNDLED_FORM_CONFIGS = [
                           "fr": " portions to reheat or combine",
                           "nl": " portions to reheat or combine"
                         }
+                      },
+                      {
+                        "type": "text",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        },
+                        "text": {
+                          "en": " | Store ",
+                          "fr": " | Stocker ",
+                          "nl": " | Bewaar "
+                        }
+                      },
+                      {
+                        "fieldRef": "MP_LEFTOVER_STORAGE_CAPTURE",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        },
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 110,
+                        "maxWidth": 150
                       }
                     ],
                     "actionsLayout": "below",
@@ -13864,13 +13960,15 @@ export const BUNDLED_FORM_CONFIGS = [
             "tableColumns": [
               "LEFTOVER_INGREDIENT",
               "LEFTOVER_QTY",
-              "LEFTOVER_UNIT"
+              "LEFTOVER_UNIT",
+              "LEFTOVER_STORAGE"
             ],
             "addButtonPlacement": "top",
             "tableColumnWidths": {
-              "LEFTOVER_INGREDIENT": "50%",
-              "LEFTOVER_QTY": "25%",
-              "LEFTOVER_UNIT": "25%",
+              "LEFTOVER_INGREDIENT": "42%",
+              "LEFTOVER_QTY": "18%",
+              "LEFTOVER_UNIT": "14%",
+              "LEFTOVER_STORAGE": "26%",
               "__remove": "44px"
             },
             "openInOverlay": false,
@@ -14164,6 +14262,116 @@ export const BUNDLED_FORM_CONFIGS = [
               ]
             },
             {
+              "id": "LEFTOVER_STORAGE",
+              "type": "CHOICE",
+              "labelEn": "Storage",
+              "labelFr": "Stockage",
+              "labelNl": "Bewaring",
+              "required": false,
+              "defaultValue": "Chilled",
+              "ui": {
+                "control": "select"
+              },
+              "options": [
+                "Chilled",
+                "Frozen"
+              ],
+              "optionsFr": [
+                "Réfrigéré",
+                "Congelé"
+              ],
+              "optionsNl": [
+                "Gekoeld",
+                "Ingevroren"
+              ],
+              "validationRules": [
+                {
+                  "when": {
+                    "fieldId": "LEFTOVER_INGREDIENT",
+                    "notEmpty": true
+                  },
+                  "then": {
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "required": true
+                  },
+                  "message": {
+                    "en": "Select how this leftover will be stored.",
+                    "fr": "Sélectionnez comment ce reste sera stocké.",
+                    "nl": "Selecteer hoe dit restant wordt bewaard."
+                  }
+                }
+              ],
+              "selectionEffects": [
+                {
+                  "id": "set_leftover_exp_date_chilled",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_EXP_DATE",
+                  "when": {
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "equals": [
+                      "Chilled"
+                    ]
+                  },
+                  "value": "$row.LEFTOVER_EXP_DATE_CHILLED"
+                },
+                {
+                  "id": "set_leftover_exp_date_frozen",
+                  "type": "setValue",
+                  "fieldId": "LEFTOVER_EXP_DATE",
+                  "when": {
+                    "fieldId": "LEFTOVER_STORAGE",
+                    "equals": [
+                      "Frozen"
+                    ]
+                  },
+                  "value": "$row.LEFTOVER_EXP_DATE_FROZEN"
+                }
+              ]
+            },
+            {
+              "id": "LEFTOVER_EXP_DATE_CHILLED",
+              "type": "DATE",
+              "labelEn": "Chilled expiration date",
+              "labelFr": "Date d'expiration réfrigérée",
+              "labelNl": "Gekoelde vervaldatum",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "derivedValue": {
+                "op": "copy",
+                "dependsOn": "MP_EXP_DATE",
+                "hidden": true
+              }
+            },
+            {
+              "id": "LEFTOVER_EXP_DATE_FROZEN",
+              "type": "DATE",
+              "labelEn": "Frozen expiration date",
+              "labelFr": "Date d'expiration congelée",
+              "labelNl": "Bevroren vervaldatum",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "derivedValue": {
+                "op": "addMonths",
+                "dependsOn": "MP_PREP_DATE",
+                "offsetMonths": 6,
+                "hidden": true
+              }
+            },
+            {
               "id": "LEFTOVER_EXP_DATE",
               "type": "DATE",
               "labelEn": "Expiration date",
@@ -14177,6 +14385,11 @@ export const BUNDLED_FORM_CONFIGS = [
                     "1"
                   ]
                 }
+              },
+              "derivedValue": {
+                "op": "copy",
+                "dependsOn": "LEFTOVER_EXP_DATE_CHILLED",
+                "hidden": true
               }
             },
             {
@@ -15323,6 +15536,155 @@ export const BUNDLED_FORM_CONFIGS = [
               },
               "ui": {
                 "hideLabel": true
+              }
+            },
+            {
+              "id": "MP_LEFTOVER_STORAGE_CAPTURE",
+              "type": "CHOICE",
+              "labelEn": "Storage",
+              "labelFr": "Stockage",
+              "labelNl": "Bewaring",
+              "required": false,
+              "defaultValue": "Chilled",
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "leftovers"
+                  ]
+                }
+              },
+              "ui": {
+                "control": "select"
+              },
+              "options": [
+                "Chilled",
+                "Frozen"
+              ],
+              "optionsFr": [
+                "Réfrigéré",
+                "Congelé"
+              ],
+              "optionsNl": [
+                "Gekoeld",
+                "Ingevroren"
+              ],
+              "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "leftovers"
+                        ]
+                      },
+                      {
+                        "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                        "greaterThan": 0
+                      }
+                    ]
+                  },
+                  "then": {
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "required": true
+                  },
+                  "message": {
+                    "en": "Select how this leftover will be stored.",
+                    "fr": "Sélectionnez comment ce reste sera stocké.",
+                    "nl": "Selecteer hoe dit restant wordt bewaard."
+                  }
+                }
+              ],
+              "selectionEffects": [
+                {
+                  "id": "set_mp_leftover_exp_date_capture_chilled",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": [
+                      "Chilled"
+                    ]
+                  },
+                  "value": "$row.MP_LEFTOVER_EXP_DATE_CHILLED"
+                },
+                {
+                  "id": "set_mp_leftover_exp_date_capture_frozen",
+                  "type": "setValue",
+                  "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                  "when": {
+                    "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": [
+                      "Frozen"
+                    ]
+                  },
+                  "value": "$row.MP_LEFTOVER_EXP_DATE_FROZEN"
+                }
+              ]
+            },
+            {
+              "id": "MP_LEFTOVER_EXP_DATE_CHILLED",
+              "type": "DATE",
+              "labelEn": "Leftover chilled expiration date",
+              "labelFr": "Date d'expiration réfrigérée du reste",
+              "labelNl": "Gekoelde vervaldatum restant",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "derivedValue": {
+                "op": "copy",
+                "dependsOn": "MP_EXP_DATE",
+                "hidden": true
+              }
+            },
+            {
+              "id": "MP_LEFTOVER_EXP_DATE_FROZEN",
+              "type": "DATE",
+              "labelEn": "Leftover frozen expiration date",
+              "labelFr": "Date d'expiration congelée du reste",
+              "labelNl": "Bevroren vervaldatum restant",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "derivedValue": {
+                "op": "addMonths",
+                "dependsOn": "MP_PREP_DATE",
+                "offsetMonths": 6,
+                "hidden": true
+              }
+            },
+            {
+              "id": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+              "type": "DATE",
+              "labelEn": "Leftover expiration date",
+              "labelFr": "Date d'expiration du reste",
+              "labelNl": "Vervaldatum restant",
+              "required": false,
+              "visibility": {
+                "showWhen": {
+                  "fieldId": "NEVER_SHOW",
+                  "equals": [
+                    "1"
+                  ]
+                }
+              },
+              "derivedValue": {
+                "op": "copy",
+                "dependsOn": "MP_LEFTOVER_EXP_DATE_CHILLED",
+                "hidden": true
               }
             },
             {
@@ -17033,13 +17395,15 @@ export const BUNDLED_FORM_CONFIGS = [
               "tableColumns": [
                 "LEFTOVER_INGREDIENT",
                 "LEFTOVER_QTY",
-                "LEFTOVER_UNIT"
+                "LEFTOVER_UNIT",
+                "LEFTOVER_STORAGE"
               ],
               "addButtonPlacement": "top",
               "tableColumnWidths": {
-                "LEFTOVER_INGREDIENT": "50%",
-                "LEFTOVER_QTY": "25%",
-                "LEFTOVER_UNIT": "25%",
+                "LEFTOVER_INGREDIENT": "42%",
+                "LEFTOVER_QTY": "18%",
+                "LEFTOVER_UNIT": "14%",
+                "LEFTOVER_STORAGE": "26%",
                 "__remove": "44px"
               },
               "openInOverlay": false,
@@ -17333,6 +17697,116 @@ export const BUNDLED_FORM_CONFIGS = [
                 ]
               },
               {
+                "id": "LEFTOVER_STORAGE",
+                "type": "CHOICE",
+                "labelEn": "Storage",
+                "labelFr": "Stockage",
+                "labelNl": "Bewaring",
+                "required": false,
+                "defaultValue": "Chilled",
+                "ui": {
+                  "control": "select"
+                },
+                "options": [
+                  "Chilled",
+                  "Frozen"
+                ],
+                "optionsFr": [
+                  "Réfrigéré",
+                  "Congelé"
+                ],
+                "optionsNl": [
+                  "Gekoeld",
+                  "Ingevroren"
+                ],
+                "validationRules": [
+                  {
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    },
+                    "then": {
+                      "fieldId": "LEFTOVER_STORAGE",
+                      "required": true
+                    },
+                    "message": {
+                      "en": "Select how this leftover will be stored.",
+                      "fr": "Sélectionnez comment ce reste sera stocké.",
+                      "nl": "Selecteer hoe dit restant wordt bewaard."
+                    }
+                  }
+                ],
+                "selectionEffects": [
+                  {
+                    "id": "set_leftover_exp_date_chilled",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_EXP_DATE",
+                    "when": {
+                      "fieldId": "LEFTOVER_STORAGE",
+                      "equals": [
+                        "Chilled"
+                      ]
+                    },
+                    "value": "$row.LEFTOVER_EXP_DATE_CHILLED"
+                  },
+                  {
+                    "id": "set_leftover_exp_date_frozen",
+                    "type": "setValue",
+                    "fieldId": "LEFTOVER_EXP_DATE",
+                    "when": {
+                      "fieldId": "LEFTOVER_STORAGE",
+                      "equals": [
+                        "Frozen"
+                      ]
+                    },
+                    "value": "$row.LEFTOVER_EXP_DATE_FROZEN"
+                  }
+                ]
+              },
+              {
+                "id": "LEFTOVER_EXP_DATE_CHILLED",
+                "type": "DATE",
+                "labelEn": "Chilled expiration date",
+                "labelFr": "Date d'expiration réfrigérée",
+                "labelNl": "Gekoelde vervaldatum",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "derivedValue": {
+                  "op": "copy",
+                  "dependsOn": "MP_EXP_DATE",
+                  "hidden": true
+                }
+              },
+              {
+                "id": "LEFTOVER_EXP_DATE_FROZEN",
+                "type": "DATE",
+                "labelEn": "Frozen expiration date",
+                "labelFr": "Date d'expiration congelée",
+                "labelNl": "Bevroren vervaldatum",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "derivedValue": {
+                  "op": "addMonths",
+                  "dependsOn": "MP_PREP_DATE",
+                  "offsetMonths": 6,
+                  "hidden": true
+                }
+              },
+              {
                 "id": "LEFTOVER_EXP_DATE",
                 "type": "DATE",
                 "labelEn": "Expiration date",
@@ -17346,6 +17820,11 @@ export const BUNDLED_FORM_CONFIGS = [
                       "1"
                     ]
                   }
+                },
+                "derivedValue": {
+                  "op": "copy",
+                  "dependsOn": "LEFTOVER_EXP_DATE_CHILLED",
+                  "hidden": true
                 }
               },
               {
@@ -18551,6 +19030,155 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "ui": {
                   "hideLabel": true
+                }
+              },
+              {
+                "id": "MP_LEFTOVER_STORAGE_CAPTURE",
+                "type": "CHOICE",
+                "labelEn": "Storage",
+                "labelFr": "Stockage",
+                "labelNl": "Bewaring",
+                "required": false,
+                "defaultValue": "Chilled",
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  }
+                },
+                "ui": {
+                  "control": "select"
+                },
+                "options": [
+                  "Chilled",
+                  "Frozen"
+                ],
+                "optionsFr": [
+                  "Réfrigéré",
+                  "Congelé"
+                ],
+                "optionsNl": [
+                  "Gekoeld",
+                  "Ingevroren"
+                ],
+                "validationRules": [
+                  {
+                    "when": {
+                      "all": [
+                        {
+                          "fieldId": "__ckStep",
+                          "equals": [
+                            "leftovers"
+                          ]
+                        },
+                        {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        }
+                      ]
+                    },
+                    "then": {
+                      "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                      "required": true
+                    },
+                    "message": {
+                      "en": "Select how this leftover will be stored.",
+                      "fr": "Sélectionnez comment ce reste sera stocké.",
+                      "nl": "Selecteer hoe dit restant wordt bewaard."
+                    }
+                  }
+                ],
+                "selectionEffects": [
+                  {
+                    "id": "set_mp_leftover_exp_date_capture_chilled",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                      "equals": [
+                        "Chilled"
+                      ]
+                    },
+                    "value": "$row.MP_LEFTOVER_EXP_DATE_CHILLED"
+                  },
+                  {
+                    "id": "set_mp_leftover_exp_date_capture_frozen",
+                    "type": "setValue",
+                    "fieldId": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_STORAGE_CAPTURE",
+                      "equals": [
+                        "Frozen"
+                      ]
+                    },
+                    "value": "$row.MP_LEFTOVER_EXP_DATE_FROZEN"
+                  }
+                ]
+              },
+              {
+                "id": "MP_LEFTOVER_EXP_DATE_CHILLED",
+                "type": "DATE",
+                "labelEn": "Leftover chilled expiration date",
+                "labelFr": "Date d'expiration réfrigérée du reste",
+                "labelNl": "Gekoelde vervaldatum restant",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "derivedValue": {
+                  "op": "copy",
+                  "dependsOn": "MP_EXP_DATE",
+                  "hidden": true
+                }
+              },
+              {
+                "id": "MP_LEFTOVER_EXP_DATE_FROZEN",
+                "type": "DATE",
+                "labelEn": "Leftover frozen expiration date",
+                "labelFr": "Date d'expiration congelée du reste",
+                "labelNl": "Bevroren vervaldatum restant",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "derivedValue": {
+                  "op": "addMonths",
+                  "dependsOn": "MP_PREP_DATE",
+                  "offsetMonths": 6,
+                  "hidden": true
+                }
+              },
+              {
+                "id": "MP_LEFTOVER_EXP_DATE_CAPTURE",
+                "type": "DATE",
+                "labelEn": "Leftover expiration date",
+                "labelFr": "Date d'expiration du reste",
+                "labelNl": "Vervaldatum restant",
+                "required": false,
+                "visibility": {
+                  "showWhen": {
+                    "fieldId": "NEVER_SHOW",
+                    "equals": [
+                      "1"
+                    ]
+                  }
+                },
+                "derivedValue": {
+                  "op": "copy",
+                  "dependsOn": "MP_LEFTOVER_EXP_DATE_CHILLED",
+                  "hidden": true
                 }
               },
               {
@@ -20159,7 +20787,13 @@ export const BUNDLED_FORM_CONFIGS = [
                 ]
               },
               "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
-              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_EXP_DATE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}",
+                  "{{source.MP_EXP_DATE}}"
+                ]
+              },
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
               "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
@@ -20182,7 +20816,8 @@ export const BUNDLED_FORM_CONFIGS = [
                   ]
                 },
                 "else": "{{row.MP_INGREDIENTS_LI}}"
-              }
+              },
+              "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
             }
           },
           {
@@ -20219,10 +20854,17 @@ export const BUNDLED_FORM_CONFIGS = [
               "LEFTOVER_ALLERGEN": "{{row.LEFTOVER_ALLERGEN}}",
               "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
               "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
-              "LEFTOVER_EXP_DATE": "{{source.MP_EXP_DATE}}",
+              "LEFTOVER_EXP_DATE": {
+                "op": "firstNonEmpty",
+                "values": [
+                  "{{row.LEFTOVER_EXP_DATE}}",
+                  "{{source.MP_EXP_DATE}}"
+                ]
+              },
               "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
               "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
-              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}"
+              "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
+              "LEFTOVER_STORAGE": "{{row.LEFTOVER_STORAGE}}"
             }
           },
           {
@@ -22594,7 +23236,8 @@ export const BUNDLED_FORM_CONFIGS = [
                     "renderAsLabel": true
                   },
                   "MP_LEFTOVER_PORTIONS_CAPTURE",
-                  "MP_LEFTOVER_RECIPE_CAPTURE"
+                  "MP_LEFTOVER_RECIPE_CAPTURE",
+                  "MP_LEFTOVER_STORAGE_CAPTURE"
                 ],
                 "subGroups": {
                   "include": [
@@ -22741,6 +23384,29 @@ export const BUNDLED_FORM_CONFIGS = [
                           "fr": " portions to reheat or combine",
                           "nl": " portions to reheat or combine"
                         }
+                      },
+                      {
+                        "type": "text",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        },
+                        "text": {
+                          "en": " | Store ",
+                          "fr": " | Stocker ",
+                          "nl": " | Bewaar "
+                        }
+                      },
+                      {
+                        "fieldRef": "MP_LEFTOVER_STORAGE_CAPTURE",
+                        "showWhen": {
+                          "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                          "greaterThan": 0
+                        },
+                        "renderAs": "control",
+                        "controlStyle": "compact",
+                        "minWidth": 110,
+                        "maxWidth": 150
                       }
                     ],
                     "actionsLayout": "below",
@@ -23076,7 +23742,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "526c594c10627746d416203b7073474e"
+    "cacheFingerprint": "1d3ad25f9a0a188b29de6fa31aff39c9"
   },
   {
     "formKey": "Config: Recipes",

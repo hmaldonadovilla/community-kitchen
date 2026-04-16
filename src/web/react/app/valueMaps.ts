@@ -105,10 +105,10 @@ const resolveDerivedWhen = (config: any): 'always' | 'empty' => {
   if (raw === 'always') return 'always';
   if (raw === 'empty') return 'empty';
   // Defaults:
-  // - addDays: always (computed field)
+  // - addDays/addMonths: always (computed field)
   // - today/timeOfDayMap/copy/template: empty (prefill/default behavior)
   const op = (config?.op || '').toString();
-  return op === 'addDays' || op === 'calc' ? 'always' : 'empty';
+  return op === 'addDays' || op === 'addMonths' || op === 'calc' ? 'always' : 'empty';
 };
 
 const resolveDerivedApplyOn = (config: any): 'change' | 'blur' => {
@@ -581,6 +581,15 @@ export const resolveDerivedValue = (config: any, getter: (fieldId: string) => Fi
     const result = new Date(baseDate);
     result.setDate(result.getDate() + (isNaN(offset) ? 0 : offset));
     // Keep existing behavior: store as YYYY-MM-DD.
+    return formatLocalYmd(result);
+  }
+  if (config.op === 'addMonths') {
+    const base = getter(config.dependsOn);
+    const baseDate = parseDateValue(base);
+    if (!baseDate) return '';
+    const offset = typeof config.offsetMonths === 'number' ? config.offsetMonths : Number(config.offsetMonths || 0);
+    const result = new Date(baseDate);
+    result.setMonth(result.getMonth() + (isNaN(offset) ? 0 : offset));
     return formatLocalYmd(result);
   }
   if (config.op === 'today') {

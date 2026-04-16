@@ -493,7 +493,13 @@ describe('staging integrity dialogs and list legend config', () => {
       );
       expect(leftoversMeals?.presentation).toBe('liftedRowFields');
       expect((leftoversMeals?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
-        expect.arrayContaining(['MEAL_TYPE', 'FINAL_QTY', 'MP_LEFTOVER_RECIPE_CAPTURE', 'MP_LEFTOVER_PORTIONS_CAPTURE'])
+        expect.arrayContaining([
+          'MEAL_TYPE',
+          'FINAL_QTY',
+          'MP_LEFTOVER_RECIPE_CAPTURE',
+          'MP_LEFTOVER_PORTIONS_CAPTURE',
+          'MP_LEFTOVER_STORAGE_CAPTURE'
+        ])
       );
       expect(leftoversMeals?.subGroups?.include).toEqual(
         expect.arrayContaining([
@@ -567,15 +573,30 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(partialLeftovers?.visibility).toBeUndefined();
       expect(partialLeftovers?.ui?.hideLabel).toBe(true);
       expect(partialLeftovers?.lineItemConfig?.ui?.addButtonPlacement).toBe('top');
+      expect(partialLeftovers?.lineItemConfig?.ui?.tableColumns).toEqual([
+        'LEFTOVER_INGREDIENT',
+        'LEFTOVER_QTY',
+        'LEFTOVER_UNIT',
+        'LEFTOVER_STORAGE'
+      ]);
       expect(partialLeftovers?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
       const singleIngredientField = (partialLeftovers?.lineItemConfig?.fields || []).find(
         (entry: any) => entry?.id === 'LEFTOVER_INGREDIENT'
+      );
+      const singleIngredientStorageField = (partialLeftovers?.lineItemConfig?.fields || []).find(
+        (entry: any) => entry?.id === 'LEFTOVER_STORAGE'
       );
       expect(singleIngredientField?.ui).toEqual(
         expect.objectContaining({
           choiceSearchEnabled: true,
           helperPlacement: 'placeholder',
           helperText: expect.objectContaining({ en: 'Search ingredients' })
+        })
+      );
+      expect(singleIngredientStorageField).toEqual(
+        expect.objectContaining({
+          defaultValue: 'Chilled',
+          options: ['Chilled', 'Frozen']
         })
       );
 
@@ -585,9 +606,25 @@ describe('staging integrity dialogs and list legend config', () => {
       const meals = findQuestion(questions || [], 'MP_MEALS_REQUEST');
       const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
+      const leftoverStorageField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_STORAGE_CAPTURE');
+      const leftoverFrozenExpiryField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_EXP_DATE_FROZEN');
       expect(leftoverPortionsField?.defaultValue).toBeUndefined();
       expect(leftoverPortionsField?.ui?.helperText).toBeUndefined();
       expect(mealFields.some((entry: any) => entry?.id === 'MP_LEFTOVER_RECIPE_CAPTURE')).toBe(true);
+      expect(leftoverStorageField).toEqual(
+        expect.objectContaining({
+          defaultValue: 'Chilled',
+          options: ['Chilled', 'Frozen']
+        })
+      );
+      expect(leftoverFrozenExpiryField?.derivedValue).toEqual(
+        expect.objectContaining({
+          op: 'addMonths',
+          dependsOn: 'MP_PREP_DATE',
+          offsetMonths: 6,
+          hidden: true
+        })
+      );
       expect(mealFields.some((entry: any) => entry?.id === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_READY')).toBe(true);
       const captureIngredientsGroup = (meals?.lineItemConfig?.subGroups || []).find(
         (entry: any) => entry?.id === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
@@ -638,6 +675,13 @@ describe('staging integrity dialogs and list legend config', () => {
           values: ['{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}', '{{row.RECIPE}}']
         })
       );
+      expect(entireDishEffect?.values?.LEFTOVER_STORAGE).toBe('{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}');
+      expect(entireDishEffect?.values?.LEFTOVER_EXP_DATE).toEqual(
+        expect.objectContaining({
+          op: 'firstNonEmpty',
+          values: ['{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}', '{{source.MP_EXP_DATE}}']
+        })
+      );
       expect(entireDishEffect?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
         expect.objectContaining({
           op: 'ifPresent',
@@ -650,6 +694,13 @@ describe('staging integrity dialogs and list legend config', () => {
         sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY'
       });
       expect(partialDishEffect?.values?.DIETARY_APPLICABILITY).toBe('{{row.LEFTOVER_DIETARY_APPLICABILITY}}');
+      expect(partialDishEffect?.values?.LEFTOVER_STORAGE).toBe('{{row.LEFTOVER_STORAGE}}');
+      expect(partialDishEffect?.values?.LEFTOVER_EXP_DATE).toEqual(
+        expect.objectContaining({
+          op: 'firstNonEmpty',
+          values: ['{{row.LEFTOVER_EXP_DATE}}', '{{source.MP_EXP_DATE}}']
+        })
+      );
     };
 
     assertMainHomeDialog(cfg.form);

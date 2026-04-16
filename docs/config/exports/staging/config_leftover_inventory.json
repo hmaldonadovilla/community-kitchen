@@ -468,6 +468,35 @@
       ]
     },
     {
+      "id": "LEFTOVER_STORAGE",
+      "type": "CHOICE",
+      "qEn": "Storage",
+      "qFr": "Stockage",
+      "qNl": "Bewaring",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "options": [
+        "Chilled",
+        "Frozen"
+      ],
+      "optionsFr": [
+        "Réfrigéré",
+        "Congelé"
+      ],
+      "optionsNl": [
+        "Gekoeld",
+        "Ingevroren"
+      ],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": "1"
+        }
+      }
+    },
+    {
       "id": "LEFTOVER_PORTIONS",
       "type": "NUMBER",
       "qEn": "Portions",
@@ -1041,16 +1070,16 @@
           "statusAllowList": [
             "Active"
           ],
-        "projection": [
-          "INGREDIENT_NAME",
-          "CATEGORY",
-          "DIETARY_APPLICABILITY",
-          "ALLOWED_UNIT",
-          "ALLERGEN",
-          "STATUS"
-        ]
-      }
-    },
+          "projection": [
+            "INGREDIENT_NAME",
+            "CATEGORY",
+            "DIETARY_APPLICABILITY",
+            "ALLOWED_UNIT",
+            "ALLERGEN",
+            "STATUS"
+          ]
+        }
+      },
       {
         "id": "LEFTOVER_CAT",
         "type": "TEXT",
@@ -1223,6 +1252,35 @@
             }
           }
         ]
+      },
+      {
+        "id": "LEFTOVER_STORAGE",
+        "type": "CHOICE",
+        "qEn": "Storage",
+        "qFr": "Stockage",
+        "qNl": "Bewaring",
+        "required": false,
+        "readOnly": true,
+        "listView": false,
+        "options": [
+          "Chilled",
+          "Frozen"
+        ],
+        "optionsFr": [
+          "Réfrigéré",
+          "Congelé"
+        ],
+        "optionsNl": [
+          "Gekoeld",
+          "Ingevroren"
+        ],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": "1"
+          }
+        }
       },
       {
         "id": "LEFTOVER_PORTIONS",
@@ -1462,14 +1520,14 @@
                 "statusAllowList": [
                   "Active"
                 ],
-              "projection": [
-                "INGREDIENT_NAME",
-                "CATEGORY",
-                "DIETARY_APPLICABILITY",
-                "ALLOWED_UNIT",
-                "ALLERGEN",
-                "STATUS"
-              ]
+                "projection": [
+                  "INGREDIENT_NAME",
+                  "CATEGORY",
+                  "DIETARY_APPLICABILITY",
+                  "ALLOWED_UNIT",
+                  "ALLERGEN",
+                  "STATUS"
+                ]
               }
             },
             {

@@ -1536,12 +1536,16 @@ describe('WebFormService', () => {
             LEFTOVER_KIND: 'Entire dish',
             LEFTOVER_PREP_TYPE: 'Entire dish',
             LEFTOVER_MEAL_TYPE: '{{parent.MEAL_TYPE}}',
+            LEFTOVER_STORAGE: '{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}',
             LEFTOVER_RECIPE: {
               op: 'firstNonEmpty',
               values: ['{{parent.MP_LEFTOVER_RECIPE_CAPTURE}}', '{{row.RECIPE}}']
             },
             LEFTOVER_PORTIONS: '{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}',
-            LEFTOVER_EXP_DATE: '{{source.MP_EXP_DATE}}',
+            LEFTOVER_EXP_DATE: {
+              op: 'firstNonEmpty',
+              values: ['{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}', '{{source.MP_EXP_DATE}}']
+            },
             LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
             LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
@@ -1587,12 +1591,16 @@ describe('WebFormService', () => {
             LEFTOVER_STATUS: 'available',
             LEFTOVER_KIND: 'Part dish',
             LEFTOVER_PREP_TYPE: 'Part dish',
+            LEFTOVER_STORAGE: '{{row.LEFTOVER_STORAGE}}',
             LEFTOVER_INGREDIENT: '{{row.LEFTOVER_INGREDIENT}}',
             LEFTOVER_CAT: '{{row.LEFTOVER_CAT}}',
             LEFTOVER_ALLERGEN: '{{row.LEFTOVER_ALLERGEN}}',
             LEFTOVER_QTY: '{{row.LEFTOVER_QTY}}',
             LEFTOVER_UNIT: '{{row.LEFTOVER_UNIT}}',
-            LEFTOVER_EXP_DATE: '{{source.MP_EXP_DATE}}',
+            LEFTOVER_EXP_DATE: {
+              op: 'firstNonEmpty',
+              values: ['{{row.LEFTOVER_EXP_DATE}}', '{{source.MP_EXP_DATE}}']
+            },
             LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
             LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}'
@@ -1622,6 +1630,8 @@ describe('WebFormService', () => {
       ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', ''],
       ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', ''],
       ['MP_LEFTOVER_RECIPE_CAPTURE', 'TEXT', 'Dish name', 'Dish name', 'Dish name', false, '', '', ''],
+      ['MP_LEFTOVER_STORAGE_CAPTURE', 'CHOICE', 'Storage', 'Storage', 'Storage', false, 'Chilled,Frozen', 'Réfrigéré,Congelé', 'Gekoeld,Ingevroren'],
+      ['MP_LEFTOVER_EXP_DATE_CAPTURE', 'DATE', 'Leftover expiration date', 'Leftover expiration date', 'Leftover expiration date', false, '', '', ''],
       ['MP_LEFTOVER_INGREDIENTS_CAPTURE_READY', 'TEXT', 'Ingredients capture ready', 'Ingredients capture ready', 'Ingredients capture ready', false, '', '', '']
     ]);
 
@@ -1631,6 +1641,8 @@ describe('WebFormService', () => {
       ['LEFTOVER_INGREDIENT', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
       ['LEFTOVER_CAT', 'TEXT', 'Category', 'Category', 'Category', false, '', '', ''],
       ['LEFTOVER_ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', ''],
+      ['LEFTOVER_STORAGE', 'CHOICE', 'Storage', 'Storage', 'Storage', false, 'Chilled,Frozen', 'Réfrigéré,Congelé', 'Gekoeld,Ingevroren'],
+      ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', ''],
       ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
       ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '']
     ]);
@@ -1649,6 +1661,7 @@ describe('WebFormService', () => {
       ['LEFTOVER_ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_STORAGE', 'CHOICE', 'Storage', 'Storage', 'Storage', false, 'Chilled,Frozen', 'Réfrigéré,Congelé', 'Gekoeld,Ingevroren', 'Active', '', '', '', '', ''],
       ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -1679,6 +1692,8 @@ describe('WebFormService', () => {
         MEAL_TYPE: 'Diabetic',
         MP_LEFTOVER_PORTIONS_CAPTURE: 2,
         MP_LEFTOVER_RECIPE_CAPTURE: 'Renamed curry & fish',
+        MP_LEFTOVER_STORAGE_CAPTURE: 'Frozen',
+        MP_LEFTOVER_EXP_DATE_CAPTURE: '2026-10-02',
         MP_LEFTOVER_INGREDIENTS_CAPTURE_READY: '1',
         MP_TYPE_LI: [
           {
@@ -1728,6 +1743,8 @@ describe('WebFormService', () => {
         LEFTOVER_INGREDIENT: 'Chicken wings',
         LEFTOVER_CAT: 'Animal protein Halal',
         LEFTOVER_ALLERGEN: 'None',
+        LEFTOVER_STORAGE: 'Frozen',
+        LEFTOVER_EXP_DATE: '2026-10-02',
         LEFTOVER_QTY: 250,
         LEFTOVER_UNIT: 'gr'
       },
@@ -1799,8 +1816,9 @@ describe('WebFormService', () => {
     expect(entireDishRow.LEFTOVER_MEAL_TYPE).toBe('Diabetic');
     expect(entireDishRow.LEFTOVER_RECIPE).toBe('Renamed curry & fish');
     expect(Number(entireDishRow.LEFTOVER_PORTIONS || 0)).toBe(2);
+    expect(entireDishRow.LEFTOVER_STORAGE).toBe('Frozen');
     expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
-    expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);
+    expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(9);
     expect(new Date(entireDishRow.LEFTOVER_EXP_DATE).getDate()).toBe(2);
     expect(entireDishRow.LEFTOVER_SOURCE_FORM_KEY).toBe(mealProductionFormKey);
     expect(entireDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');
@@ -1815,10 +1833,11 @@ describe('WebFormService', () => {
     expect(partialDishRow.LEFTOVER_INGREDIENT).toBe('Chicken wings');
     expect(partialDishRow.LEFTOVER_CAT).toBe('Animal protein Halal');
     expect(partialDishRow.LEFTOVER_ALLERGEN).toBe('None');
+    expect(partialDishRow.LEFTOVER_STORAGE).toBe('Frozen');
     expect(Number(partialDishRow.LEFTOVER_QTY || 0)).toBe(250);
     expect(partialDishRow.LEFTOVER_UNIT).toBe('gr');
     expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
-    expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);
+    expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(9);
     expect(new Date(partialDishRow.LEFTOVER_EXP_DATE).getDate()).toBe(2);
     expect(partialDishRow.LEFTOVER_SOURCE_FORM_KEY).toBe(mealProductionFormKey);
     expect(partialDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');

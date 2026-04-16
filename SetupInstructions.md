@@ -1974,7 +1974,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         ```json
         {
           "derivedValue": {
-                "op": "addDays",
+            "op": "addDays",
             "dependsOn": "MEAL_DATE",
             "offsetDays": 2,
             "hidden": true
@@ -1983,7 +1983,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         ```
 
           - Supported ops:
-            - `addDays`: date math (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).
+            - `addDays`: date math in days (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).
+            - `addMonths`: date math in months (offset can be negative). Defaults to `"when": "always"` and is useful for retention or freezer-expiry rules such as “6 months from prep date”.
             - `today`: prefill a DATE field with today’s local date. Defaults to `"when": "empty"` (only sets when the target is empty).
             - `timeOfDayMap`: map time-of-day to a value via thresholds. Defaults to `"when": "empty"`.
             - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
@@ -1997,6 +1998,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
             ```json
             { "derivedValue": { "op": "today" } }
+            ```
+
+          - Example: compute a freezer expiration date 6 months after prep:
+
+            ```json
+            { "derivedValue": { "op": "addMonths", "dependsOn": "MP_PREP_DATE", "offsetMonths": 6, "hidden": true } }
             ```
 
           - Example: map time-of-day to a label (uses current time):
@@ -2702,6 +2709,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Each row writes to `Config: Leftover Inventory` through `submitEffects.createRecord`
    - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream inventory row stable across autosave and later edits
    - `sourceLink` lets the Leftovers step and summary template recover the generated `Config: Leftover Inventory` rows later from the Meal Production record
+   - Derived helper fields can resolve chilled vs frozen expiry in the source record first, then `submitEffects` can copy both storage mode and the final expiration date into the shared inventory record
    - Final inventory usage updates can still be handled through `submitEffects.updateRecord`, but active leftover selection is now expected to use the dedicated reservation ledger flow instead of a status-only toggle
 
    Reservation-backed inventory lifecycle:
