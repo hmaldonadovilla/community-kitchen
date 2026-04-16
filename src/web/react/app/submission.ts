@@ -32,6 +32,7 @@ import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from './recipeIngredientsDirty';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 import { GuidedStepsVirtualState, resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
+import { buildDraftStateFingerprint } from './draftSaveFingerprint';
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -1259,6 +1260,50 @@ export const shouldApplyIncomingRecordSnapshot = (args: {
     return true;
   }
   return incomingDataVersion >= currentDataVersion;
+};
+
+export const shouldAdoptIncomingRecordSnapshotMetaOnly = (args: {
+  incomingRecordId?: string | null;
+  currentRecordId?: string | null;
+  incomingDataVersion?: number | string | null;
+  currentDataVersion?: number | string | null;
+  incomingStatus?: string | null;
+  currentStatus?: string | null;
+  incomingValues?: Record<string, FieldValue> | null;
+  incomingLineItems?: LineItemState | null;
+  currentValues?: Record<string, FieldValue> | null;
+  currentLineItems?: LineItemState | null;
+  formKey?: string | null;
+  language?: string | null;
+}): boolean => {
+  const incomingRecordId = ((args.incomingRecordId || '') as any).toString?.().trim?.() || '';
+  const currentRecordId = ((args.currentRecordId || '') as any).toString?.().trim?.() || '';
+  if (!incomingRecordId || !currentRecordId || incomingRecordId !== currentRecordId) return false;
+
+  const incomingDataVersion = resolveCurrentClientDataVersion(args.incomingDataVersion);
+  const currentDataVersion = resolveCurrentClientDataVersion(args.currentDataVersion);
+  if (incomingDataVersion === null || currentDataVersion === null || incomingDataVersion <= currentDataVersion) {
+    return false;
+  }
+
+  const incomingStatus = ((args.incomingStatus || '') as any).toString?.().trim?.() || '';
+  const currentStatus = ((args.currentStatus || '') as any).toString?.().trim?.() || '';
+  if (incomingStatus !== currentStatus) return false;
+
+  const currentFingerprint = buildDraftStateFingerprint({
+    formKey: args.formKey || '',
+    language: args.language || '',
+    values: args.currentValues || {},
+    lineItems: args.currentLineItems || {}
+  });
+  const incomingFingerprint = buildDraftStateFingerprint({
+    formKey: args.formKey || '',
+    language: args.language || '',
+    values: args.incomingValues || {},
+    lineItems: args.incomingLineItems || {}
+  });
+  if (!currentFingerprint || !incomingFingerprint) return false;
+  return currentFingerprint === incomingFingerprint;
 };
 
 export const chainSerializedSubmissionRequest = <T,>(

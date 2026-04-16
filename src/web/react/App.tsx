@@ -87,6 +87,7 @@ import {
   resolveExistingRecordId,
   resolveCurrentClientDataVersion,
   settleClientDataVersionAfterDispatch,
+  shouldAdoptIncomingRecordSnapshotMetaOnly,
   shouldApplyIncomingRecordSnapshot,
   validateForm
 } from './app/submission';
@@ -775,6 +776,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     title: string;
     message: string;
   };
+  type RecordSnapshotApplyMode = 'ignored' | 'metaOnly' | 'applied';
   const [recordStale, setRecordStale] = useState<RecordStaleInfo | null>(null);
   const [recordSyncNotice, setRecordSyncNotice] = useState<RecordSyncNoticeState>({ open: false, title: '', message: '' });
   const recordStaleRef = useRef<RecordStaleInfo | null>(null);
@@ -798,6 +800,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const optionStateRef = useRef<OptionState>({});
   const tooltipStateRef = useRef<Record<string, Record<string, string>>>({});
   const recordFetchSeqRef = useRef(0);
+  const lastRecordSnapshotApplyModeRef = useRef<{
+    mode: RecordSnapshotApplyMode;
+    recordId: string | null;
+    dataVersion: number | null;
+  }>({
+    mode: 'ignored',
+    recordId: null,
+    dataVersion: null
+  });
   const [externalScrollAnchor, setExternalScrollAnchor] = useState<string | null>(null);
   const [lastSubmissionMeta, setLastSubmissionMeta] = useState<SubmissionMeta | null>(() =>
     record
@@ -4936,9 +4947,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   ]);
 
   const applyRecordSnapshot = useCallback(
-    (snapshot: WebFormSubmission) => {
+    (snapshot: WebFormSubmission): RecordSnapshotApplyMode => {
       const id = snapshot?.id;
-      if (!snapshot || !id) return;
+      if (!snapshot || !id) {
+        lastRecordSnapshotApplyModeRef.current = { mode: 'ignored', recordId: null, dataVersion: null };
+        return 'ignored';
+      }
       const currentRecordId =
         resolveExistingRecordId({
           selectedRecordId: selectedRecordIdRef.current,
@@ -4965,7 +4979,110 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           incomingDataVersion,
           currentDataVersion
         });
-        return;
+        lastRecordSnapshotApplyModeRef.current = {
+          mode: 'ignored',
+          recordId: id,
+          dataVersion: incomingDataVersion
+        };
+        return 'ignored';
+      }
+      const normalized = normalizeRecordValues(definition, snapshot.values || {});
+      const initialLineItems = buildInitialLineItems(definition, normalized);
+      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+      const reconciledState = reconcileAutoAddModeGroups({
+        definition,
+        values: mapped.values,
+        lineItems: mapped.lineItems,
+        optionState: optionStateRef.current,
+        language: languageRef.current,
+        ensureLineOptions: ensureLineOptionsRef.current
+      });
+      const nextMappedValues = reconciledState.changed ? reconciledState.values : mapped.values;
+      const nextMappedLineItems = reconciledState.changed ? reconciledState.lineItems : mapped.lineItems;
+      const currentStatusRaw =
+        ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
+      const incomingStatusRaw = ((snapshot.status || '') as any)?.toString?.() || '';
+      const shouldAdoptMetaOnly = shouldAdoptIncomingRecordSnapshotMetaOnly({
+        incomingRecordId: id,
+        currentRecordId,
+        incomingDataVersion,
+        currentDataVersion,
+        incomingStatus: incomingStatusRaw,
+        currentStatus: currentStatusRaw,
+        incomingValues: nextMappedValues,
+        incomingLineItems: nextMappedLineItems,
+        currentValues: valuesRef.current,
+        currentLineItems: lineItemsRef.current,
+        formKey,
+        language: languageRef.current
+      });
+      if (shouldAdoptMetaOnly) {
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        pendingDeferredRecordFreshnessSyncRef.current = null;
+        recordDataVersionRef.current =
+          snapshot && Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : null;
+        optimisticClientDataVersionRef.current = recordDataVersionRef.current;
+        if (snapshot && Number.isFinite(Number((snapshot as any).__rowNumber))) {
+          recordRowNumberRef.current = Number((snapshot as any).__rowNumber);
+        }
+        autoSaveDirtyRef.current = false;
+        if (autoSaveTimerRef.current) {
+          globalThis.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        setDraftSave({ phase: 'idle' });
+        rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
+        setRecordLoadingId(null);
+        setRecordLoadError(null);
+        selectedRecordSnapshotRef.current = snapshot;
+        setSelectedRecordSnapshot(snapshot);
+        setLastSubmissionMeta(prev => ({
+          ...(prev || {}),
+          id,
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+          dataVersion: (snapshot as any).dataVersion,
+          status: snapshot.status || null
+        }));
+        lastSubmissionMetaRef.current = {
+          ...(lastSubmissionMetaRef.current || {}),
+          id,
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+          dataVersion: (snapshot as any).dataVersion,
+          status: snapshot.status || null
+        };
+        setListCache(prev => ({
+          response: prev.response,
+          records: { ...prev.records, [id]: snapshot }
+        }));
+        try {
+          upsertListCacheRow({
+            recordId: id,
+            values: (snapshot.values as any) || {},
+            createdAt: snapshot.createdAt,
+            updatedAt: snapshot.updatedAt,
+            status: (snapshot.status as any) || null,
+            pdfUrl: (snapshot as any).pdfUrl,
+            dataVersion: Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : undefined,
+            rowNumber: Number.isFinite(Number((snapshot as any).__rowNumber)) ? Number((snapshot as any).__rowNumber) : undefined
+          });
+        } catch {
+          // ignore
+        }
+        lastRecordSnapshotApplyModeRef.current = {
+          mode: 'metaOnly',
+          recordId: id,
+          dataVersion: incomingDataVersion
+        };
+        logEvent('record.snapshot.metaOnlyAdopted', {
+          recordId: id,
+          incomingDataVersion,
+          currentDataVersion,
+          autoAddGroupRebuilds: reconciledState.changedCount
+        });
+        return 'metaOnly';
       }
       setPrefetchedSummaryHtml(null);
       // Switching records: cancel any in-flight dedup check so stale responses can't affect the new record.
@@ -5002,19 +5119,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveUserEditedRef.current = false;
       }
       dedupHoldRef.current = false;
-      const normalized = normalizeRecordValues(definition, snapshot.values || {});
-      const initialLineItems = buildInitialLineItems(definition, normalized);
-      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
       // Treat the loaded snapshot's dedup signature as "already checked" so we don't spam dedup checks
       // on every record navigation. Subsequent edits of dedup-key fields will force a re-check.
       try {
-        const baseline = computeDedupSignatureFromValues(dedupPrecheckRules, mapped.values as any);
+        const baseline = computeDedupSignatureFromValues(dedupPrecheckRules, nextMappedValues as any);
         lastDedupCheckedSignatureRef.current = (baseline || '').toString();
         dedupSignatureRef.current = lastDedupCheckedSignatureRef.current;
         dedupBaselineSignatureRef.current = lastDedupCheckedSignatureRef.current;
         dedupKeyFingerprintBaselineRef.current = computeDedupKeyFingerprint(
           (definition as any)?.dedupRules,
-          mapped.values as any
+          nextMappedValues as any
         );
       } catch {
         lastDedupCheckedSignatureRef.current = '';
@@ -5029,15 +5143,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveTimerRef.current = null;
       }
       setDraftSave({ phase: 'idle' });
-      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
+      rememberAutoSaveSeenState(nextMappedValues, nextMappedLineItems);
       // Keep refs in sync immediately so any follow-up actions (e.g. list-triggered button previews) can use
       // the freshly loaded record values without waiting for a re-render.
-      valuesRef.current = mapped.values;
-      lineItemsRef.current = mapped.lineItems;
+      valuesRef.current = nextMappedValues;
+      lineItemsRef.current = nextMappedLineItems;
       selectedRecordIdRef.current = id;
       selectedRecordSnapshotRef.current = snapshot;
-      setValues(mapped.values);
-      setLineItems(mapped.lineItems);
+      setValues(nextMappedValues);
+      setLineItems(nextMappedLineItems);
       setErrors({});
       setValidationWarnings({ top: [], byField: {} });
       setValidationAttempted(false);
@@ -5076,26 +5190,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dataVersion: Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : undefined,
           rowNumber: Number.isFinite(Number((snapshot as any).__rowNumber)) ? Number((snapshot as any).__rowNumber) : undefined
         });
-      } catch (_) {
+      } catch {
         // ignore
       }
-
+      lastRecordSnapshotApplyModeRef.current = {
+        mode: 'applied',
+        recordId: id,
+        dataVersion: incomingDataVersion
+      };
+      logEvent('record.snapshot.applied', {
+        recordId: id,
+        incomingDataVersion,
+        currentDataVersion,
+        autoAddGroupRebuilds: reconciledState.changedCount
+      });
+      return 'applied';
     },
-    [dedupPrecheckRules, definition, logEvent, rememberAutoSaveSeenState, resetFieldChangeTransientState, upsertListCacheRow]
+    [
+      dedupPrecheckRules,
+      definition,
+      formKey,
+      logEvent,
+      rememberAutoSaveSeenState,
+      resetFieldChangeTransientState,
+      upsertListCacheRow
+    ]
   );
 
   const loadRecordSnapshot = useCallback(
-    async (recordId: string, rowNumberHint?: number): Promise<boolean> => {
+    async (recordId: string, rowNumberHint?: number, options?: { background?: boolean }): Promise<boolean> => {
       const candidateRow = rowNumberHint && Number.isFinite(rowNumberHint) && rowNumberHint >= 2 ? rowNumberHint : undefined;
+      const background = options?.background === true;
       if (!recordId && !candidateRow) return false;
       if (candidateRow) {
         recordRowNumberRef.current = candidateRow;
       }
       const seq = ++recordFetchSeqRef.current;
       const startedAt = Date.now();
-      setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
-      setRecordLoadError(null);
-      logEvent('record.fetch.start', { recordId: recordId || null, rowNumberHint: candidateRow || null });
+      if (!background) {
+        setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
+        setRecordLoadError(null);
+      }
+      logEvent('record.fetch.start', { recordId: recordId || null, rowNumberHint: candidateRow || null, background });
       try {
         let snapshot: WebFormSubmission | null = null;
 
@@ -5119,17 +5255,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         if (seq !== recordFetchSeqRef.current) return false;
         if (!snapshot) throw new Error('Record not found.');
-        applyRecordSnapshot(snapshot);
+        const applyMode = applyRecordSnapshot(snapshot);
         markRecordFreshnessServerTouch({ reason: 'record.load', recordId: snapshot.id || recordId });
-        logEvent('record.fetch.done', { recordId: snapshot.id || recordId, durationMs: Date.now() - startedAt });
+        logEvent('record.fetch.done', {
+          recordId: snapshot.id || recordId,
+          durationMs: Date.now() - startedAt,
+          background,
+          applyMode
+        });
         return true;
       } catch (err: any) {
         if (seq !== recordFetchSeqRef.current) return false;
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load record.');
         const logMessage = resolveLogMessage(err, 'Failed to load record.');
-        setRecordLoadError(uiMessage);
-        setRecordLoadingId(null);
-        logEvent('record.fetch.error', { recordId, message: logMessage, rowNumberHint, durationMs: Date.now() - startedAt });
+        if (!background) {
+          setRecordLoadError(uiMessage);
+          setRecordLoadingId(null);
+        }
+        logEvent('record.fetch.error', {
+          recordId,
+          message: logMessage,
+          rowNumberHint,
+          durationMs: Date.now() - startedAt,
+          background
+        });
         return false;
       }
     },
@@ -5210,22 +5359,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setStatus(null);
       setStatusLevel(null);
 
-      const busySeq = recordSyncBusy.lock({
-        title: tSystem('record.syncingTitle', languageRef.current, 'Synchronizing record…'),
-        message: tSystem(
-          'record.syncing',
-          languageRef.current,
-          'This record changed at the source. We are synchronizing the latest version now.'
-        ),
-        kind: 'recordSync',
-        diagnosticMeta: {
-          recordId,
-          cachedVersion: args.cachedVersion ?? null,
-          serverVersion: args.serverVersion ?? null,
-          serverRow: args.serverRow ?? null
-        }
-      });
-
       const promise = (async () => {
         logEvent('record.sync.start', {
           reason: args.reason,
@@ -5234,10 +5367,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           serverVersion: args.serverVersion ?? null,
           serverRow: args.serverRow ?? null
         });
-        const refreshed = await loadRecordSnapshot(recordId, args.serverRow || undefined);
+        const refreshed = await loadRecordSnapshot(recordId, args.serverRow || undefined, { background: true });
         if (refreshed) {
+          const applyMode = lastRecordSnapshotApplyModeRef.current.mode;
           recordStaleRef.current = null;
           setRecordStale(null);
+          if (applyMode === 'metaOnly') {
+            setRecordSyncNotice({ open: false, title: '', message: '' });
+            logEvent('record.sync.metaOnly', {
+              reason: args.reason,
+              recordId,
+              cachedVersion: args.cachedVersion ?? null,
+              serverVersion: args.serverVersion ?? null,
+              serverRow: args.serverRow ?? null
+            });
+            return true;
+          }
           setRecordSyncNotice({
             open: true,
             title: tSystem('record.syncedTitle', languageRef.current, 'Record synchronized'),
@@ -5250,7 +5395,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('record.sync.success', {
             reason: args.reason,
             recordId,
-            serverRow: args.serverRow ?? null
+            serverRow: args.serverRow ?? null,
+            applyMode
           });
           return true;
         }
@@ -5278,17 +5424,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         return false;
       })().finally(() => {
-        recordSyncBusy.unlock(busySeq, {
-          reason: args.reason,
-          recordId
-        });
         recordSyncPromiseRef.current = null;
       });
 
       recordSyncPromiseRef.current = promise;
       return promise;
     },
-    [loadRecordSnapshot, logEvent, recordSyncBusy, setStatus, setStatusLevel]
+    [loadRecordSnapshot, logEvent, setStatus, setStatusLevel]
   );
   synchronizeStaleRecordRef.current = synchronizeStaleRecord;
 

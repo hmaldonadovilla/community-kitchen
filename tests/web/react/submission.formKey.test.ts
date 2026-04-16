@@ -7,6 +7,7 @@ import {
   resolveCurrentClientDataVersion,
   resolveDraftPayloadFormKey,
   settleClientDataVersionAfterDispatch,
+  shouldAdoptIncomingRecordSnapshotMetaOnly,
   shouldApplyIncomingRecordSnapshot
 } from '../../../src/web/react/app/submission';
 
@@ -230,6 +231,77 @@ describe('shouldApplyIncomingRecordSnapshot', () => {
         currentDataVersion: 3
       })
     ).toBe(true);
+  });
+});
+
+describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
+  it('adopts a newer version when the record content is unchanged', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'In progress',
+        currentStatus: 'In progress',
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: { MP_SERVICE: 'Lunch' } as any,
+        incomingValues: { MP_SERVICE: 'Lunch' } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        },
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('does not adopt when the incoming snapshot changes the visible content', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'In progress',
+        currentStatus: 'In progress',
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: { MP_SERVICE: 'Lunch' } as any,
+        incomingValues: { MP_SERVICE: 'Dinner' } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        },
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        }
+      })
+    ).toBe(false);
+  });
+
+  it('does not adopt when only the status changed', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'Closed',
+        currentStatus: 'In progress',
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: { MP_SERVICE: 'Lunch' } as any,
+        incomingValues: { MP_SERVICE: 'Lunch' } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        },
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10 } as any }] as any
+        }
+      })
+    ).toBe(false);
   });
 });
 
