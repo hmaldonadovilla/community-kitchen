@@ -850,6 +850,8 @@ export const LineItemGroupQuestion: React.FC<{
     return map;
   }, [activeFieldMeta.path, activeFieldMeta.type, lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
 
+  const guidedStepFieldId = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
+  const currentGuidedStepId = `${resolveTopValue(guidedStepFieldId) ?? ''}`.trim();
   const stepDataSourceRows = React.useMemo(
     () => (Array.isArray(dataSourceRows) ? dataSourceRows.filter(Boolean) : []),
     [dataSourceRows]
@@ -862,14 +864,21 @@ export const LineItemGroupQuestion: React.FC<{
     }),
     [lineItems, resolveTopValue]
   );
-  const sourceFirstDataSourceRows = React.useMemo(
+  const activeStepDataSourceRows = React.useMemo(
     () =>
       stepDataSourceRows.filter(config => {
-        if (`${(config as any)?.presentation || ''}`.trim() !== 'sourceFirstAllocations') return false;
         const when = (config as any)?.presentationWhen;
         return !when || matchesWhenClause(when as any, topLevelVisibilityContext);
       }),
     [stepDataSourceRows, topLevelVisibilityContext]
+  );
+  const sourceFirstDataSourceRows = React.useMemo(
+    () =>
+      activeStepDataSourceRows.filter(config => {
+        if (`${(config as any)?.presentation || ''}`.trim() !== 'sourceFirstAllocations') return false;
+        return true;
+      }),
+    [activeStepDataSourceRows]
   );
   const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
   const [stepDataSourceLoadingCounts, setStepDataSourceLoadingCounts] = React.useState<Record<string, number>>({});
@@ -896,10 +905,11 @@ export const LineItemGroupQuestion: React.FC<{
       buildStepDataSourceBootstrapSignature({
         recordId,
         language,
-        configs: stepDataSourceRows,
+        stepId: currentGuidedStepId,
+        configs: activeStepDataSourceRows,
         bootstrap: dataSourceBootstrap
       }),
-    [dataSourceBootstrap, language, recordId, stepDataSourceRows]
+    [activeStepDataSourceRows, currentGuidedStepId, dataSourceBootstrap, language, recordId]
   );
 
   React.useEffect(() => {
@@ -981,23 +991,21 @@ export const LineItemGroupQuestion: React.FC<{
       patch: Record<string, FieldValue>;
     }) => {
       if (!queueGuidedStepReservationDraftSync) return;
-      const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
-      const stepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
-      if (!stepId) return;
+      if (!currentGuidedStepId) return;
       pendingStepReservationDraftSyncRef.current = {
-        stepId,
+        stepId: currentGuidedStepId,
         reason: `lineItem:${q.id}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`
       };
       onDiagnostic?.('guidedStep.reservationSync.queued', {
         groupId: q.id,
-        stepId,
+        stepId: currentGuidedStepId,
         parentRowId: args.parentRowId,
         sourceKey: args.sourceKey,
         patchFields: Object.keys(args.patch).sort()
       });
       setPendingStepReservationDraftSyncTick(prev => prev + 1);
     },
-    [definition, onDiagnostic, q.id, queueGuidedStepReservationDraftSync, resolveTopValue]
+    [currentGuidedStepId, onDiagnostic, q.id, queueGuidedStepReservationDraftSync]
   );
 
   const updateStepDataSourceAvailability = React.useCallback(
@@ -1022,8 +1030,8 @@ export const LineItemGroupQuestion: React.FC<{
   const applyStepDataSourceAvailabilitySnapshots = React.useCallback(
     (snapshots: InventoryAvailabilitySnapshot[] | null | undefined): void => {
       const entries = Array.isArray(snapshots) ? snapshots.filter(Boolean) : [];
-      if (!entries.length || !stepDataSourceRows.length) return;
-      stepDataSourceRows.forEach(config => {
+      if (!entries.length || !activeStepDataSourceRows.length) return;
+      activeStepDataSourceRows.forEach(config => {
         const dataSourceFormKey = `${config?.dataSource?.formKey || ''}`.trim();
         entries.forEach(snapshot => {
           if (!snapshot) return;
@@ -1032,7 +1040,7 @@ export const LineItemGroupQuestion: React.FC<{
         });
       });
     },
-    [stepDataSourceRows, updateStepDataSourceAvailability]
+    [activeStepDataSourceRows, updateStepDataSourceAvailability]
   );
 
   React.useEffect(() => {
@@ -1059,11 +1067,15 @@ export const LineItemGroupQuestion: React.FC<{
         setStepDataSourceDrafts({});
       }
     }
+    if (!activeStepDataSourceRows.length) {
+      stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+      return;
+    }
     if (!recordChanged && stepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
       return;
     }
     let cancelled = false;
-    const configEntries = stepDataSourceRows
+    const configEntries = activeStepDataSourceRows
       .map(candidate => {
         if (!candidate || typeof candidate !== 'object') return null;
         const dataSource = (candidate as any).dataSource;
@@ -1082,8 +1094,6 @@ export const LineItemGroupQuestion: React.FC<{
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
       stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
       beginStepDataSourceLoading(loadingEntries);
-      const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
-      const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
       try {
         if (
           shouldWaitForReservationSyncBeforeBootstrap &&
@@ -1092,19 +1102,19 @@ export const LineItemGroupQuestion: React.FC<{
         ) {
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.start', {
             groupId: q.id,
-            stepId: currentStepId || null,
+            stepId: currentGuidedStepId || null,
             recordId: normalizedRecordId
           });
           const waitResult = await waitForGuidedStepReservationDraftSync({
             recordId: normalizedRecordId,
-            stepId: currentStepId || undefined,
+            stepId: currentGuidedStepId || undefined,
             reason: `stepDataSourceBootstrap:${q.id}`
           });
           if (cancelled) return;
           if (!waitResult.ok) {
             onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.blocked', {
               groupId: q.id,
-              stepId: currentStepId || null,
+              stepId: currentGuidedStepId || null,
               recordId: normalizedRecordId,
               message: waitResult.message || null
             });
@@ -1112,7 +1122,7 @@ export const LineItemGroupQuestion: React.FC<{
           }
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
             groupId: q.id,
-            stepId: currentStepId || null,
+            stepId: currentGuidedStepId || null,
             recordId: normalizedRecordId
           });
         }
@@ -1148,14 +1158,14 @@ export const LineItemGroupQuestion: React.FC<{
       cancelled = true;
     };
   }, [
+    activeStepDataSourceRows,
     beginStepDataSourceLoading,
-    definition,
+    currentGuidedStepId,
     endStepDataSourceLoading,
     language,
     onDiagnostic,
     q.id,
     recordId,
-    resolveTopValue,
     shouldWaitForReservationSyncBeforeBootstrap,
     stepDataSourceBootstrapSignature,
     stepDataSourceRows,
@@ -1163,11 +1173,11 @@ export const LineItemGroupQuestion: React.FC<{
   ]);
 
   React.useEffect(() => {
-    if (!stepDataSourceRows.length) return;
+    if (!activeStepDataSourceRows.length) return;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     let cancelled = false;
     const watchedDataSourceIds = new Set(
-      stepDataSourceRows
+      activeStepDataSourceRows
         .map(candidate =>
           candidate && typeof candidate === 'object' ? `${(candidate as any)?.dataSource?.id || ''}`.trim() : ''
         )
@@ -1175,7 +1185,7 @@ export const LineItemGroupQuestion: React.FC<{
     );
 
     const handleCacheCleared = () => {
-      const configs = stepDataSourceRows
+      const configs = activeStepDataSourceRows
         .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
         .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
       if (!configs.length) {
@@ -1207,7 +1217,7 @@ export const LineItemGroupQuestion: React.FC<{
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
       window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     };
-  }, [beginStepDataSourceLoading, endStepDataSourceLoading, language, stepDataSourceRows]);
+  }, [activeStepDataSourceRows, beginStepDataSourceLoading, endStepDataSourceLoading, language]);
 
   React.useEffect(() => {
     const pending = pendingStepReservationDraftSyncRef.current;
@@ -2558,7 +2568,7 @@ export const LineItemGroupQuestion: React.FC<{
   const rollbackRejectedStepReservations = React.useCallback(
     (rejectedReservations: GuidedStepReservationAvailabilityEventDetail['rejectedReservations']): void => {
       const entries = Array.isArray(rejectedReservations) ? rejectedReservations.filter(Boolean) : [];
-      if (!entries.length || !stepDataSourceRows.length) return;
+      if (!entries.length || !activeStepDataSourceRows.length) return;
       const parentRows = Array.isArray(lineItems[q.id]) ? lineItems[q.id] : [];
       if (!parentRows.length) return;
       const handled = new Set<string>();
@@ -2573,7 +2583,7 @@ export const LineItemGroupQuestion: React.FC<{
         const parentRow = parentRows.find(candidate => `${candidate?.id || ''}`.trim() === sourceParentRowId);
         if (!parentRow) return;
 
-        stepDataSourceRows.forEach(config => {
+        activeStepDataSourceRows.forEach(config => {
           const outputGroupId = `${config?.outputGroupId || ''}`.trim();
           const rejectedOutputGroupId = `${entry?.sourceOutputGroupId || ''}`.trim();
           if (rejectedOutputGroupId && outputGroupId && rejectedOutputGroupId !== outputGroupId) return;
@@ -2619,19 +2629,18 @@ export const LineItemGroupQuestion: React.FC<{
         });
       });
     },
-    [language, lineItems, q.id, stepDataSourceRows, syncStepDataSourceOutputRowWithReservation]
+    [activeStepDataSourceRows, language, lineItems, q.id, syncStepDataSourceOutputRowWithReservation]
   );
 
   React.useEffect(() => {
+    if (!activeStepDataSourceRows.length) return;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const currentRecordId = `${recordId || ''}`.trim();
-    const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
-    const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
     const handleAvailability = (event: Event) => {
       const detail = (event as CustomEvent<GuidedStepReservationAvailabilityEventDetail>)?.detail;
       if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
       if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
-      if (currentStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentStepId) return;
+      if (currentGuidedStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentGuidedStepId) return;
       applyStepDataSourceAvailabilitySnapshots(detail.availability);
       rollbackRejectedStepReservations(detail.rejectedReservations);
     };
@@ -2645,7 +2654,7 @@ export const LineItemGroupQuestion: React.FC<{
         handleAvailability as EventListener
       );
     };
-  }, [applyStepDataSourceAvailabilitySnapshots, definition, recordId, resolveTopValue, rollbackRejectedStepReservations]);
+  }, [activeStepDataSourceRows.length, applyStepDataSourceAvailabilitySnapshots, currentGuidedStepId, recordId, rollbackRejectedStepReservations]);
 
   const seedReservationCommittedValues = React.useCallback(
     (args: {
@@ -2715,7 +2724,7 @@ export const LineItemGroupQuestion: React.FC<{
   const stepDataSourceNormalizationSignatureRef = React.useRef<string>('');
 
   React.useEffect(() => {
-    if (!stepDataSourceRows.length || !parentRows.length) {
+    if (!activeStepDataSourceRows.length || !parentRows.length) {
       stepDataSourceNormalizationSignatureRef.current = '';
       return;
     }
@@ -2728,7 +2737,7 @@ export const LineItemGroupQuestion: React.FC<{
     }> = [];
 
     parentRows.forEach(parentRow => {
-      stepDataSourceRows.forEach(config => {
+      activeStepDataSourceRows.forEach(config => {
         const output = resolveDataSourceOutputGroup(config, parentRow.id);
         if (!output) return;
         const outputRows = lineItems[output.key] || [];
@@ -2873,7 +2882,7 @@ export const LineItemGroupQuestion: React.FC<{
     resolveVirtualRowWhenContext,
     setLineItems,
     stepDataSourceDrafts,
-    stepDataSourceRows
+    activeStepDataSourceRows
   ]);
 
   const coerceDataSourceItemsCollection = React.useCallback((payload: any): any[] => {
@@ -11767,9 +11776,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       }}
                     />
                   ) : null}
-                  {!hideInlineSubgroups && !rowCollapsed && stepDataSourceRows.length ? (
+                  {!hideInlineSubgroups && !rowCollapsed && activeStepDataSourceRows.length ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-                      {stepDataSourceRows.map((config: any, configIndex: number) => {
+                      {activeStepDataSourceRows.map((config: any, configIndex: number) => {
                         const sourceRows = resolveStepDataSourceRowsForParent(config, row);
                         if (!sourceRows.length) return null;
                         const output = resolveDataSourceOutputGroup(config, row.id);

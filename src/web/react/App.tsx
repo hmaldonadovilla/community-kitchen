@@ -104,6 +104,7 @@ import {
 } from './app/recordFreshness';
 import {
   buildDataSourceFreshnessSnapshotSignature,
+  primeDataSourceFreshnessWatchBaselines,
   resolveActiveDataSourceFreshnessWatches,
   resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
@@ -3152,13 +3153,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         watches: dataSourceFreshnessWatchesRef.current,
         stepId: activeGuidedStepIdRef.current
       });
+      const now = Date.now();
+      const primed = primeDataSourceFreshnessWatchBaselines({
+        watches: activeWatches,
+        now,
+        lastServerActivityAtByWatchKey: lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current
+      });
+      if (primed.initializedWatchKeys.length) {
+        lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current = primed.lastServerActivityAtByWatchKey;
+        logEvent('datasource.freshness.baseline', {
+          reason,
+          recordId: getCurrentOpenRecordId() || null,
+          stepId: activeGuidedStepIdRef.current || null,
+          watchKeys: primed.initializedWatchKeys,
+          dataSourceIds: Array.from(new Set(activeWatches.flatMap(watch => watch.dataSourceIds)))
+        });
+      }
       const delayMs = resolveDataSourceFreshnessTimerDelay({
         watches: activeWatches,
         view: viewRef.current,
         recordId: getCurrentOpenRecordId(),
         recordLoading: Boolean(recordLoadingIdRef.current),
-        now: Date.now(),
-        lastServerActivityAtByWatchKey: lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current
+        now,
+        lastServerActivityAtByWatchKey: primed.lastServerActivityAtByWatchKey
       });
       if (delayMs === null) return;
       const nextDelayMs = Math.max(1000, Math.floor(delayMs));

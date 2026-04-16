@@ -43,6 +43,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
     const baseline = buildStepDataSourceBootstrapSignature({
       recordId: 'REC-1',
       language: 'EN',
+      stepId: 'leftoverForm',
       configs: [
         {
           id: 'leftoverRows',
@@ -56,6 +57,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
       buildStepDataSourceBootstrapSignature({
         recordId: 'REC-2',
         language: 'EN',
+        stepId: 'leftoverForm',
         configs: [
           {
             id: 'leftoverRows',
@@ -70,6 +72,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
       buildStepDataSourceBootstrapSignature({
         recordId: 'REC-1',
         language: 'EN',
+        stepId: 'leftoverForm',
         configs: [
           {
             id: 'leftoverRows',
@@ -80,6 +83,30 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         bootstrap: { waitForGuidedReservationSync: true }
       })
     ).not.toBe(baseline);
+  });
+
+  it('changes when the active guided step changes', () => {
+    const orderSignature = buildStepDataSourceBootstrapSignature({
+      recordId: 'REC-1',
+      language: 'EN',
+      stepId: 'orderInfo',
+      configs: []
+    });
+
+    const leftoverSignature = buildStepDataSourceBootstrapSignature({
+      recordId: 'REC-1',
+      language: 'EN',
+      stepId: 'leftoverForm',
+      configs: [
+        {
+          id: 'leftoverRows',
+          dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+          availability: { enabled: true }
+        }
+      ]
+    });
+
+    expect(leftoverSignature).not.toBe(orderSignature);
   });
 
   it('normalizes the guided reservation wait flag', () => {

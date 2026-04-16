@@ -1,6 +1,7 @@
 import {
   buildDataSourceFreshnessSnapshotSignature,
   buildDataSourceFreshnessWatchKey,
+  primeDataSourceFreshnessWatchBaselines,
   resolveActiveDataSourceFreshnessWatches,
   resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
@@ -68,6 +69,36 @@ describe('dataSourceFreshness helpers', () => {
         }
       })
     ).toBe(15_000);
+  });
+
+  test('primes missing datasource watch baselines once so the quiet window can elapse', () => {
+    const watches = resolveDataSourceFreshnessWatches({
+      dataSourceWatches: [
+        {
+          stepId: 'leftoverForm',
+          dataSourceIds: ['Leftover Inventory Data'],
+          quietWindowMs: 30000
+        }
+      ]
+    } as any);
+
+    const first = primeDataSourceFreshnessWatchBaselines({
+      watches,
+      now: 10_000,
+      lastServerActivityAtByWatchKey: {}
+    });
+
+    expect(first.initializedWatchKeys).toEqual([watches[0].key]);
+    expect(first.lastServerActivityAtByWatchKey[watches[0].key]).toBe(10_000);
+
+    const second = primeDataSourceFreshnessWatchBaselines({
+      watches,
+      now: 20_000,
+      lastServerActivityAtByWatchKey: first.lastServerActivityAtByWatchKey
+    });
+
+    expect(second.initializedWatchKeys).toEqual([]);
+    expect(second.lastServerActivityAtByWatchKey[watches[0].key]).toBe(10_000);
   });
 
   test('builds a stable signature from datasource rows', () => {

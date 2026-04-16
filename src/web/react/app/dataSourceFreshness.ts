@@ -132,6 +132,29 @@ export const resolveDataSourceFreshnessTimerDelay = (args: {
   return minDelayMs;
 };
 
+export const primeDataSourceFreshnessWatchBaselines = (args: {
+  watches: ResolvedDataSourceFreshnessWatch[];
+  now: number;
+  lastServerActivityAtByWatchKey: Record<string, number | null | undefined>;
+}): {
+  lastServerActivityAtByWatchKey: Record<string, number>;
+  initializedWatchKeys: string[];
+} => {
+  const next = { ...(args.lastServerActivityAtByWatchKey || {}) } as Record<string, number>;
+  const initializedWatchKeys: string[] = [];
+  (Array.isArray(args.watches) ? args.watches : []).forEach(watch => {
+    if (!watch?.key) return;
+    const current = Number(next[watch.key]);
+    if (Number.isFinite(current) && current > 0) return;
+    next[watch.key] = args.now;
+    initializedWatchKeys.push(watch.key);
+  });
+  return {
+    lastServerActivityAtByWatchKey: next,
+    initializedWatchKeys
+  };
+};
+
 const stableStringify = (value: any): string => {
   const seen = new WeakSet<object>();
   const normalize = (input: any): any => {

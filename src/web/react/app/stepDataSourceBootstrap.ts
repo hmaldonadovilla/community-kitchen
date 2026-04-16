@@ -7,12 +7,14 @@ import type { StepDataSourceBootstrapConfig } from '../../types';
 export const buildStepDataSourceBootstrapSignature = (args: {
   recordId?: string | null;
   language?: string | null;
+  stepId?: string | null;
   configs?: any[];
   bootstrap?: StepDataSourceBootstrapConfig | null;
 }): string => {
   const configs = Array.isArray(args.configs) ? args.configs.filter(Boolean) : [];
   const language = `${args.language || 'EN'}`.trim().toUpperCase();
   const recordId = `${args.recordId || ''}`.trim();
+  const stepId = `${args.stepId || ''}`.trim();
   const normalizedConfigs = configs.map(config => {
     const dataSource = config?.dataSource && typeof config.dataSource === 'object' ? config.dataSource : {};
     return {
@@ -30,6 +32,7 @@ export const buildStepDataSourceBootstrapSignature = (args: {
   return JSON.stringify({
     recordId,
     language,
+    stepId,
     waitForGuidedReservationSync: args.bootstrap?.waitForGuidedReservationSync === true,
     configs: normalizedConfigs
   });
