@@ -3646,6 +3646,18 @@ components:
         showBackButton:
           type: boolean
           description: Optional per-step toggle to hide/show the Back button (defaults to the global setting).
+        backgroundReservationSyncOnAdvance:
+          type: boolean
+          description: |
+            Optional per-step toggle for the normal guided-step advance background reservation sync.
+
+            When false, advancing away from this step will not queue the generic
+            `applyInventoryReservationPlan` reconciliation pass.
+
+            Use this when step entry should only refresh shared inventory through
+            datasource fetches/heartbeats, and reservation writes should happen only
+            after real user reservation edits or when another mechanism already
+            detects reservation-managed row deletions.
         milestoneAction:
           $ref: '#/components/schemas/StepMilestoneActionConfig'
           description: Optional step-scoped action triggered by the primary button after the current step validates.

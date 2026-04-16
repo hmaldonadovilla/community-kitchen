@@ -3770,6 +3770,14 @@ export interface StepNavigationConfig {
    */
   showBackButton?: boolean;
   /**
+   * Optional per-step toggle for the normal guided-step advance background reservation sync.
+   *
+   * When false, advancing away from this step will not queue the background
+   * applyInventoryReservationPlan reconciliation pass. This does not affect immediate
+   * datasource-row reservation syncs, destructive clears, or milestone pre-actions.
+   */
+  backgroundReservationSyncOnAdvance?: boolean;
+  /**
    * Optional step-scoped action triggered by the primary submit/next button after the current step validates.
    *
    * Use this for milestone-style guided steps that need to run server-backed side effects

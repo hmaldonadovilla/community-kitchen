@@ -961,6 +961,7 @@
           "navigation": {
             "forwardGate": "whenValid",
             "autoAdvance": "onValid",
+            "backgroundReservationSyncOnAdvance": false,
             "autoAdvanceWhen": {
               "fieldId": "status",
               "equals": "In production"
@@ -10655,6 +10656,7 @@
           "navigation": {
             "forwardGate": "whenValid",
             "autoAdvance": "onValid",
+            "backgroundReservationSyncOnAdvance": false,
             "autoAdvanceWhen": {
               "fieldId": "status",
               "equals": "In production"

@@ -11042,6 +11042,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "forwardGate": "whenValid",
               "autoAdvance": "onValid",
+              "backgroundReservationSyncOnAdvance": false,
               "autoAdvanceWhen": {
                 "fieldId": "status",
                 "equals": "In production"
@@ -20736,6 +20737,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "navigation": {
               "forwardGate": "whenValid",
               "autoAdvance": "onValid",
+              "backgroundReservationSyncOnAdvance": false,
               "autoAdvanceWhen": {
                 "fieldId": "status",
                 "equals": "In production"
@@ -23074,7 +23076,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "147e28ae3e4a21705659d39419399821"
+    "cacheFingerprint": "526c594c10627746d416203b7073474e"
   },
   {
     "formKey": "Config: Recipes",

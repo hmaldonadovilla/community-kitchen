@@ -63,6 +63,16 @@ describe('meal production leftover selection config', () => {
     expect(definitionWatches).toEqual(formWatches);
   });
 
+  it('does not queue the generic reservation sync when leaving Order for Leftover bank', () => {
+    const definition = getDefinition();
+    const exported = getExport();
+    const formOrderStep = exported.form?.steps?.items?.find((step: any) => step.id === 'orderInfo');
+    const definitionOrderStep = definition.steps?.items?.find((step: any) => step.id === 'orderInfo');
+
+    expect(formOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
+    expect(definitionOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
+  });
+
   it('defines direct MP_TYPE_LI output rules for part dish, reheat, and combine', () => {
     const definition = getDefinition();
     const leftoverStep = definition.steps?.items?.find((step: any) => step.id === 'leftoverForm');

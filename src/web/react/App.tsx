@@ -10907,13 +10907,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       nextStepId?: string;
       trigger: 'next' | 'auto';
       waitDialog?: SystemActionGateDialogConfig | null;
+      queueBackgroundReservationSync?: boolean;
     }): Promise<{ success: boolean; message?: string }> => {
       const waitResult = await waitForGuidedStepAdvance(args);
       if (!waitResult.success) return waitResult;
-      queueGuidedStepBackgroundSync(args);
+      if (args.queueBackgroundReservationSync === false) {
+        logEvent('guidedStep.advance.backgroundSync.skipped.config', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger
+        });
+      } else {
+        queueGuidedStepBackgroundSync(args);
+      }
       return { success: true };
     },
     [
+      logEvent,
       queueGuidedStepBackgroundSync,
       waitForGuidedStepAdvance
     ]

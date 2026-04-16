@@ -46,6 +46,7 @@ import { getOverlayCloseAllowCloseFromEdit, resolveOverlayCloseConfirm } from '.
 import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/domain/overlayDetailNavigation';
 import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
+import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
@@ -629,6 +630,7 @@ interface FormViewProps {
     nextStepId?: string;
     trigger: 'next' | 'auto';
     waitDialog?: ConfirmDialogOpenArgs;
+    queueBackgroundReservationSync?: boolean;
   }) => Promise<{ success: boolean; message?: string }>;
   requestedGuidedStepId?: string | null;
   guidedExternalSyncToken?: number;
@@ -1159,6 +1161,27 @@ const FormView: React.FC<FormViewProps> = ({
     queueGuidedStepReservationDraftSync,
     recordMeta?.id
   ]);
+
+  const runSelectionEffectsForAncestorRows = useCallback(
+    (
+      sourceGroupKey: string,
+      prevLineItems: LineItemState,
+      nextLineItems: LineItemState,
+      options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
+    ) => {
+      if (!onSelectionEffect) return;
+      runSelectionEffectsForAncestors({
+        definition,
+        values: options?.topValues || valuesRef.current,
+        onSelectionEffect,
+        sourceGroupKey,
+        prevLineItems,
+        nextLineItems,
+        options
+      });
+    },
+    [definition, onSelectionEffect]
+  );
 
   const normalizeForwardGate = useCallback(
     (raw: any, fallback: 'free' | 'whenComplete' | 'whenValid'): 'free' | 'whenComplete' | 'whenValid' => {
@@ -2181,7 +2204,8 @@ const FormView: React.FC<FormViewProps> = ({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
           trigger: 'next',
-          waitDialog
+          waitDialog,
+          queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
         });
         if (!outcome?.success) {
           onDiagnostic?.('steps.step.advance.blocked', {
@@ -2424,7 +2448,8 @@ const FormView: React.FC<FormViewProps> = ({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
           trigger: 'auto',
-          waitDialog
+          waitDialog,
+          queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
         });
         if (!outcome?.success) {
           onDiagnostic?.('steps.step.autoAdvance.blocked', {
@@ -8085,24 +8110,6 @@ const FormView: React.FC<FormViewProps> = ({
       onSelectionEffect(q, nextValue);
     }
   };
-
-  function runSelectionEffectsForAncestorRows(
-    sourceGroupKey: string,
-    prevLineItems: LineItemState,
-    nextLineItems: LineItemState,
-    options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
-  ) {
-    if (!onSelectionEffect) return;
-    runSelectionEffectsForAncestors({
-      definition,
-      values: options?.topValues || valuesRef.current,
-      onSelectionEffect,
-      sourceGroupKey,
-      prevLineItems,
-      nextLineItems,
-      options
-    });
-  }
 
   const handleLineFieldChange = (
     group: WebQuestionDefinition,
