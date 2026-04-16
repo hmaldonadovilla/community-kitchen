@@ -104,3 +104,24 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
 
   return blockers;
 };
+
+export const resolveDeferredRecordFreshnessResumeAction = (args: {
+  pending?: { recordId?: string | null } | null;
+  view: View;
+  currentRecordId?: string | null;
+  recordLoading: boolean;
+  submitting: boolean;
+  recordSyncInFlight: boolean;
+  blockers: string[];
+}): 'none' | 'clear' | 'wait' | 'resume' => {
+  if (!args.pending) return 'none';
+  if (args.view !== 'form') return 'wait';
+
+  const pendingRecordId = (args.pending.recordId || '').toString().trim();
+  const currentRecordId = (args.currentRecordId || '').toString().trim();
+  if (!pendingRecordId || !currentRecordId) return 'wait';
+  if (pendingRecordId !== currentRecordId) return 'clear';
+  if (args.recordLoading || args.submitting || args.recordSyncInFlight) return 'wait';
+  if (Array.isArray(args.blockers) && args.blockers.length > 0) return 'wait';
+  return 'resume';
+};

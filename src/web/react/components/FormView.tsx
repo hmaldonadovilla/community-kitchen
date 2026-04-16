@@ -166,6 +166,7 @@ import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClau
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
+import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
 import {
@@ -630,6 +631,7 @@ interface FormViewProps {
     waitDialog?: ConfirmDialogOpenArgs;
   }) => Promise<{ success: boolean; message?: string }>;
   requestedGuidedStepId?: string | null;
+  guidedExternalSyncToken?: number;
   onRequestedGuidedStepHandled?: () => void;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
@@ -708,6 +710,7 @@ const FormView: React.FC<FormViewProps> = ({
   onGuidedStepMilestone,
   onBeforeGuidedStepAdvance,
   requestedGuidedStepId,
+  guidedExternalSyncToken,
   onRequestedGuidedStepHandled,
   dedupNavigationBlocked,
   openConfirmDialog,
@@ -1081,6 +1084,12 @@ const FormView: React.FC<FormViewProps> = ({
     const first = guidedStepIds[0];
     return first ? first : '';
   });
+  const lastGuidedExternalSyncTokenRef = useRef<number>(0);
+  const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
+  const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
+  const guidedAutoAdvanceAttemptRef = useRef<(() => void) | null>(null);
+  const guidedLastUserEditAtRef = useRef<number>(0);
 
   const activeGuidedStepIndex = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
   const guidedReservationRemovalSyncSnapshotRef = useRef<{
@@ -1467,6 +1476,42 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: requestedId, reason: 'externalRequest' });
     onRequestedGuidedStepHandled?.();
   }, [activeGuidedStepId, guidedEnabled, guidedStepIds, onDiagnostic, onRequestedGuidedStepHandled, requestedGuidedStepId]);
+
+  useLayoutEffect(() => {
+    if (!guidedEnabled) return;
+    const nextToken = Number(guidedExternalSyncToken);
+    if (!Number.isFinite(nextToken) || nextToken <= 0) return;
+    if (nextToken === lastGuidedExternalSyncTokenRef.current) return;
+    lastGuidedExternalSyncTokenRef.current = nextToken;
+    guidedAutoAdvanceAttemptRef.current = null;
+    if (guidedAutoAdvanceTimerRef.current) {
+      globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+      guidedAutoAdvanceTimerRef.current = null;
+    }
+    guidedAutoAdvanceStateRef.current = null;
+    const desiredStepId = resolveGuidedStepIdAfterExternalSync({
+      guidedStepIds,
+      steps: guidedStatus.steps,
+      maxReachableIndex: maxReachableGuidedIndex,
+      currentStepId: activeGuidedStepId
+    });
+    onDiagnostic?.('steps.step.externalSync.realign', {
+      from: activeGuidedStepId || null,
+      to: desiredStepId || activeGuidedStepId || null,
+      changed: Boolean(desiredStepId)
+    });
+    if (!desiredStepId) return;
+    setActiveGuidedStepId(desiredStepId);
+    onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: desiredStepId, reason: 'externalSync' });
+  }, [
+    activeGuidedStepId,
+    guidedEnabled,
+    guidedExternalSyncToken,
+    guidedStatus.steps,
+    guidedStepIds,
+    maxReachableGuidedIndex,
+    onDiagnostic
+  ]);
 
   const guidedVirtualState = useMemo(() => {
     if (!guidedEnabled) return null;
@@ -1901,12 +1946,6 @@ const FormView: React.FC<FormViewProps> = ({
     byConfig.forEach(add);
     return ordered.length ? ordered : byConfig;
   }, [definition.questions, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg]);
-
-  const guidedStepBodyRef = useRef<HTMLDivElement | null>(null);
-  const guidedAutoAdvanceTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const guidedAutoAdvanceStateRef = useRef<{ stepId: string; lastSatisfied: boolean; armed: boolean } | null>(null);
-  const guidedAutoAdvanceAttemptRef = useRef<(() => void) | null>(null);
-  const guidedLastUserEditAtRef = useRef<number>(0);
 
   const selectGuidedStep = useCallback(
     (nextStepId: string, reason: 'user' | 'auto' = 'user') => {
@@ -2464,7 +2503,7 @@ const FormView: React.FC<FormViewProps> = ({
         globalThis.setTimeout(() => {
           guidedAutoAdvanceAttemptRef.current?.();
         }, 0);
-      } catch (_) {
+      } catch {
         // ignore
       }
     };
@@ -2474,7 +2513,7 @@ const FormView: React.FC<FormViewProps> = ({
       return () => {
         document.removeEventListener('focusout', handler, true);
       };
-    } catch (_) {
+    } catch {
       return;
     }
   }, [guidedEnabled]);
@@ -7704,6 +7743,7 @@ const FormView: React.FC<FormViewProps> = ({
       buildOrderedEntryErrors,
       collapsedRows,
       collapsedSubgroups,
+      guidedVirtualState,
       language,
       lineItems,
       onDiagnostic,
@@ -12531,7 +12571,7 @@ const FormView: React.FC<FormViewProps> = ({
               />
             </div>
           ) : orderedRows.length ? (
-            orderedRows.map((subRow, subIdx) => {
+            orderedRows.map(subRow => {
               const isAutoRow =
                 !!subRow.autoGenerated || (subRow.values && (subRow.values as any)[ROW_SOURCE_KEY] === 'auto');
               const anchorFieldId = subAnchorFieldId;

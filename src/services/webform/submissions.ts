@@ -1671,6 +1671,69 @@ export class SubmissionService {
     }
   }
 
+  bumpDirectMutationDataVersion(args: {
+    sheet: GoogleAppsScript.Spreadsheet.Sheet;
+    columns: HeaderColumns;
+    rowIndex: number;
+    recordId?: string;
+    reason: string;
+  }): { dataVersion?: number; rowNumber?: number; updatedAt?: string } {
+    const rowIndex = Number(args.rowIndex);
+    if (!Number.isFinite(rowIndex) || rowIndex < 2) {
+      this.cacheManager.bumpSheetEtag(args.sheet, args.columns, args.reason || 'directMutation.invalidRow');
+      return {};
+    }
+
+    const readCell = (col?: number): any => {
+      if (!col) return undefined;
+      try {
+        return args.sheet.getRange(rowIndex, col, 1, 1).getValues()[0][0];
+      } catch {
+        return undefined;
+      }
+    };
+
+    let nextDataVersion: number | undefined;
+    if (args.columns.dataVersion) {
+      const raw = readCell(args.columns.dataVersion);
+      const currentDataVersion = Number(raw);
+      nextDataVersion =
+        Number.isFinite(currentDataVersion) && currentDataVersion > 0 ? currentDataVersion + 1 : 1;
+      try {
+        args.sheet.getRange(rowIndex, args.columns.dataVersion, 1, 1).setValue(nextDataVersion);
+      } catch {
+        nextDataVersion = undefined;
+      }
+    }
+
+    const updatedAt = args.columns.updatedAt ? this.asIso(readCell(args.columns.updatedAt)) : undefined;
+    const createdAt = args.columns.createdAt ? this.asIso(readCell(args.columns.createdAt)) : undefined;
+    const recordId =
+      (args.recordId || '').toString().trim() ||
+      (args.columns.recordId ? (readCell(args.columns.recordId) || '').toString().trim() : '');
+
+    if (recordId && nextDataVersion !== undefined) {
+      try {
+        const indexSheet = this.ss.getSheetByName(getRecordIndexSheetName(args.sheet.getName()));
+        if (indexSheet) {
+          indexSheet.getRange(rowIndex, 1, 1, 5).setValues([
+            [recordId, rowIndex, nextDataVersion, updatedAt || '', createdAt || '']
+          ]);
+        }
+      } catch {
+        // ignore record-index refresh failures; the destination row is still authoritative
+      }
+    }
+
+    this.cacheManager.bumpSheetEtag(args.sheet, args.columns, args.reason || 'directMutation.bumpDataVersion');
+
+    return {
+      dataVersion: nextDataVersion,
+      rowNumber: rowIndex,
+      updatedAt
+    };
+  }
+
   touchUpdatedAt(
     sheet: GoogleAppsScript.Spreadsheet.Sheet,
     columns: HeaderColumns,

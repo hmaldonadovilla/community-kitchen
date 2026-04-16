@@ -27,6 +27,11 @@ describe('followup create-pdf reuse policy', () => {
     const submissionService = {
       writeStatus: jest.fn(() => null),
       touchUpdatedAt: jest.fn(() => new Date('2026-02-10T12:34:56.000Z')),
+      bumpDirectMutationDataVersion: jest.fn(() => ({
+        dataVersion: 2,
+        rowNumber: 2,
+        updatedAt: '2026-02-10T12:34:56.000Z'
+      })),
       refreshRecordCache: jest.fn()
     } as any;
 

@@ -6,6 +6,7 @@ import {
   resolveReservationPlanSourceMetaAdoption,
   resolveCurrentClientDataVersion,
   resolveDraftPayloadFormKey,
+  resolveFollowupActionResultMeta,
   settleClientDataVersionAfterDispatch,
   shouldAdoptIncomingRecordSnapshotMetaOnly,
   shouldApplyIncomingRecordSnapshot
@@ -189,6 +190,49 @@ describe('resolveReservationPlanSourceMetaAdoption', () => {
         }
       })
     ).toBeNull();
+  });
+});
+
+describe('resolveFollowupActionResultMeta', () => {
+  it('adopts newer follow-up metadata for the current record', () => {
+    expect(
+      resolveFollowupActionResultMeta({
+        currentDataVersion: 213,
+        result: {
+          updatedAt: '2026-04-16T00:00:00.000Z',
+          status: 'Final report emailed',
+          pdfUrl: 'https://example.test/report.pdf',
+          dataVersion: 215,
+          rowNumber: 204
+        }
+      })
+    ).toEqual({
+      updatedAt: '2026-04-16T00:00:00.000Z',
+      status: 'Final report emailed',
+      pdfUrl: 'https://example.test/report.pdf',
+      dataVersion: 215,
+      rowNumber: 204
+    });
+  });
+
+  it('ignores stale follow-up dataVersion regressions while keeping other metadata', () => {
+    expect(
+      resolveFollowupActionResultMeta({
+        currentDataVersion: 215,
+        result: {
+          updatedAt: '2026-04-16T00:00:00.000Z',
+          status: 'Final report emailed',
+          dataVersion: 214,
+          rowNumber: 204
+        }
+      })
+    ).toEqual({
+      updatedAt: '2026-04-16T00:00:00.000Z',
+      status: 'Final report emailed',
+      pdfUrl: undefined,
+      dataVersion: undefined,
+      rowNumber: 204
+    });
   });
 });
 

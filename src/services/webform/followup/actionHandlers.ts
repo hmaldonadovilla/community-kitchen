@@ -144,13 +144,22 @@ export const handleCreatePdfAction = (args: {
     if (!updatedAt) {
       updatedAt = submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
     }
+    const revisionMeta = submissionService.bumpDirectMutationDataVersion({
+      sheet: ctx.sheet,
+      columns: ctx.columns,
+      rowIndex: ctx.rowIndex,
+      recordId: ctx.record.id,
+      reason: 'followup.createPdf.reuse'
+    });
     submissionService.refreshRecordCache(form.configSheet, questions, ctx);
     return {
       success: true,
       status: statusValue || currentStatus || ctx.record.status,
       pdfUrl: existing.url,
       fileId: existing.fileId,
-      updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
+      updatedAt: revisionMeta.updatedAt || (updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt),
+      dataVersion: revisionMeta.dataVersion,
+      rowNumber: revisionMeta.rowNumber
     };
   }
   if (!allowReuse) {
@@ -179,6 +188,13 @@ export const handleCreatePdfAction = (args: {
   if (!updatedAt) {
     updatedAt = submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
   }
+  const revisionMeta = submissionService.bumpDirectMutationDataVersion({
+    sheet: ctx.sheet,
+    columns: ctx.columns,
+    rowIndex: ctx.rowIndex,
+    recordId: ctx.record.id,
+    reason: 'followup.createPdf'
+  });
   // For bundled HTML PDF templates we intentionally regenerate to pick up template/style updates.
   // Cleanup the prior artifact to avoid accumulating stale copies with the same logical record.
   if (!allowReuse && existing?.fileId && existing.fileId !== pdfArtifact.fileId) {
@@ -190,7 +206,9 @@ export const handleCreatePdfAction = (args: {
     status: statusValue || currentStatus || ctx.record.status,
     pdfUrl: pdfArtifact.url,
     fileId: pdfArtifact.fileId,
-    updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
+    updatedAt: revisionMeta.updatedAt || (updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt),
+    dataVersion: revisionMeta.dataVersion,
+    rowNumber: revisionMeta.rowNumber
   };
 };
 
@@ -302,13 +320,22 @@ export const handleSendEmailAction = (args: {
   if (!updatedAt) {
     updatedAt = submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
   }
+  const revisionMeta = submissionService.bumpDirectMutationDataVersion({
+    sheet: ctx.sheet,
+    columns: ctx.columns,
+    rowIndex: ctx.rowIndex,
+    recordId: ctx.record.id,
+    reason: 'followup.sendEmail'
+  });
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
     success: true,
     status: statusValue || currentStatus || ctx.record.status,
     pdfUrl: pdfArtifact?.url,
     fileId: pdfArtifact?.fileId,
-    updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt
+    updatedAt: revisionMeta.updatedAt || (updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt),
+    dataVersion: revisionMeta.dataVersion,
+    rowNumber: revisionMeta.rowNumber
   };
 };
 
@@ -334,10 +361,19 @@ export const handleCloseRecordAction = (args: {
   const updatedAt =
     submissionService.writeStatus(ctx.sheet, ctx.columns, ctx.rowIndex, statusValue, followup.statusFieldId) ||
     submissionService.touchUpdatedAt(ctx.sheet, ctx.columns, ctx.rowIndex);
+  const revisionMeta = submissionService.bumpDirectMutationDataVersion({
+    sheet: ctx.sheet,
+    columns: ctx.columns,
+    rowIndex: ctx.rowIndex,
+    recordId: ctx.record?.id,
+    reason: 'followup.closeRecord'
+  });
   submissionService.refreshRecordCache(form.configSheet, questions, ctx);
   return {
     success: true,
     status: statusValue || currentStatus,
-    updatedAt: updatedAt ? updatedAt.toISOString() : ctx.record?.updatedAt
+    updatedAt: revisionMeta.updatedAt || (updatedAt ? updatedAt.toISOString() : ctx.record?.updatedAt),
+    dataVersion: revisionMeta.dataVersion,
+    rowNumber: revisionMeta.rowNumber
   };
 };

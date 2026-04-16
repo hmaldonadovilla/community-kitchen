@@ -1237,6 +1237,38 @@ export const resolveReservationPlanSourceMetaAdoption = (args: {
   };
 };
 
+export const resolveFollowupActionResultMeta = (args: {
+  result?: {
+    updatedAt?: string | null;
+    status?: string | null;
+    pdfUrl?: string | null;
+    dataVersion?: number | string | null;
+    rowNumber?: number | string | null;
+  } | null;
+  currentDataVersion?: number | string | null;
+}): {
+  updatedAt?: string;
+  status?: string | null;
+  pdfUrl?: string;
+  dataVersion?: number;
+  rowNumber?: number;
+} => {
+  const result = args.result || null;
+  const nextDataVersion = resolveCurrentClientDataVersion(result?.dataVersion);
+  const currentDataVersion = resolveCurrentClientDataVersion(args.currentDataVersion);
+  const rowNumber = Number(result?.rowNumber);
+  return {
+    updatedAt: (result?.updatedAt || '').toString() || undefined,
+    status: result?.status === undefined ? undefined : (result?.status || null),
+    pdfUrl: (result?.pdfUrl || '').toString() || undefined,
+    dataVersion:
+      nextDataVersion !== null && (currentDataVersion === null || nextDataVersion >= currentDataVersion)
+        ? nextDataVersion
+        : undefined,
+    rowNumber: Number.isFinite(rowNumber) && rowNumber >= 2 ? rowNumber : undefined
+  };
+};
+
 export const isSubmissionStaleMessage = (message: string | null | undefined): boolean => {
   const lower = (message || '').toString().trim().toLowerCase();
   if (!lower) return false;

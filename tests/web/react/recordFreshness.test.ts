@@ -1,6 +1,7 @@
 import {
   DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS,
   RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS,
+  resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
@@ -138,5 +139,47 @@ describe('recordFreshness helpers', () => {
         now: 10_000 + RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS - 1
       })
     ).toEqual(['dirty.recentInteraction']);
+  });
+
+  test('clears deferred sync when the user has moved to another record', () => {
+    expect(
+      resolveDeferredRecordFreshnessResumeAction({
+        pending: { recordId: 'rec-1' },
+        view: 'form',
+        currentRecordId: 'rec-2',
+        recordLoading: false,
+        submitting: false,
+        recordSyncInFlight: false,
+        blockers: []
+      })
+    ).toBe('clear');
+  });
+
+  test('waits while ref-backed record blockers are still active', () => {
+    expect(
+      resolveDeferredRecordFreshnessResumeAction({
+        pending: { recordId: 'rec-1' },
+        view: 'form',
+        currentRecordId: 'rec-1',
+        recordLoading: false,
+        submitting: false,
+        recordSyncInFlight: false,
+        blockers: ['guidedStep.liveSync']
+      })
+    ).toBe('wait');
+  });
+
+  test('resumes deferred sync as soon as the current record is unblocked', () => {
+    expect(
+      resolveDeferredRecordFreshnessResumeAction({
+        pending: { recordId: 'rec-1' },
+        view: 'form',
+        currentRecordId: 'rec-1',
+        recordLoading: false,
+        submitting: false,
+        recordSyncInFlight: false,
+        blockers: []
+      })
+    ).toBe('resume');
   });
 });

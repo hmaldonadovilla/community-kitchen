@@ -1,4 +1,5 @@
 import { computeGuidedStepsStatus } from '../../../src/web/react/features/steps/domain/computeStepStatus';
+import { resolveGuidedStepIdAfterExternalSync } from '../../../src/web/react/features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField } from '../../../src/web/react/features/steps/domain/resolveVirtualStepField';
 
 describe('guidedSteps domain', () => {
@@ -506,5 +507,79 @@ describe('guidedSteps domain', () => {
     expect(resolveVirtualStepField('__ckStepValid_order', state as any)).toBe('false');
     expect(resolveVirtualStepField('__ckStepComplete_context', state as any)).toBe('true');
     expect(resolveVirtualStepField('__ckStepComplete_order', state as any)).toBe('false');
+  });
+
+  it('realigns guided navigation to the first incomplete step after an external sync', () => {
+    expect(
+      resolveGuidedStepIdAfterExternalSync({
+        guidedStepIds: ['order', 'leftoverBank', 'production', 'foodSafety', 'portioning', 'leftovers'],
+        steps: [
+          { id: 'order', index: 0, complete: true, valid: true, missingRequiredCount: 0, missingValidCount: 0, errorCount: 0 },
+          {
+            id: 'leftoverBank',
+            index: 1,
+            complete: true,
+            valid: true,
+            missingRequiredCount: 0,
+            missingValidCount: 0,
+            errorCount: 0
+          },
+          { id: 'production', index: 2, complete: true, valid: true, missingRequiredCount: 0, missingValidCount: 0, errorCount: 0 },
+          { id: 'foodSafety', index: 3, complete: true, valid: true, missingRequiredCount: 0, missingValidCount: 0, errorCount: 0 },
+          { id: 'portioning', index: 4, complete: true, valid: true, missingRequiredCount: 0, missingValidCount: 0, errorCount: 0 },
+          {
+            id: 'leftovers',
+            index: 5,
+            complete: false,
+            valid: true,
+            missingRequiredCount: 1,
+            missingValidCount: 0,
+            errorCount: 0
+          }
+        ],
+        maxReachableIndex: 5,
+        currentStepId: 'portioning'
+      })
+    ).toBe('leftovers');
+  });
+
+  it('does not move guided navigation past the furthest reachable step during an external sync', () => {
+    expect(
+      resolveGuidedStepIdAfterExternalSync({
+        guidedStepIds: ['order', 'leftoverBank', 'production', 'foodSafety'],
+        steps: [
+          { id: 'order', index: 0, complete: true, valid: true, missingRequiredCount: 0, missingValidCount: 0, errorCount: 0 },
+          {
+            id: 'leftoverBank',
+            index: 1,
+            complete: true,
+            valid: true,
+            missingRequiredCount: 0,
+            missingValidCount: 0,
+            errorCount: 0
+          },
+          {
+            id: 'production',
+            index: 2,
+            complete: false,
+            valid: true,
+            missingRequiredCount: 1,
+            missingValidCount: 0,
+            errorCount: 0
+          },
+          {
+            id: 'foodSafety',
+            index: 3,
+            complete: false,
+            valid: true,
+            missingRequiredCount: 1,
+            missingValidCount: 0,
+            errorCount: 0
+          }
+        ],
+        maxReachableIndex: 2,
+        currentStepId: 'leftoverBank'
+      })
+    ).toBe('production');
   });
 });

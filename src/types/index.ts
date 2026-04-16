@@ -5295,6 +5295,8 @@ export interface FollowupActionResult {
   pdfUrl?: string;
   fileId?: string;
   updatedAt?: string;
+  dataVersion?: number;
+  rowNumber?: number;
   reservationReconciliation?: {
     success: boolean;
     sourceRecordId?: string;

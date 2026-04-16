@@ -919,7 +919,7 @@ describe('WebFormService', () => {
       blob: null
     });
 
-    service.saveSubmissionWithId({
+    const saved = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
       language: 'EN',
       id: 'REC-BATCH-1',
@@ -935,8 +935,11 @@ describe('WebFormService', () => {
     expect(result.results).toHaveLength(2);
     expect(result.results[0].action).toBe('SEND_EMAIL');
     expect(result.results[0].result?.success).toBe(true);
+    expect(result.results[0].result?.dataVersion).toBe((saved.meta?.dataVersion || 0) + 1);
     expect(result.results[1].action).toBe('CLOSE_RECORD');
     expect(result.results[1].result?.success).toBe(true);
+    expect(result.results[1].result?.dataVersion).toBe((saved.meta?.dataVersion || 0) + 2);
+    expect(service.getRecordVersion('Config: Delivery', 'REC-BATCH-1').dataVersion).toBe((saved.meta?.dataVersion || 0) + 2);
   });
 
   test('emailTemplateId supports conditional cases based on record field values', () => {

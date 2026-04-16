@@ -83,6 +83,7 @@ import {
   computeUrlOnlyUploadUpdates,
   isSubmissionStaleMessage,
   prepareClientDataVersionDispatch,
+  resolveFollowupActionResultMeta,
   resolveReservationPlanSourceMetaAdoption,
   resolveExistingRecordId,
   resolveCurrentClientDataVersion,
@@ -96,6 +97,7 @@ import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bun
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
 import {
+  resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay
@@ -153,6 +155,7 @@ import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import { buildFilePayload } from './app/filePayload';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
+import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
 import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
 import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
@@ -628,7 +631,7 @@ const readHomeListLocalCache = (key: string): HomeListLocalCacheEntry | null => 
     const homeRevRaw = Number((parsed as any)?.homeRev);
     const homeRev = Number.isFinite(homeRevRaw) && homeRevRaw >= 0 ? homeRevRaw : undefined;
     return { response, homeRev };
-  } catch (_) {
+  } catch {
     try {
       storage.removeItem(key);
     } catch {
@@ -1963,7 +1966,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!autoSaveUserEditedRef.current) {
           autoSaveUserEditedRef.current = true;
         }
-        lastUserInteractionRef.current = Date.now();
+        const editAt = Date.now();
+        lastUserInteractionRef.current = editAt;
+        lastLocalRecordMutationAtRef.current = editAt;
 
         // Mark dirty immediately on user edits so navigation handlers can flush autosave
         // even if the debounced autosave effect hasn't run yet.
@@ -2469,6 +2474,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   } | null>(null);
   const [formIsValid, setFormIsValid] = useState<boolean>(() => (orderedEntryEnabled ? false : true));
   const [requestedGuidedStepId, setRequestedGuidedStepId] = useState<string | null>(null);
+  const [guidedExternalSyncToken, setGuidedExternalSyncToken] = useState<number>(0);
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
@@ -2503,11 +2509,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
   const prevAutoSaveHoldRef = useRef<boolean>(false);
   const lastUserInteractionRef = useRef<number>(0);
+  const lastLocalRecordMutationAtRef = useRef<number>(0);
+  const lastExternalRecordSyncAtRef = useRef<number>(0);
   const lastRecordServerActivityAtRef = useRef<number>(record && (record as any).id ? Date.now() : 0);
   const recordFreshnessTimerRef = useRef<number | null>(null);
   const recordFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
   const performRecordFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const pendingDeferredRecordFreshnessSyncRef = useRef<Parameters<SynchronizeStaleRecordFn>[0] | null>(null);
+  const resumeDeferredRecordFreshnessSyncRef = useRef<(reason: string) => boolean>(() => false);
   const dataSourceFreshnessTimerRef = useRef<number | null>(null);
   const dataSourceFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
   const performDataSourceFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
@@ -3741,6 +3750,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;
       recordFreshnessCheckPromiseRef.current = null;
+      lastLocalRecordMutationAtRef.current = 0;
+      lastExternalRecordSyncAtRef.current = 0;
       lastRecordServerActivityAtRef.current = args?.nextRecordId ? Date.now() : 0;
       if (dataSourceFreshnessTimerRef.current) {
         globalThis.clearTimeout(dataSourceFreshnessTimerRef.current);
@@ -5408,6 +5419,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return true;
           }
+          lastExternalRecordSyncAtRef.current = Date.now();
+          setGuidedExternalSyncToken(prev => prev + 1);
           setRecordSyncNotice({
             open: true,
             title: tSystem('record.syncedTitle', languageRef.current, 'Record synchronized'),
@@ -5450,6 +5463,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return false;
       })().finally(() => {
         recordSyncPromiseRef.current = null;
+        resumeDeferredRecordFreshnessSyncRef.current('recordSync.release');
       });
 
       recordSyncPromiseRef.current = promise;
@@ -5459,33 +5473,46 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   synchronizeStaleRecordRef.current = synchronizeStaleRecord;
 
-  useEffect(() => {
-    const pending = pendingDeferredRecordFreshnessSyncRef.current;
-    if (!pending) return;
-    if (view !== 'form') return;
-    const pendingRecordId = (pending.recordId || '').toString().trim();
-    const currentRecordId = getCurrentOpenRecordId();
-    if (!pendingRecordId || !currentRecordId) return;
-    if (pendingRecordId !== currentRecordId) {
+  const resumeDeferredRecordFreshnessSyncIfUnblocked = useCallback(
+    (reason: string): boolean => {
+      const pending = pendingDeferredRecordFreshnessSyncRef.current;
+      const action = resolveDeferredRecordFreshnessResumeAction({
+        pending,
+        view: viewRef.current,
+        currentRecordId: getCurrentOpenRecordId(),
+        recordLoading: Boolean(recordLoadingIdRef.current),
+        submitting: submittingRef.current,
+        recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+        blockers: getRecordFreshnessSyncBlockers()
+      });
+      if (action === 'none' || action === 'wait') return false;
+      if (action === 'clear') {
+        pendingDeferredRecordFreshnessSyncRef.current = null;
+        return false;
+      }
+      if (!pending) return false;
       pendingDeferredRecordFreshnessSyncRef.current = null;
-      return;
-    }
-    if (recordLoadingId || submitting || recordSyncPromiseRef.current) return;
-    const blockers = getRecordFreshnessSyncBlockers();
-    if (blockers.length > 0) return;
-    pendingDeferredRecordFreshnessSyncRef.current = null;
-    logEvent('record.freshness.deferred.resume', {
-      reason: pending.reason,
-      recordId: pendingRecordId,
-      cachedVersion: pending.cachedVersion ?? null,
-      serverVersion: pending.serverVersion ?? null,
-      serverRow: pending.serverRow ?? null
-    });
-    void synchronizeStaleRecordRef.current({
-      ...pending,
-      reason: `${pending.reason}.resume`
-    });
-  }, [draftSave.phase, getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent, recordLoadingId, submitting, view]);
+      logEvent('record.freshness.deferred.resume', {
+        reason: pending.reason,
+        resumeReason: reason,
+        recordId: pending.recordId || null,
+        cachedVersion: pending.cachedVersion ?? null,
+        serverVersion: pending.serverVersion ?? null,
+        serverRow: pending.serverRow ?? null
+      });
+      void synchronizeStaleRecordRef.current({
+        ...pending,
+        reason: `${pending.reason}.resume`
+      });
+      return true;
+    },
+    [getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent]
+  );
+  resumeDeferredRecordFreshnessSyncRef.current = resumeDeferredRecordFreshnessSyncIfUnblocked;
+
+  useEffect(() => {
+    resumeDeferredRecordFreshnessSyncIfUnblocked('reactivity');
+  }, [draftSave.phase, recordLoadingId, resumeDeferredRecordFreshnessSyncIfUnblocked, submitting, view]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {
@@ -9507,32 +9534,74 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('followup.batch.error', { action, recordId: args.recordId, message: msg, reason: args.reason });
           continue;
         }
+        const nextMeta = resolveFollowupActionResultMeta({
+          result,
+          currentDataVersion: recordDataVersionRef.current
+        });
         upsertListCacheRow({
           recordId: args.recordId,
-          updatedAt: (result.updatedAt || '').toString() || undefined,
-          status: (result.status || null) as any,
-          pdfUrl: (result.pdfUrl || '').toString() || undefined
+          updatedAt: nextMeta.updatedAt,
+          status: nextMeta.status as any,
+          pdfUrl: nextMeta.pdfUrl,
+          dataVersion: nextMeta.dataVersion,
+          rowNumber: nextMeta.rowNumber
         });
         markRecordFreshnessServerTouch({ reason: 'record.followupBatch', recordId: args.recordId });
+        if (nextMeta.dataVersion !== undefined) {
+          recordDataVersionRef.current = nextMeta.dataVersion;
+          optimisticClientDataVersionRef.current = nextMeta.dataVersion;
+        }
+        if (nextMeta.rowNumber !== undefined) {
+          recordRowNumberRef.current = nextMeta.rowNumber;
+        }
         logEvent('followup.batch.success', {
           action,
           recordId: args.recordId,
           status: result.status || null,
+          dataVersion: nextMeta.dataVersion ?? null,
           reason: args.reason
         });
+        lastSubmissionMetaRef.current = {
+          ...(lastSubmissionMetaRef.current || { id: args.recordId }),
+          id: args.recordId,
+          updatedAt: nextMeta.updatedAt || result.updatedAt || lastSubmissionMetaRef.current?.updatedAt,
+          dataVersion: nextMeta.dataVersion ?? lastSubmissionMetaRef.current?.dataVersion,
+          status:
+            nextMeta.status !== undefined
+              ? nextMeta.status || null
+              : lastSubmissionMetaRef.current?.status || null
+        };
         setLastSubmissionMeta(prev => ({
           ...(prev || { id: args.recordId }),
-          updatedAt: result.updatedAt || prev?.updatedAt,
-          status: result.status || prev?.status || null
+          updatedAt: nextMeta.updatedAt || result.updatedAt || prev?.updatedAt,
+          dataVersion: nextMeta.dataVersion ?? prev?.dataVersion,
+          status:
+            nextMeta.status !== undefined
+              ? nextMeta.status
+              : prev?.status || null
         }));
+        const nextSnapshotStatus =
+          nextMeta.status !== undefined ? (nextMeta.status || undefined) : selectedRecordSnapshotRef.current?.status;
+        selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current
+          ? ({
+              ...selectedRecordSnapshotRef.current,
+              updatedAt: nextMeta.updatedAt || result.updatedAt || selectedRecordSnapshotRef.current.updatedAt,
+              status: nextSnapshotStatus,
+              pdfUrl: nextMeta.pdfUrl || result.pdfUrl || selectedRecordSnapshotRef.current.pdfUrl,
+              dataVersion: nextMeta.dataVersion ?? (selectedRecordSnapshotRef.current as any).dataVersion,
+              __rowNumber: nextMeta.rowNumber ?? (selectedRecordSnapshotRef.current as any).__rowNumber
+            } as any)
+          : selectedRecordSnapshotRef.current;
         setSelectedRecordSnapshot(prev =>
           prev
-            ? {
+            ? ({
                 ...prev,
-                updatedAt: result.updatedAt || prev.updatedAt,
-                status: result.status || prev.status,
-                pdfUrl: result.pdfUrl || prev.pdfUrl
-              }
+                updatedAt: nextMeta.updatedAt || result.updatedAt || prev.updatedAt,
+                status: nextMeta.status !== undefined ? (nextMeta.status || undefined) : prev.status,
+                pdfUrl: nextMeta.pdfUrl || result.pdfUrl || prev.pdfUrl,
+                dataVersion: nextMeta.dataVersion ?? (prev as any).dataVersion,
+                __rowNumber: nextMeta.rowNumber ?? (prev as any).__rowNumber
+              } as any)
             : prev
         );
       }
@@ -10444,6 +10513,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           } else if (!submittingRef.current && (autoSaveDirtyRef.current || autoSaveQueuedRef.current)) {
             scheduleLatestAutoSave('guidedStepLiveSync.release', autoSaveDebounceMs);
           }
+          resumeDeferredRecordFreshnessSyncRef.current('guidedStep.liveSync.release');
         });
     },
     [
@@ -10461,6 +10531,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const queueGuidedStepBackgroundSync = useCallback(
     (args: { stepId: string; nextStepId?: string; trigger: 'next' | 'auto' }) => {
       const sessionId = recordSessionRef.current;
+      if (
+        shouldSkipGuidedStepBackgroundSync({
+          autoSaveDirty: autoSaveDirtyRef.current,
+          autoSaveQueued: autoSaveQueuedRef.current,
+          lastExternalSyncAt: lastExternalRecordSyncAtRef.current,
+          lastLocalRecordMutationAt: lastLocalRecordMutationAtRef.current
+        })
+      ) {
+        logEvent('guidedStep.advance.backgroundSync.skipped.externalSyncBaseline', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger,
+          lastExternalSyncAt: lastExternalRecordSyncAtRef.current || null,
+          lastLocalRecordMutationAt: lastLocalRecordMutationAtRef.current || null
+        });
+        return;
+      }
       const queueFingerprint = [
         sessionId,
         args.stepId || '',
@@ -10584,6 +10671,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               trigger: guidedStepBackgroundSyncPendingRef.current.trigger
             });
           }
+          resumeDeferredRecordFreshnessSyncRef.current('guidedStep.backgroundSync.release');
         });
     },
     [
@@ -13828,6 +13916,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onGuidedUiChange={setGuidedUiState}
           onGuidedStepMilestone={handleGuidedStepMilestone}
           requestedGuidedStepId={requestedGuidedStepId}
+          guidedExternalSyncToken={guidedExternalSyncToken}
           onRequestedGuidedStepHandled={() => setRequestedGuidedStepId(null)}
           dedupNavigationBlocked={dedupNavigationBlocked}
           guidedForwardNavigationBlocked={submitDisabledByGate}
