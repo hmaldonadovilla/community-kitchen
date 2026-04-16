@@ -3,6 +3,7 @@ import {
   chainSerializedSubmissionRequest,
   isSubmissionStaleMessage,
   prepareClientDataVersionDispatch,
+  resolveReservationPlanSourceMetaAdoption,
   resolveCurrentClientDataVersion,
   resolveDraftPayloadFormKey,
   settleClientDataVersionAfterDispatch,
@@ -138,6 +139,55 @@ describe('settleClientDataVersionAfterDispatch', () => {
         optimisticDataVersion: 3
       })
     ).toBe(2);
+  });
+});
+
+describe('resolveReservationPlanSourceMetaAdoption', () => {
+  it('adopts matching source metadata when the reservation plan started from the current version', () => {
+    expect(
+      resolveReservationPlanSourceMetaAdoption({
+        currentRecordId: 'REC-1',
+        currentDataVersion: 109,
+        fallbackRecordId: 'REC-1',
+        result: {
+          success: true,
+          message: 'ok',
+          sourceClientDataVersionMatched: true,
+          sourceRecordMeta: {
+            id: 'REC-1',
+            dataVersion: 110,
+            rowNumber: 42,
+            updatedAt: '2026-04-16T00:00:00.000Z'
+          }
+        }
+      })
+    ).toEqual(
+      expect.objectContaining({
+        id: 'REC-1',
+        dataVersion: 110,
+        rowNumber: 42,
+        updatedAt: '2026-04-16T00:00:00.000Z'
+      })
+    );
+  });
+
+  it('skips adoption when the reservation plan started from a stale client version', () => {
+    expect(
+      resolveReservationPlanSourceMetaAdoption({
+        currentRecordId: 'REC-1',
+        currentDataVersion: 109,
+        fallbackRecordId: 'REC-1',
+        result: {
+          success: true,
+          message: 'ok',
+          sourceClientDataVersionMatched: false,
+          sourceRecordMeta: {
+            id: 'REC-1',
+            dataVersion: 110
+          }
+        }
+      })
+    ).toBeNull();
   });
 });
 

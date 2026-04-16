@@ -83,6 +83,7 @@ import {
   computeUrlOnlyUploadUpdates,
   isSubmissionStaleMessage,
   prepareClientDataVersionDispatch,
+  resolveReservationPlanSourceMetaAdoption,
   resolveExistingRecordId,
   resolveCurrentClientDataVersion,
   settleClientDataVersionAfterDispatch,
@@ -2195,7 +2196,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             logEvent('validation.warnings.blur.failed', { message: err?.message || err || 'unknown' });
           }
         }
-      } catch (_) {
+      } catch {
         // ignore
       }
     },
@@ -2484,6 +2485,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     reason: string;
     sessionId: number;
     fingerprint: string;
+    persistSnapshot: boolean;
+    snapshotLineItems?: LineItemState;
   } | null>(null);
   const guidedStepImmediateSyncActiveFingerprintRef = useRef<string>('');
   const guidedStepImmediateSyncPendingFingerprintRef = useRef<string>('');
@@ -3716,7 +3719,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         // Dedup checks run once dedup keys are complete; no extra handling here.
-      } catch (_) {
+      } catch {
         // ignore
       }
     };
@@ -3727,7 +3730,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const target = e.target as HTMLElement | null;
         if (!isFormTarget(target)) return;
         lastUserInteractionRef.current = Date.now();
-      } catch (_) {
+      } catch {
         // ignore
       }
     };
@@ -3828,7 +3831,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
   const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const [dataSourceVisibilityVersion, setDataSourceVisibilityVersion] = useState(0);
+  const [, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
   const guidedDataSourceConfigMap = useMemo(() => {
     const byExact = new Map<string, any>();
@@ -3853,7 +3856,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
         window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
       };
-    } catch (_) {
+    } catch {
       return;
     }
   }, []);
@@ -3983,7 +3986,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       } else {
         timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
       }
-    } catch (_) {
+    } catch {
       timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
     }
 
@@ -4205,7 +4208,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ) as number;
           return;
         }
-      } catch (_) {
+      } catch {
         // fall through to timeout path
       }
       restTimerHandle = globalThis.setTimeout(() => {
@@ -9748,13 +9751,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const resolveGuidedStepReservationPlan = useCallback(
-    (args: { stepId: string; recordId: string; mode?: 'step' | 'all' }) =>
+    (args: {
+      stepId: string;
+      recordId: string;
+      mode?: 'step' | 'all';
+      snapshotLineItems?: LineItemState;
+    }) =>
       buildStepInventoryReservationPlan({
         definition,
         stepId: args.stepId,
         formKey,
         recordId: args.recordId,
-        lineItems: lineItemsRef.current,
+        lineItems: args.snapshotLineItems || lineItemsRef.current,
         mode: args.mode || 'all',
         previousManagedScopes:
           reservationManagedScopesRef.current?.recordId === args.recordId
@@ -9786,7 +9794,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reservations: reservationPlan.reservations?.length || 0,
           managedScopes: reservationPlan.managedScopes?.length || 0
         });
-        const reservationResult = await applyInventoryReservationPlanApi(reservationPlan);
+        const reservationResult = await applyInventoryReservationPlanApi({
+          ...reservationPlan,
+          clientDataVersion: getCurrentKnownClientDataVersion() || undefined
+        });
         if (!reservationResult.success) {
           const message = buildReservationFailureMessage(
             resolveUserFacingErrorMessage(
@@ -9829,6 +9840,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reservationsApplied: reservationResult.reservationsApplied || 0,
           reservationsReleased: reservationResult.reservationsReleased || 0
         });
+        const adoptedSourceMeta = resolveReservationPlanSourceMetaAdoption({
+          result: reservationResult,
+          currentRecordId: args.recordId,
+          currentDataVersion: getCurrentKnownClientDataVersion(),
+          fallbackRecordId: args.recordId
+        });
+        if (adoptedSourceMeta) {
+          applySuccessfulSubmissionState({
+            recordId: args.recordId,
+            response: { meta: adoptedSourceMeta }
+          });
+          logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.sync`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            dataVersion: adoptedSourceMeta.dataVersion || null,
+            rowNumber: adoptedSourceMeta.rowNumber || null
+          });
+        } else {
+          logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.skip`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            matched: reservationResult.sourceClientDataVersionMatched === true,
+            sourceDataVersion: Number(reservationResult.sourceRecordMeta?.dataVersion) || null,
+            currentDataVersion: getCurrentKnownClientDataVersion() || null
+          });
+        }
         markRecordFreshnessServerTouch({ reason: 'record.reservationPlan', recordId: args.recordId });
         markDataSourceFreshnessServerTouch({ reason: 'datasource.reservationPlan', stepId: args.stepId });
         const availability = Array.isArray(reservationResult.availability)
@@ -9902,6 +9939,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [
+      applySuccessfulSubmissionState,
+      getCurrentKnownClientDataVersion,
       guidedDataSourceConfigs,
       language,
       logEvent,
@@ -10008,16 +10047,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const queueGuidedStepReservationDraftSync = useCallback(
-    (args: { stepId: string; reason: string }) => {
+    (args: {
+      stepId: string;
+      reason: string;
+      persistSnapshot?: boolean;
+      snapshotLineItems?: LineItemState;
+    }) => {
       const sessionId = recordSessionRef.current;
+      const persistSnapshot = args.persistSnapshot !== false;
+      const snapshotLineItems = args.snapshotLineItems || lineItemsRef.current;
       const queueFingerprint = [
         sessionId,
         args.stepId || '',
+        persistSnapshot ? 'persist' : 'planOnly',
         buildDraftStateFingerprint({
           formKey,
           language: languageRef.current,
           values: valuesRef.current,
-          lineItems: lineItemsRef.current
+          lineItems: snapshotLineItems
         })
       ].join('::');
       if (
@@ -10034,7 +10081,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedStepImmediateSyncPendingRef.current = {
         ...args,
         sessionId,
-        fingerprint: queueFingerprint
+        fingerprint: queueFingerprint,
+        persistSnapshot,
+        snapshotLineItems
       };
       guidedStepImmediateSyncPendingFingerprintRef.current = queueFingerprint;
 
@@ -10070,12 +10119,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const reservationPlan = resolveGuidedStepReservationPlan({
             stepId: next.stepId,
             recordId,
-            mode: 'step'
+            mode: 'step',
+            snapshotLineItems: next.snapshotLineItems
           });
           if (!reservationPlan) continue;
           const snapshotOverride = {
             values: valuesRef.current,
-            lineItems: lineItemsRef.current,
+            lineItems: next.snapshotLineItems || lineItemsRef.current,
             language: languageRef.current
           };
 
@@ -10105,6 +10155,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             continue;
           }
 
+          if (!next.persistSnapshot) {
+            logEvent('guidedStep.liveSync.done', {
+              stepId: next.stepId,
+              reason: next.reason,
+              recordId,
+              persistedSnapshot: false
+            });
+            continue;
+          }
+
           autoSaveDirtyRef.current = true;
           autoSaveQueuedRef.current = false;
           setDraftSave(prev => (prev.phase === 'saving' || prev.phase === 'dirty' ? prev : { phase: 'dirty' }));
@@ -10118,6 +10178,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (recordSessionRef.current !== next.sessionId) continue;
           if (!snapshotResult.success) {
             const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
+            if (isSubmissionStaleMessage(message)) {
+              logEvent('guidedStep.liveSync.snapshot.deferredToAutosave', {
+                stepId: next.stepId,
+                reason: next.reason,
+                recordId,
+                message
+              });
+              continue;
+            }
             setStatus(message);
             setStatusLevel('error');
             setRequestedGuidedStepId(next.stepId || null);
@@ -10133,7 +10202,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('guidedStep.liveSync.done', {
             stepId: next.stepId,
             reason: next.reason,
-            recordId: snapshotResult.recordId || recordId
+            recordId: snapshotResult.recordId || recordId,
+            persistedSnapshot: true
           });
         }
       })()
@@ -10148,7 +10218,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (guidedStepImmediateSyncPendingRef.current) {
             queueGuidedStepReservationDraftSync({
               stepId: guidedStepImmediateSyncPendingRef.current.stepId,
-              reason: guidedStepImmediateSyncPendingRef.current.reason
+              reason: guidedStepImmediateSyncPendingRef.current.reason,
+              persistSnapshot: guidedStepImmediateSyncPendingRef.current.persistSnapshot,
+              snapshotLineItems: guidedStepImmediateSyncPendingRef.current.snapshotLineItems
             });
           } else if (!submittingRef.current && (autoSaveDirtyRef.current || autoSaveQueuedRef.current)) {
             scheduleLatestAutoSave('guidedStepLiveSync.release', autoSaveDebounceMs);
@@ -10368,6 +10440,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return { ok: true };
     },
     [logEvent]
+  );
+
+  const waitForGuidedStepReservationDraftSync = useCallback(
+    async (args: {
+      recordId: string;
+      stepId?: string;
+      reason: string;
+    }): Promise<{ ok: boolean; message?: string }> => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return { ok: true };
+      if (guidedStepImmediateSyncPromiseRef.current) {
+        logEvent('guidedStep.liveSync.wait.start', {
+          reason: args.reason,
+          recordId,
+          stepId: args.stepId || null
+        });
+        await guidedStepImmediateSyncPromiseRef.current.catch(() => undefined);
+        logEvent('guidedStep.liveSync.wait.done', {
+          reason: args.reason,
+          recordId,
+          stepId: args.stepId || null
+        });
+      }
+      return waitForPendingReservationSync({
+        recordId,
+        reason: args.reason
+      });
+    },
+    [logEvent, waitForPendingReservationSync]
   );
 
   const handleBeforeGuidedStepAdvance = useCallback(
@@ -13515,6 +13616,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           summarySubmitIntentRef={summarySubmitIntentRef}
           ensureRecordId={ensureDraftRecordId}
           queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
+          waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
           onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
         />
       ) : null}

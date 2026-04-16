@@ -51,6 +51,7 @@ import {
   QuestionGroupConfig,
   SummaryVisibility,
   StepMilestoneActionConfig,
+  StepDataSourceBootstrapConfig,
   SystemActionGateDialogConfig,
   StepRowFilterConfig,
   WhenClause,
@@ -64,6 +65,7 @@ import {
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
 export type { SystemActionGateDialogConfig };
 export type { LineItemOverlaySessionConfig };
+export type { StepDataSourceBootstrapConfig };
 
 export type FieldValue =
   | string

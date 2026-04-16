@@ -1,4 +1,7 @@
-import { buildStepDataSourceBootstrapSignature } from '../../../src/web/react/app/stepDataSourceBootstrap';
+import {
+  buildStepDataSourceBootstrapSignature,
+  shouldWaitForGuidedReservationSyncOnBootstrap
+} from '../../../src/web/react/app/stepDataSourceBootstrap';
 
 describe('buildStepDataSourceBootstrapSignature', () => {
   it('stays stable across config object identity churn', () => {
@@ -73,8 +76,17 @@ describe('buildStepDataSourceBootstrapSignature', () => {
             dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
             reservationBehavior: { enabled: true }
           }
-        ]
+        ],
+        bootstrap: { waitForGuidedReservationSync: true }
       })
     ).not.toBe(baseline);
+  });
+
+  it('normalizes the guided reservation wait flag', () => {
+    expect(shouldWaitForGuidedReservationSyncOnBootstrap(undefined)).toBe(false);
+    expect(shouldWaitForGuidedReservationSyncOnBootstrap({})).toBe(false);
+    expect(
+      shouldWaitForGuidedReservationSyncOnBootstrap({ waitForGuidedReservationSync: true })
+    ).toBe(true);
   });
 });

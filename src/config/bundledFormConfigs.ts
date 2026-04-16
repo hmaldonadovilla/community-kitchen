@@ -11089,6 +11089,9 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
+                "dataSourceBootstrap": {
+                  "waitForGuidedReservationSync": true
+                },
                 "fields": [],
                 "helperText": {
                   "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
@@ -20687,6 +20690,9 @@ export const BUNDLED_FORM_CONFIGS = [
               {
                 "kind": "lineGroup",
                 "id": "MP_MEALS_REQUEST",
+                "dataSourceBootstrap": {
+                  "waitForGuidedReservationSync": true
+                },
                 "fields": [],
                 "helperText": {
                   "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
@@ -22944,7 +22950,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "b6ee3f3b312dae6a47d5e2736e34b1d6"
+    "cacheFingerprint": "58dacb39dd25a416281a436e24fabe1e"
   },
   {
     "formKey": "Config: Recipes",

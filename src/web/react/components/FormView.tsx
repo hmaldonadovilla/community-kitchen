@@ -169,6 +169,11 @@ import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepSt
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
 import {
+  cloneLineItemStateSnapshot,
+  detectGuidedReservationManagedRowRemovals,
+  type GuidedReservationManagedRowRemovalImpact
+} from '../features/reservations/stepReservationPlan';
+import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
   DATA_SOURCE_CACHE_UPDATED_EVENT,
   getCachedDataSourceItemCount
@@ -632,7 +637,21 @@ interface FormViewProps {
    * Optional guided-step hook that applies step-managed inventory reservations and persists
    * the latest draft immediately after a valid datasource-row change.
    */
-  queueGuidedStepReservationDraftSync?: (args: { stepId: string; reason: string }) => void;
+  queueGuidedStepReservationDraftSync?: (args: {
+    stepId: string;
+    reason: string;
+    persistSnapshot?: boolean;
+    snapshotLineItems?: LineItemState;
+  }) => void;
+  /**
+   * Optional guided-step hook used by datasource-backed steps that must wait for an in-flight
+   * guided reservation sync before bootstrapping shared inventory rows.
+   */
+  waitForGuidedStepReservationDraftSync?: (args: {
+    recordId: string;
+    stepId?: string;
+    reason: string;
+  }) => Promise<{ ok: boolean; message?: string }>;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -684,7 +703,8 @@ const FormView: React.FC<FormViewProps> = ({
   openConfirmDialog,
   setAutoSaveHold,
   ensureRecordId,
-  queueGuidedStepReservationDraftSync
+  queueGuidedStepReservationDraftSync,
+  waitForGuidedStepReservationDraftSync
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -1053,6 +1073,74 @@ const FormView: React.FC<FormViewProps> = ({
   });
 
   const activeGuidedStepIndex = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
+  const guidedReservationRemovalSyncSnapshotRef = useRef<{
+    recordId: string;
+    lineItems: LineItemState | null;
+  }>({ recordId: '', lineItems: null });
+
+  useLayoutEffect(() => {
+    const recordId = `${recordMeta?.id || ''}`.trim();
+    const previousSnapshot = guidedReservationRemovalSyncSnapshotRef.current;
+    const recordChanged = previousSnapshot.recordId !== recordId;
+    const nextSnapshot = cloneLineItemStateSnapshot(lineItems);
+    if (!guidedEnabled || !queueGuidedStepReservationDraftSync || !recordId) {
+      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      return;
+    }
+    if (!previousSnapshot.lineItems || recordChanged) {
+      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      return;
+    }
+
+    const impacts = detectGuidedReservationManagedRowRemovals({
+      definition,
+      stepId: activeGuidedStepId || '__all__',
+      previousLineItems: previousSnapshot.lineItems,
+      nextLineItems: nextSnapshot,
+      mode: 'all'
+    }).filter(impact => impact.stepId !== activeGuidedStepId);
+
+    guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+    if (!impacts.length) return;
+
+    const stepImpacts = new Map<string, GuidedReservationManagedRowRemovalImpact[]>();
+    impacts.forEach(impact => {
+      const list = stepImpacts.get(impact.stepId) || [];
+      list.push(impact);
+      stepImpacts.set(impact.stepId, list);
+    });
+
+    stepImpacts.forEach((stepImpactList, stepId) => {
+      const removedRowIds = Array.from(
+        new Set(
+          stepImpactList.flatMap(impact => Array.isArray(impact.removedRowIds) ? impact.removedRowIds : [])
+        )
+      );
+      onDiagnostic?.('guidedStep.reservationSync.queuedOnManagedRowRemoval', {
+        recordId,
+        activeStepId: activeGuidedStepId || null,
+        stepId,
+        impactCount: stepImpactList.length,
+        removedRowIds,
+        outputGroups: Array.from(new Set(stepImpactList.map(impact => impact.outputGroupId).filter(Boolean)))
+      });
+      queueGuidedStepReservationDraftSync({
+        stepId,
+        reason: `managedRowRemoval:${removedRowIds.join(',') || 'unknown'}`,
+        persistSnapshot: false,
+        snapshotLineItems: nextSnapshot
+      });
+    });
+  }, [
+    activeGuidedStepId,
+    definition,
+    guidedEnabled,
+    lineItems,
+    onDiagnostic,
+    queueGuidedStepReservationDraftSync,
+    recordMeta?.id
+  ]);
+
   const normalizeForwardGate = useCallback(
     (raw: any, fallback: 'free' | 'whenComplete' | 'whenValid'): 'free' | 'whenComplete' | 'whenValid' => {
       const v = (raw ?? '').toString().trim().toLowerCase();
@@ -5164,7 +5252,6 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
-    mergeLineItemGroupErrors,
     onDiagnostic,
     setErrors,
     validateLineItemGroupOverlay
@@ -9779,7 +9866,8 @@ const FormView: React.FC<FormViewProps> = ({
               suppressOverlayOpenAction,
               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
               ensureRecordId,
-              queueGuidedStepReservationDraftSync
+              queueGuidedStepReservationDraftSync,
+              waitForGuidedStepReservationDraftSync
             }}
           />
         );
@@ -10259,6 +10347,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedInlineLineGroupIds,
     guidedStepIds,
     guidedStepsCfg,
+    guidedVisibleSteps,
     lineItems,
     maxReachableGuidedIndex,
     onDiagnostic,
@@ -10285,7 +10374,6 @@ const FormView: React.FC<FormViewProps> = ({
     const parentGroup = subgroupDefs.root;
     const parentRows = parsed ? lineItems[parsed.parentGroupKey] || [] : [];
     const parentRow = parsed ? parentRows.find(r => r.id === parsed.parentRowId) : undefined;
-    const parentRowIdx = parsed ? parentRows.findIndex(r => r.id === parsed.parentRowId) : -1;
     const parentRowValues: Record<string, FieldValue> = parentRow?.values || {};
     const ancestorValues: Record<string, FieldValue> = (() => {
       const merged: Record<string, FieldValue> = { ...parentRowValues };
@@ -11052,6 +11140,7 @@ const FormView: React.FC<FormViewProps> = ({
                 runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                 ensureRecordId,
                 queueGuidedStepReservationDraftSync,
+                waitForGuidedStepReservationDraftSync,
                 closeOverlay: closeSubgroupOverlay
               }}
             />
@@ -11881,7 +11970,8 @@ const FormView: React.FC<FormViewProps> = ({
                             suppressOverlayOpenAction,
                             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                             ensureRecordId,
-                            queueGuidedStepReservationDraftSync
+                            queueGuidedStepReservationDraftSync,
+                            waitForGuidedStepReservationDraftSync
                           }}
                         />
                       </div>
@@ -14065,6 +14155,7 @@ const FormView: React.FC<FormViewProps> = ({
                     runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                     ensureRecordId,
                     queueGuidedStepReservationDraftSync,
+                    waitForGuidedStepReservationDraftSync,
                     closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                   }}
                 />
@@ -14652,6 +14743,7 @@ const FormView: React.FC<FormViewProps> = ({
           rowFlow={target.rowFlow}
           rowFilter={rowFilter}
           dataSourceRows={Array.isArray((target as any).dataSourceRows) ? ((target as any).dataSourceRows as any[]) : undefined}
+          dataSourceBootstrap={(target as any).dataSourceBootstrap || undefined}
           hideInlineSubgroups={hideInlineSubgroups}
           supplementalHelperText={delegateTargetHelperText ? targetHelperText : undefined}
           hideSupplementalHelperWhenNoSourceRows={delegateTargetHelperText}
@@ -14710,7 +14802,8 @@ const FormView: React.FC<FormViewProps> = ({
             suppressOverlayOpenAction,
             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
             ensureRecordId,
-            queueGuidedStepReservationDraftSync
+            queueGuidedStepReservationDraftSync,
+            waitForGuidedStepReservationDraftSync
           }}
         />
       );

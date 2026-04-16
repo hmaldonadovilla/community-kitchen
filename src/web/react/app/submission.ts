@@ -10,6 +10,7 @@ import {
   WebFormDefinition,
   WebFormSubmission
 } from '../../types';
+import type { InventoryReservationPlanResult, RecordMetadata } from '../../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
@@ -1208,6 +1209,31 @@ export const settleClientDataVersionAfterDispatch = (args: {
     return resolveCurrentClientDataVersion(responseDataVersion, optimisticDataVersion, confirmedDataVersion);
   }
   return resolveCurrentClientDataVersion(responseDataVersion, confirmedDataVersion);
+};
+
+export const resolveReservationPlanSourceMetaAdoption = (args: {
+  result?: InventoryReservationPlanResult | null;
+  currentRecordId?: string | null;
+  currentDataVersion?: number | string | null;
+  fallbackRecordId?: string | null;
+}): RecordMetadata | null => {
+  if (args.result?.sourceClientDataVersionMatched !== true) return null;
+
+  const rawMeta = (args.result?.sourceRecordMeta || {}) as RecordMetadata;
+  const currentRecordId = ((args.currentRecordId || '') as any).toString?.().trim?.() || '';
+  const targetRecordId = ((rawMeta.id || args.fallbackRecordId || '') as any).toString?.().trim?.() || '';
+  if (!currentRecordId || !targetRecordId || currentRecordId !== targetRecordId) return null;
+
+  const nextDataVersion = resolveCurrentClientDataVersion(rawMeta.dataVersion);
+  const currentDataVersion = resolveCurrentClientDataVersion(args.currentDataVersion);
+  if (nextDataVersion === null) return null;
+  if (currentDataVersion !== null && nextDataVersion < currentDataVersion) return null;
+
+  return {
+    ...rawMeta,
+    id: targetRecordId,
+    dataVersion: nextDataVersion
+  };
 };
 
 export const isSubmissionStaleMessage = (message: string | null | undefined): boolean => {

@@ -49,39 +49,64 @@ const inferReservationFieldId = (outputKeyFieldId: string, suffix: 'RECORD_ID' |
   return base ? `${base}_${suffix}` : '';
 };
 
-export const buildStepInventoryReservationPlan = (args: {
+type StepManagedReservationConfig = {
+  stepId: string;
+  parentGroupId: string;
+  resourceFormKey: string;
+  outputGroupId: string;
+  outputKeyFieldId: string;
+  quantityFieldId: string;
+  resourceRecordIdFieldId: string;
+  resourceKindFieldId: string;
+  resourceUnitFieldId: string;
+  allowedStatuses?: string[];
+};
+
+export type GuidedReservationManagedRowRemovalImpact = {
+  stepId: string;
+  parentGroupId: string;
+  parentRowId: string;
+  outputGroupId: string;
+  removedRowIds: string[];
+};
+
+export const cloneLineItemStateSnapshot = (lineItems: LineItemState | null | undefined): LineItemState => {
+  const source = lineItems || {};
+  const snapshot: LineItemState = {};
+  Object.entries(source).forEach(([groupKey, rows]) => {
+    snapshot[groupKey] = Array.isArray(rows)
+      ? rows.map((row: any) => ({
+          ...row,
+          values: { ...((row?.values || {}) as Record<string, any>) }
+        }))
+      : [];
+  });
+  return snapshot;
+};
+
+const collectStepManagedReservationConfigs = (args: {
   definition: WebFormDefinition;
   stepId: string;
-  formKey: string;
-  recordId: string;
-  lineItems: LineItemState;
   mode?: 'step' | 'all';
-  previousManagedScopes?: InventoryReservationPlanScope[];
-}): InventoryReservationPlanRequest | null => {
-  const formKey = (args.formKey || '').toString().trim();
-  const recordId = (args.recordId || '').toString().trim();
-  if (!formKey || !recordId) return null;
-
+}): StepManagedReservationConfig[] => {
   const stepsCfg = (args.definition as any)?.steps;
   const stepId = normalizeStepId(args.stepId);
-  if (stepsCfg?.mode !== 'guided' || !stepId) return null;
+  if (stepsCfg?.mode !== 'guided' || !stepId) return [];
   const stepItems = Array.isArray(stepsCfg.items) ? stepsCfg.items : [];
   const steps =
     args.mode === 'all'
       ? stepItems
       : stepItems.filter((candidate: any) => normalizeStepId(candidate?.id) === stepId);
-  if (!steps.length) return null;
+  if (!steps.length) return [];
 
-  const reservations: NonNullable<InventoryReservationPlanRequest['reservations']> = [];
-  const managedScopes: NonNullable<InventoryReservationPlanRequest['managedScopes']> = [];
-  let hasStepManagedReservation = false;
-
+  const configs: StepManagedReservationConfig[] = [];
   steps.forEach((step: any) => {
+    const normalizedStepId = normalizeStepId(step?.id);
+    if (!normalizedStepId) return;
     (Array.isArray(step.include) ? step.include : []).forEach((target: any) => {
       if (!target || target.kind !== 'lineGroup') return;
       const parentGroupId = normalizeStepId(target.id);
       if (!parentGroupId) return;
-      const parentRows = Array.isArray(args.lineItems[parentGroupId]) ? args.lineItems[parentGroupId] : [];
       const dataSourceRows = Array.isArray(target.dataSourceRows) ? target.dataSourceRows : [];
       dataSourceRows.forEach((config: any) => {
         const reservationConfig =
@@ -102,45 +127,152 @@ export const buildStepInventoryReservationPlan = (args: {
           reservationConfig.resourceUnitFieldId || inferReservationFieldId(outputKeyFieldId, 'UNIT') || ''
         }`.trim();
         if (!resourceFormKey || !outputGroupId || !outputKeyFieldId || !quantityFieldId) return;
-        hasStepManagedReservation = true;
-
-        parentRows.forEach((parentRow: any) => {
-          const parentRowId = normalizeStepId(parentRow?.id);
-          if (!parentRowId) return;
-          managedScopes.push({
-            sourceParentGroupId: parentGroupId,
-            sourceParentRowId: parentRowId,
-            sourceOutputGroupId: outputGroupId
-          });
-          const outputGroupKey = resolveOutputGroupKey(parentGroupId, parentRowId, outputGroupId);
-          const outputRows = Array.isArray(args.lineItems[outputGroupKey]) ? args.lineItems[outputGroupKey] : [];
-          outputRows.forEach((row: any) => {
-            const values = (row?.values || {}) as Record<string, any>;
-            const resourceRecordId = `${values[resourceRecordIdFieldId] ?? ''}`.trim();
-            const resourceItemId = `${values[outputKeyFieldId] ?? ''}`.trim();
-            const quantity = toFiniteNumber(values[quantityFieldId]);
-            if (!resourceRecordId || !resourceItemId || quantity <= 0) return;
-            reservations.push({
-              resourceFormKey,
-              resourceRecordId,
-              resourceItemId,
-              resourceKind: resourceKindFieldId ? `${values[resourceKindFieldId] ?? ''}`.trim() || undefined : undefined,
-              quantity,
-              unit: resourceUnitFieldId ? `${values[resourceUnitFieldId] ?? ''}`.trim() || undefined : undefined,
-              sourceParentGroupId: parentGroupId,
-              sourceParentRowId: parentRowId,
-              sourceOutputGroupId: outputGroupId,
-              sourceOutputRowId: normalizeStepId(row?.id) || undefined,
-              sourceOutputKeyFieldId: outputKeyFieldId,
-              allowedStatuses: Array.isArray(reservationConfig.allowedStatuses) ? reservationConfig.allowedStatuses : undefined
-            });
-          });
+        configs.push({
+          stepId: normalizedStepId,
+          parentGroupId,
+          resourceFormKey,
+          outputGroupId,
+          outputKeyFieldId,
+          quantityFieldId,
+          resourceRecordIdFieldId,
+          resourceKindFieldId,
+          resourceUnitFieldId,
+          allowedStatuses: Array.isArray(reservationConfig.allowedStatuses) ? reservationConfig.allowedStatuses : undefined
         });
       });
     });
   });
+  return configs;
+};
 
-  if (!hasStepManagedReservation) return null;
+const rowHasManagedReservationSelection = (row: any, config: StepManagedReservationConfig): boolean => {
+  const values = (row?.values || {}) as Record<string, any>;
+  const resourceRecordId = `${values[config.resourceRecordIdFieldId] ?? ''}`.trim();
+  const resourceItemId = `${values[config.outputKeyFieldId] ?? ''}`.trim();
+  const quantity = toFiniteNumber(values[config.quantityFieldId]);
+  return Boolean(resourceRecordId && resourceItemId && quantity > 0);
+};
+
+export const detectGuidedReservationManagedRowRemovals = (args: {
+  definition: WebFormDefinition;
+  stepId: string;
+  previousLineItems: LineItemState;
+  nextLineItems: LineItemState;
+  mode?: 'step' | 'all';
+}): GuidedReservationManagedRowRemovalImpact[] => {
+  const configs = collectStepManagedReservationConfigs({
+    definition: args.definition,
+    stepId: args.stepId,
+    mode: args.mode
+  });
+  if (!configs.length) return [];
+
+  const previousLineItems = args.previousLineItems || {};
+  const nextLineItems = args.nextLineItems || {};
+  const impacts: GuidedReservationManagedRowRemovalImpact[] = [];
+
+  configs.forEach(config => {
+    const previousParentRows = Array.isArray(previousLineItems[config.parentGroupId])
+      ? previousLineItems[config.parentGroupId]
+      : [];
+    if (!previousParentRows.length) return;
+    const nextParentRowIds = new Set(
+      (Array.isArray(nextLineItems[config.parentGroupId]) ? nextLineItems[config.parentGroupId] : [])
+        .map((row: any) => normalizeStepId(row?.id))
+        .filter(Boolean)
+    );
+
+    previousParentRows.forEach((parentRow: any) => {
+      const parentRowId = normalizeStepId(parentRow?.id);
+      if (!parentRowId) return;
+      const outputGroupKey = resolveOutputGroupKey(config.parentGroupId, parentRowId, config.outputGroupId);
+      const previousOutputRows = Array.isArray(previousLineItems[outputGroupKey]) ? previousLineItems[outputGroupKey] : [];
+      if (!previousOutputRows.length) return;
+      const nextOutputRows =
+        nextParentRowIds.has(parentRowId) && Array.isArray(nextLineItems[outputGroupKey]) ? nextLineItems[outputGroupKey] : [];
+      const nextOutputRowIds = new Set(
+        nextOutputRows
+          .map((row: any) => normalizeStepId(row?.id))
+          .filter(Boolean)
+      );
+      const removedRelevantRows = previousOutputRows.filter((row: any) => {
+        const rowId = normalizeStepId(row?.id);
+        if (rowId && nextOutputRowIds.has(rowId)) return false;
+        return rowHasManagedReservationSelection(row, config);
+      });
+      if (!removedRelevantRows.length) return;
+      impacts.push({
+        stepId: config.stepId,
+        parentGroupId: config.parentGroupId,
+        parentRowId,
+        outputGroupId: config.outputGroupId,
+        removedRowIds: removedRelevantRows
+          .map((row: any) => normalizeStepId(row?.id))
+          .filter(Boolean)
+      });
+    });
+  });
+
+  return impacts;
+};
+
+export const buildStepInventoryReservationPlan = (args: {
+  definition: WebFormDefinition;
+  stepId: string;
+  formKey: string;
+  recordId: string;
+  lineItems: LineItemState;
+  mode?: 'step' | 'all';
+  previousManagedScopes?: InventoryReservationPlanScope[];
+}): InventoryReservationPlanRequest | null => {
+  const formKey = (args.formKey || '').toString().trim();
+  const recordId = (args.recordId || '').toString().trim();
+  if (!formKey || !recordId) return null;
+
+  const configs = collectStepManagedReservationConfigs({
+    definition: args.definition,
+    stepId: args.stepId,
+    mode: args.mode
+  });
+  if (!configs.length) return null;
+
+  const reservations: NonNullable<InventoryReservationPlanRequest['reservations']> = [];
+  const managedScopes: NonNullable<InventoryReservationPlanRequest['managedScopes']> = [];
+  configs.forEach(config => {
+    const parentRows = Array.isArray(args.lineItems[config.parentGroupId]) ? args.lineItems[config.parentGroupId] : [];
+    parentRows.forEach((parentRow: any) => {
+      const parentRowId = normalizeStepId(parentRow?.id);
+      if (!parentRowId) return;
+      managedScopes.push({
+        sourceParentGroupId: config.parentGroupId,
+        sourceParentRowId: parentRowId,
+        sourceOutputGroupId: config.outputGroupId
+      });
+      const outputGroupKey = resolveOutputGroupKey(config.parentGroupId, parentRowId, config.outputGroupId);
+      const outputRows = Array.isArray(args.lineItems[outputGroupKey]) ? args.lineItems[outputGroupKey] : [];
+      outputRows.forEach((row: any) => {
+        const values = (row?.values || {}) as Record<string, any>;
+        const resourceRecordId = `${values[config.resourceRecordIdFieldId] ?? ''}`.trim();
+        const resourceItemId = `${values[config.outputKeyFieldId] ?? ''}`.trim();
+        const quantity = toFiniteNumber(values[config.quantityFieldId]);
+        if (!resourceRecordId || !resourceItemId || quantity <= 0) return;
+        reservations.push({
+          resourceFormKey: config.resourceFormKey,
+          resourceRecordId,
+          resourceItemId,
+          resourceKind: config.resourceKindFieldId ? `${values[config.resourceKindFieldId] ?? ''}`.trim() || undefined : undefined,
+          quantity,
+          unit: config.resourceUnitFieldId ? `${values[config.resourceUnitFieldId] ?? ''}`.trim() || undefined : undefined,
+          sourceParentGroupId: config.parentGroupId,
+          sourceParentRowId: parentRowId,
+          sourceOutputGroupId: config.outputGroupId,
+          sourceOutputRowId: normalizeStepId(row?.id) || undefined,
+          sourceOutputKeyFieldId: config.outputKeyFieldId,
+          allowedStatuses: config.allowedStatuses
+        });
+      });
+    });
+  });
 
   const mergedManagedScopes = dedupeManagedScopes([
     ...(Array.isArray(args.previousManagedScopes) ? args.previousManagedScopes : []),

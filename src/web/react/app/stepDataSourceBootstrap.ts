@@ -1,3 +1,5 @@
+import type { StepDataSourceBootstrapConfig } from '../../types';
+
 /**
  * Builds a stable signature for step-level datasource bootstrap requests so harmless rerenders
  * do not trigger duplicate forced refreshes.
@@ -6,6 +8,7 @@ export const buildStepDataSourceBootstrapSignature = (args: {
   recordId?: string | null;
   language?: string | null;
   configs?: any[];
+  bootstrap?: StepDataSourceBootstrapConfig | null;
 }): string => {
   const configs = Array.isArray(args.configs) ? args.configs.filter(Boolean) : [];
   const language = `${args.language || 'EN'}`.trim().toUpperCase();
@@ -27,6 +30,11 @@ export const buildStepDataSourceBootstrapSignature = (args: {
   return JSON.stringify({
     recordId,
     language,
+    waitForGuidedReservationSync: args.bootstrap?.waitForGuidedReservationSync === true,
     configs: normalizedConfigs
   });
 };
+
+export const shouldWaitForGuidedReservationSyncOnBootstrap = (
+  config?: StepDataSourceBootstrapConfig | null
+): boolean => config?.waitForGuidedReservationSync === true;

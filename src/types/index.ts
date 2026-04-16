@@ -611,6 +611,12 @@ export interface InventoryReservationPlanEntry {
 export interface InventoryReservationPlanRequest {
   sourceFormKey: string;
   sourceRecordId: string;
+  /**
+   * Optional optimistic-lock baseline for the source record.
+   * Lets the server report whether the reservation plan started from the same
+   * source-record version the client currently has loaded.
+   */
+  clientDataVersion?: number;
   ledgerFormKey?: string;
   managedScopes?: InventoryReservationPlanScope[];
   reservations?: InventoryReservationPlanEntry[];
@@ -630,6 +636,15 @@ export interface InventoryReservationPlanResult {
   reservationsApplied?: number;
   reservationsReleased?: number;
   availability?: InventoryAvailabilitySnapshot[];
+  /**
+   * Latest known source-record metadata after the reservation plan completed.
+   */
+  sourceRecordMeta?: RecordMetadata;
+  /**
+   * True when `clientDataVersion` matched the source record version at the
+   * start of the reservation-plan transaction.
+   */
+  sourceClientDataVersionMatched?: boolean;
 }
 
 export interface InventoryReservationReconciliationRequest {
@@ -4214,6 +4229,17 @@ export interface StepSubGroupCollectionConfig {
   include?: StepSubGroupTargetConfig[];
 }
 
+export interface StepDataSourceBootstrapConfig {
+  /**
+   * When true, delay the initial guided-step datasource bootstrap until any in-flight
+   * guided reservation draft sync for the current record has finished.
+   *
+   * Use this when a later step fetches shared inventory that may have been updated by
+   * reservation-managed output rows deleted in an earlier step.
+   */
+  waitForGuidedReservationSync?: boolean;
+}
+
 export interface StepLineGroupTargetConfig {
   kind: 'lineGroup';
   /**
@@ -4280,6 +4306,10 @@ export interface StepLineGroupTargetConfig {
    * Optional subgroup scoping + display configuration for this step.
    */
   subGroups?: StepSubGroupCollectionConfig;
+  /**
+   * Optional datasource bootstrap coordination for guided steps.
+   */
+  dataSourceBootstrap?: StepDataSourceBootstrapConfig;
 }
 
 export interface StepQuestionTargetConfig {

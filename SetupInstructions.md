@@ -2703,6 +2703,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - Keep the UI read path on the inventory datasource only; do not query the ledger just to render availability
    - Write reservation changes through one atomic server endpoint so the response can return the fresh authoritative availability snapshot after every mutation
    - For guided leftover-selection steps that should avoid live per-keystroke reservation writes, set `reservation.commitMode: "step"` on the datasource-row config. The app keeps edits local while the user is on the step, then sends one batched reservation plan when they tap `Next`, replacing stale reservations in the managed step scopes.
+   - If a later guided step reads shared inventory that can still be changing because another step just deleted reservation-managed output rows, set `dataSourceBootstrap.waitForGuidedReservationSync: true` on that step's line-group target. The step will wait for the current record's in-flight guided reservation draft sync to finish before it bootstraps `fetchDataSource`, which prevents stale shared inventory from flashing in the UI.
    - Optional: define `reservation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change
    - Optional source-form cleanup hooks:
      - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted

@@ -4496,6 +4496,22 @@ components:
             type: string
         subGroups:
           $ref: '#/components/schemas/StepSubGroupCollectionConfig'
+        dataSourceBootstrap:
+          type: object
+          description: |
+            Optional guided-step datasource bootstrap coordination.
+
+            Use this when the step loads shared datasource rows that may be updated by
+            in-flight guided reservation syncs from another step for the same record.
+          properties:
+            waitForGuidedReservationSync:
+              type: boolean
+              description: |
+                When true, delay the initial guided-step datasource bootstrap until any
+                in-flight guided reservation draft sync for the current record has finished.
+
+                This avoids fetching stale shared inventory immediately after another step
+                deleted reservation-managed output rows and queued a release plan.
       required: [kind, id]
       additionalProperties: true
 

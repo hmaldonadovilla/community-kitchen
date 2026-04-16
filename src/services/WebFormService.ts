@@ -18,6 +18,7 @@ import {
   InventoryReservationReconciliationRequest,
   InventoryReservationReconciliationResult,
   LifecycleRule,
+  RecordMetadata,
   QuestionConfig,
   WebFormDefinition,
   WebFormSubmission,
@@ -2377,6 +2378,14 @@ export class WebFormService {
 
     try {
       return this.withDocumentTransactionLock('inventoryReservation.applyPlan', () => {
+        const clientDataVersion = this.normalizeReservationPlanClientDataVersion(request?.clientDataVersion);
+        const sourceRecordMetaBefore = this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId);
+        const sourceClientDataVersionMatched =
+          clientDataVersion !== null &&
+          Number.isFinite(Number(sourceRecordMetaBefore?.dataVersion)) &&
+          Number(sourceRecordMetaBefore?.dataVersion) > 0
+            ? Number(sourceRecordMetaBefore?.dataVersion) === clientDataVersion
+            : false;
         const refreshMode = this.normalizeReservationRefreshMode(request?.refreshMode, 'revisionOnly');
         const managedScopes = this.normalizeReservationPlanScopes(request?.managedScopes);
         const normalizedReservations = this.normalizeReservationPlanEntries({
@@ -2505,17 +2514,23 @@ export class WebFormService {
         }
 
         if (refreshMode !== 'none') {
+          this.refreshFormBackedReadCaches(touchedForms, 'inventoryReservation.applyPlan');
           touchedForms.forEach(target => {
             this.refreshMutationCaches(target.form, target.questions, 'inventoryReservation.applyPlan', refreshMode);
           });
         }
+
+        const sourceRecordMetaAfter =
+          this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId) || sourceRecordMetaBefore;
 
         return {
           success: true,
           message: 'Inventory reservations updated.',
           reservationsApplied: appliedCount,
           reservationsReleased: releasedCount,
-          availability: this.collectUniqueReservationAvailabilitySnapshots(availabilitySnapshots)
+          availability: this.collectUniqueReservationAvailabilitySnapshots(availabilitySnapshots),
+          sourceRecordMeta: sourceRecordMetaAfter,
+          sourceClientDataVersionMatched
         };
       });
     } catch (err: any) {
@@ -2524,6 +2539,22 @@ export class WebFormService {
         message: (err?.message || 'Could not acquire the reservation transaction lock. Please retry.').toString()
       };
     }
+  }
+
+  private normalizeReservationPlanClientDataVersion(value: any): number | null {
+    const normalized = Number(value);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+  }
+
+  private buildReservationPlanSourceRecordMeta(sourceFormKey: string, sourceRecordId: string): RecordMetadata | undefined {
+    const version = this.getRecordVersion(sourceFormKey, sourceRecordId);
+    if (!version?.success) return undefined;
+    return {
+      id: (version.id || sourceRecordId || '').toString().trim() || undefined,
+      updatedAt: (version.updatedAt || '').toString().trim() || undefined,
+      dataVersion: Number.isFinite(Number(version.dataVersion)) ? Number(version.dataVersion) : undefined,
+      rowNumber: Number.isFinite(Number(version.rowNumber)) ? Number(version.rowNumber) : undefined
+    };
   }
 
   private upsertInventoryReservationDirect(
@@ -2731,6 +2762,7 @@ export class WebFormService {
     if (!options?.touchedForms) {
       const refreshMode = this.normalizeReservationRefreshMode(options?.refreshMode, 'revisionOnly');
       if (refreshMode !== 'none') {
+        this.refreshFormBackedReadCaches(touchedForms, 'inventoryReservation.upsert');
         touchedForms.forEach(target => {
           this.refreshMutationCaches(target.form, target.questions, 'inventoryReservation.upsert', refreshMode);
         });
@@ -3319,9 +3351,12 @@ export class WebFormService {
         releasedReservations += groupEntry.release.length;
       });
 
-      touchedForms.forEach(target => {
-        this.refreshMutationCaches(target.form, target.questions, 'inventoryReservation.reconcile', refreshMode);
-      });
+      if (refreshMode !== 'none') {
+        this.refreshFormBackedReadCaches(touchedForms, 'inventoryReservation.reconcile');
+        touchedForms.forEach(target => {
+          this.refreshMutationCaches(target.form, target.questions, 'inventoryReservation.reconcile', refreshMode);
+        });
+      }
 
       debugLog('inventoryReservation.reconcile.ok', {
         sourceFormKey,
@@ -4417,6 +4452,42 @@ export class WebFormService {
     const canonicalKey = (form.configSheet || form.title || '').toString().trim();
     if (!canonicalKey) return;
     this.bumpHomeRevision(canonicalKey, reason);
+  }
+
+  private refreshFormBackedReadCaches(
+    touchedForms: Map<string, { form: FormConfig; questions: QuestionConfig[] }>,
+    reason: string
+  ): void {
+    touchedForms.forEach(target => {
+      this.bumpFormBackedReadCacheEtag(target.form, target.questions, reason);
+    });
+  }
+
+  private bumpFormBackedReadCacheEtag(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    reason: string
+  ): void {
+    const destinationTab = (form.destinationTab || `${form.title} Responses` || '').toString().trim();
+    const formKey = (form.configSheet || form.title || '').toString().trim();
+    if (!destinationTab || !formKey) return;
+    try {
+      const { sheet, columns } = this.submissions.ensureDestination(destinationTab, questions);
+      const etag = this.cacheManager.bumpSheetEtag(sheet, columns, `${reason}.formBackedRead`);
+      debugLog('mutation.formBackedRead.etag.bump', {
+        formKey,
+        destinationTab,
+        etag,
+        reason
+      });
+    } catch (err: any) {
+      debugLog('mutation.formBackedRead.etag.bump.error', {
+        formKey,
+        destinationTab,
+        reason,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+    }
   }
 
   /**

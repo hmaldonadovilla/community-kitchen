@@ -32,6 +32,7 @@ import {
   RowFlowActionRef,
   RowFlowConfig,
   RowFlowOverlayContextHeaderConfig,
+  StepDataSourceBootstrapConfig,
   ValidationRule,
   VisibilityContext,
   WebFormDefinition,
@@ -129,7 +130,10 @@ import {
   resolveSourceFirstAllocationLabelVisibility,
   shouldShowSourceFirstAllocationLabel
 } from '../../app/sourceFirstAllocations';
-import { buildStepDataSourceBootstrapSignature } from '../../app/stepDataSourceBootstrap';
+import {
+  buildStepDataSourceBootstrapSignature,
+  shouldWaitForGuidedReservationSyncOnBootstrap
+} from '../../app/stepDataSourceBootstrap';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -494,7 +498,17 @@ export interface LineItemGroupQuestionCtx {
     options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
   ) => void;
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
-  queueGuidedStepReservationDraftSync?: (args: { stepId: string; reason: string }) => void;
+  queueGuidedStepReservationDraftSync?: (args: {
+    stepId: string;
+    reason: string;
+    persistSnapshot?: boolean;
+    snapshotLineItems?: LineItemState;
+  }) => void;
+  waitForGuidedStepReservationDraftSync?: (args: {
+    recordId: string;
+    stepId?: string;
+    reason: string;
+  }) => Promise<{ ok: boolean; message?: string }>;
   handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
 
   collapsedGroups: Record<string, boolean>;
@@ -565,6 +579,10 @@ export const LineItemGroupQuestion: React.FC<{
    */
   dataSourceRows?: any[];
   /**
+   * Optional guided-step datasource bootstrap controls.
+   */
+  dataSourceBootstrap?: StepDataSourceBootstrapConfig;
+  /**
    * When true, hide the inline subgroup editor sections and rely on subgroup "open" pills/overlays instead.
    */
   hideInlineSubgroups?: boolean;
@@ -587,6 +605,7 @@ export const LineItemGroupQuestion: React.FC<{
   rowFlow,
   rowFilter,
   dataSourceRows,
+  dataSourceBootstrap,
   hideInlineSubgroups,
   hideToolbars,
   supplementalHelperText,
@@ -622,6 +641,7 @@ export const LineItemGroupQuestion: React.FC<{
     runSelectionEffectsForAncestors,
     ensureRecordId,
     queueGuidedStepReservationDraftSync,
+    waitForGuidedStepReservationDraftSync,
     handleLineFieldChange,
     collapsedGroups,
     toggleGroupCollapsed,
@@ -885,15 +905,20 @@ export const LineItemGroupQuestion: React.FC<{
     stepId: string;
     reason: string;
   } | null>(null);
+  const shouldWaitForReservationSyncBeforeBootstrap = React.useMemo(
+    () => shouldWaitForGuidedReservationSyncOnBootstrap(dataSourceBootstrap),
+    [dataSourceBootstrap]
+  );
   const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
   const stepDataSourceBootstrapSignature = React.useMemo(
     () =>
       buildStepDataSourceBootstrapSignature({
         recordId,
         language,
-        configs: stepDataSourceRows
+        configs: stepDataSourceRows,
+        bootstrap: dataSourceBootstrap
       }),
-    [language, recordId, stepDataSourceRows]
+    [dataSourceBootstrap, language, recordId, stepDataSourceRows]
   );
 
   React.useEffect(() => {
@@ -1072,35 +1097,88 @@ export const LineItemGroupQuestion: React.FC<{
       .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
     if (!configEntries.length) return;
 
-    const pendingFetches = configEntries
-      .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
-      .map(({ dataSource, shouldForceRefresh }) => ({
-        config: dataSource,
-        promise: fetchDataSource(dataSource, language, shouldForceRefresh ? { forceRefresh: true } : undefined).catch(() => null)
-      }));
-    stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
-    if (!pendingFetches.length) return;
+    const runBootstrap = async () => {
+      const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
+      stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+      beginStepDataSourceLoading(loadingEntries);
+      const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
+      const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
+      try {
+        if (
+          shouldWaitForReservationSyncBeforeBootstrap &&
+          normalizedRecordId &&
+          waitForGuidedStepReservationDraftSync
+        ) {
+          onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.start', {
+            groupId: q.id,
+            stepId: currentStepId || null,
+            recordId: normalizedRecordId
+          });
+          const waitResult = await waitForGuidedStepReservationDraftSync({
+            recordId: normalizedRecordId,
+            stepId: currentStepId || undefined,
+            reason: `stepDataSourceBootstrap:${q.id}`
+          });
+          if (cancelled) return;
+          if (!waitResult.ok) {
+            onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.blocked', {
+              groupId: q.id,
+              stepId: currentStepId || null,
+              recordId: normalizedRecordId,
+              message: waitResult.message || null
+            });
+            return;
+          }
+          onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
+            groupId: q.id,
+            stepId: currentStepId || null,
+            recordId: normalizedRecordId
+          });
+        }
 
-    beginStepDataSourceLoading(pendingFetches.map(entry => ({ dataSource: entry.config, id: entry.config?.id })));
-    Promise.all(pendingFetches.map(entry => entry.promise))
-      .then(() => {
-        if (cancelled) return;
-        setStepDataSourceRefreshTick(prev => prev + 1);
-      })
-      .finally(() => {
-        endStepDataSourceLoading(pendingFetches.map(entry => ({ dataSource: entry.config, id: entry.config?.id })));
-      });
+        const pendingFetches = configEntries
+          .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
+          .map(({ dataSource, shouldForceRefresh }) => ({
+            config: dataSource,
+            promise: fetchDataSource(
+              dataSource,
+              language,
+              shouldForceRefresh ? { forceRefresh: true } : undefined
+            ).catch(() => null)
+          }));
+        if (!pendingFetches.length) {
+          if (!cancelled) {
+            setStepDataSourceRefreshTick(prev => prev + 1);
+          }
+          return;
+        }
+        await Promise.all(pendingFetches.map(entry => entry.promise));
+        if (!cancelled) {
+          setStepDataSourceRefreshTick(prev => prev + 1);
+        }
+      } finally {
+        endStepDataSourceLoading(loadingEntries);
+      }
+    };
+
+    void runBootstrap();
 
     return () => {
       cancelled = true;
     };
   }, [
     beginStepDataSourceLoading,
+    definition,
     endStepDataSourceLoading,
     language,
+    onDiagnostic,
+    q.id,
     recordId,
+    resolveTopValue,
+    shouldWaitForReservationSyncBeforeBootstrap,
     stepDataSourceBootstrapSignature,
-    stepDataSourceRows
+    stepDataSourceRows,
+    waitForGuidedStepReservationDraftSync
   ]);
 
   React.useEffect(() => {
@@ -1140,7 +1218,8 @@ export const LineItemGroupQuestion: React.FC<{
     pendingStepReservationDraftSyncRef.current = null;
     queueGuidedStepReservationDraftSync({
       stepId: pending.stepId,
-      reason: pending.reason
+      reason: pending.reason,
+      snapshotLineItems: lineItems
     });
   }, [
     lineItems,
@@ -2991,17 +3070,20 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   return { title, helperText, searchHelperText, placeholder };
 };
 
-  const buildOverlayGroupOverride = (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
-    if (!override || typeof override !== 'object') return undefined;
-    const baseConfig = group.lineItemConfig as any;
-    if (!baseConfig) return undefined;
-    const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
-    return {
-      ...group,
-      id: group.id,
-      lineItemConfig: mergedConfig
-    };
-  };
+  const buildOverlayGroupOverride = React.useCallback(
+    (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
+      if (!override || typeof override !== 'object') return undefined;
+      const baseConfig = group.lineItemConfig as any;
+      if (!baseConfig) return undefined;
+      const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
+      return {
+        ...group,
+        id: group.id,
+        lineItemConfig: mergedConfig
+      };
+    },
+    [applyLineItemGroupOverride]
+  );
 
   const runRowFlowActionWithContext = React.useCallback(
     (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
@@ -4076,6 +4158,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       return recomputed;
     });
   }, [
+    buildOptionSetForLineField,
+    definition,
+    onDiagnostic,
     submitting,
     q,
     values,

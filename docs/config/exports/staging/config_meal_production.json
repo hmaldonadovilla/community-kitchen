@@ -1008,6 +1008,9 @@
             {
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
+              "dataSourceBootstrap": {
+                "waitForGuidedReservationSync": true
+              },
               "fields": [],
               "helperText": {
                 "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
@@ -10606,6 +10609,9 @@
             {
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
+              "dataSourceBootstrap": {
+                "waitForGuidedReservationSync": true
+              },
               "fields": [],
               "helperText": {
                 "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"

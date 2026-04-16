@@ -195,6 +195,72 @@ describe('WebFormService', () => {
     };
   };
 
+  const installServerCacheMocks = () => {
+    const previousCacheService = (global as any).CacheService;
+    const store = new Map<string, string>();
+    const cache = {
+      get: jest.fn((key: string) => store.get(key) || null),
+      put: jest.fn((key: string, value: string) => {
+        store.set(key, value);
+      }),
+      getAll: jest.fn((keys: string[]) =>
+        keys.reduce((acc, key) => {
+          if (store.has(key)) acc[key] = store.get(key) || '';
+          return acc;
+        }, {} as Record<string, string>)
+      ),
+      putAll: jest.fn((values: Record<string, string>) => {
+        Object.entries(values || {}).forEach(([key, value]) => {
+          store.set(key, value);
+        });
+      }),
+      remove: jest.fn((key: string) => {
+        store.delete(key);
+      })
+    };
+    (global as any).CacheService = {
+      getScriptCache: () => cache
+    };
+    return {
+      cache,
+      store,
+      restore: () => {
+        (global as any).CacheService = previousCacheService;
+      }
+    };
+  };
+
+  const installDocumentPropertiesMocks = () => {
+    const previousPropertiesService = (global as any).PropertiesService;
+    const store = new Map<string, string>();
+    const props: {
+      getProperty: jest.Mock<string | null, [string]>;
+      setProperty: jest.Mock<any, [string, string]>;
+      deleteProperty: jest.Mock<any, [string]>;
+    } = {
+      getProperty: jest.fn((key: string) => (store.has(key) ? store.get(key) || null : null)),
+      setProperty: jest.fn((key: string, value: string) => {
+        store.set(key, value);
+        return props;
+      }),
+      deleteProperty: jest.fn((key: string) => {
+        store.delete(key);
+        return props;
+      })
+    };
+    (global as any).PropertiesService = {
+      ...(previousPropertiesService || {}),
+      getDocumentProperties: () => props
+    };
+    return {
+      props,
+      store,
+      restore: () => {
+        (global as any).PropertiesService = previousPropertiesService;
+      }
+    };
+  };
+
   afterEach(() => {
     jest.restoreAllMocks();
     (global as any).GmailApp.sendEmail.mockClear();
@@ -2023,6 +2089,144 @@ describe('WebFormService', () => {
     expect((reservation?.values as any)?.RESERVED_QTY).toBe(3);
   });
 
+  test('applyInventoryReservationPlan refreshes stale form-backed datasource caches after noop inventory release writes', () => {
+    const serverCache = installServerCacheMocks();
+    const docProps = installDocumentPropertiesMocks();
+    try {
+      const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+      const inventory = service.saveSubmissionWithId({
+        formKey: inventoryFormKey,
+        language: 'EN',
+        LEFTOVER_ID: 'LP-CACHE-1',
+        LEFTOVER_STATUS: 'available',
+        LEFTOVER_KIND: 'Part dish',
+        LEFTOVER_QTY: 500,
+        LEFTOVER_UNIT: 'gr',
+        LEFTOVER_RESERVED_QTY: 0
+      } as any);
+      expect(inventory.success).toBe(true);
+
+      const dataSourceConfig = {
+        id: 'Leftover Inventory Data',
+        formKey: inventoryFormKey,
+        mode: 'options',
+        statusFieldId: 'LEFTOVER_STATUS',
+        statusAllowList: ['available'],
+        projection: [
+          'id',
+          'LEFTOVER_ID',
+          'LEFTOVER_STATUS',
+          'LEFTOVER_QTY',
+          'LEFTOVER_RESERVED_QTY',
+          'LEFTOVER_UNIT'
+        ]
+      } as any;
+
+      const initial = service.fetchDataSource(dataSourceConfig, 'EN');
+      expect(initial.items).toEqual([
+        expect.objectContaining({
+          LEFTOVER_ID: 'LP-CACHE-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: 0,
+          LEFTOVER_UNIT: 'gr',
+          LEFTOVER_STATUS: 'available'
+        })
+      ]);
+
+      const reserve = service.applyInventoryReservationPlan({
+        sourceFormKey: 'Config: Delivery',
+        sourceRecordId: 'REC-CACHE-1',
+        ledgerFormKey,
+        refreshMode: 'revisionOnly',
+        managedScopes: [
+          {
+            sourceParentGroupId: 'MP_MEALS_REQUEST',
+            sourceParentRowId: 'ROW-CACHE-1'
+          }
+        ],
+        reservations: [
+          {
+            resourceFormKey: inventoryFormKey,
+            resourceRecordId: (inventory.meta?.id || '').toString(),
+            resourceItemId: 'LP-CACHE-1',
+            resourceKind: 'Part dish',
+            quantity: 500,
+            unit: 'gr',
+            sourceParentGroupId: 'MP_MEALS_REQUEST',
+            sourceParentRowId: 'ROW-CACHE-1',
+            quantityFieldId: 'LEFTOVER_QTY',
+            reservedQuantityFieldId: 'LEFTOVER_RESERVED_QTY',
+            statusFieldId: 'LEFTOVER_STATUS',
+            unitFieldId: 'LEFTOVER_UNIT'
+          }
+        ]
+      } as any);
+      expect(reserve.success).toBe(true);
+
+      const cachedWideProjection = service.fetchDataSource(dataSourceConfig, 'EN');
+      expect(cachedWideProjection.items).toEqual([
+        expect.objectContaining({
+          LEFTOVER_ID: 'LP-CACHE-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: 500,
+          LEFTOVER_UNIT: 'gr',
+          LEFTOVER_STATUS: 'available'
+        })
+      ]);
+
+      const inventorySheet = ss.getSheetByName('Test Leftover Inventory Data');
+      expect(inventorySheet).toBeDefined();
+      const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+      const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+      const reservedQtyCol = header.findIndex((value: string) => /\[LEFTOVER_RESERVED_QTY\]\s*$/.test(value));
+      expect(reservedQtyCol).toBeGreaterThanOrEqual(0);
+      inventorySheet!.getRange((inventory.meta?.rowNumber || 0) as number, reservedQtyCol + 1, 1, 1).setValue(0);
+
+      const refreshedRecord = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+      expect((refreshedRecord?.values as any)?.LEFTOVER_RESERVED_QTY).toBe(0);
+
+      const staleWideProjection = service.fetchDataSource(dataSourceConfig, 'EN');
+      expect(staleWideProjection.items).toEqual([
+        expect.objectContaining({
+          LEFTOVER_ID: 'LP-CACHE-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: 500,
+          LEFTOVER_UNIT: 'gr',
+          LEFTOVER_STATUS: 'available'
+        })
+      ]);
+
+      const release = service.applyInventoryReservationPlan({
+        sourceFormKey: 'Config: Delivery',
+        sourceRecordId: 'REC-CACHE-1',
+        ledgerFormKey,
+        refreshMode: 'revisionOnly',
+        managedScopes: [
+          {
+            sourceParentGroupId: 'MP_MEALS_REQUEST',
+            sourceParentRowId: 'ROW-CACHE-1'
+          }
+        ],
+        reservations: []
+      } as any);
+      expect(release.success).toBe(true);
+
+      const afterRelease = service.fetchDataSource(dataSourceConfig, 'EN');
+      expect(afterRelease.items).toEqual([
+        expect.objectContaining({
+          LEFTOVER_ID: 'LP-CACHE-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: 0,
+          LEFTOVER_UNIT: 'gr',
+          LEFTOVER_STATUS: 'available'
+        })
+      ]);
+    } finally {
+      docProps.restore();
+      serverCache.restore();
+    }
+  });
+
   test('upsertInventoryReservation rejects over-reservation and returns fresh availability', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const inventory = service.saveSubmissionWithId({
@@ -2251,6 +2455,76 @@ describe('WebFormService', () => {
     const nextReservation = service.fetchSubmissionById(ledgerFormKey, expectedNextReservationId);
     expect((nextReservation?.values as any)?.STATUS).toBe('active');
     expect((nextReservation?.values as any)?.RESERVED_QTY).toBe(2);
+  });
+
+  test('applyInventoryReservationPlan reports safe source-record metadata for optimistic-lock adoption', () => {
+    const { ledgerFormKey } = setupInventoryReservationForms();
+    const createdSource = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-PLAN-META',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(createdSource.success).toBe(true);
+
+    const matched = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-PLAN-META',
+      ledgerFormKey,
+      clientDataVersion: createdSource.meta?.dataVersion,
+      managedScopes: [],
+      reservations: []
+    });
+
+    expect(matched.success).toBe(true);
+    expect(matched.sourceClientDataVersionMatched).toBe(true);
+    expect(matched.sourceRecordMeta).toEqual(
+      expect.objectContaining({
+        id: 'REC-PLAN-META',
+        dataVersion: createdSource.meta?.dataVersion,
+        rowNumber: createdSource.meta?.rowNumber,
+        updatedAt: createdSource.meta?.updatedAt
+      })
+    );
+
+    const updatedSource = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-PLAN-META',
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckClientDataVersion: createdSource.meta?.dataVersion
+    } as any);
+    expect(updatedSource.success).toBe(true);
+
+    const stale = service.applyInventoryReservationPlan({
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-PLAN-META',
+      ledgerFormKey,
+      clientDataVersion: createdSource.meta?.dataVersion,
+      managedScopes: [],
+      reservations: []
+    });
+
+    expect(stale.success).toBe(true);
+    expect(stale.sourceClientDataVersionMatched).toBe(false);
+    expect(stale.sourceRecordMeta).toEqual(
+      expect.objectContaining({
+        id: 'REC-PLAN-META',
+        dataVersion: updatedSource.meta?.dataVersion,
+        rowNumber: updatedSource.meta?.rowNumber,
+        updatedAt: updatedSource.meta?.updatedAt
+      })
+    );
   });
 
   test('applyInventoryReservationPlan reuses a single active-ledger scan for the batch', () => {
