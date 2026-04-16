@@ -183,6 +183,7 @@ import {
   type GuidedStepReservationAvailabilityEventDetail
 } from './features/reservations/liveSyncEvents';
 import { applyInventoryAvailabilitySnapshotsToCachedDataSources } from './features/reservations/availabilityCache';
+import { buildRejectedStepReservationEntries } from './features/reservations/rejectedReservations';
 import {
   buildFieldIdMap,
   filterDedupRulesForPrecheck,
@@ -214,6 +215,7 @@ import { resolveLocalizedString } from '../i18n';
 import { toUploadItems } from './components/form/utils';
 import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
 import { isEmptyValue } from './utils/values';
+import { resolveReservationDisplayLabelFromCachedDataSources } from './features/reservations/displayLabel';
 import {
   clearFetchDataSourceCache,
   DATA_SOURCE_CACHE_CLEARED_EVENT,
@@ -10092,6 +10094,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           clientDataVersion: getCurrentKnownClientDataVersion() || undefined
         });
         if (!reservationResult.success) {
+          const availability = Array.isArray(reservationResult.availability)
+            ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
+            : [];
+          const rejectedReservations = buildRejectedStepReservationEntries({
+            plan: reservationPlan,
+            availability
+          });
+          if (availability.length) {
+            const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+              dataSourceConfigs: guidedDataSourceConfigs,
+              language,
+              availability
+            });
+            logEvent(`${args.logPrefix}.reservationPlan.rejected.cacheSync`, {
+              stepId: args.stepId,
+              recordId: args.recordId,
+              updatedRows: cacheSync.updatedRows,
+              updatedDataSourceIds: cacheSync.updatedDataSourceIds,
+              rejectedReservations: rejectedReservations.length
+            });
+            if (
+              typeof window !== 'undefined' &&
+              typeof window.dispatchEvent === 'function' &&
+              typeof CustomEvent === 'function'
+            ) {
+              const detail: GuidedStepReservationAvailabilityEventDetail = {
+                stepId: args.stepId,
+                recordId: args.recordId,
+                availability,
+                rejectedReservations
+              };
+              window.dispatchEvent(
+                new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
+                  GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+                  { detail }
+                )
+              );
+            }
+          }
+          const primaryAvailability =
+            availability.length
+              ? (availability[0] as InventoryAvailabilitySnapshot)
+              : null;
           const message = buildReservationFailureMessage(
             resolveUserFacingErrorMessage(
               reservationResult,
@@ -10103,10 +10148,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               'inventory.reservationUpdateFailedDetail',
               languageRef.current,
               "We couldn't update the reservation properly. Please try again."
-            )
+            ),
+            {
+              availability: primaryAvailability,
+              itemId: primaryAvailability?.resourceItemId,
+              itemLabel: resolveReservationDisplayLabelFromCachedDataSources({
+                dataSourceConfigs: guidedDataSourceConfigs,
+                language,
+                availability: primaryAvailability
+              })
+            }
           );
-          setStatus(message);
-          setStatusLevel('error');
           logEvent(`${args.logPrefix}.reservationPlan.failed`, {
             stepId: args.stepId,
             recordId: args.recordId,
@@ -10197,6 +10249,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         return { success: true, applied: true };
       } catch (err: any) {
+        const availability = Array.isArray((err as any)?.availability)
+          ? ((err as any).availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
+          : ((err as any)?.availability ? [((err as any).availability as InventoryAvailabilitySnapshot)] : []);
+        const rejectedReservations = buildRejectedStepReservationEntries({
+          plan: reservationPlan,
+          availability
+        });
+        if (availability.length) {
+          const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+            dataSourceConfigs: guidedDataSourceConfigs,
+            language,
+            availability
+          });
+          logEvent(`${args.logPrefix}.reservationPlan.exception.cacheSync`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            updatedRows: cacheSync.updatedRows,
+            updatedDataSourceIds: cacheSync.updatedDataSourceIds,
+            rejectedReservations: rejectedReservations.length
+          });
+          if (
+            typeof window !== 'undefined' &&
+            typeof window.dispatchEvent === 'function' &&
+            typeof CustomEvent === 'function'
+          ) {
+            const detail: GuidedStepReservationAvailabilityEventDetail = {
+              stepId: args.stepId,
+              recordId: args.recordId,
+              availability,
+              rejectedReservations
+            };
+            window.dispatchEvent(
+              new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
+                GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+                { detail }
+              )
+            );
+          }
+        }
+        const primaryAvailability = availability.length
+          ? (availability[0] as InventoryAvailabilitySnapshot)
+          : null;
         const message = buildReservationFailureMessage(
           resolveUserFacingErrorMessage(
             err,
@@ -10207,10 +10301,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             'inventory.reservationUpdateFailedDetail',
             languageRef.current,
             "We couldn't update the reservation properly. Please try again."
-          )
+          ),
+          {
+            availability: primaryAvailability,
+            itemId: primaryAvailability?.resourceItemId,
+            itemLabel: resolveReservationDisplayLabelFromCachedDataSources({
+              dataSourceConfigs: guidedDataSourceConfigs,
+              language,
+              availability: primaryAvailability
+            })
+          }
         );
-        setStatus(message);
-        setStatusLevel('error');
         logEvent(`${args.logPrefix}.reservationPlan.exception`, {
           stepId: args.stepId,
           recordId: args.recordId,

@@ -108,6 +108,66 @@ describe('reservationSyncPolicy', () => {
     ).toBe('The selected reservation is no longer available.');
   });
 
+  test('formats availability conflicts with the leftover item and remaining quantity', () => {
+    expect(
+      buildReservationFailureMessage(
+        'Only 0',
+        "We couldn't update the reservation.",
+        undefined,
+        {
+          itemId: 'LE-95',
+          itemLabel: 'Bulgur & vegetable sauce',
+          availability: {
+            resourceFormKey: 'Config: Leftover Inventory',
+            resourceRecordId: 'leftover-1',
+            resourceItemId: 'LE-95',
+            quantityFieldId: 'LEFTOVER_PORTIONS',
+            reservedQuantityFieldId: 'LEFTOVER_RESERVED_PORTIONS',
+            remainingQuantity: 5,
+            reservedQuantity: 10,
+            freeQuantity: 0,
+            currentReservationQuantity: 5,
+            currentRecordReservedQuantity: 5,
+            unit: 'portions',
+            status: 'available'
+          }
+        }
+      )
+    ).toBe(
+      'Bulgur & vegetable sauce | LE-95 has only 0 portions available. Adjust the quantity or choose another leftover item.'
+    );
+  });
+
+  test('formats unavailable reservation items with the leftover item and remaining quantity', () => {
+    expect(
+      buildReservationFailureMessage(
+        'This inventory item is not available for reservation (used).',
+        "We couldn't update the reservation.",
+        undefined,
+        {
+          itemId: 'LP-22',
+          itemLabel: 'Broccoli mix - frozen',
+          availability: {
+            resourceFormKey: 'Config: Leftover Inventory',
+            resourceRecordId: 'leftover-2',
+            resourceItemId: 'LP-22',
+            quantityFieldId: 'LEFTOVER_QTY',
+            reservedQuantityFieldId: 'LEFTOVER_RESERVED_QTY',
+            remainingQuantity: 500,
+            reservedQuantity: 0,
+            freeQuantity: 500,
+            currentReservationQuantity: 0,
+            currentRecordReservedQuantity: 0,
+            unit: 'gr',
+            status: 'used'
+          }
+        }
+      )
+    ).toBe(
+      'Broccoli mix - frozen | LP-22 is no longer available for reservation. Current remaining quantity: 500 gr. Adjust the quantity or choose another leftover item.'
+    );
+  });
+
   test('detects step-commit reservation mode', () => {
     expect(getReservationCommitMode({ commitMode: 'step' })).toBe('step');
     expect(getReservationCommitMode({})).toBe('immediate');

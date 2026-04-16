@@ -102,6 +102,7 @@ import {
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from './reservationSyncPolicy';
+import { resolveReservationDisplayLabel } from '../../features/reservations/displayLabel';
 import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
   type GuidedStepReservationAvailabilityEventDetail
@@ -113,8 +114,7 @@ import {
 import {
   hasStructuredValue,
   resolveReservationResourceFieldIds,
-  resolveReservationSourceItemKey,
-  resolveReservationSourceKeyFieldId
+  resolveReservationSourceItemKey
 } from '../../features/reservations/sourceFields';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
@@ -148,35 +148,6 @@ const getByPath = (root: any, path: string): any => {
 };
 
 const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
-
-const resolveReservationDisplayLabel = (
-  config: any,
-  sourceRow: Record<string, any> | null | undefined,
-  fallbackItemId: string
-): string => {
-  const reservationConfig =
-    config?.reservation && typeof config.reservation === 'object'
-      ? config.reservation
-      : null;
-  const dialogConfig =
-    reservationConfig?.conflictDialog && typeof reservationConfig.conflictDialog === 'object'
-      ? reservationConfig.conflictDialog
-      : null;
-  const configuredFieldIds = Array.isArray(dialogConfig?.itemLabelFieldIds)
-    ? dialogConfig.itemLabelFieldIds.map((entry: any) => normalizeIdValue(entry)).filter(Boolean)
-    : [];
-  const candidateFieldIds = [
-    ...configuredFieldIds,
-    normalizeIdValue(config?.dataSource?.tooltipField),
-    normalizeIdValue(config?.dataSource?.labelField),
-    resolveReservationSourceKeyFieldId(config)
-  ].filter(Boolean);
-  for (const fieldId of candidateFieldIds) {
-    const value = normalizeIdValue(sourceRow?.[fieldId]);
-    if (value) return value;
-  }
-  return fallbackItemId;
-};
 
 const resolveAvailabilityFieldPair = (
   availabilityConfig: any,
@@ -674,11 +645,14 @@ export const LineItemGroupQuestion: React.FC<{
     onDiagnostic
   } = ctx;
 
-  const resolveTopValue = (fieldId: string): FieldValue | undefined => {
-    if (getTopValueFromCtx) return getTopValueFromCtx(fieldId);
-    if (resolveVisibilityValue) return resolveVisibilityValue(fieldId);
-    return values[fieldId];
-  };
+  const resolveTopValue = React.useCallback(
+    (fieldId: string): FieldValue | undefined => {
+      if (getTopValueFromCtx) return getTopValueFromCtx(fieldId);
+      if (resolveVisibilityValue) return resolveVisibilityValue(fieldId);
+      return values[fieldId];
+    },
+    [getTopValueFromCtx, resolveVisibilityValue, values]
+  );
 
   const isIncludedByRowFilter = React.useCallback(
     (rowValues: Record<string, FieldValue>): boolean => {
@@ -1251,30 +1225,6 @@ export const LineItemGroupQuestion: React.FC<{
     stepDataSourceDrafts,
     values
   ]);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-    const currentRecordId = `${recordId || ''}`.trim();
-    const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
-    const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
-    const handleAvailability = (event: Event) => {
-      const detail = (event as CustomEvent<GuidedStepReservationAvailabilityEventDetail>)?.detail;
-      if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
-      if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
-      if (currentStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentStepId) return;
-      applyStepDataSourceAvailabilitySnapshots(detail.availability);
-    };
-    window.addEventListener(
-      GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-      handleAvailability as EventListener
-    );
-    return () => {
-      window.removeEventListener(
-        GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-        handleAvailability as EventListener
-      );
-    };
-  }, [applyStepDataSourceAvailabilitySnapshots, definition, recordId, resolveTopValue]);
 
   React.useEffect(() => {
     if (!sourceFirstDataSourceRows.length) {
@@ -2331,8 +2281,8 @@ export const LineItemGroupQuestion: React.FC<{
           resourceItemId: sourceKey,
           quantity
         });
+        const { kindFieldId, unitFieldId } = resolveReservationResourceFieldIds(args.config);
         try {
-          const { kindFieldId, unitFieldId } = resolveReservationResourceFieldIds(args.config);
           const result = await upsertInventoryReservationApi({
             resourceFormKey,
             resourceRecordId,
@@ -2372,7 +2322,13 @@ export const LineItemGroupQuestion: React.FC<{
                 'inventory.reservationUpdateFailedDetail',
                 language,
                 "We couldn't update the reservation properly. Please try again."
-              )
+              ),
+              {
+                availability: result.availability,
+                itemId: sourceKey,
+                itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+                unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : ''
+              }
             );
             if (message) {
               onDiagnostic?.('inventory.reservation.rejected', {
@@ -2536,7 +2492,12 @@ export const LineItemGroupQuestion: React.FC<{
               'inventory.reservationUpdateFailedDetail',
               language,
               "We couldn't update the reservation properly. Please try again."
-            )
+            ),
+            {
+              itemId: sourceKey,
+              itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+              unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : ''
+            }
           );
           onDiagnostic?.('inventory.reservation.error', {
             groupId: q.id,
@@ -2593,6 +2554,98 @@ export const LineItemGroupQuestion: React.FC<{
       validateVirtualFieldRules
     ]
   );
+
+  const rollbackRejectedStepReservations = React.useCallback(
+    (rejectedReservations: GuidedStepReservationAvailabilityEventDetail['rejectedReservations']): void => {
+      const entries = Array.isArray(rejectedReservations) ? rejectedReservations.filter(Boolean) : [];
+      if (!entries.length || !stepDataSourceRows.length) return;
+      const parentRows = Array.isArray(lineItems[q.id]) ? lineItems[q.id] : [];
+      if (!parentRows.length) return;
+      const handled = new Set<string>();
+
+      entries.forEach(entry => {
+        const sourceParentGroupId = `${entry?.sourceParentGroupId || ''}`.trim();
+        if (sourceParentGroupId && sourceParentGroupId !== q.id) return;
+        const sourceParentRowId = `${entry?.sourceParentRowId || ''}`.trim();
+        const resourceRecordId = `${entry?.resourceRecordId || ''}`.trim();
+        const resourceItemId = `${entry?.resourceItemId || ''}`.trim();
+        if (!sourceParentRowId || !resourceRecordId) return;
+        const parentRow = parentRows.find(candidate => `${candidate?.id || ''}`.trim() === sourceParentRowId);
+        if (!parentRow) return;
+
+        stepDataSourceRows.forEach(config => {
+          const outputGroupId = `${config?.outputGroupId || ''}`.trim();
+          const rejectedOutputGroupId = `${entry?.sourceOutputGroupId || ''}`.trim();
+          if (rejectedOutputGroupId && outputGroupId && rejectedOutputGroupId !== outputGroupId) return;
+
+          const cached = peekCachedDataSource(config?.dataSource, language) as any;
+          const items = Array.isArray(cached?.items) ? cached.items : Array.isArray(cached) ? cached : [];
+          const sourceRow =
+            items.find((item: Record<string, any>) => {
+              if (!item || typeof item !== 'object') return false;
+              if (`${item.id ?? ''}`.trim() !== resourceRecordId) return false;
+              if (!resourceItemId) return true;
+              return resolveReservationSourceItemKey(config, item) === resourceItemId;
+            }) || null;
+          if (!sourceRow) return;
+
+          const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
+          const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
+          const modeFieldId = `${config?.modeFieldId || ''}`.trim();
+          const patch: Record<string, FieldValue> = {};
+          if (selectedFieldId) patch[selectedFieldId] = false;
+          if (quantityFieldId) patch[quantityFieldId] = null;
+          if (modeFieldId) patch[modeFieldId] = null;
+          if (!Object.keys(patch).length) return;
+
+          const rollbackKey = [
+            outputGroupId,
+            sourceParentRowId,
+            resourceRecordId,
+            resourceItemId
+          ].join('::');
+          if (handled.has(rollbackKey)) return;
+          handled.add(rollbackKey);
+
+          syncStepDataSourceOutputRowWithReservation(
+            {
+              config,
+              parentRow,
+              sourceRow,
+              patch
+            },
+            { skipReservation: true }
+          );
+        });
+      });
+    },
+    [language, lineItems, q.id, stepDataSourceRows, syncStepDataSourceOutputRowWithReservation]
+  );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    const currentRecordId = `${recordId || ''}`.trim();
+    const guidedPrefix = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
+    const currentStepId = `${resolveTopValue(guidedPrefix) ?? ''}`.trim();
+    const handleAvailability = (event: Event) => {
+      const detail = (event as CustomEvent<GuidedStepReservationAvailabilityEventDetail>)?.detail;
+      if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
+      if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
+      if (currentStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentStepId) return;
+      applyStepDataSourceAvailabilitySnapshots(detail.availability);
+      rollbackRejectedStepReservations(detail.rejectedReservations);
+    };
+    window.addEventListener(
+      GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+      handleAvailability as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+        handleAvailability as EventListener
+      );
+    };
+  }, [applyStepDataSourceAvailabilitySnapshots, definition, recordId, resolveTopValue, rollbackRejectedStepReservations]);
 
   const seedReservationCommittedValues = React.useCallback(
     (args: {

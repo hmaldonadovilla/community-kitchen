@@ -1,3 +1,5 @@
+import type { InventoryAvailabilitySnapshot } from '../../../../types';
+
 export const getReservationCommitMode = (reservationConfig: any): 'immediate' | 'step' => {
   const raw = (reservationConfig?.commitMode || '').toString().trim().toLowerCase();
   return raw === 'step' ? 'step' : 'immediate';
@@ -59,7 +61,13 @@ export const shouldImmediatelySyncStepReservationChange = (args: {
 export const buildReservationFailureMessage = (
   rawMessage: string,
   fallback: string,
-  lockFailureFallback?: string
+  lockFailureFallback?: string,
+  context?: {
+    availability?: InventoryAvailabilitySnapshot | null;
+    itemId?: string | null;
+    itemLabel?: string | null;
+    unit?: string | null;
+  }
 ): string => {
   const message = (rawMessage || '').toString().trim();
   const normalized = message.toLowerCase();
@@ -69,6 +77,52 @@ export const buildReservationFailureMessage = (
     normalized.includes('please retry');
   if (isLockFailure) {
     return (lockFailureFallback || fallback || message).toString().trim();
+  }
+  const availability = context?.availability || null;
+  const shouldUseAvailabilityMessage =
+    !!availability &&
+    (!message ||
+      normalized.startsWith('only ') ||
+      normalized.includes('not available for reservation') ||
+      normalized.includes('no longer available'));
+  if (shouldUseAvailabilityMessage) {
+    const itemId = `${context?.itemId || availability?.resourceItemId || ''}`.trim();
+    const itemLabel = `${context?.itemLabel || ''}`.trim();
+    const itemDescriptor =
+      itemLabel && itemId && itemLabel !== itemId ? `${itemLabel} | ${itemId}` : itemLabel || itemId || 'This leftover item';
+    const unit = `${context?.unit || availability?.unit || ''}`.trim();
+    const remainingQuantity = Number(availability?.remainingQuantity);
+    const reservedQuantity = Number(availability?.reservedQuantity);
+    const currentRecordReservedQuantity = Number(availability?.currentRecordReservedQuantity);
+    const availableQuantity = Number.isFinite(remainingQuantity) && Number.isFinite(reservedQuantity)
+      ? Math.max(
+          0,
+          remainingQuantity - reservedQuantity + (Number.isFinite(currentRecordReservedQuantity) ? currentRecordReservedQuantity : 0)
+        )
+      : Math.max(
+          0,
+          (Number.isFinite(Number(availability?.freeQuantity)) ? Number(availability?.freeQuantity) : 0) +
+            (Number.isFinite(currentRecordReservedQuantity) ? currentRecordReservedQuantity : 0)
+        );
+    const roundedQuantity =
+      Math.abs(availableQuantity - Math.round(availableQuantity)) < 1e-9
+        ? `${Math.round(availableQuantity)}`
+        : availableQuantity.toFixed(2).replace(/\.?0+$/, '');
+    const normalizedUnit = unit.toLowerCase();
+    const unitLabel =
+      roundedQuantity === '1' && normalizedUnit === 'portions'
+        ? 'portion'
+        : unit;
+    const availableWithUnit = [roundedQuantity, unitLabel].filter(Boolean).join(' ').trim() || roundedQuantity;
+    const status = `${availability?.status || ''}`.trim().toLowerCase();
+    if (status && status !== 'available') {
+      return `${itemDescriptor} is no longer available for reservation. Current remaining quantity: ${availableWithUnit}. Adjust the quantity or choose another leftover item.`
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    return `${itemDescriptor} has only ${availableWithUnit} available. Adjust the quantity or choose another leftover item.`
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   return message || fallback;
 };
