@@ -18,6 +18,7 @@ import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
+  DATA_SOURCE_CACHE_UPDATED_EVENT,
   fetchDataSource,
   mutateCachedDataSource,
   peekCachedDataSource
@@ -1191,6 +1192,13 @@ export const LineItemGroupQuestion: React.FC<{
     if (!stepDataSourceRows.length) return;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     let cancelled = false;
+    const watchedDataSourceIds = new Set(
+      stepDataSourceRows
+        .map(candidate =>
+          candidate && typeof candidate === 'object' ? `${(candidate as any)?.dataSource?.id || ''}`.trim() : ''
+        )
+        .filter(Boolean)
+    );
 
     const handleCacheCleared = () => {
       const configs = stepDataSourceRows
@@ -1211,10 +1219,19 @@ export const LineItemGroupQuestion: React.FC<{
         });
     };
 
+    const handleCacheUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string }>).detail;
+      const dataSourceId = `${detail?.id || ''}`.trim();
+      if (dataSourceId && !watchedDataSourceIds.has(dataSourceId)) return;
+      setStepDataSourceRefreshTick(prev => prev + 1);
+    };
+
     window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
+    window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     return () => {
       cancelled = true;
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
+      window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     };
   }, [beginStepDataSourceLoading, endStepDataSourceLoading, language, stepDataSourceRows]);
 

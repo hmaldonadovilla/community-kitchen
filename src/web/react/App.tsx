@@ -105,6 +105,7 @@ import {
 import {
   buildDataSourceFreshnessSnapshotSignature,
   resolveActiveDataSourceFreshnessWatches,
+  resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
 } from './app/dataSourceFreshness';
@@ -3311,8 +3312,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 });
                 continue;
               }
+              const signatureFieldIds = resolveDataSourceFreshnessSignatureFieldIds(config);
               const beforeSignature = buildDataSourceFreshnessSnapshotSignature(
-                peekCachedDataSource(config, languageRef.current)
+                peekCachedDataSource(config, languageRef.current),
+                { fieldIds: signatureFieldIds }
               );
               const refreshed = await fetchDataSource(config, languageRef.current, { forceRefresh: true }).catch(() => null);
               if (selectedRecordIdRef.current !== recordId) return;
@@ -3330,7 +3333,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 });
                 continue;
               }
-              const afterSignature = buildDataSourceFreshnessSnapshotSignature(refreshed);
+              const afterSignature = buildDataSourceFreshnessSnapshotSignature(refreshed, {
+                fieldIds: signatureFieldIds
+              });
               if (beforeSignature !== afterSignature) {
                 watchChanged = true;
               }
@@ -13605,7 +13610,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         ? definition.listView?.legend
         : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
     return buildListViewLegendItems(cols as any, configuredLegend as any, language);
-  }, [definition, definition.listView?.columns, definition.listView?.legend, language]);
+  }, [definition, language]);
   const listLegendColumns = useMemo(() => {
     const raw = Number((definition.listView as any)?.legendColumns ?? (definition as any)?.listViewLegendColumns);
     if (!Number.isFinite(raw) || raw <= 1) return 1;

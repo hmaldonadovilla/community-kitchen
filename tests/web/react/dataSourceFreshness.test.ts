@@ -2,6 +2,7 @@ import {
   buildDataSourceFreshnessSnapshotSignature,
   buildDataSourceFreshnessWatchKey,
   resolveActiveDataSourceFreshnessWatches,
+  resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
 } from '../../../src/web/react/app/dataSourceFreshness';
@@ -81,6 +82,53 @@ describe('dataSourceFreshness helpers', () => {
 
     expect(buildDataSourceFreshnessSnapshotSignature(before)).not.toBe(
       buildDataSourceFreshnessSnapshotSignature(after)
+    );
+  });
+
+  test('uses datasource projection fields for freshness comparisons', () => {
+    expect(
+      resolveDataSourceFreshnessSignatureFieldIds({
+        id: 'Leftover Inventory Data',
+        projection: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY'],
+        statusFieldId: 'LEFTOVER_STATUS'
+      } as any)
+    ).toEqual(['id', 'value', 'status', 'LEFTOVER_STATUS', 'LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']);
+  });
+
+  test('ignores metadata-only datasource changes when projected fields are unchanged', () => {
+    const before = {
+      items: [
+        {
+          id: 'leftover-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: 0,
+          updatedAt: '2026-04-16T10:00:00.000Z',
+          __rowNumber: 68
+        }
+      ],
+      totalCount: 1
+    };
+    const after = {
+      items: [
+        {
+          id: 'leftover-1',
+          LEFTOVER_QTY: 500,
+          LEFTOVER_RESERVED_QTY: '',
+          updatedAt: '2026-04-16T10:00:30.000Z',
+          __rowNumber: 68
+        }
+      ],
+      totalCount: 1
+    };
+
+    expect(
+      buildDataSourceFreshnessSnapshotSignature(before, {
+        fieldIds: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']
+      })
+    ).toBe(
+      buildDataSourceFreshnessSnapshotSignature(after, {
+        fieldIds: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']
+      })
     );
   });
 });

@@ -104,7 +104,7 @@ const parsePersistEnvelope = (
       response: parsed,
       legacy: true
     };
-  } catch (_) {
+  } catch {
     return null;
   }
 };
@@ -180,7 +180,7 @@ const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null
       return null;
     }
     return parsed.response && typeof parsed.response === 'object' ? parsed.response : null;
-  } catch (_) {
+  } catch {
     return null;
   }
 };
@@ -209,6 +209,75 @@ function key(config: DataSourceConfig, lang: LangCode): string {
   const sig = normalizeDataSourceSignature(config);
   return `${idPart}::${langPart}::${sig}`;
 }
+
+const parsePersistStorageKey = (
+  storageKey: string
+): { id: string; language: LangCode; signature: string } | null => {
+  const match = /^ck\.ds\.(.+)\.([A-Z]{2,})\.v\d+\.(.+)$/.exec((storageKey || '').trim());
+  if (!match) return null;
+  try {
+    return {
+      id: decodeURIComponent(match[1]),
+      language: match[2] as LangCode,
+      signature: match[3]
+    };
+  } catch {
+    return null;
+  }
+};
+
+const clearSiblingInMemoryCacheEntries = (args: {
+  id: string;
+  language: LangCode;
+  keepCacheKey?: string | null;
+}): void => {
+  const cacheKeyPrefix = `${(args.id || '').toString()}::${(args.language || 'EN').toString().toUpperCase()}::`;
+  if (!cacheKeyPrefix.trim()) return;
+  Array.from(cache.keys()).forEach(candidateKey => {
+    if (!candidateKey.startsWith(cacheKeyPrefix)) return;
+    if (args.keepCacheKey && candidateKey === args.keepCacheKey) return;
+    cache.delete(candidateKey);
+  });
+};
+
+let storageSyncListenerInstalled = false;
+
+const ensureStorageSyncListener = (): void => {
+  if (storageSyncListenerInstalled) return;
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function' || !window.localStorage) return;
+  storageSyncListenerInstalled = true;
+  window.addEventListener('storage', event => {
+    try {
+      if (event.storageArea !== window.localStorage) return;
+      if (!event.key) return;
+      const parsedKey = parsePersistStorageKey(event.key);
+      if (!parsedKey) return;
+
+      const exactCacheKey = `${parsedKey.id}::${parsedKey.language}::${parsedKey.signature}`;
+      clearSiblingInMemoryCacheEntries({
+        id: parsedKey.id,
+        language: parsedKey.language,
+        keepCacheKey: event.newValue ? exactCacheKey : null
+      });
+
+      const persisted = event.newValue ? parsePersistEnvelope(event.newValue) : null;
+      if (persisted?.response !== null && persisted?.response !== undefined) {
+        cache.set(exactCacheKey, persisted.response);
+        emitCacheUpdated(
+          { id: parsedKey.id } as DataSourceConfig,
+          parsedKey.language,
+          resolveCachedItemCount(persisted.response) ?? 0
+        );
+        return;
+      }
+
+      cache.delete(exactCacheKey);
+      emitCacheUpdated({ id: parsedKey.id } as DataSourceConfig, parsedKey.language, 0);
+    } catch {
+      // ignore cross-tab cache sync failures
+    }
+  });
+};
 
 function emitLog(
   level: 'info' | 'warn' | 'error',
@@ -243,6 +312,7 @@ export async function fetchDataSource(
   language: LangCode,
   opts?: { forceRefresh?: boolean }
 ): Promise<any> {
+  ensureStorageSyncListener();
   const cacheKey = key(config, language);
   const mode = ((config as any)?.mode || '').toString().trim().toLowerCase();
   const autoPage = mode === 'options';
@@ -421,6 +491,7 @@ export async function fetchDataSource(
 }
 
 export function peekCachedDataSource(config: DataSourceConfig, language: LangCode): any | null {
+  ensureStorageSyncListener();
   const cacheKey = key(config, language);
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey) ?? null;
@@ -564,6 +635,7 @@ export function mutateCachedDataSource(
   language: LangCode,
   mutateItems: (items: any[]) => any[]
 ): any | null {
+  ensureStorageSyncListener();
   const cacheKey = key(config, language);
   const current = cache.has(cacheKey) ? cache.get(cacheKey) : loadPersisted(config, language);
   if (!current) return null;

@@ -1,4 +1,5 @@
 import type {
+  DataSourceConfig,
   DataSourceFreshnessDialogConfig,
   DataSourceFreshnessWatchConfig,
   RecordFreshnessConfig
@@ -24,6 +25,8 @@ const normalizeStringList = (value: unknown): string[] =>
   (Array.isArray(value) ? value : [])
     .map(entry => normalizeText(entry))
     .filter(Boolean);
+
+const NUMERIC_FIELD_ID_PATTERN = /(?:^|_)(?:QTY|QUANTITY|PORTION|PORTIONS|COUNT|AMOUNT|FREE)(?:_|$)/i;
 
 const normalizeQuietWindowMs = (value: unknown): number => {
   const quietWindowRaw = Number(value);
@@ -88,6 +91,21 @@ export const resolveActiveDataSourceFreshnessWatches = (args: {
   return (Array.isArray(args.watches) ? args.watches : []).filter(watch => watch.stepId === stepId);
 };
 
+export const resolveDataSourceFreshnessSignatureFieldIds = (
+  config?: DataSourceConfig | null
+): string[] => {
+  const projection = normalizeStringList((config as any)?.projection);
+  const statusFieldId = normalizeText((config as any)?.statusFieldId);
+  if (!projection.length && !statusFieldId) return [];
+  return Array.from(
+    new Set(
+      ['id', 'value', 'status', statusFieldId, ...projection]
+        .map(entry => normalizeText(entry))
+        .filter(Boolean)
+    )
+  );
+};
+
 export const resolveDataSourceFreshnessTimerDelay = (args: {
   watches: ResolvedDataSourceFreshnessWatch[];
   view: View;
@@ -135,7 +153,66 @@ const stableStringify = (value: any): string => {
   return JSON.stringify(normalize(value));
 };
 
-export const buildDataSourceFreshnessSnapshotSignature = (value: any): string => {
+const normalizeSignatureFieldValue = (fieldId: string, value: any): any => {
+  if (value === undefined || value === null) {
+    return NUMERIC_FIELD_ID_PATTERN.test(fieldId) ? 0 : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (NUMERIC_FIELD_ID_PATTERN.test(fieldId)) {
+      if (!trimmed) return 0;
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (Array.isArray(value)) {
+    return value.map(entry => normalizeSignatureFieldValue(fieldId, entry));
+  }
+  if (value && typeof value === 'object') {
+    const next: Record<string, any> = {};
+    Object.keys(value)
+      .sort()
+      .forEach(key => {
+        next[key] = normalizeSignatureFieldValue(key, value[key]);
+      });
+    return next;
+  }
+  return value;
+};
+
+const buildProjectedItemSignature = (item: any, fieldIds: string[]): any => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    return item;
+  }
+  const next: Record<string, any> = {};
+  fieldIds.forEach(fieldId => {
+    if (!fieldId) return;
+    if (!Object.prototype.hasOwnProperty.call(item, fieldId)) return;
+    next[fieldId] = normalizeSignatureFieldValue(fieldId, item[fieldId]);
+  });
+  return next;
+};
+
+export const buildDataSourceFreshnessSnapshotSignature = (
+  value: any,
+  opts?: { fieldIds?: string[] | null }
+): string => {
+  const fieldIds = Array.from(new Set(normalizeStringList(opts?.fieldIds))).sort();
+  if (fieldIds.length) {
+    const items = Array.isArray((value as any)?.items) ? (value as any).items : Array.isArray(value) ? value : [];
+    const totalCount = Number((value as any)?.totalCount);
+    const normalizedItems = items
+      .map((item: any) => buildProjectedItemSignature(item, fieldIds))
+      .sort((left: any, right: any) => stableStringify(left).localeCompare(stableStringify(right)));
+    return stableStringify({
+      items: normalizedItems,
+      totalCount: Number.isFinite(totalCount) ? totalCount : normalizedItems.length
+    });
+  }
   const normalized =
     value && typeof value === 'object' && !Array.isArray(value)
       ? {
