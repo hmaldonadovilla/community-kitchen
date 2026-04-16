@@ -6,6 +6,7 @@ import {
   normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
 } from '../../../src/web/react/app/autoSaveDedup';
@@ -82,6 +83,35 @@ describe('autoSaveDedup helpers', () => {
       shouldRetainPendingDebouncedAutoSave({
         scheduledFingerprint: '',
         latestFingerprint: 'draft:v1'
+      })
+    ).toBe(false);
+  });
+
+  it('suppresses autosave for automated mutations only when no user draft is pending', () => {
+    expect(
+      shouldSuppressAutomatedAutoSave({
+        pendingSource: 'selectionEffectInit',
+        dirty: false,
+        queued: false,
+        inFlight: false
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSuppressAutomatedAutoSave({
+        pendingSource: 'selectionEffectInit',
+        dirty: true,
+        queued: false,
+        inFlight: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressAutomatedAutoSave({
+        pendingSource: '',
+        dirty: false,
+        queued: false,
+        inFlight: false
       })
     ).toBe(false);
   });

@@ -78,6 +78,17 @@ export const shouldRetainPendingDebouncedAutoSave = (args: {
   return Boolean(scheduledFingerprint && scheduledFingerprint === latestFingerprint);
 };
 
+export const shouldSuppressAutomatedAutoSave = (args: {
+  pendingSource?: string | null;
+  dirty: boolean;
+  queued: boolean;
+  inFlight: boolean;
+}): boolean => {
+  const pendingSource = normalizeStringId(args.pendingSource);
+  if (!pendingSource) return false;
+  return !args.dirty && !args.queued && !args.inFlight;
+};
+
 export const shouldForceAutoSaveOnConfiguredBlur = (args: {
   autoSaveEnabled: boolean;
   isCreateFlow: boolean;

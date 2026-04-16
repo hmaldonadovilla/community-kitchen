@@ -595,6 +595,15 @@ interface FormViewProps {
     inputType?: string;
     nextValue?: FieldValue;
   }) => { deferMutation?: boolean } | void;
+  onAutomatedMutation?: (args: {
+    scope: 'line';
+    fieldPath: string;
+    fieldId?: string;
+    groupId?: string;
+    rowId?: string;
+    source: 'selectionEffectInit';
+    nextValue?: FieldValue;
+  }) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onFormValidityChange?: (isValid: boolean) => void;
   onGuidedUiChange?: (state: {
@@ -692,6 +701,7 @@ const FormView: React.FC<FormViewProps> = ({
   reportBusy,
   reportBusyId,
   onUserEdit,
+  onAutomatedMutation,
   onDiagnostic,
   onFormValidityChange,
   onGuidedUiChange,
@@ -8054,7 +8064,13 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }
 
-  const handleLineFieldChange = (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => {
+  const handleLineFieldChange = (
+    group: WebQuestionDefinition,
+    rowId: string,
+    field: any,
+    value: FieldValue,
+    options?: { source?: 'user' | 'selectionEffectInit' }
+  ) => {
     if (submitting) return;
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
     if (field?.readOnly === true) {
@@ -8097,16 +8113,30 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
-    guidedLastUserEditAtRef.current = Date.now();
-    const userEditResult = onUserEdit?.({
-      scope: 'line',
-      fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
-      fieldId: (field?.id || '').toString(),
-      groupId: group.id,
-      rowId,
-      event: 'change',
-      nextValue: value
-    });
+    const changeSource = options?.source === 'selectionEffectInit' ? 'selectionEffectInit' : 'user';
+    let userEditResult: { deferMutation?: boolean } | void = undefined;
+    if (changeSource === 'selectionEffectInit') {
+      onAutomatedMutation?.({
+        scope: 'line',
+        fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
+        fieldId: (field?.id || '').toString(),
+        groupId: group.id,
+        rowId,
+        source: 'selectionEffectInit',
+        nextValue: value
+      });
+    } else {
+      guidedLastUserEditAtRef.current = Date.now();
+      userEditResult = onUserEdit?.({
+        scope: 'line',
+        fieldPath: `${group.id}__${field?.id || ''}__${rowId}`,
+        fieldId: (field?.id || '').toString(),
+        groupId: group.id,
+        rowId,
+        event: 'change',
+        nextValue: value
+      });
+    }
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
     if (userEditResult?.deferMutation) return;
@@ -13117,7 +13147,6 @@ const FormView: React.FC<FormViewProps> = ({
     const rowsAll = lineItems[groupId] || [];
     const rows =
       overlayRowFilter && Array.isArray(rowsAll) ? rowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any)) : rowsAll;
-    const count = rows.length;
     const limitCount = overlayRowFilter ? rows.length : rowsAll.length;
     const maxRowsReached = isLineItemMaxRowsReached(limitCount, groupMaxRows);
     const remainingSlots = groupMaxRows !== undefined && groupMaxRows !== null ? Math.max(0, groupMaxRows - limitCount) : undefined;

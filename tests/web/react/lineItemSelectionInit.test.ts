@@ -641,6 +641,126 @@ describe('collectSelectionEffectInitTargets', () => {
     expect(targets).toEqual([]);
   });
 
+  it('skips replay for hydrated data-source outputs when only transient __ck fields remain unset', () => {
+    const question: any = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }],
+        subGroups: [
+          {
+            id: 'COOK_ROWS',
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                selectionEffects: [
+                  {
+                    id: 'seed_ingredients',
+                    type: 'addLineItemsFromDataSource',
+                    groupId: 'INGREDIENTS',
+                    dataSource: { id: 'Recipes Data' },
+                    lineItemMapping: {
+                      ING: 'ING',
+                      QTY: 'QTY'
+                    }
+                  },
+                  {
+                    type: 'setValue',
+                    fieldId: '__ckRecipeIngredientsDirty',
+                    value: false
+                  }
+                ]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                anchorFieldId: 'ING',
+                fields: [
+                  { id: 'ING', type: 'CHOICE' },
+                  { id: 'QTY', type: 'NUMBER' }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const cookRowsKey = buildSubgroupKey('MEALS', 'meal-1', 'COOK_ROWS');
+    const ingredientsKey = buildSubgroupKey(cookRowsKey, 'cook-1', 'INGREDIENTS');
+    const lineItems: any = {
+      MEALS: [{ id: 'meal-1', values: { MEAL_TYPE: 'Standard' } }],
+      [cookRowsKey]: [
+        {
+          id: 'cook-1',
+          values: {
+            RECIPE: 'Chili'
+          }
+        }
+      ],
+      [ingredientsKey]: [
+        {
+          id: 'ingredient-1',
+          values: {
+            ING: 'Tomato',
+            QTY: 3
+          }
+        }
+      ]
+    };
+
+    expect(collectSelectionEffectInitTargets(question, lineItems, {})).toEqual([]);
+  });
+
+  it('skips direct init replay when an effect when clause does not match the current value', () => {
+    const question: any = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [
+          {
+            id: 'MP_TO_COOK',
+            type: 'NUMBER',
+            selectionEffects: [
+              {
+                id: 'mp_to_cook_sync',
+                type: 'addLineItems',
+                groupId: 'MP_TYPE_LI',
+                when: {
+                  fieldId: 'MP_TO_COOK',
+                  greaterThan: 0
+                },
+                preset: {
+                  PREP_QTY: '$row.MP_TO_COOK',
+                  PREP_TYPE: 'Cook'
+                }
+              }
+            ]
+          }
+        ],
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [
+              { id: 'PREP_TYPE', type: 'CHOICE' },
+              { id: 'PREP_QTY', type: 'NUMBER' }
+            ]
+          }
+        ]
+      }
+    };
+
+    const subgroupKey = buildSubgroupKey('MEALS', 'meal-1', 'MP_TYPE_LI');
+    const lineItems: any = {
+      MEALS: [{ id: 'meal-1', values: { MP_TO_COOK: 0 } }],
+      [subgroupKey]: []
+    };
+
+    expect(collectSelectionEffectInitTargets(question, lineItems, {})).toEqual([]);
+  });
+
   it('includes computed selection-effect fields that are derived from the current row state', () => {
     const question: any = {
       id: 'MEALS',
@@ -728,5 +848,57 @@ describe('collectSelectionEffectInitTargets', () => {
     const targets = collectComputedSelectionEffectInitTargets(question, lineItems, {});
 
     expect(targets).toEqual([]);
+  });
+
+  it('skips computed init replay when an effect when clause does not match the computed value', () => {
+    const question: any = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [
+          { id: 'ORD_QTY', type: 'NUMBER' },
+          {
+            id: 'MP_TO_COOK',
+            type: 'NUMBER',
+            derivedValue: {
+              op: 'copy',
+              dependsOn: 'ORD_QTY',
+              applyOn: 'change',
+              when: 'always'
+            },
+            selectionEffects: [
+              {
+                id: 'mp_to_cook_sync',
+                type: 'addLineItems',
+                groupId: 'MP_TYPE_LI',
+                when: {
+                  fieldId: 'MP_TO_COOK',
+                  greaterThan: 0
+                },
+                preset: {
+                  PREP_QTY: '$row.MP_TO_COOK',
+                  PREP_TYPE: 'Cook'
+                }
+              }
+            ]
+          }
+        ],
+        subGroups: [
+          {
+            id: 'MP_TYPE_LI',
+            fields: [
+              { id: 'PREP_TYPE', type: 'CHOICE' },
+              { id: 'PREP_QTY', type: 'NUMBER' }
+            ]
+          }
+        ]
+      }
+    };
+
+    const lineItems: any = {
+      MEALS: [{ id: 'meal-1', values: { ORD_QTY: 0 } }]
+    };
+
+    expect(collectComputedSelectionEffectInitTargets(question, lineItems, {})).toEqual([]);
   });
 });

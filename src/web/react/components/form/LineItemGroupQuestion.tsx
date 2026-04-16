@@ -509,7 +509,13 @@ export interface LineItemGroupQuestionCtx {
     stepId?: string;
     reason: string;
   }) => Promise<{ ok: boolean; message?: string }>;
-  handleLineFieldChange: (group: WebQuestionDefinition, rowId: string, field: any, value: FieldValue) => void;
+  handleLineFieldChange: (
+    group: WebQuestionDefinition,
+    rowId: string,
+    field: any,
+    value: FieldValue,
+    options?: { source?: 'user' | 'selectionEffectInit' }
+  ) => void;
 
   collapsedGroups: Record<string, boolean>;
   toggleGroupCollapsed: (groupKey: string) => void;
@@ -4027,7 +4033,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
   React.useEffect(() => {
     if (submitting) return;
     const targets = [
-      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems),
+      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems, values as Record<string, FieldValue>),
       ...collectSubgroupSeedInitTargets(initSourceQuestion, lineItems),
       ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, values as Record<string, FieldValue>)
     ];
@@ -4051,7 +4057,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
         target.field && typeof target.field === 'object' && target.field.readOnly === true
           ? { ...target.field, readOnly: false }
           : target.field;
-      handleLineFieldChange(target.group as any, target.rowId, initField, target.rawValue as any);
+      handleLineFieldChange(target.group as any, target.rowId, initField, target.rawValue as any, {
+        source: 'selectionEffectInit'
+      });
     });
 
     initializedSelectionEffectsRef.current.forEach(signature => {

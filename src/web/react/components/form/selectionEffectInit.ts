@@ -1,4 +1,5 @@
 import { FieldValue, WebQuestionDefinition } from '../../../types';
+import { matchesWhenClause } from '../../../core';
 import {
   buildSubgroupKey,
   resolveSubgroupKey,
@@ -46,6 +47,64 @@ const normalizeString = (rawValue: unknown): string => {
 };
 
 const shouldRunSelectionEffectsOnInit = (field: any): boolean => field?.ui?.runSelectionEffectsOnInit !== false;
+
+const normalizeSelectionValues = (rawValue: FieldValue): string[] => {
+  if (Array.isArray(rawValue)) {
+    return rawValue
+      .map(entry => normalizeString(entry))
+      .filter(Boolean);
+  }
+  const normalized = normalizeString(rawValue);
+  return normalized ? [normalized] : [];
+};
+
+const effectSelectionMatches = (effect: any, rawValue: FieldValue): boolean => {
+  const triggerValues = Array.isArray(effect?.triggerValues)
+    ? effect.triggerValues.map((entry: any) => normalizeString(entry)).filter(Boolean)
+    : [];
+  if (!triggerValues.length) return true;
+  const currentSelections = normalizeSelectionValues(rawValue);
+  return currentSelections.some(entry => triggerValues.includes(entry));
+};
+
+const buildEffectWhenContext = (args: {
+  rowValues: Record<string, FieldValue>;
+  topValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+}) => ({
+  getValue: (fieldId: string) => {
+    if (Object.prototype.hasOwnProperty.call(args.rowValues, fieldId)) return args.rowValues[fieldId];
+    if (Object.prototype.hasOwnProperty.call(args.topValues, fieldId)) return args.topValues[fieldId];
+    return undefined;
+  },
+  getLineItems: (groupId: string) => (args.lineItems[groupId] || []) as any[],
+  getLineItemKeys: () => Object.keys(args.lineItems || {})
+});
+
+const resolveInitEffectValue = (
+  rawValue: unknown,
+  rowValues: Record<string, FieldValue>,
+  topValues: Record<string, FieldValue>
+): FieldValue => {
+  if (typeof rawValue !== 'string') return rawValue as FieldValue;
+  const normalized = rawValue.toString().trim();
+  if (!normalized) return rawValue as FieldValue;
+  if (normalized.startsWith('$row.')) {
+    const fieldId = normalized.slice('$row.'.length).trim();
+    return fieldId ? rowValues[fieldId] : undefined;
+  }
+  if (normalized.startsWith('$top.')) {
+    const fieldId = normalized.slice('$top.'.length).trim();
+    return fieldId ? topValues[fieldId] : undefined;
+  }
+  return rawValue as FieldValue;
+};
+
+const areEquivalentFieldValues = (left: FieldValue, right: FieldValue): boolean => {
+  if (right === null && isEmptyValue(left)) return true;
+  if (left === null && isEmptyValue(right)) return true;
+  return toStableSignatureValue(left) === toStableSignatureValue(right);
+};
 
 const fieldUsesSubgroupSeedInit = (group: WebQuestionDefinition, field: any): boolean => {
   const subGroupIds = (((group as any)?.lineItemConfig?.subGroups || []) as any[])
@@ -158,6 +217,129 @@ const resolveEffectTargetGroupKey = (question: WebQuestionDefinition, rowId: str
   return groupId;
 };
 
+const resolveEffectTargetRows = (args: {
+  question: WebQuestionDefinition;
+  rowId: string;
+  effect: any;
+  lineItems: LineItemState;
+}): any[] => {
+  const targetKey = resolveEffectTargetGroupKey(
+    args.question,
+    args.rowId,
+    (args.effect as any)?.targetPath ?? (args.effect as any)?.groupId
+  );
+  if (!targetKey) return [];
+  const rows = (args.lineItems[targetKey] || []) as any[];
+  if (!rows.length) return [];
+
+  const effectId = normalizeString((args.effect as any)?.targetEffectId) || normalizeString((args.effect as any)?.id);
+  const hasParentMetadata = rows.some(row => {
+    const values = (row?.values || {}) as Record<string, FieldValue>;
+    return !!(
+      normalizeString(values[ROW_PARENT_GROUP_ID_KEY]) ||
+      normalizeString((row as any)?.parentGroupId) ||
+      normalizeString(values[ROW_PARENT_ROW_ID_KEY]) ||
+      normalizeString((row as any)?.parentId)
+    );
+  });
+  const hasEffectMetadata = rows.some(row => {
+    const values = (row?.values || {}) as Record<string, FieldValue>;
+    return !!normalizeString(values[ROW_SELECTION_EFFECT_ID_KEY]);
+  });
+
+  return rows.filter(row => {
+    const values = (row?.values || {}) as Record<string, FieldValue>;
+    if (hasParentMetadata) {
+      const parentGroupId = normalizeString(values[ROW_PARENT_GROUP_ID_KEY]) || normalizeString((row as any)?.parentGroupId);
+      const parentRowId = normalizeString(values[ROW_PARENT_ROW_ID_KEY]) || normalizeString((row as any)?.parentId);
+      if (parentGroupId !== args.question.id || parentRowId !== args.rowId) {
+        return false;
+      }
+    }
+    if (effectId && hasEffectMetadata) {
+      const rowEffectId = normalizeString(values[ROW_SELECTION_EFFECT_ID_KEY]);
+      if (rowEffectId !== effectId) {
+        return false;
+      }
+    }
+    return true;
+  });
+};
+
+const effectTargetRowsAreHydrated = (args: {
+  question: WebQuestionDefinition;
+  rowId: string;
+  effect: any;
+  lineItems: LineItemState;
+}): boolean => {
+  const rows = resolveEffectTargetRows(args);
+  if (!rows.length) return false;
+  const mappedFieldIds = Object.keys((args.effect as any)?.lineItemMapping || {})
+    .map(fieldId => normalizeString(fieldId))
+    .filter(Boolean);
+  if (!mappedFieldIds.length) return true;
+  return rows.some(row => {
+    const values = (row?.values || {}) as Record<string, FieldValue>;
+    return mappedFieldIds.some(fieldId => hasSelectionEffectInitialValue(values[fieldId]));
+  });
+};
+
+const effectNeedsInit = (args: {
+  question: WebQuestionDefinition;
+  rowId: string;
+  field: any;
+  rowValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  topValues: Record<string, FieldValue>;
+}): boolean => {
+  const effects = Array.isArray(args.field?.selectionEffects) ? args.field.selectionEffects : [];
+  const sourceValue = args.rowValues[(args.field?.id || '').toString()] as FieldValue;
+  const whenCtx = buildEffectWhenContext({
+    rowValues: args.rowValues,
+    topValues: args.topValues,
+    lineItems: args.lineItems
+  });
+  return effects.some((effect: any) => {
+    if (!effect || typeof effect !== 'object') return false;
+    if (!effectSelectionMatches(effect, sourceValue)) return false;
+    if (effect?.when && !matchesWhenClause((effect as any).when, whenCtx as any)) return false;
+    switch ((effect.type || '').toString()) {
+      case 'setValuesFromDataSource':
+        return !fieldHasHydratedDataSourceMappings(args.field, args.rowValues);
+      case 'setValue': {
+        const fieldId = normalizeString((effect as any)?.fieldId);
+        if (!fieldId) return false;
+        if (fieldId.startsWith('__ck')) return false;
+        const expectedValue = resolveInitEffectValue((effect as any)?.value, args.rowValues, args.topValues);
+        return !areEquivalentFieldValues(args.rowValues[fieldId], expectedValue);
+      }
+      case 'addLineItems':
+        return resolveEffectTargetRows({
+          question: args.question,
+          rowId: args.rowId,
+          effect,
+          lineItems: args.lineItems
+        }).length === 0;
+      case 'deleteLineItems':
+        return resolveEffectTargetRows({
+          question: args.question,
+          rowId: args.rowId,
+          effect,
+          lineItems: args.lineItems
+        }).length > 0;
+      case 'addLineItemsFromDataSource':
+        return !effectTargetRowsAreHydrated({
+          question: args.question,
+          rowId: args.rowId,
+          effect,
+          lineItems: args.lineItems
+        });
+      default:
+        return true;
+    }
+  });
+};
+
 const buildNestedGroupQuestion = (groupKey: string, subGroup: any, fallbackQuestion: WebQuestionDefinition): WebQuestionDefinition =>
   ({
     ...(fallbackQuestion as any),
@@ -202,64 +384,12 @@ const visitLineItemGroups = (args: {
   });
 };
 
-const buildEffectOwnedOutputSignature = (args: {
-  question: WebQuestionDefinition;
-  rowId: string;
-  field: any;
-  lineItems: LineItemState;
-}): string => {
-  const { question, rowId, field, lineItems } = args;
-  const effects = Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
-  const parts = effects
-    .map((effect: any) => {
-      if (!effect || (effect.type !== 'addLineItems' && effect.type !== 'deleteLineItems')) return '';
-      const effectId =
-        normalizeString((effect as any)?.targetEffectId) || normalizeString((effect as any)?.id);
-      const targetKey = resolveEffectTargetGroupKey(
-        question,
-        rowId,
-        (effect as any)?.targetPath ?? (effect as any)?.groupId
-      );
-      if (!effectId || !targetKey) return '';
-      const rows = (lineItems[targetKey] || []) as any[];
-      const matchingRows = rows.filter(row => {
-        const values = (row?.values || {}) as Record<string, FieldValue>;
-        const rowEffectId = normalizeString(values[ROW_SELECTION_EFFECT_ID_KEY]);
-        if (rowEffectId !== effectId) return false;
-        const parentGroupId = normalizeString(values[ROW_PARENT_GROUP_ID_KEY]) || normalizeString((row as any)?.parentGroupId);
-        const parentRowId = normalizeString(values[ROW_PARENT_ROW_ID_KEY]) || normalizeString((row as any)?.parentId);
-        if (!parentGroupId && !parentRowId) return true;
-        return parentGroupId === question.id && parentRowId === rowId;
-      });
-      return `${targetKey}:${effectId}:${matchingRows.length}`;
-    })
-    .filter(Boolean);
-  return parts.join('||');
-};
-
-const fieldHasEffectOwnedOutputRows = (args: {
-  question: WebQuestionDefinition;
-  rowId: string;
-  field: any;
-  lineItems: LineItemState;
-}): boolean => {
-  const signature = buildEffectOwnedOutputSignature(args);
-  if (!signature) return false;
-  return signature
-    .split('||')
-    .map(part => {
-      const countText = part.split(':').pop() || '';
-      const count = Number(countText);
-      return Number.isFinite(count) ? count : 0;
-    })
-    .some(count => count > 0);
-};
-
 const collectSelectionEffectTargetsForGroup = (
   group: WebQuestionDefinition,
   groupKey: string,
   rows: any[],
-  lineItems: LineItemState
+  lineItems: LineItemState,
+  topValues: Record<string, FieldValue>
 ): SelectionEffectInitTarget[] => {
   const fieldsWithSelectionEffects = (((group as any)?.lineItemConfig?.fields || (group as any)?.fields || []) as any[]).filter(
     (field: any) =>
@@ -276,13 +406,14 @@ const collectSelectionEffectTargetsForGroup = (
     fieldsWithSelectionEffects.forEach((field: any) => {
       const rawValue = rowValues[field.id];
       if (!hasSelectionEffectInitialValue(rawValue)) return;
-      if (fieldHasHydratedDataSourceMappings(field, rowValues)) return;
       if (
-        fieldHasEffectOwnedOutputRows({
+        !effectNeedsInit({
           question: group,
           rowId: row?.id || '',
           field,
-          lineItems
+          rowValues,
+          lineItems,
+          topValues
         })
       ) {
         return;
@@ -303,14 +434,17 @@ const collectSelectionEffectTargetsForGroup = (
 
 export const collectSelectionEffectInitTargets = (
   question: WebQuestionDefinition,
-  lineItems: LineItemState
+  lineItems: LineItemState,
+  topValues: Record<string, FieldValue> = {}
 ): SelectionEffectInitTarget[] => {
   const targets: SelectionEffectInitTarget[] = [];
   visitLineItemGroups({
     question,
     lineItems,
     visit: entry => {
-      targets.push(...collectSelectionEffectTargetsForGroup(entry.question, entry.groupKey, entry.rows, lineItems));
+      targets.push(
+        ...collectSelectionEffectTargetsForGroup(entry.question, entry.groupKey, entry.rows, lineItems, topValues)
+      );
     }
   });
   return targets;
@@ -420,11 +554,13 @@ export const collectComputedSelectionEffectInitTargets = (
           const rawValue = (computedValues as Record<string, FieldValue>)[field.id];
           if (!hasSelectionEffectInitialValue(rawValue)) return;
           if (
-            fieldHasEffectOwnedOutputRows({
+            !effectNeedsInit({
               question: entry.question,
               rowId,
               field,
-              lineItems
+              rowValues: computedValues as Record<string, FieldValue>,
+              lineItems,
+              topValues
             })
           ) {
             return;

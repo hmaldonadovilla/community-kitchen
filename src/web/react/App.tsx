@@ -188,6 +188,7 @@ import {
   normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
 } from './app/autoSaveDedup';
@@ -1942,6 +1943,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       nextValue?: FieldValue;
     }): { deferMutation?: boolean } | void => {
       try {
+        pendingAutomatedAutoSaveSourceRef.current = '';
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
         const fieldKey = fieldPath || fieldId;
@@ -2261,6 +2263,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     ]
   );
 
+  const handleAutomatedMutation = useCallback(
+    (args: {
+      scope: 'line';
+      fieldPath: string;
+      fieldId?: string;
+      groupId?: string;
+      rowId?: string;
+      source: 'selectionEffectInit';
+      nextValue?: FieldValue;
+    }) => {
+      pendingAutomatedAutoSaveSourceRef.current = (args.source || '').toString();
+      logEvent('autosave.automatedMutation', {
+        source: args.source,
+        fieldPath: args.fieldPath || null,
+        fieldId: args.fieldId || null,
+        groupId: args.groupId || null,
+        rowId: args.rowId || null
+      });
+    },
+    [logEvent]
+  );
+
   useEffect(() => {
     dedupCheckingRef.current = dedupChecking;
   }, [dedupChecking]);
@@ -2490,6 +2514,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const lastDataSourceFreshnessServerActivityAtByWatchKeyRef = useRef<Record<string, number>>({});
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
+  const pendingAutomatedAutoSaveSourceRef = useRef<string>('');
   const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
   const reservationSyncPromiseRef = useRef<
     Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
@@ -9112,6 +9137,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const changed = lastAutoSaveStateFingerprintRef.current !== stateFingerprint;
     rememberAutoSaveSeenState(values, lineItems);
     if (!changed) return;
+    const pendingAutomatedAutoSaveSource = pendingAutomatedAutoSaveSourceRef.current;
+    pendingAutomatedAutoSaveSourceRef.current = '';
+    if (
+      shouldSuppressAutomatedAutoSave({
+        pendingSource: pendingAutomatedAutoSaveSource,
+        dirty: autoSaveDirtyRef.current,
+        queued: autoSaveQueuedRef.current,
+        inFlight: autoSaveInFlightRef.current
+      })
+    ) {
+      logEvent('autosave.skip.automatedMutation', {
+        source: pendingAutomatedAutoSaveSource,
+        view
+      });
+      return;
+    }
 
     if (view !== 'form') {
       if (autoSaveTimerRef.current) {
@@ -13781,6 +13822,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reportBusy={reportOverlay.pdfPhase === 'rendering'}
           reportBusyId={reportOverlay.buttonId || null}
           onUserEdit={handleUserEdit}
+          onAutomatedMutation={handleAutomatedMutation}
           onDiagnostic={logEvent}
           onFormValidityChange={setFormIsValid}
           onGuidedUiChange={setGuidedUiState}
