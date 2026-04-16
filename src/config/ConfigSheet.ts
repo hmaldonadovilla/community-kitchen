@@ -2201,6 +2201,19 @@ export class ConfigSheet {
     };
   }
 
+  private static normalizeChangeDialogConfirmUpdate(raw: any): NonNullable<FieldChangeDialogConfig['confirmUpdates']>[number] | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const target = this.normalizeChangeDialogTarget(raw.target ?? raw);
+    if (!target) return undefined;
+    const clear = this.normalizeBoolean(raw.clear ?? raw.empty ?? raw.reset);
+    const hasValue = Object.prototype.hasOwnProperty.call(raw, 'value');
+    if (clear === undefined && !hasValue) return undefined;
+    const update: NonNullable<FieldChangeDialogConfig['confirmUpdates']>[number] = { target };
+    if (clear !== undefined) update.clear = clear;
+    if (hasValue) update.value = raw.value as any;
+    return update;
+  }
+
   private static normalizeChangeDialog(raw: any): FieldChangeDialogConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const when = this.normalizeWhenClause(raw.when);
@@ -2261,6 +2274,12 @@ export class ConfigSheet {
         return input;
       }).filter(Boolean) as FieldChangeDialogConfig['inputs'];
       if (inputs && inputs.length) cfg.inputs = inputs;
+    }
+    if (Array.isArray(raw.confirmUpdates) || Array.isArray(raw.confirm_updates)) {
+      const confirmUpdates = (raw.confirmUpdates || raw.confirm_updates || [])
+        .map((entry: any) => this.normalizeChangeDialogConfirmUpdate(entry))
+        .filter(Boolean) as FieldChangeDialogConfig['confirmUpdates'];
+      if (confirmUpdates && confirmUpdates.length) cfg.confirmUpdates = confirmUpdates;
     }
     return cfg;
   }
@@ -2815,6 +2834,7 @@ export class ConfigSheet {
     if (paragraphRows) (cfg as any).paragraphRows = paragraphRows;
     if (paragraphDisclaimer) (cfg as any).paragraphDisclaimer = paragraphDisclaimer;
     if (choiceSearchEnabled !== undefined) (cfg as any).choiceSearchEnabled = choiceSearchEnabled;
+    if (nonMatchWarningMode) (cfg as any).nonMatchWarningMode = nonMatchWarningMode;
     if (overlayOpenActions && overlayOpenActions.length) (cfg as any).overlayOpenActions = overlayOpenActions;
     return Object.keys(cfg).length ? cfg : undefined;
   }

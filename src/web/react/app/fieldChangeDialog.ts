@@ -1,5 +1,6 @@
 import {
   FieldChangeDialogConfig,
+  FieldChangeDialogConfirmUpdate,
   FieldChangeDialogTarget,
   FieldValue,
   LineItemFieldConfig,
@@ -319,6 +320,23 @@ export const applyFieldChangeDialogTargets = (args: {
   return { values: nextValues, lineItems: nextLineItems, effectOverrides };
 };
 
+const resolveClearedFieldChangeDialogValue = (args: {
+  question?: WebQuestionDefinition;
+  field?: LineItemFieldConfig;
+}): FieldValue => {
+  const typeRaw = (args.question?.type || args.field?.type || '').toString().trim().toUpperCase();
+  if (typeRaw === 'FILE_UPLOAD') return [];
+  if (typeRaw === 'CHECKBOX') {
+    const options = Array.isArray(args.question?.options)
+      ? args.question?.options
+      : Array.isArray(args.field?.options)
+        ? args.field?.options
+        : [];
+    return options.length > 0 ? [] : false;
+  }
+  return '';
+};
+
 export const resolveTargetFieldConfig = (args: {
   definition: WebFormDefinition;
   target: FieldChangeDialogTarget;
@@ -349,4 +367,36 @@ export const resolveTargetFieldConfig = (args: {
     return { field: resolved.field };
   }
   return {};
+};
+
+export const resolveFieldChangeDialogConfirmUpdates = (args: {
+  dialog?: FieldChangeDialogConfig;
+  definition: WebFormDefinition;
+  context: { scope: FieldChangeDialogScope; groupId?: string };
+  selectionEffects?: Array<{ id?: string; groupId: string }>;
+}): FieldChangeDialogTargetUpdate[] => {
+  const confirmUpdates = Array.isArray(args.dialog?.confirmUpdates) ? args.dialog?.confirmUpdates : [];
+  if (!confirmUpdates.length) return [];
+  return confirmUpdates
+    .map((entry): FieldChangeDialogTargetUpdate | null => {
+      const update = entry as FieldChangeDialogConfirmUpdate | undefined;
+      if (!update?.target) return null;
+      const hasLiteralValue = Object.prototype.hasOwnProperty.call(update, 'value');
+      if (update.clear !== true && !hasLiteralValue) return null;
+      const resolved = resolveTargetFieldConfig({
+        definition: args.definition,
+        target: update.target,
+        context: args.context,
+        selectionEffects: args.selectionEffects
+      });
+      const value =
+        update.clear === true
+          ? resolveClearedFieldChangeDialogValue(resolved)
+          : (update.value as FieldValue);
+      return {
+        target: update.target,
+        value
+      };
+    })
+    .filter(Boolean) as FieldChangeDialogTargetUpdate[];
 };

@@ -125,6 +125,38 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.message)).toBe(true);
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.confirmLabel)).toBe(true);
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.cancelLabel)).toBe(true);
+
+      const meals = findQuestion(questions, 'MP_MEALS_REQUEST');
+      const recipe = (meals?.lineItemConfig?.subGroups || [])
+        .find((entry: any) => entry?.id === 'MP_TYPE_LI')
+        ?.fields?.find((field: any) => field?.id === 'RECIPE');
+      expect(recipe?.changeDialog?.when).toEqual({
+        any: [
+          { fieldId: '__ckRecipeIngredientsDirty', equals: true },
+          { fieldId: 'ING_EVD', notEmpty: true }
+        ]
+      });
+      expect(recipe?.changeDialog?.title).toBe('Change recipe?');
+      expect(recipe?.changeDialog?.message).toBe(
+        'Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.'
+      );
+      expect(recipe?.changeDialog?.cancelLabel).toBe('Cancel - Keep current recipe');
+      expect(recipe?.changeDialog?.confirmLabel).toBe('Continue - Delete subsequent data');
+      expect(recipe?.changeDialog?.primaryAction).toBe('cancel');
+      expect(recipe?.changeDialog?.confirmUpdates).toEqual([
+        {
+          target: { scope: 'top', fieldId: 'ING_EVD' },
+          clear: true
+        },
+        {
+          target: { scope: 'parent', fieldId: 'MP_COOK_TEMP' },
+          clear: true
+        },
+        {
+          target: { scope: 'parent', fieldId: 'TEMP_EVD' },
+          clear: true
+        }
+      ]);
     };
 
     const assertClosedListActions = (root: any) => {

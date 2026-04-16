@@ -12565,13 +12565,44 @@ export const BUNDLED_FORM_CONFIGS = [
                                 ],
                                 "changeDialog": {
                                   "when": {
-                                    "fieldId": "__ckRecipeIngredientsDirty",
-                                    "equals": true
+                                    "any": [
+                                      {
+                                        "fieldId": "__ckRecipeIngredientsDirty",
+                                        "equals": true
+                                      },
+                                      {
+                                        "fieldId": "ING_EVD",
+                                        "notEmpty": true
+                                      }
+                                    ]
                                   },
                                   "title": "Change recipe?",
-                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
-                                  "cancelLabel": "Cancel",
-                                  "confirmLabel": "Change recipe",
+                                  "message": "Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.",
+                                  "cancelLabel": "Cancel - Keep current recipe",
+                                  "confirmLabel": "Continue - Delete subsequent data",
+                                  "confirmUpdates": [
+                                    {
+                                      "target": {
+                                        "scope": "top",
+                                        "fieldId": "ING_EVD"
+                                      },
+                                      "clear": true
+                                    },
+                                    {
+                                      "target": {
+                                        "scope": "parent",
+                                        "fieldId": "MP_COOK_TEMP"
+                                      },
+                                      "clear": true
+                                    },
+                                    {
+                                      "target": {
+                                        "scope": "parent",
+                                        "fieldId": "TEMP_EVD"
+                                      },
+                                      "clear": true
+                                    }
+                                  ],
                                   "primaryAction": "cancel"
                                 },
                                 "ui": {
@@ -15436,13 +15467,44 @@ export const BUNDLED_FORM_CONFIGS = [
                   ],
                   "changeDialog": {
                     "when": {
-                      "fieldId": "__ckRecipeIngredientsDirty",
-                      "equals": true
+                      "any": [
+                        {
+                          "fieldId": "__ckRecipeIngredientsDirty",
+                          "equals": true
+                        },
+                        {
+                          "fieldId": "ING_EVD",
+                          "notEmpty": true
+                        }
+                      ]
                     },
                     "title": "Change recipe?",
-                    "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
-                    "cancelLabel": "Cancel",
-                    "confirmLabel": "Change recipe",
+                    "message": "Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.",
+                    "cancelLabel": "Cancel - Keep current recipe",
+                    "confirmLabel": "Continue - Delete subsequent data",
+                    "confirmUpdates": [
+                      {
+                        "target": {
+                          "scope": "top",
+                          "fieldId": "ING_EVD"
+                        },
+                        "clear": true
+                      },
+                      {
+                        "target": {
+                          "scope": "parent",
+                          "fieldId": "MP_COOK_TEMP"
+                        },
+                        "clear": true
+                      },
+                      {
+                        "target": {
+                          "scope": "parent",
+                          "fieldId": "TEMP_EVD"
+                        },
+                        "clear": true
+                      }
+                    ],
                     "primaryAction": "cancel"
                   }
                 },
@@ -18633,13 +18695,44 @@ export const BUNDLED_FORM_CONFIGS = [
                     ],
                     "changeDialog": {
                       "when": {
-                        "fieldId": "__ckRecipeIngredientsDirty",
-                        "equals": true
+                        "any": [
+                          {
+                            "fieldId": "__ckRecipeIngredientsDirty",
+                            "equals": true
+                          },
+                          {
+                            "fieldId": "ING_EVD",
+                            "notEmpty": true
+                          }
+                        ]
                       },
                       "title": "Change recipe?",
-                      "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
-                      "cancelLabel": "Cancel",
-                      "confirmLabel": "Change recipe",
+                      "message": "Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.",
+                      "cancelLabel": "Cancel - Keep current recipe",
+                      "confirmLabel": "Continue - Delete subsequent data",
+                      "confirmUpdates": [
+                        {
+                          "target": {
+                            "scope": "top",
+                            "fieldId": "ING_EVD"
+                          },
+                          "clear": true
+                        },
+                        {
+                          "target": {
+                            "scope": "parent",
+                            "fieldId": "MP_COOK_TEMP"
+                          },
+                          "clear": true
+                        },
+                        {
+                          "target": {
+                            "scope": "parent",
+                            "fieldId": "TEMP_EVD"
+                          },
+                          "clear": true
+                        }
+                      ],
                       "primaryAction": "cancel"
                     }
                   },
@@ -22140,13 +22233,44 @@ export const BUNDLED_FORM_CONFIGS = [
                                 ],
                                 "changeDialog": {
                                   "when": {
-                                    "fieldId": "__ckRecipeIngredientsDirty",
-                                    "equals": true
+                                    "any": [
+                                      {
+                                        "fieldId": "__ckRecipeIngredientsDirty",
+                                        "equals": true
+                                      },
+                                      {
+                                        "fieldId": "ING_EVD",
+                                        "notEmpty": true
+                                      }
+                                    ]
                                   },
                                   "title": "Change recipe?",
-                                  "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
-                                  "cancelLabel": "Cancel",
-                                  "confirmLabel": "Change recipe",
+                                  "message": "Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.",
+                                  "cancelLabel": "Cancel - Keep current recipe",
+                                  "confirmLabel": "Continue - Delete subsequent data",
+                                  "confirmUpdates": [
+                                    {
+                                      "target": {
+                                        "scope": "top",
+                                        "fieldId": "ING_EVD"
+                                      },
+                                      "clear": true
+                                    },
+                                    {
+                                      "target": {
+                                        "scope": "parent",
+                                        "fieldId": "MP_COOK_TEMP"
+                                      },
+                                      "clear": true
+                                    },
+                                    {
+                                      "target": {
+                                        "scope": "parent",
+                                        "fieldId": "TEMP_EVD"
+                                      },
+                                      "clear": true
+                                    }
+                                  ],
                                   "primaryAction": "cancel"
                                 },
                                 "ui": {
@@ -22950,7 +23074,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "58dacb39dd25a416281a436e24fabe1e"
+    "cacheFingerprint": "147e28ae3e4a21705659d39419399821"
   },
   {
     "formKey": "Config: Recipes",

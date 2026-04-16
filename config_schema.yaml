@@ -2415,6 +2415,28 @@ components:
           $ref: '#/components/schemas/FieldChangeDialogTarget'
       required: [id, target]
 
+    FieldChangeDialogConfirmUpdate:
+      type: object
+      properties:
+        target:
+          $ref: '#/components/schemas/FieldChangeDialogTarget'
+        clear:
+          type: boolean
+          description: |
+            When true, clear the target using a type-aware empty value.
+            - FILE_UPLOAD => []
+            - single CHECKBOX => false
+            - multi CHECKBOX => []
+            - other field types => ''
+        value:
+          description: |
+            Optional literal value to set on confirm. Use `clear: true` for destructive clears so
+            the runtime can choose the correct empty value for the target field type.
+      required: [target]
+      anyOf:
+        - required: [clear]
+        - required: [value]
+
     FieldChangeDialogConfig:
       type: object
       properties:
@@ -2463,6 +2485,13 @@ components:
           items:
             $ref: '#/components/schemas/FieldChangeDialogInput'
           description: Optional dialog input fields that update other targets on confirm.
+        confirmUpdates:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldChangeDialogConfirmUpdate'
+          description: |
+            Optional confirm-time target updates that run in addition to the changed field itself.
+            Useful for destructive confirms that must clear related fields or uploaded files.
       required: [when]
 
     DedupDialogConfig:

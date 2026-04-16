@@ -1,5 +1,6 @@
 import {
   applyFieldChangeDialogTargets,
+  resolveFieldChangeDialogConfirmUpdates,
   resolveFieldChangeDialogCancelAction
 } from '../../src/web/react/app/fieldChangeDialog';
 
@@ -67,6 +68,60 @@ describe('applyFieldChangeDialogTargets', () => {
       context: { scope: 'top' }
     });
     expect(result.effectOverrides.effectA.QTY).toEqual(5);
+  });
+});
+
+describe('resolveFieldChangeDialogConfirmUpdates', () => {
+  it('clears file uploads and single checkboxes with type-aware empty values', () => {
+    const definition: any = {
+      questions: [
+        { id: 'ING_EVD', type: 'FILE_UPLOAD' },
+        { id: 'MP_COOK_TEMP', type: 'CHECKBOX', options: [] }
+      ]
+    };
+
+    const updates = resolveFieldChangeDialogConfirmUpdates({
+      dialog: {
+        when: { fieldId: 'ING_EVD', notEmpty: true } as any,
+        confirmUpdates: [
+          { target: { scope: 'top', fieldId: 'ING_EVD' }, clear: true },
+          { target: { scope: 'top', fieldId: 'MP_COOK_TEMP' }, clear: true }
+        ]
+      } as any,
+      definition,
+      context: { scope: 'line', groupId: 'MP_MEALS_REQUEST::row1::MP_TYPE_LI' }
+    });
+
+    expect(updates).toEqual([
+      { target: { scope: 'top', fieldId: 'ING_EVD' }, value: [] },
+      { target: { scope: 'top', fieldId: 'MP_COOK_TEMP' }, value: false }
+    ]);
+  });
+
+  it('clears multi-select checkboxes to an empty array and preserves explicit values', () => {
+    const definition: any = {
+      questions: [
+        { id: 'FLAGS', type: 'CHECKBOX', options: ['A', 'B'] },
+        { id: 'STATUS', type: 'TEXT' }
+      ]
+    };
+
+    const updates = resolveFieldChangeDialogConfirmUpdates({
+      dialog: {
+        when: { fieldId: 'FLAGS', notEmpty: true } as any,
+        confirmUpdates: [
+          { target: { scope: 'top', fieldId: 'FLAGS' }, clear: true },
+          { target: { scope: 'top', fieldId: 'STATUS' }, value: 'reset' }
+        ]
+      } as any,
+      definition,
+      context: { scope: 'top' }
+    });
+
+    expect(updates).toEqual([
+      { target: { scope: 'top', fieldId: 'FLAGS' }, value: [] },
+      { target: { scope: 'top', fieldId: 'STATUS' }, value: 'reset' }
+    ]);
   });
 });
 

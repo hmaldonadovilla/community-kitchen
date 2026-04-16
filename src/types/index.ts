@@ -1525,6 +1525,22 @@ export interface FieldChangeDialogTarget {
   effectId?: string;
 }
 
+export interface FieldChangeDialogConfirmUpdate {
+  target: FieldChangeDialogTarget;
+  /**
+   * When true, clear the target using a type-aware empty value.
+   * - FILE_UPLOAD => []
+   * - single CHECKBOX => false
+   * - multi CHECKBOX => []
+   * - other field types => ''
+   */
+  clear?: boolean;
+  /**
+   * Optional literal value to set on confirm.
+   */
+  value?: any;
+}
+
 export interface FieldChangeDialogInput {
   id: string;
   label?: LocalizedString;
@@ -1569,6 +1585,11 @@ export interface FieldChangeDialogConfig {
    * Optional dialog input fields that update other targets on confirm.
    */
   inputs?: FieldChangeDialogInput[];
+  /**
+   * Optional confirm-time target updates that run in addition to the changed field itself.
+   * Useful for destructive confirms that must clear related fields or uploaded files.
+   */
+  confirmUpdates?: FieldChangeDialogConfirmUpdate[];
 }
 
 export interface DedupDialogConfig {

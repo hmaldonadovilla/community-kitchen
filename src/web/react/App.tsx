@@ -123,6 +123,7 @@ import {
 } from './app/dedupIncompleteHomeDialog';
 import {
   applyFieldChangeDialogTargets,
+  resolveFieldChangeDialogConfirmUpdates,
   evaluateFieldChangeDialogWhen,
   evaluateFieldChangeDialogWhenWithFallback,
   finalizeInitialDateChangeDialogEntry,
@@ -1571,6 +1572,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (value === undefined) return;
           updates.push({ target: inputCfg.target, value });
         });
+        const confirmUpdates = resolveFieldChangeDialogConfirmUpdates({
+          dialog: dialogCfg,
+          definition,
+          context: { scope: pending.scope, groupId: pending.groupId },
+          selectionEffects: (pending.selectionEffects || []).filter(
+            (effect): effect is SelectionEffect & { groupId: string } => !!effect?.groupId
+          )
+        });
+        if (confirmUpdates.length) {
+          updates.push(...confirmUpdates);
+          logEvent('fieldChangeDialog.confirmUpdates.applied', {
+            fieldPath: pending.fieldPath,
+            fieldId: pending.fieldId,
+            updateCount: confirmUpdates.length,
+            targets: confirmUpdates.map(update => ({
+              scope: update.target.scope,
+              fieldId: update.target.fieldId,
+              effectId: update.target.effectId || null
+            }))
+          });
+        }
 
         const sourceQuestion =
           pending.scope === 'top'
@@ -1713,6 +1735,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setLineItems(mapped.lineItems);
         valuesRef.current = mapped.values;
         lineItemsRef.current = mapped.lineItems;
+        const updatedTopFieldIds = Array.from(
+          new Set(
+            updates
+              .filter(update => update.target.scope === 'top')
+              .map(update => (update.target.fieldId || '').toString().trim())
+              .filter(Boolean)
+          )
+        );
+
         if (shouldApplyClearOnChange) {
           setErrors({});
         } else {
@@ -1720,6 +1751,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             const next = { ...(prev || {}) };
             delete next[pending.fieldPath];
             delete next[pending.fieldId];
+            updatedTopFieldIds.forEach(fieldId => {
+              delete next[fieldId];
+            });
             return next;
           });
         }
@@ -1730,9 +1764,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setDraftSave({ phase: 'paused' });
         } else {
           autoSaveDirtyRef.current = true;
-          if (pending.fieldPath) {
-            uploadedFieldValueOverridesRef.current.delete(pending.fieldPath);
-          }
+          if (pending.fieldPath) uploadedFieldValueOverridesRef.current.delete(pending.fieldPath);
+          updatedTopFieldIds.forEach(fieldId => {
+            uploadedFieldValueOverridesRef.current.delete(fieldId);
+          });
           setDraftSave({ phase: 'dirty' });
         }
 
@@ -1781,7 +1816,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           fieldPath: pending.fieldPath,
           fieldId: pending.fieldId,
           groupId: pending.groupId || null,
-          rowId: pending.rowId || null
+          rowId: pending.rowId || null,
+          confirmUpdateCount: confirmUpdates.length
         });
       } finally {
         destructiveChangeBusy.unlock(lockSeq, { source: 'fieldChangeDialog' });

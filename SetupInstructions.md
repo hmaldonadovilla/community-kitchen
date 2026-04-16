@@ -397,7 +397,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
         ```
 
-    - **Field-level guarded changes (`changeDialog`)**: You can pause autosave and require confirmation before applying a change when a condition matches. This works on top-level questions and line-item fields. Optional `inputs` let you update peer fields, parent fields, or selection-effect rows.
+    - **Field-level guarded changes (`changeDialog`)**: You can pause autosave and require confirmation before applying a change when a condition matches. This works on top-level questions and line-item fields. Optional `inputs` let you update peer fields, parent fields, or selection-effect rows. Optional `confirmUpdates` let you apply literal values or type-aware clears on confirm.
 
         ```json
         {
@@ -420,6 +420,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
                 "id": "effect_qty",
                 "target": { "scope": "effect", "effectId": "add_ingredients", "fieldId": "QTY" }
               }
+            ],
+            "confirmUpdates": [
+              {
+                "target": { "scope": "top", "fieldId": "PHOTO_EVIDENCE" },
+                "clear": true
+              }
             ]
           }
         }
@@ -428,6 +434,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         Notes:
         - `target.scope: "parent"` updates the parent row when used inside a subgroup (falls back to top-level for non-subgroups).
         - `target.scope: "effect"` applies to rows created by the matching `selectionEffects[].id`.
+        - `confirmUpdates[].clear: true` chooses the right empty value for the target field type (`[]` for file uploads, `false` for a single checkbox, `[]` for multi-checkboxes, `''` otherwise).
         - `primaryAction: "cancel"` makes the Cancel button the primary/default action (useful when confirming a destructive change).
         - `cancelAction: "discardDraftAndGoHome"` makes Cancel revert the change, discard local draft edits, and return to Home/List.
 
