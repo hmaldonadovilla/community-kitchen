@@ -4,12 +4,12 @@ import {
 } from '../../../src/web/react/app/incompleteOverlayRowGuard';
 
 describe('incompleteOverlayRowGuard', () => {
-  it('collects only entire-dish rows with missing or invalid quantities', () => {
+  it('collects only multi-ingredient rows with missing or invalid quantities', () => {
     const rowIds = collectIncompleteRowsByTypeAndQuantity([
-      { id: 'a', values: { PREP_TYPE: 'Entire dish', PREP_QTY: '' } },
+      { id: 'a', values: { PREP_TYPE: 'Multi-ingredient', PREP_QTY: '' } },
       { id: 'b', values: { PREP_TYPE: 'Entire dish', PREP_QTY: 0 } },
-      { id: 'c', values: { PREP_TYPE: 'Entire dish', PREP_QTY: -1 } },
-      { id: 'd', values: { PREP_TYPE: 'Part dish', PREP_QTY: '' } }
+      { id: 'c', values: { PREP_TYPE: 'Multi-ingredient', PREP_QTY: -1 } },
+      { id: 'd', values: { PREP_TYPE: 'Single-ingredient', PREP_QTY: '' } }
     ] as any);
 
     expect(rowIds).toEqual(['a', 'c']);
@@ -30,7 +30,7 @@ describe('incompleteOverlayRowGuard', () => {
 
   it('resolves stable default dialog copy', () => {
     const copy = resolveIncompleteOverlayRowDialogCopy('EN');
-    expect(copy.title).toBe('Missing Entire leftover number of portions.');
+    expect(copy.title).toBe('Missing multi-ingredient leftover number of portions.');
     expect(copy.confirmLabel).toBe('Discard incomplete leftover record.');
     expect(copy.cancelLabel).toBe('Continue editing');
     expect(copy.showCloseButton).toBe(false);

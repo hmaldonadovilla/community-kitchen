@@ -95,8 +95,8 @@
           },
           "values": {
             "LEFTOVER_STATUS": "available",
-            "LEFTOVER_KIND": "Entire dish",
-            "LEFTOVER_PREP_TYPE": "Entire dish",
+            "LEFTOVER_KIND": "Multi-ingredient",
+            "LEFTOVER_PREP_TYPE": "Multi-ingredient",
             "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
@@ -191,8 +191,8 @@
           },
           "values": {
             "LEFTOVER_STATUS": "available",
-            "LEFTOVER_KIND": "Part dish",
-            "LEFTOVER_PREP_TYPE": "Part dish",
+            "LEFTOVER_KIND": "Single-ingredient",
+            "LEFTOVER_PREP_TYPE": "Single-ingredient",
             "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
             "DIETARY_APPLICABILITY": "{{row.LEFTOVER_DIETARY_APPLICABILITY}}",
             "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
@@ -1028,7 +1028,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
               },
               "rows": {
                 "includeWhen": {
@@ -1238,7 +1238,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -1251,7 +1254,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Part dish",
+                        "PREP_TYPE": "Single-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$source.LEFTOVER_INGREDIENT",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -1288,7 +1291,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -1305,7 +1311,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Entire dish",
+                        "PREP_TYPE": "Multi-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$source.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -1334,7 +1340,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -1351,7 +1360,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Entire dish",
+                        "PREP_TYPE": "Multi-ingredient",
                         "PREP_QTY": 0,
                         "RECIPE": "$source.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -1438,7 +1447,8 @@
                           "fieldId": "NEVER_SHOW",
                           "equals": "1"
                         }
-                      }
+                      },
+                      "defaultValue": "Single-ingredient"
                     },
                     {
                       "id": "LEFTOVER_PORTIONS_AVAILABLE",
@@ -1512,6 +1522,7 @@
                         "showWhen": {
                           "fieldId": "LEFTOVER_KIND",
                           "equals": [
+                            "Single-ingredient",
                             "Part dish"
                           ]
                         }
@@ -1557,7 +1568,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               }
                             ]
                           },
@@ -1581,7 +1595,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Part dish"
+                                "equals": [
+                                  "Single-ingredient",
+                                  "Part dish"
+                                ]
                               }
                             ]
                           },
@@ -1623,7 +1640,10 @@
                       "visibility": {
                         "showWhen": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         }
                       },
                       "validationRules": [
@@ -1636,7 +1656,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               }
                             ]
                           },
@@ -1728,7 +1751,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -1773,7 +1799,10 @@
                           "all": [
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "not": {
@@ -1814,7 +1843,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -1853,7 +1885,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -1864,7 +1899,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -1891,7 +1929,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "actions": [
                           {
@@ -2002,7 +2043,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -2025,7 +2069,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -2219,7 +2266,9 @@
                           {
                             "fieldId": "PREP_TYPE",
                             "equals": [
+                              "Multi-ingredient",
                               "Entire dish",
+                              "Single-ingredient",
                               "Part dish"
                             ]
                           }
@@ -4012,7 +4061,7 @@
             "labelFr": "Type",
             "labelNl": "Type",
             "required": true,
-            "defaultValue": "Part dish",
+            "defaultValue": "Single-ingredient",
             "ui": {
               "control": "select"
             },
@@ -4025,16 +4074,16 @@
               }
             },
             "options": [
-              "Entire dish",
-              "Part dish"
+              "Multi-ingredient",
+              "Single-ingredient"
             ],
             "optionsFr": [
-              "Plat entier",
-              "Plat partiel"
+              "Multi-ingrédients",
+              "Mono-ingrédient"
             ],
             "optionsNl": [
-              "Volledig gerecht",
-              "Deel gerecht"
+              "Meerdere ingrediënten",
+              "Enkel ingrediënt"
             ]
           },
           {
@@ -4051,6 +4100,7 @@
               "hideWhen": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Single-ingredient",
                   "Part dish"
                 ]
               }
@@ -4060,6 +4110,7 @@
                 "when": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Multi-ingredient",
                     "Entire dish"
                   ]
                 },
@@ -4142,6 +4193,7 @@
               "hideWhen": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Single-ingredient",
                   "Part dish"
                 ]
               }
@@ -4151,6 +4203,7 @@
                 "when": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Multi-ingredient",
                     "Entire dish"
                   ]
                 },
@@ -4804,7 +4857,7 @@
           "Options (EN)": "",
           "Options (FR)": "",
           "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+          "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -5252,6 +5305,7 @@
                   "when": {
                     "fieldId": "PREP_TYPE",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish"
                     ]
                   }
@@ -5790,18 +5844,18 @@
                 },
                 "options": [
                   "Cook",
-                  "Entire dish",
-                  "Part dish"
+                  "Multi-ingredient",
+                  "Single-ingredient"
                 ],
                 "optionsFr": [
                   "Cuisiner",
-                  "Plat entier",
-                  "Plat partiel"
+                  "Multi-ingrédients",
+                  "Mono-ingrédient"
                 ],
                 "optionsNl": [
                   "Koken",
-                  "Volledig gerecht",
-                  "Deel gerecht"
+                  "Meerdere ingrediënten",
+                  "Enkel ingrediënt"
                 ]
               },
               {
@@ -7734,7 +7788,7 @@
               "labelFr": "Type",
               "labelNl": "Type",
               "required": true,
-              "defaultValue": "Part dish",
+              "defaultValue": "Single-ingredient",
               "ui": {
                 "control": "select"
               },
@@ -7747,16 +7801,16 @@
                 }
               },
               "options": [
-                "Entire dish",
-                "Part dish"
+                "Multi-ingredient",
+                "Single-ingredient"
               ],
               "optionsFr": [
-                "Plat entier",
-                "Plat partiel"
+                "Multi-ingrédients",
+                "Mono-ingrédient"
               ],
               "optionsNl": [
-                "Volledig gerecht",
-                "Deel gerecht"
+                "Meerdere ingrediënten",
+                "Enkel ingrediënt"
               ]
             },
             {
@@ -7773,6 +7827,7 @@
                 "hideWhen": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Single-ingredient",
                     "Part dish"
                   ]
                 }
@@ -7782,6 +7837,7 @@
                   "when": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish"
                     ]
                   },
@@ -7864,6 +7920,7 @@
                 "hideWhen": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Single-ingredient",
                     "Part dish"
                   ]
                 }
@@ -7873,6 +7930,7 @@
                   "when": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish"
                     ]
                   },
@@ -8431,7 +8489,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -8444,7 +8505,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Part dish",
+                        "PREP_TYPE": "Single-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$row.LEFTOVER_INGREDIENT",
                         "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -8468,7 +8529,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -8485,7 +8549,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Entire dish",
+                        "PREP_TYPE": "Multi-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$row.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -8509,7 +8573,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -8526,7 +8593,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Part dish",
+                        "PREP_TYPE": "Single-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$row.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -8639,7 +8706,7 @@
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -9054,6 +9121,7 @@
                     "when": {
                       "fieldId": "PREP_TYPE",
                       "equals": [
+                        "Multi-ingredient",
                         "Entire dish"
                       ]
                     }
@@ -9571,18 +9639,18 @@
                   },
                   "options": [
                     "Cook",
-                    "Entire dish",
-                    "Part dish"
+                    "Multi-ingredient",
+                    "Single-ingredient"
                   ],
                   "optionsFr": [
                     "Cuisiner",
-                    "Plat entier",
-                    "Plat partiel"
+                    "Multi-ingrédients",
+                    "Mono-ingrédient"
                   ],
                   "optionsNl": [
                     "Koken",
-                    "Volledig gerecht",
-                    "Deel gerecht"
+                    "Meerdere ingrediënten",
+                    "Enkel ingrediënt"
                   ]
                 },
                 {
@@ -11231,8 +11299,8 @@
           },
           "values": {
             "LEFTOVER_STATUS": "available",
-            "LEFTOVER_KIND": "Entire dish",
-            "LEFTOVER_PREP_TYPE": "Entire dish",
+            "LEFTOVER_KIND": "Multi-ingredient",
+            "LEFTOVER_PREP_TYPE": "Multi-ingredient",
             "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
@@ -11327,8 +11395,8 @@
           },
           "values": {
             "LEFTOVER_STATUS": "available",
-            "LEFTOVER_KIND": "Part dish",
-            "LEFTOVER_PREP_TYPE": "Part dish",
+            "LEFTOVER_KIND": "Single-ingredient",
+            "LEFTOVER_PREP_TYPE": "Single-ingredient",
             "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
             "DIETARY_APPLICABILITY": "{{row.LEFTOVER_DIETARY_APPLICABILITY}}",
             "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
@@ -11375,7 +11443,9 @@
                 {
                   "fieldId": "PREP_TYPE",
                   "equals": [
+                    "Multi-ingredient",
                     "Entire dish",
+                    "Single-ingredient",
                     "Part dish"
                   ]
                 }
@@ -11913,7 +11983,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
               },
               "rows": {
                 "includeWhen": {
@@ -12097,7 +12167,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -12110,7 +12183,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Part dish",
+                        "PREP_TYPE": "Single-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$source.LEFTOVER_INGREDIENT",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -12147,7 +12220,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -12164,7 +12240,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Entire dish",
+                        "PREP_TYPE": "Multi-ingredient",
                         "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                         "RECIPE": "$source.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -12193,7 +12269,10 @@
                           },
                           {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           {
                             "fieldId": "LEFTOVER_ID",
@@ -12210,7 +12289,7 @@
                         ]
                       },
                       "preset": {
-                        "PREP_TYPE": "Entire dish",
+                        "PREP_TYPE": "Multi-ingredient",
                         "PREP_QTY": 0,
                         "RECIPE": "$source.LEFTOVER_RECIPE",
                         "LEFTOVER_RECORD_ID": "$source.id",
@@ -12297,7 +12376,8 @@
                           "fieldId": "NEVER_SHOW",
                           "equals": "1"
                         }
-                      }
+                      },
+                      "defaultValue": "Single-ingredient"
                     },
                     {
                       "id": "LEFTOVER_PORTIONS_AVAILABLE",
@@ -12371,6 +12451,7 @@
                         "showWhen": {
                           "fieldId": "LEFTOVER_KIND",
                           "equals": [
+                            "Single-ingredient",
                             "Part dish"
                           ]
                         }
@@ -12416,7 +12497,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               }
                             ]
                           },
@@ -12440,7 +12524,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Part dish"
+                                "equals": [
+                                  "Single-ingredient",
+                                  "Part dish"
+                                ]
                               }
                             ]
                           },
@@ -12482,7 +12569,10 @@
                       "visibility": {
                         "showWhen": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         }
                       },
                       "validationRules": [
@@ -12495,7 +12585,10 @@
                               },
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               }
                             ]
                           },
@@ -12587,7 +12680,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -12632,7 +12728,10 @@
                           "all": [
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "not": {
@@ -12673,7 +12772,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -12712,7 +12814,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -12723,7 +12828,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -12750,7 +12858,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "actions": [
                           {
@@ -12861,7 +12972,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Part dish"
+                          "equals": [
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -12884,7 +12998,10 @@
                       {
                         "when": {
                           "fieldId": "LEFTOVER_KIND",
-                          "equals": "Entire dish"
+                          "equals": [
+                            "Multi-ingredient",
+                            "Entire dish"
+                          ]
                         },
                         "parts": [
                           {
@@ -13078,7 +13195,9 @@
                           {
                             "fieldId": "PREP_TYPE",
                             "equals": [
+                              "Multi-ingredient",
                               "Entire dish",
+                              "Single-ingredient",
                               "Part dish"
                             ]
                           }

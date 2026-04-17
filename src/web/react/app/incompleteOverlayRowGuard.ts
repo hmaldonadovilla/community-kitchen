@@ -1,5 +1,11 @@
 import { resolveLocalizedString } from '../../i18n';
 import type { FieldValue, LangCode } from '../../types';
+import {
+  MULTI_INGREDIENT_LEFTOVER_KIND,
+  SINGLE_INGREDIENT_LEFTOVER_KIND,
+  isMultiIngredientLeftoverKind,
+  isSingleIngredientLeftoverKind
+} from '../../../domain/leftoverKinds';
 
 type OverlayRowLike = {
   id?: string;
@@ -24,7 +30,7 @@ export type IncompleteOverlayDialogCopy = {
 };
 
 const DEFAULT_TYPE_FIELD_ID = 'PREP_TYPE';
-const DEFAULT_TYPE_VALUE = 'Entire dish';
+const DEFAULT_TYPE_VALUE = MULTI_INGREDIENT_LEFTOVER_KIND;
 const DEFAULT_QUANTITY_FIELD_ID = 'PREP_QTY';
 const DEFAULT_MIN_QUANTITY = 0;
 
@@ -51,10 +57,19 @@ export const collectIncompleteRowsByTypeAndQuantity = (
   options?: IncompleteRowGuardOptions
 ): string[] => {
   const typeFieldId = normalizeString(options?.typeFieldId || DEFAULT_TYPE_FIELD_ID);
-  const typeValue = normalizeString(options?.typeValue || DEFAULT_TYPE_VALUE).toLowerCase();
+  const typeValue = normalizeString(options?.typeValue || DEFAULT_TYPE_VALUE);
   const quantityFieldId = normalizeString(options?.quantityFieldId || DEFAULT_QUANTITY_FIELD_ID);
   const minQuantityRaw = normalizeNumber(options?.minQuantity);
   const minQuantity = minQuantityRaw === null ? DEFAULT_MIN_QUANTITY : minQuantityRaw;
+  const matchesTypeValue = (rawType: unknown): boolean => {
+    if (typeValue === MULTI_INGREDIENT_LEFTOVER_KIND) {
+      return isMultiIngredientLeftoverKind(rawType);
+    }
+    if (typeValue === SINGLE_INGREDIENT_LEFTOVER_KIND) {
+      return isSingleIngredientLeftoverKind(rawType);
+    }
+    return normalizeString(rawType).toLowerCase() === typeValue.toLowerCase();
+  };
   const out: string[] = [];
   const seen = new Set<string>();
 
@@ -62,8 +77,8 @@ export const collectIncompleteRowsByTypeAndQuantity = (
     const rowId = normalizeString((row as any)?.id);
     if (!rowId || seen.has(rowId)) return;
     const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
-    const rowType = normalizeString((rowValues as any)[typeFieldId]).toLowerCase();
-    if (!rowType || rowType !== typeValue) return;
+    const rowType = (rowValues as any)[typeFieldId];
+    if (!matchesTypeValue(rowType)) return;
     const quantity = normalizeNumber((rowValues as any)[quantityFieldId]);
     if (quantity !== null && quantity >= minQuantity) return;
     seen.add(rowId);
@@ -79,21 +94,21 @@ export const resolveIncompleteOverlayRowDialogCopy = (
   return {
     title: resolveLocalizedString(
       {
-        en: 'Missing Entire leftover number of portions.',
-        fr: 'Missing Entire leftover number of portions.',
-        nl: 'Missing Entire leftover number of portions.'
+        en: 'Missing multi-ingredient leftover number of portions.',
+        fr: 'Missing multi-ingredient leftover number of portions.',
+        nl: 'Missing multi-ingredient leftover number of portions.'
       },
       language,
-      'Missing Entire leftover number of portions.'
+      'Missing multi-ingredient leftover number of portions.'
     ),
     message: resolveLocalizedString(
       {
         en:
-          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as an entire dish with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently.",
+          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as a multi-ingredient leftover with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently.",
         fr:
-          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as an entire dish with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently.",
+          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as a multi-ingredient leftover with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently.",
         nl:
-          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as an entire dish with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently."
+          "Enter the number of portion this leftover dish will yield.\n\nEnter 0 if the dish will be fully combined with today's dish in which case its ingredients will be added to today's dish ingredients on the Report.\n\nIf value > 0, the leftover will be shown as a multi-ingredient leftover with its recipe and ingredients.\n\nIf no value is entered, this incomplete record will be removed permanently."
       },
       language,
       ''

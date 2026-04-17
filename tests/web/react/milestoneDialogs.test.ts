@@ -63,14 +63,14 @@ describe('milestoneDialogs', () => {
           targetFormKey: 'Config: Leftover Inventory',
           recordId: 'inv-1',
           values: {
-            LEFTOVER_ID: 'LP-1',
-            LEFTOVER_KIND: 'Part dish',
+            LEFTOVER_ID: 'SI-1',
+            LEFTOVER_KIND: 'Single-ingredient',
             LEFTOVER_INGREDIENT: 'Rice'
           }
         },
         '{{LEFTOVER_ID}} | {{LEFTOVER_KIND}} | {{LEFTOVER_INGREDIENT}}'
       )
-    ).toBe('LP-1 | Part dish | Rice');
+    ).toBe('SI-1 | Single-ingredient | Rice');
   });
 
   test('renders generated record lines with fallback, pluralization, and date formatting', () => {
@@ -81,8 +81,8 @@ describe('milestoneDialogs', () => {
           targetFormKey: 'Config: Leftover Inventory',
           recordId: 'inv-1',
           values: {
-            LEFTOVER_ID: 'LE-8',
-            LEFTOVER_KIND: 'Entire dish',
+            LEFTOVER_ID: 'MI-8',
+            LEFTOVER_KIND: 'Multi-ingredient',
             LEFTOVER_RECIPE: 'Chicken & vegetable sauce',
             LEFTOVER_PORTIONS: 5,
             LEFTOVER_EXP_DATE: '2026-04-17'
@@ -90,7 +90,7 @@ describe('milestoneDialogs', () => {
         },
         '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
       )
-    ).toBe('LE-8 | Chicken & vegetable sauce | 5 portions | Expires 17-Apr-2026');
+    ).toBe('MI-8 | Chicken & vegetable sauce | 5 portions | Expires 17-Apr-2026');
   });
 
   test('renders generated record lines with alternate quantity fields', () => {
@@ -101,8 +101,8 @@ describe('milestoneDialogs', () => {
           targetFormKey: 'Config: Leftover Inventory',
           recordId: 'inv-2',
           values: {
-            LEFTOVER_ID: 'LP-4',
-            LEFTOVER_KIND: 'Part dish',
+            LEFTOVER_ID: 'SI-4',
+            LEFTOVER_KIND: 'Single-ingredient',
             LEFTOVER_INGREDIENT: 'Basmati rice',
             LEFTOVER_QTY: 5000,
             LEFTOVER_UNIT: 'gr',
@@ -111,7 +111,7 @@ describe('milestoneDialogs', () => {
         },
         '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
       )
-    ).toBe('LP-4 | Basmati rice | 5000 gr | Expires 18-Apr-2026');
+    ).toBe('SI-4 | Basmati rice | 5000 gr | Expires 18-Apr-2026');
   });
 
   test('extracts generated records from follow-up action results', () => {

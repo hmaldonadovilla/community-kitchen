@@ -1,4 +1,5 @@
 import { FormConfig, QuestionConfig, WebFormSubmission } from '../../../types';
+import { isMultiIngredientLeftoverKind, isSingleIngredientLeftoverKind } from '../../../domain/leftoverKinds';
 import { fetchDriveFileBlob } from '../driveApi';
 import { collectLineItemRows } from './placeholders';
 
@@ -212,13 +213,17 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
     });
 
     const cookEntries = normalizedEntries.filter(entry => entry.prepType === 'cook');
-    const entireEntries = normalizedEntries.filter(entry => entry.prepType === 'entire dish');
+    const entireEntries = normalizedEntries.filter(entry => isMultiIngredientLeftoverKind(entry.prepType));
     const entireZeroEntries = entireEntries.filter(entry => (entry.prepQty ?? 0) === 0);
     const entireNonZeroEntries = entireEntries.filter(entry => (entry.prepQty ?? 0) !== 0);
-    const partialEntries = normalizedEntries.filter(entry => entry.prepType === 'part dish');
-    const otherEntries = normalizedEntries.filter(
-      entry => entry.prepType !== 'cook' && entry.prepType !== 'entire dish' && entry.prepType !== 'part dish'
-    );
+    const partialEntries = normalizedEntries.filter(entry => isSingleIngredientLeftoverKind(entry.prepType));
+    const otherEntries = normalizedEntries.filter(entry => {
+      return (
+        entry.prepType !== 'cook' &&
+        !isMultiIngredientLeftoverKind(entry.prepType) &&
+        !isSingleIngredientLeftoverKind(entry.prepType)
+      );
+    });
 
     const entireTotal = entireNonZeroEntries.reduce((sum, entry) => sum + (entry.prepQty ?? 0), 0);
     const finalQtyNumber = parseNumber(meal.FINAL_QTY);

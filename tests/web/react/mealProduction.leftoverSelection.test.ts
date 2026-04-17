@@ -10,6 +10,11 @@ const getExport = (): any =>
     JSON.stringify(require('../../../docs/config/exports/staging/config_meal_production.json'))
   );
 
+const getInventoryExport = (): any =>
+  JSON.parse(
+    JSON.stringify(require('../../../docs/config/exports/staging/config_leftover_inventory.json'))
+  );
+
 describe('meal production leftover selection config', () => {
   it('renders the Leftover step from datasource-backed rows instead of a persisted subgroup', () => {
     const definition = getDefinition();
@@ -25,10 +30,10 @@ describe('meal production leftover selection config', () => {
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
     expect(target?.helperText?.en).toBe(
-      'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+      'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
     );
     expect(formTarget?.helperText?.en).toBe(
-      'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+      'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
     );
     expect(target?.subGroups).toBeUndefined();
     expect((question.lineItemConfig.subGroups || []).map((group: any) => group.id)).not.toContain('MP_LEFTOVER_SELECTION_LI');
@@ -61,6 +66,20 @@ describe('meal production leftover selection config', () => {
       })
     ]);
     expect(definitionWatches).toEqual(formWatches);
+  });
+
+  it('renames leftover ids to MI and SI prefixes in the shared inventory form', () => {
+    const exported = getInventoryExport();
+    const idField = (exported.questions || []).find((question: any) => question?.id === 'LEFTOVER_ID');
+    const kindField = (exported.questions || []).find((question: any) => question?.id === 'LEFTOVER_KIND');
+
+    expect(kindField?.options).toEqual(['Multi-ingredient', 'Single-ingredient']);
+    expect(idField?.autoIncrement?.prefixByValue?.map).toEqual(
+      expect.objectContaining({
+        'Multi-ingredient': 'MI-',
+        'Single-ingredient': 'SI-'
+      })
+    );
   });
 
   it('does not queue the generic reservation sync when leaving Order for Leftover bank', () => {
@@ -144,7 +163,7 @@ describe('meal production leftover selection config', () => {
         expect.objectContaining({
           id: 'sync_leftover_part_prep',
           preset: expect.objectContaining({
-            PREP_TYPE: 'Part dish',
+            PREP_TYPE: 'Single-ingredient',
             PREP_QTY: '$row.LEFTOVER_USE_QTY',
             LEFTOVER_ID: '$row.LEFTOVER_ID',
             LEFTOVER_DISPLAY_UNIT: '$source.LEFTOVER_UNIT',
@@ -167,7 +186,7 @@ describe('meal production leftover selection config', () => {
         expect.objectContaining({
           id: 'sync_leftover_entire_reheat_prep',
           preset: expect.objectContaining({
-            PREP_TYPE: 'Entire dish',
+            PREP_TYPE: 'Multi-ingredient',
             PREP_QTY: '$row.LEFTOVER_USE_QTY',
             LEFTOVER_ID: '$row.LEFTOVER_ID',
             LEFTOVER_DISPLAY_UNIT: 'portions',
@@ -183,7 +202,7 @@ describe('meal production leftover selection config', () => {
         expect.objectContaining({
           id: 'sync_leftover_entire_combine_prep',
           preset: expect.objectContaining({
-            PREP_TYPE: 'Entire dish',
+            PREP_TYPE: 'Multi-ingredient',
             PREP_QTY: 0,
             LEFTOVER_ID: '$row.LEFTOVER_ID',
             LEFTOVER_DISPLAY_UNIT: '',
@@ -224,8 +243,16 @@ describe('meal production leftover selection config', () => {
       ])
     );
 
-    const partHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) => rule?.when?.equals === 'Part dish');
-    const entireHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) => rule?.when?.equals === 'Entire dish');
+    const hasEqualsValue = (when: any, value: string) => {
+      const equals = when?.equals;
+      return Array.isArray(equals) ? equals.includes(value) : equals === value;
+    };
+    const partHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) =>
+      hasEqualsValue(rule?.when, 'Single-ingredient')
+    );
+    const entireHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) =>
+      hasEqualsValue(rule?.when, 'Multi-ingredient')
+    );
     expect(partHeadline?.parts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sourcePathAlternatives: ['LEFTOVER_INGREDIENT', 'LEFTOVER_RECIPE'] }),
@@ -244,11 +271,11 @@ describe('meal production leftover selection config', () => {
     expect(detailRules).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Part dish' }),
+          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Single-ingredient', 'Part dish'] }),
           parts: expect.arrayContaining([expect.objectContaining({ sourcePath: 'LEFTOVER_INGREDIENT' })])
         }),
         expect.objectContaining({
-          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Entire dish' }),
+          when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Multi-ingredient', 'Entire dish'] }),
           parts: expect.arrayContaining([
             expect.objectContaining({
               type: 'sourceListSummary',
@@ -300,7 +327,10 @@ describe('meal production leftover selection config', () => {
             includeWhen: expect.objectContaining({
               all: expect.arrayContaining([
                 expect.objectContaining({ fieldId: 'LEFTOVER_ID', notEmpty: true }),
-                expect.objectContaining({ fieldId: 'PREP_TYPE', equals: ['Entire dish', 'Part dish'] })
+                expect.objectContaining({
+                  fieldId: 'PREP_TYPE',
+                  equals: ['Multi-ingredient', 'Entire dish', 'Single-ingredient', 'Part dish']
+                })
               ])
             })
           })

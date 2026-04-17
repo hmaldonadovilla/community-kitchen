@@ -171,7 +171,7 @@ components:
               type: integer
               description: |
                 Width for zero-padding the numeric counter.
-                Use `0` for variable-width ids like `LE-1`, `LE-2`, `LE-10`.
+                Use `0` for variable-width ids like `MI-1`, `MI-2`, `MI-10`.
             propertyKey:
               type: string
             prefixByValue:

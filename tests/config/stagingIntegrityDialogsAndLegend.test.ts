@@ -267,7 +267,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        'Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine'
+        'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
       );
       expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverInventoryRows?.presentationWhen).toEqual({
@@ -351,10 +351,10 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoverInventoryRows?.ui?.compactDetailRows).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Part dish' })
+            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Single-ingredient', 'Part dish'] })
           }),
           expect.objectContaining({
-            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: 'Entire dish' })
+            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Multi-ingredient', 'Entire dish'] })
           })
         ])
       );

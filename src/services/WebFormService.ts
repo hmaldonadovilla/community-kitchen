@@ -65,6 +65,7 @@ import {
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
 import { HeaderColumns } from './webform/types';
+import { isSingleIngredientLeftoverKind } from '../domain/leftoverKinds';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
 const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
@@ -5680,13 +5681,14 @@ export class WebFormService {
     statusFieldId?: string;
     unitFieldId?: string;
   }): InventoryReservationFieldIds {
-    const kind = (args.resourceKind || '').toString().trim().toLowerCase();
-    const isPartDish = kind.includes('part');
-    const quantityFieldId = (args.quantityFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_QTY' : 'LEFTOVER_PORTIONS');
+    const isSingleIngredient = isSingleIngredientLeftoverKind(args.resourceKind);
+    const quantityFieldId =
+      (args.quantityFieldId || '').toString().trim() || (isSingleIngredient ? 'LEFTOVER_QTY' : 'LEFTOVER_PORTIONS');
     const reservedQuantityFieldId =
-      (args.reservedQuantityFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_RESERVED_QTY' : 'LEFTOVER_RESERVED_PORTIONS');
+      (args.reservedQuantityFieldId || '').toString().trim() ||
+      (isSingleIngredient ? 'LEFTOVER_RESERVED_QTY' : 'LEFTOVER_RESERVED_PORTIONS');
     const statusFieldId = (args.statusFieldId || '').toString().trim() || 'LEFTOVER_STATUS';
-    const unitFieldId = (args.unitFieldId || '').toString().trim() || (isPartDish ? 'LEFTOVER_UNIT' : '');
+    const unitFieldId = (args.unitFieldId || '').toString().trim() || (isSingleIngredient ? 'LEFTOVER_UNIT' : '');
     return { quantityFieldId, reservedQuantityFieldId, statusFieldId, unitFieldId };
   }
 

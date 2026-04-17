@@ -1,5 +1,6 @@
 import { QuestionConfig, WebFormSubmission } from '../../../types';
 import { collectLineItemRows } from './placeholders';
+import { isMultiIngredientLeftoverKind, isSingleIngredientLeftoverKind } from '../../../domain/leftoverKinds';
 
 interface TypeRow {
   __parent?: any;
@@ -172,8 +173,8 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
     });
 
     const cookEntries = normalizedEntries.filter(e => e.prepType === 'cook');
-    const entireEntries = normalizedEntries.filter(e => e.prepType === 'entire dish');
-    const partialEntries = normalizedEntries.filter(e => e.prepType === 'part dish');
+    const entireEntries = normalizedEntries.filter(e => isMultiIngredientLeftoverKind(e.prepType));
+    const partialEntries = normalizedEntries.filter(e => isSingleIngredientLeftoverKind(e.prepType));
 
     const entireDishTotal = entireEntries.reduce((sum, entry) => sum + (entry.prepQty ?? 0), 0);
     const finalNumeric = parseNumber(finalQtyValue);
@@ -197,12 +198,22 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
       const partialIngredients = uniqueList(partialEntries.flatMap(entry => entry.ingredients));
       const partialAllergens = uniqueList(partialEntries.flatMap(entry => entry.allergens));
       const partialPortionsLabel = cookPortionsValue !== null ? `${cookPortionsValue} portions` : finalQtyLabel;
-      mealSegments.push(renderRecipeBlock('Cooked', partialPortionsLabel, 'Partial leftovers', partialIngredients, partialAllergens));
+      mealSegments.push(
+        renderRecipeBlock('Cooked', partialPortionsLabel, 'Single-ingredient leftovers', partialIngredients, partialAllergens)
+      );
     }
 
     entireEntries.forEach(entry => {
       const qtyLabel = formatPortions(entry.prepQty ?? 0, 0);
-      mealSegments.push(renderRecipeBlock('Leftover (entire dish)', qtyLabel, entry.recipe, uniqueList(entry.ingredients), uniqueList(entry.allergens)));
+      mealSegments.push(
+        renderRecipeBlock(
+          'Leftover (multi-ingredient)',
+          qtyLabel,
+          entry.recipe,
+          uniqueList(entry.ingredients),
+          uniqueList(entry.allergens)
+        )
+      );
     });
 
     blocks.push(`

@@ -1672,7 +1672,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       }
       ```
 
-      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form. Set `"padLength": 0` when you want variable-width ids such as `LE-1`, `LE-2`, `LE-10`.
+      Leave the field empty in the UI and the backend will emit `MP-AA000001`, `MP-AA000002`, etc. Counters are stored in script properties, so numbering persists across deployments. Use `"propertyKey": "MEAL_RUN"` when you need isolated counters within the same form. Set `"padLength": 0` when you want variable-width ids such as `MI-1`, `MI-2`, `MI-10`.
       When one shared table needs different id prefixes by record kind, use `prefixByValue`:
 
       ```json
@@ -1682,8 +1682,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           "prefixByValue": {
             "fieldId": "LEFTOVER_KIND",
             "map": {
-              "entireDish": "LE-",
-              "partialDish": "LP-"
+              "Multi-ingredient": "MI-",
+              "Single-ingredient": "SI-"
             },
             "defaultPrefix": "LX-"
           }
@@ -1691,7 +1691,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       }
       ```
 
-      The backend keeps a separate counter per resolved prefix, so `LE-000001` and `LP-000001` can advance independently from the same field definition.
+      The backend keeps a separate counter per resolved prefix, so `MI-000001` and `SI-000001` can advance independently from the same field definition.
     - **Default values (`defaultValue`)**: To prefill a field on **new records / new rows**, add `defaultValue` in the field JSON.
       - This is only applied when the field is **missing from the payload**, so it **does not override user edits** once the field exists.
       - Works for **top-level fields** and **line-item / subgroup fields**.

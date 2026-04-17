@@ -330,7 +330,8 @@
     var buildGeneratedLeftoverLabel = function (entry) {
       var values = entry && typeof entry.values === 'object' ? entry.values : {};
       var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
-      var kind = toText(values.LEFTOVER_KIND || '');
+      var rawKind = toText(values.LEFTOVER_KIND || '');
+      var kind = normalize(rawKind) === 'entire dish' ? 'Multi-ingredient' : normalize(rawKind) === 'part dish' ? 'Single-ingredient' : rawKind;
       var recipe = toText(values.LEFTOVER_RECIPE || '');
       var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
       var quantity = formatGeneratedLeftoverQuantity(values);
@@ -523,6 +524,14 @@
       if (text === 'false' || text === 'no' || text === '0') return 'No';
       return toText(rawValue);
     };
+    var isMultiIngredientPrepType = function (rawValue) {
+      var text = normalize(rawValue);
+      return text === 'multi-ingredient' || text === 'entire dish';
+    };
+    var isSingleIngredientPrepType = function (rawValue) {
+      var text = normalize(rawValue);
+      return text === 'single-ingredient' || text === 'part dish';
+    };
 
     var appendPhotoIcon = function (inline, rawUrls) {
       if (!rawUrls || !rawUrls.length) return;
@@ -638,10 +647,10 @@
         return normalize(entry.prepType) === 'cook';
       });
       var leftoverFullEntries = group.entries.filter(function (entry) {
-        return normalize(entry.prepType) === 'entire dish';
+        return isMultiIngredientPrepType(entry.prepType);
       });
       var leftoverPartEntries = group.entries.filter(function (entry) {
-        return normalize(entry.prepType) === 'part dish';
+        return isSingleIngredientPrepType(entry.prepType);
       });
 
       var cookEntry = cookEntries.length ? cookEntries[0] : null;
@@ -666,7 +675,7 @@
       leftoverFullEntries.forEach(function (entry) {
         var qty = parseNumber(entry.prepQty);
         var qtyValue = Number.isNaN(qty) ? 0 : qty;
-        var leftoverFullLine = 'Leftover: ' + formatPortions(entry.prepQty, '0');
+        var leftoverFullLine = 'Multi-ingredient leftover: ' + formatPortions(entry.prepQty, '0');
         if (entry.recipe) {
           leftoverFullLine += ' | ' + entry.recipe;
         }
@@ -684,7 +693,7 @@
       });
 
       leftoverPartEntries.forEach(function (entry) {
-        var leftoverPartLine = 'Leftover part dish';
+        var leftoverPartLine = 'Single-ingredient leftover';
         if (entry.recipe) {
           leftoverPartLine += ': ' + entry.recipe;
         }

@@ -8601,8 +8601,10 @@ export const BUNDLED_FORM_CONFIGS = [
           "prefixByValue": {
             "fieldId": "LEFTOVER_KIND",
             "map": {
-              "Entire dish": "LE-",
-              "Part dish": "LP-"
+              "Entire dish": "MI-",
+              "Part dish": "SI-",
+              "Multi-ingredient": "MI-",
+              "Single-ingredient": "SI-"
             },
             "defaultPrefix": "LX-"
           }
@@ -8644,18 +8646,19 @@ export const BUNDLED_FORM_CONFIGS = [
         "required": true,
         "listView": true,
         "options": [
-          "Entire dish",
-          "Part dish"
+          "Multi-ingredient",
+          "Single-ingredient"
         ],
         "optionsFr": [
-          "Plat entier",
-          "Plat partiel"
+          "Multi-ingrédients",
+          "Mono-ingrédient"
         ],
         "optionsNl": [
-          "Volledig gerecht",
-          "Deel gerecht"
+          "Meerdere ingrediënten",
+          "Enkel ingrediënt"
         ],
-        "status": "Active"
+        "status": "Active",
+        "defaultValue": "Single-ingredient"
       },
       {
         "id": "LEFTOVER_PREP_TYPE",
@@ -8708,6 +8711,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Multi-ingredient",
               "Entire dish"
             ]
           }
@@ -8717,6 +8721,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "when": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Multi-ingredient",
                 "Entire dish"
               ]
             },
@@ -8771,6 +8776,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Single-ingredient",
               "Part dish"
             ]
           }
@@ -8780,6 +8786,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "when": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             },
@@ -8826,6 +8833,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Single-ingredient",
               "Part dish"
             ]
           }
@@ -8855,6 +8863,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Single-ingredient",
               "Part dish"
             ]
           }
@@ -8906,6 +8915,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Single-ingredient",
               "Part dish"
             ]
           }
@@ -8915,6 +8925,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "when": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             },
@@ -8959,6 +8970,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Single-ingredient",
               "Part dish"
             ]
           }
@@ -8968,6 +8980,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "when": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             },
@@ -9028,6 +9041,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Multi-ingredient",
               "Entire dish"
             ]
           }
@@ -9037,6 +9051,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "when": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Multi-ingredient",
                 "Entire dish"
               ]
             },
@@ -9341,6 +9356,7 @@ export const BUNDLED_FORM_CONFIGS = [
           "showWhen": {
             "fieldId": "LEFTOVER_KIND",
             "equals": [
+              "Multi-ingredient",
               "Entire dish"
             ]
           }
@@ -9387,8 +9403,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "prefixByValue": {
               "fieldId": "LEFTOVER_KIND",
               "map": {
-                "Entire dish": "LE-",
-                "Part dish": "LP-"
+                "Entire dish": "MI-",
+                "Part dish": "SI-",
+                "Multi-ingredient": "MI-",
+                "Single-ingredient": "SI-"
               },
               "defaultPrefix": "LX-"
             }
@@ -9430,18 +9448,19 @@ export const BUNDLED_FORM_CONFIGS = [
           "required": true,
           "listView": true,
           "options": [
-            "Entire dish",
-            "Part dish"
+            "Multi-ingredient",
+            "Single-ingredient"
           ],
           "optionsFr": [
-            "Plat entier",
-            "Plat partiel"
+            "Multi-ingrédients",
+            "Mono-ingrédient"
           ],
           "optionsNl": [
-            "Volledig gerecht",
-            "Deel gerecht"
+            "Meerdere ingrediënten",
+            "Enkel ingrediënt"
           ],
-          "status": "Active"
+          "status": "Active",
+          "defaultValue": "Single-ingredient"
         },
         {
           "id": "LEFTOVER_PREP_TYPE",
@@ -9494,6 +9513,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Multi-ingredient",
                 "Entire dish"
               ]
             }
@@ -9503,6 +9523,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "when": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Multi-ingredient",
                   "Entire dish"
                 ]
               },
@@ -9557,6 +9578,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             }
@@ -9566,6 +9588,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "when": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Single-ingredient",
                   "Part dish"
                 ]
               },
@@ -9612,6 +9635,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             }
@@ -9641,6 +9665,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             }
@@ -9692,6 +9717,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             }
@@ -9701,6 +9727,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "when": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Single-ingredient",
                   "Part dish"
                 ]
               },
@@ -9745,6 +9772,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Single-ingredient",
                 "Part dish"
               ]
             }
@@ -9754,6 +9782,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "when": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Single-ingredient",
                   "Part dish"
                 ]
               },
@@ -9814,6 +9843,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Multi-ingredient",
                 "Entire dish"
               ]
             }
@@ -9823,6 +9853,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "when": {
                 "fieldId": "LEFTOVER_KIND",
                 "equals": [
+                  "Multi-ingredient",
                   "Entire dish"
                 ]
               },
@@ -10127,6 +10158,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "showWhen": {
               "fieldId": "LEFTOVER_KIND",
               "equals": [
+                "Multi-ingredient",
                 "Entire dish"
               ]
             }
@@ -10135,7 +10167,7 @@ export const BUNDLED_FORM_CONFIGS = [
       ]
     },
     "validationErrors": [],
-    "cacheFingerprint": "92a2297d65adf792eb32b935195bcc36"
+    "cacheFingerprint": "d70ef9cbdf2f271f941111a75285ca6f"
   },
   {
     "formKey": "Config: Meal Production",
@@ -10234,8 +10266,8 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "Entire dish",
-              "LEFTOVER_PREP_TYPE": "Entire dish",
+              "LEFTOVER_KIND": "Multi-ingredient",
+              "LEFTOVER_PREP_TYPE": "Multi-ingredient",
               "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
               "DIETARY_APPLICABILITY": {
                 "op": "lookupSetIntersection",
@@ -10330,8 +10362,8 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "Part dish",
-              "LEFTOVER_PREP_TYPE": "Part dish",
+              "LEFTOVER_KIND": "Single-ingredient",
+              "LEFTOVER_PREP_TYPE": "Single-ingredient",
               "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
               "DIETARY_APPLICABILITY": "{{row.LEFTOVER_DIETARY_APPLICABILITY}}",
               "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
@@ -11167,7 +11199,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "fields": [],
                 "helperText": {
-                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
                 },
                 "rows": {
                   "includeWhen": {
@@ -11377,7 +11409,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Part dish"
+                              "equals": [
+                                "Single-ingredient",
+                                "Part dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -11390,7 +11425,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Part dish",
+                          "PREP_TYPE": "Single-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$source.LEFTOVER_INGREDIENT",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -11427,7 +11462,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -11444,7 +11482,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Entire dish",
+                          "PREP_TYPE": "Multi-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$source.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -11473,7 +11511,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -11490,7 +11531,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Entire dish",
+                          "PREP_TYPE": "Multi-ingredient",
                           "PREP_QTY": 0,
                           "RECIPE": "$source.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -11577,7 +11618,8 @@ export const BUNDLED_FORM_CONFIGS = [
                             "fieldId": "NEVER_SHOW",
                             "equals": "1"
                           }
-                        }
+                        },
+                        "defaultValue": "Single-ingredient"
                       },
                       {
                         "id": "LEFTOVER_PORTIONS_AVAILABLE",
@@ -11651,6 +11693,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "showWhen": {
                             "fieldId": "LEFTOVER_KIND",
                             "equals": [
+                              "Single-ingredient",
                               "Part dish"
                             ]
                           }
@@ -11696,7 +11739,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Entire dish"
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
                                 }
                               ]
                             },
@@ -11720,7 +11766,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Part dish"
+                                  "equals": [
+                                    "Single-ingredient",
+                                    "Part dish"
+                                  ]
                                 }
                               ]
                             },
@@ -11762,7 +11811,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         "visibility": {
                           "showWhen": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           }
                         },
                         "validationRules": [
@@ -11775,7 +11827,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Entire dish"
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
                                 }
                               ]
                             },
@@ -11867,7 +11922,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -11912,7 +11970,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             "all": [
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               },
                               {
                                 "not": {
@@ -11953,7 +12014,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -11992,7 +12056,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -12003,7 +12070,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -12030,7 +12100,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "actions": [
                             {
@@ -12141,7 +12214,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -12164,7 +12240,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -12358,7 +12437,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             {
                               "fieldId": "PREP_TYPE",
                               "equals": [
+                                "Multi-ingredient",
                                 "Entire dish",
+                                "Single-ingredient",
                                 "Part dish"
                               ]
                             }
@@ -14151,7 +14232,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "labelFr": "Type",
               "labelNl": "Type",
               "required": true,
-              "defaultValue": "Part dish",
+              "defaultValue": "Single-ingredient",
               "ui": {
                 "control": "select"
               },
@@ -14164,16 +14245,16 @@ export const BUNDLED_FORM_CONFIGS = [
                 }
               },
               "options": [
-                "Entire dish",
-                "Part dish"
+                "Multi-ingredient",
+                "Single-ingredient"
               ],
               "optionsFr": [
-                "Plat entier",
-                "Plat partiel"
+                "Multi-ingrédients",
+                "Mono-ingrédient"
               ],
               "optionsNl": [
-                "Volledig gerecht",
-                "Deel gerecht"
+                "Meerdere ingrediënten",
+                "Enkel ingrediënt"
               ]
             },
             {
@@ -14190,6 +14271,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "hideWhen": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Single-ingredient",
                     "Part dish"
                   ]
                 }
@@ -14199,6 +14281,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   "when": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish"
                     ]
                   },
@@ -14281,6 +14364,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "hideWhen": {
                   "fieldId": "LEFTOVER_KIND",
                   "equals": [
+                    "Single-ingredient",
                     "Part dish"
                   ]
                 }
@@ -14290,6 +14374,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   "when": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish"
                     ]
                   },
@@ -14943,7 +15028,7 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -15391,6 +15476,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "when": {
                       "fieldId": "PREP_TYPE",
                       "equals": [
+                        "Multi-ingredient",
                         "Entire dish"
                       ]
                     }
@@ -15929,18 +16015,18 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   "options": [
                     "Cook",
-                    "Entire dish",
-                    "Part dish"
+                    "Multi-ingredient",
+                    "Single-ingredient"
                   ],
                   "optionsFr": [
                     "Cuisiner",
-                    "Plat entier",
-                    "Plat partiel"
+                    "Multi-ingrédients",
+                    "Mono-ingrédient"
                   ],
                   "optionsNl": [
                     "Koken",
-                    "Volledig gerecht",
-                    "Deel gerecht"
+                    "Meerdere ingrediënten",
+                    "Enkel ingrediënt"
                   ]
                 },
                 {
@@ -17873,7 +17959,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 "labelFr": "Type",
                 "labelNl": "Type",
                 "required": true,
-                "defaultValue": "Part dish",
+                "defaultValue": "Single-ingredient",
                 "ui": {
                   "control": "select"
                 },
@@ -17886,16 +17972,16 @@ export const BUNDLED_FORM_CONFIGS = [
                   }
                 },
                 "options": [
-                  "Entire dish",
-                  "Part dish"
+                  "Multi-ingredient",
+                  "Single-ingredient"
                 ],
                 "optionsFr": [
-                  "Plat entier",
-                  "Plat partiel"
+                  "Multi-ingrédients",
+                  "Mono-ingrédient"
                 ],
                 "optionsNl": [
-                  "Volledig gerecht",
-                  "Deel gerecht"
+                  "Meerdere ingrediënten",
+                  "Enkel ingrediënt"
                 ]
               },
               {
@@ -17912,6 +17998,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   "hideWhen": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Single-ingredient",
                       "Part dish"
                     ]
                   }
@@ -17921,6 +18008,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "when": {
                       "fieldId": "LEFTOVER_KIND",
                       "equals": [
+                        "Multi-ingredient",
                         "Entire dish"
                       ]
                     },
@@ -18003,6 +18091,7 @@ export const BUNDLED_FORM_CONFIGS = [
                   "hideWhen": {
                     "fieldId": "LEFTOVER_KIND",
                     "equals": [
+                      "Single-ingredient",
                       "Part dish"
                     ]
                   }
@@ -18012,6 +18101,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "when": {
                       "fieldId": "LEFTOVER_KIND",
                       "equals": [
+                        "Multi-ingredient",
                         "Entire dish"
                       ]
                     },
@@ -18570,7 +18660,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Part dish"
+                              "equals": [
+                                "Single-ingredient",
+                                "Part dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -18583,7 +18676,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Part dish",
+                          "PREP_TYPE": "Single-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$row.LEFTOVER_INGREDIENT",
                           "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -18607,7 +18700,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -18624,7 +18720,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Entire dish",
+                          "PREP_TYPE": "Multi-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$row.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -18648,7 +18744,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -18665,7 +18764,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Part dish",
+                          "PREP_TYPE": "Single-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$row.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$row.LEFTOVER_RECORD_ID",
@@ -18778,7 +18877,7 @@ export const BUNDLED_FORM_CONFIGS = [
               "Options (EN)": "",
               "Options (FR)": "",
               "Options (NL)": "",
-              "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Entire dish\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+              "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -19193,6 +19292,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "when": {
                         "fieldId": "PREP_TYPE",
                         "equals": [
+                          "Multi-ingredient",
                           "Entire dish"
                         ]
                       }
@@ -19710,18 +19810,18 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "options": [
                       "Cook",
-                      "Entire dish",
-                      "Part dish"
+                      "Multi-ingredient",
+                      "Single-ingredient"
                     ],
                     "optionsFr": [
                       "Cuisiner",
-                      "Plat entier",
-                      "Plat partiel"
+                      "Multi-ingrédients",
+                      "Mono-ingrédient"
                     ],
                     "optionsNl": [
                       "Koken",
-                      "Volledig gerecht",
-                      "Deel gerecht"
+                      "Meerdere ingrediënten",
+                      "Enkel ingrediënt"
                     ]
                   },
                   {
@@ -21370,8 +21470,8 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "Entire dish",
-              "LEFTOVER_PREP_TYPE": "Entire dish",
+              "LEFTOVER_KIND": "Multi-ingredient",
+              "LEFTOVER_PREP_TYPE": "Multi-ingredient",
               "LEFTOVER_MEAL_TYPE": "{{parent.MEAL_TYPE}}",
               "DIETARY_APPLICABILITY": {
                 "op": "lookupSetIntersection",
@@ -21466,8 +21566,8 @@ export const BUNDLED_FORM_CONFIGS = [
             },
             "values": {
               "LEFTOVER_STATUS": "available",
-              "LEFTOVER_KIND": "Part dish",
-              "LEFTOVER_PREP_TYPE": "Part dish",
+              "LEFTOVER_KIND": "Single-ingredient",
+              "LEFTOVER_PREP_TYPE": "Single-ingredient",
               "LEFTOVER_INGREDIENT": "{{row.LEFTOVER_INGREDIENT}}",
               "DIETARY_APPLICABILITY": "{{row.LEFTOVER_DIETARY_APPLICABILITY}}",
               "LEFTOVER_CAT": "{{row.LEFTOVER_CAT}}",
@@ -21514,7 +21614,9 @@ export const BUNDLED_FORM_CONFIGS = [
                   {
                     "fieldId": "PREP_TYPE",
                     "equals": [
+                      "Multi-ingredient",
                       "Entire dish",
+                      "Single-ingredient",
                       "Part dish"
                     ]
                   }
@@ -22052,7 +22154,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "fields": [],
                 "helperText": {
-                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nLE = Entire dish to reheat by default otherwise change to combine.\nLP = Part dish to combine"
+                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
                 },
                 "rows": {
                   "includeWhen": {
@@ -22236,7 +22338,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Part dish"
+                              "equals": [
+                                "Single-ingredient",
+                                "Part dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -22249,7 +22354,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Part dish",
+                          "PREP_TYPE": "Single-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$source.LEFTOVER_INGREDIENT",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -22286,7 +22391,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -22303,7 +22411,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Entire dish",
+                          "PREP_TYPE": "Multi-ingredient",
                           "PREP_QTY": "$row.LEFTOVER_USE_QTY",
                           "RECIPE": "$source.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -22332,7 +22440,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             },
                             {
                               "fieldId": "LEFTOVER_KIND",
-                              "equals": "Entire dish"
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
                             },
                             {
                               "fieldId": "LEFTOVER_ID",
@@ -22349,7 +22460,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           ]
                         },
                         "preset": {
-                          "PREP_TYPE": "Entire dish",
+                          "PREP_TYPE": "Multi-ingredient",
                           "PREP_QTY": 0,
                           "RECIPE": "$source.LEFTOVER_RECIPE",
                           "LEFTOVER_RECORD_ID": "$source.id",
@@ -22436,7 +22547,8 @@ export const BUNDLED_FORM_CONFIGS = [
                             "fieldId": "NEVER_SHOW",
                             "equals": "1"
                           }
-                        }
+                        },
+                        "defaultValue": "Single-ingredient"
                       },
                       {
                         "id": "LEFTOVER_PORTIONS_AVAILABLE",
@@ -22510,6 +22622,7 @@ export const BUNDLED_FORM_CONFIGS = [
                           "showWhen": {
                             "fieldId": "LEFTOVER_KIND",
                             "equals": [
+                              "Single-ingredient",
                               "Part dish"
                             ]
                           }
@@ -22555,7 +22668,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Entire dish"
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
                                 }
                               ]
                             },
@@ -22579,7 +22695,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Part dish"
+                                  "equals": [
+                                    "Single-ingredient",
+                                    "Part dish"
+                                  ]
                                 }
                               ]
                             },
@@ -22621,7 +22740,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         "visibility": {
                           "showWhen": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           }
                         },
                         "validationRules": [
@@ -22634,7 +22756,10 @@ export const BUNDLED_FORM_CONFIGS = [
                                 },
                                 {
                                   "fieldId": "LEFTOVER_KIND",
-                                  "equals": "Entire dish"
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
                                 }
                               ]
                             },
@@ -22726,7 +22851,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -22771,7 +22899,10 @@ export const BUNDLED_FORM_CONFIGS = [
                             "all": [
                               {
                                 "fieldId": "LEFTOVER_KIND",
-                                "equals": "Entire dish"
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
                               },
                               {
                                 "not": {
@@ -22812,7 +22943,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -22851,7 +22985,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -22862,7 +22999,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -22889,7 +23029,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "actions": [
                             {
@@ -23000,7 +23143,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Part dish"
+                            "equals": [
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -23023,7 +23169,10 @@ export const BUNDLED_FORM_CONFIGS = [
                         {
                           "when": {
                             "fieldId": "LEFTOVER_KIND",
-                            "equals": "Entire dish"
+                            "equals": [
+                              "Multi-ingredient",
+                              "Entire dish"
+                            ]
                           },
                           "parts": [
                             {
@@ -23217,7 +23366,9 @@ export const BUNDLED_FORM_CONFIGS = [
                             {
                               "fieldId": "PREP_TYPE",
                               "equals": [
+                                "Multi-ingredient",
                                 "Entire dish",
+                                "Single-ingredient",
                                 "Part dish"
                               ]
                             }
@@ -24408,7 +24559,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "d543ad3553917fa4507699a7ccd86864"
+    "cacheFingerprint": "426ea0afab91087a65459468d712c3b6"
   },
   {
     "formKey": "Config: Recipes",
