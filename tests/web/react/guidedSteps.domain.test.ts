@@ -1,5 +1,7 @@
 import { computeGuidedStepsStatus } from '../../../src/web/react/features/steps/domain/computeStepStatus';
+import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../../../src/web/react/features/steps/domain/errorNavigation';
 import { resolveGuidedStepIdAfterExternalSync } from '../../../src/web/react/features/steps/domain/resolveGuidedStepAfterExternalSync';
+import { resolveGuidedStepIdOnStructureChange } from '../../../src/web/react/features/steps/domain/resolveGuidedStepOnStructureChange';
 import { resolveVirtualStepField } from '../../../src/web/react/features/steps/domain/resolveVirtualStepField';
 
 describe('guidedSteps domain', () => {
@@ -223,6 +225,61 @@ describe('guidedSteps domain', () => {
     expect(out.steps[0].missingRequiredCount).toBe(1); // only r2 is in scope
     expect(out.steps[0].complete).toBe(false);
     expect(out.steps[0].valid).toBe(false);
+  });
+
+  it('suppresses cross-step error navigation immediately after a manual back navigation', () => {
+    expect(
+      shouldSuppressGuidedErrorStepNavigationAfterBack({
+        guidedStepIds: ['orderInfo', 'deliveryForm', 'foodSafety', 'portioning'],
+        activeStepId: 'deliveryForm',
+        desiredStepId: 'foodSafety',
+        suppressedStepId: 'deliveryForm',
+        suppressUntil: 2_000,
+        now: 1_500
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSuppressGuidedErrorStepNavigationAfterBack({
+        guidedStepIds: ['orderInfo', 'deliveryForm', 'foodSafety', 'portioning'],
+        activeStepId: 'deliveryForm',
+        desiredStepId: 'orderInfo',
+        suppressedStepId: 'deliveryForm',
+        suppressUntil: 2_000,
+        now: 1_500
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressGuidedErrorStepNavigationAfterBack({
+        guidedStepIds: ['orderInfo', 'deliveryForm', 'foodSafety', 'portioning'],
+        activeStepId: 'deliveryForm',
+        desiredStepId: 'foodSafety',
+        suppressedStepId: 'deliveryForm',
+        suppressUntil: 1_000,
+        now: 1_500
+      })
+    ).toBe(false);
+  });
+
+  it('keeps the current step when it is still visible even if forward reachability moved backward', () => {
+    expect(
+      resolveGuidedStepIdOnStructureChange({
+        guidedStepIds: ['orderInfo', 'leftoverForm', 'production'],
+        activeGuidedStepId: 'production',
+        maxReachableIndex: 0
+      })
+    ).toBeNull();
+  });
+
+  it('repairs the active step when the current step is no longer visible', () => {
+    expect(
+      resolveGuidedStepIdOnStructureChange({
+        guidedStepIds: ['orderInfo', 'leftoverForm', 'production'],
+        activeGuidedStepId: 'foodSafety',
+        maxReachableIndex: 1
+      })
+    ).toBe('leftoverForm');
   });
 
   it('supports validationRows to validate a subset of rows while still allowing all rows to be displayed', () => {

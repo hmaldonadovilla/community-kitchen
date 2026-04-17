@@ -47,6 +47,8 @@ import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/dom
 import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
 import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
+import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../features/steps/domain/errorNavigation';
+import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
@@ -99,7 +101,7 @@ import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey }
 import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
-import { applyValueMapsToForm, applyValueMapsToLineRow, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
+import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
 import {
   findFirstOrderedEntryIssue,
@@ -840,6 +842,7 @@ const FormView: React.FC<FormViewProps> = ({
   const errorNavConsumedRef = useRef(0);
   const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
   const errorNavAllowOverlayOpenRef = useRef(true);
+  const guidedBackErrorNavSuppressionRef = useRef<{ stepId: string; suppressUntil: number } | null>(null);
   const orderedEntryGuideFieldPathRef = useRef<string | null>(null);
   const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
   const choiceVariantLogRef = useRef<Record<string, string>>({});
@@ -1470,17 +1473,19 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('form.rowFlow.output.segmentActions.enabled', payload);
   }, [onDiagnostic, rowFlowSegmentActionTargets]);
 
-  // Clamp/initialize the active step when step config or validity changes.
+  // Initialize/repair the active step when the visible step structure changes.
+  // Do not clamp a still-visible step back to the current forward gate; users must be able
+  // to navigate backward through earlier steps even when upstream required fields are now empty.
   useEffect(() => {
     if (!guidedEnabled) return;
-    if (!guidedStepIds.length) return;
-    const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
-    const maxReach = Math.min(guidedStepIds.length - 1, Math.max(0, maxReachableGuidedIndex));
-    if (currentIdx >= 0 && currentIdx <= maxReach) return;
-    const nextId = guidedStepIds[Math.max(0, Math.min(maxReach, guidedStepIds.length - 1))] || guidedStepIds[0];
+    const nextId = resolveGuidedStepIdOnStructureChange({
+      guidedStepIds,
+      activeGuidedStepId,
+      maxReachableIndex: maxReachableGuidedIndex
+    });
     if (!nextId) return;
     setActiveGuidedStepId(nextId);
-    onDiagnostic?.('steps.step.change', { from: currentIdx >= 0 ? guidedStepIds[currentIdx] : null, to: nextId, reason: 'load' });
+    onDiagnostic?.('steps.step.change', { from: activeGuidedStepId || null, to: nextId, reason: 'load' });
   }, [activeGuidedStepId, guidedEnabled, guidedStepIds, maxReachableGuidedIndex, onDiagnostic]);
 
   useEffect(() => {
@@ -1988,10 +1993,26 @@ const FormView: React.FC<FormViewProps> = ({
           onDiagnostic?.('steps.step.blocked', { from: activeGuidedStepId, to: nextId, gate: 'allowBack', reason: 'allowBack=false' });
           return;
         }
+        guidedAutoAdvanceAttemptRef.current = null;
+        if (guidedAutoAdvanceTimerRef.current) {
+          globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
+          guidedAutoAdvanceTimerRef.current = null;
+        }
+        guidedAutoAdvanceStateRef.current = null;
+        if (reason === 'user') {
+          guidedBackErrorNavSuppressionRef.current = {
+            stepId: nextId,
+            suppressUntil: Date.now() + 800
+          };
+        } else {
+          guidedBackErrorNavSuppressionRef.current = null;
+        }
         setActiveGuidedStepId(nextId);
         onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason });
         return;
       }
+
+      guidedBackErrorNavSuppressionRef.current = null;
 
       const effectiveMaxReachableIndex = guidedForwardNavigationBlocked
         ? Math.min(maxReachableGuidedIndex, currentIdx)
@@ -10321,6 +10342,25 @@ const FormView: React.FC<FormViewProps> = ({
     firstKey = guidedPick.key;
     const desiredStepId = guidedPick.stepId;
     if (desiredStepId && guidedEnabled && desiredStepId !== activeGuidedStepId) {
+      const suppressState = guidedBackErrorNavSuppressionRef.current;
+      const shouldSuppressGuidedStepRedirect = shouldSuppressGuidedErrorStepNavigationAfterBack({
+        guidedStepIds,
+        activeStepId: activeGuidedStepId,
+        desiredStepId,
+        suppressedStepId: suppressState?.stepId || null,
+        suppressUntil: suppressState?.suppressUntil || null
+      });
+      if (shouldSuppressGuidedStepRedirect) {
+        onDiagnostic?.('validation.navigate.step.suppressed', {
+          from: activeGuidedStepId,
+          to: desiredStepId,
+          key: firstKey,
+          reason: 'manualBack'
+        });
+        errorNavAllowOverlayOpenRef.current = true;
+        errorNavConsumedRef.current = errorNavRequestRef.current;
+        return;
+      }
       // Switch steps first, then re-run this navigation effect to scroll once the field is mounted.
       selectGuidedStep(desiredStepId, 'auto');
       onDiagnostic?.('validation.navigate.step', { from: activeGuidedStepId, to: desiredStepId, key: firstKey });
