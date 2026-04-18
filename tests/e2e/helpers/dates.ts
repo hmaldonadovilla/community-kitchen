@@ -17,6 +17,16 @@ export function uniqueFutureDate(seed = 0): string {
   return futureDate(30 + salt + seed);
 }
 
+export function uniqueFutureWeekdayDate(seed = 0): string {
+  const salt = Math.floor(Date.now() / 60_000) % 120;
+  const date = new Date();
+  date.setDate(date.getDate() + 30 + salt + seed);
+  while (date.getDay() === 0) {
+    date.setDate(date.getDate() + 1);
+  }
+  return toDateInputValue(date);
+}
+
 export function nextSunday(): string {
   const date = new Date();
   const day = date.getDay();

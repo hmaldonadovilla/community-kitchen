@@ -33,6 +33,14 @@ describe('quantityConstraints', () => {
         localCurrentRecordReservedQuantity: 5
       })
     ).toBe(0);
+    expect(
+      computeOptimisticFreeQuantity({
+        remainingQuantity: 500,
+        reservedQuantity: 400,
+        serverCurrentRecordReservedQuantity: 200,
+        localCurrentRecordReservedQuantity: 200
+      })
+    ).toBe(100);
   });
 
   it('falls back to committed current-record reservations when datasource rows have no explicit metadata', () => {

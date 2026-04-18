@@ -128,7 +128,9 @@ import {
 } from './selectionEffectInit';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 import {
+  filterSourceFirstAllocationRows,
   resolveSourceFirstAllocationLabelVisibility,
+  shouldRemoveSourceFirstAllocationOutputWhenExcluded,
   shouldShowSourceFirstAllocationLabel
 } from '../../app/sourceFirstAllocations';
 import {
@@ -1069,7 +1071,7 @@ export const LineItemGroupQuestion: React.FC<{
       }
     }
     if (!activeStepDataSourceRows.length) {
-      stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+      stepDataSourceBootstrapSignatureRef.current = '';
       return;
     }
     if (!recordChanged && stepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
@@ -1409,9 +1411,15 @@ export const LineItemGroupQuestion: React.FC<{
       if (isStepDataSourceLoading(config)) return [];
       const cached = peekCachedDataSource(config.dataSource, language);
       const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
-      return items.length ? items : [];
+      if (!items.length) return [];
+      return filterSourceFirstAllocationRows({
+        rows: items,
+        sourceRowsConfig: config?.sourceRows,
+        topValues: values,
+        lineItems
+      });
     },
-    [isStepDataSourceLoading, language, stepDataSourceRefreshTick]
+    [isStepDataSourceLoading, language, lineItems, stepDataSourceRefreshTick, values]
   );
 
   const resolveStepDataSourceRowsForParent = React.useCallback(
@@ -1424,7 +1432,13 @@ export const LineItemGroupQuestion: React.FC<{
         : [];
       const parentMatchFieldId = (config?.parentMatchFieldId || '').toString().trim();
       const parentMatchValue = parentMatchFieldId ? (parentRow.values as any)?.[parentMatchFieldId] : undefined;
-      return items.filter((item: any) => {
+      return filterSourceFirstAllocationRows({
+        rows: items,
+        sourceRowsConfig: config?.sourceRows,
+        parentValues: (parentRow.values || {}) as Record<string, FieldValue>,
+        topValues: values,
+        lineItems
+      }).filter((item: any) => {
         if ((!sourceMatchFieldId && !sourceMatchFieldIds.length) || !parentMatchFieldId) return true;
         return matchesDataSourceRowToParent({
           item,
@@ -1436,7 +1450,7 @@ export const LineItemGroupQuestion: React.FC<{
         });
         });
     },
-    [resolveStepDataSourceRows]
+    [lineItems, resolveStepDataSourceRows, values]
   );
 
   const sourceFirstPresentationEntries = React.useMemo(() => {
@@ -1446,6 +1460,14 @@ export const LineItemGroupQuestion: React.FC<{
       const visibleSourceRows = sourceRows
         .map((sourceRow: Record<string, any>) => {
           const eligibleParents = parentRows.filter(parentRow => {
+            const parentScopedRows = filterSourceFirstAllocationRows({
+              rows: [sourceRow],
+              sourceRowsConfig: config?.sourceRows,
+              parentValues: (parentRow.values || {}) as Record<string, FieldValue>,
+              topValues: values,
+              lineItems
+            });
+            if (!parentScopedRows.length) return false;
             const parentMatchFieldId = `${config?.parentMatchFieldId || ''}`.trim();
             const sourceMatchFieldId = `${config?.sourceMatchFieldId || ''}`.trim();
             const sourceMatchFieldIds = Array.isArray(config?.sourceMatchFieldIds)
@@ -1483,7 +1505,7 @@ export const LineItemGroupQuestion: React.FC<{
         emptyStateMessage
       };
     });
-  }, [isStepDataSourceLoading, language, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows]);
+  }, [isStepDataSourceLoading, language, lineItems, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows, values]);
 
   const hideSupplementalHelper = React.useMemo(
     () =>
@@ -2632,6 +2654,99 @@ export const LineItemGroupQuestion: React.FC<{
     },
     [activeStepDataSourceRows, language, lineItems, q.id, syncStepDataSourceOutputRowWithReservation]
   );
+
+  React.useEffect(() => {
+    if (!activeStepDataSourceRows.length) return;
+    if (!currentGuidedStepId) return;
+
+    const parentRowsForGroup = Array.isArray(lineItems[q.id]) ? lineItems[q.id] : [];
+    if (!parentRowsForGroup.length) return;
+
+    const staleEntries: Array<{
+      config: any;
+      parentRow: LineItemRowState;
+      keyFieldId: string;
+      sourceKey: string;
+    }> = [];
+    const seen = new Set<string>();
+
+    activeStepDataSourceRows.forEach(config => {
+      if (!shouldRemoveSourceFirstAllocationOutputWhenExcluded(config)) return;
+      if (isStepDataSourceLoading(config)) return;
+      const cached = peekCachedDataSource(config?.dataSource, language);
+      if (!cached) return;
+      const keyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
+      const outputKeyFieldId = `${config?.outputKeyFieldId || keyFieldId}`.trim();
+      if (!keyFieldId || !outputKeyFieldId) return;
+
+      parentRowsForGroup.forEach(parentRow => {
+        const output = resolveDataSourceOutputGroup(config, parentRow.id);
+        if (!output) return;
+        const outputRows = Array.isArray(lineItems[output.key]) ? lineItems[output.key] : [];
+        if (!outputRows.length) return;
+
+        const eligibleSourceKeys = new Set(
+          resolveStepDataSourceRowsForParent(config, parentRow)
+            .map(sourceRow => `${sourceRow?.[keyFieldId] ?? ''}`.trim())
+            .filter(Boolean)
+        );
+
+        outputRows.forEach(outputRow => {
+          const sourceKey = `${(outputRow?.values as any)?.[outputKeyFieldId] ?? ''}`.trim();
+          if (!sourceKey || eligibleSourceKeys.has(sourceKey)) return;
+          const staleKey = [`${config?.id || ''}`.trim(), `${parentRow.id || ''}`.trim(), sourceKey].join('::');
+          if (seen.has(staleKey)) return;
+          seen.add(staleKey);
+          staleEntries.push({ config, parentRow, keyFieldId, sourceKey });
+        });
+      });
+    });
+
+    if (!staleEntries.length) return;
+
+    staleEntries.forEach(entry => {
+      const selectedFieldId = `${entry.config?.selectedFieldId || ''}`.trim();
+      const quantityFieldId = `${entry.config?.quantityFieldId || ''}`.trim();
+      const modeFieldId = `${entry.config?.modeFieldId || ''}`.trim();
+      const patch: Record<string, FieldValue> = {};
+      if (selectedFieldId) patch[selectedFieldId] = false;
+      if (quantityFieldId) patch[quantityFieldId] = null;
+      if (modeFieldId) patch[modeFieldId] = null;
+      if (!Object.keys(patch).length) return;
+
+      onDiagnostic?.('dataSourceRows.sourceFirst.outputRemovedWhenExcluded', {
+        groupId: q.id,
+        stepId: currentGuidedStepId,
+        configId: `${entry.config?.id || ''}`.trim() || null,
+        parentRowId: entry.parentRow.id,
+        sourceKey: entry.sourceKey
+      });
+
+      syncStepDataSourceOutputRow({
+        config: entry.config,
+        parentRow: entry.parentRow,
+        sourceRow: { [entry.keyFieldId]: entry.sourceKey },
+        patch
+      });
+    });
+
+    pendingStepReservationDraftSyncRef.current = {
+      stepId: currentGuidedStepId,
+      reason: `sourceRowExcluded:${staleEntries.map(entry => entry.sourceKey).join(',')}`
+    };
+    setPendingStepReservationDraftSyncTick(prev => prev + 1);
+  }, [
+    activeStepDataSourceRows,
+    currentGuidedStepId,
+    isStepDataSourceLoading,
+    language,
+    lineItems,
+    onDiagnostic,
+    q.id,
+    resolveDataSourceOutputGroup,
+    resolveStepDataSourceRowsForParent,
+    syncStepDataSourceOutputRow
+  ]);
 
   React.useEffect(() => {
     if (!activeStepDataSourceRows.length) return;

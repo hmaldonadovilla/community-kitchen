@@ -35,6 +35,14 @@ const formatLocalYmd = (d: Date): string => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
+const extractPureYmd = (raw: unknown): string => {
+  if (typeof raw !== 'string') return '';
+  const value = raw.trim();
+  if (!value) return '';
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})$/);
+  return match ? match[1] : '';
+};
+
 const parseDateLike = (raw: unknown): Date | null => {
   if (raw === undefined || raw === null) return null;
   if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
@@ -70,12 +78,56 @@ const parseDateLike = (raw: unknown): Date | null => {
   return isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const looksLikeDateInput = (raw: unknown): boolean => {
+  if (raw instanceof Date) return !Number.isNaN(raw.getTime());
+  if (typeof raw === 'number') return Number.isFinite(raw);
+  if (typeof raw !== 'string') return false;
+  const value = raw.trim();
+  if (!value) return false;
+  return (
+    /^\d{4}-\d{2}-\d{2}(?:[T\s].*)?$/.test(value) ||
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)
+  );
+};
+
 const toLocalYmd = (raw: unknown): string => {
+  const explicitYmd = extractPureYmd(raw);
+  if (explicitYmd) return explicitYmd;
   const d = parseDateLike(raw);
   return d ? formatLocalYmd(d) : '';
 };
 
-export function matchesWhen(value: unknown, when?: VisibilityCondition | any, options?: { now?: Date }): boolean {
+const toComparableNumber = (raw: unknown): number | null => {
+  if (raw === undefined || raw === null || raw === '' || typeof raw === 'boolean' || raw instanceof Date) return null;
+  const next = Number(raw);
+  return Number.isFinite(next) ? next : null;
+};
+
+const compareComparableValues = (left: unknown, right: unknown): number | null => {
+  if (looksLikeDateInput(left) && looksLikeDateInput(right)) {
+    const leftYmd = toLocalYmd(left);
+    const rightYmd = toLocalYmd(right);
+    if (leftYmd && rightYmd) {
+      if (leftYmd === rightYmd) return 0;
+      return leftYmd > rightYmd ? 1 : -1;
+    }
+  }
+
+  const leftNumber = toComparableNumber(left);
+  const rightNumber = toComparableNumber(right);
+  if (leftNumber !== null && rightNumber !== null) {
+    if (leftNumber === rightNumber) return 0;
+    return leftNumber > rightNumber ? 1 : -1;
+  }
+
+  return null;
+};
+
+export function matchesWhen(
+  value: unknown,
+  when?: VisibilityCondition | any,
+  options?: { now?: Date; getComparisonValue?: (fieldId: string) => unknown }
+): boolean {
   if (!when) return true;
   const values = Array.isArray(value) ? value : [value];
   // Normalize undefined/null and trim/standardize strings for tolerant comparisons
@@ -182,6 +234,34 @@ export function matchesWhen(value: unknown, when?: VisibilityCondition | any, op
   }
   if (when.lessThan !== undefined) {
     if (!numericVals.some(v => v < Number(when.lessThan))) return false;
+  }
+
+  const comparisonSpecs = [
+    { fieldId: (when as any).greaterThanFieldId, mode: 'gt' as const },
+    { fieldId: (when as any).greaterThanOrEqualFieldId, mode: 'gte' as const },
+    { fieldId: (when as any).lessThanFieldId, mode: 'lt' as const },
+    { fieldId: (when as any).lessThanOrEqualFieldId, mode: 'lte' as const }
+  ].filter((entry): entry is { fieldId: string; mode: 'gt' | 'gte' | 'lt' | 'lte' } => `${entry.fieldId || ''}`.trim().length > 0);
+
+  if (comparisonSpecs.length) {
+    const getComparisonValue = options?.getComparisonValue;
+    if (typeof getComparisonValue !== 'function') return false;
+
+    const comparisonMatches = comparisonSpecs.every(spec => {
+      const comparisonRaw = getComparisonValue(spec.fieldId);
+      const comparisonValues = Array.isArray(comparisonRaw) ? comparisonRaw : [comparisonRaw];
+      return candidates.some(candidate =>
+        comparisonValues.some(comparisonValue => {
+          const result = compareComparableValues(candidate, comparisonValue);
+          if (result === null) return false;
+          if (spec.mode === 'gt') return result > 0;
+          if (spec.mode === 'gte') return result >= 0;
+          if (spec.mode === 'lt') return result < 0;
+          return result <= 0;
+        })
+      );
+    });
+    if (!comparisonMatches) return false;
   }
 
   return true;
@@ -434,7 +514,10 @@ export const matchesWhenClause = (
   if (!fieldId) return true;
   const leaf: VisibilityCondition = { ...(when as any), fieldId };
   const value = resolveVisibilityValue(leaf, ctx, options?.rowId, options?.linePrefix);
-  return matchesWhen(value, leaf as any, { now: options?.now });
+  return matchesWhen(value, leaf as any, {
+    now: options?.now,
+    getComparisonValue: (comparisonFieldId: string) => resolveVisibilityValue({ fieldId: comparisonFieldId } as any, ctx, options?.rowId, options?.linePrefix)
+  });
 };
 
 const matchesLineItemsClause = (

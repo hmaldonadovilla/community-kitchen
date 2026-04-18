@@ -26,10 +26,7 @@ const setWhenChanged = (
 export const normalizeInventoryAvailabilitySnapshotForDisplay = (
   snapshot: InventoryAvailabilitySnapshot
 ): InventoryAvailabilitySnapshot => ({
-  ...snapshot,
-  // Step-managed rows already account for the current record through local line-item state.
-  // Reapplying the server-reported current reservation quantity here would double-count it.
-  currentRecordReservedQuantity: 0
+  ...snapshot
 });
 
 export const applyInventoryAvailabilitySnapshotToRow = (

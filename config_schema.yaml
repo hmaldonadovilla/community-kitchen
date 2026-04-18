@@ -6415,6 +6415,30 @@ components:
           oneOf:
             - type: number
             - type: string
+        greaterThanFieldId:
+          type: string
+          description: |
+            Cross-field comparison. Matches when this field is greater than the referenced field.
+
+            Supports numbers and date-like values (`YYYY-MM-DD`, local date-times, `DD/MM/YYYY`).
+        greaterThanOrEqualFieldId:
+          type: string
+          description: |
+            Cross-field comparison. Matches when this field is greater than or equal to the referenced field.
+
+            Supports numbers and date-like values (`YYYY-MM-DD`, local date-times, `DD/MM/YYYY`).
+        lessThanFieldId:
+          type: string
+          description: |
+            Cross-field comparison. Matches when this field is less than the referenced field.
+
+            Supports numbers and date-like values (`YYYY-MM-DD`, local date-times, `DD/MM/YYYY`).
+        lessThanOrEqualFieldId:
+          type: string
+          description: |
+            Cross-field comparison. Matches when this field is less than or equal to the referenced field.
+
+            Supports numbers and date-like values (`YYYY-MM-DD`, local date-times, `DD/MM/YYYY`).
         notEmpty:
           type: boolean
           description: If true, condition matches when the field has any value other than empty/blank/null. If false, condition matches when the field is empty.
@@ -6504,7 +6528,7 @@ components:
         Condition clause used by visibility, validation, rowDisclaimer, and guided-step row filters.
 
         Supports both:
-        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `notEmpty`, `isEmpty`
+        - Leaf conditions (single field): `fieldId` + comparator(s) like `equals`, `greaterThan`, `lessThan`, `greaterThanOrEqualFieldId`, `lessThanOrEqualFieldId`, `notEmpty`, `isEmpty`
         - Line-item conditions: `lineItems: { groupId, subGroupId?, subGroupPath?, when?, match?, parentWhen?, parentScope?, parentMatch? }`
         - Compound conditions:
           - `all`: AND (every entry must match)

@@ -1,6 +1,9 @@
 # E2E Automation
 
 This directory contains the Playwright-based frontend regression framework for staging verification.
+The Meal Production suite mirrors the workbook at:
+
+- `/Users/a57321/Library/CloudStorage/OneDrive-Personal/Que et Moi/community-kitchen/feedback/CK Meal Production - Updated Test scenari.xlsx`
 
 ## Runtime inputs
 
@@ -50,6 +53,8 @@ When `E2E_PROJECT=chromium-mobile`, local smoke runs stay on Chromium without ne
 
 ## Notes
 
-- The checked-in suite now separates fast staging smoke coverage from broader `@regression` coverage.
+- `tests/e2e/specs/meal-production.manual-scenarios.spec.ts` is the source of truth for Meal Production automation.
+- Scenario titles map to the workbook scenario numbers so manual and automated coverage stay aligned.
+- Implemented scenarios keep `@smoke` / `@regression` tags for targeted runs.
+- Remaining workbook scenarios are kept as explicit pending tests instead of separate ad hoc spec files.
 - `npm run test:e2e:nightly` is intended for non-blocking Chromium, Firefox, and WebKit runs against staging.
-- Business scenario expansion should follow the mapping in `docs/test-automation/automation-backlog.md`.

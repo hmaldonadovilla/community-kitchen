@@ -86,7 +86,7 @@ describe('inventory availability cache sync', () => {
         LEFTOVER_QTY: 500,
         LEFTOVER_RESERVED_QTY: 0,
         LEFTOVER_STATUS: 'available',
-        __ckCurrentRecordReservedQuantity: 0
+        __ckCurrentRecordReservedQuantity: 4
       })
     );
   });

@@ -173,7 +173,7 @@ describe('reservationSyncPolicy', () => {
     expect(getReservationCommitMode({})).toBe('immediate');
   });
 
-  test('does not double-count the current record when applying step-sync availability snapshots', () => {
+  test('preserves current-record reservations in step-sync availability snapshots', () => {
     expect(
       normalizeInventoryAvailabilitySnapshotForDisplay({
         resourceFormKey: 'Config: Leftover Inventory',
@@ -188,7 +188,7 @@ describe('reservationSyncPolicy', () => {
         resourceRecordId: 'leftover-1',
         resourceItemId: 'LE-43',
         reservedQuantity: 2,
-        currentRecordReservedQuantity: 0,
+        currentRecordReservedQuantity: 2,
         freeQuantity: 3
       })
     );

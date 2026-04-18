@@ -125,6 +125,16 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.message)).toBe(true);
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.confirmLabel)).toBe(true);
       expect(hasNonEmptyEnText(prepDate?.changeDialog?.cancelLabel)).toBe(true);
+      expect(prepDate?.clearOnChange).toEqual({
+        mode: 'full',
+        bypassFields: ['MP_DISTRIBUTOR']
+      });
+
+      const service = findQuestion(questions, 'MP_SERVICE');
+      expect(service?.clearOnChange).toEqual({
+        mode: 'ordered',
+        bypassFields: ['MP_PREP_DATE']
+      });
 
       const meals = findQuestion(questions, 'MP_MEALS_REQUEST');
       const recipe = (meals?.lineItemConfig?.subGroups || [])

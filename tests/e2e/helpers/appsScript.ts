@@ -1,8 +1,11 @@
 import type { Frame } from 'playwright/test';
 
-export async function runAppsScript<T>(frame: Frame, fnName: string, ...args: unknown[]): Promise<T> {
-  const timeoutMs = 45_000;
-
+export async function runAppsScriptWithTimeout<T>(
+  frame: Frame,
+  fnName: string,
+  timeoutMs: number,
+  ...args: unknown[]
+): Promise<T> {
   return frame.evaluate(
     ({ fnName: targetFnName, args: targetArgs, timeoutMs: targetTimeoutMs }) =>
       new Promise((resolve, reject) => {
@@ -35,4 +38,8 @@ export async function runAppsScript<T>(frame: Frame, fnName: string, ...args: un
       }),
     { fnName, args, timeoutMs }
   ) as Promise<T>;
+}
+
+export async function runAppsScript<T>(frame: Frame, fnName: string, ...args: unknown[]): Promise<T> {
+  return runAppsScriptWithTimeout<T>(frame, fnName, 45_000, ...args);
 }

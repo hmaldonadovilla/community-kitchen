@@ -153,7 +153,10 @@ function main() {
   process.chdir(repoRoot);
 
   const { baseRef, changedLines } = getChangedLineMap();
-  const changedLintableFiles = Array.from(changedLines.keys()).filter(isLintableFile).sort();
+  const changedLintableFiles = Array.from(changedLines.keys())
+    .filter(isLintableFile)
+    .filter((filePath) => fs.existsSync(filePath))
+    .sort();
   if (changedLintableFiles.length === 0) {
     console.log('No changed lintable files found.');
     return;

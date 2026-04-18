@@ -1,0 +1,415 @@
+import { expect, test } from 'playwright/test';
+
+import { mealProductionFixtures } from '../fixtures/mealProduction';
+import { expectAnyVisible } from '../helpers/assertions';
+import { futureDate, nextSunday, today } from '../helpers/dates';
+import {
+  checkAllVisibleBoxes,
+  chooseDuplicateChangeOption,
+  cleanupMealProductionRecordInFrameBestEffort,
+  clickHome,
+  clickNext,
+  cleanupMealProductionRecordBestEffort,
+  confirmDialog,
+  createMealProductionDraftRecord,
+  expectDialogCopy,
+  expectMealTypesHidden,
+  expectMealTypesVisible,
+  expectTotalOrdered,
+  findDedupConflictRecordId,
+  fillFirstOrderedPortions,
+  fillOrderedPortions,
+  openNewOrderFromPreset,
+  openExistingRecordIfDuplicatePresent,
+  openRecipeEditor,
+  prepareHubLunchOrderForDate,
+  selectCook,
+  selectFirstAvailableRecipes,
+  selectRecipes,
+  selectService,
+  setProductionDate,
+  uploadVisibleFiles,
+  waitForSaved,
+  waitForLoadingToSettle
+} from '../helpers/mealProduction';
+import { openMealProductionHome } from '../helpers/navigation';
+
+function pendingScenario(id: string, title: string): void {
+  test.skip(`Scenario ${id} - ${title}`, async () => {});
+}
+
+test.describe('Meal Production manual script scenarios', () => {
+  test('@smoke Scenario 01 - home page exposes meal production entry points and navigation', async ({ page }) => {
+    const frame = await openMealProductionHome(page);
+
+    await expect(frame.getByText('Belliard')).toBeVisible();
+    await expect(frame.getByText('Hub')).toBeVisible();
+    await expect(frame.getByText('Le Phare')).toBeVisible();
+    await expect(frame.getByText('Meal Production Procedure')).toBeVisible();
+    await expect(frame.getByText('Hygiene rules')).toBeVisible();
+    await expect(frame.getByText(/\d+\s+portions delivered/i)).toBeVisible();
+    await expect(frame.locator('input[type="date"]')).toBeVisible();
+    await expect(frame.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
+    await expect(frame.getByRole('button', { name: 'Next 7 days' })).toBeVisible();
+    const iconCount = await frame.locator('button[title="Edit"], button[title="View"], button[title="Copy"]').count();
+    if (iconCount > 0) {
+      await expectAnyVisible(frame, ['button[title="Edit"]', 'button[title="View"]', 'button[title="Copy"]']);
+    }
+  });
+
+  test('@regression Scenario 02 - changing service preserves production date and rebuilds the dinner meal set', async ({
+    page
+  }) => {
+    test.setTimeout(300_000);
+    const serviceChangeDate = today();
+    const pastDate = (() => {
+      const date = new Date(`${serviceChangeDate}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - 1);
+      return date.toISOString().slice(0, 10);
+    })();
+    const futureProductionDate = futureDate(4);
+    const lunchKey = {
+      customerValue: mealProductionFixtures.customerValues.belliard,
+      service: mealProductionFixtures.services.lunch,
+      date: serviceChangeDate
+    };
+    const dinnerKey = {
+      customerValue: mealProductionFixtures.customerValues.belliard,
+      service: mealProductionFixtures.services.dinner,
+      date: serviceChangeDate
+    };
+    const futureDinnerKey = {
+      customerValue: mealProductionFixtures.customerValues.belliard,
+      service: mealProductionFixtures.services.dinner,
+      date: futureProductionDate
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, lunchKey);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, dinnerKey);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, futureDinnerKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.belliard);
+
+    try {
+      const dateInput = frame.locator('input[aria-label="Date"]').first();
+      await expect(frame.getByText('Date is required.')).toBeVisible();
+      await dateInput.click();
+      await dateInput.fill(pastDate);
+      await dateInput.dispatchEvent('change');
+      await expect(frame.getByText('Dates in the past are not allowed. Please select today or a future date.')).toBeVisible();
+      await setProductionDate(frame, futureProductionDate);
+      await expect(dateInput).toHaveValue(futureProductionDate);
+      await setProductionDate(frame, serviceChangeDate);
+
+      const cookSelect = frame.locator('select').nth(1);
+      await cookSelect.selectOption({ index: 1 });
+      await expect(cookSelect).toHaveValue('');
+
+      await selectService(frame, mealProductionFixtures.services.lunch);
+      await expectMealTypesVisible(frame, [
+        mealProductionFixtures.mealTypes.diabetic,
+        mealProductionFixtures.mealTypes.noSalt,
+        mealProductionFixtures.mealTypes.vegan,
+        mealProductionFixtures.mealTypes.vegetarian
+      ]);
+      await expectMealTypesHidden(frame, [mealProductionFixtures.mealTypes.standard]);
+      const ordered = frame.locator('input[aria-label="Ordered"]');
+      await expect(cookSelect).toHaveValue('');
+      await ordered.first().fill('12');
+      await ordered.first().dispatchEvent('change');
+      await expect(ordered.first()).toHaveValue('');
+      await expect(frame.getByText('Responsible cook is required.')).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
+
+      await selectCook(frame, mealProductionFixtures.cooks.aline);
+      await fillFirstOrderedPortions(frame, '-2');
+      await expect(frame.getByText('Ordered portions must be 0 or more')).toBeVisible();
+      await fillFirstOrderedPortions(frame, '2.5');
+      await expect(frame.getByText('Enter a whole number')).toBeVisible();
+      await fillOrderedPortions(frame, [15, 0, 3]);
+      await expectTotalOrdered(frame, 18);
+      await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
+      await ordered.nth(3).fill('57');
+      await ordered.nth(3).dispatchEvent('change');
+      await expectTotalOrdered(frame, 75);
+      await fillFirstOrderedPortions(frame, '16');
+      await expectTotalOrdered(frame, 76);
+      await fillFirstOrderedPortions(frame, '15');
+      await expectTotalOrdered(frame, 75);
+
+      await selectService(frame, mealProductionFixtures.services.dinner);
+      await expectDialogCopy(frame, 'Changing the service will permanently delete any data or photos entered after the service.');
+      await expect(frame.getByRole('button', { name: 'Cancel — Keep current service' })).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Continue — Delete subsequent data' })).toBeVisible();
+      await confirmDialog(frame, 'Continue — Delete subsequent data');
+
+      await expect(frame.getByLabel('Date')).toHaveValue(serviceChangeDate);
+      await expect(frame.locator('button[title="Dinner"]')).toHaveAttribute('aria-checked', 'true');
+      await expectMealTypesVisible(frame, [
+        mealProductionFixtures.mealTypes.diabetic,
+        mealProductionFixtures.mealTypes.noSalt,
+        mealProductionFixtures.mealTypes.standard,
+        mealProductionFixtures.mealTypes.vegan,
+        mealProductionFixtures.mealTypes.vegetarian
+      ]);
+
+      await selectCook(frame, mealProductionFixtures.cooks.aline);
+      await fillOrderedPortions(frame, [15, 1, 57, 3, 3]);
+      await expectTotalOrdered(frame, 79);
+      await waitForSaved(frame);
+      await clickNext(frame);
+      await expect
+        .poll(
+          async () => {
+            const bodyText = await frame.locator('body').innerText();
+            return bodyText.includes('There is currently no leftover.');
+          },
+          {
+            timeout: 60_000,
+            message: 'Expected Leftover bank to show the no-leftover message after changing service to dinner.'
+          }
+        )
+        .toBe(true);
+      await expect(frame.getByRole('button', { name: 'Leftover bank' })).toBeVisible();
+
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+      const productionBody = await frame.locator('body').innerText();
+      expect(productionBody).toMatch(/Diabetic\s*\|\s*To cook:\s*15/);
+      expect(productionBody).toMatch(/No-salt\s*\|\s*To cook:\s*1/);
+      expect(productionBody).toMatch(/Standard\s*\|\s*To cook:\s*57/);
+      expect(productionBody).toMatch(/Vegan\s*\|\s*To cook:\s*3/);
+      expect(productionBody).toMatch(/Vegetarian\s*\|\s*To cook:\s*3/);
+
+      await selectFirstAvailableRecipes(frame);
+      await waitForSaved(frame);
+      await frame.getByRole('button', { name: 'Order' }).click();
+      await waitForLoadingToSettle(frame);
+
+      await setProductionDate(frame, futureProductionDate);
+      await expectDialogCopy(frame, 'Changing the production date will permanently delete service as well as any data or photos entered after service.');
+      await expect(frame.getByRole('button', { name: 'Cancel and keep current production date' })).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Continue and delete subsequent data.' })).toBeVisible();
+      await confirmDialog(frame, 'Continue and delete subsequent data.');
+      await expect(dateInput).toHaveValue(futureProductionDate);
+      await expect(frame.locator('button[title="Lunch"]')).not.toHaveAttribute('aria-checked', 'true');
+      await expect(frame.locator('button[title="Dinner"]')).not.toHaveAttribute('aria-checked', 'true');
+      await expect(cookSelect.locator('option:checked')).toHaveText(/Select…/);
+
+      await setProductionDate(frame, serviceChangeDate);
+      await clickHome(frame);
+      await expectDialogCopy(frame, 'A meal production record can only exist when customer, production date, and service are all filled in.');
+      await expect(frame.getByText('Leaving this page now will permanently delete this record and all data and photos already entered.')).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Cancel — Continue editing' })).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Continue — Delete the record' })).toBeVisible();
+      await confirmDialog(frame, 'Continue — Delete the record');
+      await waitForLoadingToSettle(frame);
+      await expect(frame.getByText('Belliard')).toBeVisible();
+      expect(await findDedupConflictRecordId(frame, lunchKey)).toBeNull();
+      expect(await findDedupConflictRecordId(frame, dinnerKey)).toBeNull();
+      expect(await findDedupConflictRecordId(frame, futureDinnerKey)).toBeNull();
+    } finally {
+      await cleanupMealProductionRecordBestEffort(page, futureDinnerKey);
+      await cleanupMealProductionRecordBestEffort(page, lunchKey);
+      await cleanupMealProductionRecordInFrameBestEffort(frame, dinnerKey);
+    }
+  });
+
+  test('@regression Scenario 03 - Belliard lunch can progress from production through create report', async ({ page }) => {
+    const lunchKey = {
+      customerValue: mealProductionFixtures.customerValues.belliard,
+      service: mealProductionFixtures.services.lunch,
+      date: today()
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, lunchKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.belliard);
+
+    try {
+      await setProductionDate(frame, today());
+      await selectService(frame, mealProductionFixtures.services.lunch);
+      if (await openExistingRecordIfDuplicatePresent(frame)) {
+        await frame.getByRole('button', { name: 'Order' }).click();
+        await waitForLoadingToSettle(frame);
+      }
+      await selectCook(frame, mealProductionFixtures.cooks.akkara);
+      await fillOrderedPortions(frame, [15, 0, 3, 57]);
+      await expectTotalOrdered(frame, 75);
+
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+      await expect(frame.getByText('There is currently no leftover.')).toBeVisible({ timeout: 15_000 });
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+
+      await selectRecipes(frame, ['One pot creamy pasta', 'One pot creamy pasta', 'One pot creamy pasta']);
+
+      await openRecipeEditor(frame, 0);
+      await expect(frame.getByRole('button', { name: /Back to Production/i })).toBeVisible();
+      await frame.getByRole('button', { name: /Back to Production/i }).click();
+
+      await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
+      await uploadVisibleFiles(frame, ['ingredient-receipt-1.svg']);
+      await expect(frame.getByRole('button', { name: /Open Photos 1\/10|1\/10/ })).toBeVisible({ timeout: 15_000 });
+      await waitForSaved(frame);
+      await expect(frame.getByRole('alert').filter({ hasText: 'Failed to create draft record.' })).toBeHidden({
+        timeout: 15_000
+      });
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+
+      await expect(frame.getByText('Confirm that all pots reached at least 63°C')).toBeVisible({ timeout: 15_000 });
+      await checkAllVisibleBoxes(frame, 'All pots ≥63°C: Confirm');
+      await uploadVisibleFiles(frame, ['pot-photo-1.svg', 'pot-photo-2.svg', 'pot-photo-1.svg']);
+      await waitForSaved(frame);
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+
+      const delivered = frame.getByLabel('Delivered Portions');
+      await expect(delivered.first()).toHaveValue('15');
+      await expect(frame.getByRole('button', { name: 'Create report' })).toBeVisible();
+      await frame.getByRole('button', { name: 'Create report' }).click();
+      await expect(frame.getByText('Confirm that today')).toBeVisible({ timeout: 10_000 });
+      await confirmDialog(frame, 'Yes, create final report');
+      await waitForLoadingToSettle(frame);
+      await expect(frame.getByText('Leftovers')).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await cleanupMealProductionRecordInFrameBestEffort(frame, lunchKey);
+    }
+  });
+  pendingScenario('04', 'leftovers confirmations, label dialog and return to home');
+  pendingScenario('05', 'Hub lunch leftover bank assignment and to-cook adjustments');
+  pendingScenario('06', 'customer change destructive reset and applicability filtering');
+
+  test('@regression Scenario 07 - duplicate Le Phare records offer change or open existing record', async ({ page }) => {
+    const homeFrame = await openMealProductionHome(page);
+    const duplicateKey = {
+      customerValue: mealProductionFixtures.customerValues.lePhare,
+      service: mealProductionFixtures.services.lunch,
+      date: futureDate(45)
+    };
+    await cleanupMealProductionRecordInFrameBestEffort(homeFrame, duplicateKey);
+    const seededRecord = await createMealProductionDraftRecord(homeFrame, duplicateKey);
+
+    try {
+      const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.lePhare);
+      await setProductionDate(frame, duplicateKey.date);
+      await selectService(frame, duplicateKey.service);
+
+      await expectDialogCopy(frame, 'Creating duplicate record for the same customer, service and date is not allowed.');
+      await expect(frame.getByRole('button', { name: 'Change customer, service or date' })).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Open existing record' })).toBeVisible();
+
+      await chooseDuplicateChangeOption(frame);
+      await expect(frame.getByText('Customer is required.')).toBeVisible();
+      await expect(frame.getByLabel('Date')).toHaveValue('');
+      await expect(frame.locator(`button[title="${duplicateKey.service}"]`)).not.toHaveAttribute('aria-checked', 'true');
+    } finally {
+      await cleanupMealProductionRecordBestEffort(page, seededRecord.key);
+    }
+  });
+
+  test('@regression Scenario 08 - future-dated Hub planning hides expired leftovers and execution-only capture', async ({
+    page
+  }) => {
+    const productionDate = futureDate(4);
+    const orderKey = {
+      customerValue: mealProductionFixtures.customerValues.hub,
+      service: mealProductionFixtures.services.lunch,
+      date: productionDate
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, orderKey);
+
+    const frame = await prepareHubLunchOrderForDate(page, productionDate);
+
+    try {
+      await selectCook(frame, mealProductionFixtures.cooks.akkara);
+      await fillFirstOrderedPortions(frame, '450');
+      await clickNext(frame);
+      await expect(frame.getByText('There is currently no leftover.')).toBeVisible({ timeout: 15_000 });
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+      await selectRecipes(frame, ['Adassi']);
+      await waitForSaved(frame);
+      const notice = frame.getByText('Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+      await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
+    } finally {
+      await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);
+    }
+  });
+
+  pendingScenario('09', 'ready for production lock and summary unlock flow');
+
+  test('@smoke Scenario 10 - Belliard Sunday lunch includes Standard', async ({ page }) => {
+    const productionDate = nextSunday();
+    const orderKey = {
+      customerValue: mealProductionFixtures.customerValues.belliard,
+      service: mealProductionFixtures.services.lunch,
+      date: productionDate
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, orderKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.belliard);
+
+    try {
+      await setProductionDate(frame, productionDate);
+      await selectService(frame, mealProductionFixtures.services.lunch);
+
+      await expectMealTypesVisible(frame, [
+        mealProductionFixtures.mealTypes.diabetic,
+        mealProductionFixtures.mealTypes.noSalt,
+        mealProductionFixtures.mealTypes.standard,
+        mealProductionFixtures.mealTypes.vegan,
+        mealProductionFixtures.mealTypes.vegetarian
+      ]);
+    } finally {
+      await cleanupMealProductionRecordBestEffort(page, orderKey);
+    }
+  });
+
+  test('@smoke Scenario 11 - Le Phare meal types stay limited to Vegetarian', async ({ page }) => {
+    const orderKey = {
+      customerValue: mealProductionFixtures.customerValues.lePhare,
+      service: mealProductionFixtures.services.lunch,
+      date: today()
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, orderKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.lePhare);
+
+    try {
+      await setProductionDate(frame, today());
+      await selectService(frame, mealProductionFixtures.services.lunch);
+
+      await expectMealTypesVisible(frame, [mealProductionFixtures.mealTypes.vegetarian]);
+      await expectMealTypesHidden(frame, [
+        mealProductionFixtures.mealTypes.diabetic,
+        mealProductionFixtures.mealTypes.noSalt,
+        mealProductionFixtures.mealTypes.standard,
+        mealProductionFixtures.mealTypes.vegan
+      ]);
+    } finally {
+      await cleanupMealProductionRecordBestEffort(page, orderKey);
+    }
+  });
+
+  pendingScenario('12', 'production helper and leftover summary details');
+  pendingScenario('13', 'reheat leftovers reduce to-cook quantities and summary ingredients');
+  pendingScenario('14', 'changing recipe refreshes ingredients and clears photo evidence');
+  pendingScenario('15', 'production blocks next without all recipes and ingredient receipt photos');
+  pendingScenario('16', 'food safety confirmation and per-pot photo requirements');
+  pendingScenario('17', 'portioning defaults to ordered portions and disallows under-delivery');
+  pendingScenario('18', 'summary renders record, leftovers and ingredients details');
+  pendingScenario('19', 'final report renders expected production and leftovers content');
+  pendingScenario('20', 'future-dated records block execution data capture after production');
+  pendingScenario('21', 'changing production date after portioning prompts destructive reset');
+  pendingScenario('22', 'customer, production date and service changes delete subsequent data');
+  pendingScenario('23', 'edited Belliard leftovers are available to future records');
+  pendingScenario('24', 'Hub dinner leftovers are available to tomorrow Hub lunch');
+  pendingScenario('25', 'completed Hub record can be copied into a future production plan');
+});

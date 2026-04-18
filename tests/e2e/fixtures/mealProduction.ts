@@ -19,7 +19,8 @@ export const mealProductionFixtures = {
     dinner: 'Dinner'
   },
   cooks: {
-    akkara: 1
+    akkara: 1,
+    aline: 7
   },
   mealTypes: {
     diabetic: 'Diabetic',

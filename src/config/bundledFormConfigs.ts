@@ -12305,6 +12305,13 @@ export const BUNDLED_FORM_CONFIGS = [
                         "LEFTOVER_USE_QTY": "18%",
                         "LEFTOVER_USAGE_MODE": "18%"
                       }
+                    },
+                    "sourceRows": {
+                      "includeWhen": {
+                        "fieldId": "LEFTOVER_EXP_DATE",
+                        "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                      },
+                      "removeOutputWhenExcluded": true
                     }
                   }
                 ]
@@ -12316,7 +12323,8 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restantenbank"
             },
             "navigation": {
-              "autoAdvance": "off"
+              "autoAdvance": "off",
+              "backgroundReservationSyncOnAdvance": false
             },
             "render": {
               "subGroups": {
@@ -13725,7 +13733,10 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "ordered",
+          "bypassFields": [
+            "MP_PREP_DATE"
+          ]
         },
         "listViewSort": {
           "direction": "asc",
@@ -13816,7 +13827,10 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "ordered",
+          "bypassFields": [
+            "MP_PREP_DATE"
+          ]
         },
         "listViewSort": {
           "direction": "asc",
@@ -13987,7 +14001,10 @@ export const BUNDLED_FORM_CONFIGS = [
           "dedupMode": "never"
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "full",
+          "bypassFields": [
+            "MP_DISTRIBUTOR"
+          ]
         },
         "selectionEffects": [
           {
@@ -17452,7 +17469,10 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           "clearOnChange": {
-            "mode": "ordered"
+            "mode": "ordered",
+            "bypassFields": [
+              "MP_PREP_DATE"
+            ]
           },
           "listViewSort": {
             "direction": "asc",
@@ -17543,7 +17563,10 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           "clearOnChange": {
-            "mode": "ordered"
+            "mode": "ordered",
+            "bypassFields": [
+              "MP_PREP_DATE"
+            ]
           },
           "listViewSort": {
             "direction": "asc",
@@ -17714,7 +17737,10 @@ export const BUNDLED_FORM_CONFIGS = [
             "dedupMode": "never"
           },
           "clearOnChange": {
-            "mode": "ordered"
+            "mode": "full",
+            "bypassFields": [
+              "MP_DISTRIBUTOR"
+            ]
           },
           "selectionEffects": [
             {
@@ -23234,6 +23260,13 @@ export const BUNDLED_FORM_CONFIGS = [
                         "LEFTOVER_USE_QTY": "18%",
                         "LEFTOVER_USAGE_MODE": "18%"
                       }
+                    },
+                    "sourceRows": {
+                      "includeWhen": {
+                        "fieldId": "LEFTOVER_EXP_DATE",
+                        "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                      },
+                      "removeOutputWhenExcluded": true
                     }
                   }
                 ]
@@ -23245,7 +23278,8 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restantenbank"
             },
             "navigation": {
-              "autoAdvance": "off"
+              "autoAdvance": "off",
+              "backgroundReservationSyncOnAdvance": false
             },
             "render": {
               "subGroups": {
@@ -24559,7 +24593,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "426ea0afab91087a65459468d712c3b6"
+    "cacheFingerprint": "56b06d81356d89ffc7747bb8147a6097"
   },
   {
     "formKey": "Config: Recipes",

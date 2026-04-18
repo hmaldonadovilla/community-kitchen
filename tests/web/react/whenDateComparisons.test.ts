@@ -48,8 +48,46 @@ describe('when clause date comparisons', () => {
     expect(matchesWhenClause({ fieldId: 'D', isInFuture: true } as any, ctx({ D: '21/12/2025' }))).toBe(true);
   });
 
+  it('supports cross-field date comparisons', () => {
+    expect(
+      matchesWhenClause(
+        { fieldId: 'LEFTOVER_EXP_DATE', greaterThanOrEqualFieldId: 'MP_PREP_DATE' } as any,
+        ctx({ LEFTOVER_EXP_DATE: '2026-04-16', MP_PREP_DATE: '2026-04-16' })
+      )
+    ).toBe(true);
+    expect(
+      matchesWhenClause(
+        { fieldId: 'LEFTOVER_EXP_DATE', greaterThanOrEqualFieldId: 'MP_PREP_DATE' } as any,
+        ctx({ LEFTOVER_EXP_DATE: '2026-04-15', MP_PREP_DATE: '2026-04-16' })
+      )
+    ).toBe(false);
+  });
+
+  it('supports cross-field numeric comparisons', () => {
+    expect(
+      matchesWhenClause(
+        { fieldId: 'LEFTOVER_QTY', lessThanOrEqualFieldId: 'LEFTOVER_QTY_MAX' } as any,
+        ctx({ LEFTOVER_QTY: 500, LEFTOVER_QTY_MAX: 500 })
+      )
+    ).toBe(true);
+    expect(
+      matchesWhenClause(
+        { fieldId: 'LEFTOVER_QTY', lessThanFieldId: 'LEFTOVER_QTY_MAX' } as any,
+        ctx({ LEFTOVER_QTY: 501, LEFTOVER_QTY_MAX: 500 })
+      )
+    ).toBe(false);
+  });
+
   it('keeps date operators when normalizing when clauses from sheet JSON', () => {
-    const normalized = (ConfigSheet as any).normalizeWhenClause({ fieldId: 'MP_PREP_DATE', isInFuture: true });
-    expect(normalized).toEqual({ fieldId: 'MP_PREP_DATE', isInFuture: true });
+    const normalized = (ConfigSheet as any).normalizeWhenClause({
+      fieldId: 'MP_PREP_DATE',
+      isInFuture: true,
+      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE'
+    });
+    expect(normalized).toEqual({
+      fieldId: 'MP_PREP_DATE',
+      isInFuture: true,
+      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE'
+    });
   });
 });

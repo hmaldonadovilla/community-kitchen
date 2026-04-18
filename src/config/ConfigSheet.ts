@@ -2127,6 +2127,16 @@ export class ConfigSheet {
     if ((raw as any).notEquals !== undefined) condition.notEquals = (raw as any).notEquals;
     if ((raw as any).greaterThan !== undefined) condition.greaterThan = (raw as any).greaterThan;
     if ((raw as any).lessThan !== undefined) condition.lessThan = (raw as any).lessThan;
+    if ((raw as any).greaterThanFieldId !== undefined)
+      condition.greaterThanFieldId = (raw as any).greaterThanFieldId?.toString?.() || (raw as any).greaterThanFieldId;
+    if ((raw as any).greaterThanOrEqualFieldId !== undefined)
+      condition.greaterThanOrEqualFieldId =
+        (raw as any).greaterThanOrEqualFieldId?.toString?.() || (raw as any).greaterThanOrEqualFieldId;
+    if ((raw as any).lessThanFieldId !== undefined)
+      condition.lessThanFieldId = (raw as any).lessThanFieldId?.toString?.() || (raw as any).lessThanFieldId;
+    if ((raw as any).lessThanOrEqualFieldId !== undefined)
+      condition.lessThanOrEqualFieldId =
+        (raw as any).lessThanOrEqualFieldId?.toString?.() || (raw as any).lessThanOrEqualFieldId;
     if ((raw as any).notEmpty !== undefined) condition.notEmpty = Boolean((raw as any).notEmpty);
     if ((raw as any).isEmpty !== undefined) condition.isEmpty = Boolean((raw as any).isEmpty);
     if ((raw as any).isToday !== undefined) condition.isToday = Boolean((raw as any).isToday);

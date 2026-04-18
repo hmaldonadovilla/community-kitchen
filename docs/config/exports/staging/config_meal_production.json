@@ -2134,6 +2134,13 @@
                       "LEFTOVER_USE_QTY": "18%",
                       "LEFTOVER_USAGE_MODE": "18%"
                     }
+                  },
+                  "sourceRows": {
+                    "includeWhen": {
+                      "fieldId": "LEFTOVER_EXP_DATE",
+                      "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                    },
+                    "removeOutputWhenExcluded": true
                   }
                 }
               ]
@@ -2145,7 +2152,8 @@
             "nl": "Restantenbank"
           },
           "navigation": {
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "backgroundReservationSyncOnAdvance": false
           },
           "render": {
             "subGroups": {
@@ -3554,7 +3562,10 @@
         }
       },
       "clearOnChange": {
-        "mode": "ordered"
+        "mode": "ordered",
+        "bypassFields": [
+          "MP_PREP_DATE"
+        ]
       },
       "listViewSort": {
         "direction": "asc",
@@ -3645,7 +3656,10 @@
         }
       },
       "clearOnChange": {
-        "mode": "ordered"
+        "mode": "ordered",
+        "bypassFields": [
+          "MP_PREP_DATE"
+        ]
       },
       "listViewSort": {
         "direction": "asc",
@@ -3816,7 +3830,10 @@
         "dedupMode": "never"
       },
       "clearOnChange": {
-        "mode": "ordered"
+        "mode": "full",
+        "bypassFields": [
+          "MP_DISTRIBUTOR"
+        ]
       },
       "selectionEffects": [
         {
@@ -7281,7 +7298,10 @@
           }
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "ordered",
+          "bypassFields": [
+            "MP_PREP_DATE"
+          ]
         },
         "listViewSort": {
           "direction": "asc",
@@ -7372,7 +7392,10 @@
           }
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "ordered",
+          "bypassFields": [
+            "MP_PREP_DATE"
+          ]
         },
         "listViewSort": {
           "direction": "asc",
@@ -7543,7 +7566,10 @@
           "dedupMode": "never"
         },
         "clearOnChange": {
-          "mode": "ordered"
+          "mode": "full",
+          "bypassFields": [
+            "MP_DISTRIBUTOR"
+          ]
         },
         "selectionEffects": [
           {
@@ -13063,6 +13089,13 @@
                       "LEFTOVER_USE_QTY": "18%",
                       "LEFTOVER_USAGE_MODE": "18%"
                     }
+                  },
+                  "sourceRows": {
+                    "includeWhen": {
+                      "fieldId": "LEFTOVER_EXP_DATE",
+                      "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                    },
+                    "removeOutputWhenExcluded": true
                   }
                 }
               ]
@@ -13074,7 +13107,8 @@
             "nl": "Restantenbank"
           },
           "navigation": {
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "backgroundReservationSyncOnAdvance": false
           },
           "render": {
             "subGroups": {

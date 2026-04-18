@@ -87,9 +87,13 @@ describe('meal production leftover selection config', () => {
     const exported = getExport();
     const formOrderStep = exported.form?.steps?.items?.find((step: any) => step.id === 'orderInfo');
     const definitionOrderStep = definition.steps?.items?.find((step: any) => step.id === 'orderInfo');
+    const formLeftoverStep = exported.form?.steps?.items?.find((step: any) => step.id === 'leftoverForm');
+    const definitionLeftoverStep = definition.steps?.items?.find((step: any) => step.id === 'leftoverForm');
 
     expect(formOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
     expect(definitionOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
+    expect(formLeftoverStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
+    expect(definitionLeftoverStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
   });
 
   it('defines direct MP_TYPE_LI output rules for part dish, reheat, and combine', () => {
@@ -156,6 +160,13 @@ describe('meal production leftover selection config', () => {
     expect(config?.ui?.allocationLabelVisibility).toBe('always');
     expect(config?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
     expect(config?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
+    expect(config?.sourceRows).toEqual({
+      includeWhen: {
+        fieldId: 'LEFTOVER_EXP_DATE',
+        greaterThanOrEqualFieldId: 'MP_PREP_DATE'
+      },
+      removeOutputWhenExcluded: true
+    });
     expect(config?.exclusiveSelection).toBeUndefined();
 
     expect(config?.outputRules).toEqual(

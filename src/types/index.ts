@@ -1658,6 +1658,10 @@ export interface VisibilityCondition {
   notEquals?: string | string[];
   greaterThan?: number | string;
   lessThan?: number | string;
+  greaterThanFieldId?: string;
+  greaterThanOrEqualFieldId?: string;
+  lessThanFieldId?: string;
+  lessThanOrEqualFieldId?: string;
   /**
    * Match based on emptiness rather than a specific value.
    * - true: matches when the field has any non-empty value (not null/undefined/blank)
