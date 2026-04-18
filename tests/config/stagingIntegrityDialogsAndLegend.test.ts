@@ -98,6 +98,9 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(hasNonEmptyEnText(customer?.changeDialog?.message)).toBe(true);
       expect(hasNonEmptyEnText(customer?.changeDialog?.confirmLabel)).toBe(true);
       expect(hasNonEmptyEnText(customer?.changeDialog?.cancelLabel)).toBe(true);
+      expect(customer?.clearOnChange).toEqual({
+        mode: 'ordered'
+      });
 
       const prepDate = findQuestion(questions, 'MP_PREP_DATE');
       expect(prepDate?.ui?.minDate).toBeUndefined();
@@ -408,7 +411,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
-        'Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.'
+        'Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery and Final report can be created.'
       );
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.confirmLabel?.en).toBe(
         'Yes, create final report'

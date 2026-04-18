@@ -12467,10 +12467,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fieldRef": "MP_TO_COOK",
                         "label": {
                           "en": "To cook"
-                        },
-                        "showWhen": {
-                          "fieldId": "MP_TO_COOK",
-                          "greaterThan": 0
                         }
                       },
                       {
@@ -13040,7 +13036,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Gelieve te bevestigen"
                   },
                   "message": {
-                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.",
+                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery and Final report can be created.",
                     "fr": "Confirmez que le {MP_SERVICE} pour {MP_DISTRIBUTOR} du {MP_PREP_DATE} a ete produit par {MP_COOK_NAME} conformement a la procedure de production des repas et aux regles d'hygiene.\n\nToutes les portions commandees sont pretes pour la livraison.",
                     "nl": "Bevestig dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} op {MP_PREP_DATE} is bereid door {MP_COOK_NAME} volgens de procedure voor maaltijdproductie en de hygieneregels.\n\nAlle bestelde porties zijn klaar voor levering."
                   },
@@ -13733,10 +13729,7 @@ export const BUNDLED_FORM_CONFIGS = [
           }
         },
         "clearOnChange": {
-          "mode": "ordered",
-          "bypassFields": [
-            "MP_PREP_DATE"
-          ]
+          "mode": "ordered"
         },
         "listViewSort": {
           "direction": "asc",
@@ -17469,10 +17462,7 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           },
           "clearOnChange": {
-            "mode": "ordered",
-            "bypassFields": [
-              "MP_PREP_DATE"
-            ]
+            "mode": "ordered"
           },
           "listViewSort": {
             "direction": "asc",
@@ -23422,10 +23412,6 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fieldRef": "MP_TO_COOK",
                         "label": {
                           "en": "To cook"
-                        },
-                        "showWhen": {
-                          "fieldId": "MP_TO_COOK",
-                          "greaterThan": 0
                         }
                       },
                       {
@@ -23995,7 +23981,7 @@ export const BUNDLED_FORM_CONFIGS = [
                     "nl": "Gelieve te bevestigen"
                   },
                   "message": {
-                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery.",
+                    "en": "Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery and Final report can be created.",
                     "fr": "Confirmez que le {MP_SERVICE} pour {MP_DISTRIBUTOR} du {MP_PREP_DATE} a ete produit par {MP_COOK_NAME} conformement a la procedure de production des repas et aux regles d'hygiene.\n\nToutes les portions commandees sont pretes pour la livraison.",
                     "nl": "Bevestig dat de {MP_SERVICE} voor {MP_DISTRIBUTOR} op {MP_PREP_DATE} is bereid door {MP_COOK_NAME} volgens de procedure voor maaltijdproductie en de hygieneregels.\n\nAlle bestelde porties zijn klaar voor levering."
                   },
@@ -24593,7 +24579,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "56b06d81356d89ffc7747bb8147a6097"
+    "cacheFingerprint": "8c3a66ad8b265f59c12341682d8fea6c"
   },
   {
     "formKey": "Config: Recipes",

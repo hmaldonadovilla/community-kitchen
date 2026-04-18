@@ -312,4 +312,48 @@ describe('applyClearOnChange', () => {
     expect(result.values.MP_COOK_NAME).toBeUndefined();
     expect((result.lineItems.MP_MEALS_REQUEST || []).length).toBe(0);
   });
+
+  it('clears production date and service when an ordered customer change removes downstream meal data', () => {
+    const definition: any = {
+      title: 'Meal Production',
+      destinationTab: 'Meal Production',
+      languages: ['EN'],
+      questions: [
+        { id: 'MP_DISTRIBUTOR', type: 'CHOICE', clearOnChange: { mode: 'ordered' } },
+        { id: 'MP_SERVICE', type: 'CHOICE' },
+        { id: 'MP_COOK_NAME', type: 'CHOICE' },
+        { id: 'MP_PREP_DATE', type: 'DATE' },
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            minRows: 0,
+            fields: [{ id: 'ORD_QTY', type: 'NUMBER' }]
+          }
+        }
+      ]
+    };
+
+    const result = applyClearOnChange({
+      definition,
+      values: {
+        MP_DISTRIBUTOR: 'Belliard',
+        MP_SERVICE: 'Lunch',
+        MP_COOK_NAME: 'Aline',
+        MP_PREP_DATE: '2026-04-18'
+      } as any,
+      lineItems: {
+        MP_MEALS_REQUEST: [{ id: 'row-1', values: { ORD_QTY: 10 } }]
+      } as any,
+      fieldId: 'MP_DISTRIBUTOR',
+      nextValue: 'HUB',
+      orderedFieldIds: ['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_COOK_NAME', 'MP_PREP_DATE', 'MP_MEALS_REQUEST']
+    });
+
+    expect(result.values.MP_DISTRIBUTOR).toBe('HUB');
+    expect(result.values.MP_SERVICE).toBeUndefined();
+    expect(result.values.MP_PREP_DATE).toBeUndefined();
+    expect(result.values.MP_COOK_NAME).toBeUndefined();
+    expect((result.lineItems.MP_MEALS_REQUEST || []).length).toBe(0);
+  });
 });

@@ -351,23 +351,26 @@ describe('meal production leftover selection config', () => {
     expect(definitionTarget?.rowFlow?.output).toEqual(
       expect.objectContaining({
         separator: ' | ',
-        hideEmpty: true,
-        segments: [
-          expect.objectContaining({ fieldRef: 'MEAL_TYPE' }),
-          expect.objectContaining({
-            fieldRef: 'MP_TO_COOK',
-            label: expect.objectContaining({ en: 'To cook' })
-          }),
-          expect.objectContaining({
-            fieldRef: 'leftoverRows.LEFTOVER_SUMMARY',
-            layout: 'block',
-            format: expect.objectContaining({
-              type: 'list',
-              listDelimiter: '\n',
-              unique: false
-            })
-          })
-        ]
+        hideEmpty: true
+      })
+    );
+    expect(definitionTarget?.rowFlow?.output?.segments?.[0]).toEqual(expect.objectContaining({ fieldRef: 'MEAL_TYPE' }));
+    expect(definitionTarget?.rowFlow?.output?.segments?.[1]).toEqual(
+      expect.objectContaining({
+        fieldRef: 'MP_TO_COOK',
+        label: expect.objectContaining({ en: 'To cook' })
+      })
+    );
+    expect(definitionTarget?.rowFlow?.output?.segments?.[1]?.showWhen).toBeUndefined();
+    expect(definitionTarget?.rowFlow?.output?.segments?.[2]).toEqual(
+      expect.objectContaining({
+        fieldRef: 'leftoverRows.LEFTOVER_SUMMARY',
+        layout: 'block',
+        format: expect.objectContaining({
+          type: 'list',
+          listDelimiter: '\n',
+          unique: false
+        })
       })
     );
     expect(formTarget?.rowFlow?.output).toEqual(definitionTarget?.rowFlow?.output);
