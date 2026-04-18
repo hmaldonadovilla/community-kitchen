@@ -96,7 +96,7 @@ import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
-import { shouldDiscardRecordLoadResult } from './app/recordLoadGuard';
+import { shouldApplyPrefetchedRecordPreview, shouldDiscardRecordLoadResult } from './app/recordLoadGuard';
 import {
   resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessConfig,
@@ -541,7 +541,8 @@ const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
 // analytics, data source warmup, and first-record snapshot hydration.
 const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
-const HOME_RECORD_PREFETCH_DELAY_MS = 2400;
+const HOME_RECORD_PREFETCH_PRIME_DELAY_MS = 250;
+const HOME_RECORD_PREFETCH_REST_DELAY_MS = 2400;
 const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
 
@@ -4322,7 +4323,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       restTimerHandle = globalThis.setTimeout(() => {
         restTimerHandle = null;
         void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
-      }, HOME_RECORD_PREFETCH_DELAY_MS);
+      }, HOME_RECORD_PREFETCH_REST_DELAY_MS);
     };
 
     primeTimerHandle = globalThis.setTimeout(() => {
@@ -4330,7 +4331,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       void runPrefetch('prime', primeRowHints, 'ck.list.records.prefetch.rpc').finally(() => {
         scheduleRestPrefetch();
       });
-    }, HOME_RECORD_PREFETCH_DELAY_MS);
+    }, HOME_RECORD_PREFETCH_PRIME_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -13004,8 +13005,73 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return true;
       };
 
+      const queueSelectedRecordPreviewPrefetch = () => {
+        if (shouldUseCombinedSummaryFetch) return;
+        if (!hintedRow || hintedRow < 2) return;
+        if (listCache.records[row.id]) return;
+        const existing = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
+        if (existing) return;
+        const sessionAtStart = recordSessionRef.current;
+        const startedAt = Date.now();
+        logEvent('record.open.previewPrefetch.start', {
+          recordId: row.id,
+          rowNumberHint: hintedRow
+        });
+        const requestPromise = fetchRecordsByRowNumbers(formKey, [hintedRow]);
+        listRecordSnapshotPrefetchByRowRef.current.set(hintedRow, requestPromise);
+        void requestPromise
+          .then(prefetchedRecords => {
+            const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
+            if (receivedIds.length) {
+              setListCache(prev => ({
+                response: prev.response,
+                records: { ...(prev.records || {}), ...prefetchedRecords }
+              }));
+            }
+            const prefetchedRecord = prefetchedRecords?.[row.id];
+            if (
+              prefetchedRecord &&
+              shouldApplyPrefetchedRecordPreview({
+                recordId: row.id,
+                selectedRecordId: selectedRecordIdRef.current || '',
+                hasSelectedSnapshot: Boolean(selectedRecordSnapshotRef.current),
+                sessionAtStart,
+                currentSession: recordSessionRef.current
+              })
+            ) {
+              applyRecordSnapshot(prefetchedRecord);
+              logEvent('record.open.previewPrefetch.apply', {
+                recordId: row.id,
+                rowNumberHint: hintedRow,
+                durationMs: Date.now() - startedAt
+              });
+            }
+            logEvent('record.open.previewPrefetch.ok', {
+              recordId: row.id,
+              rowNumberHint: hintedRow,
+              received: receivedIds.length,
+              durationMs: Date.now() - startedAt
+            });
+          })
+          .catch((err: any) => {
+            logEvent('record.open.previewPrefetch.error', {
+              recordId: row.id,
+              rowNumberHint: hintedRow,
+              durationMs: Date.now() - startedAt,
+              message: err?.message || err?.toString?.() || 'failed'
+            });
+          })
+          .finally(() => {
+            const inFlight = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
+            if (inFlight === requestPromise) {
+              listRecordSnapshotPrefetchByRowRef.current.delete(hintedRow);
+            }
+          });
+      };
+
       void (async () => {
         const startedAt = Date.now();
+        queueSelectedRecordPreviewPrefetch();
         if (shouldUseCombinedSummaryFetch) {
           const startedAt = Date.now();
           logEvent('summary.fetchCombined.start', { recordId: row.id, rowNumberHint: hintedRow || null });

@@ -312,6 +312,14 @@ export const FORM_VIEW_STYLES = `
           background: var(--card);
           box-shadow: none;
         }
+        .form-card .ck-line-item-table th.ck-line-item-table__column--checkbox,
+        .form-card .ck-line-item-table td.ck-line-item-table__column--checkbox,
+        .webform-overlay .ck-line-item-table th.ck-line-item-table__column--checkbox,
+        .webform-overlay .ck-line-item-table td.ck-line-item-table__column--checkbox,
+        .ck-form-sections .ck-line-item-table th.ck-line-item-table__column--checkbox,
+        .ck-form-sections .ck-line-item-table td.ck-line-item-table__column--checkbox {
+          text-align: center;
+        }
         .form-card .ck-line-item-table__actions,
         .webform-overlay .ck-line-item-table__actions,
         .ck-form-sections .ck-line-item-table__actions {
@@ -380,6 +388,26 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-table__control .ck-line-item-table__consent-checkbox,
         .ck-form-sections .ck-line-item-table__control .ck-line-item-table__consent-checkbox,
         .webform-overlay .ck-line-item-table__control .ck-line-item-table__consent-checkbox {
+          width: 32px;
+          height: 32px;
+          margin: 0;
+          flex: 0 0 auto;
+          accent-color: var(--accent);
+          transform: scale(1.35);
+          transform-origin: center;
+        }
+        .form-card .ck-row-flow__consent-toggle,
+        .ck-form-sections .ck-row-flow__consent-toggle,
+        .webform-overlay .ck-row-flow__consent-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 32px;
+          min-height: 32px;
+        }
+        .form-card .ck-row-flow__consent-checkbox,
+        .ck-form-sections .ck-row-flow__consent-checkbox,
+        .webform-overlay .ck-row-flow__consent-checkbox {
           width: 32px;
           height: 32px;
           margin: 0;

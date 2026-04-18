@@ -5700,6 +5700,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           const tableColumns: LineItemTableColumn[] = [
             ...tableFields.map(field => ({
               id: field.id,
+              className: field.type === 'CHECKBOX' ? 'ck-line-item-table__column--checkbox' : undefined,
               label: (() => {
                 const labelText = resolveFieldLabel(field, language, field.id);
                 const hideHeaderLabel = Boolean((field as any)?.hideLabel || (field as any)?.ui?.hideLabel);
@@ -5720,7 +5721,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   </div>
                 );
               })(),
-              style: resolveTableColumnStyle(field.id),
+              style:
+                field.type === 'CHECKBOX'
+                  ? { ...(resolveTableColumnStyle(field.id) || {}), textAlign: 'center' as const }
+                  : resolveTableColumnStyle(field.id),
               renderCell: (row: any, rowIdx: number) => renderTableField(field, row, rowIdx)
             })),
             ...(hideRemoveColumn ? [] : [{ ...removeColumn, style: resolveTableColumnStyle(removeColumn.id) }])
@@ -7325,7 +7329,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
 
                 const outputSegments = rowFlowState.segments.filter(segment => {
                   const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
-                  if (segmentType === 'text') return true;
+                  if (segmentType === 'text' || segmentType === 'spacer') return true;
                   const target = segment.target?.fieldId ? segment.target : segment.fallbackTarget;
                   const field = target?.fieldId ? resolveRowFlowFieldConfig(target.groupKey, target.fieldId) : null;
                   if (!target?.fieldId || !field) return false;
@@ -7677,6 +7681,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           >
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
                               <label
+                                className="ck-row-flow__consent-toggle"
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -7688,6 +7693,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               >
                                 <input
                                   type="checkbox"
+                                  className="ck-row-flow__consent-checkbox"
                                   checked={checked}
                                   disabled={isLineFieldInputDisabled(field)}
                                   aria-label={resolveFieldLabel(field, language, field.id)}
@@ -7695,7 +7701,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                     if (isLineFieldInputDisabled(field)) return;
                                     handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, e.target.checked);
                                   }}
-                                  style={{ width: 20, height: 20, margin: 0 }}
+                                  style={{ margin: 0 }}
                                 />
                               </label>
                               {segmentActions}
@@ -7766,6 +7772,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const outputActionsEnd = rowOutputActions.filter(a => (a.position || 'start') === 'end');
                 const hasOutputActions = outputActionsStart.length > 0 || outputActionsEnd.length > 0;
                 const hasOutputSegments = outputSegments.length > 0;
+                const renderOutputSegmentList = (segments: RowFlowResolvedSegment[]) =>
+                  segments.map((segment, idx) => renderOutputSegment(segment, idx, idx < segments.length - 1));
                 const promptsToRender = rowFlowState.prompts.filter(
                   prompt =>
                     prompt.visible &&
@@ -7790,21 +7798,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         {outputActionsLayout === 'inline'
                           ? outputActionsStart.map(action => renderRowFlowActionControl(action.id))
                           : null}
-                        {outputSegments.map((segment, idx) => renderOutputSegment(segment, idx, idx < outputSegments.length - 1))}
+                        {renderOutputSegmentList(outputSegments)}
+                        {outputActionsLayout === 'inline'
+                          ? outputActionsEnd.map(action => renderRowFlowActionControl(action.id))
+                          : null}
                       </div>
-                      {outputActionsLayout === 'inline' && outputActionsEnd.length ? (
-                        <div
-                          className={useEdgeToEdgeRowChrome ? 'ck-row-flow-actions ck-row-flow-actions--edge' : 'ck-row-flow-actions'}
-                          style={{
-                            display: 'flex',
-                            gap: 8,
-                            flexShrink: 0,
-                            ...(useEdgeToEdgeRowChrome ? { alignSelf: 'stretch', alignItems: 'flex-end' } : {})
-                          }}
-                        >
-                          {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
-                        </div>
-                      ) : null}
                     </div>
                     {outputActionsLayout === 'below' && hasOutputActions ? (
                       <div style={{ marginTop: hasOutputSegments ? 8 : 0, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
