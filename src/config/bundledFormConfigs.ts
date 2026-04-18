@@ -13306,9 +13306,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": "❄️ ",
-                          "fr": "❄️ ",
-                          "nl": "❄️ "
+                          "en": "❄️",
+                          "fr": "❄️",
+                          "nl": "❄️"
                         }
                       },
                       {
@@ -24283,9 +24283,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": "❄️ ",
-                          "fr": "❄️ ",
-                          "nl": "❄️ "
+                          "en": "❄️",
+                          "fr": "❄️",
+                          "nl": "❄️"
                         }
                       },
                       {
@@ -24643,7 +24643,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "7507ffb81b3664e92283896678984962"
+    "cacheFingerprint": "00940811c498fe98ca3873a018644672"
   },
   {
     "formKey": "Config: Recipes",

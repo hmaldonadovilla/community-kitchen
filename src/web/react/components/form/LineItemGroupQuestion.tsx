@@ -7688,6 +7688,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   justifyContent: 'center',
                                   minWidth: 32,
                                   minHeight: 32,
+                                  marginInlineStart: 4,
                                   cursor: isLineFieldInputDisabled(field) ? 'default' : 'pointer'
                                 }}
                               >
