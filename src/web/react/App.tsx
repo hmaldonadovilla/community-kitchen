@@ -96,6 +96,7 @@ import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
+import { shouldDiscardRecordLoadResult } from './app/recordLoadGuard';
 import {
   resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessConfig,
@@ -5286,6 +5287,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordRowNumberRef.current = candidateRow;
       }
       const seq = ++recordFetchSeqRef.current;
+      const sessionAtStart = recordSessionRef.current;
       const startedAt = Date.now();
       if (!background) {
         setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
@@ -5298,7 +5300,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         // Prefer row-number fetch when available (avoids expensive ID scans and works even if legacy endpoints exist).
         if (candidateRow) {
           snapshot = await fetchRecordByRowNumber(formKey, candidateRow);
-          if (seq !== recordFetchSeqRef.current) return false;
+          if (
+            shouldDiscardRecordLoadResult({
+              requestSeq: seq,
+              currentSeq: recordFetchSeqRef.current,
+              sessionAtStart,
+              currentSession: recordSessionRef.current
+            })
+          ) {
+            return false;
+          }
           if (recordId && snapshot && snapshot.id && snapshot.id !== recordId) {
             // Row hint might be stale; fall back to ID to avoid loading the wrong record.
             logEvent('record.fetch.rowNumberMismatch', {
@@ -5313,7 +5324,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!snapshot && recordId) {
           snapshot = await fetchRecordById(formKey, recordId);
         }
-        if (seq !== recordFetchSeqRef.current) return false;
+        if (
+          shouldDiscardRecordLoadResult({
+            requestSeq: seq,
+            currentSeq: recordFetchSeqRef.current,
+            sessionAtStart,
+            currentSession: recordSessionRef.current
+          })
+        ) {
+          return false;
+        }
         if (!snapshot) throw new Error('Record not found.');
         const applyMode = applyRecordSnapshot(snapshot);
         markRecordFreshnessServerTouch({ reason: 'record.load', recordId: snapshot.id || recordId });
@@ -5325,7 +5345,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         return true;
       } catch (err: any) {
-        if (seq !== recordFetchSeqRef.current) return false;
+        if (
+          shouldDiscardRecordLoadResult({
+            requestSeq: seq,
+            currentSeq: recordFetchSeqRef.current,
+            sessionAtStart,
+            currentSession: recordSessionRef.current
+          })
+        ) {
+          return false;
+        }
         const uiMessage = resolveUiErrorMessage(err, 'Failed to load record.');
         const logMessage = resolveLogMessage(err, 'Failed to load record.');
         if (!background) {
@@ -8938,6 +8967,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async (trigger: string) => {
       if (viewRef.current === 'list') return;
       if (navigateHomeInFlightRef.current) return;
+      const clearActiveRecordContext = () => {
+        setSelectedRecordId('');
+        selectedRecordIdRef.current = '';
+        setSelectedRecordSnapshot(null);
+        selectedRecordSnapshotRef.current = null;
+        setLastSubmissionMeta(null);
+        lastSubmissionMetaRef.current = null;
+        setPrefetchedSummaryHtml(null);
+        setRecordLoadingId(null);
+        setRecordLoadError(null);
+        recordDataVersionRef.current = null;
+        optimisticClientDataVersionRef.current = null;
+        recordRowNumberRef.current = null;
+        recordStaleRef.current = null;
+        setRecordStale(null);
+        setRecordSyncNotice({ open: false, title: '', message: '' });
+      };
       const startedAt = Date.now();
       const startMark = `ck.nav.back.start.${startedAt}`;
       backToHomePerfRef.current = { trigger, startedAt, startMark };
@@ -8945,6 +8991,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const needsWait =
         uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current || autoSaveDirtyRef.current;
       if (!needsWait) {
+        bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
+        clearActiveRecordContext();
         setView('list');
         setStatus(null);
         setStatusLevel(null);
@@ -8971,6 +9019,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         await flushAutoSaveBeforeNavigate(trigger);
         logEvent('navigate.list.wait.done', { trigger, durationMs: Date.now() - startedAt });
+        bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
+        clearActiveRecordContext();
         setView('list');
         setStatus(null);
         setStatusLevel(null);
@@ -8979,7 +9029,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         navigateHomeInFlightRef.current = false;
       }
     },
-    [flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy, perfMark]
+    [bumpRecordSession, flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy, perfMark]
   );
 
   const handleGoHome = useCallback(() => {
@@ -12722,6 +12772,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setPrefetchedSummaryHtml(null);
     // Clear any previous snapshot immediately; we will re-apply a fresh snapshot below.
     setSelectedRecordSnapshot(null);
+    selectedRecordSnapshotRef.current = null;
+    setLastSubmissionMeta(null);
+    lastSubmissionMetaRef.current = null;
     const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
       const parsed = parseButtonRef(buttonRef || '');
       const baseId = parsed.id;
