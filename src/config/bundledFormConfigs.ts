@@ -13226,6 +13226,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       {
                         "fieldRef": "FINAL_QTY",
+                        "layout": "block",
                         "label": {
                           "en": "{{value}} portions delivered | ",
                           "fr": "{{value}} portions delivered | ",
@@ -24203,6 +24204,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       {
                         "fieldRef": "FINAL_QTY",
+                        "layout": "block",
                         "label": {
                           "en": "{{value}} portions delivered | ",
                           "fr": "{{value}} portions delivered | ",
@@ -24643,7 +24645,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "00940811c498fe98ca3873a018644672"
+    "cacheFingerprint": "9bd15b33cdbc30296645c28b70613903"
   },
   {
     "formKey": "Config: Recipes",

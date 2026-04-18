@@ -3055,6 +3055,7 @@
                     },
                     {
                       "fieldRef": "FINAL_QTY",
+                      "layout": "block",
                       "label": {
                         "en": "{{value}} portions delivered | ",
                         "fr": "{{value}} portions delivered | ",
@@ -14032,6 +14033,7 @@
                     },
                     {
                       "fieldRef": "FINAL_QTY",
+                      "layout": "block",
                       "label": {
                         "en": "{{value}} portions delivered | ",
                         "fr": "{{value}} portions delivered | ",
