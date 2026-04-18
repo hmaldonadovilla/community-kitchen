@@ -3296,6 +3296,26 @@ components:
                           - confirm
                           - cancel
                         description: Controls which button is styled as the primary action.
+            metaOnlyAdoptionRules:
+              type: array
+              description: |
+                Optional silent meta-only adoption rules scoped to guided steps.
+
+                Use this when a step can stay open while server-side follow-up actions update only record metadata
+                (for example a generated PDF URL) and those metadata-only changes should not interrupt the user
+                with a full record refresh.
+              items:
+                type: object
+                properties:
+                  stepId:
+                    type: string
+                    description: Guided step id where this rule becomes active.
+                  compareAgainst:
+                    type: string
+                    enum: [currentDraft, lastAppliedSnapshot]
+                    description: |
+                      Which local state the client should compare against before deciding that the
+                      newer server version only changed metadata.
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
           description: |
@@ -3670,6 +3690,14 @@ components:
         showBackButton:
           type: boolean
           description: Optional per-step toggle to hide/show the Back button (defaults to the global setting).
+        stepBarAccessWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: |
+            Optional direct step-bar access gate for this step.
+
+            When this condition does not match, the step remains visible but cannot be opened directly
+            from the guided step carousel. Sequential navigation (Back/Next/auto-advance/milestones)
+            is unaffected.
         backgroundReservationSyncOnAdvance:
           type: boolean
           description: |
@@ -7062,6 +7090,16 @@ components:
                         enum:
                           - confirm
                           - cancel
+            metaOnlyAdoptionRules:
+              type: array
+              items:
+                type: object
+                properties:
+                  stepId:
+                    type: string
+                  compareAgainst:
+                    type: string
+                    enum: [currentDraft, lastAppliedSnapshot]
           additionalProperties: true
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'

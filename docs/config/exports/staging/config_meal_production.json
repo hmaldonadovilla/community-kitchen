@@ -462,6 +462,12 @@
             "showCancel": false
           }
         }
+      ],
+      "metaOnlyAdoptionRules": [
+        {
+          "stepId": "leftovers",
+          "compareAgainst": "lastAppliedSnapshot"
+        }
       ]
     },
     "submissionAfterSubmit": {
@@ -2683,13 +2689,21 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "fieldId": "status",
-            "equals": [
-              "PDF ready",
-              "Emailed",
-              "Final report created",
-              "Final report emailed",
-              "Closed"
+            "any": [
+              {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
             ]
           },
           "contextHeader": {
@@ -2762,13 +2776,21 @@
         {
           "id": "portioning",
           "excludeWhen": {
-            "fieldId": "status",
-            "equals": [
-              "PDF ready",
-              "Emailed",
-              "Final report created",
-              "Final report emailed",
-              "Closed"
+            "any": [
+              {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
             ]
           },
           "contextHeader": {
@@ -3258,6 +3280,16 @@
             "nl": "Restanten"
           },
           "navigation": {
+            "stepBarAccessWhen": {
+              "fieldId": "status",
+              "equals": [
+                "PDF ready",
+                "Emailed",
+                "Final report created",
+                "Final report emailed",
+                "Closed"
+              ]
+            },
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [
@@ -11501,6 +11533,12 @@
             "showCancel": false
           }
         }
+      ],
+      "metaOnlyAdoptionRules": [
+        {
+          "stepId": "leftovers",
+          "compareAgainst": "lastAppliedSnapshot"
+        }
       ]
     },
     "submissionAfterSubmit": {
@@ -13628,13 +13666,21 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "fieldId": "status",
-            "equals": [
-              "PDF ready",
-              "Emailed",
-              "Final report created",
-              "Final report emailed",
-              "Closed"
+            "any": [
+              {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
             ]
           },
           "contextHeader": {
@@ -13707,13 +13753,21 @@
         {
           "id": "portioning",
           "excludeWhen": {
-            "fieldId": "status",
-            "equals": [
-              "PDF ready",
-              "Emailed",
-              "Final report created",
-              "Final report emailed",
-              "Closed"
+            "any": [
+              {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
             ]
           },
           "contextHeader": {
@@ -14203,6 +14257,16 @@
             "nl": "Restanten"
           },
           "navigation": {
+            "stepBarAccessWhen": {
+              "fieldId": "status",
+              "equals": [
+                "PDF ready",
+                "Emailed",
+                "Final report created",
+                "Final report emailed",
+                "Closed"
+              ]
+            },
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [

@@ -324,6 +324,23 @@ export interface DataSourceFreshnessWatchConfig {
   dialog?: DataSourceFreshnessDialogConfig;
 }
 
+export interface RecordFreshnessMetaOnlyAdoptionRuleConfig {
+  /**
+   * Guided step id where this silent meta-only adoption rule becomes active.
+   *
+   * When omitted, the rule can apply on any guided step.
+   */
+  stepId?: string;
+  /**
+   * Which local state the client should compare against before deciding that a newer
+   * server version only changed metadata.
+   *
+   * - currentDraft: compare against the live form draft (default)
+   * - lastAppliedSnapshot: compare against the last fully applied server snapshot
+   */
+  compareAgainst?: 'currentDraft' | 'lastAppliedSnapshot';
+}
+
 export interface UpdateRecordDependencySetRecordMutation {
   /**
    * Update top-level fields on each impacted target record.
@@ -3059,6 +3076,14 @@ export interface RecordFreshnessConfig {
    * If a refresh changes the cached datasource rows, the UI updates in place and can show a configurable dialog.
    */
   dataSourceWatches?: DataSourceFreshnessWatchConfig[];
+  /**
+   * Optional silent meta-only adoption rules scoped to guided steps.
+   *
+   * Use this when a step can stay open while server-side follow-up actions update record metadata
+   * (for example, a generated PDF URL) and those metadata-only changes should not interrupt the user
+   * with a full record refresh.
+   */
+  metaOnlyAdoptionRules?: RecordFreshnessMetaOnlyAdoptionRuleConfig[];
 }
 
 export interface DedupCheckDialogConfig {
@@ -3797,6 +3822,13 @@ export interface StepNavigationConfig {
    * Optional per-step toggle to hide/show the Back button (defaults to the global setting).
    */
   showBackButton?: boolean;
+  /**
+   * Optional direct step-bar access gate for this step.
+   *
+   * When this condition does not match, the step stays visible but cannot be opened directly from
+   * the guided step carousel. Sequential navigation (Back/Next/auto-advance/milestones) is unaffected.
+   */
+  stepBarAccessWhen?: WhenClause;
   /**
    * Optional per-step toggle for the normal guided-step advance background reservation sync.
    *

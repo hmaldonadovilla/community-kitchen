@@ -10633,6 +10633,12 @@ export const BUNDLED_FORM_CONFIGS = [
               "showCancel": false
             }
           }
+        ],
+        "metaOnlyAdoptionRules": [
+          {
+            "stepId": "leftovers",
+            "compareAgainst": "lastAppliedSnapshot"
+          }
         ]
       },
       "submissionAfterSubmit": {
@@ -12854,13 +12860,21 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "id": "foodSafety",
             "excludeWhen": {
-              "fieldId": "status",
-              "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
-                "Final report emailed",
-                "Closed"
+              "any": [
+                {
+                  "fieldId": "status",
+                  "equals": [
+                    "PDF ready",
+                    "Emailed",
+                    "Final report created",
+                    "Final report emailed",
+                    "Closed"
+                  ]
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
               ]
             },
             "contextHeader": {
@@ -12933,13 +12947,21 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "id": "portioning",
             "excludeWhen": {
-              "fieldId": "status",
-              "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
-                "Final report emailed",
-                "Closed"
+              "any": [
+                {
+                  "fieldId": "status",
+                  "equals": [
+                    "PDF ready",
+                    "Emailed",
+                    "Final report created",
+                    "Final report emailed",
+                    "Closed"
+                  ]
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
               ]
             },
             "contextHeader": {
@@ -13284,9 +13306,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": "❄️",
-                          "fr": "❄️",
-                          "nl": "❄️"
+                          "en": "❄️ ",
+                          "fr": "❄️ ",
+                          "nl": "❄️ "
                         }
                       },
                       {
@@ -13429,6 +13451,16 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restanten"
             },
             "navigation": {
+              "stepBarAccessWhen": {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
               "milestoneAction": {
                 "type": "followupBatch",
                 "preActions": [
@@ -21672,6 +21704,12 @@ export const BUNDLED_FORM_CONFIGS = [
               "showCancel": false
             }
           }
+        ],
+        "metaOnlyAdoptionRules": [
+          {
+            "stepId": "leftovers",
+            "compareAgainst": "lastAppliedSnapshot"
+          }
         ]
       },
       "submissionAfterSubmit": {
@@ -23799,13 +23837,21 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "id": "foodSafety",
             "excludeWhen": {
-              "fieldId": "status",
-              "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
-                "Final report emailed",
-                "Closed"
+              "any": [
+                {
+                  "fieldId": "status",
+                  "equals": [
+                    "PDF ready",
+                    "Emailed",
+                    "Final report created",
+                    "Final report emailed",
+                    "Closed"
+                  ]
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
               ]
             },
             "contextHeader": {
@@ -23878,13 +23924,21 @@ export const BUNDLED_FORM_CONFIGS = [
           {
             "id": "portioning",
             "excludeWhen": {
-              "fieldId": "status",
-              "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
-                "Final report emailed",
-                "Closed"
+              "any": [
+                {
+                  "fieldId": "status",
+                  "equals": [
+                    "PDF ready",
+                    "Emailed",
+                    "Final report created",
+                    "Final report emailed",
+                    "Closed"
+                  ]
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                }
               ]
             },
             "contextHeader": {
@@ -24229,9 +24283,9 @@ export const BUNDLED_FORM_CONFIGS = [
                           "greaterThan": 0
                         },
                         "text": {
-                          "en": "❄️",
-                          "fr": "❄️",
-                          "nl": "❄️"
+                          "en": "❄️ ",
+                          "fr": "❄️ ",
+                          "nl": "❄️ "
                         }
                       },
                       {
@@ -24374,6 +24428,16 @@ export const BUNDLED_FORM_CONFIGS = [
               "nl": "Restanten"
             },
             "navigation": {
+              "stepBarAccessWhen": {
+                "fieldId": "status",
+                "equals": [
+                  "PDF ready",
+                  "Emailed",
+                  "Final report created",
+                  "Final report emailed",
+                  "Closed"
+                ]
+              },
               "milestoneAction": {
                 "type": "followupBatch",
                 "preActions": [
@@ -24579,7 +24643,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "8c3a66ad8b265f59c12341682d8fea6c"
+    "cacheFingerprint": "7507ffb81b3664e92283896678984962"
   },
   {
     "formKey": "Config: Recipes",

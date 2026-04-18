@@ -2,6 +2,7 @@ import {
   DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS,
   RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS,
   resolveDeferredRecordFreshnessResumeAction,
+  resolveRecordFreshnessMetaOnlyAdoptionRule,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
@@ -12,19 +13,33 @@ describe('recordFreshness helpers', () => {
   test('defaults to an enabled 30-second quiet window', () => {
     expect(resolveRecordFreshnessConfig()).toEqual({
       enabled: true,
-      quietWindowMs: DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS
+      quietWindowMs: DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS,
+      metaOnlyAdoptionRules: []
     });
   });
 
   test('clamps configured quiet windows to supported bounds', () => {
     expect(resolveRecordFreshnessConfig({ quietWindowMs: 1000 })).toEqual({
       enabled: true,
-      quietWindowMs: 5000
+      quietWindowMs: 5000,
+      metaOnlyAdoptionRules: []
     });
     expect(resolveRecordFreshnessConfig({ quietWindowMs: 20 * 60_000 })).toEqual({
       enabled: true,
-      quietWindowMs: 10 * 60_000
+      quietWindowMs: 10 * 60_000,
+      metaOnlyAdoptionRules: []
     });
+  });
+
+  test('resolves step-scoped meta-only adoption rules', () => {
+    const config = resolveRecordFreshnessConfig({
+      metaOnlyAdoptionRules: [{ stepId: 'leftovers', compareAgainst: 'lastAppliedSnapshot' }]
+    });
+    expect(resolveRecordFreshnessMetaOnlyAdoptionRule({ config, stepId: 'leftovers' })).toEqual({
+      stepId: 'leftovers',
+      compareAgainst: 'lastAppliedSnapshot'
+    });
+    expect(resolveRecordFreshnessMetaOnlyAdoptionRule({ config, stepId: 'production' })).toBeNull();
   });
 
   test('returns the remaining delay before the next heartbeat', () => {

@@ -9,6 +9,10 @@ export const RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS = 5_000;
 export interface ResolvedRecordFreshnessConfig {
   enabled: boolean;
   quietWindowMs: number;
+  metaOnlyAdoptionRules: Array<{
+    stepId?: string;
+    compareAgainst: 'currentDraft' | 'lastAppliedSnapshot';
+  }>;
 }
 
 export const resolveRecordFreshnessConfig = (
@@ -18,10 +22,38 @@ export const resolveRecordFreshnessConfig = (
   const quietWindowMs = Number.isFinite(quietWindowRaw)
     ? Math.max(MIN_RECORD_FRESHNESS_QUIET_WINDOW_MS, Math.min(MAX_RECORD_FRESHNESS_QUIET_WINDOW_MS, Math.floor(quietWindowRaw)))
     : DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS;
+  const metaOnlyAdoptionRules = Array.isArray(value?.metaOnlyAdoptionRules)
+    ? value!.metaOnlyAdoptionRules
+        .map(rule => {
+          if (!rule || typeof rule !== 'object') return null;
+          const stepId = (rule.stepId || '').toString().trim() || undefined;
+          const compareAgainst = rule.compareAgainst === 'lastAppliedSnapshot' ? 'lastAppliedSnapshot' : 'currentDraft';
+          return {
+            stepId,
+            compareAgainst
+          } as const;
+        })
+        .filter(Boolean) as Array<{ stepId?: string; compareAgainst: 'currentDraft' | 'lastAppliedSnapshot' }>
+    : [];
   return {
     enabled: value?.enabled !== false,
-    quietWindowMs
+    quietWindowMs,
+    metaOnlyAdoptionRules
   };
+};
+
+export const resolveRecordFreshnessMetaOnlyAdoptionRule = (args: {
+  config?: ResolvedRecordFreshnessConfig | null;
+  stepId?: string | null;
+}) => {
+  const rules = Array.isArray(args.config?.metaOnlyAdoptionRules) ? args.config!.metaOnlyAdoptionRules : [];
+  if (!rules.length) return null;
+  const stepId = (args.stepId || '').toString().trim();
+  return (
+    rules.find(rule => rule.stepId && rule.stepId === stepId) ||
+    rules.find(rule => !rule.stepId) ||
+    null
+  );
 };
 
 export const resolveRecordFreshnessTimerDelay = (args: {

@@ -2241,6 +2241,8 @@ export class Dashboard {
         if (adv) nav.autoAdvance = adv;
         if (autoAdvanceWhen) nav.autoAdvanceWhen = autoAdvanceWhen;
         if ((navRaw as any).allowBack !== undefined) nav.allowBack = Boolean((navRaw as any).allowBack);
+        const stepBarAccessWhen = normalizeCondition((navRaw as any).stepBarAccessWhen);
+        if (stepBarAccessWhen) nav.stepBarAccessWhen = stepBarAccessWhen;
         const submitLabel = normalizeLocalized((navRaw as any).submitLabel);
         if (submitLabel) nav.submitLabel = submitLabel;
         const backLabel = normalizeLocalized((navRaw as any).backLabel);
@@ -2537,6 +2539,23 @@ export class Dashboard {
         cfg.quietWindowMs = Math.max(5000, Math.min(10 * 60 * 1000, Math.floor(n)));
       }
     }
+    const metaOnlyAdoptionRulesRaw = Array.isArray((value as any).metaOnlyAdoptionRules)
+      ? (value as any).metaOnlyAdoptionRules
+      : [];
+    const metaOnlyAdoptionRules = metaOnlyAdoptionRulesRaw
+      .map((entry: any) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const compareAgainstRaw = (entry as any).compareAgainst;
+        const compareAgainst =
+          compareAgainstRaw === 'lastAppliedSnapshot' ? 'lastAppliedSnapshot' : compareAgainstRaw === 'currentDraft' ? 'currentDraft' : undefined;
+        const stepId = ((entry as any).stepId || '').toString().trim();
+        const next: Record<string, any> = {};
+        if (stepId) next.stepId = stepId;
+        if (compareAgainst) next.compareAgainst = compareAgainst;
+        return Object.keys(next).length ? next : null;
+      })
+      .filter(Boolean) as NonNullable<RecordFreshnessConfig['metaOnlyAdoptionRules']>;
+    if (metaOnlyAdoptionRules.length) cfg.metaOnlyAdoptionRules = metaOnlyAdoptionRules;
     return Object.keys(cfg).length ? cfg : undefined;
   }
 

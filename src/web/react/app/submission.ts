@@ -1305,6 +1305,8 @@ export const shouldAdoptIncomingRecordSnapshotMetaOnly = (args: {
   incomingLineItems?: LineItemState | null;
   currentValues?: Record<string, FieldValue> | null;
   currentLineItems?: LineItemState | null;
+  comparisonValues?: Record<string, FieldValue> | null;
+  comparisonLineItems?: LineItemState | null;
   formKey?: string | null;
   language?: string | null;
 }): boolean => {
@@ -1322,11 +1324,14 @@ export const shouldAdoptIncomingRecordSnapshotMetaOnly = (args: {
   const currentStatus = ((args.currentStatus || '') as any).toString?.().trim?.() || '';
   if (incomingStatus !== currentStatus) return false;
 
+  const comparisonValues = args.comparisonValues ?? args.currentValues;
+  const comparisonLineItems = args.comparisonLineItems ?? args.currentLineItems;
+
   const currentFingerprint = buildDraftStateFingerprint({
     formKey: args.formKey || '',
     language: args.language || '',
-    values: args.currentValues || {},
-    lineItems: args.currentLineItems || {}
+    values: comparisonValues || {},
+    lineItems: comparisonLineItems || {}
   });
   const incomingFingerprint = buildDraftStateFingerprint({
     formKey: args.formKey || '',

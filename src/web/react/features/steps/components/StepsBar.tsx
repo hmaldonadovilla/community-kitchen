@@ -10,12 +10,22 @@ export type StepsBarProps = {
   status: GuidedStepStatus[];
   activeStepId: string;
   maxReachableIndex: number;
+  disabledStepIds?: string[];
   onSelectStep: (stepId: string) => void;
 };
 
-export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, activeStepId, maxReachableIndex, onSelectStep }) => {
+export const StepsBar: React.FC<StepsBarProps> = ({
+  language,
+  steps,
+  status,
+  activeStepId,
+  maxReachableIndex,
+  disabledStepIds,
+  onSelectStep
+}) => {
   if (!steps.length) return null;
   const statusById = new Map(status.map(s => [s.id, s]));
+  const blockedStepIds = new Set((disabledStepIds || []).map(id => (id || '').toString().trim()).filter(Boolean));
   const activeChipRef = useRef<HTMLButtonElement | null>(null);
 
   // Keep the active chip visible when we programmatically jump steps (e.g. Submit -> validation -> jump).
@@ -47,6 +57,8 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
         const s = statusById.get(step.id);
         const active = step.id === activeStepId;
         const reachable = idx <= maxReachableIndex;
+        const stepBarAllowed = !blockedStepIds.has(step.id);
+        const selectable = reachable && stepBarAllowed;
         const complete = !!s?.complete;
         const valid = !!s?.valid;
         const label = resolveLocalizedString(step.label as any, language, step.id);
@@ -56,7 +68,7 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
         // - available: reachable but incomplete (should look tappable)
         // - bad: complete but invalid (has validation errors)
         // - good: valid
-        const tone = !reachable ? 'locked' : active ? 'active' : valid ? 'good' : complete ? 'bad' : 'available';
+        const tone = !selectable ? 'locked' : active ? 'active' : valid ? 'good' : complete ? 'bad' : 'available';
         const bg = active ? 'var(--card)' : 'transparent';
         const border = active ? 'var(--text)' : 'var(--border)';
         const textColor = tone === 'locked' ? 'var(--muted)' : 'var(--text)';
@@ -65,7 +77,7 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
           <button
             key={step.id}
             type="button"
-            disabled={!reachable}
+            disabled={!selectable}
             onClick={() => onSelectStep(step.id)}
             ref={active ? activeChipRef : null}
             className={`ck-steps-bar__item${active ? ' is-active' : ''}`}
@@ -83,7 +95,7 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
               whiteSpace: 'nowrap',
               boxShadow: 'none',
               opacity: 1,
-              cursor: reachable ? 'pointer' : 'not-allowed'
+              cursor: selectable ? 'pointer' : 'not-allowed'
             }}
           >
             <span
@@ -99,7 +111,7 @@ export const StepsBar: React.FC<StepsBarProps> = ({ language, steps, status, act
                 color: textColor,
                 flex: '0 0 auto'
               }}
-              title={!reachable ? 'Locked' : valid ? 'Valid' : complete ? 'Needs attention' : 'Available'}
+                title={!selectable ? 'Locked' : valid ? 'Valid' : complete ? 'Needs attention' : 'Available'}
             >
               {tone === 'good' ? (
                 <CheckIcon size={22} />

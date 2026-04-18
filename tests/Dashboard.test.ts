@@ -459,6 +459,44 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses guided step stepBarAccessWhen conditions', () => {
+    const configJson = JSON.stringify({
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftovers',
+            include: [{ kind: 'question', id: 'FINAL_QTY' }],
+            navigation: {
+              stepBarAccessWhen: { fieldId: 'status', equals: ['Final report emailed', 'Closed'] }
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).steps).toEqual({
+      mode: 'guided',
+      items: [
+        {
+          id: 'leftovers',
+          include: [{ kind: 'question', id: 'FINAL_QTY' }],
+          navigation: {
+            stepBarAccessWhen: { fieldId: 'status', equals: ['Final report emailed', 'Closed'] }
+          }
+        }
+      ]
+    });
+  });
+
   test('getForms enforces analytics script function naming contract', () => {
     const configJson = JSON.stringify({
       analyticsWidgets: [
@@ -1359,6 +1397,33 @@ describe('Dashboard', () => {
     expect(forms[0].recordFreshness).toEqual({
       enabled: true,
       quietWindowMs: 30000
+    });
+  });
+
+  test('getForms parses record freshness meta-only adoption rules', () => {
+    const configJson = JSON.stringify({
+      recordFreshness: {
+        metaOnlyAdoptionRules: [{ stepId: 'leftovers', compareAgainst: 'lastAppliedSnapshot' }]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      [
+        'Form Title',
+        'Configuration Sheet Name',
+        'Destination Tab Name',
+        'Description',
+        'Web App URL (?form=ConfigSheetName)',
+        'Follow-up Config (JSON)'
+      ],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].recordFreshness).toEqual({
+      metaOnlyAdoptionRules: [{ stepId: 'leftovers', compareAgainst: 'lastAppliedSnapshot' }]
     });
   });
 

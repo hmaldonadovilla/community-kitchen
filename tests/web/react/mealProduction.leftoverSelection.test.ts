@@ -523,7 +523,7 @@ describe('meal production leftover selection config', () => {
             }),
             expect.objectContaining({
               type: 'text',
-              text: expect.objectContaining({ en: '❄️' }),
+              text: expect.objectContaining({ en: '❄️ ' }),
               showWhen: expect.objectContaining({
                 fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
                 greaterThan: 0

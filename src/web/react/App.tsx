@@ -99,6 +99,7 @@ import { resolveUiRecordStatus } from './app/recordMeta';
 import { shouldApplyPrefetchedRecordPreview, shouldDiscardRecordLoadResult } from './app/recordLoadGuard';
 import {
   resolveDeferredRecordFreshnessResumeAction,
+  resolveRecordFreshnessMetaOnlyAdoptionRule,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay
@@ -5008,6 +5009,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     view
   ]);
 
+  const resolveDraftStateFromSnapshot = useCallback(
+    (snapshot: WebFormSubmission | null | undefined) => {
+      if (!snapshot) return null;
+      const normalized = normalizeRecordValues(definition, snapshot.values || {});
+      const initialLineItems = buildInitialLineItems(definition, normalized);
+      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
+      const reconciledState = reconcileAutoAddModeGroups({
+        definition,
+        values: mapped.values,
+        lineItems: mapped.lineItems,
+        optionState: optionStateRef.current,
+        language: languageRef.current,
+        ensureLineOptions: ensureLineOptionsRef.current
+      });
+      return {
+        values: reconciledState.changed ? reconciledState.values : mapped.values,
+        lineItems: reconciledState.changed ? reconciledState.lineItems : mapped.lineItems,
+        changedCount: reconciledState.changedCount
+      };
+    },
+    [definition]
+  );
+
   const applyRecordSnapshot = useCallback(
     (snapshot: WebFormSubmission): RecordSnapshotApplyMode => {
       const id = snapshot?.id;
@@ -5048,22 +5072,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
         return 'ignored';
       }
-      const normalized = normalizeRecordValues(definition, snapshot.values || {});
-      const initialLineItems = buildInitialLineItems(definition, normalized);
-      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
-      const reconciledState = reconcileAutoAddModeGroups({
-        definition,
-        values: mapped.values,
-        lineItems: mapped.lineItems,
-        optionState: optionStateRef.current,
-        language: languageRef.current,
-        ensureLineOptions: ensureLineOptionsRef.current
-      });
-      const nextMappedValues = reconciledState.changed ? reconciledState.values : mapped.values;
-      const nextMappedLineItems = reconciledState.changed ? reconciledState.lineItems : mapped.lineItems;
+      const incomingDraftState = resolveDraftStateFromSnapshot(snapshot);
+      if (!incomingDraftState) {
+        lastRecordSnapshotApplyModeRef.current = { mode: 'ignored', recordId: id, dataVersion: incomingDataVersion };
+        return 'ignored';
+      }
+      const nextMappedValues = incomingDraftState.values;
+      const nextMappedLineItems = incomingDraftState.lineItems;
       const currentStatusRaw =
         ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
       const incomingStatusRaw = ((snapshot.status || '') as any)?.toString?.() || '';
+      const metaOnlyRule = resolveRecordFreshnessMetaOnlyAdoptionRule({
+        config: recordFreshnessConfigRef.current,
+        stepId: activeGuidedStepIdRef.current
+      });
+      const baselineDraftState =
+        metaOnlyRule?.compareAgainst === 'lastAppliedSnapshot'
+          ? resolveDraftStateFromSnapshot(selectedRecordSnapshotRef.current)
+          : null;
       const shouldAdoptMetaOnly = shouldAdoptIncomingRecordSnapshotMetaOnly({
         incomingRecordId: id,
         currentRecordId,
@@ -5075,6 +5101,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         incomingLineItems: nextMappedLineItems,
         currentValues: valuesRef.current,
         currentLineItems: lineItemsRef.current,
+        comparisonValues: baselineDraftState?.values,
+        comparisonLineItems: baselineDraftState?.lineItems,
         formKey,
         language: languageRef.current
       });
@@ -5142,7 +5170,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId: id,
           incomingDataVersion,
           currentDataVersion,
-          autoAddGroupRebuilds: reconciledState.changedCount
+          autoAddGroupRebuilds: incomingDraftState.changedCount,
+          compareAgainst: metaOnlyRule?.compareAgainst || 'currentDraft'
         });
         return 'metaOnly';
       }
@@ -5264,11 +5293,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordId: id,
         incomingDataVersion,
         currentDataVersion,
-        autoAddGroupRebuilds: reconciledState.changedCount
+        autoAddGroupRebuilds: incomingDraftState.changedCount
       });
       return 'applied';
     },
     [
+      resolveDraftStateFromSnapshot,
       dedupPrecheckRules,
       definition,
       formKey,

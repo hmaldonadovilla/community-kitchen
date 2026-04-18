@@ -48,6 +48,7 @@ import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayD
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
 import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
 import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../features/steps/domain/errorNavigation';
+import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
@@ -1061,16 +1062,20 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [guidedDataSourceConfigMap, language, lineItems, recordMeta, values]
   );
+  const guidedStepVisibilityCtx = useMemo(
+    () => ({
+      getValue: (fieldId: string) => resolveStepVisibilityValue(fieldId),
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    }),
+    [lineItems, resolveStepVisibilityValue]
+  );
   const guidedVisibleSteps = useMemo(
-    () =>
-      guidedEnabled
-        ? filterVisibleGuidedSteps((guidedStepsCfg?.items || []) as any[], {
-            getValue: (fieldId: string) => resolveStepVisibilityValue(fieldId),
-            getLineItems: (groupId: string) => lineItems[groupId] || [],
-            getLineItemKeys: () => Object.keys(lineItems)
-          })
-        : [],
-    [dataSourceVisibilityVersion, guidedEnabled, guidedStepsCfg, lineItems, resolveStepVisibilityValue]
+    () => {
+      void dataSourceVisibilityVersion;
+      return guidedEnabled ? filterVisibleGuidedSteps((guidedStepsCfg?.items || []) as any[], guidedStepVisibilityCtx) : [];
+    },
+    [dataSourceVisibilityVersion, guidedEnabled, guidedStepVisibilityCtx, guidedStepsCfg]
   );
 
   const guidedStatus = useMemo(() => {
@@ -1084,6 +1089,13 @@ const FormView: React.FC<FormViewProps> = ({
       .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
       .filter(Boolean);
   }, [guidedEnabled, guidedVisibleSteps]);
+  const guidedStepBarBlockedIds = useMemo(() => {
+    if (!guidedEnabled) return [] as string[];
+    return guidedVisibleSteps
+      .filter(step => !isGuidedStepBarAccessAllowed(step as any, guidedStepVisibilityCtx))
+      .map(step => (step?.id || '').toString().trim())
+      .filter(Boolean);
+  }, [guidedEnabled, guidedVisibleSteps, guidedStepVisibilityCtx]);
 
   const [activeGuidedStepId, setActiveGuidedStepId] = useState<string>(() => {
     const first = guidedStepIds[0];
@@ -2283,8 +2295,18 @@ const FormView: React.FC<FormViewProps> = ({
       if (!targetId) return;
       const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
       const targetIdx = guidedStepIds.indexOf(targetId);
+      const targetStepCfg = guidedVisibleSteps.find(step => (step?.id || '').toString().trim() === targetId) as any;
       if (currentIdx < 0 || targetIdx < 0 || targetIdx <= currentIdx) {
         selectGuidedStep(targetId, 'user');
+        return;
+      }
+      if (!isGuidedStepBarAccessAllowed(targetStepCfg, guidedStepVisibilityCtx)) {
+        onDiagnostic?.('steps.step.blocked', {
+          from: activeGuidedStepId,
+          to: targetId,
+          gate: 'stepBarAccessWhen',
+          reason: 'stepBarAccessWhen=false'
+        });
         return;
       }
 
@@ -2305,7 +2327,9 @@ const FormView: React.FC<FormViewProps> = ({
       advanceGuidedStepFromCurrentStep,
       guidedEnabled,
       guidedStepIds,
+      guidedStepVisibilityCtx,
       guidedVisibleSteps,
+      onDiagnostic,
       selectGuidedStep
     ]
   );
@@ -10559,7 +10583,7 @@ const FormView: React.FC<FormViewProps> = ({
       .toString()
       .trim();
     const parentLabel = parentGroup ? resolveLabel(parentGroup, language) : (parsed?.rootGroupId || 'Group');
-    const breadcrumbText = [parentLabel, subLabel].filter(Boolean).join(' / ');
+    const _breadcrumbText = [parentLabel, subLabel].filter(Boolean).join(' / ');
 
     const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>): boolean => {
       if (!overlayRowFilter) return true;
@@ -15009,6 +15033,7 @@ const FormView: React.FC<FormViewProps> = ({
         steps={steps.map(s => ({ id: (s?.id || '').toString(), label: (s as any).label }))}
         status={guidedStatus.steps}
         activeStepId={activeGuidedStepId}
+        disabledStepIds={guidedStepBarBlockedIds}
         maxReachableIndex={
           guidedForwardNavigationBlocked ? Math.min(maxReachableGuidedIndex, activeGuidedStepIndex) : maxReachableGuidedIndex
         }

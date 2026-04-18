@@ -254,6 +254,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(root?.steps?.waitForUploadsDialog?.message?.en).toBe('Please wait while your photos finish uploading.');
       expect(root?.steps?.waitForUploadsDialog?.showCancel).toBe(false);
       const leftoverBank = items.find((entry: any) => entry?.id === 'leftoverForm');
+      const foodSafety = items.find((entry: any) => entry?.id === 'foodSafety');
       const portioning = items.find((entry: any) => entry?.id === 'portioning');
       const leftovers = items.find((entry: any) => entry?.id === 'leftovers');
       const contextHeaderSteps = items.filter((entry: any) => Array.isArray(entry?.contextHeader?.parts));
@@ -387,14 +388,50 @@ describe('staging integrity dialogs and list legend config', () => {
           decimalPlaces: 0
         }
       ]);
+      expect(root?.recordFreshness).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          quietWindowMs: 30000,
+          metaOnlyAdoptionRules: [
+            {
+              stepId: 'leftovers',
+              compareAgainst: 'lastAppliedSnapshot'
+            }
+          ]
+        })
+      );
       expect(portioning?.label?.en).toBe('Portioning');
+      expect(foodSafety?.excludeWhen).toEqual({
+        any: [
+          {
+            fieldId: 'status',
+            equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
+          },
+          {
+            fieldId: 'MP_PREP_DATE',
+            isInFuture: true
+          }
+        ]
+      });
       expect(portioning?.excludeWhen).toEqual({
-        fieldId: 'status',
-        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
+        any: [
+          {
+            fieldId: 'status',
+            equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
+          },
+          {
+            fieldId: 'MP_PREP_DATE',
+            isInFuture: true
+          }
+        ]
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
       expect(leftovers?.excludeWhen).toBeUndefined();
       expect(leftovers?.helpText).toBeUndefined();
+      expect(leftovers?.navigation?.stepBarAccessWhen).toEqual({
+        fieldId: 'status',
+        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
+      });
       expect(root?.submitButtonLabel?.en).toBe('Complete');
       expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
@@ -426,7 +463,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
-      ['orderInfo', 'deliveryForm', 'foodSafety'].forEach(stepId => {
+      ['orderInfo', 'deliveryForm'].forEach(stepId => {
         const step = items.find((entry: any) => entry?.id === stepId);
         expect(step?.excludeWhen).toEqual({
           fieldId: 'status',

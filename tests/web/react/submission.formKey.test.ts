@@ -347,6 +347,33 @@ describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
       })
     ).toBe(false);
   });
+
+  it('can compare against a saved baseline instead of the live draft', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'Final report emailed',
+        currentStatus: 'Final report emailed',
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: { MP_SERVICE: 'Dinner', MP_NOTES: 'editing leftovers' } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', FINAL_QTY: 10 } as any }] as any
+        },
+        comparisonValues: { MP_SERVICE: 'Dinner' } as any,
+        comparisonLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', FINAL_QTY: 10 } as any }] as any
+        },
+        incomingValues: { MP_SERVICE: 'Dinner' } as any,
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', FINAL_QTY: 10 } as any }] as any
+        }
+      })
+    ).toBe(true);
+  });
 });
 
 describe('chainSerializedSubmissionRequest', () => {
