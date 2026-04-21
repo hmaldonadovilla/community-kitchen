@@ -72,6 +72,7 @@ const listConfigFiles = configsDir => {
   return fs
     .readdirSync(configsDir)
     .filter(fileName => fileName && fileName.toLowerCase().endsWith('.json'))
+    .filter(fileName => fileName.toLowerCase() !== 'landing_page.json')
     .sort();
 };
 

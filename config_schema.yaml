@@ -3,7 +3,7 @@ info:
   title: Community Kitchen Config Sheet Schema
   version: 1.0.0
   description: |
-    Schema definition for the Configuration Sheet used to generate forms. The React web template is the only supported experience for deployed web apps; the legacy iframe UI has been retired, so no sheet-level configuration or query parameters are required for toggling views. Optional runtime query params may still be used by specific features (for example `?unlock=<record_id>` for guided lock overrides).
+    Schema definition for the Configuration Sheet used to generate forms. The React web template is the only supported experience for deployed web apps; the legacy iframe UI has been retired, so no sheet-level configuration or query parameters are required for toggling views. Optional runtime query params may still be used by specific features (for example `?unlock=<record_id>` for guided lock overrides). The central landing page has its own dedicated export in `docs/config/exports/<env>/landing_page.json`; that export now owns landing-only branding, `logoFormKey`/`logoUrl`, and per-app `imagePath` artwork, while the sheet schema below continues to describe per-form configuration only.
 paths: {}
 components:
   schemas:

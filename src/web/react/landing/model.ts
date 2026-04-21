@@ -1,7 +1,62 @@
 import type { FormCatalogItem } from '../api';
 import type { FormConfigExport } from '../../../types';
+import type { LandingIllustrationKey, LandingPageAppConfig, LandingPageConfig } from '../../../config/landingPageTypes';
 
 export const LANDING_TITLE_FALLBACK = 'Community Kitchen';
+export type { LandingIllustrationKey } from '../../../config/landingPageTypes';
+
+export interface LandingAppItem extends FormCatalogItem {
+  displayTitle: string;
+  displayDescription?: string;
+  illustration: LandingIllustrationKey;
+  imageUrl?: string;
+}
+
+export interface LandingCatalogLayout {
+  primaryApps: LandingAppItem[];
+  adminApps: LandingAppItem[];
+  overflowAdminApps: LandingAppItem[];
+}
+
+type LandingSection = 'primary' | 'admin' | 'overflow';
+
+type LandingFormPreset = LandingPageAppConfig & {
+  section: LandingSection;
+};
+
+const resolveLandingPreset = (item: FormCatalogItem, pageConfig: LandingPageConfig): LandingFormPreset => {
+  const formKey = (item?.formKey || '').toString().trim();
+  const preset = (Array.isArray(pageConfig?.apps) ? pageConfig.apps : []).find(entry => entry.formKey === formKey);
+  if (preset) return preset;
+  return {
+    formKey,
+    section: 'overflow',
+    order: 999,
+    illustration: 'admin'
+  };
+};
+
+const toLandingAppItem = (item: FormCatalogItem, preset: LandingFormPreset): LandingAppItem => ({
+  ...item,
+  displayTitle: (preset.title || item.title || item.formKey).toString().trim(),
+  displayDescription: (preset.description || item.description || '').toString().trim() || undefined,
+  illustration: preset.illustration,
+  imageUrl: normalizeOptionalText(preset.imageUrl)
+});
+
+const compareLandingItems = (
+  left: { item: LandingAppItem; preset: LandingFormPreset },
+  right: { item: LandingAppItem; preset: LandingFormPreset }
+): number => {
+  if (left.preset.order !== right.preset.order) return left.preset.order - right.preset.order;
+  return left.item.displayTitle.localeCompare(right.item.displayTitle);
+};
+
+const normalizeOptionalText = (value: any): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  const raw = value.toString().trim();
+  return raw || undefined;
+};
 
 export const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
@@ -41,9 +96,23 @@ export const pickLandingLogoUrl = (items: FormCatalogItem[]): string | undefined
   return best;
 };
 
-export const resolveLandingHeaderTitle = (documentTitle?: string | null): string => {
-  const raw = (documentTitle || '').toString().trim();
-  return raw || LANDING_TITLE_FALLBACK;
+export const pickLandingLogoUrlByFormKey = (items: FormCatalogItem[], formKey: string | null | undefined): string | undefined => {
+  const matchKey = normalizeOptionalText(formKey);
+  if (!matchKey) return undefined;
+  const match = (Array.isArray(items) ? items : []).find(item => (item?.formKey || '').toString().trim() === matchKey);
+  return normalizeOptionalText(match?.logoUrl);
+};
+
+export const resolveLandingLogoUrl = (
+  configuredLogoUrl: string | null | undefined,
+  configuredLogoFormKey: string | null | undefined,
+  items: FormCatalogItem[]
+): string | undefined => {
+  return normalizeOptionalText(configuredLogoUrl) || pickLandingLogoUrlByFormKey(items, configuredLogoFormKey) || pickLandingLogoUrl(items);
+};
+
+export const resolveLandingHeaderTitle = (documentTitle?: string | null, configuredTitle?: string | null): string => {
+  return normalizeOptionalText(configuredTitle) || normalizeOptionalText(documentTitle) || LANDING_TITLE_FALLBACK;
 };
 
 export const buildBundledLandingCatalog = (configs: FormConfigExport[]): FormCatalogItem[] => {
@@ -83,4 +152,39 @@ export const filterNavigableLandingItems = (items: FormCatalogItem[], adminEnabl
 
   next.sort((a, b) => a.title.localeCompare(b.title));
   return next;
+};
+
+export const buildLandingCatalogLayout = (items: FormCatalogItem[], adminEnabled: boolean, pageConfig: LandingPageConfig): LandingCatalogLayout => {
+  const primaryApps: Array<{ item: LandingAppItem; preset: LandingFormPreset }> = [];
+  const adminApps: Array<{ item: LandingAppItem; preset: LandingFormPreset }> = [];
+  const overflowAdminApps: Array<{ item: LandingAppItem; preset: LandingFormPreset }> = [];
+
+  (Array.isArray(items) ? items : []).forEach(item => {
+    const preset = resolveLandingPreset(item, pageConfig);
+    const nextItem = toLandingAppItem(item, preset);
+
+    if (preset.section === 'primary') {
+      primaryApps.push({ item: nextItem, preset });
+      return;
+    }
+
+    if (!adminEnabled) return;
+
+    if (preset.section === 'admin') {
+      adminApps.push({ item: nextItem, preset });
+      return;
+    }
+
+    overflowAdminApps.push({ item: nextItem, preset });
+  });
+
+  primaryApps.sort(compareLandingItems);
+  adminApps.sort(compareLandingItems);
+  overflowAdminApps.sort(compareLandingItems);
+
+  return {
+    primaryApps: primaryApps.map(entry => entry.item),
+    adminApps: adminApps.map(entry => entry.item),
+    overflowAdminApps: overflowAdminApps.map(entry => entry.item)
+  };
 };
