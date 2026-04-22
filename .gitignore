@@ -2,6 +2,9 @@ dist
 node_modules
 src/web/webformBundle.ts
 src/web/react/reactBundle.ts
+# React app entrypoints are source files and must stay tracked across environments.
+!src/web/react/entrypoints/
+!src/web/react/entrypoints/*.tsx
 perf-results/
 playwright-report/
 test-results/

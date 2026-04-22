@@ -160,9 +160,7 @@ Each app entry (e.g., `src/web/react/entrypoints/<app>.tsx`) should:
 - Always renders **header + skeleton** (app shell) first.
 - Uses a single loading view (shell + card) until `phase === 'ready'` (no extra overlay swap).
   
-**Maintainer note**: entrypoints are optional and can be **local‑only**. If you want app‑specific bundles without committing them, add files under `src/web/react/entrypoints` and ignore them locally via `.git/info/exclude`:
-
-- `src/web/react/entrypoints/*`
+Entrypoint files under `src/web/react/entrypoints` are part of the deployed source and should be committed so app-specific bundles are available across environments.
 
 Skeleton examples:
 - Header bar with app title and main action buttons disabled.

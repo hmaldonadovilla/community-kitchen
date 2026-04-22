@@ -470,8 +470,7 @@ This section summarizes the deployment flow and the new server-side caching, wit
    - Run `warmDefinitions()` once after config changes (or let a scheduled trigger handle it).
    - This uses `WebFormService.warmDefinitions()` to prebuild and cache `WebFormDefinition` objects for all forms, so `doGet()` does not need to re-parse large config sheets on first user hits.
    - The web app shell loads the React bundle via `?bundle=react`. You can pass `?app=<bundleKey>` to select an app-specific bundle (defaults to `full`). Bundle keys come from filenames under `src/web/react/entrypoints` (converted to kebab-case).
-   - **Maintainer note**: if you want local-only entrypoints (not committed), add them under `src/web/react/entrypoints` and ignore them locally via `.git/info/exclude`:
-     - `src/web/react/entrypoints/*`
+   - Entrypoint files under `src/web/react/entrypoints` are part of the deployed source and should be committed.
 
 6. **Publish / re-deploy the web app**
    - In Apps Script, go to **Deploy → Manage deployments**.
