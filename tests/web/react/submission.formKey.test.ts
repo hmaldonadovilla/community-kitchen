@@ -279,9 +279,22 @@ describe('shouldApplyIncomingRecordSnapshot', () => {
 });
 
 describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
+  const mealProductionDefinition: any = {
+    questions: [
+      {
+        id: 'MP_MEALS_REQUEST',
+        type: 'LINE_ITEM_GROUP',
+        lineItemConfig: {
+          fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }, { id: 'QTY', type: 'NUMBER' }]
+        }
+      }
+    ]
+  };
+
   it('adopts a newer version when the record content is unchanged', () => {
     expect(
       shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
         incomingRecordId: 'REC-1',
         currentRecordId: 'REC-1',
         incomingDataVersion: 3,
@@ -305,6 +318,7 @@ describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
   it('does not adopt when the incoming snapshot changes the visible content', () => {
     expect(
       shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
         incomingRecordId: 'REC-1',
         currentRecordId: 'REC-1',
         incomingDataVersion: 3,
@@ -328,6 +342,7 @@ describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
   it('does not adopt when only the status changed', () => {
     expect(
       shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
         incomingRecordId: 'REC-1',
         currentRecordId: 'REC-1',
         incomingDataVersion: 3,
@@ -348,9 +363,35 @@ describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
     ).toBe(false);
   });
 
+  it('can ignore a status-only change when the caller explicitly allows it', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'Final report emailed',
+        currentStatus: 'In progress',
+        allowStatusChange: true,
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: { MP_SERVICE: 'Lunch', status: 'In progress' } as any,
+        incomingValues: { MP_SERVICE: 'Lunch', status: 'Final report emailed' } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10, __ckRowId: 'row-1' } as any }] as any
+        },
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10, __ckRowId: 'row-1' } as any }] as any
+        }
+      })
+    ).toBe(true);
+  });
+
   it('can compare against a saved baseline instead of the live draft', () => {
     expect(
       shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
         incomingRecordId: 'REC-1',
         currentRecordId: 'REC-1',
         incomingDataVersion: 3,
@@ -370,6 +411,41 @@ describe('shouldAdoptIncomingRecordSnapshotMetaOnly', () => {
         incomingValues: { MP_SERVICE: 'Dinner' } as any,
         incomingLineItems: {
           MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', FINAL_QTY: 10 } as any }] as any
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('ignores mirrored line-group payload fields when checking for meta-only drift', () => {
+    expect(
+      shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition: mealProductionDefinition,
+        incomingRecordId: 'REC-1',
+        currentRecordId: 'REC-1',
+        incomingDataVersion: 3,
+        currentDataVersion: 2,
+        incomingStatus: 'Final report emailed',
+        currentStatus: 'In progress',
+        allowStatusChange: true,
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        currentValues: {
+          MP_SERVICE: 'Lunch',
+          MP_MEALS_REQUEST: [{ MEAL_TYPE: 'Standard', QTY: 10 }] as any,
+          MP_MEALS_REQUEST_json: '[{"MEAL_TYPE":"Standard","QTY":10}]',
+          status: 'In progress'
+        } as any,
+        incomingValues: {
+          MP_SERVICE: 'Lunch',
+          MP_MEALS_REQUEST: [{ MEAL_TYPE: 'Standard', QTY: 999 }] as any,
+          MP_MEALS_REQUEST_json: '[{"MEAL_TYPE":"Standard","QTY":999}]',
+          status: 'Final report emailed'
+        } as any,
+        currentLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10, __ckRowId: 'row-1' } as any }] as any
+        },
+        incomingLineItems: {
+          MP_MEALS_REQUEST: [{ id: 'row-1', values: { MEAL_TYPE: 'Standard', QTY: 10, __ckRowId: 'row-1' } as any }] as any
         }
       })
     ).toBe(true);

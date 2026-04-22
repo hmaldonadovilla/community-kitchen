@@ -90,6 +90,7 @@ export const shouldDeferRecordFreshnessSync = (args: {
   recordSyncInFlight: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
+  followupBatchInFlight?: boolean;
   lastUserInteractionAt?: number | null;
   now?: number | null;
 }): boolean => resolveRecordFreshnessSyncBlockers(args).length > 0;
@@ -105,6 +106,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   recordSyncInFlight: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
+  followupBatchInFlight?: boolean;
   lastUserInteractionAt?: number | null;
   now?: number | null;
 }): string[] => {
@@ -133,6 +135,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   if (args.recordSyncInFlight) blockers.push('recordSync.inFlight');
   if (args.guidedStepLiveSyncInFlight) blockers.push('guidedStep.liveSync');
   if (args.guidedStepBackgroundSyncInFlight) blockers.push('guidedStep.backgroundSync');
+  if (args.followupBatchInFlight) blockers.push('followupBatch.inFlight');
 
   return blockers;
 };
