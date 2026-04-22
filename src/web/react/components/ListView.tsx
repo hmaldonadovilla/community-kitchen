@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { resolveLocalizedString } from '../../i18n';
 import { collectStatusTransitionValues } from '../../../domain/statusTransitions';
 import {
+  AnalyticsSnapshot,
   LangCode,
   ListViewColumnConfig,
   ListViewRuleColumnConfig,
@@ -40,11 +41,14 @@ import { buildGroupedOverlayTableSections } from '../app/listViewOverlay';
 import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../app/listViewLegend';
 import { ListViewLegend } from './app/ListViewLegend';
 import { resolveLabel } from '../utils/labels';
+import { buildListViewAnalyticsMetrics } from '../analytics/model';
 
 interface ListViewProps {
   formKey: string;
   definition: WebFormDefinition;
   language: LangCode;
+  analyticsSnapshot?: AnalyticsSnapshot;
+  analyticsRevision?: number;
   disabled?: boolean;
   onSelect: (
     row: ListItem,
@@ -74,6 +78,8 @@ const ListView: React.FC<ListViewProps> = ({
   formKey,
   definition,
   language,
+  analyticsSnapshot,
+  analyticsRevision,
   disabled,
   onSelect,
   cachedResponse,
@@ -1815,6 +1821,10 @@ const ListView: React.FC<ListViewProps> = ({
   ]);
 
   const showResults = viewMode === 'table' || activeSearch;
+  const analyticsListMetrics = useMemo(
+    () => buildListViewAnalyticsMetrics(analyticsSnapshot, definition.analytics?.widgets, language),
+    [analyticsSnapshot, definition.analytics?.widgets, language]
+  );
   const listMetricCfg = definition.listView?.metric;
   const listMetricLabelText = useMemo(() => {
     if (!listMetricCfg?.label) return '';
@@ -1864,7 +1874,23 @@ const ListView: React.FC<ListViewProps> = ({
     });
   }, [effectiveTotalCount, listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic]);
 
-  const metricNode = listMetricCfg ? (
+  useEffect(() => {
+    if (!onDiagnostic || !analyticsListMetrics.length) return;
+    onDiagnostic('analytics.listView.snapshot', {
+      revision: Number(analyticsRevision ?? analyticsSnapshot?.revision ?? 0) || 0,
+      widgetCount: analyticsListMetrics.length
+    });
+  }, [analyticsListMetrics.length, analyticsRevision, analyticsSnapshot?.revision, onDiagnostic]);
+
+  const metricNode = analyticsListMetrics.length ? (
+    <div className="ck-list-metric-stack" aria-live="polite">
+      {analyticsListMetrics.map(metric => (
+        <div key={metric.id} className="ck-list-metric">
+          {metric.text}
+        </div>
+      ))}
+    </div>
+  ) : listMetricCfg ? (
     <div className="ck-list-metric" aria-live="polite">
       {listMetricDisplayText}
     </div>
@@ -1976,7 +2002,7 @@ const ListView: React.FC<ListViewProps> = ({
         ? definition.listView.legend
         : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
     return buildListViewLegendItems(columnsAll as any, configuredLegend as any, language);
-  }, [columnsAll, definition, definition.listView?.legend, language, legendItems]);
+  }, [columnsAll, definition, language, legendItems]);
 
   useEffect(() => {
     if (!onDiagnostic || !overlayPresetButton) return;

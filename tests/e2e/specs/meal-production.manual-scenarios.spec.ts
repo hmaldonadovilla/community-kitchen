@@ -47,7 +47,7 @@ test.describe('Meal Production manual script scenarios', () => {
     await expect(frame.getByRole('button', { name: /^Le Phare$/ })).toBeVisible();
     await expect(frame.getByText('Meal Production Procedure')).toBeVisible();
     await expect(frame.getByText('Hygiene rules')).toBeVisible();
-    await expect(frame.getByText(/portions delivered/i)).toHaveCount(0);
+    await expect(frame.getByText(/portions delivered/i).first()).toBeVisible({ timeout: 60_000 });
     await expect(frame.locator('input[type="date"]')).toBeVisible();
     await expect(frame.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
     await expect(frame.getByRole('button', { name: 'Next 7 days' })).toBeVisible();
