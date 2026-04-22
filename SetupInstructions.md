@@ -528,6 +528,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       Admin aliases are accepted (`?admin-true` or `?admin=1|true|yes|on`) and links are propagated with canonical `admin=true`.
       Landing-page settings are export-owned in `docs/config/exports/<env>/landing_page.json`; update that file when the launcher needs its own header logo source (`appHeader.logoFormKey` or `appHeader.logoUrl`), hero copy, section labels, app grouping/renames, or per-card art (`apps[].imagePath`).
+      Central analytics dashboard settings are export-owned in `docs/config/exports/<env>/analytics_page.json`; update that file when the dashboard card copy/art, header logo source, or widget composition should change.
 
     - Want to replace the default keyword search with **search by date**? Set `listView.search`:
 
@@ -1043,6 +1044,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       Note:
       - This dashboard setting applies to individual form apps.
       - The central landing page uses `docs/config/exports/<env>/landing_page.json` for its own brand logo source, copy, and card artwork.
+      - The centralized analytics dashboard uses `docs/config/exports/<env>/analytics_page.json` for its landing tile, header brand source, and cross-form widget layout.
 
     - Want group sections to **auto-collapse on completion** (and optionally open the next incomplete section + auto-scroll on expand)? Set `groupBehavior`:
 

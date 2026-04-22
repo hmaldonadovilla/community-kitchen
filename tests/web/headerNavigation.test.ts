@@ -11,10 +11,30 @@ describe('header navigation helpers', () => {
     );
   });
 
-  test('buildAnalyticsUrl targets the analytics bundle for the current form', () => {
-    expect(buildAnalyticsUrl('https://script.google.com/macros/s/deployment/exec', 'Config: Meal Production', false)).toBe(
-      'https://script.google.com/macros/s/deployment/exec?form=Config%3A+Meal+Production&app=analytics'
+  test('buildAnalyticsUrl targets the centralized analytics bundle and preserves admin mode', () => {
+    expect(buildAnalyticsUrl('https://script.google.com/macros/s/deployment/exec', true)).toBe(
+      'https://script.google.com/macros/s/deployment/exec?app=analytics&admin=true'
     );
+  });
+
+  test('buildLandingUrl falls back to the current page path when the service URL is unavailable', () => {
+    const globalAny = globalThis as any;
+    const originalLocation = globalAny.location;
+    Object.defineProperty(globalAny, 'location', {
+      configurable: true,
+      value: {
+        href: 'https://script.google.com/macros/s/deployment/exec?app=analytics&admin=true#summary'
+      }
+    });
+
+    try {
+      expect(buildLandingUrl('', true)).toBe('https://script.google.com/macros/s/deployment/exec?app=landing&admin=true');
+    } finally {
+      Object.defineProperty(globalAny, 'location', {
+        configurable: true,
+        value: originalLocation
+      });
+    }
   });
 
   test('isTruthyParam matches supported truthy query tokens', () => {

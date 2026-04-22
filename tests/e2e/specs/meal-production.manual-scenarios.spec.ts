@@ -42,12 +42,12 @@ test.describe('Meal Production manual script scenarios', () => {
   test('@smoke Scenario 01 - home page exposes meal production entry points and navigation', async ({ page }) => {
     const frame = await openMealProductionHome(page);
 
-    await expect(frame.getByText('Belliard')).toBeVisible();
-    await expect(frame.getByText('Hub')).toBeVisible();
-    await expect(frame.getByText('Le Phare')).toBeVisible();
+    await expect(frame.getByRole('button', { name: /^Belliard$/ })).toBeVisible();
+    await expect(frame.getByRole('button', { name: /^Hub$/ })).toBeVisible();
+    await expect(frame.getByRole('button', { name: /^Le Phare$/ })).toBeVisible();
     await expect(frame.getByText('Meal Production Procedure')).toBeVisible();
     await expect(frame.getByText('Hygiene rules')).toBeVisible();
-    await expect(frame.getByText(/\d+\s+portions delivered/i)).toBeVisible();
+    await expect(frame.getByText(/portions delivered/i)).toHaveCount(0);
     await expect(frame.locator('input[type="date"]')).toBeVisible();
     await expect(frame.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
     await expect(frame.getByRole('button', { name: 'Next 7 days' })).toBeVisible();

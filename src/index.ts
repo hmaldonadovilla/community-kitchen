@@ -205,6 +205,12 @@ export function fetchFormCatalog(): any {
   return service.fetchFormCatalog();
 }
 
+export function fetchAnalyticsDashboard(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.fetchAnalyticsDashboard();
+}
+
 export function runDailyAnalyticsRecompute(): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

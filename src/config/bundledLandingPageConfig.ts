@@ -21,7 +21,7 @@ export const BUNDLED_LANDING_PAGE_CONFIG = {
     "openAppLabel": "Go to app",
     "primarySectionTitle": "Apps for cooks",
     "adminSectionTitle": "Administrator apps",
-    "adminSectionNote": "Analytics stays inside each app.",
+    "adminSectionNote": "Analytics is available from the dashboard below.",
     "overflowTitle": "More Admin Forms",
     "overflowShowLabel": "Show forms",
     "overflowHideLabel": "Hide forms",

@@ -1,6 +1,6 @@
 import type { AppHeaderConfig } from '../types';
 
-export type LandingIllustrationKey = 'checks' | 'meal' | 'customers' | 'ingredients' | 'recipes' | 'more' | 'admin';
+export type LandingIllustrationKey = 'checks' | 'meal' | 'customers' | 'ingredients' | 'recipes' | 'analytics' | 'more' | 'admin';
 export type LandingSectionKey = 'primary' | 'admin' | 'overflow';
 
 export interface LandingPageHeaderConfig extends AppHeaderConfig {

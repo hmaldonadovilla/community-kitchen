@@ -1,6 +1,8 @@
 import { Dashboard } from '../config/Dashboard';
+import { ANALYTICS_PAGE_CONFIG, resolveAnalyticsPageUpdatedAt } from '../config/analyticsPage';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
+import type { AnalyticsDashboardPayload, AnalyticsDashboardSection, AnalyticsDashboardWidget } from '../config/analyticsPageTypes';
 import {
   AnalyticsSnapshot,
   FollowupSubmitEffect,
@@ -943,6 +945,95 @@ export class WebFormService {
       .filter(Boolean) as Array<{ formKey: string; title: string; description?: string; targetUrl: string; logoUrl?: string }>;
     items.sort((a, b) => a.title.localeCompare(b.title));
     return items;
+  }
+
+  public fetchAnalyticsDashboard(): AnalyticsDashboardPayload {
+    const errors: string[] = [];
+    const forms = this.getFormsCached();
+    const snapshotByFormKey = new Map<
+      string,
+      {
+        title: string;
+        snapshot: AnalyticsSnapshot;
+      }
+    >();
+
+    const loadSnapshot = (rawFormKey: string): { title: string; snapshot: AnalyticsSnapshot } | null => {
+      const requestedKey = (rawFormKey || '').toString().trim();
+      if (!requestedKey) return null;
+      const existing = snapshotByFormKey.get(requestedKey);
+      if (existing) return existing;
+
+      const match = forms.find(form => {
+        const candidateKey = (form.configSheet || form.title || '').toString().trim();
+        const candidateTitle = (form.title || '').toString().trim();
+        return candidateKey === requestedKey || candidateTitle === requestedKey;
+      });
+
+      if (!match) {
+        errors.push(`Unknown analytics source form: ${requestedKey}`);
+        return null;
+      }
+
+      let snapshot = this.analytics.readSnapshot(match);
+      if (!snapshot.revision) {
+        const definition = this.getOrBuildDefinition(match.configSheet || match.title);
+        if (definition.analytics?.widgets?.length) {
+          const { questions } = this.getFormContextLite(match.configSheet || match.title);
+          snapshot = this.analytics.recomputeForm(match, questions, definition);
+        }
+      }
+
+      const resolved = {
+        title: (match.title || match.configSheet || requestedKey).toString().trim() || requestedKey,
+        snapshot
+      };
+      snapshotByFormKey.set(requestedKey, resolved);
+      return resolved;
+    };
+
+    const sections: AnalyticsDashboardSection[] = (Array.isArray(ANALYTICS_PAGE_CONFIG.sections) ? ANALYTICS_PAGE_CONFIG.sections : [])
+      .map(section => {
+        const widgets: AnalyticsDashboardWidget[] = (Array.isArray(section.widgets) ? section.widgets : [])
+          .map(widget => {
+            const source = loadSnapshot(widget.sourceFormKey);
+            if (!source) return null;
+            const item = (Array.isArray(source.snapshot.items) ? source.snapshot.items : []).find(
+              entry => (entry?.id || '').toString().trim() === widget.sourceWidgetId
+            );
+            if (!item) {
+              errors.push(`Missing analytics widget "${widget.sourceWidgetId}" on ${widget.sourceFormKey}`);
+              return null;
+            }
+            return {
+              ...item,
+              dashboardWidgetId: widget.id,
+              title: (widget.title || item.label || item.id).toString().trim(),
+              description: (widget.description || '').toString().trim() || undefined,
+              sourceFormKey: widget.sourceFormKey,
+              sourceFormTitle: source.title,
+              sourceWidgetId: widget.sourceWidgetId
+            } satisfies AnalyticsDashboardWidget;
+          })
+          .filter(Boolean) as AnalyticsDashboardWidget[];
+
+        return {
+          id: section.id,
+          title: section.title,
+          description: section.description,
+          widgets
+        } satisfies AnalyticsDashboardSection;
+      })
+      .filter(section => section.widgets.length > 0);
+
+    return {
+      pageTitle: ANALYTICS_PAGE_CONFIG.pageTitle,
+      pageDescription: ANALYTICS_PAGE_CONFIG.pageDescription,
+      sections,
+      updatedAt: resolveAnalyticsPageUpdatedAt(sections),
+      errors,
+      envTag: getUiEnvTag() || undefined
+    };
   }
 
   public renderForm(

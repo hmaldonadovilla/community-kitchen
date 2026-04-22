@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { resolveLocalizedString } from '../../i18n';
 import { collectStatusTransitionValues } from '../../../domain/statusTransitions';
 import {
-  AnalyticsSnapshot,
   LangCode,
   ListViewColumnConfig,
   ListViewRuleColumnConfig,
@@ -46,8 +45,6 @@ interface ListViewProps {
   formKey: string;
   definition: WebFormDefinition;
   language: LangCode;
-  analyticsSnapshot?: AnalyticsSnapshot;
-  analyticsRevision?: number;
   disabled?: boolean;
   onSelect: (
     row: ListItem,
@@ -77,8 +74,6 @@ const ListView: React.FC<ListViewProps> = ({
   formKey,
   definition,
   language,
-  analyticsSnapshot,
-  analyticsRevision,
   disabled,
   onSelect,
   cachedResponse,
@@ -1820,48 +1815,6 @@ const ListView: React.FC<ListViewProps> = ({
   ]);
 
   const showResults = viewMode === 'table' || activeSearch;
-  const analyticsListMetrics = useMemo(() => {
-    const items = Array.isArray((analyticsSnapshot as any)?.items) ? ((analyticsSnapshot as any).items as any[]) : [];
-    if (!items.length) return [] as Array<{ id: string; text: string }>;
-    const widgetById = new Map<string, any>();
-    const widgets = Array.isArray((definition as any)?.analytics?.widgets) ? ((definition as any).analytics.widgets as any[]) : [];
-    widgets.forEach((entry: any) => {
-      const id = (entry?.id || '').toString().trim();
-      if (!id) return;
-      widgetById.set(id, entry);
-    });
-    const locale = language === 'FR' ? 'fr-BE' : language === 'NL' ? 'nl-BE' : 'en-US';
-    return items
-      .filter(entry => {
-        const placements = Array.isArray((entry as any)?.placements) ? ((entry as any).placements as any[]) : [];
-        return placements.some(token => (token || '').toString().trim() === 'listView');
-      })
-      .map(entry => {
-        const id = ((entry as any)?.id || '').toString().trim();
-        const cfg = widgetById.get(id);
-        const maxFractionDigitsRaw = Number(
-          (cfg as any)?.maximumFractionDigits !== undefined
-            ? (cfg as any).maximumFractionDigits
-            : (entry as any)?.maximumFractionDigits
-        );
-        const maxFractionDigits = Number.isFinite(maxFractionDigitsRaw) ? Math.max(0, Math.min(6, Math.round(maxFractionDigitsRaw))) : 0;
-        const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: maxFractionDigits });
-        const numericRaw =
-          typeof (entry as any)?.valueNumber === 'number'
-            ? (entry as any).valueNumber
-            : typeof (entry as any)?.value === 'number'
-              ? (entry as any).value
-              : Number((entry as any)?.value);
-        const numericValue = Number.isFinite(numericRaw) ? numericRaw : null;
-        const valueText =
-          ((entry as any)?.valueText || '').toString().trim() ||
-          (numericValue !== null ? formatter.format(numericValue) : ((entry as any)?.value ?? '').toString().trim());
-        const labelText = resolveLocalizedString((entry as any)?.label ?? (cfg as any)?.label, language, '').trim();
-        const text = labelText ? `${valueText} ${labelText}`.trim() : valueText;
-        return { id: id || `analytics-${text}`, text };
-      })
-      .filter(entry => !!entry.text);
-  }, [analyticsSnapshot, definition, language]);
   const listMetricCfg = definition.listView?.metric;
   const listMetricLabelText = useMemo(() => {
     if (!listMetricCfg?.label) return '';
@@ -1911,24 +1864,7 @@ const ListView: React.FC<ListViewProps> = ({
     });
   }, [effectiveTotalCount, listMetricCfg, listMetricCompleteData, listMetricComputed, loadedCount, onDiagnostic]);
 
-  useEffect(() => {
-    if (!onDiagnostic) return;
-    if (!analyticsListMetrics.length) return;
-    onDiagnostic('analytics.listView.snapshot', {
-      revision: Number(analyticsRevision ?? (analyticsSnapshot as any)?.revision ?? 0) || 0,
-      widgetCount: analyticsListMetrics.length
-    });
-  }, [analyticsListMetrics.length, analyticsRevision, analyticsSnapshot, onDiagnostic]);
-
-  const metricNode = analyticsListMetrics.length ? (
-    <div className="ck-list-metric-stack" aria-live="polite">
-      {analyticsListMetrics.map(metric => (
-        <div key={metric.id} className="ck-list-metric">
-          {metric.text}
-        </div>
-      ))}
-    </div>
-  ) : listMetricCfg ? (
+  const metricNode = listMetricCfg ? (
     <div className="ck-list-metric" aria-live="polite">
       {listMetricDisplayText}
     </div>

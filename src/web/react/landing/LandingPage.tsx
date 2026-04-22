@@ -1,16 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ANALYTICS_PAGE_CONFIG } from '../../../config/analyticsPage';
 import { LANDING_PAGE_CONFIG } from '../../../config/landingPage';
 import type { LandingIllustrationKey } from '../../../config/landingPageTypes';
 import { BUNDLED_FORM_CONFIGS } from '../../../config/bundledFormConfigs';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
+import { buildAnalyticsUrl, resolveServiceUrl } from '../app/headerNavigation';
 import { BlockingOverlay } from '../features/overlays/BlockingOverlay';
 import {
+  appendLandingSpecialItems,
   buildBundledLandingCatalog,
   buildLandingCatalogLayout,
   filterNavigableLandingItems,
   isTruthyParam,
   LandingAppItem,
+  resolveLandingCatalogItems,
   resolveLandingLogoUrl
 } from './model';
 
@@ -600,6 +604,19 @@ const LandingIllustration: React.FC<{ kind: LandingIllustrationKey; imageUrl?: s
     );
   }
 
+  if (kind === 'analytics') {
+    return (
+      <svg viewBox="0 0 188 132" className="ck-landing-visual" aria-hidden="true">
+        <ellipse cx="94" cy="112" rx="66" ry="10" fill="rgba(11, 87, 208, 0.08)" />
+        <rect x="26" y="28" width="132" height="68" rx="18" fill="rgba(11, 87, 208, 0.08)" stroke="currentColor" strokeWidth="3" />
+        <path d="M54 86V57M86 86V43M118 86V64M150 86V49" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+        <path d="M47 50h90" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.22" />
+        <circle cx="46" cy="50" r="8" fill="rgba(11, 87, 208, 0.16)" stroke="currentColor" strokeWidth="3" />
+        <path d="M38 22h22M138 22h22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.45" />
+      </svg>
+    );
+  }
+
   if (kind === 'more') {
     return (
       <svg viewBox="0 0 96 96" className="ck-landing-visual" aria-hidden="true">
@@ -687,55 +704,47 @@ const LandingActionCard: React.FC<{
   );
 };
 
-const LandingOverflowCard: React.FC<{
-  open: boolean;
-  title: string;
-  showLabel: string;
-  hideLabel: string;
-  onToggle: () => void;
-}> = ({ open, title, showLabel, hideLabel, onToggle }) => {
-  return (
-    <button
-      type="button"
-      className="ck-landing-card ck-landing-card--admin"
-      aria-expanded={open}
-      onClick={onToggle}
-    >
-      <div className="ck-landing-card-visual">
-        <LandingIllustration kind="more" />
-      </div>
-      <div className="ck-landing-card-copy ck-landing-card-copy--admin">
-        <div>
-          <h3 className="ck-landing-card-title">{title}</h3>
-        </div>
-      </div>
-      <span className="ck-landing-action ck-landing-action--secondary">{open ? hideLabel : showLabel}</span>
-    </button>
-  );
-};
-
 const LandingPage: React.FC = () => {
   const bundledItems = useMemo(() => buildBundledLandingCatalog(BUNDLED_FORM_CONFIGS as any), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FormCatalogItem[]>([]);
   const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
-  const [showMoreAdminForms, setShowMoreAdminForms] = useState(false);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const envTag = useMemo(() => resolveEnvTag(), []);
+  const serviceUrl = useMemo(() => resolveServiceUrl(), []);
   const landingCopy = LANDING_PAGE_CONFIG.copy;
+  const catalogItems = useMemo(() => resolveLandingCatalogItems(items, adminEnabled), [adminEnabled, items]);
   const headerLogoItems = useMemo(() => {
-    if (!items.length) return bundledItems;
     const itemMap = new Map<string, FormCatalogItem>();
     bundledItems.forEach(item => itemMap.set((item.formKey || '').toString().trim(), item));
-    items.forEach(item => itemMap.set((item.formKey || '').toString().trim(), { ...(itemMap.get((item.formKey || '').toString().trim()) || {}), ...item }));
+    catalogItems.forEach(item =>
+      itemMap.set((item.formKey || '').toString().trim(), { ...(itemMap.get((item.formKey || '').toString().trim()) || {}), ...item })
+    );
     return Array.from(itemMap.values());
-  }, [bundledItems, items]);
+  }, [bundledItems, catalogItems]);
   const headerLogoUrl = useMemo(
     () => resolveLandingLogoUrl(LANDING_PAGE_CONFIG.appHeader?.logoUrl, LANDING_PAGE_CONFIG.appHeader?.logoFormKey, headerLogoItems),
     [headerLogoItems]
   );
-  const landingLayout = useMemo(() => buildLandingCatalogLayout(items, adminEnabled, LANDING_PAGE_CONFIG), [adminEnabled, items]);
+  const analyticsLandingItem = useMemo(() => {
+    const targetUrl = buildAnalyticsUrl(serviceUrl, adminEnabled);
+    return {
+      id: '__analytics__',
+      section: ANALYTICS_PAGE_CONFIG.landingTile.section,
+      order: ANALYTICS_PAGE_CONFIG.landingTile.order,
+      illustration: 'analytics' as const,
+      targetUrl,
+      title: ANALYTICS_PAGE_CONFIG.landingTile.title,
+      description: ANALYTICS_PAGE_CONFIG.landingTile.description,
+      imageUrl: ANALYTICS_PAGE_CONFIG.landingTile.imageUrl
+    };
+  }, [adminEnabled, serviceUrl]);
+  const landingLayout = useMemo(
+    () =>
+      appendLandingSpecialItems(buildLandingCatalogLayout(catalogItems, adminEnabled, LANDING_PAGE_CONFIG), adminEnabled, [analyticsLandingItem]),
+    [adminEnabled, analyticsLandingItem, catalogItems]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -746,24 +755,22 @@ const LandingPage: React.FC = () => {
       .then(response => {
         if (cancelled) return;
         const list = Array.isArray(response) ? response : [];
-        const resolvedItems = filterNavigableLandingItems(list.length ? list : bundledItems, adminEnabled);
+        const resolvedItems = filterNavigableLandingItems(list, adminEnabled);
         setItems(resolvedItems);
         logEvent('catalog.fetch.success', {
           count: list.length,
-          resolvedCount: resolvedItems.length,
-          replacedBundled: list.length > 0
+          resolvedCount: resolvedItems.length
         });
       })
       .catch((err: any) => {
         if (cancelled) return;
         const message = (err?.message || err?.toString?.() || 'Failed to load forms.').toString();
-        const fallbackItems = filterNavigableLandingItems(bundledItems, adminEnabled);
-        setItems(fallbackItems);
-        if (!fallbackItems.length) setError(message);
+        setItems([]);
+        setError(message);
         logEvent('catalog.fetch.error', {
           message,
-          usedBundledFallback: fallbackItems.length > 0,
-          fallbackCount: fallbackItems.length
+          usedBundledFallback: false,
+          fallbackCount: 0
         });
       })
       .finally(() => {
@@ -775,13 +782,8 @@ const LandingPage: React.FC = () => {
     };
   }, [adminEnabled, bundledItems]);
 
-  React.useEffect(() => {
-    if (!landingLayout.overflowAdminApps.length && showMoreAdminForms) {
-      setShowMoreAdminForms(false);
-    }
-  }, [landingLayout.overflowAdminApps.length, showMoreAdminForms]);
-
-  const showAdminSection = adminEnabled && (landingLayout.adminApps.length > 0 || landingLayout.overflowAdminApps.length > 0);
+  const showPrimaryApps = !loading && !error && landingLayout.primaryApps.length > 0;
+  const showAdminSection = !loading && !error && adminEnabled && landingLayout.adminApps.length > 0;
 
   return (
     <div className="ck-landing-page page">
@@ -823,7 +825,7 @@ const LandingPage: React.FC = () => {
             <h2 className="ck-landing-section-title">{landingCopy.primarySectionTitle}</h2>
           </div>
 
-          {!loading && !error && landingLayout.primaryApps.length ? (
+          {showPrimaryApps ? (
             <div className="ck-landing-grid ck-landing-grid--primary">
               {landingLayout.primaryApps.map(item => (
                 <LandingActionCard
@@ -850,7 +852,7 @@ const LandingPage: React.FC = () => {
           <section className="ck-landing-section" style={{ animationDelay: '200ms' }}>
             <div className="ck-landing-section-head">
               <h2 className="ck-landing-section-title">{landingCopy.adminSectionTitle}</h2>
-              <p className="muted ck-landing-section-note">{landingCopy.adminSectionNote}</p>
+              {landingCopy.adminSectionNote ? <p className="muted ck-landing-section-note">{landingCopy.adminSectionNote}</p> : null}
             </div>
 
             <div className="ck-landing-grid ck-landing-grid--admin">
@@ -865,47 +867,6 @@ const LandingPage: React.FC = () => {
                   }
                 />
               ))}
-              {landingLayout.overflowAdminApps.length ? (
-                <LandingOverflowCard
-                  open={showMoreAdminForms}
-                  title={landingCopy.overflowTitle}
-                  showLabel={landingCopy.overflowShowLabel}
-                  hideLabel={landingCopy.overflowHideLabel}
-                  onToggle={() => {
-                    const nextOpen = !showMoreAdminForms;
-                    setShowMoreAdminForms(nextOpen);
-                    logEvent('catalog.adminOverflow.toggle', {
-                      open: nextOpen,
-                      count: landingLayout.overflowAdminApps.length
-                    });
-                  }}
-                />
-              ) : null}
-            </div>
-
-            <div className="ck-landing-overflow-panel" data-open={showMoreAdminForms ? 'true' : 'false'}>
-              {showMoreAdminForms ? (
-                <div className="ck-landing-overflow-list">
-                  {landingLayout.overflowAdminApps.map(item => (
-                    <a
-                      key={item.formKey}
-                      href={(item.targetUrl || '').toString().trim()}
-                      target="_top"
-                      className="ck-landing-overflow-link"
-                      onClick={event => {
-                        event.preventDefault();
-                        openLandingItem(item, setPendingNavigation, landingCopy.pendingNavigationTitle, landingCopy.pendingNavigationMessage);
-                      }}
-                    >
-                      <div className="ck-landing-overflow-copy">
-                        <p className="ck-landing-overflow-title">{item.displayTitle}</p>
-                        {item.displayDescription ? <p className="ck-landing-overflow-description">{item.displayDescription}</p> : null}
-                      </div>
-                      <span className="ck-landing-overflow-action">{landingCopy.openAppLabel}</span>
-                    </a>
-                  ))}
-                </div>
-              ) : null}
             </div>
           </section>
         ) : null}

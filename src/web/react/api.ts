@@ -14,6 +14,7 @@ import {
   WebFormDefinition,
   WebFormSubmission
 } from '../../types';
+import type { AnalyticsDashboardPayload } from '../../config/analyticsPageTypes';
 import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
@@ -803,3 +804,6 @@ export const fetchFormConfigApi = (formKey?: string | null): Promise<FormConfigE
 
 export const fetchFormCatalogApi = (): Promise<FormCatalogItem[]> =>
   invokeTransport<FormCatalogItem[]>('fetchFormCatalog');
+
+export const fetchAnalyticsDashboardApi = (): Promise<AnalyticsDashboardPayload> =>
+  invokeTransport<AnalyticsDashboardPayload>('fetchAnalyticsDashboard');

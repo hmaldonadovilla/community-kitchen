@@ -34,7 +34,18 @@ export const resolveAdminEnabled = (requestParams?: Record<string, any>): boolea
 };
 
 const buildUrl = (serviceUrl: string, params: Record<string, string>): string => {
-  const base = (serviceUrl || '').toString().trim();
+  let base = (serviceUrl || '').toString().trim();
+  if (!base) {
+    try {
+      const currentHref = typeof location !== 'undefined' ? location.href : '';
+      const currentUrl = new URL((currentHref || '').toString());
+      currentUrl.search = '';
+      currentUrl.hash = '';
+      base = currentUrl.toString();
+    } catch {
+      // ignore
+    }
+  }
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     const k = (key || '').toString().trim();
@@ -56,11 +67,8 @@ export const buildLandingUrl = (serviceUrl: string, adminEnabled: boolean): stri
   return buildUrl(serviceUrl, params);
 };
 
-export const buildAnalyticsUrl = (serviceUrl: string, formKey: string, adminEnabled: boolean): string => {
-  const params: Record<string, string> = {
-    form: (formKey || '').toString().trim(),
-    app: 'analytics'
-  };
+export const buildAnalyticsUrl = (serviceUrl: string, adminEnabled: boolean): string => {
+  const params: Record<string, string> = { app: 'analytics' };
   if (adminEnabled) params.admin = 'true';
   return buildUrl(serviceUrl, params);
 };

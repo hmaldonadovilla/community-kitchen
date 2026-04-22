@@ -21,7 +21,7 @@ const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Analytics stays inside each app.',
+    adminSectionNote: 'Analytics is available from the dashboard below.',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',
@@ -47,6 +47,7 @@ const normalizeSection = (value: any): LandingSectionKey => {
 const normalizeIllustration = (value: any): LandingIllustrationKey => {
   const raw = normalizeOptionalText(value);
   return raw === 'checks' || raw === 'meal' || raw === 'customers' || raw === 'ingredients' || raw === 'recipes' || raw === 'more' || raw === 'admin'
+    || raw === 'analytics'
     ? raw
     : 'admin';
 };

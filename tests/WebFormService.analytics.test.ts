@@ -1,5 +1,44 @@
 import './mocks/GoogleAppsScript';
 import { MockSpreadsheet } from './mocks/GoogleAppsScript';
+
+jest.mock('../src/config/analyticsPage', () => {
+  const actual = jest.requireActual('../src/config/analyticsPage');
+  return {
+    ...actual,
+    ANALYTICS_PAGE_CONFIG: {
+      pageTitle: 'Analytics',
+      pageDescription: 'Review analytics across configured forms.',
+      copy: {
+        loadingLabel: 'Loading analytics...',
+        emptyLabel: 'No analytics widgets are configured for this dashboard.',
+        backToLandingLabel: 'Back to forms',
+        pendingNavigationTitle: 'Please wait',
+        pendingNavigationMessage: 'Opening forms...'
+      },
+      landingTile: {
+        title: 'Analytics',
+        description: 'Review analytics across configured forms.',
+        section: 'admin',
+        order: 40
+      },
+      sections: [
+        {
+          id: 'operations',
+          title: 'Operations',
+          widgets: [
+            {
+              id: 'analytics_closed_qty',
+              sourceFormKey: 'Config: Analytics',
+              sourceWidgetId: 'closed_qty',
+              title: 'Closed quantity'
+            }
+          ]
+        }
+      ]
+    }
+  };
+});
+
 import { WebFormService } from '../src/services/WebFormService';
 
 describe('WebFormService analytics integration', () => {
@@ -46,6 +85,7 @@ describe('WebFormService analytics integration', () => {
       ['NOTE', 'TEXT', 'Note', 'Note', 'Notitie', false, '', '', '', 'Active', '', '', '', '', '']
     ];
     (configSheet as any).setMockData(configRows);
+
   });
 
   it('recomputes analytics on save and exposes snapshots in bootstrap payloads', () => {
@@ -107,5 +147,45 @@ describe('WebFormService analytics integration', () => {
     expect(result.success).toBe(true);
     expect(result.updatedForms).toBeGreaterThanOrEqual(1);
     expect(result.errors).toEqual([]);
+  });
+
+  it('builds the centralized analytics dashboard from configured form snapshots', () => {
+    service.saveSubmissionWithId({
+      formKey: 'Config: Analytics',
+      language: 'EN',
+      id: 'REC-20',
+      QTY: 18,
+      NOTE: 'closed'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Analytics',
+      language: 'EN',
+      id: 'REC-21',
+      QTY: 5,
+      NOTE: 'open'
+    } as any);
+    service.saveSubmissionWithId({
+      formKey: 'Config: Analytics',
+      language: 'EN',
+      id: 'REC-22',
+      QTY: 7,
+      NOTE: 'closed'
+    } as any);
+
+    const dashboard = service.fetchAnalyticsDashboard();
+    expect(dashboard.pageTitle).toBe('Analytics');
+    expect(dashboard.errors).toEqual([]);
+    expect(dashboard.sections).toHaveLength(1);
+    expect(dashboard.sections[0]?.widgets).toHaveLength(1);
+    expect(dashboard.sections[0]?.widgets[0]).toMatchObject({
+      dashboardWidgetId: 'analytics_closed_qty',
+      id: 'closed_qty',
+      sourceFormKey: 'Config: Analytics',
+      sourceFormTitle: 'Analytics Form',
+      sourceWidgetId: 'closed_qty',
+      title: 'Closed quantity',
+      value: 25
+    });
+    expect((dashboard.updatedAt || '').toString()).not.toBe('');
   });
 });

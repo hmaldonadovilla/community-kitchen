@@ -1,10 +1,12 @@
 import {
   appendAdminQuery,
+  appendLandingSpecialItems,
   buildBundledLandingCatalog,
   buildLandingCatalogLayout,
   filterNavigableLandingItems,
   pickLandingLogoUrl,
   pickLandingLogoUrlByFormKey,
+  resolveLandingCatalogItems,
   resolveLandingLogoUrl,
   resolveLandingHeaderTitle
 } from '../../src/web/react/landing/model';
@@ -26,7 +28,7 @@ const landingConfigFixture: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Analytics stays inside each app.',
+    adminSectionNote: 'Analytics is available from the dashboard below.',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',
@@ -247,6 +249,25 @@ describe('landing model helpers', () => {
     ]);
   });
 
+  test('resolveLandingCatalogItems waits for runtime targets before exposing landing navigation', () => {
+    expect(resolveLandingCatalogItems([], true)).toEqual([]);
+  });
+
+  test('resolveLandingCatalogItems prefers the runtime catalog when it is available', () => {
+    const runtimeItems = [
+      { formKey: 'Config: Meal Production', title: 'Meal Production', targetUrl: 'https://example.test/runtime' },
+      { formKey: 'Config: Checklist', title: 'Checklist', targetUrl: '' }
+    ] as any;
+
+    expect(resolveLandingCatalogItems(runtimeItems, true)).toEqual([
+      {
+        formKey: 'Config: Meal Production',
+        title: 'Meal Production',
+        targetUrl: 'https://example.test/runtime?admin=true'
+      }
+    ]);
+  });
+
   test('buildLandingCatalogLayout maps the mockup copy and groups overflow admin forms', () => {
     expect(
       buildLandingCatalogLayout(
@@ -395,5 +416,74 @@ describe('landing model helpers', () => {
         adminApps: [],
         overflowAdminApps: []
       });
+  });
+
+  test('appendLandingSpecialItems merges special cards into the configured order', () => {
+    const layout = buildLandingCatalogLayout(
+      [
+        { formKey: 'Config: Checklist', title: 'Checklist', targetUrl: 'https://example.test/checks' },
+        { formKey: 'Config: Distributor', title: 'Distributors', targetUrl: 'https://example.test/distributors' },
+        { formKey: 'Config: Ingredients Management', title: 'Ingredients Management', targetUrl: 'https://example.test/ingredients' }
+      ] as any,
+      true,
+      landingConfigFixture
+    );
+
+    expect(
+      appendLandingSpecialItems(layout, true, [
+        {
+          id: '__analytics__',
+          section: 'admin',
+          order: 15,
+          illustration: 'analytics',
+          targetUrl: 'https://example.test/analytics',
+          title: 'Analytics',
+          description: 'Review analytics across configured forms.',
+          imageUrl: 'data:image/jpeg;base64,analytics'
+        }
+      ])
+    ).toEqual({
+      primaryApps: [
+        {
+          formKey: 'Config: Checklist',
+          title: 'Checklist',
+          targetUrl: 'https://example.test/checks',
+          displayTitle: 'Storage & cleaning checks',
+          displayDescription: 'Conduct cleaning inspections and check food storage.',
+          illustration: 'checks',
+          imageUrl: 'data:image/jpeg;base64,checks'
+        }
+      ],
+      adminApps: [
+        {
+          formKey: 'Config: Distributor',
+          title: 'Distributors',
+          targetUrl: 'https://example.test/distributors',
+          displayTitle: 'Customer Management',
+          displayDescription: 'Manage and communicate with customers.',
+          illustration: 'customers',
+          imageUrl: 'data:image/jpeg;base64,customers'
+        },
+        {
+          formKey: '__analytics__',
+          title: 'Analytics',
+          targetUrl: 'https://example.test/analytics',
+          displayTitle: 'Analytics',
+          displayDescription: 'Review analytics across configured forms.',
+          illustration: 'analytics',
+          imageUrl: 'data:image/jpeg;base64,analytics'
+        },
+        {
+          formKey: 'Config: Ingredients Management',
+          title: 'Ingredients Management',
+          targetUrl: 'https://example.test/ingredients',
+          displayTitle: 'Ingredient Management',
+          displayDescription: 'Track inventory of ingredients and supplies.',
+          illustration: 'ingredients',
+          imageUrl: 'data:image/jpeg;base64,ingredients'
+        }
+      ],
+      overflowAdminApps: []
+    });
   });
 });

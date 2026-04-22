@@ -41,7 +41,6 @@ import {
   clearHtmlRenderClientCache,
   invalidateClientSharedDataCaches,
   consumePrefetchedHomeBootstrapApi,
-  fetchBootstrapContextApi,
   fetchHomeBootstrapApi,
   fetchSummaryRecordApi,
   fetchSortedBatch,
@@ -64,7 +63,6 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { ListViewLegend } from './components/app/ListViewLegend';
-import { AnalyticsOverlay } from './components/app/AnalyticsOverlay';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FileOverlay } from './components/form/overlays/FileOverlay';
 import { FormErrors, LineItemState, OptionState, View } from './types';
@@ -539,12 +537,11 @@ const HOME_LIST_LOCAL_CACHE_PREFIX = 'ck.homeList.v1';
 const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
 // Remaining list pages are purely background enrichment for the home list.
 // Delay them so they do not compete with more valuable boot work such as
-// analytics, data source warmup, and first-record snapshot hydration.
+// data source warmup and first-record snapshot hydration.
 const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
 const HOME_RECORD_PREFETCH_PRIME_DELAY_MS = 250;
 const HOME_RECORD_PREFETCH_REST_DELAY_MS = 2400;
-const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
 
 type HomeListLocalCachePayload = {
@@ -680,7 +677,7 @@ const clearHomeListLocalCache = (key: string): void => {
   }
 };
 
-const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {
+const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
   >;
@@ -856,7 +853,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
-      } catch (_) {
+      } catch {
         // ignore logging failures
       }
     },
@@ -3892,28 +3889,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const records = bootstrap?.records || {};
     return { response, records };
   });
-  const [analyticsSnapshot, setAnalyticsSnapshot] = useState<any>(() => {
-    const globalAny = globalThis as any;
-    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    return (bootstrap?.analytics || analytics || null) as any;
-  });
-  const [analyticsSnapshotRev, setAnalyticsSnapshotRev] = useState<number>(() => {
-    const globalAny = globalThis as any;
-    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
-    return Number.isFinite(rev) && rev >= 0 ? rev : 0;
-  });
-  const hasListViewAnalyticsWidgets = useMemo(() => {
-    const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
-    return widgets.some(widget => {
-      const placements = Array.isArray(widget?.placements) ? widget.placements : ['analyticsPage'];
-      return placements.some(token => (token || '').toString().trim() === 'listView');
-    });
-  }, [definition.analytics?.widgets]);
-  const [analyticsOverlayOpen, setAnalyticsOverlayOpen] = useState(false);
-  const [analyticsOverlayLoading, setAnalyticsOverlayLoading] = useState(false);
-  const [analyticsOverlayError, setAnalyticsOverlayError] = useState<string | null>(null);
-  const analyticsOverlayRequestRef = useRef(0);
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
@@ -3939,7 +3914,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const formDataSourceRefreshKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
-  const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
@@ -3977,19 +3951,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedDataSourceRefreshTimersRef.current = [];
     };
   }, []);
-
-  useEffect(() => {
-    const globalAny = globalThis as any;
-    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    setAnalyticsSnapshot((bootstrap?.analytics || analytics || null) as any);
-  }, [analytics, formKey]);
-
-  useEffect(() => {
-    const globalAny = globalThis as any;
-    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
-    setAnalyticsSnapshotRev(Number.isFinite(rev) && rev >= 0 ? rev : 0);
-  }, [analytics, analyticsRev, formKey]);
 
   useEffect(() => {
     if (initialHomeListSource !== 'localStorage') return;
@@ -4047,67 +4008,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       firstItemCount: firstCount
     });
   }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
-
-  useEffect(() => {
-    if (view !== 'list') return;
-    if (homeFirstDataReadyAtMs <= 0) return;
-    if (!hasListViewAnalyticsWidgets) return;
-    if (analyticsSnapshot && Array.isArray((analyticsSnapshot as any)?.items) && (analyticsSnapshot as any).items.length > 0) return;
-    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}`;
-    if (deferredAnalyticsPrefetchKeyRef.current === key) return;
-    deferredAnalyticsPrefetchKeyRef.current = key;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
-    let idleHandle: number | null = null;
-    const run = () => {
-      if (cancelled) return;
-      const startedAt = Date.now();
-      logEvent('analytics.listView.prefetch.start', {
-        formKey,
-        startedAfterHomeDataMs: Math.max(0, Date.now() - homeFirstDataReadyAtMs)
-      });
-      fetchBootstrapContextApi(formKey, { includeAnalytics: true })
-        .then(res => {
-          if (cancelled) return;
-          const snapshot = ((res as any)?.analytics || null) as any;
-          setAnalyticsSnapshot(snapshot);
-          const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
-          setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
-          logEvent('analytics.listView.prefetch.ok', {
-            formKey,
-            itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
-            durationMs: Date.now() - startedAt
-          });
-        })
-        .catch((err: any) => {
-          if (cancelled) return;
-          logEvent('analytics.listView.prefetch.error', {
-            formKey,
-            message: err?.message || err?.toString?.() || 'unknown',
-            durationMs: Date.now() - startedAt
-          });
-        });
-    };
-
-    try {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleHandle = (window as any).requestIdleCallback(run, { timeout: HOME_ANALYTICS_PREFETCH_DELAY_MS + 1200 }) as number;
-      } else {
-        timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
-      }
-    } catch {
-      timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
-    }
-
-    return () => {
-      cancelled = true;
-      if (timer !== null) globalThis.clearTimeout(timer);
-      if (idleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleHandle);
-      }
-    };
-  }, [analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -5948,7 +5848,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!debugEnabled || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm][iOSZoom]', event, payload || {});
-      } catch (_) {
+      } catch {
         // ignore logging failures
       }
     };
@@ -11520,7 +11420,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const isFile = (v: any): v is File => {
           try {
             return typeof File !== 'undefined' && v instanceof File;
-          } catch (_) {
+          } catch {
             return false;
           }
         };
@@ -13242,7 +13142,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (globalAny.__CK_PERF_OPEN_RECORD_BY_ID__ === hook) {
           delete globalAny.__CK_PERF_OPEN_RECORD_BY_ID__;
         }
-      } catch (_) {
+      } catch {
         // ignore cleanup failures
       }
     };
@@ -13265,7 +13165,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (globalAny.__CK_DEBUG_FORM_STATE__ === hook) {
           delete globalAny.__CK_DEBUG_FORM_STATE__;
         }
-      } catch (_) {
+      } catch {
         // ignore cleanup failures
       }
     };
@@ -13361,62 +13261,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [headerEnvTag, headerSaveIndicator]);
   const headerServiceUrl = useMemo(() => resolveServiceUrl(), []);
   const headerAdminEnabled = useMemo(() => resolveAdminEnabled(), []);
-  const hasAnalyticsPageWidgets = useMemo(() => {
-    const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
-    return widgets.some(widget => {
-      const placements = Array.isArray(widget?.placements) ? widget.placements : ['analyticsPage'];
-      return placements.some(token => (token || '').toString().trim() === 'analyticsPage');
-    });
-  }, [definition.analytics?.widgets]);
-  const openAnalyticsOverlay = useCallback(() => {
-    setAnalyticsOverlayOpen(true);
-    setAnalyticsOverlayError(null);
-    setAnalyticsOverlayLoading(true);
-    const requestId = analyticsOverlayRequestRef.current + 1;
-    analyticsOverlayRequestRef.current = requestId;
-    logEvent('ui.header.drawer.analytics.open', { formKey, requestId });
-    fetchBootstrapContextApi(formKey, { includeAnalytics: true })
-      .then(res => {
-        if (analyticsOverlayRequestRef.current !== requestId) return;
-        const snapshot = ((res as any)?.analytics || null) as any;
-        setAnalyticsSnapshot(snapshot);
-        const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
-        setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
-        logEvent('ui.header.drawer.analytics.ready', {
-          formKey,
-          itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
-          requestId
-        });
-      })
-      .catch((err: any) => {
-        if (analyticsOverlayRequestRef.current !== requestId) return;
-        const message = resolveUserFacingErrorMessage(err, 'Failed to load analytics.');
-        setAnalyticsOverlayError(message);
-        logEvent('ui.header.drawer.analytics.error', { formKey, message, requestId });
-      })
-      .finally(() => {
-        if (analyticsOverlayRequestRef.current !== requestId) return;
-        setAnalyticsOverlayLoading(false);
-      });
-  }, [formKey, logEvent]);
-  const closeAnalyticsOverlay = useCallback(() => {
-    setAnalyticsOverlayOpen(false);
-    setAnalyticsOverlayLoading(false);
-    setAnalyticsOverlayError(null);
-    logEvent('ui.header.drawer.analytics.close', { formKey });
-  }, [formKey, logEvent]);
   const drawerActions = useMemo(() => {
     const actions: Array<{ id: string; label: string; onClick: () => void; placement?: 'main' | 'secondary' | 'footer' }> = [];
-    if (hasAnalyticsPageWidgets) {
-      actions.push({
-        id: 'analytics',
-        label: tSystem('app.analytics', language, 'Analytics'),
-        placement: 'secondary',
-        onClick: () => {
-          openAnalyticsOverlay();
-        }
-      });
-    }
     actions.push({
       id: 'landing',
       label: tSystem('app.forms', language, 'Forms'),
@@ -13439,7 +13285,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     });
     return actions;
-  }, [hasAnalyticsPageWidgets, headerAdminEnabled, headerServiceUrl, language, navigateHomeBusy, openAnalyticsOverlay, logEvent]);
+  }, [headerAdminEnabled, headerServiceUrl, language, navigateHomeBusy, logEvent]);
 
   const dedupDialogConflict = useMemo(() => {
     const conflict = (dedupConflict || dedupNotice) as any;
@@ -14235,8 +14081,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           formKey={formKey}
           definition={definition}
           language={language}
-          analyticsSnapshot={analyticsSnapshot || undefined}
-          analyticsRevision={analyticsSnapshotRev}
           disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}
@@ -14253,18 +14097,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onSelect={handleRecordSelect}
         />
       )}
-
-      <AnalyticsOverlay
-        open={analyticsOverlayOpen}
-        language={language}
-        title={tSystem('app.analytics', language, 'Analytics')}
-        subtitle={definition.title || formKey || ''}
-        items={Array.isArray((analyticsSnapshot as any)?.items) ? ((analyticsSnapshot as any).items as any[]) : []}
-        loading={analyticsOverlayLoading}
-        error={analyticsOverlayError}
-        updatedAt={(analyticsSnapshot as any)?.updatedAt || ''}
-        onClose={closeAnalyticsOverlay}
-      />
 
       <BlockingOverlay
         open={dedupProgress.open}

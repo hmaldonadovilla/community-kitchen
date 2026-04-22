@@ -1,0 +1,37 @@
+{
+  "pageTitle": "Analytics",
+  "pageDescription": "Review analytics across configured forms.",
+  "appHeader": {
+    "logoFormKey": "Config: Meal Production"
+  },
+  "landingTile": {
+    "title": "Analytics",
+    "description": "Review analytics across configured forms.",
+    "section": "admin",
+    "order": 40,
+    "imagePath": "docs/images/analytics.png"
+  },
+  "copy": {
+    "loadingLabel": "Loading analytics...",
+    "emptyLabel": "No analytics widgets are configured for this dashboard.",
+    "backToLandingLabel": "Back to forms",
+    "pendingNavigationTitle": "Please wait",
+    "pendingNavigationMessage": "Opening forms..."
+  },
+  "sections": [
+    {
+      "id": "operations",
+      "title": "Operations",
+      "description": "Cross-form operational metrics pulled from configured analytics snapshots.",
+      "widgets": [
+        {
+          "id": "meal_production_portions_delivered",
+          "sourceFormKey": "Config: Meal Production",
+          "sourceWidgetId": "portions_delivered",
+          "title": "Portions delivered",
+          "description": "Closed meal production portions delivered across recorded services."
+        }
+      ]
+    }
+  ]
+}

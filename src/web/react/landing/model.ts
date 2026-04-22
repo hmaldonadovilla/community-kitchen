@@ -18,10 +18,25 @@ export interface LandingCatalogLayout {
   overflowAdminApps: LandingAppItem[];
 }
 
+export interface LandingSpecialAppConfig {
+  id: string;
+  section: Exclude<LandingSection, 'overflow'>;
+  order: number;
+  illustration: LandingIllustrationKey;
+  targetUrl: string;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+}
+
 type LandingSection = 'primary' | 'admin' | 'overflow';
 
 type LandingFormPreset = LandingPageAppConfig & {
   section: LandingSection;
+};
+
+type OrderedLandingAppItem = LandingAppItem & {
+  __landingOrder?: number;
 };
 
 const resolveLandingPreset = (item: FormCatalogItem, pageConfig: LandingPageConfig): LandingFormPreset => {
@@ -36,13 +51,24 @@ const resolveLandingPreset = (item: FormCatalogItem, pageConfig: LandingPageConf
   };
 };
 
-const toLandingAppItem = (item: FormCatalogItem, preset: LandingFormPreset): LandingAppItem => ({
-  ...item,
-  displayTitle: (preset.title || item.title || item.formKey).toString().trim(),
-  displayDescription: (preset.description || item.description || '').toString().trim() || undefined,
-  illustration: preset.illustration,
-  imageUrl: normalizeOptionalText(preset.imageUrl)
-});
+const toLandingAppItem = (item: FormCatalogItem, preset: LandingFormPreset): LandingAppItem => {
+  const nextItem = {
+    ...item,
+    displayTitle: (preset.title || item.title || item.formKey).toString().trim(),
+    displayDescription: (preset.description || item.description || '').toString().trim() || undefined,
+    illustration: preset.illustration,
+    imageUrl: normalizeOptionalText(preset.imageUrl)
+  } as LandingAppItem;
+
+  Object.defineProperty(nextItem, '__landingOrder', {
+    value: preset.order,
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return nextItem;
+};
 
 const compareLandingItems = (
   left: { item: LandingAppItem; preset: LandingFormPreset },
@@ -50,6 +76,13 @@ const compareLandingItems = (
 ): number => {
   if (left.preset.order !== right.preset.order) return left.preset.order - right.preset.order;
   return left.item.displayTitle.localeCompare(right.item.displayTitle);
+};
+
+const compareOrderedLandingItems = (left: OrderedLandingAppItem, right: OrderedLandingAppItem): number => {
+  const leftOrder = Number(left.__landingOrder ?? Number.MAX_SAFE_INTEGER);
+  const rightOrder = Number(right.__landingOrder ?? Number.MAX_SAFE_INTEGER);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return left.displayTitle.localeCompare(right.displayTitle);
 };
 
 const normalizeOptionalText = (value: any): string | undefined => {
@@ -154,6 +187,13 @@ export const filterNavigableLandingItems = (items: FormCatalogItem[], adminEnabl
   return next;
 };
 
+export const resolveLandingCatalogItems = (
+  runtimeItems: FormCatalogItem[],
+  adminEnabled: boolean
+): FormCatalogItem[] => {
+  return filterNavigableLandingItems(runtimeItems, adminEnabled);
+};
+
 export const buildLandingCatalogLayout = (items: FormCatalogItem[], adminEnabled: boolean, pageConfig: LandingPageConfig): LandingCatalogLayout => {
   const primaryApps: Array<{ item: LandingAppItem; preset: LandingFormPreset }> = [];
   const adminApps: Array<{ item: LandingAppItem; preset: LandingFormPreset }> = [];
@@ -186,5 +226,47 @@ export const buildLandingCatalogLayout = (items: FormCatalogItem[], adminEnabled
     primaryApps: primaryApps.map(entry => entry.item),
     adminApps: adminApps.map(entry => entry.item),
     overflowAdminApps: overflowAdminApps.map(entry => entry.item)
+  };
+};
+
+export const appendLandingSpecialItems = (
+  layout: LandingCatalogLayout,
+  adminEnabled: boolean,
+  specialItems: LandingSpecialAppConfig[]
+): LandingCatalogLayout => {
+  const specialPrimary: Array<LandingAppItem & { __landingOrder: number }> = [];
+  const specialAdmin: Array<LandingAppItem & { __landingOrder: number }> = [];
+
+  (Array.isArray(specialItems) ? specialItems : []).forEach(item => {
+    const nextItem = {
+      formKey: item.id,
+      title: item.title,
+      displayTitle: item.title,
+      displayDescription: item.description,
+      targetUrl: item.targetUrl,
+      illustration: item.illustration,
+      imageUrl: item.imageUrl,
+      __landingOrder: item.order
+    } as LandingAppItem & { __landingOrder: number };
+    const bucket = item.section === 'primary' ? specialPrimary : adminEnabled ? specialAdmin : null;
+    if (!bucket) return;
+    bucket.push(nextItem);
+  });
+
+  const nextPrimary = [...layout.primaryApps, ...specialPrimary].sort(compareOrderedLandingItems).map(item => {
+    const nextItem = { ...item } as OrderedLandingAppItem;
+    delete nextItem.__landingOrder;
+    return nextItem as LandingAppItem;
+  });
+  const nextAdmin = [...layout.adminApps, ...specialAdmin].sort(compareOrderedLandingItems).map(item => {
+    const nextItem = { ...item } as OrderedLandingAppItem;
+    delete nextItem.__landingOrder;
+    return nextItem as LandingAppItem;
+  });
+
+  return {
+    primaryApps: nextPrimary,
+    adminApps: nextAdmin,
+    overflowAdminApps: layout.overflowAdminApps
   };
 };
