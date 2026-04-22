@@ -46,6 +46,7 @@ import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
+import { hydrateMealProductionPrepIngredientsFromLeftovers } from './webform/followup/mealProductionLeftoverIngredients';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
 import { getUiEnvTag } from './webform/envTag';
@@ -262,7 +263,9 @@ export class WebFormService {
 
   private get followups(): FollowupService {
     if (!this._followups) {
-      this._followups = new FollowupService(this.ss, this.submissions, this.dataSources);
+      this._followups = new FollowupService(this.ss, this.submissions, this.dataSources, (formKey: string, recordId: string) =>
+        this.fetchSubmissionById(formKey, recordId)
+      );
     }
     return this._followups;
   }
@@ -5328,7 +5331,7 @@ export class WebFormService {
       renderValues = backfill.values;
     }
 
-    const record: WebFormSubmission = {
+    let record: WebFormSubmission = {
       formKey: formKey,
       language,
       values: renderValues,
@@ -5338,6 +5341,12 @@ export class WebFormService {
       status: formObject?.status ? formObject.status.toString() : undefined,
       pdfUrl: undefined
     };
+    const canonicalFormKey = this.resolveCanonicalFormKey(formKey) || formKey;
+    if (canonicalFormKey === 'Config: Meal Production') {
+      record = hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
+        this.fetchSubmissionById('Config: Leftover Inventory', leftoverRecordId)
+      );
+    }
     return record;
   }
 

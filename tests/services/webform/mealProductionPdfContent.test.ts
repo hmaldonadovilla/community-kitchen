@@ -143,7 +143,7 @@ describe('buildMealProductionPdfPlaceholders', () => {
               ]
             },
             {
-              PREP_TYPE: 'Entire dish',
+              PREP_TYPE: 'Multi-ingredient',
               PREP_QTY: 6,
               RECIPE: 'Leftover curry',
               MP_INGREDIENTS_LI: [
@@ -151,7 +151,7 @@ describe('buildMealProductionPdfPlaceholders', () => {
               ]
             },
             {
-              PREP_TYPE: 'Part dish',
+              PREP_TYPE: 'Single-ingredient',
               PREP_QTY: 0,
               RECIPE: 'Spice mix',
               MP_INGREDIENTS_LI: [
@@ -189,7 +189,7 @@ describe('buildMealProductionPdfPlaceholders', () => {
     expect(placeholders.APP_HEADER_LOGO_HTML).toBe('');
   });
 
-  it('merges entire dish leftovers with quantity 0 into cooked section', () => {
+  it('merges multi-ingredient leftovers with quantity 0 into cooked section', () => {
     const recordWithZeroEntire: WebFormSubmission = {
       formKey: 'Config: Meal Production',
       language: 'EN',
@@ -209,7 +209,7 @@ describe('buildMealProductionPdfPlaceholders', () => {
                 ]
               },
               {
-                PREP_TYPE: 'Entire dish',
+                PREP_TYPE: 'Multi-ingredient',
                 PREP_QTY: 0,
                 RECIPE: 'Leftover curry',
                 MP_INGREDIENTS_LI: [
@@ -229,5 +229,45 @@ describe('buildMealProductionPdfPlaceholders', () => {
     expect(placeholders.MEAL_BLOCKS).toContain('Peas');
     const tables = (placeholders.MEAL_BLOCKS.match(/class="ck-meal-table"/g) || []).length;
     expect(tables).toBe(1);
+  });
+
+  it('still accepts legacy leftover prep type aliases in the PDF renderer', () => {
+    const legacyRecord: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      values: {
+        MP_MEALS_REQUEST: [
+          {
+            MEAL_TYPE: 'Vegetarian',
+            ORD_QTY: 20,
+            FINAL_QTY: 18,
+            MP_TYPE_LI: [
+              {
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 12,
+                RECIPE: 'Veg curry',
+                MP_INGREDIENTS_LI: [{ ING: 'Carrots', ALLERGEN: 'None' }]
+              },
+              {
+                PREP_TYPE: 'Entire dish',
+                PREP_QTY: 6,
+                RECIPE: 'Leftover curry',
+                MP_INGREDIENTS_LI: [{ ING: 'Peas', ALLERGEN: 'Peas' }]
+              },
+              {
+                PREP_TYPE: 'Part dish',
+                PREP_QTY: 0,
+                RECIPE: 'Spice mix',
+                MP_INGREDIENTS_LI: [{ ING: 'Spices', ALLERGEN: 'None' }]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const placeholders = buildMealProductionPdfPlaceholders({ record: legacyRecord, questions, form });
+    expect(placeholders.MEAL_BLOCKS).toContain('Leftover curry');
+    expect(placeholders.MEAL_BLOCKS).toContain('Spices');
   });
 });
