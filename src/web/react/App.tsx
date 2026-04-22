@@ -782,14 +782,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     serverVersion?: number | null;
     serverRow?: number | null;
   }) => Promise<boolean>;
-  type RecordSyncNoticeState = {
-    open: boolean;
-    title: string;
-    message: string;
-  };
   type RecordSnapshotApplyMode = 'ignored' | 'metaOnly' | 'applied';
   const [recordStale, setRecordStale] = useState<RecordStaleInfo | null>(null);
-  const [recordSyncNotice, setRecordSyncNotice] = useState<RecordSyncNoticeState>({ open: false, title: '', message: '' });
   const recordStaleRef = useRef<RecordStaleInfo | null>(null);
   const submitPrecheckInFlightRef = useRef<boolean>(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
@@ -1564,7 +1558,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dedupDeleteOnKeyChangeInFlightRef.current = false;
       }
     },
-    [definition, formKey, logEvent, setSelectedRecordId, submit]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [definition, formKey, logEvent, resolveLogMessage, setSelectedRecordId]
   );
 
   const handleFieldChangeDialogConfirm = useCallback(
@@ -2435,7 +2430,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           run();
         }, 600);
       }
-    } catch (_) {
+    } catch {
       run();
     }
     return () => {
@@ -2947,8 +2942,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const getRecordFreshnessSyncBlockers = useCallback(
-    () =>
-      resolveRecordFreshnessSyncBlockers({
+    () => {
+      const currentRecordId = getCurrentOpenRecordId();
+      return resolveRecordFreshnessSyncBlockers({
         dirty: autoSaveDirtyRef.current,
         draftSavePhase: draftSave.phase,
         autoSaveQueued: autoSaveQueuedRef.current,
@@ -2959,10 +2955,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current) || Boolean(recordLoadingIdRef.current),
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
+        followupBatchInFlight: currentRecordId ? pendingFollowupBatchPromisesRef.current.has(currentRecordId) : false,
         lastUserInteractionAt: lastUserInteractionRef.current || null,
         now: Date.now()
-      }),
-    [draftSave.phase]
+      });
+    },
+    [draftSave.phase, getCurrentOpenRecordId]
   );
 
   const performRecordFreshnessCheck = useCallback(
@@ -2997,6 +2995,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         Boolean(recordSyncPromiseRef.current) ||
         Boolean(guidedStepImmediateSyncPromiseRef.current) ||
         Boolean(guidedStepBackgroundSyncPromiseRef.current) ||
+        pendingFollowupBatchPromisesRef.current.has(recordId) ||
         submittingRef.current
       ) {
         logEvent('record.freshness.check.skipped', {
@@ -3009,7 +3008,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           submissionInFlight: Boolean(submissionRequestPromiseRef.current),
           recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
           guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
-          guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
+          guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
+          followupBatchInFlight: pendingFollowupBatchPromisesRef.current.has(recordId)
         });
         scheduleRecordFreshnessCheck(`${reason}.serverWorkInFlight`);
         return;
@@ -3789,7 +3789,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordFreshnessTimerRef.current = null;
       }
       recordSyncBusy.forceUnlock();
-      setRecordSyncNotice({ open: false, title: '', message: '' });
       logEvent('record.session.bump', {
         reason: (args?.reason || '').toString() || null,
         nextRecordId: args?.nextRecordId ? args.nextRecordId.toString() : null,
@@ -5085,12 +5084,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ? resolveDraftStateFromSnapshot(selectedRecordSnapshotRef.current)
           : null;
       const shouldAdoptMetaOnly = shouldAdoptIncomingRecordSnapshotMetaOnly({
+        definition,
         incomingRecordId: id,
         currentRecordId,
         incomingDataVersion,
         currentDataVersion,
         incomingStatus: incomingStatusRaw,
         currentStatus: currentStatusRaw,
+        allowStatusChange: Boolean(metaOnlyRule),
         incomingValues: nextMappedValues,
         incomingLineItems: nextMappedLineItems,
         currentValues: valuesRef.current,
@@ -5486,8 +5487,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const applyMode = lastRecordSnapshotApplyModeRef.current.mode;
           recordStaleRef.current = null;
           setRecordStale(null);
+          lastExternalRecordSyncAtRef.current = Date.now();
           if (applyMode === 'metaOnly') {
-            setRecordSyncNotice({ open: false, title: '', message: '' });
             logEvent('record.sync.metaOnly', {
               reason: args.reason,
               recordId,
@@ -5497,17 +5498,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return true;
           }
-          lastExternalRecordSyncAtRef.current = Date.now();
           setGuidedExternalSyncToken(prev => prev + 1);
-          setRecordSyncNotice({
-            open: true,
-            title: tSystem('record.syncedTitle', languageRef.current, 'Record synchronized'),
-            message: tSystem(
-              'record.synced',
-              languageRef.current,
-              'The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.'
-            )
-          });
           logEvent('record.sync.success', {
             reason: args.reason,
             recordId,
@@ -6677,7 +6668,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           w.document.open();
           w.document.write(html);
           w.document.close();
-        } catch (_) {
+        } catch {
           // best effort
         }
         return w;
@@ -9007,7 +8998,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordRowNumberRef.current = null;
         recordStaleRef.current = null;
         setRecordStale(null);
-        setRecordSyncNotice({ open: false, title: '', message: '' });
       };
       const startedAt = Date.now();
       const startMark = `ck.nav.back.start.${startedAt}`;
@@ -9952,6 +9942,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         await waitForDraftSaveRequest(`snapshot:${args.reason}`);
       }
+      if (args.mode === 'draft' && args.existingRecordId) {
+        const followupWait = await waitForPendingFollowupBatch({
+          recordId: args.existingRecordId,
+          reason: `snapshot:${args.reason}`
+        });
+        if (!followupWait.ok) {
+          const message = (followupWait.message || submitPreviousActionRetryMessage()).toString();
+          logEvent('snapshot.save.blocked.pendingFollowup', {
+            reason: args.reason,
+            recordId: args.existingRecordId,
+            message
+          });
+          return {
+            success: false,
+            recordId: args.existingRecordId,
+            message
+          };
+        }
+      }
       if (
         args.mode === 'draft' &&
         args.existingRecordId &&
@@ -10092,7 +10101,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       resolveAutoSaveStatus,
       runCoalescedDraftSaveRequest,
+      submitPreviousActionRetryMessage,
       submitCurrentRecordMutation,
+      waitForPendingFollowupBatch,
       waitForDraftSaveRequest
     ]
   );
@@ -11321,13 +11332,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
           const followupSessionId = recordSessionRef.current;
           const backgroundPromise = (async () => {
-            let outcome: { success: boolean; message?: string } = { success: true };
-            if (preActions.length) {
-              outcome = await runBatch(preActions, `${reason}.pre`);
-            }
-            if (outcome.success && effectiveBackgroundActions.length) {
-              outcome = await runBatch(effectiveBackgroundActions, `${reason}.background`);
-            }
+            const outcome = await runBatch(allBackgroundActions, `${reason}.background`);
             if (outcome.success) {
               return {
                 success: true,
@@ -14200,27 +14205,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         message={dedupProgress.message}
         mode={dedupProgress.phase === 'checking' ? 'loading' : dedupProgress.phase === 'available' ? 'success' : 'error'}
         zIndex={12019}
-      />
-
-      <ConfirmDialogOverlay
-        open={recordSyncNotice.open}
-        title={recordSyncNotice.title || tSystem('record.syncedTitle', language, 'Record synchronized')}
-        message={
-          recordSyncNotice.message ||
-          tSystem(
-            'record.synced',
-            language,
-            'The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.'
-          )
-        }
-        confirmLabel={tSystem('common.ok', language, 'OK')}
-        cancelLabel={tSystem('common.cancel', language, 'Cancel')}
-        showCancel={false}
-        dismissOnBackdrop={false}
-        showCloseButton={false}
-        zIndex={12061}
-        onCancel={() => undefined}
-        onConfirm={() => setRecordSyncNotice({ open: false, title: '', message: '' })}
       />
 
       <ConfirmDialogOverlay

@@ -32,7 +32,7 @@ import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from './recipeIngredientsDirty';
 import { applyValueMapsToForm } from './valueMaps';
 import { buildValidationContext } from './validation';
 import { GuidedStepsVirtualState, resolveVirtualStepField } from '../features/steps/domain/resolveVirtualStepField';
-import { buildDraftStateFingerprint } from './draftSaveFingerprint';
+import { buildRecordSyncComparableFingerprint } from './recordSyncReview';
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -1295,12 +1295,14 @@ export const shouldApplyIncomingRecordSnapshot = (args: {
 };
 
 export const shouldAdoptIncomingRecordSnapshotMetaOnly = (args: {
+  definition?: WebFormDefinition | null;
   incomingRecordId?: string | null;
   currentRecordId?: string | null;
   incomingDataVersion?: number | string | null;
   currentDataVersion?: number | string | null;
   incomingStatus?: string | null;
   currentStatus?: string | null;
+  allowStatusChange?: boolean | null;
   incomingValues?: Record<string, FieldValue> | null;
   incomingLineItems?: LineItemState | null;
   currentValues?: Record<string, FieldValue> | null;
@@ -1322,18 +1324,20 @@ export const shouldAdoptIncomingRecordSnapshotMetaOnly = (args: {
 
   const incomingStatus = ((args.incomingStatus || '') as any).toString?.().trim?.() || '';
   const currentStatus = ((args.currentStatus || '') as any).toString?.().trim?.() || '';
-  if (incomingStatus !== currentStatus) return false;
+  if (!args.allowStatusChange && incomingStatus !== currentStatus) return false;
 
   const comparisonValues = args.comparisonValues ?? args.currentValues;
   const comparisonLineItems = args.comparisonLineItems ?? args.currentLineItems;
 
-  const currentFingerprint = buildDraftStateFingerprint({
+  const currentFingerprint = buildRecordSyncComparableFingerprint({
+    definition: args.definition,
     formKey: args.formKey || '',
     language: args.language || '',
     values: comparisonValues || {},
     lineItems: comparisonLineItems || {}
   });
-  const incomingFingerprint = buildDraftStateFingerprint({
+  const incomingFingerprint = buildRecordSyncComparableFingerprint({
+    definition: args.definition,
     formKey: args.formKey || '',
     language: args.language || '',
     values: args.incomingValues || {},

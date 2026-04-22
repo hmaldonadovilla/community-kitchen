@@ -156,6 +156,26 @@ describe('recordFreshness helpers', () => {
     ).toEqual(['dirty.recentInteraction']);
   });
 
+  test('blocks auto-sync while a follow-up batch is still running for the record', () => {
+    expect(
+      resolveRecordFreshnessSyncBlockers({
+        dirty: false,
+        draftSavePhase: 'saved',
+        autoSaveQueued: false,
+        autoSaveInFlight: false,
+        draftSaveInFlight: false,
+        submissionInFlight: false,
+        uploadInFlight: false,
+        recordSyncInFlight: false,
+        guidedStepLiveSyncInFlight: false,
+        guidedStepBackgroundSyncInFlight: false,
+        followupBatchInFlight: true,
+        lastUserInteractionAt: 0,
+        now: 90_000
+      })
+    ).toEqual(['followupBatch.inFlight']);
+  });
+
   test('clears deferred sync when the user has moved to another record', () => {
     expect(
       resolveDeferredRecordFreshnessResumeAction({
