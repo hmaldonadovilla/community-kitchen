@@ -9,6 +9,7 @@ import {
   buildLocalizedOptions
 } from '../core';
 import {
+  AnalyticsSnapshot,
   FieldValue,
   FieldChangeDialogConfig,
   LangCode,
@@ -29,6 +30,7 @@ import {
   BootstrapContext,
   applyInventoryReservationPlanApi,
   submit,
+  fetchBootstrapContextApi,
   previewUpdateRecordDependenciesApi,
   applyUpdateRecordWithDependenciesApi,
   checkDedupConflictApi,
@@ -539,6 +541,7 @@ const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
 // Delay them so they do not compete with more valuable boot work such as
 // data source warmup and first-record snapshot hydration.
 const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
+const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
 const HOME_RECORD_PREFETCH_PRIME_DELAY_MS = 250;
 const HOME_RECORD_PREFETCH_REST_DELAY_MS = 2400;
@@ -677,7 +680,7 @@ const clearHomeListLocalCache = (key: string): void => {
   }
 };
 
-const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }) => {
+const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {
   const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
     'EN' | 'FR' | 'NL'
   >;
@@ -3889,6 +3892,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
     const records = bootstrap?.records || {};
     return { response, records };
   });
+  const [analyticsSnapshot, setAnalyticsSnapshot] = useState<AnalyticsSnapshot | null>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    return (bootstrap?.analytics || analytics || null) as AnalyticsSnapshot | null;
+  });
+  const [analyticsSnapshotRev, setAnalyticsSnapshotRev] = useState<number>(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
+    return Number.isFinite(rev) && rev >= 0 ? rev : 0;
+  });
+  const hasListViewAnalyticsWidgets = useMemo(() => {
+    const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
+    return widgets.some(widget => {
+      const placements = Array.isArray(widget?.placements) ? widget.placements : ['analyticsPage'];
+      return placements.some(token => (token || '').toString().trim() === 'listView');
+    });
+  }, [definition.analytics?.widgets]);
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
@@ -3914,6 +3935,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   const formDataSourceRefreshKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
+  const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
@@ -3982,6 +4004,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
   useEffect(() => {
     listCacheRef.current = listCache;
   }, [listCache]);
+  useEffect(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    setAnalyticsSnapshot((bootstrap?.analytics || analytics || null) as AnalyticsSnapshot | null);
+  }, [analytics, formKey]);
+  useEffect(() => {
+    const globalAny = globalThis as any;
+    const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
+    const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
+    setAnalyticsSnapshotRev(Number.isFinite(rev) && rev >= 0 ? rev : 0);
+  }, [analytics, analyticsRev, formKey]);
 
   useEffect(() => {
     const response = listCache.response;
@@ -4008,6 +4041,67 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
       firstItemCount: firstCount
     });
   }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
+
+  useEffect(() => {
+    if (view !== 'list') return;
+    if (homeFirstDataReadyAtMs <= 0) return;
+    if (!hasListViewAnalyticsWidgets) return;
+    if (analyticsSnapshot && Array.isArray(analyticsSnapshot.items) && analyticsSnapshot.items.length > 0) return;
+    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}`;
+    if (deferredAnalyticsPrefetchKeyRef.current === key) return;
+    deferredAnalyticsPrefetchKeyRef.current = key;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let idleHandle: number | null = null;
+    const run = () => {
+      if (cancelled) return;
+      const startedAt = Date.now();
+      logEvent('analytics.listView.prefetch.start', {
+        formKey,
+        startedAfterHomeDataMs: Math.max(0, Date.now() - homeFirstDataReadyAtMs)
+      });
+      fetchBootstrapContextApi(formKey, { includeAnalytics: true })
+        .then(res => {
+          if (cancelled) return;
+          const snapshot = ((res as any)?.analytics || null) as AnalyticsSnapshot | null;
+          setAnalyticsSnapshot(snapshot);
+          const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
+          setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
+          logEvent('analytics.listView.prefetch.ok', {
+            formKey,
+            itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+            durationMs: Date.now() - startedAt
+          });
+        })
+        .catch((err: any) => {
+          if (cancelled) return;
+          logEvent('analytics.listView.prefetch.error', {
+            formKey,
+            message: err?.message || err?.toString?.() || 'unknown',
+            durationMs: Date.now() - startedAt
+          });
+        });
+    };
+
+    try {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleHandle = (window as any).requestIdleCallback(run, { timeout: HOME_ANALYTICS_PREFETCH_DELAY_MS + 1200 }) as number;
+      } else {
+        timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
+      }
+    } catch {
+      timer = globalThis.setTimeout(run, HOME_ANALYTICS_PREFETCH_DELAY_MS);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) globalThis.clearTimeout(timer);
+      if (idleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -6587,7 +6681,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           // best effort
         }
         return w;
-      } catch (_) {
+      } catch {
         return null;
       }
     },
@@ -14081,6 +14175,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, envTag }
           formKey={formKey}
           definition={definition}
           language={language}
+          analyticsSnapshot={analyticsSnapshot || undefined}
+          analyticsRevision={analyticsSnapshotRev}
           disabled={precreateDedupChecking}
           cachedResponse={listCache.response}
           cachedRecords={listCache.records}

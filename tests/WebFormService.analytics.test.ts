@@ -40,6 +40,7 @@ jest.mock('../src/config/analyticsPage', () => {
 });
 
 import { WebFormService } from '../src/services/WebFormService';
+import * as templateModule from '../src/services/webform/template';
 
 describe('WebFormService analytics integration', () => {
   let ss: MockSpreadsheet;
@@ -187,5 +188,20 @@ describe('WebFormService analytics integration', () => {
       value: 25
     });
     expect((dashboard.updatedAt || '').toString()).not.toBe('');
+  });
+
+  it('renders the centralized analytics page without binding a bundled form bootstrap', () => {
+    const shellSpy = jest.spyOn(templateModule, 'buildReactShellTemplate').mockReturnValue('<html>shell</html>');
+    const embeddedSpy = jest.spyOn(templateModule, 'buildReactTemplate').mockReturnValue('<html>embedded</html>');
+    const htmlOutput = { setTitle: jest.fn().mockReturnThis() } as any;
+    const createHtmlOutputSpy = jest.spyOn((global as any).HtmlService, 'createHtmlOutput').mockReturnValue(htmlOutput);
+
+    service.renderForm(undefined, { app: 'analytics' } as any);
+
+    expect(shellSpy).toHaveBeenCalledTimes(1);
+    expect(shellSpy).toHaveBeenCalledWith('', 'analytics', { app: 'analytics' }, undefined);
+    expect(embeddedSpy).not.toHaveBeenCalled();
+    expect(createHtmlOutputSpy).toHaveBeenCalledWith('<html>shell</html>');
+    expect(htmlOutput.setTitle).toHaveBeenCalledWith('Community Kitchen');
   });
 });

@@ -1077,8 +1077,10 @@ export class WebFormService {
       });
       return out;
     })();
-    const bundled = serverTiming?.measure('renderForm.resolveBundledConfigMs', () => this.resolveBundledConfig(targetKey || undefined))
-      ?? this.resolveBundledConfig(targetKey || undefined);
+    const bundled = targetKey
+      ? serverTiming?.measure('renderForm.resolveBundledConfigMs', () => this.resolveBundledConfig(targetKey))
+        ?? this.resolveBundledConfig(targetKey)
+      : null;
     const configEnv =
       serverTiming?.measure('renderForm.resolveBundledConfigEnvMs', () => getBundledConfigEnv() || undefined) ??
       (getBundledConfigEnv() || undefined);
