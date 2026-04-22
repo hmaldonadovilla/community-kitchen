@@ -30,7 +30,9 @@ const mealProductionGroup: QuestionConfig = {
           { id: 'PREP_TYPE', type: 'TEXT', labelEn: 'Prep type', required: false } as any,
           { id: 'PREP_QTY', type: 'NUMBER', labelEn: 'Prep qty', required: false } as any,
           { id: 'RECIPE', type: 'TEXT', labelEn: 'Recipe', required: false } as any,
-          { id: 'REC_INST', type: 'PARAGRAPH', labelEn: 'Instructions', required: false } as any
+          { id: 'REC_INST', type: 'PARAGRAPH', labelEn: 'Instructions', required: false } as any,
+          { id: 'LEFTOVER_USAGE_MODE', type: 'TEXT', labelEn: 'Leftover usage mode', required: false } as any,
+          { id: 'LEFTOVER_SUMMARY_ACTION', type: 'TEXT', labelEn: 'Leftover summary action', required: false } as any
         ],
         subGroups: [
           {
@@ -287,6 +289,159 @@ describe('meal production bundled HTML rendering', () => {
     expect(recipe.html).toContain('Salt');
   });
 
+  it('hydrates leftover ingredients from linked inventory records when meal production prep rows are saved without MP_INGREDIENTS_LI', () => {
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
+    const realFetchSubmissionById = service.fetchSubmissionById.bind(service);
+    jest.spyOn(service, 'fetchSubmissionById').mockImplementation((formKey: string, recordId: string) => {
+      if (formKey !== 'Config: Leftover Inventory') {
+        return realFetchSubmissionById(formKey, recordId);
+      }
+      if (recordId === 'leftover-single') {
+        return {
+          formKey,
+          language: 'EN',
+          id: recordId,
+          values: {
+            LEFTOVER_KIND: 'Single-ingredient',
+            LEFTOVER_INGREDIENT: 'Basil - fresh',
+            LEFTOVER_CAT: 'Herbs - spices - condiments',
+            LEFTOVER_ALLERGEN: 'None',
+            LEFTOVER_UNIT: 'gr'
+          }
+        } as any;
+      }
+      if (recordId === 'leftover-multi') {
+        return {
+          formKey,
+          language: 'EN',
+          id: recordId,
+          values: {
+            LEFTOVER_KIND: 'Multi-ingredient',
+            LEFTOVER_INGREDIENTS_LI: [
+              { ING: 'Bulgur', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten', QTY: '2.80', UNIT: 'kg' },
+              { ING: 'Broccoli', CAT: 'Fresh vegetables', ALLERGEN: 'None', QTY: '2.33', UNIT: 'kg' }
+            ]
+          }
+        } as any;
+      }
+      return null;
+    });
+
+    const payload: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'meal-record-leftovers',
+      values: {
+        MP_DISTRIBUTOR: 'Hub',
+        MP_SERVICE: 'Lunch',
+        MP_PREP_DATE: '2026-04-22',
+        MP_ID: 'MP-AA001403',
+        MP_MEALS_REQUEST: [
+          {
+            [ROW_ID_KEY]: 'meal-1',
+            MEAL_TYPE: 'Vegetarian',
+            ORD_QTY: 450,
+            MP_TO_COOK: 450,
+            FINAL_QTY: 450,
+            MP_TYPE_LI: [
+              {
+                [ROW_ID_KEY]: 'prep-single',
+                PREP_TYPE: 'Single-ingredient',
+                PREP_QTY: '500',
+                RECIPE: 'Basil - fresh',
+                LEFTOVER_KIND: 'Single-ingredient',
+                LEFTOVER_RECORD_ID: 'leftover-single',
+                LEFTOVER_ID: 'SI-4',
+                LEFTOVER_USE_QTY: '500',
+                LEFTOVER_DISPLAY_UNIT: 'gr',
+                MP_INGREDIENTS_LI: []
+              },
+              {
+                [ROW_ID_KEY]: 'prep-multi',
+                PREP_TYPE: 'Multi-ingredient',
+                PREP_QTY: 0,
+                RECIPE: 'Bulgur & vegetable warm salad mama mia',
+                LEFTOVER_KIND: 'Multi-ingredient',
+                LEFTOVER_RECORD_ID: 'leftover-multi',
+                LEFTOVER_ID: 'MI-10',
+                LEFTOVER_USAGE_MODE: 'Combine',
+                MP_INGREDIENTS_LI: []
+              },
+              {
+                [ROW_ID_KEY]: 'prep-cook',
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 450,
+                RECIPE: 'Chili',
+                MP_INGREDIENTS_LI: [
+                  { [ROW_ID_KEY]: 'ing-1', CAT: 'Vegan protein', ING: 'Red beans - tinned', QTY: 10, UNIT: 'tin-2505gr', ALLERGEN: 'None' },
+                  { [ROW_ID_KEY]: 'ing-2', CAT: 'Herbs - spices - condiments', ING: 'Bouillon powder', QTY: 30, UNIT: 'Tbsp', ALLERGEN: 'Soy' }
+                ]
+              }
+            ]
+          }
+        ]
+      } as any,
+      status: 'In progress'
+    } as any;
+
+    const summary = service.renderSummaryHtmlTemplate(payload);
+
+    expect(summary.success).toBe(true);
+    expect(summary.html).toContain('<td data-ingredient-name>Basil - fresh</td>');
+    expect(summary.html).toContain('<td data-ingredient-name>Broccoli</td>');
+    expect(summary.html).toContain('<td data-ingredient-allergen>Gluten</td>');
+  });
+
+  it('includes leftover display-mode metadata in the summary template payload', () => {
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const service = new WebFormService(ss as any);
+    const payload: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA001403',
+      values: {
+        ...recordValues,
+        MP_MEALS_REQUEST: [
+          {
+            [ROW_ID_KEY]: 'meal-1',
+            MEAL_TYPE: 'Vegetarian',
+            ORD_QTY: 450,
+            MP_TO_COOK: 450,
+            FINAL_QTY: 450,
+            MP_TYPE_LI: [
+              {
+                [ROW_ID_KEY]: 'prep-multi-combine',
+                PREP_TYPE: 'Multi-ingredient',
+                PREP_QTY: 0,
+                RECIPE: 'Bulgur & vegetable warm salad mama mia',
+                LEFTOVER_USAGE_MODE: 'Combine',
+                LEFTOVER_SUMMARY_ACTION: 'combine'
+              },
+              {
+                [ROW_ID_KEY]: 'prep-multi-reheat',
+                PREP_TYPE: 'Multi-ingredient',
+                PREP_QTY: 40,
+                RECIPE: 'Chili',
+                LEFTOVER_USAGE_MODE: 'Reheat',
+                LEFTOVER_SUMMARY_ACTION: 'reheat '
+              }
+            ]
+          }
+        ]
+      } as any,
+      status: 'Closed'
+    } as any;
+
+    const summary = service.renderSummaryHtmlTemplate(payload);
+
+    expect(summary.success).toBe(true);
+    expect(summary.html).toContain('data-leftover-summary-action>combine</span>');
+    expect(summary.html).toContain('data-leftover-summary-action>reheat </span>');
+  });
+
   it('injects generated leftover records into the summary template payload for later rendering', () => {
     const ss = new MockSpreadsheet();
     seedIngredientsData(ss);
@@ -306,8 +461,8 @@ describe('meal production bundled HTML rendering', () => {
     const inventoryData = ss.insertSheet('Leftover Inventory Data');
     inventoryData.setMockData([
       ['ID [ID]', 'Leftover ID [LEFTOVER_ID]', 'Kind [LEFTOVER_KIND]', 'Recipe [LEFTOVER_RECIPE]', 'Ingredient [LEFTOVER_INGREDIENT]', 'Portions [LEFTOVER_PORTIONS]', 'Qty [LEFTOVER_QTY]', 'Unit [LEFTOVER_UNIT]', 'Source form [LEFTOVER_SOURCE_FORM_KEY]', 'Source record [LEFTOVER_SOURCE_RECORD_ID]'],
-      ['inv-1', 'LE-1', 'Entire dish', 'Garlic green beans', '', 5, '', '', 'Config: Meal Production', 'MP-AA000818'],
-      ['inv-2', 'LP-1', 'Part dish', '', 'Rice', '', 250, 'gr', 'Config: Meal Production', 'MP-AA000818']
+      ['inv-1', 'LE-1', 'Multi-ingredient', 'Garlic green beans', '', 5, '', '', 'Config: Meal Production', 'MP-AA000818'],
+      ['inv-2', 'LP-1', 'Single-ingredient', '', 'Rice', '', 250, 'gr', 'Config: Meal Production', 'MP-AA000818']
     ]);
 
     const service = new WebFormService(ss as any);
@@ -408,7 +563,7 @@ describe('meal production bundled HTML rendering', () => {
               },
               {
                 [ROW_ID_KEY]: 'prep-leftover',
-                PREP_TYPE: 'Entire dish',
+                PREP_TYPE: 'Multi-ingredient',
                 PREP_QTY: 10,
                 RECIPE: 'Rice curry & fish',
                 MP_INGREDIENTS_LI: [
@@ -462,7 +617,7 @@ describe('meal production bundled HTML rendering', () => {
             MP_TYPE_LI: [
               {
                 [ROW_ID_KEY]: 'prep-leftover',
-                PREP_TYPE: 'Entire dish',
+                PREP_TYPE: 'Multi-ingredient',
                 PREP_QTY: 10,
                 RECIPE: 'Rice curry & fish',
                 MP_INGREDIENTS_LI: [

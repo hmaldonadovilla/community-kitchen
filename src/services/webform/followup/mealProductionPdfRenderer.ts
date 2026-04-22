@@ -1,6 +1,11 @@
 import { QuestionConfig, WebFormSubmission } from '../../../types';
 import { collectLineItemRows } from './placeholders';
-import { isMultiIngredientLeftoverKind, isSingleIngredientLeftoverKind } from '../../../domain/leftoverKinds';
+import {
+  isMultiIngredientLeftoverKind,
+  isSingleIngredientLeftoverKind,
+  MULTI_INGREDIENT_LEFTOVER_KIND,
+  SINGLE_INGREDIENT_LEFTOVER_KIND
+} from '../../../domain/leftoverKinds';
 
 interface TypeRow {
   __parent?: any;
@@ -199,7 +204,7 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
       const partialAllergens = uniqueList(partialEntries.flatMap(entry => entry.allergens));
       const partialPortionsLabel = cookPortionsValue !== null ? `${cookPortionsValue} portions` : finalQtyLabel;
       mealSegments.push(
-        renderRecipeBlock('Cooked', partialPortionsLabel, 'Single-ingredient leftovers', partialIngredients, partialAllergens)
+        renderRecipeBlock('Cooked', partialPortionsLabel, `${SINGLE_INGREDIENT_LEFTOVER_KIND} leftovers`, partialIngredients, partialAllergens)
       );
     }
 
@@ -207,7 +212,7 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
       const qtyLabel = formatPortions(entry.prepQty ?? 0, 0);
       mealSegments.push(
         renderRecipeBlock(
-          'Leftover (multi-ingredient)',
+          `${MULTI_INGREDIENT_LEFTOVER_KIND} leftover`,
           qtyLabel,
           entry.recipe,
           uniqueList(entry.ingredients),

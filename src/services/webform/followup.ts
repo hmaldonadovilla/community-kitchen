@@ -19,6 +19,7 @@ import {
 } from './followup/docRenderer';
 import { renderHtmlFromHtmlTemplate } from './followup/htmlRenderer';
 import { renderMarkdownFromTemplate } from './followup/markdownRenderer';
+import { hydrateMealProductionPrepIngredientsFromLeftovers } from './followup/mealProductionLeftoverIngredients';
 
 /**
  * Follow-up actions + Doc template rendering (PDF/email/html).
@@ -31,15 +32,18 @@ export class FollowupService {
   private readonly ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private readonly submissionService: SubmissionService;
   private readonly dataSources: DataSourceService;
+  private readonly resolveLinkedRecord?: (formKey: string, recordId: string) => WebFormSubmission | null;
 
   constructor(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
     submissionService: SubmissionService,
-    dataSources: DataSourceService
+    dataSources: DataSourceService,
+    resolveLinkedRecord?: (formKey: string, recordId: string) => WebFormSubmission | null
   ) {
     this.ss = ss;
     this.submissionService = submissionService;
     this.dataSources = dataSources;
+    this.resolveLinkedRecord = resolveLinkedRecord;
   }
 
   triggerFollowupAction(
@@ -136,10 +140,12 @@ export class FollowupService {
     folderId?: string;
     namePrefix?: string;
   }): { success: boolean; message?: string; url?: string; fileId?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderPdfFromTemplate({
       ss: this.ss,
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -154,9 +160,11 @@ export class FollowupService {
     templateIdMap: any;
     namePrefix?: string;
   }): { success: boolean; message?: string; pdfBase64?: string; mimeType?: string; fileName?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderPdfBytesFromTemplate({
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -172,10 +180,12 @@ export class FollowupService {
     folderId?: string;
     namePrefix?: string;
   }): { success: boolean; message?: string; fileId?: string; previewUrl?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderDocPreviewFromTemplate({
       ss: this.ss,
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -189,9 +199,11 @@ export class FollowupService {
     templateIdMap: any;
     namePrefix?: string;
   }): { success: boolean; message?: string; html?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderHtmlFromTemplate({
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -206,9 +218,11 @@ export class FollowupService {
     templateIdMap: any;
     namePrefix?: string;
   }): { success: boolean; message?: string; markdown?: string; fileName?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderMarkdownFromTemplate({
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -223,9 +237,11 @@ export class FollowupService {
     templateIdMap: any;
     namePrefix?: string;
   }): { success: boolean; message?: string; html?: string; fileName?: string } {
+    const record = this.prepareRecordForTemplateRender(args.form, args.record);
     return renderHtmlFromHtmlTemplate({
       dataSources: this.dataSources,
-      ...args
+      ...args,
+      record
     });
   }
 
@@ -242,12 +258,13 @@ export class FollowupService {
     if (!followup.pdfTemplateId) {
       return { success: false, message: 'PDF template ID missing.' };
     }
+    const preparedRecord = this.prepareRecordForTemplateRender(form, record);
     return renderPdfArtifactFromTemplate({
       ss: this.ss,
       dataSources: this.dataSources,
       form,
       questions,
-      record,
+      record: preparedRecord,
       templateIdMap: followup.pdfTemplateId,
       folderId: followup.pdfFolderId,
       namePrefix: form.title || 'Form'
@@ -255,7 +272,24 @@ export class FollowupService {
   }
 
   private getRecordContext(form: FormConfig, questions: QuestionConfig[], recordId: string): RecordContext | null {
-    return this.submissionService.getRecordContext(form, questions, recordId);
+    const context = this.submissionService.getRecordContext(form, questions, recordId);
+    if (!context?.record) return context;
+    return {
+      ...context,
+      record: this.prepareRecordForTemplateRender(form, context.record)
+    };
+  }
+
+  private prepareRecordForTemplateRender(form: FormConfig, record: WebFormSubmission): WebFormSubmission {
+    const formKey = (form.configSheet || form.title || '').toString().trim().toLowerCase();
+    if (formKey !== 'config: meal production' && formKey !== 'meal production') {
+      return record;
+    }
+    if (!this.resolveLinkedRecord) {
+      return record;
+    }
+    return hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
+      this.resolveLinkedRecord ? this.resolveLinkedRecord('Config: Leftover Inventory', leftoverRecordId) : null
+    );
   }
 }
-

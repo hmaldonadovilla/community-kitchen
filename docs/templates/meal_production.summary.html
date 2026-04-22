@@ -246,6 +246,8 @@
             <span class="ck-hidden" data-prep-type>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE}}</span>
             <span class="ck-hidden" data-prep-qty>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_QTY}}</span>
             <span class="ck-hidden" data-recipe>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</span>
+            <span class="ck-hidden" data-leftover-usage-mode>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_USAGE_MODE}}</span>
+            <span class="ck-hidden" data-leftover-summary-action>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_SUMMARY_ACTION}}</span>
             <span class="ck-hidden" data-core-temp>{{MP_MEALS_REQUEST.MP_COOK_TEMP}}</span>
             <span class="ck-hidden" data-core-temp-label>{{LABEL(MP_MEALS_REQUEST.MP_COOK_TEMP)}}</span>
             <span class="ck-hidden" data-temp-photos="{{MP_MEALS_REQUEST.TEMP_EVD}}"></span>
@@ -313,6 +315,8 @@
     var toText = function (value) {
       return (value || '').toString().trim();
     };
+    var MULTI_INGREDIENT_LEFTOVER_KIND = 'Multi-ingredient';
+    var SINGLE_INGREDIENT_LEFTOVER_KIND = 'Single-ingredient';
     var formatPortionsLabel = function (value) {
       if (!value) return '';
       var numericValue = Number(value.toString().replace(/,/g, '.'));
@@ -331,7 +335,7 @@
       var values = entry && typeof entry.values === 'object' ? entry.values : {};
       var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
       var rawKind = toText(values.LEFTOVER_KIND || '');
-      var kind = normalize(rawKind) === 'entire dish' ? 'Multi-ingredient' : normalize(rawKind) === 'part dish' ? 'Single-ingredient' : rawKind;
+      var kind = toCanonicalLeftoverKind(rawKind);
       var recipe = toText(values.LEFTOVER_RECIPE || '');
       var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
       var quantity = formatGeneratedLeftoverQuantity(values);
@@ -452,6 +456,8 @@
         prepType: getText('[data-prep-type]'),
         prepQty: getText('[data-prep-qty]'),
         recipe: getText('[data-recipe]'),
+        leftoverUsageMode: getText('[data-leftover-usage-mode]'),
+        leftoverSummaryAction: getText('[data-leftover-summary-action]'),
         coreTemp: getText('[data-core-temp]'),
         coreTempLabel: getText('[data-core-temp-label]'),
         tempPhotoUrls: tempPhotoUrls,
@@ -526,11 +532,33 @@
     };
     var isMultiIngredientPrepType = function (rawValue) {
       var text = normalize(rawValue);
-      return text === 'multi-ingredient' || text === 'entire dish';
+      return text === normalize(MULTI_INGREDIENT_LEFTOVER_KIND) || text === 'entire dish';
     };
     var isSingleIngredientPrepType = function (rawValue) {
       var text = normalize(rawValue);
-      return text === 'single-ingredient' || text === 'part dish';
+      return text === normalize(SINGLE_INGREDIENT_LEFTOVER_KIND) || text === 'part dish';
+    };
+    var toCanonicalLeftoverKind = function (rawValue) {
+      if (isMultiIngredientPrepType(rawValue)) return MULTI_INGREDIENT_LEFTOVER_KIND;
+      if (isSingleIngredientPrepType(rawValue)) return SINGLE_INGREDIENT_LEFTOVER_KIND;
+      return toText(rawValue);
+    };
+    var resolveLeftoverDisplayMode = function (entry) {
+      var action = normalize(entry.leftoverSummaryAction);
+      if (action.indexOf('reheat') === 0) return 'reheat';
+      if (action.indexOf('combine') === 0) return 'combine';
+
+      var usageMode = normalize(entry.leftoverUsageMode);
+      if (usageMode === 'reheat' || usageMode === 'combine') return usageMode;
+
+      var qty = parseNumber(entry.prepQty);
+      if (isMultiIngredientPrepType(entry.prepType) && !Number.isNaN(qty)) {
+        return qty > 0 ? 'reheat' : 'combine';
+      }
+      return '';
+    };
+    var shouldRenderLeftoverPrepGroup = function (entry) {
+      return resolveLeftoverDisplayMode(entry) === 'reheat';
     };
 
     var appendPhotoIcon = function (inline, rawUrls) {
@@ -673,31 +701,29 @@
       var cookedAllergens = cookEntry ? cookEntry.allergens.slice() : [];
 
       leftoverFullEntries.forEach(function (entry) {
-        var qty = parseNumber(entry.prepQty);
-        var qtyValue = Number.isNaN(qty) ? 0 : qty;
-        var leftoverFullLine = 'Multi-ingredient leftover: ' + formatPortions(entry.prepQty, '0');
-        if (entry.recipe) {
-          leftoverFullLine += ' | ' + entry.recipe;
-        }
-        var showLeftoverFullDetails = qtyValue > 0;
-        if (showLeftoverFullDetails) {
+        if (shouldRenderLeftoverPrepGroup(entry)) {
+          var leftoverFullLine = MULTI_INGREDIENT_LEFTOVER_KIND + ' leftover: ' + formatPortions(entry.prepQty, '0');
+          if (entry.recipe) {
+            leftoverFullLine += ' | ' + entry.recipe;
+          }
           appendPrepGroup(mealBlock, leftoverFullLine, {
             ingredientsText: formatList(entry.ingredients, 'None'),
             allergensText: formatList(entry.allergens, 'None')
           });
         } else {
-          appendPrepGroup(mealBlock, leftoverFullLine, null);
           cookedIngredients = cookedIngredients.concat(entry.ingredients);
           cookedAllergens = cookedAllergens.concat(entry.allergens);
         }
       });
 
       leftoverPartEntries.forEach(function (entry) {
-        var leftoverPartLine = 'Single-ingredient leftover';
-        if (entry.recipe) {
-          leftoverPartLine += ': ' + entry.recipe;
+        if (shouldRenderLeftoverPrepGroup(entry)) {
+          var leftoverPartLine = SINGLE_INGREDIENT_LEFTOVER_KIND + ' leftover';
+          if (entry.recipe) {
+            leftoverPartLine += ': ' + entry.recipe;
+          }
+          appendPrepGroup(mealBlock, leftoverPartLine, null);
         }
-        appendPrepGroup(mealBlock, leftoverPartLine, null);
         cookedIngredients = cookedIngredients.concat(entry.ingredients);
         cookedAllergens = cookedAllergens.concat(entry.allergens);
       });
