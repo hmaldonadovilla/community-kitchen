@@ -12314,8 +12314,24 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "sourceRows": {
                       "includeWhen": {
-                        "fieldId": "LEFTOVER_EXP_DATE",
-                        "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                        "all": [
+                          {
+                            "fieldId": "LEFTOVER_EXP_DATE",
+                            "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                          },
+                          {
+                            "any": [
+                              {
+                                "fieldId": "__ckCurrentRecordReservedQuantity",
+                                "greaterThan": 0
+                              },
+                              {
+                                "fieldId": "__ckFreeQuantity",
+                                "greaterThan": 0
+                              }
+                            ]
+                          }
+                        ]
                       },
                       "removeOutputWhenExcluded": true
                     }
@@ -23292,8 +23308,24 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "sourceRows": {
                       "includeWhen": {
-                        "fieldId": "LEFTOVER_EXP_DATE",
-                        "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                        "all": [
+                          {
+                            "fieldId": "LEFTOVER_EXP_DATE",
+                            "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                          },
+                          {
+                            "any": [
+                              {
+                                "fieldId": "__ckCurrentRecordReservedQuantity",
+                                "greaterThan": 0
+                              },
+                              {
+                                "fieldId": "__ckFreeQuantity",
+                                "greaterThan": 0
+                              }
+                            ]
+                          }
+                        ]
                       },
                       "removeOutputWhenExcluded": true
                     }
@@ -24645,7 +24677,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "9bd15b33cdbc30296645c28b70613903"
+    "cacheFingerprint": "17a19447cc7cd38ce41a27f8b8c47382"
   },
   {
     "formKey": "Config: Recipes",

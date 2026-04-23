@@ -112,7 +112,6 @@ import {
   normalizeInventoryAvailabilitySnapshotForDisplay
 } from '../../features/reservations/availabilitySnapshots';
 import {
-  hasStructuredValue,
   resolveReservationResourceFieldIds,
   resolveReservationSourceItemKey
 } from '../../features/reservations/sourceFields';
@@ -128,7 +127,9 @@ import {
 } from './selectionEffectInit';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 import {
+  decorateSourceFirstAllocationRowForVisibility,
   filterSourceFirstAllocationRows,
+  resolveSourceFirstAllocationAvailabilityFieldPair,
   resolveSourceFirstAllocationLabelVisibility,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded,
   shouldShowSourceFirstAllocationLabel
@@ -150,33 +151,6 @@ const getByPath = (root: any, path: string): any => {
 };
 
 const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
-
-const resolveAvailabilityFieldPair = (
-  availabilityConfig: any,
-  sourceRow: Record<string, any> | null | undefined
-): { remainingFieldId: string; reservedFieldId: string } => {
-  const candidates = [
-    {
-      remainingFieldId: normalizeIdValue(availabilityConfig?.sourcePortionsFieldId),
-      reservedFieldId: normalizeIdValue(availabilityConfig?.sourceReservedPortionsFieldId)
-    },
-    {
-      remainingFieldId: normalizeIdValue(availabilityConfig?.sourceQuantityFieldId),
-      reservedFieldId: normalizeIdValue(availabilityConfig?.sourceReservedQuantityFieldId)
-    }
-  ].filter(candidate => candidate.remainingFieldId && candidate.reservedFieldId);
-
-  if (!candidates.length) {
-    return { remainingFieldId: '', reservedFieldId: '' };
-  }
-
-  return (
-    candidates.find(candidate =>
-      hasStructuredValue(sourceRow?.[candidate.remainingFieldId]) ||
-      hasStructuredValue(sourceRow?.[candidate.reservedFieldId])
-    ) || candidates[0]
-  );
-};
 
 const coerceStructuredItems = (payload: any): Record<string, any>[] => {
   if (!payload) return [];
@@ -1403,8 +1377,99 @@ export const LineItemGroupQuestion: React.FC<{
     [resolveVirtualPresetNode]
   );
 
+  const buildStepDataSourceDraftKey = React.useCallback(
+    (config: any, parentRowId: string, sourceKey: string): string => {
+      const configId = `${config?.id || 'datasourceRows'}`.trim();
+      return `${q.id}::${configId}::${parentRowId}::${sourceKey}`;
+    },
+    [q.id]
+  );
+
+  const resolveReservationQuantityFromValues = React.useCallback(
+    (
+      values: Record<string, FieldValue> | null | undefined,
+      selectedFieldId: string,
+      quantityFieldId: string
+    ): number => {
+      if (!values || !quantityFieldId) return 0;
+      const selected =
+        !selectedFieldId ||
+        !Object.prototype.hasOwnProperty.call(values, selectedFieldId) ||
+        values[selectedFieldId] === true;
+      return selected ? toFiniteNumberValue(values[quantityFieldId]) : 0;
+    },
+    []
+  );
+
+  const decorateStepDataSourceRowForVisibility = React.useCallback(
+    (config: any, sourceRow: Record<string, any>, currentParentRowId?: string): Record<string, any> => {
+      const availabilityConfig =
+        config?.availability && typeof config.availability === 'object'
+          ? config.availability
+          : null;
+      if (!availabilityConfig) return sourceRow;
+
+      const outputGroupId = `${config?.outputGroupId || ''}`.trim();
+      const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
+      const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
+      const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
+      const sourceKey = resolveReservationSourceItemKey(config, sourceRow);
+      if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !sourceKey) {
+        return decorateSourceFirstAllocationRowForVisibility({
+          row: sourceRow,
+          availabilityConfig
+        });
+      }
+
+      let localTotalReservedQuantity = 0;
+      let localCurrentRowQuantity = 0;
+      let committedTotalReservedQuantity = 0;
+      let committedCurrentRowQuantity = 0;
+
+      parentRows.forEach(parentRow => {
+        const outputKey = buildSubgroupKey(q.id, parentRow.id, outputGroupId);
+        const outputRows = Array.isArray(lineItems[outputKey]) ? lineItems[outputKey] : [];
+        const existingOutputRow =
+          outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
+        const outputValues = existingOutputRow?.values as Record<string, FieldValue> | undefined;
+        const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
+        const draftValues = stepDataSourceDraftsRef.current[draftKey] || null;
+        const committedValues = reservationCommittedValuesRef.current[draftKey] || null;
+        const localQuantity = resolveReservationQuantityFromValues(
+          draftValues || outputValues || null,
+          selectedFieldId,
+          quantityFieldId
+        );
+        const committedQuantity = resolveReservationQuantityFromValues(
+          committedValues || outputValues || null,
+          selectedFieldId,
+          quantityFieldId
+        );
+
+        localTotalReservedQuantity += localQuantity;
+        committedTotalReservedQuantity += committedQuantity;
+        if (parentRow.id === currentParentRowId) {
+          localCurrentRowQuantity = localQuantity;
+          committedCurrentRowQuantity = committedQuantity;
+        }
+      });
+
+      const scopedLocalReservedQuantity = currentParentRowId ? localCurrentRowQuantity : localTotalReservedQuantity;
+      const scopedCommittedReservedQuantity = currentParentRowId ? committedCurrentRowQuantity : committedTotalReservedQuantity;
+
+      return decorateSourceFirstAllocationRowForVisibility({
+        row: sourceRow,
+        availabilityConfig,
+        localCurrentRecordReservedQuantity: scopedLocalReservedQuantity,
+        committedCurrentRecordReservedQuantity: scopedCommittedReservedQuantity,
+        serverCurrentRecordReservedQuantityOverride: currentParentRowId ? scopedCommittedReservedQuantity : undefined
+      });
+    },
+    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, resolveReservationQuantityFromValues]
+  );
+
   const resolveStepDataSourceRows = React.useCallback(
-    (config: any): any[] => {
+    (config: any, currentParentRowId?: string): any[] => {
       const refreshTick = stepDataSourceRefreshTick;
       void refreshTick;
       if (!config?.dataSource || typeof config.dataSource !== 'object') return [];
@@ -1412,19 +1477,20 @@ export const LineItemGroupQuestion: React.FC<{
       const cached = peekCachedDataSource(config.dataSource, language);
       const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
       if (!items.length) return [];
+      const rows = items.map((item: any) => decorateStepDataSourceRowForVisibility(config, item, currentParentRowId));
       return filterSourceFirstAllocationRows({
-        rows: items,
+        rows,
         sourceRowsConfig: config?.sourceRows,
         topValues: values,
         lineItems
       });
     },
-    [isStepDataSourceLoading, language, lineItems, stepDataSourceRefreshTick, values]
+    [decorateStepDataSourceRowForVisibility, isStepDataSourceLoading, language, lineItems, stepDataSourceRefreshTick, values]
   );
 
   const resolveStepDataSourceRowsForParent = React.useCallback(
     (config: any, parentRow: LineItemRowState): any[] => {
-      const items = resolveStepDataSourceRows(config);
+      const items = resolveStepDataSourceRows(config, parentRow.id);
       if (!items.length) return [];
       const sourceMatchFieldId = (config?.sourceMatchFieldId || '').toString().trim();
       const sourceMatchFieldIds = Array.isArray(config?.sourceMatchFieldIds)
@@ -1460,8 +1526,9 @@ export const LineItemGroupQuestion: React.FC<{
       const visibleSourceRows = sourceRows
         .map((sourceRow: Record<string, any>) => {
           const eligibleParents = parentRows.filter(parentRow => {
+            const scopedSourceRow = decorateStepDataSourceRowForVisibility(config, sourceRow, parentRow.id);
             const parentScopedRows = filterSourceFirstAllocationRows({
-              rows: [sourceRow],
+              rows: [scopedSourceRow],
               sourceRowsConfig: config?.sourceRows,
               parentValues: (parentRow.values || {}) as Record<string, FieldValue>,
               topValues: values,
@@ -1475,7 +1542,7 @@ export const LineItemGroupQuestion: React.FC<{
               : [];
             if (!parentMatchFieldId || (!sourceMatchFieldId && !sourceMatchFieldIds.length)) return true;
             return matchesDataSourceRowToParent({
-              item: sourceRow,
+              item: scopedSourceRow,
               sourceMatchFieldId,
               sourceMatchFieldIds,
               parentValue: (parentRow.values as any)?.[parentMatchFieldId],
@@ -1505,7 +1572,7 @@ export const LineItemGroupQuestion: React.FC<{
         emptyStateMessage
       };
     });
-  }, [isStepDataSourceLoading, language, lineItems, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows, values]);
+  }, [decorateStepDataSourceRowForVisibility, isStepDataSourceLoading, language, lineItems, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows, values]);
 
   const hideSupplementalHelper = React.useMemo(
     () =>
@@ -1552,30 +1619,6 @@ export const LineItemGroupQuestion: React.FC<{
       return { key: buildSubgroupKey(q.id, parentRowId, outputGroupId), subConfig: subConfig || null };
     },
     [q.id, q.lineItemConfig?.subGroups]
-  );
-
-  const buildStepDataSourceDraftKey = React.useCallback(
-    (config: any, parentRowId: string, sourceKey: string): string => {
-      const configId = `${config?.id || 'datasourceRows'}`.trim();
-      return `${q.id}::${configId}::${parentRowId}::${sourceKey}`;
-    },
-    [q.id]
-  );
-
-  const resolveReservationQuantityFromValues = React.useCallback(
-    (
-      values: Record<string, FieldValue> | null | undefined,
-      selectedFieldId: string,
-      quantityFieldId: string
-    ): number => {
-      if (!values || !quantityFieldId) return 0;
-      const selected =
-        !selectedFieldId ||
-        !Object.prototype.hasOwnProperty.call(values, selectedFieldId) ||
-        values[selectedFieldId] === true;
-      return selected ? toFiniteNumberValue(values[quantityFieldId]) : 0;
-    },
-    []
   );
 
   const resolveReservationStateForSource = React.useCallback(
@@ -1685,8 +1728,7 @@ export const LineItemGroupQuestion: React.FC<{
         ? args.config.availability
         : null;
       if (availabilityConfig) {
-        const sourceKeyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
-        const sourceKey = sourceKeyFieldId ? `${(args.sourceRow as any)?.[sourceKeyFieldId] ?? ''}`.trim() : '';
+        const sourceKey = resolveReservationSourceItemKey(args.config, args.sourceRow);
         const localReservationState = sourceKey
           ? resolveCurrentReservationStateForSource(args.config, sourceKey, args.parentRowId)
           : { totalReservedQuantity: 0, currentRowQuantity: 0 };
@@ -1825,7 +1867,7 @@ export const LineItemGroupQuestion: React.FC<{
         fallbackCurrentRecordReservedQuantity: committedReservationState.totalReservedQuantity
       });
       const { remainingFieldId: sourceRemainingFieldId, reservedFieldId: sourceReservedFieldId } =
-        resolveAvailabilityFieldPair(availabilityConfig, args.sourceRow);
+        resolveSourceFirstAllocationAvailabilityFieldPair(availabilityConfig, args.sourceRow);
       if (!sourceRemainingFieldId || !sourceReservedFieldId) return;
 
       const remainingQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceRemainingFieldId]);
