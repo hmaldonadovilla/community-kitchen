@@ -157,6 +157,7 @@ import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange';
 import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import { buildFilePayload } from './app/filePayload';
+import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
@@ -913,7 +914,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             performance.clearMeasures(name);
           }
         }
-      } catch (_) {
+      } catch {
         // ignore measure failures
       }
       if (typeof console !== 'undefined' && typeof console.info === 'function') {
@@ -8439,7 +8440,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
           payload.__ckClientDataVersion = Number(baseVersion);
         }
-
         const res = await runCoalescedDraftSaveRequest('autosave', payload, (nextPayload: any) =>
           submitCurrentRecordMutation('autosave', nextPayload)
         );
@@ -11609,50 +11609,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         ensureSession('afterEnsureRecord');
 
         // Step 2: upload file payloads to Drive and get final URL list.
-        const readStateItems = (): Array<string | File> => {
+        const readStateItems = (): { items: Array<string | File>; hasValue: boolean } => {
           try {
             if (args.scope === 'top' && args.questionId) {
-              const raw = (valuesRef.current as any)?.[args.questionId];
-              if (Array.isArray(raw)) return raw.filter((it: any) => typeof it === 'string' || isFile(it));
-              if (typeof raw === 'string' || isFile(raw)) return [raw];
-              return [];
+              const source = (valuesRef.current as any) || {};
+              const hasValue = Object.prototype.hasOwnProperty.call(source, args.questionId);
+              const raw = source?.[args.questionId];
+              if (Array.isArray(raw)) {
+                return {
+                  items: raw.filter((it: any) => typeof it === 'string' || isFile(it)),
+                  hasValue
+                };
+              }
+              if (typeof raw === 'string' || isFile(raw)) return { items: [raw], hasValue: true };
+              return { items: [], hasValue };
             }
             if (args.scope === 'line' && args.groupId && args.rowId && args.fieldId) {
               const rows = (lineItemsRef.current as any)?.[args.groupId] || [];
               const row = Array.isArray(rows) ? rows.find((r: any) => (r?.id || '').toString() === args.rowId) : null;
-              const raw = row?.values ? (row.values as any)[args.fieldId] : undefined;
-              if (Array.isArray(raw)) return raw.filter((it: any) => typeof it === 'string' || isFile(it));
-              if (typeof raw === 'string' || isFile(raw)) return [raw];
-              return [];
+              const rowValues = (row?.values || {}) as Record<string, unknown>;
+              const hasValue = Object.prototype.hasOwnProperty.call(rowValues, args.fieldId);
+              const raw = rowValues[args.fieldId];
+              if (Array.isArray(raw)) {
+                return {
+                  items: raw.filter((it: any) => typeof it === 'string' || isFile(it)),
+                  hasValue
+                };
+              }
+              if (typeof raw === 'string' || isFile(raw)) return { items: [raw], hasValue: true };
+              return { items: [], hasValue };
             }
           } catch {
             // ignore
           }
-          return [];
+          return { items: [], hasValue: false };
         };
 
-        const normalizeExistingUrls = (items: Array<string | File>): string[] => {
-          const urls: string[] = [];
-          (items || []).forEach(it => {
-            if (typeof it !== 'string') return;
-            splitUrlList(it).forEach(u => urls.push(u));
-          });
-          const seen = new Set<string>();
-          return urls
-            .map(u => (u || '').toString().trim())
-            .filter(u => {
-              if (!u) return false;
-              if (seen.has(u)) return false;
-              seen.add(u);
-              return true;
-            });
-        };
-
-        const stateItems = readStateItems();
+        const stateSnapshot = readStateItems();
+        const stateItems = stateSnapshot.items;
         const fileItemsFromState = stateItems.filter(isFile);
         const fileItemsFromArgs = (args.items || []).filter(isFile);
         const fileItems = fileItemsFromState.length ? fileItemsFromState : fileItemsFromArgs;
-        const existingUrls = normalizeExistingUrls(stateItems.length ? stateItems : (args.items || []));
         if (!fileItems.length) {
           // Nothing new to upload (e.g., only URLs).
           return { success: true };
@@ -11699,20 +11696,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
 
           const allowUiAfterUpload = ensureSession('afterUpload') && allowUiUpdates;
-          const fileSig = (f: File): string => `${f.name}|${f.size}|${f.lastModified}`;
-          const urlBySig = new Map<string, string>();
-          fileItems.forEach((f, idx) => {
-            const u = uploadedUrls[idx];
-            if (u) urlBySig.set(fileSig(f), u);
-          });
-
-          const completionItems = readStateItems();
-          const mergeBase: Array<string | File> = completionItems.length ? completionItems : args.items;
-          const mergedItems: Array<string | File> = (mergeBase || []).map(it => {
-            if (!isFile(it)) return it;
-            const sig = fileSig(it);
-            return urlBySig.get(sig) || it;
-          });
+          const completionState = readStateItems();
+          const mergedItems = mergeUploadedFieldItems({
+            currentItems: completionState.items,
+            hasCurrentValue: completionState.hasValue,
+            fallbackItems: args.items,
+            uploadedFiles: fileItems,
+            uploadedUrls
+          }) as Array<string | File>;
 
           // Step 3: update local state with URL(s) (replace uploaded File objects), then save draft again to persist URL(s) to the sheet.
           const applyTopLevelMerge = (baseValues: Record<string, FieldValue>) => ({
@@ -11771,7 +11762,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('upload.urls.localMerged', {
             fieldPath: args.fieldPath,
             recordId,
-            urls: mergedItems.filter(it => typeof it === 'string').length
+            urls: mergedItems.filter(it => typeof it === 'string').length,
+            respectedCurrentValue: completionState.hasValue
           });
           return { success: true };
         } catch (err: any) {
