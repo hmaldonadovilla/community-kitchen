@@ -248,15 +248,22 @@ export function buildWebFormHtml(
         position: sticky;
         top: 0;
         z-index: 30;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-        align-items: center;
-        gap: 16px;
         padding: calc(14px + var(--safe-top)) 22px 14px;
         /* Make the header full-bleed within the .page padding */
         margin: -22px -22px 6px;
         background: var(--bg);
         border-bottom: 1px solid var(--border);
+      }
+      .ck-app-header[data-layout="home"] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: 16px;
+      }
+      .ck-app-header[data-layout="detail"] {
+        display: flex;
+        align-items: center;
+        gap: 16px;
       }
       .ck-app-header-slot {
         min-width: 0;
@@ -287,9 +294,47 @@ export function buildWebFormHtml(
         cursor: pointer;
       }
       .ck-app-back-btn:focus-visible,
+      .ck-app-avatar-btn:focus-visible,
       .ck-app-title-btn:focus-visible {
         outline: 2px solid var(--text);
         outline-offset: 4px;
+      }
+      .ck-app-avatar-btn {
+        appearance: none;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        flex: 0 0 auto;
+        border-radius: 999px;
+      }
+      .ck-app-avatar {
+        --ck-avatar-size: calc(var(--control-height) * 0.62);
+        width: var(--ck-avatar-size);
+        height: var(--ck-avatar-size);
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ck-secondary-bg);
+        border: 1px solid var(--ck-secondary-border);
+        color: var(--ck-secondary-text);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-size: calc(var(--ck-font-control) * 0.72);
+        line-height: 1;
+        user-select: none;
+        flex: 0 0 auto;
+      }
+      .ck-app-avatar--img {
+        display: block;
+        object-fit: cover;
+        background: transparent;
+      }
+      .ck-app-avatar--drawer {
+        --ck-avatar-size: calc(var(--control-height) * 0.58);
+        font-size: calc(var(--ck-font-control) * 0.66);
       }
       .ck-app-title-btn {
         appearance: none;
@@ -297,10 +342,15 @@ export function buildWebFormHtml(
         background: transparent;
         padding: 0;
         margin: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
         min-width: 0;
         max-width: min(100%, 720px);
         border-radius: 16px;
+        color: var(--text);
+        font: inherit;
       }
       .ck-app-title {
         font-weight: 600;
@@ -310,7 +360,13 @@ export function buildWebFormHtml(
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        color: var(--text);
+      }
+      .ck-app-header[data-layout="home"] .ck-app-title {
         text-align: center;
+      }
+      .ck-app-header[data-layout="detail"] .ck-app-title {
+        text-align: left;
       }
       .ck-app-title-row {
         flex: 1 1 auto;

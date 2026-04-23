@@ -3478,7 +3478,7 @@ components:
       description: |
         Form shell header settings.
 
-        The React form shell now shows a left-side `[← Apps]` back button, a centered title,
+        The React form shell now shows a left-side `← Apps` back button, a centered title,
         and an optional title-open sidebar. Use `sidebarEnabled: false` to hide that sidebar
         for normal users. Adding `?dev-mode=true` to the URL still enables the sidebar for troubleshooting.
       properties:

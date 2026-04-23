@@ -287,7 +287,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
       > **Notes:**
-      >- The app header now uses a **`[← Apps]` back button**, a **centered form title**, and an optional **title-open sidebar** for refresh/language/build tools.
+      >- The app header now uses a **`← Apps` back button**, a **centered form title**, and an optional **title-open sidebar** for refresh/language/build tools.
       >- Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
       >- When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
 
@@ -1048,7 +1048,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
       Note:
-      - The React form shell no longer renders the form logo directly in the sticky header; it now uses a `[← Apps]` back button plus a centered title.
+      - The React form shell no longer renders the form logo directly in the sticky header; it now uses a `← Apps` back button plus a centered title.
       - This dashboard setting still applies to individual form apps and can be reused by launcher surfaces as artwork metadata.
       - The central landing page uses `docs/config/exports/<env>/landing_page.json` for its own brand logo source, copy, and card artwork.
       - The centralized analytics dashboard uses `docs/config/exports/<env>/analytics_page.json` for its landing tile, header brand source, and cross-form widget layout.
@@ -3145,7 +3145,7 @@ Recommended steps after deploying a new bundle:
 ## UI Navigation & Shell
 
 - The web app uses an app-like shell:
-  - Header shows a **left `[← Apps]` back button**, a **centered form title**, and the environment/save state on the right.
+  - Header shows a **left `← Apps` back button**, a **centered form title**, and the environment/save state on the right.
   - When `appHeader.sidebarEnabled` is not `false`, tapping the **form title** opens a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
   - Adding `?dev-mode=true` to the form URL still enables the drawer even when `appHeader.sidebarEnabled: false`.
   - Optional: a **top action bar** under the header can show system + custom actions (default behavior uses `BUTTON` placements like `topBarList` / `topBarForm` / `topBarSummary`).

@@ -13554,7 +13554,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     () => resolveHeaderDrawerEnabled(definition.appHeader?.sidebarEnabled),
     [definition.appHeader?.sidebarEnabled]
   );
-  const headerBackLabel = useMemo(() => `[← ${tSystem('app.apps', language, 'Apps')}]`, [language]);
+  const headerLayout = view === 'list' ? 'home' : 'detail';
+  const headerBackLabel = useMemo(() => `← ${tSystem('app.apps', language, 'Apps')}`, [language]);
   const handleHeaderBack = useCallback(() => {
     const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
     logEvent('ui.header.back.navigate', { targetUrl });
@@ -14195,8 +14196,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       <AppHeader
         title={definition.title || 'Form'}
         titleRight={headerRight}
+        layout={headerLayout}
         backLabel={headerBackLabel}
         onBack={handleHeaderBack}
+        logoUrl={definition.appHeader?.logoUrl}
         drawerEnabled={headerDrawerEnabled}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}

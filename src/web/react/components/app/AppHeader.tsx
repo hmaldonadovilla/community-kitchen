@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 
@@ -9,14 +9,18 @@ type DrawerAction = {
   placement?: 'main' | 'secondary' | 'footer';
 };
 
+type HeaderLayout = 'home' | 'detail';
+
 export const AppHeader: React.FC<{
   title: string;
   /**
    * Optional content rendered on the right side of the title row (e.g. autosave status).
    */
   titleRight?: React.ReactNode;
+  layout?: HeaderLayout;
   backLabel: string;
   onBack: () => void;
+  logoUrl?: string;
   drawerEnabled?: boolean;
   buildMarker: string;
   isMobile: boolean;
@@ -29,8 +33,10 @@ export const AppHeader: React.FC<{
 }> = ({
   title,
   titleRight,
+  layout = 'home',
   backLabel,
   onBack,
+  logoUrl,
   drawerEnabled = true,
   buildMarker,
   isMobile,
@@ -42,6 +48,61 @@ export const AppHeader: React.FC<{
   onDiagnostic
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
+  const [logoCandidateIndex, setLogoCandidateIndex] = useState(0);
+  const lastErroredSrcRef = useRef<string | null>(null);
+
+  const avatarText = useMemo(() => {
+    const trimmed = (title || '').trim();
+    if (!trimmed) return 'CK';
+    const parts = trimmed.split(/\s+/g).filter(Boolean);
+    const first = parts[0]?.[0] || trimmed[0] || 'C';
+    const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
+    const joined = `${first || ''}${second || ''}`.toUpperCase();
+    return joined.trim() || first.toUpperCase();
+  }, [title]);
+
+  const logoCandidates = useMemo(() => {
+    const raw = (logoUrl || '').toString().trim();
+    if (!raw) return [];
+
+    const candidates: string[] = [];
+    const push = (value?: string) => {
+      const next = (value || '').toString().trim();
+      if (!next || candidates.includes(next)) return;
+      candidates.push(next);
+    };
+
+    const extractDriveId = (value: string): string | undefined => {
+      const byPath = value.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+      if (byPath?.[1]) return byPath[1];
+      const byQuery = value.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+      if (byQuery?.[1]) return byQuery[1];
+      const byGoogleusercontent = value.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/);
+      if (byGoogleusercontent?.[1]) return byGoogleusercontent[1];
+      if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) return value;
+      return undefined;
+    };
+
+    push(raw);
+
+    const driveId = extractDriveId(raw);
+    if (driveId) {
+      const encoded = encodeURIComponent(driveId);
+      push(`https://drive.google.com/thumbnail?id=${encoded}&sz=w256`);
+      push(`https://drive.google.com/thumbnail?id=${encoded}&sz=w512`);
+      push(`https://drive.google.com/uc?export=view&id=${encoded}`);
+      push(`https://drive.google.com/uc?export=download&id=${encoded}`);
+      push(`https://lh3.googleusercontent.com/d/${encoded}=w256`);
+      push(`https://lh3.googleusercontent.com/d/${encoded}=w512`);
+    }
+
+    return candidates;
+  }, [logoUrl]);
+
+  const logoSrc = logoCandidates[logoCandidateIndex] || undefined;
+  const showLogo = Boolean(logoSrc) && !logoFailed;
 
   const mainDrawerActions = useMemo(
     () => (Array.isArray(drawerActions) ? drawerActions.filter(action => action?.placement === 'main') : []),
@@ -60,11 +121,34 @@ export const AppHeader: React.FC<{
 
   useEffect(() => {
     onDiagnostic?.('ui.header.drawer.state', {
+      layout,
       enabled: drawerEnabled,
       languageCount,
       actionCount: drawerActionCount
     });
-  }, [drawerActionCount, drawerEnabled, languageCount, onDiagnostic]);
+  }, [drawerActionCount, drawerEnabled, languageCount, layout, onDiagnostic]);
+
+  useEffect(() => {
+    setLogoFailed(false);
+    setLogoLoaded(false);
+    setLogoCandidateIndex(0);
+    lastErroredSrcRef.current = null;
+    onDiagnostic?.('ui.header.logo.configured', {
+      layout,
+      enabled: logoCandidates.length > 0,
+      candidateCount: logoCandidates.length,
+      raw: (logoUrl || '').toString().trim() || null
+    });
+  }, [layout, logoCandidates.length, logoUrl, onDiagnostic]);
+
+  useEffect(() => {
+    if (!logoSrc) return;
+    onDiagnostic?.('ui.header.logo.attempt', {
+      index: logoCandidateIndex,
+      total: logoCandidates.length,
+      src: logoSrc
+    });
+  }, [logoCandidateIndex, logoCandidates.length, logoSrc, onDiagnostic]);
 
   useEffect(() => {
     if (drawerEnabled) return;
@@ -90,7 +174,7 @@ export const AppHeader: React.FC<{
   }, [drawerOpen]);
 
   const openDrawer = useCallback(
-    (source: 'title') => {
+    (source: 'title' | 'avatar') => {
       if (!drawerEnabled) return;
       onDiagnostic?.('ui.header.drawer.open', { source });
       setDrawerOpen(true);
@@ -119,25 +203,96 @@ export const AppHeader: React.FC<{
     <div className="ck-app-title">{title || 'Form'}</div>
   );
 
+  const renderAvatar = (size: 'header' | 'drawer') => {
+    if (showLogo && logoSrc) {
+      const className = size === 'drawer' ? 'ck-app-avatar ck-app-avatar--drawer ck-app-avatar--img' : 'ck-app-avatar ck-app-avatar--img';
+      return (
+        <img
+          className={className}
+          src={logoSrc}
+          alt=""
+          aria-hidden="true"
+          onLoad={() => {
+            if (logoLoaded) return;
+            setLogoLoaded(true);
+            onDiagnostic?.('ui.header.logo.loaded', { target: size, src: logoSrc });
+          }}
+          onError={() => {
+            if (!logoSrc) return;
+            if (lastErroredSrcRef.current === logoSrc) return;
+            lastErroredSrcRef.current = logoSrc;
+
+            const nextIndex = logoCandidateIndex + 1;
+            if (nextIndex < logoCandidates.length) {
+              const nextSrc = logoCandidates[nextIndex];
+              onDiagnostic?.('ui.header.logo.fallback', {
+                target: size,
+                from: logoSrc,
+                to: nextSrc,
+                index: nextIndex,
+                total: logoCandidates.length
+              });
+              setLogoCandidateIndex(nextIndex);
+              return;
+            }
+
+            setLogoFailed(true);
+            onDiagnostic?.('ui.header.logo.failed', { target: size, src: logoSrc });
+          }}
+        />
+      );
+    }
+
+    const className = size === 'drawer' ? 'ck-app-avatar ck-app-avatar--drawer' : 'ck-app-avatar';
+    return (
+      <span className={className} aria-hidden="true">
+        {avatarText}
+      </span>
+    );
+  };
+
   return (
     <>
-      <header className="ck-app-header" data-mobile={isMobile ? '1' : '0'}>
-        <div className="ck-app-header-slot ck-app-header-slot--start">
-          <button
-            type="button"
-            className="ck-app-back-btn"
-            onClick={() => {
-              onDiagnostic?.('ui.header.back.click', {});
-              onBack();
-            }}
-          >
-            {backLabel}
-          </button>
-        </div>
-        <div className="ck-app-header-slot ck-app-header-slot--center">{titleNode}</div>
-        <div className="ck-app-header-slot ck-app-header-slot--end">
-          {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
-        </div>
+      <header className="ck-app-header" data-mobile={isMobile ? '1' : '0'} data-layout={layout}>
+        {layout === 'home' ? (
+          <>
+            <div className="ck-app-header-slot ck-app-header-slot--start">
+              <button
+                type="button"
+                className="ck-app-back-btn"
+                onClick={() => {
+                  onDiagnostic?.('ui.header.back.click', {});
+                  onBack();
+                }}
+              >
+                {backLabel}
+              </button>
+            </div>
+            <div className="ck-app-header-slot ck-app-header-slot--center">{titleNode}</div>
+            <div className="ck-app-header-slot ck-app-header-slot--end">
+              {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
+            </div>
+          </>
+        ) : (
+          <>
+            {drawerEnabled ? (
+              <button
+                type="button"
+                className="ck-app-avatar-btn"
+                onClick={() => openDrawer('avatar')}
+                aria-label={tSystem('app.openMenu', language, 'Open menu')}
+              >
+                {renderAvatar('header')}
+              </button>
+            ) : (
+              renderAvatar('header')
+            )}
+            <div className="ck-app-title-row">
+              <div className="ck-app-title">{title || 'Form'}</div>
+              {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
+            </div>
+          </>
+        )}
       </header>
 
       {drawerEnabled ? (
@@ -151,6 +306,7 @@ export const AppHeader: React.FC<{
           >
             <div className="ck-app-drawer-top">
               <div className="ck-app-drawer-brand">
+                {renderAvatar('drawer')}
                 <div className="ck-app-drawer-brand-text">
                   <div className="ck-app-drawer-brand-title">{title || 'Form'}</div>
                   <div className="ck-app-drawer-brand-subtitle muted">{tSystem('app.menu', language, 'Menu')}</div>

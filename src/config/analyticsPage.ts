@@ -18,7 +18,7 @@ const DEFAULT_ANALYTICS_PAGE_CONFIG: AnalyticsPageConfig = {
   copy: {
     loadingLabel: 'Loading analytics...',
     emptyLabel: 'No analytics widgets are configured for this dashboard.',
-    backToLandingLabel: '[← Apps]',
+    backToLandingLabel: '← Apps',
     pendingNavigationTitle: 'Please wait',
     pendingNavigationMessage: 'Opening forms...'
   },
