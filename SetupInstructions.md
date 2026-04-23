@@ -513,6 +513,58 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Custom scripts must be named server functions with prefix `analytics_` (for example `analytics_mealKpi`).
       - Trigger policy: recompute on save/edit/follow-up actions + daily reconciliation trigger (`runDailyAnalyticsRecompute`).
       - Legacy `listView.metric` / `listViewMetric` are still runtime-compatible but deprecated.
+      - `analytics.pipelines` can add fire-and-forget export actions to the centralized analytics page. The current reusable pipeline type is `ingredientUsageReport`, which:
+        - accepts a past start date from the analytics page UI
+        - filters closed source records between that date and today
+        - aggregates nested ingredient rows by ingredient + unit
+        - exports the results as `.xlsx`
+        - queues the work server-side and emails the attachment to the configured recipients
+
+      Example:
+
+      ```json
+      {
+        "analytics": {
+          "pipelines": [
+            {
+              "id": "ingredients_analysis",
+              "type": "ingredientUsageReport",
+              "title": { "en": "Ingredients analysis" },
+              "ui": {
+                "dateLabel": { "en": "Start date" },
+                "submitLabel": { "en": "Email ingredients report" },
+                "queuedNotice": { "en": "The ingredients report has been queued. The spreadsheet will be sent by email." }
+              },
+              "email": {
+                "recipients": ["ops@example.com"],
+                "subject": { "en": "Ingredients analysis | {{START_DATE}} to {{END_DATE}}" },
+                "message": { "en": "Closed meal productions: {{RECORD_COUNT}}\nAggregated ingredients: {{ROW_COUNT}}" }
+              },
+              "attachment": {
+                "format": "xlsx",
+                "fileNameTemplate": "Ingredients analysis {{START_DATE}} to {{END_DATE}}.xlsx",
+                "sheetName": "Ingredients analysis"
+              },
+              "report": {
+                "dateFieldId": "MP_PREP_DATE",
+                "statusFieldId": "Status",
+                "closedStatuses": ["Closed"],
+                "mealGroupId": "MP_MEALS_REQUEST",
+                "prepGroupId": "MP_TYPE_LI",
+                "ingredientGroupId": "MP_INGREDIENTS_LI",
+                "prepTypeFieldId": "PREP_TYPE",
+                "prepTypeValues": ["Cook"],
+                "ingredientFieldId": "ING",
+                "quantityFieldId": "QTY",
+                "unitFieldId": "UNIT",
+                "categoryFieldId": "CAT",
+                "supplierLookupColumn": "SUPPLIER"
+              }
+            }
+          ]
+        }
+      }
+      ```
 
     - Open the dedicated analytics page for a form with:
 

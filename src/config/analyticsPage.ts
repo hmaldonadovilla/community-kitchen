@@ -142,8 +142,8 @@ export const sortAnalyticsDashboardSections = (sections: AnalyticsDashboardSecti
 export const hasAnalyticsDashboardContent = (payload: AnalyticsDashboardPayload | null | undefined): boolean =>
   Boolean(
     payload &&
-      Array.isArray(payload.sections) &&
-      payload.sections.some(section => Array.isArray(section.widgets) && section.widgets.length > 0)
+      ((Array.isArray(payload.sections) && payload.sections.some(section => Array.isArray(section.widgets) && section.widgets.length > 0)) ||
+        (Array.isArray(payload.pipelines) && payload.pipelines.length > 0))
   );
 
 export const resolveAnalyticsPageUpdatedAt = (sections: AnalyticsDashboardSection[] | null | undefined): string => {

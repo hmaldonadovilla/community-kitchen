@@ -14,7 +14,11 @@ import {
   WebFormDefinition,
   WebFormSubmission
 } from '../../types';
-import type { AnalyticsDashboardPayload } from '../../config/analyticsPageTypes';
+import type {
+  AnalyticsDashboardPayload,
+  QueueAnalyticsPipelineRequest,
+  QueueAnalyticsPipelineResult
+} from '../../config/analyticsPageTypes';
 import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
@@ -807,3 +811,8 @@ export const fetchFormCatalogApi = (): Promise<FormCatalogItem[]> =>
 
 export const fetchAnalyticsDashboardApi = (): Promise<AnalyticsDashboardPayload> =>
   invokeTransport<AnalyticsDashboardPayload>('fetchAnalyticsDashboard');
+
+export const queueAnalyticsPipelineRunApi = (
+  request: QueueAnalyticsPipelineRequest
+): Promise<QueueAnalyticsPipelineResult> =>
+  invokeTransport<QueueAnalyticsPipelineResult>('queueAnalyticsPipelineRun', request);

@@ -211,6 +211,18 @@ export function fetchAnalyticsDashboard(): any {
   return service.fetchAnalyticsDashboard();
 }
 
+export function queueAnalyticsPipelineRun(request: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.queueAnalyticsPipelineRun(request);
+}
+
+export function runQueuedAnalyticsPipelineJobs(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.runQueuedAnalyticsPipelineJobs();
+}
+
 export function runDailyAnalyticsRecompute(): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

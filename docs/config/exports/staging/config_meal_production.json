@@ -3654,6 +3654,91 @@
             }
           }
         }
+      ],
+      "pipelines": [
+        {
+          "id": "ingredients_analysis",
+          "type": "ingredientUsageReport",
+          "title": {
+            "en": "Ingredients analysis",
+            "fr": "Analyse des ingrédients",
+            "nl": "Ingrediëntenanalyse"
+          },
+          "description": {
+            "en": "Aggregate cooked ingredients used in closed meal production records and receive the spreadsheet by email.",
+            "fr": "Agrège les ingrédients cuisinés utilisés dans les enregistrements de production de repas clôturés et recevez le tableur par e-mail.",
+            "nl": "Bundelt gekookte ingrediënten uit gesloten maaltijdproductierecords en verstuurt het spreadsheet per e-mail."
+          },
+          "ui": {
+            "dateLabel": {
+              "en": "Start date",
+              "fr": "Date de début",
+              "nl": "Startdatum"
+            },
+            "dateHelperText": {
+              "en": "Select a past date. Closed meal productions from that date through today will be included.",
+              "fr": "Sélectionnez une date passée. Les productions de repas clôturées entre cette date et aujourd’hui seront incluses.",
+              "nl": "Selecteer een datum in het verleden. Gesloten maaltijdproducties van die datum tot vandaag worden opgenomen."
+            },
+            "submitLabel": {
+              "en": "Email ingredients report",
+              "fr": "Envoyer le rapport ingrédients",
+              "nl": "Ingrediëntenrapport e-mailen"
+            },
+            "pendingLabel": {
+              "en": "Queueing...",
+              "fr": "Mise en file...",
+              "nl": "Wordt ingepland..."
+            },
+            "queuedNotice": {
+              "en": "The ingredients report has been queued. The spreadsheet will be sent by email to hmaldonadovilla@outlook.com.",
+              "fr": "Le rapport ingrédients a été mis en file. Le tableur sera envoyé par e-mail à hmaldonadovilla@outlook.com.",
+              "nl": "Het ingrediëntenrapport is ingepland. Het spreadsheet wordt per e-mail verzonden naar hmaldonadovilla@outlook.com."
+            }
+          },
+          "email": {
+            "recipients": [
+              "hmaldonadovilla@outlook.com"
+            ],
+            "subject": {
+              "en": "Ingredients analysis | {{START_DATE}} to {{END_DATE}}",
+              "fr": "Analyse des ingrédients | {{START_DATE}} à {{END_DATE}}",
+              "nl": "Ingrediëntenanalyse | {{START_DATE}} tot {{END_DATE}}"
+            },
+            "message": {
+              "en": "The requested ingredients analysis is attached.\n\nRange: {{START_DATE}} to {{END_DATE}}\nClosed meal productions included: {{RECORD_COUNT}}\nAggregated ingredients: {{ROW_COUNT}}",
+              "fr": "L’analyse des ingrédients demandée est jointe.\n\nPériode : {{START_DATE}} à {{END_DATE}}\nProductions de repas clôturées incluses : {{RECORD_COUNT}}\nIngrédients agrégés : {{ROW_COUNT}}",
+              "nl": "De gevraagde ingrediëntenanalyse is bijgevoegd.\n\nPeriode: {{START_DATE}} tot {{END_DATE}}\nOpgenomen gesloten maaltijdproducties: {{RECORD_COUNT}}\nGeaggregeerde ingrediënten: {{ROW_COUNT}}"
+            },
+            "from": "operations@communitykitchen.be",
+            "fromName": "Community Kitchen Operations"
+          },
+          "attachment": {
+            "format": "xlsx",
+            "fileNameTemplate": "Ingredients analysis {{START_DATE}} to {{END_DATE}}.xlsx",
+            "sheetName": "Ingredients analysis",
+            "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
+          },
+          "report": {
+            "dateFieldId": "MP_PREP_DATE",
+            "statusFieldId": "Status",
+            "closedStatuses": [
+              "Closed"
+            ],
+            "mealGroupId": "MP_MEALS_REQUEST",
+            "prepGroupId": "MP_TYPE_LI",
+            "ingredientGroupId": "MP_INGREDIENTS_LI",
+            "prepTypeFieldId": "PREP_TYPE",
+            "prepTypeValues": [
+              "Cook"
+            ],
+            "ingredientFieldId": "ING",
+            "quantityFieldId": "QTY",
+            "unitFieldId": "UNIT",
+            "categoryFieldId": "CAT",
+            "supplierLookupColumn": "SUPPLIER"
+          }
+        }
       ]
     },
     "listViewDefaultSort": {

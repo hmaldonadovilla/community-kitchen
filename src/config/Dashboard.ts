@@ -3197,6 +3197,165 @@ export class Dashboard {
       return undefined;
     };
 
+    const normalizePipelineUi = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: Record<string, any> = {};
+      const dateLabel = normalizeLocalized((raw as any).dateLabel ?? (raw as any).inputLabel);
+      if (dateLabel !== undefined) out.dateLabel = dateLabel;
+      const dateHelperText = normalizeLocalized((raw as any).dateHelperText ?? (raw as any).helperText);
+      if (dateHelperText !== undefined) out.dateHelperText = dateHelperText;
+      const submitLabel = normalizeLocalized((raw as any).submitLabel ?? (raw as any).buttonLabel);
+      if (submitLabel !== undefined) out.submitLabel = submitLabel;
+      const pendingLabel = normalizeLocalized((raw as any).pendingLabel ?? (raw as any).loadingLabel);
+      if (pendingLabel !== undefined) out.pendingLabel = pendingLabel;
+      const queuedNotice = normalizeLocalized((raw as any).queuedNotice ?? (raw as any).notice);
+      if (queuedNotice !== undefined) out.queuedNotice = queuedNotice;
+      return Object.keys(out).length ? out : undefined;
+    };
+
+    const normalizePipelineEmail = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const recipients = this.normalizeRecipientEntries((raw as any).recipients ?? (raw as any).to ?? (raw as any).emailRecipients);
+      if (!recipients?.length) return undefined;
+      const out: Record<string, any> = { recipients };
+      const cc = this.normalizeRecipientEntries((raw as any).cc ?? (raw as any).emailCc);
+      if (cc?.length) out.cc = cc;
+      const bcc = this.normalizeRecipientEntries((raw as any).bcc ?? (raw as any).emailBcc);
+      if (bcc?.length) out.bcc = bcc;
+      const subject = normalizeLocalized((raw as any).subject ?? (raw as any).emailSubject);
+      if (subject !== undefined) out.subject = subject;
+      const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).emailMessage);
+      if (message !== undefined) out.message = message;
+      const from = (raw as any).from ?? (raw as any).emailFrom;
+      if (from !== undefined && from !== null && from.toString().trim()) out.from = from.toString().trim();
+      const fromName = (raw as any).fromName ?? (raw as any).emailFromName;
+      if (fromName !== undefined && fromName !== null && fromName.toString().trim()) {
+        out.fromName = fromName.toString().trim();
+      }
+      return out;
+    };
+
+    const normalizePipelineAttachment = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const out: Record<string, any> = {};
+      const formatRaw = (raw as any).format ?? (raw as any).type;
+      const format = formatRaw !== undefined && formatRaw !== null ? formatRaw.toString().trim().toLowerCase() : '';
+      if (format && format !== 'xlsx') return undefined;
+      out.format = 'xlsx';
+      const fileNameTemplate =
+        (raw as any).fileNameTemplate ?? (raw as any).fileName ?? (raw as any).attachmentName ?? (raw as any).name;
+      if (fileNameTemplate !== undefined && fileNameTemplate !== null && fileNameTemplate.toString().trim()) {
+        out.fileNameTemplate = fileNameTemplate.toString().trim();
+      }
+      const sheetName = (raw as any).sheetName ?? (raw as any).worksheetName ?? (raw as any).tabName;
+      if (sheetName !== undefined && sheetName !== null && sheetName.toString().trim()) {
+        out.sheetName = sheetName.toString().trim();
+      }
+      const folderId = (raw as any).folderId ?? (raw as any).driveFolderId;
+      if (folderId !== undefined && folderId !== null && folderId.toString().trim()) {
+        out.folderId = folderId.toString().trim();
+      }
+      return out;
+    };
+
+    const normalizeIngredientUsageReport = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const dateFieldId = ((raw as any).dateFieldId ?? (raw as any).recordDateFieldId ?? '').toString().trim();
+      const mealGroupId = ((raw as any).mealGroupId ?? (raw as any).groupId ?? '').toString().trim();
+      const prepGroupId = ((raw as any).prepGroupId ?? (raw as any).typeGroupId ?? '').toString().trim();
+      const ingredientGroupId = ((raw as any).ingredientGroupId ?? (raw as any).ingredientsGroupId ?? '').toString().trim();
+      const prepTypeFieldId = ((raw as any).prepTypeFieldId ?? '').toString().trim();
+      const ingredientFieldId = ((raw as any).ingredientFieldId ?? (raw as any).ingFieldId ?? '').toString().trim();
+      const quantityFieldId = ((raw as any).quantityFieldId ?? (raw as any).qtyFieldId ?? '').toString().trim();
+      const unitFieldId = ((raw as any).unitFieldId ?? '').toString().trim();
+      if (
+        !dateFieldId ||
+        !mealGroupId ||
+        !prepGroupId ||
+        !ingredientGroupId ||
+        !prepTypeFieldId ||
+        !ingredientFieldId ||
+        !quantityFieldId ||
+        !unitFieldId
+      ) {
+        return undefined;
+      }
+      const out: Record<string, any> = {
+        dateFieldId,
+        mealGroupId,
+        prepGroupId,
+        ingredientGroupId,
+        prepTypeFieldId,
+        ingredientFieldId,
+        quantityFieldId,
+        unitFieldId
+      };
+      const statusFieldId = ((raw as any).statusFieldId ?? '').toString().trim();
+      if (statusFieldId) out.statusFieldId = statusFieldId;
+      const closedStatusesRaw = (raw as any).closedStatuses ?? (raw as any).statuses;
+      const closedStatuses = (Array.isArray(closedStatusesRaw) ? closedStatusesRaw : closedStatusesRaw ? [closedStatusesRaw] : [])
+        .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      if (closedStatuses.length) out.closedStatuses = Array.from(new Set(closedStatuses));
+      const prepTypeValuesRaw = (raw as any).prepTypeValues ?? (raw as any).includedPrepTypes ?? (raw as any).prepTypes;
+      const prepTypeValues = (Array.isArray(prepTypeValuesRaw) ? prepTypeValuesRaw : prepTypeValuesRaw ? [prepTypeValuesRaw] : [])
+        .map((entry: any) => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .filter(Boolean);
+      if (prepTypeValues.length) out.prepTypeValues = Array.from(new Set(prepTypeValues));
+      const categoryFieldId = ((raw as any).categoryFieldId ?? (raw as any).catFieldId ?? '').toString().trim();
+      if (categoryFieldId) out.categoryFieldId = categoryFieldId;
+      const supplierFieldId = ((raw as any).supplierFieldId ?? '').toString().trim();
+      if (supplierFieldId) out.supplierFieldId = supplierFieldId;
+      const categoryLookupColumn = ((raw as any).categoryLookupColumn ?? '').toString().trim();
+      if (categoryLookupColumn) out.categoryLookupColumn = categoryLookupColumn;
+      const supplierLookupColumn = ((raw as any).supplierLookupColumn ?? '').toString().trim();
+      if (supplierLookupColumn) out.supplierLookupColumn = supplierLookupColumn;
+      return out;
+    };
+
+    const normalizePipeline = (entry: any): any | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const typeRaw = (entry as any).type ?? (entry as any).kind ?? 'ingredientUsageReport';
+      const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';
+      if (type !== 'ingredientUsageReport') return null;
+      const idRaw = (entry as any).id ?? (entry as any).key ?? (entry as any).name;
+      const id = idRaw !== undefined && idRaw !== null ? idRaw.toString().trim() : '';
+      if (!id) return null;
+      const report = normalizeIngredientUsageReport((entry as any).report ?? (entry as any).config ?? entry);
+      const email = normalizePipelineEmail((entry as any).email);
+      if (!report || !email) return null;
+      const out: Record<string, any> = {
+        type: 'ingredientUsageReport',
+        id,
+        report,
+        email
+      };
+      const title = normalizeLocalized((entry as any).title ?? (entry as any).label);
+      if (title !== undefined) out.title = title;
+      const description = normalizeLocalized((entry as any).description ?? (entry as any).helperText);
+      if (description !== undefined) out.description = description;
+      const placementsRaw =
+        (entry as any).placements !== undefined
+          ? (entry as any).placements
+          : (entry as any).placement !== undefined
+            ? (entry as any).placement
+            : (entry as any).showIn;
+      const placementsList = Array.isArray(placementsRaw) ? placementsRaw : placementsRaw !== undefined ? [placementsRaw] : [];
+      const placements = placementsList
+        .map(raw => normalizePlacement(raw))
+        .filter(Boolean) as Array<'listView' | 'analyticsPage'>;
+      out.placements = placements.length ? Array.from(new Set(placements)) : ['analyticsPage'];
+      const sourceFormKeyRaw = (entry as any).sourceFormKey ?? (entry as any).formKey;
+      if (sourceFormKeyRaw !== undefined && sourceFormKeyRaw !== null && sourceFormKeyRaw.toString().trim()) {
+        out.sourceFormKey = sourceFormKeyRaw.toString().trim();
+      }
+      const ui = normalizePipelineUi((entry as any).ui ?? entry);
+      if (ui) out.ui = ui;
+      const attachment = normalizePipelineAttachment((entry as any).attachment ?? (entry as any).export);
+      if (attachment) out.attachment = attachment;
+      return out;
+    };
+
     const widgetsRaw = Array.isArray((source as any).widgets)
       ? (source as any).widgets
       : Array.isArray((source as any).items)
@@ -3242,8 +3401,20 @@ export class Dashboard {
       })
       .filter(Boolean);
 
-    if (!widgets.length) return undefined;
-    return { widgets } as AnalyticsConfig;
+    const pipelinesRaw = Array.isArray((source as any).pipelines)
+      ? (source as any).pipelines
+      : Array.isArray((source as any).jobs)
+        ? (source as any).jobs
+        : Array.isArray((source as any).reports)
+          ? (source as any).reports
+          : [];
+    const pipelines = pipelinesRaw.map((entry: any) => normalizePipeline(entry)).filter(Boolean);
+
+    if (!widgets.length && !pipelines.length) return undefined;
+    const analytics: AnalyticsConfig = {};
+    if (widgets.length) analytics.widgets = widgets as any;
+    if (pipelines.length) analytics.pipelines = pipelines as any;
+    return analytics;
   }
 
   private normalizeListViewColumns(value: any): ListViewColumnConfig[] | undefined {

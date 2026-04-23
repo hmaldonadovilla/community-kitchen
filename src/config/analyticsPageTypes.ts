@@ -56,6 +56,21 @@ export interface AnalyticsDashboardWidget extends AnalyticsSnapshotItem {
   sourceWidgetId: string;
 }
 
+export interface AnalyticsDashboardPipeline {
+  dashboardPipelineId: string;
+  pipelineId: string;
+  title: string;
+  description?: string;
+  ownerFormKey: string;
+  sourceFormKey: string;
+  sourceFormTitle: string;
+  dateLabel?: string;
+  dateHelperText?: string;
+  submitLabel?: string;
+  pendingLabel?: string;
+  queuedNotice?: string;
+}
+
 export interface AnalyticsDashboardSection {
   id: string;
   title: string;
@@ -67,7 +82,19 @@ export interface AnalyticsDashboardPayload {
   pageTitle: string;
   pageDescription?: string;
   sections: AnalyticsDashboardSection[];
+  pipelines?: AnalyticsDashboardPipeline[];
   updatedAt?: string;
   errors: string[];
   envTag?: string;
+}
+
+export interface QueueAnalyticsPipelineRequest {
+  ownerFormKey: string;
+  pipelineId: string;
+  startDate: string;
+}
+
+export interface QueueAnalyticsPipelineResult {
+  success: boolean;
+  message?: string;
 }

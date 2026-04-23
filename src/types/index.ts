@@ -5136,6 +5136,134 @@ export interface ListViewLayoutConfig {
 
 export type AnalyticsPlacement = 'listView' | 'analyticsPage';
 
+export interface AnalyticsPipelineUiConfig {
+  /**
+   * Optional label shown above the date input on the analytics page.
+   */
+  dateLabel?: LocalizedString | string;
+  /**
+   * Optional helper text shown under the date input.
+   */
+  dateHelperText?: LocalizedString | string;
+  /**
+   * Optional trigger button label shown on the analytics page.
+   */
+  submitLabel?: LocalizedString | string;
+  /**
+   * Optional trigger button label shown while the request is being queued.
+   */
+  pendingLabel?: LocalizedString | string;
+  /**
+   * Optional acknowledgement shown in the browser once the job has been queued.
+   */
+  queuedNotice?: LocalizedString | string;
+}
+
+export interface AnalyticsPipelineEmailConfig {
+  recipients: EmailRecipientEntry[];
+  cc?: EmailRecipientEntry[];
+  bcc?: EmailRecipientEntry[];
+  subject?: LocalizedString | string;
+  message?: LocalizedString | string;
+  from?: string;
+  fromName?: string;
+}
+
+export interface AnalyticsPipelineAttachmentConfig {
+  /**
+   * Attachment format written and emailed by the pipeline.
+   * Currently only `xlsx` is supported.
+   */
+  format?: 'xlsx';
+  /**
+   * Optional file name template. Supports placeholders like:
+   * - `{{PIPELINE_TITLE}}`
+   * - `{{START_DATE}}`
+   * - `{{END_DATE}}`
+   * - `{{RECORD_COUNT}}`
+   * - `{{ROW_COUNT}}`
+   */
+  fileNameTemplate?: string;
+  /**
+   * Optional sheet tab name used when building spreadsheet-backed exports.
+   */
+  sheetName?: string;
+  /**
+   * Optional Drive folder id where the generated export should be saved.
+   * When omitted, the spreadsheet parent folder is used.
+   */
+  folderId?: string;
+}
+
+export interface AnalyticsIngredientUsagePipelineReportConfig {
+  /**
+   * Top-level record date field used to filter the source records.
+   */
+  dateFieldId: string;
+  /**
+   * Optional business-status field id used to detect closed source records.
+   * When omitted, the form follow-up status field or record meta Status column is used.
+   */
+  statusFieldId?: string;
+  /**
+   * Optional explicit closed statuses.
+   * When omitted, the form falls back to `followupConfig.statusTransitions.onClose`, then `Closed`.
+   */
+  closedStatuses?: string[];
+  /**
+   * Top-level line-item group containing the meal rows.
+   */
+  mealGroupId: string;
+  /**
+   * Nested subgroup on each meal row containing preparation rows.
+   */
+  prepGroupId: string;
+  /**
+   * Nested subgroup on each preparation row containing ingredient rows.
+   */
+  ingredientGroupId: string;
+  /**
+   * Field id on the preparation row used to detect "Cook" rows.
+   */
+  prepTypeFieldId: string;
+  /**
+   * Included preparation type values. Default: `["Cook"]`.
+   */
+  prepTypeValues?: string[];
+  /**
+   * Field ids used to aggregate ingredient usage.
+   */
+  ingredientFieldId: string;
+  quantityFieldId: string;
+  unitFieldId: string;
+  /**
+   * Optional fields copied to the exported row.
+   */
+  categoryFieldId?: string;
+  supplierFieldId?: string;
+  /**
+   * Optional datasource detail columns resolved from the ingredient selector datasource.
+   * Useful when the source rows do not persist all descriptive fields.
+   */
+  categoryLookupColumn?: string;
+  supplierLookupColumn?: string;
+}
+
+export interface AnalyticsIngredientUsagePipelineConfig {
+  id: string;
+  type: 'ingredientUsageReport';
+  sourceFormKey?: string;
+  title?: LocalizedString | string;
+  description?: LocalizedString | string;
+  placements?: AnalyticsPlacement[];
+  ui?: AnalyticsPipelineUiConfig;
+  email: AnalyticsPipelineEmailConfig;
+  attachment?: AnalyticsPipelineAttachmentConfig;
+  report: AnalyticsIngredientUsagePipelineReportConfig;
+}
+
+export type AnalyticsPipelineConfig = AnalyticsIngredientUsagePipelineConfig;
+
 export interface AnalyticsAggregateCalculation {
   /**
    * Aggregate over records or line-item rows.
@@ -5218,7 +5346,8 @@ export interface AnalyticsWidgetConfig {
 }
 
 export interface AnalyticsConfig {
-  widgets: AnalyticsWidgetConfig[];
+  widgets?: AnalyticsWidgetConfig[];
+  pipelines?: AnalyticsPipelineConfig[];
 }
 
 export type AnalyticsValueType = 'number' | 'string' | 'boolean' | 'object' | 'array' | 'null' | 'unknown';

@@ -2,7 +2,13 @@ import { Dashboard } from '../config/Dashboard';
 import { ANALYTICS_PAGE_CONFIG, resolveAnalyticsPageUpdatedAt } from '../config/analyticsPage';
 import { ConfigSheet } from '../config/ConfigSheet';
 import { ConfigValidator } from '../config/ConfigValidator';
-import type { AnalyticsDashboardPayload, AnalyticsDashboardSection, AnalyticsDashboardWidget } from '../config/analyticsPageTypes';
+import type {
+  AnalyticsDashboardPayload,
+  AnalyticsDashboardSection,
+  AnalyticsDashboardWidget,
+  QueueAnalyticsPipelineRequest,
+  QueueAnalyticsPipelineResult
+} from '../config/analyticsPageTypes';
 import {
   AnalyticsSnapshot,
   FollowupSubmitEffect,
@@ -40,6 +46,7 @@ import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
 import { AnalyticsService } from './webform/analytics/service';
+import { AnalyticsPipelineService } from './webform/analytics/pipelineService';
 import { buildReactShellTemplate, buildReactTemplate } from './webform/template';
 import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
@@ -82,6 +89,10 @@ const RECORD_MUTATION_LANE_PROPERTY_PREFIX = 'CK_RECORD_MUTATION_LANE_';
 const RECORD_MUTATION_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const RECORD_MUTATION_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
 const RECORD_MUTATION_LANE_POLL_MS = 250;
+const ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_QUEUE';
+const ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_TRIGGER_ID';
+const ANALYTICS_PIPELINE_TRIGGER_HANDLER = 'runQueuedAnalyticsPipelineJobs';
+const DEFAULT_ANALYTICS_PIPELINE_NOTICE = 'The report has been queued. The spreadsheet will be sent by email.';
 const USER_RECORD_SAVE_RETRY_DELAYS_MS = [0, 900];
 const INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS = [0, 500, 1500];
 const RESERVATION_FOLLOWUP_RETRY_DELAYS_MS = [0, 750, 2000];
@@ -110,6 +121,14 @@ type HomeBootstrapChunkMeta = {
 type BootstrapContextOptions = {
   includeHomeData?: boolean;
   includeAnalytics?: boolean;
+};
+
+type AnalyticsPipelineJob = {
+  id: string;
+  ownerFormKey: string;
+  pipelineId: string;
+  startDate: string;
+  queuedAt: string;
 };
 
 type FollowupLaneTicket = {
@@ -180,6 +199,7 @@ export class WebFormService {
   private _followups?: FollowupService;
   private _uploads?: UploadService;
   private _analytics?: AnalyticsService;
+  private _analyticsPipelines?: AnalyticsPipelineService;
   private _docProps?: GoogleAppsScript.Properties.Properties | null;
   private _docPropsResolved: boolean;
   private _cache?: GoogleAppsScript.Cache.Cache | null;
@@ -252,6 +272,13 @@ export class WebFormService {
       this._analytics = new AnalyticsService(this.ss, this.submissions);
     }
     return this._analytics;
+  }
+
+  private get analyticsPipelines(): AnalyticsPipelineService {
+    if (!this._analyticsPipelines) {
+      this._analyticsPipelines = new AnalyticsPipelineService(this.ss, this.submissions, this.dataSources);
+    }
+    return this._analyticsPipelines;
   }
 
   private get listing(): ListingService {
@@ -953,6 +980,15 @@ export class WebFormService {
   public fetchAnalyticsDashboard(): AnalyticsDashboardPayload {
     const errors: string[] = [];
     const forms = this.getFormsCached();
+    const resolveDisplayText = (value: any, fallback = ''): string => {
+      if (value === undefined || value === null) return fallback;
+      if (typeof value === 'string') return value.trim() || fallback;
+      if (typeof value !== 'object') return `${value ?? ''}`.trim() || fallback;
+      const preferred = [(value as any).en, (value as any).EN, (value as any).fr, (value as any).FR, (value as any).nl, (value as any).NL]
+        .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+        .find(Boolean);
+      return preferred || fallback;
+    };
     const snapshotByFormKey = new Map<
       string,
       {
@@ -1011,8 +1047,8 @@ export class WebFormService {
             return {
               ...item,
               dashboardWidgetId: widget.id,
-              title: (widget.title || item.label || item.id).toString().trim(),
-              description: (widget.description || '').toString().trim() || undefined,
+              title: resolveDisplayText(widget.title, resolveDisplayText(item.label, item.id)),
+              description: resolveDisplayText(widget.description) || undefined,
               sourceFormKey: widget.sourceFormKey,
               sourceFormTitle: source.title,
               sourceWidgetId: widget.sourceWidgetId
@@ -1028,14 +1064,139 @@ export class WebFormService {
         } satisfies AnalyticsDashboardSection;
       })
       .filter(section => section.widgets.length > 0);
+    const pipelines = this.analyticsPipelines.buildDashboardPipelines(forms);
 
     return {
       pageTitle: ANALYTICS_PAGE_CONFIG.pageTitle,
       pageDescription: ANALYTICS_PAGE_CONFIG.pageDescription,
       sections,
+      pipelines,
       updatedAt: resolveAnalyticsPageUpdatedAt(sections),
       errors,
       envTag: getUiEnvTag() || undefined
+    };
+  }
+
+  public queueAnalyticsPipelineRun(request: QueueAnalyticsPipelineRequest): QueueAnalyticsPipelineResult {
+    const ownerFormKey = (request?.ownerFormKey || '').toString().trim();
+    const pipelineId = (request?.pipelineId || '').toString().trim();
+    const startDate = normalizeToIsoDate(request?.startDate);
+    if (!ownerFormKey || !pipelineId || !startDate) {
+      return { success: false, message: 'Invalid analytics pipeline request.' };
+    }
+    const todayIso = this.scriptTodayIso();
+    if (startDate > todayIso) {
+      return { success: false, message: 'The selected date must be today or earlier.' };
+    }
+
+    const context = this.getAnalyticsPipelineContext(ownerFormKey, pipelineId);
+    if (!context) {
+      return { success: false, message: `Unknown analytics pipeline: ${ownerFormKey} / ${pipelineId}` };
+    }
+
+    const notice = (() => {
+      const raw = context.pipeline.ui?.queuedNotice;
+      if (typeof raw === 'string') return raw.trim() || DEFAULT_ANALYTICS_PIPELINE_NOTICE;
+      if (raw && typeof raw === 'object') {
+        return (
+          (raw as any).en?.toString?.().trim?.() ||
+          (raw as any).EN?.toString?.().trim?.() ||
+          DEFAULT_ANALYTICS_PIPELINE_NOTICE
+        );
+      }
+      return DEFAULT_ANALYTICS_PIPELINE_NOTICE;
+    })();
+
+    try {
+      this.withScriptLock('analyticsPipelineQueue', 30_000, () => {
+        const props = this.scriptProperties();
+        if (!props) {
+          throw new Error('PropertiesService is not available.');
+        }
+        const queue = this.readAnalyticsPipelineQueue(props);
+        queue.push({
+          id: Utilities.getUuid(),
+          ownerFormKey,
+          pipelineId,
+          startDate,
+          queuedAt: new Date().toISOString()
+        });
+        props.setProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY, JSON.stringify(queue));
+        this.ensureAnalyticsPipelineTriggerScheduled(props);
+      });
+    } catch (err: any) {
+      const message = (err?.message || err?.toString?.() || 'Failed to queue analytics pipeline.').toString();
+      debugLog('analytics.pipeline.queue.failed', { ownerFormKey, pipelineId, startDate, message });
+      return { success: false, message };
+    }
+
+    debugLog('analytics.pipeline.queued', { ownerFormKey, pipelineId, startDate });
+    return { success: true, message: notice };
+  }
+
+  public runQueuedAnalyticsPipelineJobs(): { success: boolean; processed: number; errors: string[] } {
+    let jobs: AnalyticsPipelineJob[] = [];
+    let triggerId = '';
+    try {
+      this.withScriptLock('analyticsPipelineQueue.consume', 30_000, () => {
+        const props = this.scriptProperties();
+        if (!props) return;
+        jobs = this.readAnalyticsPipelineQueue(props);
+        triggerId = (props.getProperty(ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY) || '').toString().trim();
+        props.deleteProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY);
+        props.deleteProperty(ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY);
+      });
+    } catch (err) {
+      return {
+        success: false,
+        processed: 0,
+        errors: [(err as any)?.message || (err as any)?.toString?.() || 'Failed to load queued analytics jobs.']
+      };
+    }
+
+    this.deleteAnalyticsPipelineTriggers(triggerId);
+
+    const errors: string[] = [];
+    let processed = 0;
+    jobs.forEach(job => {
+      try {
+        const context = this.getAnalyticsPipelineContext(job.ownerFormKey, job.pipelineId);
+        if (!context) {
+          throw new Error(`Unknown analytics pipeline: ${job.ownerFormKey} / ${job.pipelineId}`);
+        }
+        const result = this.analyticsPipelines.runPipeline({
+          ownerForm: context.ownerForm,
+          sourceForm: context.sourceForm,
+          sourceQuestions: context.sourceQuestions,
+          pipeline: context.pipeline,
+          startDate: job.startDate
+        });
+        if (!result.success) {
+          throw new Error(result.message || 'Analytics pipeline execution failed.');
+        }
+        processed += 1;
+      } catch (err: any) {
+        const message = (err?.message || err?.toString?.() || 'Unknown analytics pipeline error').toString();
+        errors.push(`${job.ownerFormKey}/${job.pipelineId}: ${message}`);
+        debugLog('analytics.pipeline.run.failed', {
+          ownerFormKey: job.ownerFormKey,
+          pipelineId: job.pipelineId,
+          startDate: job.startDate,
+          message
+        });
+      }
+    });
+
+    debugLog('analytics.pipeline.queue.processed', {
+      queued: jobs.length,
+      processed,
+      errorCount: errors.length
+    });
+
+    return {
+      success: errors.length === 0,
+      processed,
+      errors
     };
   }
 
@@ -6547,6 +6708,129 @@ export class WebFormService {
     } catch {
       return '';
     }
+  }
+
+  private getAnalyticsPipelineContext(
+    ownerFormKey: string,
+    pipelineId: string
+  ): {
+    ownerForm: FormConfig;
+    sourceForm: FormConfig;
+    sourceQuestions: QuestionConfig[];
+    pipeline: any;
+  } | null {
+    const ownerKey = (ownerFormKey || '').toString().trim();
+    const targetPipelineId = (pipelineId || '').toString().trim();
+    if (!ownerKey || !targetPipelineId) return null;
+    const { form: ownerForm } = this.getFormContextLite(ownerKey);
+    const pipeline = (Array.isArray(ownerForm.analytics?.pipelines) ? ownerForm.analytics?.pipelines : []).find(
+      entry => (entry?.id || '').toString().trim() === targetPipelineId
+    );
+    if (!pipeline) return null;
+    const sourceFormKey = (pipeline.sourceFormKey || ownerKey).toString().trim() || ownerKey;
+    const { form: sourceForm, questions: sourceQuestions } = this.getFormContextLite(sourceFormKey);
+    return {
+      ownerForm,
+      sourceForm,
+      sourceQuestions,
+      pipeline
+    };
+  }
+
+  private readAnalyticsPipelineQueue(props: GoogleAppsScript.Properties.Properties): AnalyticsPipelineJob[] {
+    const raw = (props.getProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY) || '').toString().trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map(entry => {
+          const item = entry && typeof entry === 'object' ? (entry as Record<string, any>) : {};
+          const id = (item.id || '').toString().trim();
+          const ownerFormKey = (item.ownerFormKey || '').toString().trim();
+          const pipelineId = (item.pipelineId || '').toString().trim();
+          const startDate = normalizeToIsoDate(item.startDate);
+          if (!id || !ownerFormKey || !pipelineId || !startDate) return null;
+          return {
+            id,
+            ownerFormKey,
+            pipelineId,
+            startDate,
+            queuedAt: (item.queuedAt || '').toString().trim() || new Date().toISOString()
+          } satisfies AnalyticsPipelineJob;
+        })
+        .filter(Boolean) as AnalyticsPipelineJob[];
+    } catch {
+      return [];
+    }
+  }
+
+  private ensureAnalyticsPipelineTriggerScheduled(props: GoogleAppsScript.Properties.Properties): void {
+    const existingId = (props.getProperty(ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY) || '').toString().trim();
+    const existingTriggers = this.findAnalyticsPipelineTriggers();
+    if (existingTriggers.length) {
+      const matched = existingId
+        ? existingTriggers.find(trigger => {
+            try {
+              return (trigger as any)?.getUniqueId?.() === existingId;
+            } catch {
+              return false;
+            }
+          })
+        : existingTriggers[0];
+      if (matched) return;
+    }
+
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.newTrigger) {
+      throw new Error('ScriptApp trigger API is not available.');
+    }
+    const trigger = scriptApp.newTrigger(ANALYTICS_PIPELINE_TRIGGER_HANDLER).timeBased().after(1_000).create();
+    const uniqueId = (() => {
+      try {
+        return (trigger as any)?.getUniqueId?.()?.toString?.().trim?.() || '';
+      } catch {
+        return '';
+      }
+    })();
+    props.setProperty(ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY, uniqueId || 'scheduled');
+  }
+
+  private findAnalyticsPipelineTriggers(): GoogleAppsScript.Script.Trigger[] {
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.getProjectTriggers) return [];
+    try {
+      return ((scriptApp.getProjectTriggers() || []) as GoogleAppsScript.Script.Trigger[]).filter(trigger => {
+        try {
+          return trigger.getHandlerFunction() === ANALYTICS_PIPELINE_TRIGGER_HANDLER;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  private deleteAnalyticsPipelineTriggers(triggerId?: string): void {
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.deleteTrigger) return;
+    this.findAnalyticsPipelineTriggers().forEach(trigger => {
+      const matchesId = (() => {
+        if (!triggerId) return true;
+        try {
+          return (trigger as any)?.getUniqueId?.() === triggerId;
+        } catch {
+          return false;
+        }
+      })();
+      if (!matchesId && triggerId) return;
+      try {
+        scriptApp.deleteTrigger(trigger);
+      } catch {
+        // ignore cleanup failures
+      }
+    });
   }
 
   private getFormContext(formKey?: string): { form: FormConfig; questions: QuestionConfig[] } {

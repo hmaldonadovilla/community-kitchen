@@ -5962,6 +5962,177 @@ components:
           $ref: '#/components/schemas/AnalyticsCalculation'
       required: [id, calculation]
 
+    AnalyticsPipelineUiConfig:
+      type: object
+      properties:
+        dateLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label shown above the analytics-page date input.
+        dateHelperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper text shown under the analytics-page date input.
+        submitLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional trigger button label.
+        pendingLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional trigger button label shown while the request is being queued.
+        queuedNotice:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional acknowledgement shown once the job has been queued.
+
+    AnalyticsPipelineEmailConfig:
+      type: object
+      properties:
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        cc:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        bcc:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailRecipientEntry'
+        subject:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional email subject. Supports placeholders like
+            `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+        message:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional email body. Supports the same placeholders as `subject`.
+        from:
+          type: string
+          description: Optional sender address (must be a valid Apps Script alias when used).
+        fromName:
+          type: string
+          description: Optional sender display name.
+      required: [recipients]
+
+    AnalyticsPipelineAttachmentConfig:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [xlsx]
+          description: Attachment format. Currently only `xlsx` is supported.
+        fileNameTemplate:
+          type: string
+          description: |
+            Optional attachment file name template.
+            Supports placeholders like `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+        sheetName:
+          type: string
+          description: Optional sheet/tab name used when building spreadsheet-backed exports.
+        folderId:
+          type: string
+          description: Optional Drive folder id where the generated export should be saved.
+
+    AnalyticsIngredientUsagePipelineReportConfig:
+      type: object
+      properties:
+        dateFieldId:
+          type: string
+          description: Top-level record date field used to filter source records.
+        statusFieldId:
+          type: string
+          description: |
+            Optional business-status field id used to detect closed source records.
+            When omitted, the form follow-up status field or record meta Status column is used.
+        closedStatuses:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional explicit closed statuses.
+            When omitted, the form falls back to `followupConfig.statusTransitions.onClose`, then `Closed`.
+        mealGroupId:
+          type: string
+          description: Top-level line-item group containing the meal rows.
+        prepGroupId:
+          type: string
+          description: Nested subgroup on each meal row containing preparation rows.
+        ingredientGroupId:
+          type: string
+          description: Nested subgroup on each preparation row containing ingredient rows.
+        prepTypeFieldId:
+          type: string
+          description: Field id on the preparation row used to detect included prep types.
+        prepTypeValues:
+          type: array
+          items:
+            type: string
+          description: Included preparation type values. Defaults to `["Cook"]`.
+        ingredientFieldId:
+          type: string
+          description: Ingredient field id on the ingredient rows.
+        quantityFieldId:
+          type: string
+          description: Quantity field id on the ingredient rows.
+        unitFieldId:
+          type: string
+          description: Unit field id on the ingredient rows.
+        categoryFieldId:
+          type: string
+          description: Optional category field id copied into the export rows.
+        supplierFieldId:
+          type: string
+          description: Optional supplier field id copied into the export rows.
+        categoryLookupColumn:
+          type: string
+          description: Optional datasource detail column resolved from the ingredient selector datasource.
+        supplierLookupColumn:
+          type: string
+          description: Optional datasource detail column resolved from the ingredient selector datasource.
+      required:
+        - dateFieldId
+        - mealGroupId
+        - prepGroupId
+        - ingredientGroupId
+        - prepTypeFieldId
+        - ingredientFieldId
+        - quantityFieldId
+        - unitFieldId
+
+    AnalyticsIngredientUsagePipelineConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable pipeline id.
+        type:
+          type: string
+          enum: [ingredientUsageReport]
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+        description:
+          $ref: '#/components/schemas/LocalizedString'
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsPlacement'
+          description: Defaults to `["analyticsPage"]` when omitted.
+        sourceFormKey:
+          type: string
+          description: Optional explicit source form key. Defaults to the form that owns the config.
+        ui:
+          $ref: '#/components/schemas/AnalyticsPipelineUiConfig'
+        email:
+          $ref: '#/components/schemas/AnalyticsPipelineEmailConfig'
+        attachment:
+          $ref: '#/components/schemas/AnalyticsPipelineAttachmentConfig'
+        report:
+          $ref: '#/components/schemas/AnalyticsIngredientUsagePipelineReportConfig'
+      required: [id, type, email, report]
+
+    AnalyticsPipelineConfig:
+      oneOf:
+        - $ref: '#/components/schemas/AnalyticsIngredientUsagePipelineConfig'
+
     AnalyticsConfig:
       type: object
       properties:
@@ -5969,7 +6140,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnalyticsWidgetConfig'
-      required: [widgets]
+        pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsPipelineConfig'
+      anyOf:
+        - required: [widgets]
+        - required: [pipelines]
       description: |
         Trigger-based analytics module.
 
@@ -5977,6 +6154,7 @@ components:
         - Event triggers: save/edit/follow-up actions recompute affected form widgets.
         - Daily reconciliation: `runDailyAnalyticsRecompute` recomputes all forms.
         - Results are persisted in a hidden per-form analytics sheet.
+        - Optional analytics pipelines can queue fire-and-forget exports from the centralized analytics page.
 
     LifecycleDateStatusTransitionRule:
       type: object

@@ -417,6 +417,93 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses analytics pipelines from dashboard config', () => {
+    const configJson = JSON.stringify({
+      analytics: {
+        pipelines: [
+          {
+            id: 'ingredient_usage',
+            type: 'ingredientUsageReport',
+            title: { EN: 'Ingredients usage' },
+            ui: {
+              dateLabel: 'From date',
+              submitLabel: 'Send report',
+              queuedNotice: 'Queued'
+            },
+            email: {
+              recipients: ['ops@example.com'],
+              subject: 'Ingredients usage {{START_DATE}}'
+            },
+            attachment: {
+              format: 'xlsx',
+              fileNameTemplate: 'Ingredients usage {{START_DATE}}.xlsx',
+              sheetName: 'Ingredients'
+            },
+            report: {
+              dateFieldId: 'MP_PREP_DATE',
+              mealGroupId: 'MP_MEALS_REQUEST',
+              prepGroupId: 'MP_TYPE_LI',
+              ingredientGroupId: 'MP_INGREDIENTS_LI',
+              prepTypeFieldId: 'PREP_TYPE',
+              prepTypeValues: ['Cook'],
+              ingredientFieldId: 'ING',
+              quantityFieldId: 'QTY',
+              unitFieldId: 'UNIT',
+              categoryFieldId: 'CAT',
+              supplierLookupColumn: 'SUPPLIER'
+            }
+          }
+        ]
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect((forms[0] as any).analytics).toEqual({
+      pipelines: [
+        {
+          id: 'ingredient_usage',
+          type: 'ingredientUsageReport',
+          title: { en: 'Ingredients usage' },
+          placements: ['analyticsPage'],
+          ui: {
+            dateLabel: 'From date',
+            submitLabel: 'Send report',
+            queuedNotice: 'Queued'
+          },
+          email: {
+            recipients: ['ops@example.com'],
+            subject: 'Ingredients usage {{START_DATE}}'
+          },
+          attachment: {
+            format: 'xlsx',
+            fileNameTemplate: 'Ingredients usage {{START_DATE}}.xlsx',
+            sheetName: 'Ingredients'
+          },
+          report: {
+            dateFieldId: 'MP_PREP_DATE',
+            mealGroupId: 'MP_MEALS_REQUEST',
+            prepGroupId: 'MP_TYPE_LI',
+            ingredientGroupId: 'MP_INGREDIENTS_LI',
+            prepTypeFieldId: 'PREP_TYPE',
+            prepTypeValues: ['Cook'],
+            ingredientFieldId: 'ING',
+            quantityFieldId: 'QTY',
+            unitFieldId: 'UNIT',
+            categoryFieldId: 'CAT',
+            supplierLookupColumn: 'SUPPLIER'
+          }
+        }
+      ]
+    });
+  });
+
   test('getForms parses guided step autoAdvanceWhen conditions', () => {
     const configJson = JSON.stringify({
       steps: {
