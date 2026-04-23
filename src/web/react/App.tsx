@@ -158,6 +158,12 @@ import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange'
 import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import { buildFilePayload } from './app/filePayload';
 import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
+import {
+  bumpUploadFieldInvalidationVersion,
+  getUploadFieldInvalidationVersion,
+  resolveInvalidatedUploadFieldPathsFromDialogUpdates,
+  wasUploadFieldInvalidated
+} from './app/uploadFieldInvalidation';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
@@ -1599,13 +1605,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (value === undefined) return;
           updates.push({ target: inputCfg.target, value });
         });
+        const dialogSelectionEffects = (pending.selectionEffects || []).filter(
+          (effect): effect is SelectionEffect & { groupId: string } => !!effect?.groupId
+        );
         const confirmUpdates = resolveFieldChangeDialogConfirmUpdates({
           dialog: dialogCfg,
           definition,
           context: { scope: pending.scope, groupId: pending.groupId },
-          selectionEffects: (pending.selectionEffects || []).filter(
-            (effect): effect is SelectionEffect & { groupId: string } => !!effect?.groupId
-          )
+          selectionEffects: dialogSelectionEffects
         });
         if (confirmUpdates.length) {
           updates.push(...confirmUpdates);
@@ -1642,6 +1649,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         let nextBaseValues = valuesRef.current;
         let nextBaseLineItems = lineItemsRef.current;
         let remainingUpdates = updates;
+        let clearedUploadFieldIds: string[] = [];
 
         if (shouldApplyClearOnChange) {
           const cleared = applyClearOnChange({
@@ -1665,6 +1673,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           nextBaseValues = reconciledState.changed ? reconciledState.values : cleared.values;
           nextBaseLineItems = reconciledState.changed ? reconciledState.lineItems : cleared.lineItems;
           remainingUpdates = updates.slice(1);
+          clearedUploadFieldIds = cleared.clearedFieldIds.filter(fieldId => {
+            const question = definition.questions.find(q => `${q?.id || ''}`.trim() === fieldId);
+            return `${question?.type || ''}`.trim().toUpperCase() === 'FILE_UPLOAD';
+          });
           logEvent('fieldChangeDialog.clearOnChange.applied', {
             fieldPath: pending.fieldPath,
             fieldId: pending.fieldId,
@@ -1770,6 +1782,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reason: 'dedupDeleteOnKeyChange'
           });
         }
+
+        const applyUploadInvalidation = (
+          fieldPaths: string[],
+          meta?: { reason?: string; sourceFieldPath?: string; sourceFieldId?: string }
+        ) => {
+          const uniquePaths = Array.from(
+            new Set(
+              (fieldPaths || [])
+                .map(fieldPath => (fieldPath || '').toString().trim())
+                .filter(Boolean)
+            )
+          );
+          if (!uniquePaths.length) return;
+          const invalidated = uniquePaths.map(fieldPath => {
+            const nextVersion = bumpUploadFieldInvalidationVersion(uploadFieldInvalidationVersionsRef.current, fieldPath);
+            uploadedFieldValueOverridesRef.current.delete(fieldPath);
+            return { fieldPath, version: nextVersion };
+          });
+          logEvent('upload.field.invalidate', {
+            reason: meta?.reason || null,
+            sourceFieldPath: meta?.sourceFieldPath || null,
+            sourceFieldId: meta?.sourceFieldId || null,
+            targetCount: invalidated.length,
+            targets: invalidated
+          });
+        };
+        const invalidatedUploadFieldPaths = [
+          ...resolveInvalidatedUploadFieldPathsFromDialogUpdates({
+            definition,
+            updates: confirmUpdates,
+            context: {
+              scope: pending.scope,
+              groupId: pending.groupId,
+              rowId: pending.rowId
+            },
+            selectionEffects: dialogSelectionEffects
+          }),
+          ...clearedUploadFieldIds
+        ];
+        applyUploadInvalidation(invalidatedUploadFieldPaths, {
+          reason: shouldApplyClearOnChange ? 'fieldChangeDialog.clearOnChange' : 'fieldChangeDialog.confirmUpdates',
+          sourceFieldPath: pending.fieldPath,
+          sourceFieldId: pending.fieldId
+        });
 
         setValues(mapped.values);
         setLineItems(mapped.lineItems);
@@ -2640,6 +2696,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     >
   >(new Map());
+  const uploadFieldInvalidationVersionsRef = useRef<Map<string, number>>(new Map());
   const [, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const summarySubmitIntentRef = useRef<boolean>(false);
@@ -11701,6 +11758,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return false;
         };
         const allowUiUpdates = ensureSession('start');
+        const uploadFieldInvalidationVersionAtStart = getUploadFieldInvalidationVersion(
+          uploadFieldInvalidationVersionsRef.current,
+          args.fieldPath
+        );
 
         const isFile = (v: any): v is File => {
           try {
@@ -11731,6 +11792,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         ensureSession('afterEnsureRecord');
+        if (
+          wasUploadFieldInvalidated({
+            versions: uploadFieldInvalidationVersionsRef.current,
+            fieldPath: args.fieldPath,
+            expectedVersion: uploadFieldInvalidationVersionAtStart
+          })
+        ) {
+          logEvent('upload.files.skipped.invalidated', {
+            fieldPath: args.fieldPath,
+            invalidationVersionAtStart: uploadFieldInvalidationVersionAtStart,
+            invalidationVersionCurrent: getUploadFieldInvalidationVersion(
+              uploadFieldInvalidationVersionsRef.current,
+              args.fieldPath
+            )
+          });
+          return { success: true };
+        }
 
         // Step 2: upload file payloads to Drive and get final URL list.
         const readStateItems = (): { items: Array<string | File>; hasValue: boolean } => {
@@ -11820,6 +11898,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
 
           const allowUiAfterUpload = ensureSession('afterUpload') && allowUiUpdates;
+          if (
+            wasUploadFieldInvalidated({
+              versions: uploadFieldInvalidationVersionsRef.current,
+              fieldPath: args.fieldPath,
+              expectedVersion: uploadFieldInvalidationVersionAtStart
+            })
+          ) {
+            logEvent('upload.urls.discarded.invalidated', {
+              fieldPath: args.fieldPath,
+              invalidationVersionAtStart: uploadFieldInvalidationVersionAtStart,
+              invalidationVersionCurrent: getUploadFieldInvalidationVersion(
+                uploadFieldInvalidationVersionsRef.current,
+                args.fieldPath
+              )
+            });
+            return { success: true };
+          }
           const completionState = readStateItems();
           const mergedItems = mergeUploadedFieldItems({
             currentItems: completionState.items,
