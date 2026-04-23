@@ -318,7 +318,8 @@
       "nl": "View"
     },
     "appHeader": {
-      "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+      "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+      "sidebarEnabled": false
     },
     "submitValidation": {
       "enforceFieldOrder": true,
@@ -831,6 +832,10 @@
       }
     }
   ],
-  "definition": {},
+  "definition": {
+    "appHeader": {
+      "sidebarEnabled": false
+    }
+  },
   "validationErrors": []
 }

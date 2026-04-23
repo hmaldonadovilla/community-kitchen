@@ -2956,7 +2956,7 @@ components:
             - `listView.analytics`
         appHeader:
           $ref: '#/components/schemas/AppHeaderConfig'
-          description: Optional app header branding (logo shown next to the title).
+          description: Optional form shell header settings (logo metadata + sidebar toggle).
         groupBehavior:
           $ref: '#/components/schemas/GroupBehaviorConfig'
           description: |
@@ -3475,19 +3475,33 @@ components:
 
     AppHeaderConfig:
       type: object
-      description: App header branding (logo shown in the top sticky header and drawer).
+      description: |
+        Form shell header settings.
+
+        The React form shell now shows a left-side `[← Apps]` back button, a centered title,
+        and an optional title-open sidebar. Use `sidebarEnabled: false` to hide that sidebar
+        for normal users. Adding `?dev-mode=true` to the URL still enables the sidebar for troubleshooting.
       properties:
         logo:
           type: string
           description: |
-            Optional logo image shown in the app header.
+            Optional logo metadata stored with the form config.
 
             Accepts:
             - A Google Drive file id (e.g., `"1AbcDEF...xyz"`)
             - A Google Drive share URL (e.g., `"https://drive.google.com/file/d/<ID>/view?..."`)
             - A direct `https://...` image URL
 
-            The app will normalize Drive links into a direct-view URL.
+            The app will normalize Drive links into a direct-view URL. Launcher surfaces can reuse this
+            metadata for card/header branding even though the in-form shell no longer renders the logo directly.
+        sidebarEnabled:
+          type: boolean
+          description: |
+            Controls whether the centered form title can open the sidebar.
+
+            - Default: `true`
+            - When `false`, the sidebar is hidden for normal users.
+            - Adding `?dev-mode=true` to the form URL still enables the sidebar for troubleshooting.
       additionalProperties: false
 
     GroupBehaviorConfig:

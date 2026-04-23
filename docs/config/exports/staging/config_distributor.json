@@ -29,7 +29,8 @@
       }
     },
     "appHeader": {
-      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+      "sidebarEnabled": false
     }
   },
   "questions": [
@@ -468,7 +469,8 @@
       }
     },
     "appHeader": {
-      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+      "sidebarEnabled": false
     }
   },
   "validationErrors": []

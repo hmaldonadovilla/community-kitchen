@@ -369,7 +369,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -6821,7 +6822,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -6878,7 +6880,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "c8e04b554f6dfcb241f12f55d911e097"
+    "cacheFingerprint": "41dca505a4ea275728fd740410da0e3e"
   },
   {
     "formKey": "Config: Distributor",
@@ -6911,7 +6913,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+        "sidebarEnabled": false
       }
     },
     "questions": [
@@ -7350,11 +7353,12 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+        "sidebarEnabled": false
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "b8bb64a2559fb5122bbf14ec08bc35d7"
+    "cacheFingerprint": "a72815de946aea2be29e417d1013c5b3"
   },
   {
     "formKey": "Config: Ingredients Management",
@@ -7676,7 +7680,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "nl": "View"
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+        "sidebarEnabled": false
       },
       "submitValidation": {
         "enforceFieldOrder": true,
@@ -8189,9 +8194,13 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       }
     ],
-    "definition": {},
+    "definition": {
+      "appHeader": {
+        "sidebarEnabled": false
+      }
+    },
     "validationErrors": [],
-    "cacheFingerprint": "c1251d141468907dff792003717b6b35"
+    "cacheFingerprint": "8b5130d572a06d467ed13c238c6edb9c"
   },
   {
     "formKey": "Config: Inventory Reservation Ledger",
@@ -8237,6 +8246,9 @@ export const BUNDLED_FORM_CONFIGS = [
         "en": "Summary",
         "fr": "Summary",
         "nl": "Summary"
+      },
+      "appHeader": {
+        "sidebarEnabled": false
       }
     },
     "questions": [
@@ -8512,7 +8524,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     ],
     "dedupRules": [],
-    "cacheFingerprint": "e8cdc910738f82a3669ef2c4693b4f83"
+    "cacheFingerprint": "8a9faa6f414f5c778cfbbdcd0e76e3d6"
   },
   {
     "formKey": "Config: Leftover Inventory",
@@ -8577,6 +8589,9 @@ export const BUNDLED_FORM_CONFIGS = [
             "compare": "onOrBeforeToday"
           }
         ]
+      },
+      "appHeader": {
+        "sidebarEnabled": false
       }
     },
     "questions": [
@@ -10164,10 +10179,13 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         }
-      ]
+      ],
+      "appHeader": {
+        "sidebarEnabled": false
+      }
     },
     "validationErrors": [],
-    "cacheFingerprint": "d70ef9cbdf2f271f941111a75285ca6f"
+    "cacheFingerprint": "36d2ad43c21ece53a664f5898d8c7cb2"
   },
   {
     "formKey": "Config: Meal Production",
@@ -11083,7 +11101,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "en": "Complete"
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -22166,7 +22185,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "en": "Complete"
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -24763,7 +24783,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "252962bc90f6b5f46a75b06228beca59"
+    "cacheFingerprint": "848b509f634bd81ecf4b766701638f3d"
   },
   {
     "formKey": "Config: Recipes",
@@ -25102,7 +25122,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -27081,7 +27102,8 @@ export const BUNDLED_FORM_CONFIGS = [
         }
       },
       "appHeader": {
-        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+        "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+        "sidebarEnabled": false
       },
       "groupBehavior": {
         "autoCollapseOnComplete": true,
@@ -27127,6 +27149,6 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "00967501a23c64590a810d4a1229be45"
+    "cacheFingerprint": "b2303bd47da05a71831f4147945bf0dd"
   }
 ] as FormConfigExport[];

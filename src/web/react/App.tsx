@@ -182,7 +182,7 @@ import {
   shouldBypassCopyCurrentRecordDestructiveChange
 } from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
-import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
+import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeaderDrawerEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
   buildInventoryReservationPlanFingerprint,
@@ -13550,31 +13550,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [headerEnvTag, headerSaveIndicator]);
   const headerServiceUrl = useMemo(() => resolveServiceUrl(), []);
   const headerAdminEnabled = useMemo(() => resolveAdminEnabled(), []);
-  const drawerActions = useMemo(() => {
-    const actions: Array<{ id: string; label: string; onClick: () => void; placement?: 'main' | 'secondary' | 'footer' }> = [];
-    actions.push({
-      id: 'landing',
-      label: tSystem('app.forms', language, 'Forms'),
-      placement: 'footer',
-      onClick: () => {
-        const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
-        logEvent('ui.header.drawer.landing.navigate', { targetUrl });
-        const seq = navigateHomeBusy.lock({
-          title: tSystem('navigation.waitTitle', language, 'Please wait'),
-          message: tSystem('navigation.waitForms', language, 'Please wait while we open the forms page...')
-        });
-        globalThis.requestAnimationFrame?.(() => {
-          globalThis.requestAnimationFrame?.(() => {
-            navigateToTopLevel(targetUrl);
-            globalThis.setTimeout?.(() => {
-              navigateHomeBusy.unlock(seq, { targetUrl });
-            }, 1500);
-          });
-        });
-      }
+  const headerDrawerEnabled = useMemo(
+    () => resolveHeaderDrawerEnabled(definition.appHeader?.sidebarEnabled),
+    [definition.appHeader?.sidebarEnabled]
+  );
+  const headerBackLabel = useMemo(() => `[← ${tSystem('app.apps', language, 'Apps')}]`, [language]);
+  const handleHeaderBack = useCallback(() => {
+    const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
+    logEvent('ui.header.back.navigate', { targetUrl });
+    const seq = navigateHomeBusy.lock({
+      title: tSystem('navigation.waitTitle', language, 'Please wait'),
+      message: tSystem('navigation.waitForms', language, 'Please wait while we open the forms page...')
     });
-    return actions;
-  }, [headerAdminEnabled, headerServiceUrl, language, navigateHomeBusy, logEvent]);
+    globalThis.requestAnimationFrame?.(() => {
+      globalThis.requestAnimationFrame?.(() => {
+        navigateToTopLevel(targetUrl);
+        globalThis.setTimeout?.(() => {
+          navigateHomeBusy.unlock(seq, { targetUrl });
+        }, 1500);
+      });
+    });
+  }, [headerAdminEnabled, headerServiceUrl, language, logEvent, navigateHomeBusy]);
 
   const dedupDialogConflict = useMemo(() => {
     const conflict = (dedupConflict || dedupNotice) as any;
@@ -14199,7 +14195,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       <AppHeader
         title={definition.title || 'Form'}
         titleRight={headerRight}
-        logoUrl={definition.appHeader?.logoUrl}
+        backLabel={headerBackLabel}
+        onBack={handleHeaderBack}
+        drawerEnabled={headerDrawerEnabled}
         buildMarker={BUILD_MARKER}
         isMobile={isMobile}
         languages={availableLanguages}
@@ -14219,7 +14217,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setLanguage(next);
         }}
         onRefresh={handleGlobalRefresh}
-        drawerActions={drawerActions}
         onDiagnostic={logEvent}
       />
 

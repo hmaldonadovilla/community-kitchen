@@ -1679,6 +1679,26 @@ describe('Dashboard', () => {
     expect(forms[0].appHeader?.logoUrl).toBe(`https://drive.google.com/uc?export=view&id=${driveId}`);
   });
 
+  test('getForms parses appHeader sidebarEnabled control', () => {
+    const configJson = JSON.stringify({
+      appHeader: {
+        sidebarEnabled: false
+      }
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Form', 'Config: Meals', 'Meals Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].appHeader).toEqual({
+      sidebarEnabled: false
+    });
+  });
+
   test('getForms parses groupBehavior config from dashboard JSON', () => {
     const configJson = JSON.stringify({
       groupBehavior: {

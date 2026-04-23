@@ -1069,7 +1069,35 @@ export class Dashboard {
         ? parsed.logoUrl
         : undefined;
     const appHeaderLogoUrl = normalizeDriveImageUrl(appHeaderLogoRaw);
-    const appHeader: AppHeaderConfig | undefined = appHeaderLogoUrl ? { logoUrl: appHeaderLogoUrl } : undefined;
+    const appHeaderSidebarRaw =
+      appHeaderObj &&
+      (appHeaderObj.sidebarEnabled !== undefined ||
+        appHeaderObj.drawerEnabled !== undefined ||
+        appHeaderObj.disableSidebar !== undefined ||
+        appHeaderObj.disableDrawer !== undefined)
+        ? appHeaderObj.sidebarEnabled ??
+          appHeaderObj.drawerEnabled ??
+          (appHeaderObj.disableSidebar !== undefined ? !appHeaderObj.disableSidebar : undefined) ??
+          (appHeaderObj.disableDrawer !== undefined ? !appHeaderObj.disableDrawer : undefined)
+        : parsed.appHeaderSidebarEnabled !== undefined
+        ? parsed.appHeaderSidebarEnabled
+        : parsed.drawerEnabled !== undefined
+        ? parsed.drawerEnabled
+        : parsed.sidebarEnabled !== undefined
+        ? parsed.sidebarEnabled
+        : parsed.disableSidebar !== undefined
+        ? !parsed.disableSidebar
+        : parsed.disableDrawer !== undefined
+        ? !parsed.disableDrawer
+        : undefined;
+    const appHeaderSidebarEnabled = normalizeBoolean(appHeaderSidebarRaw);
+    const appHeader: AppHeaderConfig | undefined =
+      appHeaderLogoUrl || appHeaderSidebarEnabled !== undefined
+        ? {
+            ...(appHeaderLogoUrl ? { logoUrl: appHeaderLogoUrl } : {}),
+            ...(appHeaderSidebarEnabled !== undefined ? { sidebarEnabled: appHeaderSidebarEnabled } : {})
+          }
+        : undefined;
 
     const groupBehaviorObj =
       parsed.groupBehavior !== undefined && parsed.groupBehavior !== null && typeof parsed.groupBehavior === 'object'

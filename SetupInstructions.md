@@ -287,7 +287,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
       > **Notes:**
-      >- The app header only contains **form title**, **build number**, **language selector**, and **burger menu**.
+      >- The app header now uses a **`[← Apps]` back button**, a **centered form title**, and an optional **title-open sidebar** for refresh/language/build tools.
       >- Legacy `"header": true` is deprecated but still supported; it is mapped to `group: { header: true, title: "Header", collapsible: true }`.
       >- When `group.collapsible` is enabled, the section header shows a **progress pill** `completed/required` (required fields only). Clicking the pill expands/collapses the section.
 
@@ -1035,14 +1035,21 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - This override is intentionally scoped to that specific lock-rule id and matching record id.
       - If that rule defines `unlockStatus` (for example `"In progress"`), the app automatically updates the record status once the unlocked record is opened in form view.
 
-    - Want a **logo** in the app header? Set `appHeader.logo` in the dashboard “Follow-up Config (JSON)” column. You can provide a Google Drive file id, a Drive share URL, or a direct `https://...` image URL:
+    - Want to **disable the title-open sidebar** for a form? Set `appHeader.sidebarEnabled: false` in the dashboard “Follow-up Config (JSON)” column. Users can still force-enable the sidebar for troubleshooting with `?dev-mode=true`:
+
+      ```json
+      { "appHeader": { "sidebarEnabled": false } }
+      ```
+
+    - Want to keep **logo metadata** with the form config? Set `appHeader.logo` in the dashboard “Follow-up Config (JSON)” column. You can provide a Google Drive file id, a Drive share URL, or a direct `https://...` image URL:
 
       ```json
       { "appHeader": { "logo": "https://drive.google.com/file/d/<ID>/view?usp=sharing" } }
       ```
 
       Note:
-      - This dashboard setting applies to individual form apps.
+      - The React form shell no longer renders the form logo directly in the sticky header; it now uses a `[← Apps]` back button plus a centered title.
+      - This dashboard setting still applies to individual form apps and can be reused by launcher surfaces as artwork metadata.
       - The central landing page uses `docs/config/exports/<env>/landing_page.json` for its own brand logo source, copy, and card artwork.
       - The centralized analytics dashboard uses `docs/config/exports/<env>/analytics_page.json` for its landing tile, header brand source, and cross-form widget layout.
 
@@ -3138,8 +3145,9 @@ Recommended steps after deploying a new bundle:
 ## UI Navigation & Shell
 
 - The web app uses an app-like shell:
-  - Header shows a **logo circle + form title** (Excel-style).
-  - Tap the logo circle to open a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
+  - Header shows a **left `[← Apps]` back button**, a **centered form title**, and the environment/save state on the right.
+  - When `appHeader.sidebarEnabled` is not `false`, tapping the **form title** opens a **left drawer** with **Refresh**, **Language** (only when enabled / 2+ languages), and **Build**.
+  - Adding `?dev-mode=true` to the form URL still enables the drawer even when `appHeader.sidebarEnabled: false`.
   - Optional: a **top action bar** under the header can show system + custom actions (default behavior uses `BUTTON` placements like `topBarList` / `topBarForm` / `topBarSummary`).
   - A fixed **bottom action bar** provides navigation/actions per view (defaults below can be overridden via `"actionBars"`):
     - **List**: Home + Create + (custom list actions, if configured).

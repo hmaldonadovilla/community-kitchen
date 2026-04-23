@@ -19,7 +19,7 @@ export const resolveAdminEnabled = (requestParams?: Record<string, any>): boolea
     const params = requestParams || (((globalThis as any)?.__WEB_FORM_REQUEST_PARAMS__ || {}) as Record<string, any>);
     if (Object.prototype.hasOwnProperty.call(params, 'admin-true')) return true;
     if (isTruthyParam(params.admin)) return true;
-  } catch (_) {
+  } catch {
     // ignore
   }
   try {
@@ -27,10 +27,37 @@ export const resolveAdminEnabled = (requestParams?: Record<string, any>): boolea
     const qs = new URLSearchParams(search || '');
     if (qs.has('admin-true')) return true;
     if (isTruthyParam(qs.get('admin'))) return true;
-  } catch (_) {
+  } catch {
     // ignore
   }
   return false;
+};
+
+export const resolveDevModeEnabled = (requestParams?: Record<string, any>): boolean => {
+  try {
+    const params = requestParams || (((globalThis as any)?.__WEB_FORM_REQUEST_PARAMS__ || {}) as Record<string, any>);
+    if (isTruthyParam(params['dev-mode'])) return true;
+    if (isTruthyParam(params.devMode)) return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const search = typeof location !== 'undefined' ? location.search : '';
+    const qs = new URLSearchParams(search || '');
+    if (isTruthyParam(qs.get('dev-mode'))) return true;
+    if (isTruthyParam(qs.get('devMode'))) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+};
+
+export const resolveHeaderDrawerEnabled = (
+  configuredSidebarEnabled?: boolean | null,
+  requestParams?: Record<string, any>
+): boolean => {
+  if (resolveDevModeEnabled(requestParams)) return true;
+  return configuredSidebarEnabled !== false;
 };
 
 const buildUrl = (serviceUrl: string, params: Record<string, string>): string => {

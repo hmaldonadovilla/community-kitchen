@@ -3706,11 +3706,17 @@ export interface FormConfigExport {
 
 export interface AppHeaderConfig {
   /**
-   * Optional logo image shown in the app header.
+   * Optional logo metadata kept with the form configuration.
    *
    * Recommend using a Google Drive image (shared with users) via a direct URL.
    */
   logoUrl?: string;
+  /**
+   * When false, hide the title-open sidebar for normal users.
+   *
+   * Adding `?dev-mode=true` to the form URL still enables the sidebar for troubleshooting.
+   */
+  sidebarEnabled?: boolean;
 }
 
 export interface GroupBehaviorConfig {

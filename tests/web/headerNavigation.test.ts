@@ -1,7 +1,9 @@
 import {
   buildAnalyticsUrl,
   buildLandingUrl,
-  isTruthyParam
+  isTruthyParam,
+  resolveDevModeEnabled,
+  resolveHeaderDrawerEnabled
 } from '../../src/web/react/app/headerNavigation';
 
 describe('header navigation helpers', () => {
@@ -40,5 +42,31 @@ describe('header navigation helpers', () => {
   test('isTruthyParam matches supported truthy query tokens', () => {
     expect(isTruthyParam('yes')).toBe(true);
     expect(isTruthyParam('0')).toBe(false);
+  });
+
+  test('resolveDevModeEnabled reads dev-mode from the URL query', () => {
+    const globalAny = globalThis as any;
+    const originalLocation = globalAny.location;
+    Object.defineProperty(globalAny, 'location', {
+      configurable: true,
+      value: {
+        search: '?form=Config%3A%20Meal%20Production&dev-mode=true'
+      }
+    });
+
+    try {
+      expect(resolveDevModeEnabled()).toBe(true);
+    } finally {
+      Object.defineProperty(globalAny, 'location', {
+        configurable: true,
+        value: originalLocation
+      });
+    }
+  });
+
+  test('resolveHeaderDrawerEnabled honors config but lets dev-mode override disabled drawers', () => {
+    expect(resolveHeaderDrawerEnabled(false, {})).toBe(false);
+    expect(resolveHeaderDrawerEnabled(false, { 'dev-mode': 'true' })).toBe(true);
+    expect(resolveHeaderDrawerEnabled(undefined, {})).toBe(true);
   });
 });

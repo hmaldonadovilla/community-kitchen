@@ -61,6 +61,9 @@
           "compare": "onOrBeforeToday"
         }
       ]
+    },
+    "appHeader": {
+      "sidebarEnabled": false
     }
   },
   "questions": [
@@ -1648,7 +1651,10 @@
           }
         }
       }
-    ]
+    ],
+    "appHeader": {
+      "sidebarEnabled": false
+    }
   },
   "validationErrors": []
 }

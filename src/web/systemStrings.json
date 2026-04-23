@@ -3,6 +3,7 @@
     "menu": { "en": "Menu", "fr": "Menu", "nl": "Menu" },
     "refresh": { "en": "Refresh", "fr": "Actualiser", "nl": "Vernieuwen" },
     "analytics": { "en": "Analytics", "fr": "Analytique", "nl": "Analyse" },
+    "apps": { "en": "Apps", "fr": "Apps", "nl": "Apps" },
     "forms": { "en": "Forms", "fr": "Formulaires", "nl": "Formulieren" },
     "language": { "en": "Language", "fr": "Langue", "nl": "Taal" },
     "build": { "en": "Build", "fr": "Version", "nl": "Versie" },
@@ -20,9 +21,9 @@
     },
     "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
     "refreshToRetry": {
-      "en": "We could not load this right now. Tap the app logo in the top left, then tap Refresh.",
-      "fr": "Impossible de charger pour le moment. Touchez le logo de l’application en haut à gauche, puis touchez Actualiser.",
-      "nl": "We kunnen dit nu niet laden. Tik op het app-logo linksboven en tik daarna op Vernieuwen."
+      "en": "We could not load this right now. Reload the page to try again.",
+      "fr": "Impossible de charger pour le moment. Rechargez la page pour réessayer.",
+      "nl": "We konden dit nu niet laden. Herlaad de pagina om opnieuw te proberen."
     }
   },
   "analytics": {

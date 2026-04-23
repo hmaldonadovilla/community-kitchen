@@ -42,6 +42,9 @@
       "en": "Summary",
       "fr": "Summary",
       "nl": "Summary"
+    },
+    "appHeader": {
+      "sidebarEnabled": false
     }
   },
   "questions": [

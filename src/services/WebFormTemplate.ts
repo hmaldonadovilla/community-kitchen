@@ -248,7 +248,8 @@ export function buildWebFormHtml(
         position: sticky;
         top: 0;
         z-index: 30;
-        display: flex;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
         gap: 16px;
         padding: calc(14px + var(--safe-top)) 22px 14px;
@@ -257,46 +258,49 @@ export function buildWebFormHtml(
         background: var(--bg);
         border-bottom: 1px solid var(--border);
       }
-      .ck-app-avatar-btn {
+      .ck-app-header-slot {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+      }
+      .ck-app-header-slot--start {
+        justify-content: flex-start;
+      }
+      .ck-app-header-slot--center {
+        justify-content: center;
+      }
+      .ck-app-header-slot--end {
+        justify-content: flex-end;
+      }
+      .ck-app-back-btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        min-height: calc(var(--control-height) * 0.62);
+        padding: 0 16px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: calc(var(--ck-font-label) * 0.82);
+        line-height: 1;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .ck-app-back-btn:focus-visible,
+      .ck-app-title-btn:focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 4px;
+      }
+      .ck-app-title-btn {
         appearance: none;
         border: none;
         background: transparent;
         padding: 0;
         margin: 0;
         cursor: pointer;
-        flex: 0 0 auto;
-        border-radius: 999px;
-      }
-      .ck-app-avatar-btn:focus-visible {
-        outline: 2px solid var(--text);
-        outline-offset: 4px;
-      }
-      .ck-app-avatar {
-        --ck-avatar-size: calc(var(--control-height) * 0.62);
-        width: var(--ck-avatar-size);
-        height: var(--ck-avatar-size);
-        border-radius: 999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--ck-secondary-bg);
-        border: 1px solid var(--ck-secondary-border);
-        color: var(--ck-secondary-text);
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        font-size: calc(var(--ck-font-control) * 0.72);
-        line-height: 1;
-        user-select: none;
-      }
-      /* When using an image logo, keep the same circular sizing + border, but render as an image. */
-      .ck-app-avatar--img {
-        display: block;
-        object-fit: cover;
-        background: transparent;
-      }
-      .ck-app-avatar--drawer {
-        --ck-avatar-size: calc(var(--control-height) * 0.58);
-        font-size: calc(var(--ck-font-control) * 0.66);
+        min-width: 0;
+        max-width: min(100%, 720px);
+        border-radius: 16px;
       }
       .ck-app-title {
         font-weight: 600;
@@ -306,6 +310,7 @@ export function buildWebFormHtml(
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: center;
       }
       .ck-app-title-row {
         flex: 1 1 auto;
@@ -316,8 +321,9 @@ export function buildWebFormHtml(
         gap: 12px;
       }
       .ck-app-title-right {
-        flex: 0 0 auto;
+        flex: 0 1 auto;
         min-width: 0;
+        max-width: 100%;
         display: inline-flex;
         align-items: center;
         justify-content: flex-end;
@@ -327,6 +333,7 @@ export function buildWebFormHtml(
         letter-spacing: 0;
         color: var(--muted);
         white-space: nowrap;
+        overflow: hidden;
       }
       .ck-app-title-right [data-tone="error"] {
         color: var(--danger);
@@ -398,7 +405,7 @@ export function buildWebFormHtml(
       .ck-app-drawer-brand {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 0;
         min-width: 0;
       }
       .ck-app-drawer-brand-text {
