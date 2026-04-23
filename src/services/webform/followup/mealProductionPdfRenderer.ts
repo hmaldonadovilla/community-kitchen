@@ -62,6 +62,19 @@ const uniqueList = (items: string[]): string[] => {
   return out;
 };
 
+const compareDisplayText = (left: string, right: string): number => {
+  const leftText = normalizeText(left);
+  const rightText = normalizeText(right);
+  if (!leftText && !rightText) return 0;
+  if (!leftText) return 1;
+  if (!rightText) return -1;
+  const normalizedCompare = leftText.toLowerCase().localeCompare(rightText.toLowerCase());
+  if (normalizedCompare !== 0) return normalizedCompare;
+  return leftText.localeCompare(rightText);
+};
+
+const uniqueSortedList = (items: string[]): string[] => uniqueList(items).sort(compareDisplayText);
+
 const getFieldValue = (source: any, fieldId: string): any => {
   if (!source) return undefined;
   const key = fieldId.trim();
@@ -189,7 +202,7 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
 
     if (cookEntries.length) {
       const cookEntry = cookEntries[0];
-      const cookIngredients = uniqueList([
+      const cookIngredients = uniqueSortedList([
         ...(cookEntry.ingredients || []),
         ...partialEntries.flatMap(entry => entry.ingredients)
       ]);
@@ -200,7 +213,7 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
       const cookQuantityLabel = cookPortionsValue !== null ? `${cookPortionsValue} portions` : formatPortions(cookEntry.prepQty ?? finalQtyValue, 0);
       mealSegments.push(renderRecipeBlock('Cooked', cookQuantityLabel, cookEntry.recipe, cookIngredients, cookAllergens));
     } else if (partialEntries.length) {
-      const partialIngredients = uniqueList(partialEntries.flatMap(entry => entry.ingredients));
+      const partialIngredients = uniqueSortedList(partialEntries.flatMap(entry => entry.ingredients));
       const partialAllergens = uniqueList(partialEntries.flatMap(entry => entry.allergens));
       const partialPortionsLabel = cookPortionsValue !== null ? `${cookPortionsValue} portions` : finalQtyLabel;
       mealSegments.push(
@@ -215,7 +228,7 @@ export const buildMealProductionHtmlBlocks = (record: WebFormSubmission, questio
           `${MULTI_INGREDIENT_LEFTOVER_KIND} leftover`,
           qtyLabel,
           entry.recipe,
-          uniqueList(entry.ingredients),
+          uniqueSortedList(entry.ingredients),
           uniqueList(entry.allergens)
         )
       );

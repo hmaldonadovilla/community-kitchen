@@ -116,6 +116,19 @@ const uniqueList = (values: string[]): string[] => {
   return result;
 };
 
+const compareDisplayText = (left: string, right: string): number => {
+  const leftText = normalizeText(left);
+  const rightText = normalizeText(right);
+  if (!leftText && !rightText) return 0;
+  if (!leftText) return 1;
+  if (!rightText) return -1;
+  const normalizedCompare = leftText.toLowerCase().localeCompare(rightText.toLowerCase());
+  if (normalizedCompare !== 0) return normalizedCompare;
+  return leftText.localeCompare(rightText);
+};
+
+const uniqueSortedList = (values: string[]): string[] => uniqueList(values).sort(compareDisplayText);
+
 interface RecipeSection {
   mealType: string;
   recipeName: string;
@@ -233,7 +246,7 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
     const finalQtyNumber = parseNumber(meal.FINAL_QTY);
     const cookPortionsNumber = finalQtyNumber !== null ? Math.max(0, finalQtyNumber - multiIngredientTotal) : null;
 
-    const cookBucketIngredients = uniqueList([
+    const cookBucketIngredients = uniqueSortedList([
       ...(cookEntries[0]?.ingredients || []),
       ...singleIngredientEntries.flatMap(entry => entry.ingredients),
       ...multiIngredientZeroEntries.flatMap(entry => entry.ingredients)
@@ -263,7 +276,7 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
           mealType: mealLabel,
           recipeName: entry.recipe || `${MULTI_INGREDIENT_LEFTOVER_KIND} leftover`,
           portionCount: formatCount(entry.prepQty ?? 0, '0'),
-          ingredientsText: uniqueList(entry.ingredients).length ? uniqueList(entry.ingredients).join(', ') : 'None',
+          ingredientsText: uniqueSortedList(entry.ingredients).length ? uniqueSortedList(entry.ingredients).join(', ') : 'None',
           allergensText: uniqueList(entry.allergens).length ? uniqueList(entry.allergens).join(', ') : 'None'
         })
       );
@@ -275,7 +288,7 @@ const buildMealBlocks = (record: WebFormSubmission, questions: QuestionConfig[])
           mealType: mealLabel,
           recipeName: entry.recipe || 'Recipe not set',
           portionCount: formatCount(entry.prepQty ?? 0, '0'),
-          ingredientsText: uniqueList(entry.ingredients).length ? uniqueList(entry.ingredients).join(', ') : 'None',
+          ingredientsText: uniqueSortedList(entry.ingredients).length ? uniqueSortedList(entry.ingredients).join(', ') : 'None',
           allergensText: uniqueList(entry.allergens).length ? uniqueList(entry.allergens).join(', ') : 'None'
         })
       );

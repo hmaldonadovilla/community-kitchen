@@ -270,4 +270,58 @@ describe('buildMealProductionPdfPlaceholders', () => {
     expect(placeholders.MEAL_BLOCKS).toContain('Leftover curry');
     expect(placeholders.MEAL_BLOCKS).toContain('Spices');
   });
+
+  it('sorts combined ingredient lists alphabetically in the PDF output', () => {
+    const sortedRecord: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      values: {
+        MP_MEALS_REQUEST: [
+          {
+            MEAL_TYPE: 'Vegetarian',
+            ORD_QTY: 20,
+            FINAL_QTY: 20,
+            MP_TYPE_LI: [
+              {
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 20,
+                RECIPE: 'Veg curry',
+                MP_INGREDIENTS_LI: [
+                  { ING: 'Zucchini', ALLERGEN: 'None' },
+                  { ING: 'banana', ALLERGEN: 'None' }
+                ]
+              },
+              {
+                PREP_TYPE: 'Multi-ingredient',
+                PREP_QTY: 0,
+                RECIPE: 'Combined leftover curry',
+                MP_INGREDIENTS_LI: [
+                  { ING: 'Carrot', ALLERGEN: 'None' }
+                ]
+              },
+              {
+                PREP_TYPE: 'Single-ingredient',
+                PREP_QTY: 0,
+                RECIPE: 'Apple garnish',
+                MP_INGREDIENTS_LI: [
+                  { ING: 'Apple', ALLERGEN: 'None' }
+                ]
+              },
+              {
+                PREP_TYPE: 'Single-ingredient',
+                PREP_QTY: 0,
+                RECIPE: 'Beetroot topping',
+                MP_INGREDIENTS_LI: [
+                  { ING: 'Beetroot', ALLERGEN: 'None' }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const placeholders = buildMealProductionPdfPlaceholders({ record: sortedRecord, questions, form });
+    expect(placeholders.MEAL_BLOCKS).toContain('Apple, banana, Beetroot, Carrot, Zucchini');
+  });
 });

@@ -393,6 +393,16 @@
       });
       return out;
     };
+    var compareDisplayText = function (left, right) {
+      var leftText = toText(left);
+      var rightText = toText(right);
+      if (!leftText && !rightText) return 0;
+      if (!leftText) return 1;
+      if (!rightText) return -1;
+      var normalizedCompare = leftText.toLowerCase().localeCompare(rightText.toLowerCase());
+      if (normalizedCompare !== 0) return normalizedCompare;
+      return leftText.localeCompare(rightText);
+    };
     var looksLikeUrl = function (value) {
       return /^https?:\/\//i.test((value || '').toString().trim());
     };
@@ -519,8 +529,11 @@
       return '0 portions';
     };
 
-    var formatList = function (items, emptyText) {
+    var formatList = function (items, emptyText, options) {
       var list = uniq(items);
+      if (options && options.sort) {
+        list.sort(compareDisplayText);
+      }
       return list.length ? list.join(', ') : emptyText;
     };
     var formatConfirmation = function (rawValue) {
@@ -707,7 +720,7 @@
             leftoverFullLine += ' | ' + entry.recipe;
           }
           appendPrepGroup(mealBlock, leftoverFullLine, {
-            ingredientsText: formatList(entry.ingredients, 'None'),
+            ingredientsText: formatList(entry.ingredients, 'None', { sort: true }),
             allergensText: formatList(entry.allergens, 'None')
           });
         } else {
@@ -735,7 +748,7 @@
       cookedLine += ' | ' + cookedRecipe;
 
       appendPrepGroup(mealBlock, cookedLine, {
-        ingredientsText: formatList(cookedIngredients, 'None'),
+        ingredientsText: formatList(cookedIngredients, 'None', { sort: true }),
         allergensText: formatList(cookedAllergens, 'None')
       });
 
