@@ -171,7 +171,8 @@ import {
   getGeneratedRecordsFromFollowupResult,
   renderGeneratedRecordLine,
   selectConditionalDialog,
-  selectMilestoneConfirmationDialog
+  selectMilestoneConfirmationDialog,
+  selectMilestoneProgressDialog
 } from './features/steps/domain/milestoneDialogs';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
 import {
@@ -7770,6 +7771,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     lineItems,
     values
   ]);
+  const submitProgressDialogConfig = useMemo(() => {
+    const afterSubmitConfig = definition.submissionAfterSubmit;
+    if (
+      afterSubmitConfig?.progressDialog ||
+      (Array.isArray(afterSubmitConfig?.progressDialogCases) && afterSubmitConfig.progressDialogCases.length > 0)
+    ) {
+      const guidedStepPrefix = ((definition.steps?.stateFields?.prefix || '__ckStep') as string).toString();
+      const submitVirtualState: GuidedStepsVirtualState | null =
+        guidedUiState?.activeStepId
+          ? {
+              prefix: guidedStepPrefix,
+              activeStepId: guidedUiState.activeStepId,
+              activeStepIndex: guidedUiState.activeStepIndex || 0,
+              maxValidIndex: -1,
+              maxCompleteIndex: -1,
+              steps: []
+            }
+          : null;
+      return (
+        selectConditionalDialog({
+          cases: afterSubmitConfig.progressDialogCases,
+          fallback: afterSubmitConfig.progressDialog,
+          ctx: buildValidationContext(values as any, lineItems as any, submitVirtualState),
+          now: new Date()
+        }) || null
+      );
+    }
+    return null;
+  }, [
+    definition.steps?.stateFields?.prefix,
+    definition.submissionAfterSubmit,
+    guidedUiState?.activeStepId,
+    guidedUiState?.activeStepIndex,
+    lineItems,
+    values
+  ]);
   const submitConfirmConfirmLabelResolved = useMemo(
     () => resolveLocalizedString(submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved),
     [submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved]
@@ -7791,6 +7828,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         tSystem('submit.confirmTitle', language, 'Confirm submission')
       ),
     [submitConfirmationDialogConfig?.title, language]
+  );
+  const submitBlockingTitle = useMemo(
+    () =>
+      resolveLocalizedString(
+        submitProgressDialogConfig?.title,
+        language,
+        tSystem('actions.submitting', language, 'Submitting…')
+      ) || tSystem('actions.submitting', language, 'Submitting…'),
+    [submitProgressDialogConfig?.title, language]
   );
   const resolveDialogTemplate = useCallback(
     (rawValue: LocalizedString | string | undefined, fallback: string): string => {
@@ -11156,9 +11202,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               steps: []
             }
           : null;
+      const milestoneDialogCtx = buildValidationContext(valuesRef.current as any, lineItemsRef.current as any, milestoneVirtualState);
       const milestoneConfirmationDialog = selectMilestoneConfirmationDialog({
         action: args.action,
-        ctx: buildValidationContext(valuesRef.current as any, lineItemsRef.current as any, milestoneVirtualState),
+        ctx: milestoneDialogCtx,
+        now: new Date()
+      });
+      const milestoneProgressDialog = selectMilestoneProgressDialog({
+        action: args.action,
+        ctx: milestoneDialogCtx,
         now: new Date()
       });
       if (milestoneConfirmationDialog) {
@@ -11185,12 +11237,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         args.action.waitForQueue ||
         (args.action.waitForBackgroundSaves ? 'all' : 'none');
       const busySeq = guidedMilestoneBusy.lock({
-        title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
-        message: tSystem(
-          'navigation.waitSaving',
-          languageRef.current,
-          'Please wait while we save your changes...'
-        ),
+        title:
+          resolveLocalizedString(
+            milestoneProgressDialog?.title,
+            languageRef.current,
+            tSystem('draft.savingShort', languageRef.current, 'Saving…')
+          ) || tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+        message:
+          resolveLocalizedString(
+            milestoneProgressDialog?.message,
+            languageRef.current,
+            tSystem(
+              'navigation.waitSaving',
+              languageRef.current,
+              'Please wait while we save your changes...'
+            )
+          ) ||
+          tSystem(
+            'navigation.waitSaving',
+            languageRef.current,
+            'Please wait while we save your changes...'
+          ),
         kind: 'guidedStepMilestone',
         diagnosticMeta: { stepId: args.stepId, nextStepId: args.nextStepId || null }
       });
@@ -12280,9 +12347,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return;
       }
     }
-    setStatus(tSystem('actions.submitting', language, 'Submitting…'));
+    const submitBlockingMessage =
+      resolveLocalizedString(
+        submitProgressDialogConfig?.message,
+        languageRef.current,
+        tSystem('actions.submitting', languageRef.current, 'Submitting…')
+      ) || tSystem('actions.submitting', languageRef.current, 'Submitting…');
+    setStatus(submitBlockingMessage);
     setStatusLevel('info');
-    logEvent('submit.begin', { language, lineItemGroups: Object.keys(lineItems).length, recordId: submitRecordId || null });
+    logEvent('submit.begin', {
+      language,
+      lineItemGroups: Object.keys(lineItems).length,
+      recordId: submitRecordId || null,
+      progressDialogTitle: resolveLocalizedString(submitProgressDialogConfig?.title, languageRef.current, '') || null
+    });
     // Ensure submission messages are immediately visible, even if the user is scrolled deep in the form.
     try {
       if (typeof globalThis.scrollTo === 'function') {
@@ -14434,7 +14512,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       <BlockingOverlay
         open={submitting}
-        title={tSystem('actions.submitting', language, 'Submitting…')}
+        title={submitBlockingTitle}
         message={(status || '').toString() || tSystem('actions.submitting', language, 'Submitting…')}
         zIndex={12040}
       />

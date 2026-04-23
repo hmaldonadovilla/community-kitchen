@@ -1272,6 +1272,8 @@ export class Dashboard {
         submissionAfterSubmitObj.navigateTo !== undefined ||
         submissionAfterSubmitObj.confirmationDialog !== undefined ||
         submissionAfterSubmitObj.confirmationDialogCases !== undefined ||
+        submissionAfterSubmitObj.progressDialog !== undefined ||
+        submissionAfterSubmitObj.progressDialogCases !== undefined ||
         submissionAfterSubmitObj.feedbackDialog !== undefined ||
         submissionAfterSubmitObj.generatedRecordsDialog !== undefined)
         ? (() => {
@@ -1283,6 +1285,19 @@ export class Dashboard {
             const confirmationDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.confirmationDialog);
             const confirmationDialogCasesRaw = submissionAfterSubmitObj.confirmationDialogCases;
             const confirmationDialogCases = (Array.isArray(confirmationDialogCasesRaw) ? confirmationDialogCasesRaw : [])
+              .map(entry => {
+                if (!entry || typeof entry !== 'object') return null;
+                const dialog = normalizeSystemDialogConfigLocal((entry as any).dialog);
+                if (!dialog) return null;
+                const outEntry: Record<string, any> = { dialog };
+                const when = this.normalizeWhenClause((entry as any).when);
+                if (when) outEntry.when = when;
+                return outEntry;
+              })
+              .filter(Boolean);
+            const progressDialog = normalizeSystemDialogConfigLocal(submissionAfterSubmitObj.progressDialog);
+            const progressDialogCasesRaw = submissionAfterSubmitObj.progressDialogCases;
+            const progressDialogCases = (Array.isArray(progressDialogCasesRaw) ? progressDialogCasesRaw : [])
               .map(entry => {
                 if (!entry || typeof entry !== 'object') return null;
                 const dialog = normalizeSystemDialogConfigLocal((entry as any).dialog);
@@ -1322,6 +1337,8 @@ export class Dashboard {
             }
             if (confirmationDialog) out.confirmationDialog = confirmationDialog;
             if (confirmationDialogCases.length) out.confirmationDialogCases = confirmationDialogCases;
+            if (progressDialog) out.progressDialog = progressDialog;
+            if (progressDialogCases.length) out.progressDialogCases = progressDialogCases;
             if (feedbackDialog) out.feedbackDialog = feedbackDialog;
             if (generatedRecordsDialog) out.generatedRecordsDialog = generatedRecordsDialog;
             return Object.keys(out).length ? out : undefined;
@@ -2331,7 +2348,20 @@ export class Dashboard {
                 return when ? { when, dialog } : { dialog };
               })
               .filter(Boolean);
+            const progressDialog = normalizeDialogConfig((milestoneActionRaw as any).progressDialog);
+            const progressDialogCasesRaw = (milestoneActionRaw as any).progressDialogCases;
+            const progressDialogCases = (Array.isArray(progressDialogCasesRaw) ? progressDialogCasesRaw : [])
+              .map((entry: any) => {
+                if (!entry || typeof entry !== 'object') return null;
+                const dialog = normalizeDialogConfig((entry as any).dialog ?? entry);
+                if (!dialog) return null;
+                const when = normalizeCondition((entry as any).when);
+                return when ? { when, dialog } : { dialog };
+              })
+              .filter(Boolean);
             if (confirmationDialogCases.length) milestoneAction.confirmationDialogCases = confirmationDialogCases;
+            if (progressDialog) milestoneAction.progressDialog = progressDialog;
+            if (progressDialogCases.length) milestoneAction.progressDialogCases = progressDialogCases;
             const feedbackDialog = normalizeDialogConfig((milestoneActionRaw as any).feedbackDialog);
             if (feedbackDialog) milestoneAction.feedbackDialog = feedbackDialog;
             const generatedRecordsDialogRaw = (milestoneActionRaw as any).generatedRecordsDialog;

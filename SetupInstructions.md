@@ -1129,10 +1129,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - compact-row actions can set `overlayLabel` separately from the button label when the overlay should not repeat the button text as a title
         - use local hydrated fields for compact-row text when the selector already copied inventory data into the row; reserve `sourceFieldId + sourcePath` for true datasource lookups
         - use `type: "sourceListSummary"` inside compact headline/detail parts when the row should summarize a nested datasource list inline (for example, comma-separated ingredient names)
+        - set `sourceListSummary.sort: "alphabetical"` when those nested values should be sorted alphabetically before joining
         - use `selectionEffects.addLineItems` with `replaceExistingByEffectId: true` when compact-row edits must immediately regenerate one downstream normalized line item
         - when a compact row lives inside a subgroup and needs to regenerate a sibling subgroup for the same parent row, point `selectionEffects[].groupId` at the sibling subgroup id; the runtime resolves it relative to the current parent row automatically
         - use `selectionEffects.type: "addLineItemsFromFieldPayload"` when the downstream line items should be hydrated from a serialized payload already stored on the current row
         - for datasource-backed allocation screens that must render each shared source row once and allocate it into multiple parent rows, set the datasource-row config `presentation: "sourceFirstAllocations"` and optionally add `presentationWhen`, `hideParentRowsWhenPresentationActive`, `allocationLabelFieldId`, `sourceMatchFieldIds` (fallback match fields checked in order), `ui.emptyStateMessage` when filtering leaves no compatible source rows, and `ui.noSourceRowsMessage` when the datasource itself returns no rows
+        - set `ui.sourceFirstRowSort: "alphabetical"` when those rendered source rows should be sorted by their resolved compact headline text instead of datasource order
         - when a `sourceFirstAllocations` row should still show its per-parent allocation label even if only one compatible parent row is visible, set `ui.allocationLabelVisibility: "always"`
         - for form-backed datasources with legacy rows missing derived fields, use `dataSource.backfill` to declare a repair pass in config. Point it at the source form/record/row fields, define root/nested `scopes`, and map `values` from those scopes; the server only applies the backfill when one of `whenMissingAnyFieldIds` is empty on the fetched datasource row
       - Compact headline parts can read directly from a datasource-backed selector by setting `sourceFieldId`, `sourcePath`, optional `lookupField`, and optional `suffixSourcePath`. This keeps compact rows configuration-driven and avoids duplicating the same display values into hidden fields only for presentation.
@@ -1149,7 +1151,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         }
         ```
 
-        - `output.segments` defines the text line (supports labels, list formatting, `format.unique`, static `type: "text"` segments, `type: "spacer"` to push later inline content toward the row end, `layout: "block"` for full-width lines, display-only references to hidden helper / derived fields, and `showWhen`).
+        - `output.segments` defines the text line (supports labels, list formatting, `format.unique`, `format.sort`, static `type: "text"` segments, `type: "spacer"` to push later inline content toward the row end, `layout: "block"` for full-width lines, display-only references to hidden helper / derived fields, and `showWhen`).
         - Newlines in row-flow text, labels, and list delimiters are preserved, so `format.listDelimiter: "\n"` can render one referenced value per line.
         - Use `renderAs: "control"` to place a field inline in the output row; combine with `controlStyle: "compact"` plus `minWidth` / `maxWidth` / `paddingChars` when the control should read like part of a sentence. Compact row-flow controls support NUMBER, CHOICE, and boolean CHECKBOX inputs, which is useful for mobile-friendly sentence rows such as leftover freeze toggles.
         - `output.segments[].editAction` (single) or `editActions` (array) renders one or more action icons next to a segment.
@@ -1177,8 +1179,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - retry transient lock-contention failures during reservation upserts and reservation reconciliation before surfacing the error to the user
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - redirect to another view after success (`navigateToAfterSuccess: "current" | "form" | "summary" | "list"`)
-          - show configurable dialogs before/after start (`confirmationDialog`, `feedbackDialog`)
-          - choose the confirmation copy per record state with ordered `confirmationDialogCases[]`
+          - show configurable dialogs before/after start (`confirmationDialog`, `confirmationDialogCases[]`, `progressDialog`, `progressDialogCases[]`, `feedbackDialog`)
+          - choose the confirmation or progress overlay copy per record state with ordered `confirmationDialogCases[]` / `progressDialogCases[]`
           - show a generated-records dialog after success (`generatedRecordsDialog`) when matching `submitEffects` created downstream records
       - Read-only labels in steps:
         - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
@@ -1237,6 +1239,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `navigateTo`: `auto` | `form` | `summary` | `list`
       - `confirmationDialog`: optional confirmation dialog shown before final submit starts
       - `confirmationDialogCases[]`: ordered conditional confirmation dialogs; first match wins and falls back to `confirmationDialog`
+      - `progressDialog`: optional blocking-overlay copy shown immediately while submit work is running
+      - `progressDialogCases[]`: ordered conditional progress dialogs; first match wins and falls back to `progressDialog`
       - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records; `itemTemplate` supports `{{FIELD_ID}}`, `{{A || B}}` fallbacks, and formatters such as `label`, `appendField`, `pluralize`, and `date`
       - `feedbackDialog`: optional acknowledgement dialog shown after background actions start
       - same-record follow-up batches are serialized on the server, so final-submit `preActions` wait behind any earlier in-flight milestone batch for that record

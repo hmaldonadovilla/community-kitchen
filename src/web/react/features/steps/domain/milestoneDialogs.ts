@@ -19,6 +19,19 @@ export const selectMilestoneConfirmationDialog = (args: {
   });
 };
 
+export const selectMilestoneProgressDialog = (args: {
+  action: StepMilestoneActionConfig;
+  ctx: VisibilityContext;
+  now?: Date;
+}) => {
+  return selectConditionalDialog({
+    cases: args.action.progressDialogCases,
+    fallback: args.action.progressDialog,
+    ctx: args.ctx,
+    now: args.now
+  });
+};
+
 export const selectConditionalDialog = (args: {
   cases:
     | Array<{

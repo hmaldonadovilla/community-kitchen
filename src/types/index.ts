@@ -1148,6 +1148,18 @@ export interface SubmissionAfterSubmitConfig {
    */
   confirmationDialogCases?: StepMilestoneDialogCaseConfig[];
   /**
+   * Optional progress dialog content shown immediately while blocking submit work is running.
+   *
+   * This does not open a separate modal; it only overrides the blocking submit overlay copy.
+   */
+  progressDialog?: SystemActionGateDialogConfig;
+  /**
+   * Optional ordered conditional progress dialogs.
+   *
+   * The first matching case wins and falls back to `progressDialog` when none match.
+   */
+  progressDialogCases?: StepMilestoneDialogCaseConfig[];
+  /**
    * Optional acknowledgement dialog shown after the user has been redirected and the background
    * actions have started successfully.
    */
@@ -2126,12 +2138,21 @@ export interface LineItemCollapsedFieldConfig {
 }
 
 export interface CompactRowPartConfig {
-  type?: 'text' | 'field' | 'primary' | 'meta';
+  type?: 'text' | 'field' | 'primary' | 'meta' | 'sourceListSummary';
   text?: LocalizedString | string;
   fieldId?: string;
   sourceFieldId?: string;
   lookupField?: string;
   sourcePath?: string;
+  summaryFieldId?: string;
+  separator?: LocalizedString | string;
+  unique?: boolean;
+  /**
+   * Optional list ordering override for `sourceListSummary`.
+   * - source: preserve source order (default)
+   * - alphabetical: sort visible values alphabetically before rendering
+   */
+  sort?: 'source' | 'alphabetical';
   suffix?: LocalizedString | string;
   suffixFieldId?: string;
   suffixSourcePath?: string;
@@ -2196,6 +2217,13 @@ export interface LineItemGroupUiConfig {
    * Default: `multiple`.
    */
   allocationLabelVisibility?: 'multiple' | 'always';
+  /**
+   * Controls row ordering for datasource-backed `sourceFirstAllocations` renderers.
+   *
+   * - `source`: preserve datasource order (default)
+   * - `alphabetical`: sort rendered source rows by their resolved compact headline text
+   */
+  sourceFirstRowSort?: 'source' | 'alphabetical';
   /**
    * Optional compact-row actions rendered alongside the headline for `compactRows` renderers.
    * The first matching rule wins.
@@ -3898,6 +3926,18 @@ export interface StepMilestoneActionConfig {
    */
   confirmationDialogCases?: StepMilestoneDialogCaseConfig[];
   /**
+   * Optional progress dialog content shown immediately while blocking milestone work is running.
+   *
+   * This does not open a separate modal; it only overrides the blocking milestone overlay copy.
+   */
+  progressDialog?: SystemActionGateDialogConfig;
+  /**
+   * Optional ordered conditional progress dialogs.
+   *
+   * The first matching case wins and falls back to `progressDialog` when none match.
+   */
+  progressDialogCases?: StepMilestoneDialogCaseConfig[];
+  /**
    * Optional acknowledgement dialog shown after the action has started.
    */
   feedbackDialog?: SystemActionGateDialogConfig;
@@ -4062,6 +4102,12 @@ export interface RowFlowOutputSegmentFormatConfig {
   type?: 'text' | 'list';
   listDelimiter?: string;
   unique?: boolean;
+  /**
+   * Optional list ordering override.
+   * - source: preserve source order (default)
+   * - alphabetical: sort visible values alphabetically before rendering
+   */
+  sort?: 'source' | 'alphabetical';
 }
 
 export interface RowFlowOutputSegmentConfig {

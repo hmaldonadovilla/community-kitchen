@@ -30,10 +30,10 @@ describe('meal production leftover selection config', () => {
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
     expect(target?.helperText?.en).toBe(
-      'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+      'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
     );
     expect(formTarget?.helperText?.en).toBe(
-      'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+      'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
     );
     expect(target?.subGroups).toBeUndefined();
     expect((question.lineItemConfig.subGroups || []).map((group: any) => group.id)).not.toContain('MP_LEFTOVER_SELECTION_LI');
@@ -307,12 +307,14 @@ describe('meal production leftover selection config', () => {
             expect.objectContaining({
               type: 'sourceListSummary',
               sourcePath: 'LEFTOVER_INGREDIENTS_LI',
-              summaryFieldId: 'ING'
+              summaryFieldId: 'ING',
+              sort: 'alphabetical'
             })
           ])
         })
       ])
     );
+    expect(config?.ui?.sourceFirstRowSort).toBe('alphabetical');
     expect(config?.availability).toEqual(
       expect.objectContaining({
         targetQuantityFieldId: 'LEFTOVER_QTY_AVAILABLE',
@@ -505,7 +507,8 @@ describe('meal production leftover selection config', () => {
               format: expect.objectContaining({
                 type: 'list',
                 listDelimiter: ', ',
-                unique: true
+                unique: true,
+                sort: 'alphabetical'
               })
             }),
             expect.objectContaining({
@@ -518,7 +521,8 @@ describe('meal production leftover selection config', () => {
               format: expect.objectContaining({
                 type: 'list',
                 listDelimiter: ', ',
-                unique: true
+                unique: true,
+                sort: 'alphabetical'
               })
             }),
             expect.objectContaining({

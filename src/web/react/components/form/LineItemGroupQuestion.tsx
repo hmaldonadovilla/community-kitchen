@@ -131,6 +131,7 @@ import {
   filterSourceFirstAllocationRows,
   resolveSourceFirstAllocationAvailabilityFieldPair,
   resolveSourceFirstAllocationLabelVisibility,
+  resolveSourceFirstRowSortMode,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded,
   shouldShowSourceFirstAllocationLabel
 } from '../../app/sourceFirstAllocations';
@@ -260,6 +261,18 @@ const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' 
   const raw = (field as any)?.optionSort;
   const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   return normalized === 'source' ? 'source' : 'alphabetical';
+};
+
+const listSortFor = (raw: any): 'alphabetical' | 'source' => {
+  const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return normalized === 'alphabetical' ? 'alphabetical' : 'source';
+};
+
+const sortVisibleTextValues = (values: string[], sortMode: 'alphabetical' | 'source'): string[] => {
+  if (sortMode !== 'alphabetical' || values.length < 2) return values;
+  return [...values].sort((left, right) =>
+    left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
+  );
 };
 
 const resolveCompactPartType = (part: any): string => {
@@ -1239,6 +1252,10 @@ export const LineItemGroupQuestion: React.FC<{
         visibility: resolveSourceFirstAllocationLabelVisibility(
           (config as any)?.allocationLabelVisibility ?? (config as any)?.ui?.allocationLabelVisibility
         )
+      })),
+      rowSortByConfig: sourceFirstDataSourceRows.map(config => ({
+        id: `${(config as any)?.id || ''}`.trim() || 'datasource',
+        sort: resolveSourceFirstRowSortMode((config as any)?.sourceFirstRowSort ?? (config as any)?.ui?.sourceFirstRowSort)
       })),
       sourceRowCount: sourceFirstDataSourceRows.reduce((count, config) => count + countRows(config), 0),
       parentRowCount: parentRows.length
@@ -3132,6 +3149,7 @@ export const LineItemGroupQuestion: React.FC<{
       const formatType = segment.config?.format?.type === 'list' ? 'list' : 'text';
       const listDelimiter = segment.config?.format?.listDelimiter || ', ';
       const uniqueValues = segment.config?.format?.unique !== false;
+      const listSortMode = listSortFor(segment.config?.format?.sort);
       const rowValues = useFallback
         ? segment.fallbackTarget?.primaryRow?.row?.values || {}
         : segment.target?.primaryRow?.row?.values || {};
@@ -3157,7 +3175,8 @@ export const LineItemGroupQuestion: React.FC<{
           return (match?.label || raw || '').toString();
         });
         const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
-        const text = formatType === 'list' ? normalizedLabels.join(listDelimiter) : normalizedLabels[0] || '';
+        const orderedLabels = sortVisibleTextValues(normalizedLabels, listSortMode);
+        const text = formatType === 'list' ? orderedLabels.join(listDelimiter) : orderedLabels[0] || '';
         return { text, hasValue: text.trim() !== '' };
       }
 
@@ -3170,7 +3189,8 @@ export const LineItemGroupQuestion: React.FC<{
         return val.toString();
       });
       const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
-      const text = formatType === 'list' ? normalizedLabels.join(listDelimiter) : normalizedLabels[0] || '';
+      const orderedLabels = sortVisibleTextValues(normalizedLabels, listSortMode);
+      const text = formatType === 'list' ? orderedLabels.join(listDelimiter) : orderedLabels[0] || '';
       return { text, hasValue: text.trim() !== '' };
     },
     [ensureLineOptions, language, optionState, resolveTopValue]
@@ -6170,12 +6190,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   if (!entries.length) return '';
                   const summaryFieldId = `${part.summaryFieldId || part.fieldId || ''}`.trim();
                   const separator = resolveLocalizedString(part.separator, language, ', ') || ', ';
+                  const sortMode = listSortFor(part.sort);
                   const values = entries
                     .map(entry => (summaryFieldId ? getByPath(entry, summaryFieldId) : entry))
                     .map(value => `${value ?? ''}`.trim())
                     .filter(Boolean);
                   const normalized = part.unique === false ? values : Array.from(new Set(values));
-                  return normalized.join(separator);
+                  return sortVisibleTextValues(normalized, sortMode).join(separator);
                 }
                 const display = resolveCompactSourceValue(part, virtualValues, sourceRow, fieldById, parentValues);
                 const fieldId = `${part.fieldId || ''}`.trim();
@@ -6514,9 +6535,47 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     </div>
                   ) : null;
                 }
+                const sourceFirstRowSortMode = resolveSourceFirstRowSortMode(
+                  config?.sourceFirstRowSort ?? uiCfg?.sourceFirstRowSort
+                );
+                const sortedVisibleSourceRows =
+                  sourceFirstRowSortMode === 'alphabetical'
+                    ? [...visibleSourceRows].sort((left, right) => {
+                        const resolveSortLabel = (entry: { sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }): string => {
+                          const sourceKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
+                          const sourceKey = sourceKeyFieldId ? `${entry.sourceRow?.[sourceKeyFieldId] ?? ''}`.trim() : '';
+                          const anchorParentRow = entry.eligibleParents[0];
+                          const headlineVirtualValues = buildVirtualDataSourceRowValues({
+                            config,
+                            sourceRow: entry.sourceRow,
+                            parentRowId: anchorParentRow?.id
+                          });
+                          const headlineRule = compactHeadlineRows.find(rule =>
+                            !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
+                              rowValues: headlineVirtualValues,
+                              parentValues: anchorParentRow?.values as Record<string, FieldValue>
+                            }))
+                          );
+                          const headlineText = headlineRule
+                            ? resolveCompactTextParts(
+                                Array.isArray(headlineRule.parts) ? headlineRule.parts : [],
+                                headlineVirtualValues,
+                                entry.sourceRow,
+                                fieldById,
+                                anchorParentRow?.values as Record<string, FieldValue>
+                              )
+                            : '';
+                          return (headlineText || sourceKey).trim().toLowerCase();
+                        };
+                        return resolveSortLabel(left).localeCompare(resolveSortLabel(right), undefined, {
+                          numeric: true,
+                          sensitivity: 'base'
+                        });
+                      })
+                    : visibleSourceRows;
                 return (
                   <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
-                    {visibleSourceRows.map(({ sourceRow, eligibleParents }, sourceIndex) => {
+                    {sortedVisibleSourceRows.map(({ sourceRow, eligibleParents }, sourceIndex) => {
                       const sourceKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
                       const sourceKey = sourceKeyFieldId ? `${sourceRow?.[sourceKeyFieldId] ?? ''}`.trim() : '';
                       if (!sourceKey) return null;
@@ -6562,7 +6621,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           style={{
                             padding: '12px 0',
                             borderBottom:
-                              sourceIndex < visibleSourceRows.length - 1 ? '1px solid var(--border)' : undefined
+                              sourceIndex < sortedVisibleSourceRows.length - 1 ? '1px solid var(--border)' : undefined
                           }}
                         >
                           {headlineText ? (

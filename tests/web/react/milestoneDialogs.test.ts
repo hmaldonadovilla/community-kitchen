@@ -2,7 +2,8 @@ import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
   renderGeneratedRecordLine,
-  selectMilestoneConfirmationDialog
+  selectMilestoneConfirmationDialog,
+  selectMilestoneProgressDialog
 } from '../../../src/web/react/features/steps/domain/milestoneDialogs';
 
 describe('milestoneDialogs', () => {
@@ -34,6 +35,37 @@ describe('milestoneDialogs', () => {
     expect(dialog).toEqual({
       title: { en: 'Store leftovers' },
       message: { en: 'Label leftovers now.' }
+    });
+  });
+
+  test('selects the first matching progress dialog case before the fallback dialog', () => {
+    const dialog = selectMilestoneProgressDialog({
+      action: {
+        type: 'followupBatch',
+        preActions: ['CLOSE_RECORD'],
+        progressDialogCases: [
+          {
+            when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+            dialog: {
+              title: { en: 'Leftovers' },
+              message: { en: 'Please wait for leftover ids.' }
+            }
+          }
+        ],
+        progressDialog: {
+          title: { en: 'Submitting' },
+          message: { en: 'Please wait.' }
+        }
+      } as any,
+      ctx: {
+        getValue: (fieldId: string) => (fieldId === 'LEFTOVER_COUNT' ? 2 : '')
+      } as any,
+      now: new Date('2026-04-07T12:00:00Z')
+    });
+
+    expect(dialog).toEqual({
+      title: { en: 'Leftovers' },
+      message: { en: 'Please wait for leftover ids.' }
     });
   });
 

@@ -7,6 +7,7 @@ import {
 } from './quantityConstraints';
 
 export type SourceFirstAllocationLabelVisibility = 'multiple' | 'always';
+export type SourceFirstRowSortMode = 'source' | 'alphabetical';
 
 type SourceFirstAllocationRow = Record<string, any>;
 type SourceFirstAllocationParentRow = { values?: Record<string, FieldValue> };
@@ -48,6 +49,11 @@ export const resolveSourceFirstAllocationLabelVisibility = (
 ): SourceFirstAllocationLabelVisibility => {
   const normalized = (raw ?? '').toString().trim().toLowerCase();
   return normalized === 'always' ? 'always' : 'multiple';
+};
+
+export const resolveSourceFirstRowSortMode = (raw: any): SourceFirstRowSortMode => {
+  const normalized = (raw ?? '').toString().trim().toLowerCase();
+  return normalized === 'alphabetical' ? 'alphabetical' : 'source';
 };
 
 export const shouldShowSourceFirstAllocationLabel = (args: {
