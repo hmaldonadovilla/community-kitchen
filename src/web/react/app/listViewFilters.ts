@@ -4,6 +4,13 @@ import type { ListItem } from '../api';
 import { filterItemsByAdvancedSearch } from './listViewAdvancedSearch';
 import { normalizeToIsoDateLocal } from './listViewSearch';
 
+export type SearchPresetDateFilter = {
+  fieldId: string;
+  equals?: string;
+  from?: string;
+  to?: string;
+};
+
 const buildRowWhenContext = (row: ListItem) =>
   ({
     getValue: (fieldId: string) => (row as any)?.[fieldId],
@@ -34,6 +41,51 @@ const addLocalDays = (isoDate: string, days: number): string | null => {
   if (Number.isNaN(d.getTime())) return null;
   d.setDate(d.getDate() + Math.max(0, Math.floor(days)));
   return normalizeToIsoDateLocal(d);
+};
+
+export const resolveSearchPresetDateFilter = (args: {
+  preset: ListViewSearchPresetButtonConfig;
+  defaultMode?: 'text' | 'date' | 'advanced';
+  searchDateFieldId?: string;
+  now?: Date;
+}): SearchPresetDateFilter | null => {
+  const { preset, defaultMode = 'text', searchDateFieldId, now = new Date() } = args;
+  const mode = normalizeMode(preset.mode || defaultMode);
+  const dateValue = normalizeToIsoDateLocal((preset as any).dateValue);
+  const presetDateFieldId = ((preset as any).dateFieldId || '').toString().trim() || (searchDateFieldId || '').toString().trim();
+  const lookbackDaysRaw = Number((preset as any).lookbackDays);
+  const lookbackDays =
+    Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw >= 0 ? Math.max(0, Math.floor(lookbackDaysRaw)) : null;
+  const lookaheadDaysRaw = Number((preset as any).lookaheadDays);
+  const lookaheadDays =
+    Number.isFinite(lookaheadDaysRaw) && lookaheadDaysRaw >= 0 ? Math.max(0, Math.floor(lookaheadDaysRaw)) : null;
+  const includeToday = (preset as any).includeToday !== false;
+  if (!presetDateFieldId) return null;
+
+  if (mode === 'date' && dateValue) {
+    return { fieldId: presetDateFieldId, equals: dateValue };
+  }
+
+  const today = normalizeToIsoDateLocal(now);
+  if (!today) return null;
+
+  if (lookbackDays !== null) {
+    const from = subtractLocalDays(today, lookbackDays);
+    const to = includeToday ? today : subtractLocalDays(today, 1);
+    if (from && to) {
+      return { fieldId: presetDateFieldId, from, to };
+    }
+  }
+
+  if (lookaheadDays !== null) {
+    const from = includeToday ? today : addLocalDays(today, 1);
+    const to = addLocalDays(today, lookaheadDays);
+    if (from && to) {
+      return { fieldId: presetDateFieldId, from, to };
+    }
+  }
+
+  return null;
 };
 
 const filterItemsByKeyword = (items: ListItem[], keyword: string, searchableFieldIds: string[]): ListItem[] => {
@@ -106,16 +158,13 @@ export const filterItemsForSearchPreset = (args: {
   let next = [...items];
   const mode = normalizeMode(preset.mode || defaultMode);
   const keyword = (preset.keyword || '').toString();
-  const dateValue = normalizeToIsoDateLocal((preset as any).dateValue);
   const presetWhen = (preset as any).when as WhenClause | undefined;
-  const presetDateFieldId = ((preset as any).dateFieldId || '').toString().trim() || (searchDateFieldId || '').toString().trim();
-  const lookbackDaysRaw = Number((preset as any).lookbackDays);
-  const lookbackDays =
-    Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw >= 0 ? Math.max(0, Math.floor(lookbackDaysRaw)) : null;
-  const lookaheadDaysRaw = Number((preset as any).lookaheadDays);
-  const lookaheadDays =
-    Number.isFinite(lookaheadDaysRaw) && lookaheadDaysRaw >= 0 ? Math.max(0, Math.floor(lookaheadDaysRaw)) : null;
-  const includeToday = (preset as any).includeToday !== false;
+  const presetDateFilter = resolveSearchPresetDateFilter({
+    preset,
+    defaultMode,
+    searchDateFieldId,
+    now
+  });
 
   if (mode === 'advanced') {
     next = filterItemsByAdvancedSearch(
@@ -123,10 +172,18 @@ export const filterItemsForSearchPreset = (args: {
       { keyword, fieldFilters: preset.fieldFilters || {} },
       { keywordFieldIds, fieldTypeById }
     ) as ListItem[];
+  } else if (presetDateFilter?.equals && presetDateFilter.fieldId) {
+    next = next.filter(row => normalizeToIsoDateLocal((row as any)?.[presetDateFilter.fieldId]) === presetDateFilter.equals);
+  } else if ((mode === 'date' && presetDateFilter?.fieldId) || (presetDateFilter?.from && presetDateFilter?.to && presetDateFilter.fieldId)) {
+    next = next.filter(row => {
+      const rowDate = normalizeToIsoDateLocal((row as any)?.[presetDateFilter.fieldId]);
+      if (!rowDate) return false;
+      if (presetDateFilter.from && rowDate < presetDateFilter.from) return false;
+      if (presetDateFilter.to && rowDate > presetDateFilter.to) return false;
+      return true;
+    });
   } else if (mode === 'date') {
-    if (dateValue && presetDateFieldId) {
-      next = next.filter(row => normalizeToIsoDateLocal((row as any)?.[presetDateFieldId]) === dateValue);
-    }
+    next = [];
   } else {
     next = filterItemsByKeyword(next, keyword, searchableFieldIds);
   }
@@ -135,33 +192,15 @@ export const filterItemsForSearchPreset = (args: {
     next = filterItemsByWhenClause(next, presetWhen, now);
   }
 
-  if (lookbackDays !== null && presetDateFieldId) {
-    const today = normalizeToIsoDateLocal(now);
-    const earliest = today ? subtractLocalDays(today, lookbackDays) : null;
-    if (today && earliest) {
-      next = next.filter(row => {
-        const rowDate = normalizeToIsoDateLocal((row as any)?.[presetDateFieldId]);
-        if (!rowDate) return false;
-        if (rowDate < earliest) return false;
-        if (includeToday) return rowDate <= today;
-        return rowDate < today;
-      });
-    }
-  }
-
-  if (lookaheadDays !== null && presetDateFieldId) {
-    const today = normalizeToIsoDateLocal(now);
-    const latest = today ? addLocalDays(today, lookaheadDays) : null;
-    if (today && latest) {
-      next = next.filter(row => {
-        const rowDate = normalizeToIsoDateLocal((row as any)?.[presetDateFieldId]);
-        if (!rowDate) return false;
-        if (rowDate > latest) return false;
-        if (includeToday) return rowDate >= today;
-        return rowDate > today;
-      });
-    }
-  }
-
   return next;
+};
+
+export const presetRequiresServerDateFetch = (args: {
+  preset: ListViewSearchPresetButtonConfig;
+  defaultMode?: 'text' | 'date' | 'advanced';
+  searchDateFieldId?: string;
+  now?: Date;
+}): boolean => {
+  const dateFilter = resolveSearchPresetDateFilter(args);
+  return Boolean(dateFilter?.fieldId && (dateFilter.equals || (dateFilter.from && dateFilter.to)));
 };

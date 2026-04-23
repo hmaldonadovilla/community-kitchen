@@ -1730,12 +1730,27 @@ export class WebFormService {
       const fetchPageSize =
         serverTiming?.measure(`${labelPrefix}.resolveHomeSummaryPageSizeMs`, () => this.resolveHomeSummaryPageSize(def)) ??
         this.resolveHomeSummaryPageSize(def);
-      const sort: { fieldId?: string; direction?: string } | undefined = def.listView?.defaultSort?.fieldId
-        ? {
-            fieldId: def.listView.defaultSort.fieldId,
-            direction: (def.listView.defaultSort.direction || 'desc') as any
+      const homeDateFilter = this.resolveHomeBootstrapDateFilter(def);
+      const sort:
+        | {
+            fieldId?: string;
+            direction?: string;
+            __dateFieldId?: string;
+            __dateEquals?: string;
           }
-        : undefined;
+        | undefined =
+        def.listView?.defaultSort?.fieldId || homeDateFilter
+          ? {
+              fieldId: def.listView?.defaultSort?.fieldId,
+              direction: (def.listView?.defaultSort?.direction || 'desc') as any,
+              ...(homeDateFilter
+                ? {
+                    __dateFieldId: homeDateFilter.fieldId,
+                    __dateEquals: homeDateFilter.equals
+                  }
+                : {})
+            }
+          : undefined;
       const batch =
         serverTiming?.measure(
           `${labelPrefix}.fetchSortedBatchMs`,
@@ -1770,6 +1785,8 @@ export class WebFormService {
         pageSize: fetchPageSize,
         items: (listResponse as any).items?.length || 0,
         totalCount: (listResponse as any).totalCount || 0,
+        dateFilterFieldId: homeDateFilter?.fieldId || null,
+        dateFilterEquals: homeDateFilter?.equals || null,
         durationMs: Date.now() - startedAt
       });
       debugLog('bootstrap.homeData.ready', {
@@ -1786,6 +1803,56 @@ export class WebFormService {
       debugLog('renderForm.bootstrap.error', { formKey, message: err?.message || err?.toString?.() || 'unknown' });
       return null;
     }
+  }
+
+  private normalizeToIsoDateLocal(value: any): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return null;
+      const year = value.getFullYear();
+      const month = (value.getMonth() + 1).toString().padStart(2, '0');
+      const day = value.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const raw = value?.toString?.().trim?.() || `${value}`.trim();
+    if (!raw) return null;
+    const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const year = parsed.getFullYear();
+    const month = (parsed.getMonth() + 1).toString().padStart(2, '0');
+    const day = parsed.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private resolveHomeBootstrapDateFilter(def: WebFormDefinition): { fieldId: string; equals: string } | null {
+    const search = def?.listView?.search as any;
+    const mode = (search?.mode || 'text').toString().trim().toLowerCase();
+    const fieldId = ((search?.dateFieldId || '') as string).toString().trim();
+    if (mode !== 'date' || !fieldId) return null;
+
+    const initialValue = search?.initialValue;
+    if (initialValue === undefined || initialValue === null) return null;
+
+    if (typeof initialValue === 'string') {
+      const equals = this.normalizeToIsoDateLocal(initialValue);
+      return equals ? { fieldId, equals } : null;
+    }
+
+    if (typeof initialValue !== 'object') return null;
+
+    const relativeDate = (((initialValue as any).relativeDate ?? (initialValue as any).relative ?? '') || '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (relativeDate === 'today') {
+      return { fieldId, equals: this.scriptTodayIso() };
+    }
+
+    const rawValue = (((initialValue as any).value ?? (initialValue as any).dateValue ?? '') || '').toString().trim();
+    const equals = this.normalizeToIsoDateLocal(rawValue);
+    return equals ? { fieldId, equals } : null;
   }
 
   public submitWebForm(formObject: any): { success: boolean; message: string } {
@@ -2544,6 +2611,8 @@ export class WebFormService {
       __clientEtag?: string;
       __dateFieldId?: string;
       __dateEquals?: string;
+      __dateFrom?: string;
+      __dateTo?: string;
     }
   ): SubmissionBatchResult<Record<string, any>> {
     const { form, questions } = this.getFormContextLite(formKey);

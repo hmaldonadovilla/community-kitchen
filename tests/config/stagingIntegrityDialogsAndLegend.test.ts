@@ -235,7 +235,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const future = findQuestion(questions, 'NEXT_7_DAYS_BTN');
       expect(future?.button?.action).toBe('listViewSearchPreset');
       expect(future?.button?.lookaheadDays).toBe(7);
-      expect(future?.button?.includeToday).toBe(true);
+      expect(future?.button?.includeToday).toBe(false);
     };
 
     const assertUnlockDialog = (questions: any[]) => {

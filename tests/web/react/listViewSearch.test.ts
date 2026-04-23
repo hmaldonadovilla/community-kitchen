@@ -50,7 +50,7 @@ describe('listViewSearch', () => {
     ).toBe('2026-02-27');
   });
 
-  it('uses local date search when the full dataset is already loaded', () => {
+  it('uses server date search when the full dataset is already loaded', () => {
     expect(
       shouldUseServerDateSearch({
         queryDate: '2026-02-27',
@@ -60,7 +60,7 @@ describe('listViewSearch', () => {
         totalCount: 100,
         completeData: true
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('uses server date search for the oldest currently prefetched date', () => {
@@ -80,7 +80,7 @@ describe('listViewSearch', () => {
     ).toBe(true);
   });
 
-  it('uses local date search for dates newer than the oldest prefetched date', () => {
+  it('uses server date search for dates newer than the oldest prefetched date', () => {
     expect(
       shouldUseServerDateSearch({
         queryDate: '2026-03-08',
@@ -94,7 +94,7 @@ describe('listViewSearch', () => {
         totalCount: 250,
         completeData: false
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('uses server date search when later pages are loaded after a gap but the contiguous prefix stops at a newer date', () => {

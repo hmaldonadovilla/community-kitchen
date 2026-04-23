@@ -33,6 +33,7 @@ import { FullPageOverlay } from './form/overlays/FullPageOverlay';
 import {
   filterItemsByWhenClause,
   filterItemsForSearchPreset,
+  resolveSearchPresetDateFilter,
   shouldShowSearchPresetInMode,
   whenClauseContainsTodayFilter
 } from '../app/listViewFilters';
@@ -42,6 +43,55 @@ import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../ap
 import { ListViewLegend } from './app/ListViewLegend';
 import { resolveLabel } from '../utils/labels';
 import { buildListViewAnalyticsMetrics } from '../analytics/model';
+
+const collectWhenFieldIds = (when: any, out: Set<string>) => {
+  if (!when) return;
+  if (Array.isArray(when)) {
+    when.forEach(entry => collectWhenFieldIds(entry, out));
+    return;
+  }
+  if (typeof when !== 'object') return;
+  const allRaw = (when as any).all ?? (when as any).and;
+  if (Array.isArray(allRaw)) {
+    allRaw.forEach(entry => collectWhenFieldIds(entry, out));
+    return;
+  }
+  const anyRaw = (when as any).any ?? (when as any).or;
+  if (Array.isArray(anyRaw)) {
+    anyRaw.forEach(entry => collectWhenFieldIds(entry, out));
+    return;
+  }
+  if ((when as any).not) {
+    collectWhenFieldIds((when as any).not, out);
+    return;
+  }
+  const lineItemsClause = (when as any).lineItems ?? (when as any).lineItem;
+  if (lineItemsClause && typeof lineItemsClause === 'object') {
+    const groupId = ((lineItemsClause as any).groupId ?? (lineItemsClause as any).group ?? '').toString().trim();
+    if (groupId) out.add(groupId);
+    collectWhenFieldIds((lineItemsClause as any).when, out);
+    collectWhenFieldIds((lineItemsClause as any).parentWhen, out);
+    return;
+  }
+  const fieldId = ((when as any).fieldId ?? (when as any).field ?? (when as any).id ?? '').toString().trim();
+  if (fieldId) out.add(fieldId);
+};
+
+const mergeListItemsById = (existing: ListItem[], incoming: ListItem[]): ListItem[] => {
+  const out = [...existing];
+  const seen = new Set<string>();
+  existing.forEach(item => {
+    const id = (item?.id || '').toString();
+    if (id) seen.add(id);
+  });
+  incoming.forEach(item => {
+    const id = (item?.id || '').toString();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push(item);
+  });
+  return out;
+};
 
 interface ListViewProps {
   formKey: string;
@@ -107,6 +157,7 @@ const ListView: React.FC<ListViewProps> = ({
   const initialSearchValue = resolveInitialListSearchValue(definition.listView?.search);
   const [loading, setLoading] = useState(false);
   const [prefetching, setPrefetching] = useState(false);
+  const [pageDemandLoading, setPageDemandLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [records, setRecords] = useState<Record<string, WebFormSubmission>>(cachedRecords || {});
   const [allItems, setAllItems] = useState<ListItem[]>(cachedResponse?.items || []);
@@ -139,6 +190,17 @@ const ListView: React.FC<ListViewProps> = ({
   const [advancedHasSearched, setAdvancedHasSearched] = useState(false);
   const [advancedKeyword, setAdvancedKeyword] = useState('');
   const [overlayPresetButton, setOverlayPresetButton] = useState<{ q: any; cfg: any } | null>(null);
+  const [overlayPresetSearch, setOverlayPresetSearch] = useState<{
+    key: string;
+    items: ListItem[];
+    loading: boolean;
+    error: string | null;
+  }>({
+    key: '',
+    items: [],
+    loading: false,
+    error: null
+  });
 
   const viewToggleEnabled = Boolean(definition.listView?.view?.toggleEnabled);
   const viewModeConfigured: 'table' | 'cards' = definition.listView?.view?.mode === 'cards' ? 'cards' : 'table';
@@ -182,6 +244,12 @@ const ListView: React.FC<ListViewProps> = ({
     setAdvancedKeyword('');
     setAdvancedOpen(false);
     setOverlayPresetButton(null);
+    setOverlayPresetSearch({
+      key: '',
+      items: [],
+      loading: false,
+      error: null
+    });
     setPageIndex(0);
   }, [formKey, initialSearchValue]);
 
@@ -286,6 +354,8 @@ const ListView: React.FC<ListViewProps> = ({
 
   const activeFetchRef = useRef(0);
   const serverDateSearchSeqRef = useRef(0);
+  const overlayPresetSearchSeqRef = useRef(0);
+  const listPageDemandFetchSeqRef = useRef(0);
 
   const encodePageTokenClient = (offset: number): string => {
     const n = Math.max(0, Math.floor(Number(offset) || 0));
@@ -903,22 +973,6 @@ const ListView: React.FC<ListViewProps> = ({
     let cancelled = false;
     const fetchPageSize = 50;
 
-    const mergeUniqueItems = (existing: ListItem[], incoming: ListItem[]): ListItem[] => {
-      const out = [...existing];
-      const seen = new Set<string>();
-      existing.forEach(item => {
-        const id = (item?.id || '').toString();
-        if (id) seen.add(id);
-      });
-      incoming.forEach(item => {
-        const id = (item?.id || '').toString();
-        if (!id || seen.has(id)) return;
-        seen.add(id);
-        out.push(item);
-      });
-      return out;
-    };
-
     setServerDateSearch({
       query: dateSearchQueryNormalized,
       response: null,
@@ -988,7 +1042,7 @@ const ListView: React.FC<ListViewProps> = ({
         while (true) {
           const { batch, list } = await fetchFilteredBatchWithRetries(token);
           if (cancelled || seq !== serverDateSearchSeqRef.current) return;
-          aggregatedItems = mergeUniqueItems(aggregatedItems, (list.items || []) as ListItem[]);
+          aggregatedItems = mergeListItemsById(aggregatedItems, (list.items || []) as ListItem[]);
           Object.assign(aggregatedRecords, (((batch as any)?.records || {}) as Record<string, WebFormSubmission>) || {});
           lastResponse = list;
           token = list.nextPageToken;
@@ -1059,9 +1113,118 @@ const ListView: React.FC<ListViewProps> = ({
   const activeTotalCount = activeDateSearchResponse?.totalCount || 0;
   const effectiveItems = dateSearchEnabled && dateSearchUsesServer ? activeItems : allItems || [];
   const effectiveTotalCount = dateSearchEnabled && dateSearchUsesServer ? activeTotalCount : totalCount;
-  const effectiveUiLoading = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.loading : uiLoading;
+  const effectiveUiLoading = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.loading : uiLoading || pageDemandLoading;
   const effectiveUiError = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.error : uiError;
   const effectiveUiNotice = dateSearchEnabled && dateSearchUsesServer ? null : uiNotice;
+
+  useEffect(() => {
+    if (autoFetch) return;
+    if (!paginationEnabled) return;
+    if (listSearchMode !== 'date') return;
+    if (dateSearchQueryNormalized) return;
+
+    const nextPageToken = (cachedResponse as any)?.nextPageToken;
+    const neededCount = (pageIndex + 1) * pageSize;
+    if (!nextPageToken || (allItems || []).length >= neededCount) return;
+
+    const requestSeq = ++listPageDemandFetchSeqRef.current;
+    let cancelled = false;
+    setPageDemandLoading(true);
+
+    void (async () => {
+      try {
+        let token: string | undefined = nextPageToken;
+        let aggregatedItems = [...((cachedResponse?.items || allItems || []) as ListItem[])];
+        let resolvedTotal = Number((cachedResponse as any)?.totalCount || totalCount || aggregatedItems.length) || aggregatedItems.length;
+        let lastResponse: ListResponse | null = cachedResponse || null;
+        let pages = 0;
+
+        onDiagnostic?.('list.fetch.pageDemand.start', {
+          neededCount,
+          loadedCount: aggregatedItems.length,
+          pageIndex,
+          totalCount: resolvedTotal
+        });
+
+        while (token && aggregatedItems.length < neededCount) {
+          const batch = await fetchSortedBatch(
+            formKey,
+            projection.length ? projection : undefined,
+            Math.max(pageSize, 25),
+            token,
+            false,
+            undefined,
+            {
+              fieldId: defaultSortField,
+              direction: defaultSortDirection
+            } as ListSort
+          );
+          if (cancelled || requestSeq !== listPageDemandFetchSeqRef.current) return;
+          const list = (batch as any)?.list as ListResponse | undefined;
+          if (!list || !Array.isArray((list as any).items)) {
+            throw new Error('Failed to load additional records.');
+          }
+          aggregatedItems = mergeListItemsById(aggregatedItems, (list.items || []) as ListItem[]);
+          token = list.nextPageToken;
+          resolvedTotal = Number(list.totalCount || resolvedTotal || aggregatedItems.length) || aggregatedItems.length;
+          lastResponse = list;
+          pages += 1;
+        }
+
+        if (cancelled || requestSeq !== listPageDemandFetchSeqRef.current) return;
+        const nextResponse: ListResponse = {
+          ...((lastResponse || cachedResponse || ({ items: [] } as ListResponse)) as ListResponse),
+          items: aggregatedItems,
+          totalCount: resolvedTotal,
+          nextPageToken: token,
+          contiguousItemCount: aggregatedItems.length,
+          completeData: !token && aggregatedItems.length >= resolvedTotal && resolvedTotal < 200
+        };
+        setAllItems(aggregatedItems);
+        setTotalCount(resolvedTotal);
+        onCache?.({ response: nextResponse, records });
+        setPageDemandLoading(false);
+        onDiagnostic?.('list.fetch.pageDemand.ok', {
+          neededCount,
+          loadedCount: aggregatedItems.length,
+          pageIndex,
+          pages,
+          hasNext: Boolean(token),
+          totalCount: resolvedTotal
+        });
+      } catch (err: any) {
+        if (cancelled || requestSeq !== listPageDemandFetchSeqRef.current) return;
+        setPageDemandLoading(false);
+        onDiagnostic?.('list.fetch.pageDemand.error', {
+          neededCount,
+          pageIndex,
+          message: (err?.message || err?.toString?.() || 'Failed to load additional records.').toString()
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setPageDemandLoading(false);
+    };
+  }, [
+    allItems,
+    autoFetch,
+    cachedResponse,
+    dateSearchQueryNormalized,
+    defaultSortDirection,
+    defaultSortField,
+    formKey,
+    listSearchMode,
+    onCache,
+    onDiagnostic,
+    pageIndex,
+    pageSize,
+    paginationEnabled,
+    projection,
+    records,
+    totalCount
+  ]);
 
   const visibleItems = useMemo(() => {
     const baseItems = effectiveItems;
@@ -1148,10 +1311,6 @@ const ListView: React.FC<ListViewProps> = ({
     return paginateItemsForListViewUi({ items: visibleItems, pageIndex, pageSize, paginationControlsEnabled: paginationEnabled });
   }, [paginationEnabled, pageIndex, pageSize, visibleItems]);
 
-  const totalPages = paginationEnabled ? Math.max(1, Math.ceil(visibleItems.length / pageSize)) : 1;
-  const showPrev = paginationEnabled && pageIndex > 0;
-  const showNext = paginationEnabled && pageIndex < totalPages - 1;
-  const loadedCount = effectiveItems.length;
   const advancedActive =
     advancedHasSearched && hasActiveAdvancedSearch({ keyword: advancedKeyword, fieldFilters: advancedFieldFilters });
   const activeSearch =
@@ -1160,6 +1319,18 @@ const ListView: React.FC<ListViewProps> = ({
       : listSearchMode === 'advanced'
         ? advancedActive
         : advancedActive || Boolean(searchQueryValue.trim());
+  const usesServerPageCount =
+    paginationEnabled &&
+    listSearchMode === 'date' &&
+    !activeSearch &&
+    !definition.listView?.defaultWhen &&
+    effectiveTotalCount > visibleItems.length;
+  const totalPages = paginationEnabled
+    ? Math.max(1, Math.ceil((usesServerPageCount ? effectiveTotalCount : visibleItems.length) / pageSize))
+    : 1;
+  const showPrev = paginationEnabled && pageIndex > 0;
+  const showNext = paginationEnabled && pageIndex < totalPages - 1;
+  const loadedCount = effectiveItems.length;
   const inlineDateHeadingText = useMemo(() => {
     const dateHeadingCfg = definition.listView?.dateHeading;
     const fieldId = (dateHeadingCfg?.fieldId || '').toString().trim();
@@ -1787,11 +1958,166 @@ const ListView: React.FC<ListViewProps> = ({
     [listSearchPresetButtons, viewMode]
   );
 
+  const overlayPresetDateFilter = useMemo(() => {
+    if (!overlayPresetButton) return null;
+    return resolveSearchPresetDateFilter({
+      preset: (overlayPresetButton.cfg || {}) as any,
+      defaultMode: listSearchMode,
+      searchDateFieldId: dateSearchFieldId
+    });
+  }, [dateSearchFieldId, listSearchMode, overlayPresetButton]);
+
+  const overlayPresetUsesServer = Boolean(
+    overlayPresetDateFilter?.fieldId && (overlayPresetDateFilter.equals || (overlayPresetDateFilter.from && overlayPresetDateFilter.to))
+  );
+
+  const overlayPresetProjection = useMemo(() => {
+    if (!overlayPresetButton) return projection.length ? projection : undefined;
+    const ids = new Set<string>(projection);
+    const add = (fieldId: any) => {
+      const id = (fieldId || '').toString().trim();
+      if (!id) return;
+      if (id === 'id' || id === 'createdAt' || id === 'updatedAt' || id === 'status' || id === 'pdfUrl') return;
+      ids.add(id);
+    };
+    const cfg = (overlayPresetButton.cfg || {}) as any;
+    add(overlayPresetDateFilter?.fieldId || '');
+    add((cfg?.overlay?.groupByFieldId || '').toString().trim());
+    const resultColumns = Array.isArray(cfg?.resultColumns) ? (cfg.resultColumns as any[]) : [];
+    resultColumns.forEach(add);
+    Object.keys((cfg?.fieldFilters || {}) as Record<string, any>).forEach(add);
+    searchableFieldIds.forEach(add);
+    keywordSearchFieldIds.forEach(add);
+    collectWhenFieldIds(cfg?.when, ids);
+    return ids.size ? Array.from(ids) : undefined;
+  }, [keywordSearchFieldIds, overlayPresetButton, overlayPresetDateFilter?.fieldId, projection, searchableFieldIds]);
+
+  useEffect(() => {
+    if (!overlayPresetButton || !overlayPresetUsesServer || !overlayPresetDateFilter?.fieldId) {
+      setOverlayPresetSearch(prev =>
+        prev.key || prev.items.length || prev.loading || prev.error
+          ? {
+              key: '',
+              items: [],
+              loading: false,
+              error: null
+            }
+          : prev
+      );
+      return;
+    }
+
+    const requestKey = JSON.stringify({
+      buttonId: (overlayPresetButton.q as any)?.id || null,
+      fieldId: overlayPresetDateFilter.fieldId,
+      equals: overlayPresetDateFilter.equals || null,
+      from: overlayPresetDateFilter.from || null,
+      to: overlayPresetDateFilter.to || null,
+      projection: overlayPresetProjection?.join('|') || ''
+    });
+    const seq = ++overlayPresetSearchSeqRef.current;
+    let cancelled = false;
+    const fetchPageSize = 50;
+
+    setOverlayPresetSearch({
+      key: requestKey,
+      items: [],
+      loading: true,
+      error: null
+    });
+    onDiagnostic?.('list.search.preset.overlay.server.start', {
+      buttonId: (overlayPresetButton.q as any)?.id || null,
+      fieldId: overlayPresetDateFilter.fieldId,
+      equals: overlayPresetDateFilter.equals || null,
+      from: overlayPresetDateFilter.from || null,
+      to: overlayPresetDateFilter.to || null
+    });
+
+    void (async () => {
+      try {
+        let token: string | undefined = undefined;
+        let aggregatedItems: ListItem[] = [];
+        let lastResponse: ListResponse | null = null;
+        let pages = 0;
+
+        while (true) {
+          const batch = await fetchSortedBatch(
+            formKey,
+            overlayPresetProjection,
+            fetchPageSize,
+            token,
+            false,
+            undefined,
+            {
+              fieldId: defaultSortField,
+              direction: defaultSortDirection,
+              __dateFieldId: overlayPresetDateFilter.fieldId,
+              ...(overlayPresetDateFilter.equals ? { __dateEquals: overlayPresetDateFilter.equals } : {}),
+              ...(overlayPresetDateFilter.from ? { __dateFrom: overlayPresetDateFilter.from } : {}),
+              ...(overlayPresetDateFilter.to ? { __dateTo: overlayPresetDateFilter.to } : {})
+            } as ListSort
+          );
+          if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
+          const list = (batch as any)?.list as ListResponse | undefined;
+          if (!list || !Array.isArray((list as any).items)) {
+            throw new Error('Failed to load preset results.');
+          }
+          aggregatedItems = mergeListItemsById(aggregatedItems, (list.items || []) as ListItem[]);
+          lastResponse = list;
+          token = list.nextPageToken;
+          pages += 1;
+          if (!token || aggregatedItems.length >= (list.totalCount || aggregatedItems.length)) break;
+        }
+
+        if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
+        setOverlayPresetSearch({
+          key: requestKey,
+          items: aggregatedItems,
+          loading: false,
+          error: null
+        });
+        onDiagnostic?.('list.search.preset.overlay.server.ok', {
+          buttonId: (overlayPresetButton.q as any)?.id || null,
+          pages,
+          items: aggregatedItems.length,
+          totalCount: (lastResponse as any)?.totalCount || aggregatedItems.length
+        });
+      } catch (err: any) {
+        if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
+        const message = resolveUserFacingErrorMessage(err, 'Failed to load preset results.') || 'Failed to load preset results.';
+        setOverlayPresetSearch({
+          key: requestKey,
+          items: [],
+          loading: false,
+          error: message
+        });
+        onDiagnostic?.('list.search.preset.overlay.server.error', {
+          buttonId: (overlayPresetButton.q as any)?.id || null,
+          message: (err?.message || err?.toString?.() || 'Failed to load preset results.').toString()
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    defaultSortDirection,
+    defaultSortField,
+    formKey,
+    onDiagnostic,
+    overlayPresetButton,
+    overlayPresetDateFilter,
+    overlayPresetProjection,
+    overlayPresetUsesServer
+  ]);
+
   const overlayPresetItems = useMemo(() => {
     if (!overlayPresetButton) return [] as ListItem[];
     const cfg = (overlayPresetButton.cfg || {}) as any;
+    const sourceItems = overlayPresetUsesServer ? overlayPresetSearch.items : allItems || [];
     const filtered = filterItemsForSearchPreset({
-      items: allItems || [],
+      items: sourceItems,
       preset: cfg,
       defaultMode: listSearchMode,
       searchDateFieldId: dateSearchFieldId,
@@ -1815,10 +2141,14 @@ const ListView: React.FC<ListViewProps> = ({
     keywordSearchFieldIds,
     listSearchMode,
     overlayPresetButton,
+    overlayPresetSearch.items,
+    overlayPresetUsesServer,
     searchableFieldIds,
     sortField,
     sortDirection
   ]);
+  const overlayPresetLoading = overlayPresetUsesServer ? overlayPresetSearch.loading : false;
+  const overlayPresetError = overlayPresetUsesServer ? overlayPresetSearch.error : null;
 
   const showResults = viewMode === 'table' || activeSearch;
   const analyticsListMetrics = useMemo(
@@ -2574,6 +2904,10 @@ const ListView: React.FC<ListViewProps> = ({
       }
     >
       <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {overlayPresetLoading ? (
+          <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
+        ) : null}
+        {overlayPresetError ? <div className="error">{overlayPresetError}</div> : null}
         {overlayPresentation === 'groupedList' && overlayGroupByFieldId ? (
           overlayGroupedSections.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -123,6 +123,7 @@ import { detectDebug } from './app/utils';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
+import { resolveInitialListSearchValue } from './app/listViewSearch';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
   resolveDedupIncompleteHomeDialogConfig,
@@ -4489,6 +4490,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return Array.from(ids);
   }, [definition.listView]);
 
+  const listViewSearchMode = (definition.listView?.search?.mode || 'text') as 'text' | 'date' | 'advanced';
+  const listViewDateSearchFieldId = ((definition.listView?.search as any)?.dateFieldId || '').toString().trim();
+  const listViewInitialDateSearchValue = useMemo(
+    () => (listViewSearchMode === 'date' ? resolveInitialListSearchValue(definition.listView?.search) : ''),
+    [definition.listView?.search, listViewSearchMode]
+  );
+  const disableListBackgroundPrefetch = listViewSearchMode === 'date';
+
   useEffect(() => {
     if (!definition.listView) return;
     if (view !== 'list') return;
@@ -4499,12 +4508,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const startedAt = Date.now();
 
     const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
-    const sort: ListSort | null = definition.listView?.defaultSort?.fieldId
-      ? {
-          fieldId: definition.listView.defaultSort.fieldId,
-          direction: (definition.listView.defaultSort.direction || 'desc') as any
-        }
-      : null;
+    const sort: ListSort | null =
+      definition.listView?.defaultSort?.fieldId || (listViewSearchMode === 'date' && listViewDateSearchFieldId && listViewInitialDateSearchValue)
+        ? {
+            fieldId: definition.listView?.defaultSort?.fieldId,
+            direction: (definition.listView?.defaultSort?.direction || 'desc') as any,
+            ...(listViewSearchMode === 'date' && listViewDateSearchFieldId && listViewInitialDateSearchValue
+              ? {
+                  __dateFieldId: listViewDateSearchFieldId,
+                  __dateEquals: listViewInitialDateSearchValue
+                }
+              : {})
+          }
+        : null;
 
     const projection = listViewProjection.length ? listViewProjection : undefined;
     const existingListCache = listCacheRef.current;
@@ -4532,7 +4548,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       skipInitialServerCheck,
       conditionalEtagCheck: canUseConditionalFirstPage,
       homeRev: homeRevRef.current,
-      includePageRecords: false
+      includePageRecords: false,
+      dateSearchMode: listViewSearchMode === 'date',
+      dateFilterFieldId: (sort as any)?.__dateFieldId || null,
+      dateFilterEquals: (sort as any)?.__dateEquals || null,
+      backgroundPrefetchDisabled: disableListBackgroundPrefetch
     });
 
     let backgroundCancelled = false;
@@ -4824,6 +4844,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
 
+        if (disableListBackgroundPrefetch) {
+          logEvent('list.sorted.prefetch.skipBackground', {
+            formKey,
+            reason: 'dateSearchMode',
+            loaded: firstAggregatedCount,
+            totalCount: cappedTotalCount,
+            nextPageToken: Boolean((firstList as any)?.nextPageToken),
+            dateFilterFieldId: (sort as any)?.__dateFieldId || null,
+            dateFilterEquals: (sort as any)?.__dateEquals || null
+          });
+          return;
+        }
+
         const backgroundPrefetchKey = `${formKey}::${existingEtag || (firstList as any).etag || 'noetag'}::${listRefreshToken}`;
         if (listBackgroundPrefetchKeyRef.current === backgroundPrefetchKey) {
           return;
@@ -4963,10 +4996,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // background list page requests the user can no longer benefit from.
   }, [
     definition.listView,
+    disableListBackgroundPrefetch,
     formKey,
     initialHomeListSource,
     listRefreshToken,
+    listViewDateSearchFieldId,
+    listViewInitialDateSearchValue,
     listViewProjection,
+    listViewSearchMode,
     logEvent,
     perfMark,
     perfMeasure,

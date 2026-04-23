@@ -102,6 +102,8 @@ export type ListSort = {
   __clientEtag?: string;
   __dateFieldId?: string;
   __dateEquals?: string;
+  __dateFrom?: string;
+  __dateTo?: string;
 };
 
 export interface DataSourceRequest {

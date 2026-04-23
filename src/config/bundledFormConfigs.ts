@@ -17613,8 +17613,8 @@ export const BUNDLED_FORM_CONFIGS = [
         "id": "NEXT_7_DAYS_BTN",
         "type": "BUTTON",
         "qEn": "Next 7 days",
-        "qFr": "Aujourd'hui et les 7 prochains jours",
-        "qNl": "Vandaag en de volgende 7 dagen",
+        "qFr": "Les 7 prochains jours",
+        "qNl": "De volgende 7 dagen",
         "required": false,
         "listView": false,
         "options": [],
@@ -17629,8 +17629,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "target": "overlay",
           "title": {
             "en": "Next 7 days activities",
-            "fr": "Activites d'aujourd'hui et des 7 prochains jours",
-            "nl": "Activiteiten van vandaag en de volgende 7 dagen"
+            "fr": "Activites des 7 prochains jours",
+            "nl": "Activiteiten van de volgende 7 dagen"
           },
           "resultColumns": [
             "MP_PREP_DATE",
@@ -17639,14 +17639,14 @@ export const BUNDLED_FORM_CONFIGS = [
           ],
           "dateFieldId": "MP_PREP_DATE",
           "lookaheadDays": 7,
-          "includeToday": true,
+          "includeToday": false,
           "overlay": {
             "presentation": "groupedList",
             "groupByFieldId": "MP_DISTRIBUTOR",
             "groupTitleSuffix": {
-              "en": "today and next 7 days",
-              "fr": "aujourd'hui et les 7 prochains jours",
-              "nl": "vandaag en de volgende 7 dagen"
+              "en": "next 7 days",
+              "fr": "les 7 prochains jours",
+              "nl": "de volgende 7 dagen"
             },
             "defaultExpanded": false
           }
@@ -21414,8 +21414,8 @@ export const BUNDLED_FORM_CONFIGS = [
           "id": "NEXT_7_DAYS_BTN",
           "type": "BUTTON",
           "qEn": "Next 7 days",
-          "qFr": "Aujourd'hui et les 7 prochains jours",
-          "qNl": "Vandaag en de volgende 7 dagen",
+          "qFr": "Les 7 prochains jours",
+          "qNl": "De volgende 7 dagen",
           "required": false,
           "listView": false,
           "options": [],
@@ -21430,8 +21430,8 @@ export const BUNDLED_FORM_CONFIGS = [
             "target": "overlay",
             "title": {
               "en": "Next 7 days activities",
-              "fr": "Activites d'aujourd'hui et des 7 prochains jours",
-              "nl": "Activiteiten van vandaag en de volgende 7 dagen"
+              "fr": "Activites des 7 prochains jours",
+              "nl": "Activiteiten van de volgende 7 dagen"
             },
             "resultColumns": [
               "MP_PREP_DATE",
@@ -21440,14 +21440,14 @@ export const BUNDLED_FORM_CONFIGS = [
             ],
             "dateFieldId": "MP_PREP_DATE",
             "lookaheadDays": 7,
-            "includeToday": true,
+            "includeToday": false,
             "overlay": {
               "presentation": "groupedList",
               "groupByFieldId": "MP_DISTRIBUTOR",
               "groupTitleSuffix": {
-                "en": "today and next 7 days",
-                "fr": "aujourd'hui et les 7 prochains jours",
-                "nl": "vandaag en de volgende 7 dagen"
+                "en": "next 7 days",
+                "fr": "les 7 prochains jours",
+                "nl": "de volgende 7 dagen"
               },
               "defaultExpanded": false
             }
@@ -25096,7 +25096,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "4cf5cd8d845cd928d4cae0687ed2846b"
+    "cacheFingerprint": "ebfe22b24100f54a4b8663253e37af0d"
   },
   {
     "formKey": "Config: Recipes",

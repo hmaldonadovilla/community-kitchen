@@ -86,6 +86,8 @@ export class ListingService {
       __clientEtag?: string;
       __dateFieldId?: string;
       __dateEquals?: string;
+      __dateFrom?: string;
+      __dateTo?: string;
     }
   ): SubmissionBatchResult<Record<string, any>> {
     const startedAt = Date.now();
@@ -97,7 +99,9 @@ export class ListingService {
     const ifNoneMatch = ifNoneMatchRaw === true || ifNoneMatchRaw === 'true' || ifNoneMatchRaw === '1' || ifNoneMatchRaw === 1;
     const dateFilterFieldId = (((sort as any)?.__dateFieldId ?? '') || '').toString().trim();
     const dateFilterEqualsRaw = (((sort as any)?.__dateEquals ?? '') || '').toString().trim();
-    const hasDateFilter = Boolean(dateFilterFieldId && dateFilterEqualsRaw);
+    const dateFilterFromRaw = (((sort as any)?.__dateFrom ?? '') || '').toString().trim();
+    const dateFilterToRaw = (((sort as any)?.__dateTo ?? '') || '').toString().trim();
+    const hasDateFilter = Boolean(dateFilterFieldId && (dateFilterEqualsRaw || dateFilterFromRaw || dateFilterToRaw));
 
     const { sheet, headers, columns } = this.submissionService.ensureDestination(
       form.destinationTab || `${form.title} Responses`,
@@ -203,7 +207,7 @@ export class ListingService {
       pageToken || '',
       includePageRecords ? 'R1' : 'R0',
       sortKey,
-      hasDateFilter ? `DATE:${dateFilterFieldId}:${dateFilterEqualsRaw}` : 'DATE:none'
+      hasDateFilter ? `DATE:${dateFilterFieldId}:${dateFilterEqualsRaw || '*'}:${dateFilterFromRaw || '*'}:${dateFilterToRaw || '*'}` : 'DATE:none'
     ]);
     const cached = this.cacheManager.cacheGet<SubmissionBatchResult<Record<string, any>>>(cacheKey);
     if (cached && cached.list && Array.isArray((cached.list as any).items)) {
@@ -306,6 +310,8 @@ export class ListingService {
     };
 
     const dateFilterEquals = hasDateFilter ? normalizeToIsoDateLocal(dateFilterEqualsRaw) : null;
+    const dateFilterFrom = hasDateFilter ? normalizeToIsoDateLocal(dateFilterFromRaw) : null;
+    const dateFilterTo = hasDateFilter ? normalizeToIsoDateLocal(dateFilterToRaw) : null;
 
     const normalizeSortValue = (raw: any, typeHint?: string): { kind: 'num' | 'str'; n: number; s: string } => {
       if (raw === undefined || raw === null || raw === '') return { kind: 'num', n: Number.NEGATIVE_INFINITY, s: '' };
@@ -375,7 +381,13 @@ export class ListingService {
           if (col && idx >= 0 && idx < col.length) return col[idx];
           return (item as any)[dateFilterFieldId];
         })();
-        if (!dateFilterEquals || normalizeToIsoDateLocal(rawFilterValue) !== dateFilterEquals) {
+        const normalizedRowDate = normalizeToIsoDateLocal(rawFilterValue);
+        const matchesDateFilter =
+          !!normalizedRowDate &&
+          (dateFilterEquals
+            ? normalizedRowDate === dateFilterEquals
+            : (!dateFilterFrom || normalizedRowDate >= dateFilterFrom) && (!dateFilterTo || normalizedRowDate <= dateFilterTo));
+        if (!matchesDateFilter) {
           continue;
         }
       }
@@ -464,6 +476,8 @@ export class ListingService {
       sortKey: sortKey || null,
       dateFilterFieldId: hasDateFilter ? dateFilterFieldId : null,
       dateFilterEquals: hasDateFilter ? dateFilterEquals : null,
+      dateFilterFrom: hasDateFilter ? dateFilterFrom : null,
+      dateFilterTo: hasDateFilter ? dateFilterTo : null,
       durationMs: Date.now() - startedAt
     });
     return result;

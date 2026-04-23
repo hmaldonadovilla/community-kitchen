@@ -321,6 +321,49 @@ describe('WebFormService', () => {
     expect((service as any).buildBootstrap).toHaveBeenCalled();
   });
 
+  test('fetchHomeBootstrap applies the initial date search value to the bootstrap query', () => {
+    jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(0);
+    jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);
+    jest.spyOn(service as any, 'resolveBundledConfig').mockReturnValue(null);
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({
+      listView: {
+        columns: [{ fieldId: 'DATE' }],
+        pageSize: 7,
+        defaultSort: { fieldId: 'DATE', direction: 'desc' },
+        search: {
+          mode: 'date',
+          dateFieldId: 'DATE',
+          initialValue: { relativeDate: 'today' }
+        }
+      }
+    });
+    jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
+    jest.spyOn(service as any, 'scriptTodayIso').mockReturnValue('2026-04-23');
+    const fetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionsSortedBatch').mockReturnValue({
+      list: { items: [{ id: 'rec-1', DATE: '2026-04-23' }], totalCount: 1 },
+      records: {}
+    });
+
+    const res = service.fetchHomeBootstrap('Config: Delivery');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      7,
+      undefined,
+      false,
+      undefined,
+      expect.objectContaining({
+        fieldId: 'DATE',
+        direction: 'desc',
+        __dateFieldId: 'DATE',
+        __dateEquals: '2026-04-23'
+      })
+    );
+    expect(res.listResponse?.items).toHaveLength(1);
+  });
+
   test('fetchDataSource can read records from another form via formKey', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [

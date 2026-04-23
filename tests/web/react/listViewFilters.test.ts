@@ -1,6 +1,7 @@
 import {
   filterItemsByWhenClause,
   filterItemsForSearchPreset,
+  resolveSearchPresetDateFilter,
   shouldShowSearchPresetInMode,
   whenClauseContainsTodayFilter
 } from '../../../src/web/react/app/listViewFilters';
@@ -72,6 +73,25 @@ describe('listViewFilters', () => {
     expect(filtered.map(item => item.id)).toEqual(['2', '3']);
   });
 
+  it('resolves date-window presets into server-friendly date ranges', () => {
+    expect(
+      resolveSearchPresetDateFilter({
+        preset: {
+          action: 'listViewSearchPreset',
+          dateFieldId: 'MP_PREP_DATE',
+          lookbackDays: 7,
+          includeToday: false
+        } as any,
+        defaultMode: 'text',
+        now: new Date()
+      })
+    ).toEqual({
+      fieldId: 'MP_PREP_DATE',
+      from: '2026-01-28',
+      to: '2026-02-03'
+    });
+  });
+
   it('filters preset results using lookahead days from today', () => {
     const items = [
       { id: '1', MP_PREP_DATE: '2026-02-04' },
@@ -97,5 +117,32 @@ describe('listViewFilters', () => {
     });
 
     expect(filtered.map(item => item.id)).toEqual(['1', '2', '3']);
+  });
+
+  it('filters preset results using lookahead days excluding today', () => {
+    const items = [
+      { id: '1', MP_PREP_DATE: '2026-02-04' },
+      { id: '2', MP_PREP_DATE: '2026-02-05' },
+      { id: '3', MP_PREP_DATE: '2026-02-11' },
+      { id: '4', MP_PREP_DATE: '2026-02-12' },
+      { id: '5', MP_PREP_DATE: '2026-02-13' }
+    ] as any[];
+
+    const filtered = filterItemsForSearchPreset({
+      items: items as any,
+      preset: {
+        action: 'listViewSearchPreset',
+        dateFieldId: 'MP_PREP_DATE',
+        lookaheadDays: 8,
+        includeToday: false
+      } as any,
+      defaultMode: 'text',
+      searchableFieldIds: [],
+      keywordFieldIds: [],
+      fieldTypeById: {},
+      now: new Date()
+    });
+
+    expect(filtered.map(item => item.id)).toEqual(['2', '3', '4']);
   });
 });

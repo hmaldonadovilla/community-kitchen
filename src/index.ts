@@ -304,6 +304,8 @@ export function fetchSubmissionsSortedBatch(
     __clientEtag?: string;
     __dateFieldId?: string;
     __dateEquals?: string;
+    __dateFrom?: string;
+    __dateTo?: string;
   }
 ): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

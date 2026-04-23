@@ -69,20 +69,7 @@ export const shouldUseServerDateSearch = (args: {
 }): boolean => {
   const queryDate = normalizeToIsoDateLocal(args.queryDate);
   const fieldId = (args.fieldId || '').toString().trim();
-  if (!queryDate || !fieldId) return false;
-
-  const loadedCount = Math.max(0, Math.floor(Number(args.loadedCount) || 0));
-  const totalCount = Math.max(0, Math.floor(Number(args.totalCount) || 0));
-  const completeData =
-    typeof args.completeData === 'boolean'
-      ? args.completeData
-      : totalCount > 0 && loadedCount >= totalCount && totalCount < 200;
-
-  if (completeData) return false;
-
-  const oldestPrefetchedDate = resolveOldestPrefetchedIsoDate(args.items, fieldId);
-  if (!oldestPrefetchedDate) return true;
-  return queryDate <= oldestPrefetchedDate;
+  return Boolean(queryDate && fieldId);
 };
 
 export const resolveInitialListSearchValue = (

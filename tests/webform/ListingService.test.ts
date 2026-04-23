@@ -233,6 +233,49 @@ describe('ListingService', () => {
     expect(((res.list.items || [])[0]?.DATE as Date).toISOString()).toBe(targetDate.toISOString());
   });
 
+  test('fetchSubmissionsSortedBatch date-range filter returns only rows inside the requested window', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Responses');
+    const header = ['Language', 'DATE', 'Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'];
+    sheet.setMockData([
+      header,
+      ['EN', new Date(Date.UTC(2026, 1, 2, 0, 0, 0)), 'id-1', new Date(Date.UTC(2026, 1, 2, 0, 0, 0)), new Date(Date.UTC(2026, 1, 2, 0, 0, 0)), 'Open', ''],
+      ['EN', new Date(Date.UTC(2026, 1, 4, 0, 0, 0)), 'id-2', new Date(Date.UTC(2026, 1, 4, 0, 0, 0)), new Date(Date.UTC(2026, 1, 4, 0, 0, 0)), 'Open', ''],
+      ['EN', new Date(Date.UTC(2026, 1, 8, 0, 0, 0)), 'id-3', new Date(Date.UTC(2026, 1, 8, 0, 0, 0)), new Date(Date.UTC(2026, 1, 8, 0, 0, 0)), 'Open', ''],
+      ['EN', new Date(Date.UTC(2026, 1, 12, 0, 0, 0)), 'id-4', new Date(Date.UTC(2026, 1, 12, 0, 0, 0)), new Date(Date.UTC(2026, 1, 12, 0, 0, 0)), 'Open', '']
+    ]);
+
+    const cacheManager = new CacheEtagManager(null, null);
+    const uploads = new UploadService(ss);
+    const submissions = new SubmissionService(ss, uploads, cacheManager, null);
+    const listing = new ListingService(submissions, cacheManager);
+
+    const form: any = { title: 'Test', configSheet: 'Config: Test', destinationTab: 'Responses' };
+    const questions: any[] = [
+      {
+        id: 'DATE',
+        qEn: 'Date',
+        qFr: 'Date',
+        qNl: 'Date',
+        type: 'DATE',
+        status: 'Active',
+        required: false,
+        listView: true
+      }
+    ];
+
+    const res = listing.fetchSubmissionsSortedBatch(form, questions, ['DATE'], 10, undefined, false, undefined, {
+      fieldId: 'DATE',
+      direction: 'asc',
+      __dateFieldId: 'DATE',
+      __dateFrom: '2026-02-03',
+      __dateTo: '2026-02-08'
+    } as any);
+
+    expect(res.list.totalCount).toBe(2);
+    expect((res.list.items || []).map((row: any) => row.id)).toEqual(['id-2', 'id-3']);
+  });
+
   test('fetchSubmissionsSortedBatch sorts across the full sheet before capping recent results to 200', () => {
     const ss = new MockSpreadsheet() as any;
     const sheet = ss.insertSheet('Responses');
