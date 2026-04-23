@@ -24783,7 +24783,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "848b509f634bd81ecf4b766701638f3d"
+    "cacheFingerprint": "252962bc90f6b5f46a75b06228beca59"
   },
   {
     "formKey": "Config: Recipes",
