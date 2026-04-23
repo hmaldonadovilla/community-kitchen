@@ -10692,6 +10692,45 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         ],
+        "progressDialogCases": [
+          {
+            "when": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": [
+                      "MP_TYPE_LI"
+                    ],
+                    "match": "any",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "greaterThan": 0
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                    "match": "any",
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Leftovers"
+              },
+              "message": {
+                "en": "Please do not leave the screen and wait for the Leftover ID to be generated"
+              }
+            }
+          }
+        ],
         "confirmationDialog": {
           "title": {
             "en": "Leftovers"
@@ -11205,7 +11244,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "fields": [],
                 "helperText": {
-                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
+                  "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
                 },
                 "rows": {
                   "includeWhen": {
@@ -12086,7 +12125,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "type": "sourceListSummary",
                               "sourcePath": "LEFTOVER_INGREDIENTS_LI",
                               "summaryFieldId": "ING",
-                              "separator": ", "
+                              "separator": ", ",
+                              "sort": "alphabetical"
                             }
                           ]
                         }
@@ -12101,6 +12141,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Il n’y a actuellement aucun reste.",
                         "nl": "Er is momenteel geen restant."
                       },
+                      "sourceFirstRowSort": "alphabetical",
                       "allocationLabelVisibility": "always",
                       "compactActions": [
                         {
@@ -13264,7 +13305,8 @@ export const BUNDLED_FORM_CONFIGS = [
                         "format": {
                           "type": "list",
                           "listDelimiter": ", ",
-                          "unique": true
+                          "unique": true,
+                          "sort": "alphabetical"
                         }
                       },
                       {
@@ -13282,7 +13324,8 @@ export const BUNDLED_FORM_CONFIGS = [
                         "format": {
                           "type": "list",
                           "listDelimiter": ", ",
-                          "unique": true
+                          "unique": true,
+                          "sort": "alphabetical"
                         }
                       },
                       {
@@ -21780,6 +21823,45 @@ export const BUNDLED_FORM_CONFIGS = [
             }
           }
         ],
+        "progressDialogCases": [
+          {
+            "when": {
+              "any": [
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupPath": [
+                      "MP_TYPE_LI"
+                    ],
+                    "match": "any",
+                    "when": {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "greaterThan": 0
+                    }
+                  }
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                    "match": "any",
+                    "when": {
+                      "fieldId": "LEFTOVER_INGREDIENT",
+                      "notEmpty": true
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Leftovers"
+              },
+              "message": {
+                "en": "Please do not leave the screen and wait for the Leftover ID to be generated"
+              }
+            }
+          }
+        ],
         "confirmationDialog": {
           "title": {
             "en": "Leftovers"
@@ -22225,7 +22307,7 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "fields": [],
                 "helperText": {
-                  "en": "Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
+                  "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
                 },
                 "rows": {
                   "includeWhen": {
@@ -23080,7 +23162,8 @@ export const BUNDLED_FORM_CONFIGS = [
                               "type": "sourceListSummary",
                               "sourcePath": "LEFTOVER_INGREDIENTS_LI",
                               "summaryFieldId": "ING",
-                              "separator": ", "
+                              "separator": ", ",
+                              "sort": "alphabetical"
                             }
                           ]
                         }
@@ -23095,6 +23178,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         "fr": "Il n’y a actuellement aucun reste.",
                         "nl": "Er is momenteel geen restant."
                       },
+                      "sourceFirstRowSort": "alphabetical",
                       "allocationLabelVisibility": "always",
                       "compactActions": [
                         {
@@ -24258,7 +24342,8 @@ export const BUNDLED_FORM_CONFIGS = [
                         "format": {
                           "type": "list",
                           "listDelimiter": ", ",
-                          "unique": true
+                          "unique": true,
+                          "sort": "alphabetical"
                         }
                       },
                       {
@@ -24276,7 +24361,8 @@ export const BUNDLED_FORM_CONFIGS = [
                         "format": {
                           "type": "list",
                           "listDelimiter": ", ",
-                          "unique": true
+                          "unique": true,
+                          "sort": "alphabetical"
                         }
                       },
                       {
@@ -24677,7 +24763,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "17a19447cc7cd38ce41a27f8b8c47382"
+    "cacheFingerprint": "252962bc90f6b5f46a75b06228beca59"
   },
   {
     "formKey": "Config: Recipes",

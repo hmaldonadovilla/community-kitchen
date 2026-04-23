@@ -281,7 +281,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        'Use leftovers if needed.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+        'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
       );
       expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverInventoryRows?.presentationWhen).toEqual({
@@ -352,6 +352,7 @@ describe('staging integrity dialogs and list legend config', () => {
       );
       expect(leftoverInventoryRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
       expect(leftoverInventoryRows?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
+      expect(leftoverInventoryRows?.ui?.sourceFirstRowSort).toBe('alphabetical');
       expect(leftoverInventoryRows?.reservation?.commitMode).toBe('step');
       expect(leftoverInventoryRows?.reservation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
       expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(
@@ -368,7 +369,8 @@ describe('staging integrity dialogs and list legend config', () => {
             when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Single-ingredient', 'Part dish'] })
           }),
           expect.objectContaining({
-            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Multi-ingredient', 'Entire dish'] })
+            when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Multi-ingredient', 'Entire dish'] }),
+            parts: expect.arrayContaining([expect.objectContaining({ sort: 'alphabetical' })])
           })
         ])
       );
@@ -509,6 +511,18 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(root?.submissionAfterSubmit?.confirmationDialog?.title?.en).toBe('Leftovers');
       expect(root?.submissionAfterSubmit?.confirmationDialog?.message?.en).toBe('Please confirm there is no leftover.');
       expect(root?.submissionAfterSubmit?.confirmationDialog?.cancelLabel?.en).toBe('No, go back to Leftovers');
+      expect(root?.submissionAfterSubmit?.progressDialogCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            dialog: expect.objectContaining({
+              title: expect.objectContaining({ en: 'Leftovers' }),
+              message: expect.objectContaining({
+                en: 'Please do not leave the screen and wait for the Leftover ID to be generated'
+              })
+            })
+          })
+        ])
+      );
       expect(root?.submissionAfterSubmit?.generatedRecordsDialog).toEqual(
         expect.objectContaining({
           targetFormKey: 'Config: Leftover Inventory',

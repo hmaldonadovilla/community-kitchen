@@ -1673,6 +1673,14 @@ components:
             - `always`: keep the label visible even when the current source row maps to a single parent label
 
             Default: `multiple`.
+        sourceFirstRowSort:
+          type: string
+          enum: [source, alphabetical]
+          description: |
+            Controls row ordering for datasource-backed `sourceFirstAllocations` renderers.
+
+            - `source`: preserve datasource order (default)
+            - `alphabetical`: sort rendered source rows by their resolved compact headline text
         persistRows:
           type: boolean
           description: |
@@ -1969,6 +1977,14 @@ components:
           type: boolean
           description: |
             When true (default), `sourceListSummary` removes duplicate values before joining.
+        sort:
+          type: string
+          enum: [source, alphabetical]
+          description: |
+            Optional ordering override for `sourceListSummary`.
+
+            - `source`: preserve source order (default)
+            - `alphabetical`: sort the visible values alphabetically before joining
         suffix:
           oneOf:
             - type: string
@@ -3786,6 +3802,19 @@ components:
             falls back to `confirmationDialog` when none match.
           items:
             $ref: '#/components/schemas/StepMilestoneDialogCaseConfig'
+        progressDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: |
+            Optional progress dialog copy shown immediately while blocking milestone work is running.
+
+            This does not open a second modal. It overrides the blocking milestone overlay title/message.
+        progressDialogCases:
+          type: array
+          description: |
+            Optional ordered conditional progress dialogs. The first matching `when` case wins and
+            falls back to `progressDialog` when none match.
+          items:
+            $ref: '#/components/schemas/StepMilestoneDialogCaseConfig'
         feedbackDialog:
           $ref: '#/components/schemas/SystemActionGateDialogConfig'
           description: Optional acknowledgement dialog shown after the action has started.
@@ -3882,6 +3911,19 @@ components:
           description: |
             Optional ordered conditional confirmation dialogs. The first matching `when` case wins and
             falls back to `confirmationDialog` when none match.
+          items:
+            $ref: '#/components/schemas/StepMilestoneDialogCaseConfig'
+        progressDialog:
+          $ref: '#/components/schemas/SystemActionGateDialogConfig'
+          description: |
+            Optional progress dialog copy shown immediately while blocking submit work is running.
+
+            This does not open a second modal. It overrides the blocking submit overlay title/message.
+        progressDialogCases:
+          type: array
+          description: |
+            Optional ordered conditional progress dialogs. The first matching `when` case wins and
+            falls back to `progressDialog` when none match.
           items:
             $ref: '#/components/schemas/StepMilestoneDialogCaseConfig'
         feedbackDialog:
@@ -4019,6 +4061,14 @@ components:
           type: boolean
           description: |
             When true (default), duplicate values are removed before rendering list output.
+        sort:
+          type: string
+          enum: [source, alphabetical]
+          description: |
+            Optional ordering override for list output.
+
+            - `source`: preserve source order (default)
+            - `alphabetical`: sort the visible values alphabetically before rendering
       additionalProperties: false
 
     RowFlowOutputSegmentConfig:

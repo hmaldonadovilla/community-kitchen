@@ -2,6 +2,7 @@ import {
   decorateSourceFirstAllocationRowForVisibility,
   filterSourceFirstAllocationRows,
   resolveSourceFirstAllocationLabelVisibility,
+  resolveSourceFirstRowSortMode,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded,
   shouldShowSourceFirstAllocationLabel
 } from '../../../src/web/react/app/sourceFirstAllocations';
@@ -16,6 +17,17 @@ describe('sourceFirstAllocations helpers', () => {
   it('accepts always as an explicit allocation label visibility override', () => {
     expect(resolveSourceFirstAllocationLabelVisibility('always')).toBe('always');
     expect(resolveSourceFirstAllocationLabelVisibility(' ALWAYS ')).toBe('always');
+  });
+
+  it('defaults source-first row sorting to datasource order', () => {
+    expect(resolveSourceFirstRowSortMode(undefined)).toBe('source');
+    expect(resolveSourceFirstRowSortMode('')).toBe('source');
+    expect(resolveSourceFirstRowSortMode('unknown')).toBe('source');
+  });
+
+  it('accepts alphabetical as an explicit source-first row sort override', () => {
+    expect(resolveSourceFirstRowSortMode('alphabetical')).toBe('alphabetical');
+    expect(resolveSourceFirstRowSortMode(' ALPHABETICAL ')).toBe('alphabetical');
   });
 
   it('shows allocation labels only when multiple parent labels exist by default', () => {

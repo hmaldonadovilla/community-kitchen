@@ -2647,7 +2647,7 @@ const FormView: React.FC<FormViewProps> = ({
         if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-      } catch (_) {
+      } catch {
         // ignore
       }
       errorNavAllowOverlayOpenRef.current = true;

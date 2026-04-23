@@ -838,6 +838,19 @@ describe('Dashboard', () => {
                     }
                   }
                 ],
+                progressDialog: {
+                  title: { EN: 'Leftovers' },
+                  message: { EN: 'Please wait while leftover ids are generated.' }
+                },
+                progressDialogCases: [
+                  {
+                    when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+                    dialog: {
+                      title: { EN: 'Leftovers' },
+                      message: { EN: 'Please do not leave the screen.' }
+                    }
+                  }
+                ],
                 feedbackDialog: {
                   title: { EN: 'Background actions started' },
                   message: { EN: 'You can continue.' },
@@ -893,6 +906,19 @@ describe('Dashboard', () => {
           dialog: {
             title: { en: 'Please confirm leftovers' },
             message: { en: 'Store leftovers.' }
+          }
+        }
+      ],
+      progressDialog: {
+        title: { en: 'Leftovers' },
+        message: { en: 'Please wait while leftover ids are generated.' }
+      },
+      progressDialogCases: [
+        {
+          when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+          dialog: {
+            title: { en: 'Leftovers' },
+            message: { en: 'Please do not leave the screen.' }
           }
         }
       ],
@@ -1012,6 +1038,19 @@ describe('Dashboard', () => {
               }
             }
           ],
+          progressDialog: {
+            title: { EN: 'Leftovers' },
+            message: { EN: 'Please wait while leftover ids are generated.' }
+          },
+          progressDialogCases: [
+            {
+              when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+              dialog: {
+                title: { EN: 'Leftovers' },
+                message: { EN: 'Please do not leave the screen.' }
+              }
+            }
+          ],
           feedbackDialog: {
             title: { EN: 'Background actions started' },
             message: { EN: 'Background processing is running.' },
@@ -1055,6 +1094,19 @@ describe('Dashboard', () => {
           dialog: {
             title: { en: 'Please confirm leftovers' },
             message: { en: 'Store leftovers first.' }
+          }
+        }
+      ],
+      progressDialog: {
+        title: { en: 'Leftovers' },
+        message: { en: 'Please wait while leftover ids are generated.' }
+      },
+      progressDialogCases: [
+        {
+          when: { fieldId: 'LEFTOVER_COUNT', greaterThan: 0 },
+          dialog: {
+            title: { en: 'Leftovers' },
+            message: { en: 'Please do not leave the screen.' }
           }
         }
       ],

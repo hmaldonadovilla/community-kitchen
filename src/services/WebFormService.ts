@@ -6196,12 +6196,11 @@ export class WebFormService {
             }
             const savedRecordId = (saveResult.meta?.id || '').toString().trim();
             if (effect.type === 'createRecord' && savedRecordId) {
-              const savedRecord = this.fetchSubmissionById(effect.targetFormKey, savedRecordId);
               generatedRecords.push({
                 effectId: (effect as any).id ? (effect as any).id.toString() : undefined,
                 targetFormKey: effect.targetFormKey,
                 recordId: savedRecordId,
-                values: toPlainData((savedRecord?.values || payload.values || {}) as Record<string, any>)
+                values: this.buildGeneratedRecordValuesFromPayload(payload, targetContext.questions)
               });
             }
             debugLog(`submitEffects.${effect.type}.ok`, {
@@ -6266,6 +6265,46 @@ export class WebFormService {
         generatedRecords
       }
     };
+  }
+
+  private readSubmitEffectPayloadFieldValue(payload: WebFormSubmission | Record<string, any>, fieldId: string): any {
+    const values = payload && typeof (payload as any).values === 'object' ? ((payload as any).values as Record<string, any>) : null;
+    if (values && Object.prototype.hasOwnProperty.call(values, fieldId)) {
+      return values[fieldId];
+    }
+    if (Object.prototype.hasOwnProperty.call(payload || {}, fieldId)) {
+      return (payload as any)[fieldId];
+    }
+    return undefined;
+  }
+
+  private buildGeneratedRecordValuesFromPayload(
+    payload: WebFormSubmission | Record<string, any>,
+    questions: QuestionConfig[]
+  ): Record<string, any> {
+    const out: Record<string, any> = {};
+    (questions || []).forEach(question => {
+      const fieldId = (question?.id || '').toString().trim();
+      if (!fieldId || question?.type === 'BUTTON') return;
+      const rawValue = this.readSubmitEffectPayloadFieldValue(payload, fieldId);
+      if (rawValue === undefined) return;
+      if (question?.type === 'LINE_ITEM_GROUP' && typeof rawValue === 'string') {
+        const trimmed = rawValue.trim();
+        if (!trimmed) {
+          out[fieldId] = '';
+          return;
+        }
+        try {
+          out[fieldId] = toPlainData(JSON.parse(trimmed));
+          return;
+        } catch {
+          out[fieldId] = rawValue;
+          return;
+        }
+      }
+      out[fieldId] = toPlainData(rawValue);
+    });
+    return out;
   }
 
   private shouldRunFollowupSubmitEffect(effect: FollowupSubmitEffect, operation: string): boolean {
