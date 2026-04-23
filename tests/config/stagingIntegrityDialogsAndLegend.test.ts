@@ -748,7 +748,13 @@ describe('staging integrity dialogs and list legend config', () => {
           op: 'lookupSetIntersection',
           collection: expect.objectContaining({
             op: 'ifPresent',
-            path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY'
+            path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+            else: expect.objectContaining({
+              op: 'flattenCollection',
+              collectionPath: 'parent.MP_TYPE_LI',
+              nestedCollectionPath: 'MP_INGREDIENTS_LI',
+              pickFields: ['ING']
+            })
           }),
           itemFieldId: 'ING',
           lookupFormKey: 'Config: Ingredients Management',
@@ -773,7 +779,13 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(entireDishEffect?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
         expect.objectContaining({
           op: 'ifPresent',
-          path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY'
+          path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+          else: expect.objectContaining({
+            op: 'flattenCollection',
+            collectionPath: 'parent.MP_TYPE_LI',
+            nestedCollectionPath: 'MP_INGREDIENTS_LI',
+            pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
+          })
         })
       );
       const partialDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedLeftovers');

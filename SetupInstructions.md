@@ -2654,6 +2654,12 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   - Inside a `forEachLineItem` effect, templates can also use `{{row.FIELD_ID}}`, `{{parent.FIELD_ID}}`, and `{{lineItem.index}}`
   - `runOn` controls whether the effect runs on source create, source update, or both
   - Exact template tokens can resolve to arrays/objects, so a top-level line-item payload can be copied directly into another form field when needed
+  - Object-valued computed expressions may derive nested values and collections:
+    - `firstNonEmpty`: take the first resolved non-empty value
+    - `ifPresent`: branch between `then` / `else` based on a source path
+    - `filterCollection`: filter a collection with `when` / `rowFilter`
+    - `flattenCollection`: flatten a nested collection path such as `parent.MP_TYPE_LI[*].MP_INGREDIENTS_LI`
+    - `lookupSetIntersection`: intersect lookup-backed labels for a resolved collection
 
    Example:
 
@@ -2720,6 +2726,32 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
          }
        }
      ]
+   }
+   ```
+
+   Nested collection example:
+
+   ```json
+   {
+     "LEFTOVER_INGREDIENTS_LI": {
+       "op": "flattenCollection",
+       "collectionPath": "parent.MP_TYPE_LI",
+       "nestedCollectionPath": "MP_INGREDIENTS_LI",
+       "rowFilter": {
+         "includeWhen": {
+           "any": [
+             { "fieldId": "PREP_TYPE", "equals": ["Cook", "Single-ingredient", "Part dish"] },
+             {
+               "all": [
+                 { "fieldId": "PREP_TYPE", "equals": ["Multi-ingredient", "Entire dish"] },
+                 { "fieldId": "PREP_QTY", "equals": 0 }
+               ]
+             }
+           ]
+         }
+       },
+       "pickFields": ["ING", "QTY", "UNIT", "CAT", "ALLERGEN"]
+     }
    }
    ```
 

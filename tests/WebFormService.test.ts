@@ -1845,6 +1845,288 @@ describe('WebFormService', () => {
     expect((partialDishRow.LEFTOVER_ID || '').toString()).toBe('LP-1');
   });
 
+  test('saveSubmissionWithId can flatten combined prep ingredients for produced leftovers when capture rows are absent', () => {
+    const mealProductionFormKey = 'Config: Test Meal Production Combined Leftovers';
+    const inventoryFormKey = 'Config: Combined Leftover Inventory';
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          id: 'captureProducedEntireDishLeftovers',
+          type: 'createRecord',
+          targetFormKey: inventoryFormKey,
+          runOn: 'both',
+          recordId: 'leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}',
+          when: {
+            fieldId: 'status',
+            equals: ['Closed']
+          },
+          forEachLineItem: {
+            groupId: 'MP_MEALS_REQUEST',
+            subGroupPath: ['MP_TYPE_LI'],
+            when: {
+              all: [
+                { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+                { fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE', greaterThan: 0 }
+              ]
+            }
+          },
+          values: {
+            LEFTOVER_KIND: 'Entire dish',
+            LEFTOVER_PREP_TYPE: 'Entire dish',
+            LEFTOVER_MEAL_TYPE: '{{parent.MEAL_TYPE}}',
+            LEFTOVER_PORTIONS: '{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}',
+            LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
+            LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
+            LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
+            LEFTOVER_INGREDIENTS_LI: {
+              op: 'ifPresent',
+              path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+              then: {
+                op: 'filterCollection',
+                collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+                when: {
+                  fieldId: 'ING_SELECTED',
+                  equals: true
+                },
+                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
+              },
+              else: {
+                op: 'flattenCollection',
+                collectionPath: 'parent.MP_TYPE_LI',
+                nestedCollectionPath: 'MP_INGREDIENTS_LI',
+                rowFilter: {
+                  includeWhen: {
+                    any: [
+                      {
+                        fieldId: 'PREP_TYPE',
+                        equals: ['Cook', 'Single-ingredient', 'Part dish']
+                      },
+                      {
+                        all: [
+                          {
+                            fieldId: 'PREP_TYPE',
+                            equals: ['Multi-ingredient', 'Entire dish']
+                          },
+                          {
+                            fieldId: 'PREP_QTY',
+                            equals: 0
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
+              }
+            }
+          }
+        }
+      ]
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Meal Production', mealProductionFormKey, 'Test Meal Production Combined Leftovers Data', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Combined Leftover Inventory Data', 'Desc', '', '', '', '']
+    ]);
+
+    const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
+    (mealProductionConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_MEALS_REQUEST', 'LINE_ITEM_GROUP', 'Meals request', 'Meals request', 'Meals request', false, '', '', '', 'Active', 'REF:LineItems_MP_MEALS_REQUEST', '', '', '', '']
+    ]);
+
+    const mealsRequestSheet = ss.insertSheet('LineItems_MP_MEALS_REQUEST');
+    (mealsRequestSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', ''],
+      ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', '']
+    ]);
+
+    const inventoryConfig = ss.insertSheet(inventoryFormKey);
+    (inventoryConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PREP_TYPE', 'TEXT', 'Prep type', 'Prep type', 'Prep type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_ROW_ID', 'TEXT', 'Source row id', 'Source row id', 'Source row id', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENTS_LI', 'LINE_ITEM_GROUP', 'Ingredients', 'Ingredients', 'Ingredients', false, '', '', '', 'Active', 'REF:LineItems_LEFTOVER_INGREDIENTS_LI', '', '', '', '']
+    ]);
+
+    const inventoryIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI');
+    (inventoryIngredientsSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['ING', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
+      ['QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
+      ['UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', ''],
+      ['CAT', 'TEXT', 'Category', 'Category', 'Category', false, '', '', ''],
+      ['ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', '']
+    ]);
+
+    const mealRows = [
+      {
+        __ckRowId: 'MEAL-1',
+        MEAL_TYPE: 'Dinner',
+        MP_LEFTOVER_PORTIONS_CAPTURE: 3,
+        MP_TYPE_LI: [
+          {
+            __ckRowId: 'COOK-1',
+            PREP_TYPE: 'Cook',
+            RECIPE: 'Vegetable stew',
+            MP_INGREDIENTS_LI: [{ ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }]
+          },
+          {
+            __ckRowId: 'COMBINE-1',
+            PREP_TYPE: 'Multi-ingredient',
+            PREP_QTY: 0,
+            RECIPE: 'Courgette mix',
+            MP_INGREDIENTS_LI: [{ ING: 'Courgette - frozen', QTY: 2, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' }]
+          },
+          {
+            __ckRowId: 'SINGLE-1',
+            PREP_TYPE: 'Single-ingredient',
+            RECIPE: 'Rice',
+            MP_INGREDIENTS_LI: [{ ING: 'Rice', QTY: 500, UNIT: 'gr', CAT: 'Dry goods', ALLERGEN: 'None' }]
+          },
+          {
+            __ckRowId: 'REHEAT-1',
+            PREP_TYPE: 'Multi-ingredient',
+            PREP_QTY: 2,
+            RECIPE: 'Old soup',
+            MP_INGREDIENTS_LI: [{ ING: 'Should stay out', QTY: 1, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' }]
+          }
+        ]
+      }
+    ];
+
+    const closed = service.saveSubmissionWithId({
+      formKey: mealProductionFormKey,
+      language: 'EN',
+      id: 'MP-COMBINED-1',
+      MP_MEALS_REQUEST_json: JSON.stringify(mealRows),
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Closed'
+    } as any);
+
+    expect(closed.success).toBe(true);
+    expect(closed.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 1,
+        operation: 'create'
+      })
+    );
+
+    const generatedRecordId = 'leftover::MP-COMBINED-1::entire::Dinner';
+    const savedInventory = service.fetchSubmissionById(inventoryFormKey, generatedRecordId);
+
+    expect(savedInventory).toBeTruthy();
+    expect(savedInventory?.values?.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-COMBINED-1');
+    expect(savedInventory?.values?.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
+    expect(savedInventory?.values?.LEFTOVER_INGREDIENTS_LI).toEqual([
+      { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' },
+      { ING: 'Courgette - frozen', QTY: 2, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' },
+      { ING: 'Rice', QTY: 500, UNIT: 'gr', CAT: 'Dry goods', ALLERGEN: 'None' }
+    ]);
+  });
+
+  test('fetchSubmissionById hydrates meal production prep ingredients from linked leftovers for form view', () => {
+    const mealProductionFormKey = 'Config: Meal Production';
+    const inventoryFormKey = 'Config: Leftover Inventory';
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Meal Production', mealProductionFormKey, 'Test Meal Production Fetch Hydration Data', 'Desc', '', '', '', ''],
+      ['Leftover Inventory', inventoryFormKey, 'Leftover Inventory Data', 'Desc', '', '', '', '']
+    ]);
+
+    const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
+    (mealProductionConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_MEALS_REQUEST', 'LINE_ITEM_GROUP', 'Meals request', 'Meals request', 'Meals request', false, '', '', '', 'Active', 'REF:LineItems_MP_MEALS_REQUEST', '', '', '', '']
+    ]);
+
+    const mealsRequestSheet = ss.insertSheet('LineItems_MP_MEALS_REQUEST');
+    (mealsRequestSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '']
+    ]);
+
+    const inventoryConfig = ss.insertSheet(inventoryFormKey);
+    (inventoryConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENTS_LI', 'LINE_ITEM_GROUP', 'Ingredients', 'Ingredients', 'Ingredients', false, '', '', '', 'Active', 'REF:LineItems_LEFTOVER_INGREDIENTS_LI_FETCH', '', '', '', '']
+    ]);
+
+    const inventoryIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI_FETCH');
+    (inventoryIngredientsSheet as any).setMockData([
+      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
+      ['ING', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
+      ['QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
+      ['UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', ''],
+      ['CAT', 'TEXT', 'Category', 'Category', 'Category', false, '', '', ''],
+      ['ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', '']
+    ]);
+
+    const leftover = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      id: 'MI-TEST-1',
+      LEFTOVER_KIND: 'Multi-ingredient',
+      LEFTOVER_INGREDIENTS_LI: [
+        { ING: 'Courgette - frozen', QTY: 2, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' }
+      ]
+    } as any);
+    expect(leftover.success).toBe(true);
+
+    const mealSave = service.saveSubmissionWithId({
+      formKey: mealProductionFormKey,
+      language: 'EN',
+      id: 'MP-FETCH-1',
+      MP_MEALS_REQUEST: [
+        {
+          __ckRowId: 'MEAL-1',
+          MEAL_TYPE: 'Dinner',
+          MP_TYPE_LI: [
+            {
+              __ckRowId: 'COOK-1',
+              PREP_TYPE: 'Cook',
+              RECIPE: 'Vegetable stew',
+              MP_INGREDIENTS_LI: [{ ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }]
+            },
+            {
+              __ckRowId: 'COMBINE-1',
+              PREP_TYPE: 'Multi-ingredient',
+              PREP_QTY: 0,
+              LEFTOVER_RECORD_ID: 'MI-TEST-1'
+            }
+          ]
+        }
+      ],
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(mealSave.success).toBe(true);
+
+    const fetched = service.fetchSubmissionById(mealProductionFormKey, 'MP-FETCH-1');
+    const mealRows = Array.isArray(fetched?.values?.MP_MEALS_REQUEST) ? fetched?.values?.MP_MEALS_REQUEST : [];
+    const prepRows = Array.isArray(mealRows[0]?.MP_TYPE_LI) ? mealRows[0].MP_TYPE_LI : [];
+    const combineRow = prepRows.find((row: any) => row?.__ckRowId === 'COMBINE-1');
+
+    expect(combineRow?.MP_INGREDIENTS_LI).toEqual([
+      { ING: 'Courgette - frozen', QTY: 2, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' }
+    ]);
+  });
+
   test('saveSubmissionWithId can update downstream records from source line-item rows', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const inventoryConfig = ss.insertSheet('Config: Inventory');

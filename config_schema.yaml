@@ -767,6 +767,12 @@ components:
 
             Exact template tokens may resolve to arrays/objects, which allows copying a top-level
             `LINE_ITEM_GROUP` payload into another form field.
+            Object-valued computed expressions may also derive nested values/collections, for example:
+            - `firstNonEmpty`: take the first resolved non-empty value
+            - `ifPresent`: branch between `then` / `else` based on a source path
+            - `filterCollection`: filter a collection with a `when` / `rowFilter`
+            - `flattenCollection`: flatten a nested collection path such as `parent.MP_TYPE_LI[*].MP_INGREDIENTS_LI`
+            - `lookupSetIntersection`: intersect lookup-backed labels for a resolved collection
         forEachLineItem:
           $ref: '#/components/schemas/FollowupCreateRecordLineItemConfig'
           description: Optional line-item iterator that creates one downstream record per matched source row.
@@ -817,7 +823,12 @@ components:
               - type: object
               - type: array
               - type: 'null'
-          description: Destination field values by question id.
+          description: |
+            Destination field values by question id.
+
+            Supports the same object-valued computed expressions as `createRecord.values`,
+            including `firstNonEmpty`, `ifPresent`, `filterCollection`, `flattenCollection`,
+            and `lookupSetIntersection`.
         forEachLineItem:
           $ref: '#/components/schemas/FollowupCreateRecordLineItemConfig'
           description: Optional line-item iterator that updates one downstream record per matched source row.
@@ -3148,6 +3159,9 @@ components:
               `{{parent.FIELD_ID}}`, and `{{lineItem.index}}`.
             - Optional `id` values let milestone dialogs target specific generated-record effects.
             - Optional `sourceLink` metadata lets later UI/template flows recover downstream records from the source record.
+            - Object-valued computed expressions can use `firstNonEmpty`, `ifPresent`,
+              `filterCollection`, `flattenCollection`, and `lookupSetIntersection`
+              to derive downstream values from nested line-item payloads.
           items:
             $ref: '#/components/schemas/FollowupSubmitEffect'
         listViewMetaColumns:

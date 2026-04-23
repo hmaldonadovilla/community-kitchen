@@ -431,7 +431,7 @@ describe('meal production leftover selection config', () => {
     );
   });
 
-  it('configures the Leftovers step LE capture as a rowFlow sentence with cook references', () => {
+  it('configures the Leftovers step LE capture as a rowFlow sentence with combined ingredient references', () => {
     const definition = getDefinition();
     const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');
     const target = leftoversStep?.include?.find((entry: any) => entry.kind === 'lineGroup' && entry.id === 'MP_MEALS_REQUEST') as any;
@@ -473,6 +473,37 @@ describe('meal production leftover selection config', () => {
             parentRef: 'cookRow',
             match: 'any'
           }),
+          contributingPrepRows: expect.objectContaining({
+            groupId: 'MP_TYPE_LI',
+            match: 'any',
+            rowFilter: expect.objectContaining({
+              includeWhen: expect.objectContaining({
+                any: expect.arrayContaining([
+                  expect.objectContaining({
+                    fieldId: 'PREP_TYPE',
+                    equals: ['Cook', 'Single-ingredient', 'Part dish']
+                  }),
+                  expect.objectContaining({
+                    all: expect.arrayContaining([
+                      expect.objectContaining({
+                        fieldId: 'PREP_TYPE',
+                        equals: ['Multi-ingredient', 'Entire dish']
+                      }),
+                      expect.objectContaining({
+                        fieldId: 'PREP_QTY',
+                        equals: 0
+                      })
+                    ])
+                  })
+                ])
+              })
+            })
+          }),
+          contributingIngredients: expect.objectContaining({
+            groupId: 'MP_INGREDIENTS_LI',
+            parentRef: 'contributingPrepRows',
+            match: 'any'
+          }),
           capturedIngredientsSelected: expect.objectContaining({
             groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
             match: 'any',
@@ -512,7 +543,7 @@ describe('meal production leftover selection config', () => {
               })
             }),
             expect.objectContaining({
-              fieldRef: 'cookIngredients.ING',
+              fieldRef: 'contributingIngredients.ING',
               tone: 'muted',
               showWhen: expect.objectContaining({
                 fieldId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
@@ -575,7 +606,7 @@ describe('meal production leftover selection config', () => {
             effects: expect.arrayContaining([
               expect.objectContaining({
                 type: 'seedLineItemsFromReference',
-                sourceRef: 'cookIngredients',
+                sourceRef: 'contributingIngredients',
                 groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
                 whenEmpty: true
               }),
@@ -602,6 +633,39 @@ describe('meal production leftover selection config', () => {
             ])
           })
         ])
+      })
+    );
+  });
+
+  it('falls back to flattened combined prep ingredients for created multi-ingredient leftovers', () => {
+    const exported = getExport();
+    const followupEffects = Array.isArray(exported.form?.followupConfig?.submitEffects)
+      ? exported.form.followupConfig.submitEffects
+      : [];
+    const target = followupEffects.find((entry: any) => entry?.id === 'captureProducedEntireDishLeftovers');
+
+    expect(target?.values?.DIETARY_APPLICABILITY?.collection).toEqual(
+      expect.objectContaining({
+        op: 'ifPresent',
+        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+        else: expect.objectContaining({
+          op: 'flattenCollection',
+          collectionPath: 'parent.MP_TYPE_LI',
+          nestedCollectionPath: 'MP_INGREDIENTS_LI',
+          pickFields: ['ING']
+        })
+      })
+    );
+    expect(target?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
+      expect.objectContaining({
+        op: 'ifPresent',
+        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+        else: expect.objectContaining({
+          op: 'flattenCollection',
+          collectionPath: 'parent.MP_TYPE_LI',
+          nestedCollectionPath: 'MP_INGREDIENTS_LI',
+          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
+        })
       })
     );
   });

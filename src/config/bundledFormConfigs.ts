@@ -10303,7 +10303,43 @@ export const BUNDLED_FORM_CONFIGS = [
                       "ING"
                     ]
                   },
-                  "else": "{{row.MP_INGREDIENTS_LI}}"
+                  "else": {
+                    "op": "flattenCollection",
+                    "collectionPath": "parent.MP_TYPE_LI",
+                    "nestedCollectionPath": "MP_INGREDIENTS_LI",
+                    "rowFilter": {
+                      "includeWhen": {
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Cook",
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "fieldId": "PREP_TYPE",
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
+                              },
+                              {
+                                "fieldId": "PREP_QTY",
+                                "equals": 0
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "pickFields": [
+                      "ING"
+                    ]
+                  }
                 },
                 "itemFieldId": "ING",
                 "lookupFormKey": "Config: Ingredients Management",
@@ -10349,7 +10385,47 @@ export const BUNDLED_FORM_CONFIGS = [
                     "ALLERGEN"
                   ]
                 },
-                "else": "{{row.MP_INGREDIENTS_LI}}"
+                "else": {
+                  "op": "flattenCollection",
+                  "collectionPath": "parent.MP_TYPE_LI",
+                  "nestedCollectionPath": "MP_INGREDIENTS_LI",
+                  "rowFilter": {
+                    "includeWhen": {
+                      "any": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": [
+                            "Cook",
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
+                        },
+                        {
+                          "all": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_QTY",
+                              "equals": 0
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "pickFields": [
+                    "ING",
+                    "QTY",
+                    "UNIT",
+                    "CAT",
+                    "ALLERGEN"
+                  ]
+                }
               },
               "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
             }
@@ -13260,6 +13336,44 @@ export const BUNDLED_FORM_CONFIGS = [
                       "parentRef": "cookRow",
                       "match": "any"
                     },
+                    "contributingPrepRows": {
+                      "groupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Cook",
+                                "Single-ingredient",
+                                "Part dish"
+                              ]
+                            },
+                            {
+                              "all": [
+                                {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
+                                },
+                                {
+                                  "fieldId": "PREP_QTY",
+                                  "equals": 0
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "contributingIngredients": {
+                      "groupId": "MP_INGREDIENTS_LI",
+                      "parentRef": "contributingPrepRows",
+                      "match": "any"
+                    },
                     "capturedIngredientsSelected": {
                       "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                       "match": "any",
@@ -13329,7 +13443,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "cookIngredients.ING",
+                        "fieldRef": "contributingIngredients.ING",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
                           "isEmpty": true
@@ -13422,7 +13536,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "effects": [
                         {
                           "type": "seedLineItemsFromReference",
-                          "sourceRef": "cookIngredients",
+                          "sourceRef": "contributingIngredients",
                           "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                           "fieldMapping": {
                             "ING": "ING",
@@ -21616,7 +21730,43 @@ export const BUNDLED_FORM_CONFIGS = [
                       "ING"
                     ]
                   },
-                  "else": "{{row.MP_INGREDIENTS_LI}}"
+                  "else": {
+                    "op": "flattenCollection",
+                    "collectionPath": "parent.MP_TYPE_LI",
+                    "nestedCollectionPath": "MP_INGREDIENTS_LI",
+                    "rowFilter": {
+                      "includeWhen": {
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Cook",
+                              "Single-ingredient",
+                              "Part dish"
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "fieldId": "PREP_TYPE",
+                                "equals": [
+                                  "Multi-ingredient",
+                                  "Entire dish"
+                                ]
+                              },
+                              {
+                                "fieldId": "PREP_QTY",
+                                "equals": 0
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "pickFields": [
+                      "ING"
+                    ]
+                  }
                 },
                 "itemFieldId": "ING",
                 "lookupFormKey": "Config: Ingredients Management",
@@ -21662,7 +21812,47 @@ export const BUNDLED_FORM_CONFIGS = [
                     "ALLERGEN"
                   ]
                 },
-                "else": "{{row.MP_INGREDIENTS_LI}}"
+                "else": {
+                  "op": "flattenCollection",
+                  "collectionPath": "parent.MP_TYPE_LI",
+                  "nestedCollectionPath": "MP_INGREDIENTS_LI",
+                  "rowFilter": {
+                    "includeWhen": {
+                      "any": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": [
+                            "Cook",
+                            "Single-ingredient",
+                            "Part dish"
+                          ]
+                        },
+                        {
+                          "all": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Multi-ingredient",
+                                "Entire dish"
+                              ]
+                            },
+                            {
+                              "fieldId": "PREP_QTY",
+                              "equals": 0
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "pickFields": [
+                    "ING",
+                    "QTY",
+                    "UNIT",
+                    "CAT",
+                    "ALLERGEN"
+                  ]
+                }
               },
               "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
             }
@@ -24298,6 +24488,44 @@ export const BUNDLED_FORM_CONFIGS = [
                       "parentRef": "cookRow",
                       "match": "any"
                     },
+                    "contributingPrepRows": {
+                      "groupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "rowFilter": {
+                        "includeWhen": {
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Cook",
+                                "Single-ingredient",
+                                "Part dish"
+                              ]
+                            },
+                            {
+                              "all": [
+                                {
+                                  "fieldId": "PREP_TYPE",
+                                  "equals": [
+                                    "Multi-ingredient",
+                                    "Entire dish"
+                                  ]
+                                },
+                                {
+                                  "fieldId": "PREP_QTY",
+                                  "equals": 0
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "contributingIngredients": {
+                      "groupId": "MP_INGREDIENTS_LI",
+                      "parentRef": "contributingPrepRows",
+                      "match": "any"
+                    },
                     "capturedIngredientsSelected": {
                       "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                       "match": "any",
@@ -24367,7 +24595,7 @@ export const BUNDLED_FORM_CONFIGS = [
                         }
                       },
                       {
-                        "fieldRef": "cookIngredients.ING",
+                        "fieldRef": "contributingIngredients.ING",
                         "showWhen": {
                           "fieldId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
                           "isEmpty": true
@@ -24460,7 +24688,7 @@ export const BUNDLED_FORM_CONFIGS = [
                       "effects": [
                         {
                           "type": "seedLineItemsFromReference",
-                          "sourceRef": "cookIngredients",
+                          "sourceRef": "contributingIngredients",
                           "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                           "fieldMapping": {
                             "ING": "ING",
@@ -24783,7 +25011,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "848b509f634bd81ecf4b766701638f3d"
+    "cacheFingerprint": "8011bdc3fa135c4def9960c29fb79ce4"
   },
   {
     "formKey": "Config: Recipes",

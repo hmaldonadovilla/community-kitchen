@@ -2050,11 +2050,11 @@ export class WebFormService {
     return false;
   }
 
-  private readTemplatePathValue(pathRaw: any, vars: Record<string, any>): any {
+  private readPathValue(root: any, pathRaw: any): any {
     const path = `${pathRaw || ''}`.trim();
     if (!path) return '';
     const parts = path.split('.').map(part => part.trim()).filter(Boolean);
-    let current: any = vars;
+    let current: any = root;
     for (const part of parts) {
       if (current === undefined || current === null) return '';
       if (typeof current === 'object' && current !== null && Object.prototype.hasOwnProperty.call(current, part)) {
@@ -2075,6 +2075,10 @@ export class WebFormService {
       return '';
     }
     return current === undefined ? '' : current;
+  }
+
+  private readTemplatePathValue(pathRaw: any, vars: Record<string, any>): any {
+    return this.readPathValue(vars, pathRaw);
   }
 
   private normalizeLookupCollection(value: any): any[] {
@@ -2125,7 +2129,7 @@ export class WebFormService {
     }, []);
   }
 
-  private filterComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+  private filterComputedCollectionEntries(value: Record<string, any>, vars: Record<string, any>): any[] {
     const collection = this.resolveComputedCollection(value, vars);
     if (!collection.length) return [];
     const sourceRecord =
@@ -2138,9 +2142,6 @@ export class WebFormService {
       value.rowFilter && typeof value.rowFilter === 'object' && !Array.isArray(value.rowFilter)
         ? (resolveTemplateValue(value.rowFilter, vars) as { includeWhen?: any; excludeWhen?: any })
         : undefined;
-    const pickFields = Array.isArray(value.pickFields)
-      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
-      : [];
     return collection
       .filter(entry => {
         if (!entry || typeof entry !== 'object') return false;
@@ -2158,15 +2159,43 @@ export class WebFormService {
         }
         if (when && !matchesWhenClause(when as any, rowCtx.ctx, { now: new Date() })) return false;
         return true;
-      })
-      .map(entry => {
-        if (!pickFields.length || !entry || typeof entry !== 'object') return entry;
+      });
+  }
+
+  private filterComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const pickFields = Array.isArray(value.pickFields)
+      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+      : [];
+    return this.filterComputedCollectionEntries(value, vars).map(entry => {
+      if (!pickFields.length || !entry || typeof entry !== 'object') return entry;
+      const next: Record<string, any> = {};
+      pickFields.forEach(fieldId => {
+        next[fieldId] = (entry as Record<string, any>)[fieldId];
+      });
+      return next;
+    });
+  }
+
+  private flattenComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const parentRows = this.filterComputedCollectionEntries(value, vars);
+    if (!parentRows.length) return [];
+    const nestedCollectionPath = `${value.nestedCollectionPath || ''}`.trim();
+    if (!nestedCollectionPath) return [];
+    const pickFields = Array.isArray(value.pickFields)
+      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+      : [];
+    return parentRows.flatMap(entry => {
+      const nestedRows = this.normalizeLookupCollection(this.readPathValue(entry, nestedCollectionPath));
+      if (!pickFields.length) return nestedRows;
+      return nestedRows.map(nestedEntry => {
+        if (!nestedEntry || typeof nestedEntry !== 'object') return nestedEntry;
         const next: Record<string, any> = {};
         pickFields.forEach(fieldId => {
-          next[fieldId] = (entry as Record<string, any>)[fieldId];
+          next[fieldId] = (nestedEntry as Record<string, any>)[fieldId];
         });
         return next;
       });
+    });
   }
 
   private resolveIfPresentComputedValue(value: Record<string, any>, vars: Record<string, any>): any {
@@ -2305,6 +2334,9 @@ export class WebFormService {
     if (op === 'filterCollection') {
       return this.filterComputedCollection(value as Record<string, any>, vars);
     }
+    if (op === 'flattenCollection') {
+      return this.flattenComputedCollection(value as Record<string, any>, vars);
+    }
     if (op === 'ifPresent') {
       return this.resolveIfPresentComputedValue(value as Record<string, any>, vars);
     }
@@ -2359,12 +2391,24 @@ export class WebFormService {
 
   public fetchSubmissionById(formKey: string, id: string): WebFormSubmission | null {
     const { form, questions } = this.getFormContextLite(formKey);
-    return this.listing.fetchSubmissionById(form, questions, id);
+    return this.hydrateFetchedSubmissionIfNeeded(formKey, this.listing.fetchSubmissionById(form, questions, id));
   }
 
   public fetchSubmissionByRowNumber(formKey: string, rowNumber: number): WebFormSubmission | null {
     const { form, questions } = this.getFormContextLite(formKey);
-    return this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber);
+    return this.hydrateFetchedSubmissionIfNeeded(formKey, this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber));
+  }
+
+  private hydrateFetchedSubmissionIfNeeded(formKey: string, record: WebFormSubmission | null): WebFormSubmission | null {
+    if (!record) return record;
+    const canonicalFormKey = this.resolveCanonicalFormKey(formKey) || formKey;
+    if (canonicalFormKey !== 'Config: Meal Production') {
+      return record;
+    }
+    const leftoverContext = this.getFormContextLite('Config: Leftover Inventory');
+    return hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
+      this.listing.fetchSubmissionById(leftoverContext.form, leftoverContext.questions, leftoverRecordId)
+    );
   }
 
   public fetchSummaryRecord(
