@@ -1263,4 +1263,85 @@ describe('selectionEffects setValue', () => {
     expect(lineItems[prepTypeKey][0].values.PREP_TYPE).toBe('Entire dish');
     expect(lineItems[prepTypeKey][0].values.PREP_QTY).toBe(5);
   });
+
+  it('keeps newly added rows when a later top-level setValue runs in the same selection-effect pass', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'TRIGGER',
+          type: 'CHECKBOX',
+          label: { en: 'Trigger', fr: 'Trigger', nl: 'Trigger' },
+          required: false,
+          selectionEffects: [
+            {
+              id: 'seed_line',
+              type: 'addLineItems',
+              groupId: 'LINES',
+              preset: { QTY: 5 }
+            },
+            {
+              id: 'reset_step',
+              type: 'setValue',
+              fieldId: '__ckStep',
+              value: 'order'
+            }
+          ]
+        } as any,
+        {
+          id: 'TOTAL_QTY',
+          type: 'NUMBER',
+          label: { en: 'Total', fr: 'Total', nl: 'Total' },
+          required: false,
+          derivedValue: {
+            op: 'calc',
+            expression: 'SUM(LINES.QTY)',
+            when: 'always'
+          }
+        } as any,
+        {
+          id: 'LINES',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Lines', fr: 'Lines', nl: 'Lines' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' }, required: false }]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = { MP_PREP_DATE: '2026-04-25' };
+    let lineItems: Record<string, any> = {};
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: definition.questions[0] as any,
+      value: true,
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems
+    });
+
+    expect(values.MP_PREP_DATE).toBe('2026-04-25');
+    expect(values.__ckStep).toBe('order');
+    expect(values.TOTAL_QTY).toBe(5);
+    expect(lineItems.LINES).toEqual([
+      expect.objectContaining({
+        values: expect.objectContaining({
+          QTY: 5
+        })
+      })
+    ]);
+  });
 });

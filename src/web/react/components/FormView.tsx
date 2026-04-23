@@ -562,6 +562,7 @@ interface FormViewProps {
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
+      snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     }
   ) => void;
   /**
@@ -870,6 +871,28 @@ const FormView: React.FC<FormViewProps> = ({
   const paragraphDisclaimerPendingRef = useRef(false);
   const paragraphDisclaimerSyncRef = useRef<((source?: string) => void) | null>(null);
   const paragraphDisclaimerTimerRef = useRef<number | null>(null);
+
+  const setValuesSynced = useCallback(
+    (
+      next:
+        | Record<string, FieldValue>
+        | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)
+    ) => {
+      const resolved = typeof next === 'function' ? next(valuesRef.current) : next;
+      valuesRef.current = resolved;
+      setValues(resolved);
+    },
+    [setValues]
+  );
+
+  const setLineItemsSynced = useCallback(
+    (next: LineItemState | ((prev: LineItemState) => LineItemState)) => {
+      const resolved = typeof next === 'function' ? next(lineItemsRef.current) : next;
+      lineItemsRef.current = resolved;
+      setLineItems(resolved);
+    },
+    [setLineItems]
+  );
 
   useLayoutEffect(() => {
     valuesRef.current = values;
@@ -8126,7 +8149,12 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemsRef.current = nextLineItemsAfterClear;
       setErrors({});
       if (onSelectionEffect) {
-        onSelectionEffect(q, nextValue);
+        onSelectionEffect(q, nextValue, {
+          snapshots: {
+            values: nextValuesAfterClear,
+            lineItems: nextLineItemsAfterClear
+          }
+        });
       }
       return;
     }
@@ -8152,7 +8180,12 @@ const FormView: React.FC<FormViewProps> = ({
       return next;
     });
     if (onSelectionEffect) {
-      onSelectionEffect(q, nextValue);
+      onSelectionEffect(q, nextValue, {
+        snapshots: {
+          values: nextValues,
+          lineItems: nextLineItems
+        }
+      });
     }
   };
 
@@ -8397,7 +8430,11 @@ const FormView: React.FC<FormViewProps> = ({
             onSelectionEffect(effectQuestion, currentValue ?? null, {
               contextId,
               lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
-              forceContextReset: true
+              forceContextReset: true,
+              snapshots: {
+                values: nextValues,
+                lineItems: syncedLineItems
+              }
             });
             return;
           }
@@ -8410,7 +8447,11 @@ const FormView: React.FC<FormViewProps> = ({
           onSelectionEffect(effectQuestion, payloadValue, {
             contextId,
             lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
-            forceContextReset: true
+            forceContextReset: true,
+            snapshots: {
+              values: nextValues,
+              lineItems: syncedLineItems
+            }
           });
         });
       }
@@ -9941,9 +9982,9 @@ const FormView: React.FC<FormViewProps> = ({
               values,
               resolveVisibilityValue,
               getTopValue: getTopValueNoScan,
-              setValues,
+              setValues: setValuesSynced,
               lineItems,
-              setLineItems,
+              setLineItems: setLineItemsSynced,
               isSubmitting: submitting,
               submitting: locked,
               isFieldLockedByDedup,
@@ -11233,9 +11274,9 @@ const FormView: React.FC<FormViewProps> = ({
                 resolveVisibilityValue,
                 getTopValue: (fieldId: string) =>
                   (ancestorValues as any)[fieldId] !== undefined ? (ancestorValues as any)[fieldId] : getTopValueNoScan(fieldId),
-                setValues,
+                setValues: setValuesSynced,
                 lineItems,
-                setLineItems,
+                setLineItems: setLineItemsSynced,
                 isSubmitting: submitting,
                 submitting: submitting || isFieldLockedByDedup(subKey),
                 isFieldLockedByDedup,
@@ -12064,9 +12105,9 @@ const FormView: React.FC<FormViewProps> = ({
                               values: detailContextValues,
                               resolveVisibilityValue,
                               getTopValue: (fieldId: string) => resolveTopValueNoScan(detailContextValues, fieldId),
-                              setValues,
+                            setValues: setValuesSynced,
                             lineItems,
-                            setLineItems,
+                            setLineItems: setLineItemsSynced,
                             isSubmitting: submitting,
                             submitting: submitting || isFieldLockedByDedup(parsed?.rootGroupId || subKey),
                             isFieldLockedByDedup,
@@ -14173,9 +14214,9 @@ const FormView: React.FC<FormViewProps> = ({
                               values: detailContextValues,
                               resolveVisibilityValue,
                               getTopValue: (fieldId: string) => resolveTopValueNoScan(detailContextValues, fieldId),
-                              setValues,
+                              setValues: setValuesSynced,
                               lineItems,
-                              setLineItems,
+                              setLineItems: setLineItemsSynced,
                               isSubmitting: submitting,
                               submitting: submitting || isFieldLockedByDedup(groupId),
                               isFieldLockedByDedup,
@@ -14247,9 +14288,9 @@ const FormView: React.FC<FormViewProps> = ({
                     values,
                     resolveVisibilityValue,
                     getTopValue: getTopValueNoScan,
-                    setValues,
+                    setValues: setValuesSynced,
                     lineItems,
-                    setLineItems,
+                    setLineItems: setLineItemsSynced,
                     isSubmitting: submitting,
                     submitting: submitting || isFieldLockedByDedup(groupId),
                     isFieldLockedByDedup,
@@ -14895,9 +14936,9 @@ const FormView: React.FC<FormViewProps> = ({
             values,
             resolveVisibilityValue,
             getTopValue: getTopValueNoScan,
-            setValues,
+            setValues: setValuesSynced,
             lineItems,
-            setLineItems,
+            setLineItems: setLineItemsSynced,
             isSubmitting: submitting,
             submitting: locked,
             isFieldLockedByDedup,

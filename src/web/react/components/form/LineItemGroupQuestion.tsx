@@ -648,6 +648,8 @@ export const LineItemGroupQuestion: React.FC<{
   const parentRows = rowFilter
     ? renderRowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any))
     : renderRowsAll;
+  const latestValuesRef = React.useRef(values);
+  latestValuesRef.current = values;
 
   const groupChoiceSearchDefault = (q.lineItemConfig?.ui as any)?.choiceSearchEnabled;
   const groupHelperCfg = resolveFieldHelperText({ ui: q.ui, language });
@@ -2145,9 +2147,11 @@ export const LineItemGroupQuestion: React.FC<{
           ];
         }
 
-        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState, {
+        const latestValues = latestValuesRef.current || {};
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, nextState, {
           mode: 'change'
         });
+        latestValuesRef.current = nextValues;
         setValues(nextValues);
         runSelectionEffectsForAncestors?.(output.key, prev, recomputed, {
           mode: 'change',
@@ -2169,8 +2173,7 @@ export const LineItemGroupQuestion: React.FC<{
       runSelectionEffectsForAncestors,
       setLineItems,
       setValues,
-      validateVirtualFieldRules,
-      values
+      validateVirtualFieldRules
     ]
   );
 
@@ -3542,9 +3545,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           }
 
           if (!changed) return prev;
-          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next, {
+          const latestValues = latestValuesRef.current || {};
+          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, next, {
             mode: 'init'
           });
+          latestValuesRef.current = nextValues;
           setValues(nextValues);
           const touchedKeys = new Set<string>();
           setEffects.forEach(effect => touchedKeys.add(effect.groupKey));
@@ -4129,9 +4134,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       const res = reconcileAutoRows({ currentRows, ...spec });
       if (!res.changed) return prev;
       const nextState = { ...prev, [q.id]: res.rows };
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextState, {
+      const latestValues = latestValuesRef.current || {};
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, nextState, {
         mode: 'change'
       });
+      latestValuesRef.current = nextValues;
       setValues(nextValues);
       onDiagnostic?.('ui.lineItems.autoAdd.apply', {
         targetKey: q.id,
@@ -4233,9 +4240,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
         changedCount += 1;
       });
       if (next === prev) return prev;
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any, {
+      const latestValues = latestValuesRef.current || {};
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, next as any, {
         mode: 'change'
       });
+      latestValuesRef.current = nextValues;
       setValues(nextValues);
       onDiagnostic?.('ui.lineItems.autoAdd.applyBatch', {
         parentGroupId: q.id,
@@ -4398,7 +4407,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
       });
 
       if (!didChange || next === prev) return prev;
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, next as any, { mode: 'change' });
+      const latestValues = latestValuesRef.current || {};
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, next as any, {
+        mode: 'change'
+      });
+      latestValuesRef.current = nextValues;
       setValues(nextValues);
       return recomputed;
     });
@@ -9952,9 +9965,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       removedCount: cascade.removed.length,
                       source: 'overlayOpenAction'
                     });
-                    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-                      mode: 'init'
-                    });
+                    const latestValues = latestValuesRef.current || {};
+                    const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
+                      definition,
+                      latestValues,
+                      nextLineItems,
+                      {
+                        mode: 'init'
+                      }
+                    );
+                    latestValuesRef.current = nextValues;
                     setValues(nextValues);
                     setLineItems(recomputed);
                     ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed, {
@@ -11228,9 +11248,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             removedCount: cascade.removed.length,
                             source: 'overlayOpenAction'
                           });
-                          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
-                            mode: 'init'
-                          });
+                          const latestValues = latestValuesRef.current || {};
+                          const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(
+                            definition,
+                            latestValues,
+                            nextLineItems,
+                            {
+                              mode: 'init'
+                            }
+                          );
+                          latestValuesRef.current = nextValues;
                           setValues(nextValues);
                           setLineItems(recomputed);
                           ctx.runSelectionEffectsForAncestors?.(groupKey, prevLineItems, recomputed, {

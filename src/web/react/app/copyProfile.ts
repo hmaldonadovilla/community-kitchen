@@ -191,6 +191,45 @@ export const applyCopyCurrentRecordDropFields = (args: {
   };
 };
 
+export const resolveCopyCurrentRecordDestructiveChangeBypassFieldIds = (args: {
+  definition: WebFormDefinition;
+  dropFields: string[];
+}): string[] => {
+  const dropFields = normalizeIdList(args.dropFields);
+  if (!dropFields.length) return [];
+  const questions = Array.isArray(args.definition?.questions) ? args.definition.questions : [];
+  const questionTypeById = new Map<string, string>();
+  questions.forEach(question => {
+    const fieldId = (question?.id || '').toString().trim();
+    if (!fieldId || questionTypeById.has(fieldId)) return;
+    questionTypeById.set(fieldId, (question?.type || '').toString().trim().toUpperCase());
+  });
+  const bypassFieldIds: string[] = [];
+  const seen = new Set<string>();
+  dropFields.forEach(fieldId => {
+    const questionType = questionTypeById.get(fieldId);
+    if (!questionType || questionType === 'LINE_ITEM_GROUP' || seen.has(fieldId)) return;
+    seen.add(fieldId);
+    bypassFieldIds.push(fieldId);
+  });
+  return bypassFieldIds;
+};
+
+export const shouldBypassCopyCurrentRecordDestructiveChange = (args: {
+  scope: 'top' | 'line';
+  fieldId?: string;
+  isCreateFlow: boolean;
+  bypassFieldIds: string[] | Record<string, true>;
+}): boolean => {
+  if (!args.isCreateFlow || args.scope !== 'top') return false;
+  const fieldId = (args.fieldId || '').toString().trim();
+  if (!fieldId) return false;
+  if (Array.isArray(args.bypassFieldIds)) {
+    return normalizeIdList(args.bypassFieldIds).includes(fieldId);
+  }
+  return Boolean(args.bypassFieldIds && (args.bypassFieldIds as Record<string, true>)[fieldId]);
+};
+
 export const applyCopyCurrentRecordProfile = (args: {
   definition: WebFormDefinition;
   values: Record<string, FieldValue>;

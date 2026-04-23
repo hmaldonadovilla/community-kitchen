@@ -93,6 +93,7 @@ export const runSelectionEffects = (args: {
   } = args;
   if (!question.selectionEffects || !question.selectionEffects.length) return;
   let latestValuesSnapshot: Record<string, FieldValue> = values;
+  let latestLineItemsSnapshot: LineItemState = lineItems;
   const emittedLogKeys = new Set<string>();
   const setValuesIfChanged = (nextValues: Record<string, FieldValue>) => {
     if (areValueMapsEqual(latestValuesSnapshot, nextValues)) return;
@@ -306,7 +307,7 @@ export const runSelectionEffects = (args: {
     let info = parseSubgroupKey(currentKey);
     while (info) {
       const currentInfo = info;
-      const parentRows = lineItems[currentInfo.parentGroupKey] || [];
+      const parentRows = latestLineItemsSnapshot[currentInfo.parentGroupKey] || [];
       const parentRow = parentRows.find(r => r.id === currentInfo.parentRowId);
       mergeMissing((parentRow?.values || {}) as Record<string, FieldValue>);
       currentKey = currentInfo.parentGroupKey;
@@ -416,6 +417,7 @@ export const runSelectionEffects = (args: {
                 .filter((_, idx) => !existingIdxs.includes(idx) || idx === keepIdx);
               const nextLineItems = { ...prev, [targetKey]: nextRows };
               const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+              latestLineItemsSnapshot = recomputed;
               setValuesIfChanged(nextValues);
               onLineItemsMutated?.({
                 sourceGroupKey: targetKey,
@@ -464,6 +466,7 @@ export const runSelectionEffects = (args: {
           // Important: do NOT auto-seed subgroup default rows for selection-effect-created rows.
           // Selection effects should only create what they explicitly preset; otherwise it produces "phantom" empty rows.
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+          latestLineItemsSnapshot = recomputed;
           setValuesIfChanged(nextValues);
           onLineItemsMutated?.({
             sourceGroupKey: targetKey,
@@ -611,6 +614,7 @@ export const runSelectionEffects = (args: {
 
           const next: LineItemState = { ...prev, [targetKey]: [...keepRows, ...rebuiltAuto] };
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
+          latestLineItemsSnapshot = recomputed;
           setValuesIfChanged(nextValues);
           onLineItemsMutated?.({
             sourceGroupKey: targetKey,
@@ -678,6 +682,7 @@ export const runSelectionEffects = (args: {
 
           const cascade = cascadeRemoveLineItemRows({ lineItems: prev, roots });
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(cascade.lineItems);
+          latestLineItemsSnapshot = recomputed;
           setValuesIfChanged(nextValues);
           onLineItemsMutated?.({
             sourceGroupKey: targetKey,
@@ -715,6 +720,7 @@ export const runSelectionEffects = (args: {
             nextRows[idx] = { ...baseRow, values: nextRowValues };
             const nextLineItems = { ...prev, [groupKey]: nextRows };
             const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+            latestLineItemsSnapshot = recomputed;
             setValuesIfChanged(nextValues);
             onLineItemsMutated?.({
               sourceGroupKey: groupKey,
@@ -739,9 +745,10 @@ export const runSelectionEffects = (args: {
           const nextValues = { ...prev, [fieldId]: value as FieldValue };
           const { values: appliedValues, lineItems: recomputed } = applyValueMapsWithBlurDerivedForValues(
             nextValues,
-            lineItems,
+            latestLineItemsSnapshot,
             [fieldId]
           );
+          latestLineItemsSnapshot = recomputed;
           setLineItems(recomputed);
           scheduleChainedSelectionEffects({
             fieldId,
@@ -776,6 +783,7 @@ export const runSelectionEffects = (args: {
             });
           }
           const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(next);
+          latestLineItemsSnapshot = recomputed;
           setValuesIfChanged(nextValues);
           onLineItemsMutated?.({
             sourceGroupKey: targetKey,
