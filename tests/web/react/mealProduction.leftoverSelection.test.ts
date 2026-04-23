@@ -162,8 +162,24 @@ describe('meal production leftover selection config', () => {
     expect(config?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
     expect(config?.sourceRows).toEqual({
       includeWhen: {
-        fieldId: 'LEFTOVER_EXP_DATE',
-        greaterThanOrEqualFieldId: 'MP_PREP_DATE'
+        all: [
+          {
+            fieldId: 'LEFTOVER_EXP_DATE',
+            greaterThanOrEqualFieldId: 'MP_PREP_DATE'
+          },
+          {
+            any: [
+              {
+                fieldId: '__ckCurrentRecordReservedQuantity',
+                greaterThan: 0
+              },
+              {
+                fieldId: '__ckFreeQuantity',
+                greaterThan: 0
+              }
+            ]
+          }
+        ]
       },
       removeOutputWhenExcluded: true
     });

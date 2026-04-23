@@ -2143,8 +2143,24 @@
                   },
                   "sourceRows": {
                     "includeWhen": {
-                      "fieldId": "LEFTOVER_EXP_DATE",
-                      "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                      "all": [
+                        {
+                          "fieldId": "LEFTOVER_EXP_DATE",
+                          "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                        },
+                        {
+                          "any": [
+                            {
+                              "fieldId": "__ckCurrentRecordReservedQuantity",
+                              "greaterThan": 0
+                            },
+                            {
+                              "fieldId": "__ckFreeQuantity",
+                              "greaterThan": 0
+                            }
+                          ]
+                        }
+                      ]
                     },
                     "removeOutputWhenExcluded": true
                   }
@@ -13121,8 +13137,24 @@
                   },
                   "sourceRows": {
                     "includeWhen": {
-                      "fieldId": "LEFTOVER_EXP_DATE",
-                      "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                      "all": [
+                        {
+                          "fieldId": "LEFTOVER_EXP_DATE",
+                          "greaterThanOrEqualFieldId": "MP_PREP_DATE"
+                        },
+                        {
+                          "any": [
+                            {
+                              "fieldId": "__ckCurrentRecordReservedQuantity",
+                              "greaterThan": 0
+                            },
+                            {
+                              "fieldId": "__ckFreeQuantity",
+                              "greaterThan": 0
+                            }
+                          ]
+                        }
+                      ]
                     },
                     "removeOutputWhenExcluded": true
                   }
