@@ -43,6 +43,7 @@ import { buildListViewLegendItems, type ResolvedListViewLegendItem } from '../ap
 import { ListViewLegend } from './app/ListViewLegend';
 import { resolveLabel } from '../utils/labels';
 import { buildListViewAnalyticsMetrics } from '../analytics/model';
+import { fetchFilteredSortedPages } from '../app/listViewServerFetch';
 
 const collectWhenFieldIds = (when: any, out: Set<string>) => {
   if (!when) return;
@@ -989,76 +990,37 @@ const ListView: React.FC<ListViewProps> = ({
 
     void (async () => {
       try {
-        const maxAttempts = 5;
-        const fetchFilteredBatchWithRetries = async (
-          pageToken?: string
-        ): Promise<{ batch: any; list: ListResponse }> => {
-          let lastBatch: any = null;
-          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            lastBatch = await fetchSortedBatch(
-              formKey,
-              projection.length ? projection : undefined,
-              fetchPageSize,
-              pageToken,
-              true,
-              undefined,
-              {
-                fieldId: defaultSortField,
-                direction: defaultSortDirection,
-                __dateFieldId: dateSearchFieldId,
-                __dateEquals: dateSearchQueryNormalized
-              } as ListSort
-            );
-            if (cancelled || seq !== serverDateSearchSeqRef.current) {
-              return {
-                batch: { records: {} },
-                list: { items: [], totalCount: 0 }
-              };
-            }
-            const list = (lastBatch as any)?.list as ListResponse | undefined;
-            if (list && Array.isArray((list as any).items)) {
-              return { batch: lastBatch, list };
-            }
+        const result = await fetchFilteredSortedPages({
+          formKey,
+          projection: projection.length ? projection : undefined,
+          pageSize: fetchPageSize,
+          includePageRecords: true,
+          sortField: defaultSortField,
+          sortDirection: defaultSortDirection,
+          dateFieldId: dateSearchFieldId,
+          dateEquals: dateSearchQueryNormalized,
+          failureMessage: 'Failed to load filtered records.',
+          onRetry: ({ attempt, maxAttempts, token, responseType }) => {
             onDiagnostic?.('list.search.date.server.retry', {
               queryDate: dateSearchQueryNormalized,
-              attempt: attempt + 1,
+              attempt,
               maxAttempts,
-              token: pageToken || null,
-              resType: lastBatch === null ? 'null' : typeof lastBatch
+              token: token || null,
+              resType: responseType
             });
-            if (attempt < maxAttempts - 1) {
-              await new Promise<void>(resolve => setTimeout(resolve, Math.min(2000, 250 * Math.pow(2, attempt))));
-            }
-          }
-          throw new Error('Failed to load filtered records.');
-        };
+          },
+          shouldAbort: () => cancelled || seq !== serverDateSearchSeqRef.current
+        });
 
-        let token: string | undefined = undefined;
-        let aggregatedItems: ListItem[] = [];
-        const aggregatedRecords: Record<string, WebFormSubmission> = {};
-        let lastResponse: ListResponse | null = null;
-        let pages = 0;
-
-        while (true) {
-          const { batch, list } = await fetchFilteredBatchWithRetries(token);
-          if (cancelled || seq !== serverDateSearchSeqRef.current) return;
-          aggregatedItems = mergeListItemsById(aggregatedItems, (list.items || []) as ListItem[]);
-          Object.assign(aggregatedRecords, (((batch as any)?.records || {}) as Record<string, WebFormSubmission>) || {});
-          lastResponse = list;
-          token = list.nextPageToken;
-          pages += 1;
-          if (!token || aggregatedItems.length >= (list.totalCount || aggregatedItems.length)) break;
-        }
-
-        if (cancelled || seq !== serverDateSearchSeqRef.current) return;
-        if (Object.keys(aggregatedRecords).length) {
-          setRecords(prev => ({ ...prev, ...aggregatedRecords }));
+        if (result.aborted || cancelled || seq !== serverDateSearchSeqRef.current) return;
+        if (Object.keys(result.records).length) {
+          setRecords(prev => ({ ...prev, ...result.records }));
         }
         setServerDateSearch({
           query: dateSearchQueryNormalized,
           response: {
-            ...(lastResponse || ({ items: [], totalCount: 0 } as ListResponse)),
-            items: aggregatedItems,
+            ...(result.response || ({ items: [], totalCount: 0 } as ListResponse)),
+            items: result.items,
             nextPageToken: undefined
           },
           loading: false,
@@ -1066,9 +1028,9 @@ const ListView: React.FC<ListViewProps> = ({
         });
         onDiagnostic?.('list.search.date.server.ok', {
           queryDate: dateSearchQueryNormalized,
-          pages,
-          items: aggregatedItems.length,
-          totalCount: (lastResponse as any)?.totalCount || aggregatedItems.length
+          pages: result.pages,
+          items: result.items.length,
+          totalCount: (result.response as any)?.totalCount || result.items.length
         });
       } catch (err: any) {
         if (cancelled || seq !== serverDateSearchSeqRef.current) return;
@@ -2035,52 +1997,42 @@ const ListView: React.FC<ListViewProps> = ({
 
     void (async () => {
       try {
-        let token: string | undefined = undefined;
-        let aggregatedItems: ListItem[] = [];
-        let lastResponse: ListResponse | null = null;
-        let pages = 0;
+        const result = await fetchFilteredSortedPages({
+          formKey,
+          projection: overlayPresetProjection,
+          pageSize: fetchPageSize,
+          includePageRecords: false,
+          sortField: defaultSortField,
+          sortDirection: defaultSortDirection,
+          dateFieldId: overlayPresetDateFilter.fieldId,
+          dateEquals: overlayPresetDateFilter.equals || undefined,
+          dateFrom: overlayPresetDateFilter.from || undefined,
+          dateTo: overlayPresetDateFilter.to || undefined,
+          failureMessage: 'Failed to load preset results.',
+          onRetry: ({ attempt, maxAttempts, token, responseType }) => {
+            onDiagnostic?.('list.search.preset.overlay.server.retry', {
+              buttonId: (overlayPresetButton.q as any)?.id || null,
+              attempt,
+              maxAttempts,
+              token: token || null,
+              resType: responseType
+            });
+          },
+          shouldAbort: () => cancelled || seq !== overlayPresetSearchSeqRef.current
+        });
 
-        while (true) {
-          const batch = await fetchSortedBatch(
-            formKey,
-            overlayPresetProjection,
-            fetchPageSize,
-            token,
-            false,
-            undefined,
-            {
-              fieldId: defaultSortField,
-              direction: defaultSortDirection,
-              __dateFieldId: overlayPresetDateFilter.fieldId,
-              ...(overlayPresetDateFilter.equals ? { __dateEquals: overlayPresetDateFilter.equals } : {}),
-              ...(overlayPresetDateFilter.from ? { __dateFrom: overlayPresetDateFilter.from } : {}),
-              ...(overlayPresetDateFilter.to ? { __dateTo: overlayPresetDateFilter.to } : {})
-            } as ListSort
-          );
-          if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
-          const list = (batch as any)?.list as ListResponse | undefined;
-          if (!list || !Array.isArray((list as any).items)) {
-            throw new Error('Failed to load preset results.');
-          }
-          aggregatedItems = mergeListItemsById(aggregatedItems, (list.items || []) as ListItem[]);
-          lastResponse = list;
-          token = list.nextPageToken;
-          pages += 1;
-          if (!token || aggregatedItems.length >= (list.totalCount || aggregatedItems.length)) break;
-        }
-
-        if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
+        if (result.aborted || cancelled || seq !== overlayPresetSearchSeqRef.current) return;
         setOverlayPresetSearch({
           key: requestKey,
-          items: aggregatedItems,
+          items: result.items,
           loading: false,
           error: null
         });
         onDiagnostic?.('list.search.preset.overlay.server.ok', {
           buttonId: (overlayPresetButton.q as any)?.id || null,
-          pages,
-          items: aggregatedItems.length,
-          totalCount: (lastResponse as any)?.totalCount || aggregatedItems.length
+          pages: result.pages,
+          items: result.items.length,
+          totalCount: (result.response as any)?.totalCount || result.items.length
         });
       } catch (err: any) {
         if (cancelled || seq !== overlayPresetSearchSeqRef.current) return;
@@ -2149,6 +2101,14 @@ const ListView: React.FC<ListViewProps> = ({
   ]);
   const overlayPresetLoading = overlayPresetUsesServer ? overlayPresetSearch.loading : false;
   const overlayPresetError = overlayPresetUsesServer ? overlayPresetSearch.error : null;
+  const overlayUiState = resolveListViewUiState({
+    visibleCount: overlayPresetItems.length,
+    hasLoadedOnce: !overlayPresetLoading,
+    loading: overlayPresetLoading,
+    prefetching: false,
+    error: overlayPresetError,
+    assumeInitialLoad: true
+  });
 
   const showResults = viewMode === 'table' || activeSearch;
   const analyticsListMetrics = useMemo(
@@ -2904,12 +2864,12 @@ const ListView: React.FC<ListViewProps> = ({
       }
     >
       <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {overlayPresetLoading ? (
+        {overlayUiState.showLoadingStatus ? (
           <div className="status">{tSystem('common.loading', language, 'Loading…')}</div>
         ) : null}
         {overlayPresetError ? <div className="error">{overlayPresetError}</div> : null}
         {overlayPresentation === 'groupedList' && overlayGroupByFieldId ? (
-          overlayGroupedSections.length ? (
+          overlayPresetError || overlayUiState.showLoadingStatus ? null : overlayGroupedSections.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {overlayGroupedSections.map(group => (
                 <details
@@ -2959,10 +2919,10 @@ const ListView: React.FC<ListViewProps> = ({
                 </details>
               ))}
             </div>
-          ) : (
+          ) : overlayUiState.showNoRecords ? (
             <div className="muted">{tSystem('list.noRecords', language, 'No records found.')}</div>
-          )
-        ) : (
+          ) : null
+        ) : overlayPresetError || overlayUiState.showLoadingStatus ? null : (
           <div className="list-table-wrapper">
             <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
@@ -2992,13 +2952,13 @@ const ListView: React.FC<ListViewProps> = ({
                       ))}
                     </tr>
                   ))
-                ) : (
+                ) : overlayUiState.showNoRecords ? (
                   <tr>
                     <td colSpan={Math.max(1, overlayColumns.length)} className="muted">
                       {tSystem('list.noRecords', language, 'No records found.')}
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
