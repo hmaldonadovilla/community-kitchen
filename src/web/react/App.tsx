@@ -196,6 +196,7 @@ import {
   normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldScheduleAutoSaveAfterPendingFollowup,
   shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
@@ -8330,6 +8331,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
       });
+      if (existingRecordId && pendingFollowupBatchPromisesRef.current.has(existingRecordId)) {
+        autoSaveQueuedRef.current = true;
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.pendingFollowup', { reason, recordId: existingRecordId });
+        return;
+      }
 
       const isCreateFlow = createFlowRef.current || !existingRecordId;
       const sessionAtStart = recordSessionRef.current;
@@ -9334,6 +9341,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }
 
     autoSaveDirtyRef.current = true;
+    const pendingFollowupRecordId =
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '';
+    if (pendingFollowupRecordId && pendingFollowupBatchPromisesRef.current.has(pendingFollowupRecordId)) {
+      autoSaveQueuedRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      logEvent('autosave.blocked.pendingFollowup', {
+        reason: 'debouncedTrigger',
+        recordId: pendingFollowupRecordId
+      });
+      return;
+    }
     if (uploadQueueRef.current.size > 0) {
       // Don't schedule autosave while uploads are persisting (avoid stale self-races).
       autoSaveQueuedRef.current = true;
@@ -11359,6 +11384,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (pending === backgroundPromise) {
               pendingFollowupBatchPromisesRef.current.delete(recordId);
             }
+            const currentRecordId =
+              resolveExistingRecordId({
+                selectedRecordId: selectedRecordIdRef.current,
+                selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+                lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+              }) || '';
+            if (
+              shouldScheduleAutoSaveAfterPendingFollowup({
+                autoSaveEnabled,
+                currentView: viewRef.current,
+                currentRecordId,
+                settledRecordId: recordId,
+                currentSessionId: recordSessionRef.current,
+                followupSessionId,
+                dirty: autoSaveDirtyRef.current,
+                queued: autoSaveQueuedRef.current,
+                submitting: submittingRef.current,
+                recordStale: Boolean(recordStaleRef.current)
+              })
+            ) {
+              const delayMs = resolveDebouncedAutoSaveDelay({
+                debounceMs: autoSaveDebounceMs,
+                lastUserInteractionAt: lastUserInteractionRef.current,
+                now: Date.now()
+              });
+              scheduleLatestAutoSave('followup.pending.settled', delayMs);
+              logEvent('autosave.queued.followupSettled', {
+                recordId,
+                delayMs,
+                dirty: autoSaveDirtyRef.current,
+                queued: autoSaveQueuedRef.current,
+                view: viewRef.current
+              });
+            }
             logEvent('followup.pending.settled', {
               stepId: args.stepId,
               recordId,
@@ -11447,6 +11506,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyFollowupBatchResults,
+      autoSaveDebounceMs,
+      autoSaveEnabled,
       definition,
       ensureDraftRecordId,
       flushAutoSaveBeforeNavigate,
@@ -11459,6 +11520,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       refreshAfterFollowupBatch,
       resolveLogMessage,
       runSerializedFollowupBatchRequest,
+      scheduleLatestAutoSave,
       statusTransitions,
       resolveUiErrorMessage,
       waitForPendingReservationSync,
