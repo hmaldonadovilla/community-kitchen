@@ -1,10 +1,11 @@
-import React, { startTransition, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ANALYTICS_PAGE_CONFIG } from '../../../config/analyticsPage';
 import type { AnalyticsDashboardPayload, AnalyticsDashboardPipeline } from '../../../config/analyticsPageTypes';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from '../app/headerNavigation';
 import { fetchAnalyticsDashboardApi, queueAnalyticsPipelineRunApi } from '../api';
 import { BlockingOverlay } from '../features/overlays/BlockingOverlay';
+import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
 import { formatAnalyticsValue } from './model';
 
 const ANALYTICS_PAGE_STYLES = `
@@ -42,10 +43,10 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-header-title {
     margin: 0;
-    font-size: clamp(28px, calc(var(--ck-font-group-title) * 1.5), 38px);
-    line-height: 1.06;
+    font-size: 48px;
+    line-height: 1.1;
     font-weight: 600;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
   }
   .ck-analytics-pill {
     display: inline-flex;
@@ -56,7 +57,7 @@ const ANALYTICS_PAGE_STYLES = `
     border: 1px solid rgba(107, 117, 128, 0.28);
     background: transparent;
     color: var(--text);
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.94);
     font-weight: 500;
     line-height: 1;
   }
@@ -71,22 +72,32 @@ const ANALYTICS_PAGE_STYLES = `
     background: transparent;
     color: var(--text);
     text-decoration: none;
-    font-size: var(--ck-font-label);
-    font-weight: 600;
+    font-size: calc(var(--ck-font-label) * 0.94);
+    font-weight: 500;
     line-height: 1;
   }
   .ck-analytics-hero {
     display: grid;
     gap: 8px;
   }
-  .ck-analytics-description,
-  .ck-analytics-updated,
+  .ck-analytics-description {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--ck-font-label);
+    line-height: 1.4;
+  }
   .ck-analytics-empty,
   .ck-analytics-loading {
     margin: 0;
     color: var(--muted);
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.95);
     line-height: 1.45;
+  }
+  .ck-analytics-updated {
+    margin: 0;
+    color: var(--muted);
+    font-size: calc(var(--ck-font-label) * 0.7);
+    line-height: 1.4;
   }
   .ck-analytics-errors {
     display: grid;
@@ -95,7 +106,7 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-error {
     margin: 0;
     color: var(--danger);
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.9);
     line-height: 1.45;
   }
   .ck-analytics-section {
@@ -109,15 +120,15 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-section-title {
     margin: 0;
-    font-size: clamp(24px, calc(var(--ck-font-group-title) * 0.88), 32px);
-    line-height: 1.08;
+    font-size: clamp(30px, calc(var(--ck-font-group-title) * 1.55), 40px);
+    line-height: 1.04;
     font-weight: 600;
     letter-spacing: -0.02em;
   }
   .ck-analytics-section-description {
     margin: 0;
     color: var(--muted);
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.95);
     line-height: 1.45;
   }
   .ck-analytics-grid {
@@ -127,7 +138,7 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-card {
     border-radius: 24px;
-    border: 1px solid rgba(107, 117, 128, 0.22);
+    border: 1px solid rgba(107, 117, 128, 0.36);
     background: rgba(255, 255, 255, 0.94);
     padding: 22px;
     display: grid;
@@ -141,19 +152,20 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-card-source {
     margin: 0;
     color: var(--muted);
-    font-size: calc(var(--ck-font-label) * 0.92);
+    font-size: calc(var(--ck-font-label) * 0.82);
     line-height: 1.35;
   }
   .ck-analytics-card-title {
     margin: 0;
-    font-size: clamp(22px, calc(var(--ck-font-group-title) * 1.05), 28px);
-    line-height: 1.18;
+    color: var(--text);
+    font-size: 32px;
+    line-height: 1.12;
     font-weight: 600;
     letter-spacing: -0.02em;
   }
   .ck-analytics-card-value {
     margin: 0;
-    font-size: clamp(36px, calc(var(--ck-font-group-title) * 1.08), 52px);
+    font-size: 48px;
     line-height: 1;
     font-weight: 600;
     letter-spacing: -0.04em;
@@ -162,7 +174,7 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-card-description {
     margin: 0;
     color: var(--muted);
-    font-size: calc(var(--ck-font-label) * 0.95);
+    font-size: calc(var(--ck-font-label) * 0.9);
     line-height: 1.45;
   }
   .ck-analytics-pipeline-grid {
@@ -177,7 +189,7 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-pipeline-card {
     border-radius: 24px;
-    border: 1px solid rgba(107, 117, 128, 0.22);
+    border: 1px solid rgba(107, 117, 128, 0.36);
     background: rgba(255, 255, 255, 0.94);
     padding: 22px;
     display: grid;
@@ -195,12 +207,12 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-field-label,
   .ck-analytics-notice,
   .ck-analytics-pipeline-helper {
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.9);
     line-height: 1.45;
   }
   .ck-analytics-field-label {
     color: var(--text);
-    font-weight: 600;
+    font-weight: 500;
   }
   .ck-analytics-pipeline-helper,
   .ck-analytics-notice {
@@ -214,7 +226,52 @@ const ANALYTICS_PAGE_STYLES = `
     background: #fff;
     color: var(--text);
     padding: 0 14px;
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.95);
+    font-family: inherit;
+    min-width: 0;
+    min-inline-size: 0;
+    max-width: 100%;
+    max-inline-size: 100%;
+    width: 100%;
+    inline-size: 100%;
+    box-sizing: border-box;
+    text-align: left;
+  }
+  .ck-analytics-date-field {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+  }
+  .ck-analytics-date-input.ck-analytics-date-input--display {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  .ck-analytics-date-input.ck-analytics-date-input--display::-webkit-date-and-time-value,
+  .ck-analytics-date-input.ck-analytics-date-input--display::-webkit-datetime-edit {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  .ck-analytics-date-input::-webkit-date-and-time-value {
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+  }
+  .ck-analytics-date-input::-webkit-calendar-picker-indicator {
+    margin: 0;
+  }
+  .ck-analytics-date-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    padding: 0 50px 0 14px;
+    color: var(--text);
+    font-size: calc(var(--ck-font-label) * 0.95);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
     font-family: inherit;
   }
   .ck-analytics-submit {
@@ -223,9 +280,9 @@ const ANALYTICS_PAGE_STYLES = `
     border-radius: 16px;
     background: rgba(11, 87, 208, 0.96);
     color: #fff;
-    font-size: var(--ck-font-label);
+    font-size: calc(var(--ck-font-label) * 0.95);
     font-family: inherit;
-    font-weight: 600;
+    font-weight: 500;
     padding: 0 18px;
   }
   .ck-analytics-submit[disabled] {
@@ -239,7 +296,7 @@ const ANALYTICS_PAGE_STYLES = `
       grid-template-columns: minmax(0, 1fr);
     }
   }
-  @media (max-width: 760px) {
+  @media (max-width: 620px) {
     .ck-analytics-header {
       grid-template-columns: 1fr;
       justify-items: stretch;
@@ -287,6 +344,15 @@ const resolveTodayIso = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+const resolvePipelineDateInputId = (dashboardPipelineId: string): string => `pipeline-date-${dashboardPipelineId}`;
+
+const readPipelineDateInputValue = (dashboardPipelineId: string): string => {
+  if (typeof document === 'undefined') return '';
+  const input = document.getElementById(resolvePipelineDateInputId(dashboardPipelineId));
+  if (!(input instanceof HTMLInputElement)) return '';
+  return (input.value || '').toString().trim();
+};
+
 const scheduleTopLevelNavigation = (targetUrl: string): void => {
   const navigate = () => navigateToTopLevel(targetUrl);
   try {
@@ -319,6 +385,8 @@ const AnalyticsPage: React.FC = () => {
   const [pipelineDates, setPipelineDates] = useState<Record<string, string>>({});
   const [pipelineErrors, setPipelineErrors] = useState<Record<string, string>>({});
   const [pipelineNotices, setPipelineNotices] = useState<Record<string, string>>({});
+  const [focusedPipelineId, setFocusedPipelineId] = useState<string | null>(null);
+  const pointerSubmittedPipelineIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -358,7 +426,9 @@ const AnalyticsPage: React.FC = () => {
   const errors = Array.isArray(payload?.errors) ? payload.errors : [];
 
   const submitPipeline = async (pipeline: AnalyticsDashboardPipeline): Promise<void> => {
-    const startDate = (pipelineDates[pipeline.dashboardPipelineId] || '').toString().trim();
+    const startDate =
+      (pipelineDates[pipeline.dashboardPipelineId] || '').toString().trim() ||
+      readPipelineDateInputValue(pipeline.dashboardPipelineId);
     if (!startDate) {
       setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: 'Select a date.' }));
       return;
@@ -377,6 +447,7 @@ const AnalyticsPage: React.FC = () => {
       });
       const notice = (result?.message || pipeline.queuedNotice || '').toString().trim();
       setPipelineNotices(prev => ({ ...prev, [pipeline.dashboardPipelineId]: notice }));
+      setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
       logEvent('dashboard.pipeline.queue.success', {
         ownerFormKey: pipeline.ownerFormKey,
         pipelineId: pipeline.pipelineId,
@@ -393,6 +464,25 @@ const AnalyticsPage: React.FC = () => {
     } finally {
       setPendingPipelineId(null);
     }
+  };
+
+  const handlePipelineSubmitPointerDown = (pipeline: AnalyticsDashboardPipeline): void => {
+    if (typeof document === 'undefined') return;
+    const activeElement = document.activeElement;
+    const inputId = resolvePipelineDateInputId(pipeline.dashboardPipelineId);
+    if (!(activeElement instanceof HTMLInputElement) || activeElement.id !== inputId) return;
+
+    pointerSubmittedPipelineIdRef.current = pipeline.dashboardPipelineId;
+    activeElement.blur();
+    void submitPipeline(pipeline);
+  };
+
+  const handlePipelineSubmitClick = (pipeline: AnalyticsDashboardPipeline): void => {
+    if (pointerSubmittedPipelineIdRef.current === pipeline.dashboardPipelineId) {
+      pointerSubmittedPipelineIdRef.current = null;
+      return;
+    }
+    void submitPipeline(pipeline);
   };
 
   return (
@@ -471,32 +561,55 @@ const AnalyticsPage: React.FC = () => {
             >
               {pipelines.map(pipeline => {
                 const pending = pendingPipelineId === pipeline.dashboardPipelineId;
+                const pipelineDateValue = pipelineDates[pipeline.dashboardPipelineId] || '';
+                const showFormattedPipelineDate = Boolean(
+                  pipelineDateValue && focusedPipelineId !== pipeline.dashboardPipelineId
+                );
+                const pipelineDateDisplay = showFormattedPipelineDate
+                  ? formatDateEeeDdMmmYyyy(pipelineDateValue, language)
+                  : '';
                 return (
                   <article key={pipeline.dashboardPipelineId} className="ck-analytics-pipeline-card">
                     <div className="ck-analytics-card-meta">
-                      <p className="ck-analytics-card-source">{pipeline.sourceFormTitle}</p>
                       <h3 className="ck-analytics-card-title">{pipeline.title}</h3>
+                      <p className="ck-analytics-card-source">{pipeline.sourceFormTitle}</p>
                     </div>
                     {pipeline.description ? <p className="ck-analytics-card-description">{pipeline.description}</p> : null}
                     <div className="ck-analytics-pipeline-form">
                       <div className="ck-analytics-field">
-                        <label className="ck-analytics-field-label" htmlFor={`pipeline-date-${pipeline.dashboardPipelineId}`}>
+                        <label
+                          className="ck-analytics-field-label"
+                          htmlFor={resolvePipelineDateInputId(pipeline.dashboardPipelineId)}
+                        >
                           {pipeline.dateLabel || 'Start date'}
                         </label>
-                        <input
-                          id={`pipeline-date-${pipeline.dashboardPipelineId}`}
-                          className="ck-analytics-date-input"
-                          type="date"
-                          max={todayIso}
-                          value={pipelineDates[pipeline.dashboardPipelineId] || ''}
-                          onChange={event => {
-                            const value = event.currentTarget.value;
-                            setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: value }));
-                            if (pipelineErrors[pipeline.dashboardPipelineId]) {
-                              setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+                        <div className="ck-analytics-date-field">
+                          <input
+                            id={resolvePipelineDateInputId(pipeline.dashboardPipelineId)}
+                            className={`ck-analytics-date-input${showFormattedPipelineDate ? ' ck-analytics-date-input--display' : ''}`}
+                            type="date"
+                            max={todayIso}
+                            value={pipelineDateValue}
+                            onFocus={() => setFocusedPipelineId(pipeline.dashboardPipelineId)}
+                            onBlur={() =>
+                              setFocusedPipelineId(current =>
+                                current === pipeline.dashboardPipelineId ? null : current
+                              )
                             }
-                          }}
-                        />
+                            onChange={event => {
+                              const value = event.currentTarget.value;
+                              setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: value }));
+                              if (pipelineErrors[pipeline.dashboardPipelineId]) {
+                                setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+                              }
+                            }}
+                          />
+                          {pipelineDateDisplay ? (
+                            <div className="ck-analytics-date-overlay" aria-hidden="true">
+                              {pipelineDateDisplay}
+                            </div>
+                          ) : null}
+                        </div>
                         {pipeline.dateHelperText ? (
                           <p className="ck-analytics-pipeline-helper">{pipeline.dateHelperText}</p>
                         ) : null}
@@ -505,9 +618,8 @@ const AnalyticsPage: React.FC = () => {
                         type="button"
                         className="ck-analytics-submit"
                         disabled={pending}
-                        onClick={() => {
-                          void submitPipeline(pipeline);
-                        }}
+                        onPointerDown={() => handlePipelineSubmitPointerDown(pipeline)}
+                        onClick={() => handlePipelineSubmitClick(pipeline)}
                       >
                         {pending ? pipeline.pendingLabel || 'Queueing...' : pipeline.submitLabel || 'Send report'}
                       </button>
@@ -539,8 +651,8 @@ const AnalyticsPage: React.FC = () => {
               {section.widgets.map(widget => (
                 <article key={widget.dashboardWidgetId} className="ck-analytics-card">
                   <div className="ck-analytics-card-meta">
-                    <p className="ck-analytics-card-source">{widget.sourceFormTitle}</p>
                     <h3 className="ck-analytics-card-title">{widget.title}</h3>
+                    <p className="ck-analytics-card-source">{widget.sourceFormTitle}</p>
                   </div>
                   <p className="ck-analytics-card-value">{formatAnalyticsValue(widget, language) || '-'}</p>
                   {widget.description ? <p className="ck-analytics-card-description">{widget.description}</p> : null}
