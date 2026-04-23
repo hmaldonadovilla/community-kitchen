@@ -6,6 +6,7 @@ import {
   normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldScheduleAutoSaveAfterPendingFollowup,
   shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
@@ -112,6 +113,100 @@ describe('autoSaveDedup helpers', () => {
         dirty: false,
         queued: false,
         inFlight: false
+      })
+    ).toBe(false);
+  });
+
+  it('resumes queued autosave once the matching pending followup settles', () => {
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'form',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-1',
+        currentSessionId: 12,
+        followupSessionId: 12,
+        dirty: true,
+        queued: false,
+        submitting: false,
+        recordStale: false
+      })
+    ).toBe(true);
+
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'summary',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-1',
+        currentSessionId: 12,
+        followupSessionId: 12,
+        dirty: false,
+        queued: true,
+        submitting: false,
+        recordStale: false
+      })
+    ).toBe(true);
+  });
+
+  it('does not resume autosave after pending followup for stale, mismatched, or inactive sessions', () => {
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'form',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-2',
+        currentSessionId: 12,
+        followupSessionId: 12,
+        dirty: true,
+        queued: false,
+        submitting: false,
+        recordStale: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'list',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-1',
+        currentSessionId: 12,
+        followupSessionId: 12,
+        dirty: true,
+        queued: false,
+        submitting: false,
+        recordStale: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'form',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-1',
+        currentSessionId: 12,
+        followupSessionId: 99,
+        dirty: true,
+        queued: false,
+        submitting: false,
+        recordStale: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldScheduleAutoSaveAfterPendingFollowup({
+        autoSaveEnabled: true,
+        currentView: 'form',
+        currentRecordId: 'REC-1',
+        settledRecordId: 'REC-1',
+        currentSessionId: 12,
+        followupSessionId: 12,
+        dirty: true,
+        queued: false,
+        submitting: false,
+        recordStale: true
       })
     ).toBe(false);
   });

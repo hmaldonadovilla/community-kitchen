@@ -4117,7 +4117,7 @@ export class WebFormService {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     if (!formKey) return { success: false, message: 'Form key is required.' };
 
-    const { form, questions } = this.getFormContext(formKey);
+    const { questions } = this.getFormContext(formKey);
     const parsed = this.parseButtonRef((buttonId || '').toString());
     const btn = this.resolveButtonQuestion(questions, parsed);
     const cfg: any = (btn as any)?.button;

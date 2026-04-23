@@ -89,6 +89,37 @@ export const shouldSuppressAutomatedAutoSave = (args: {
   return !args.dirty && !args.queued && !args.inFlight;
 };
 
+export const shouldScheduleAutoSaveAfterPendingFollowup = (args: {
+  autoSaveEnabled: boolean;
+  currentView?: string | null;
+  currentRecordId?: string | null;
+  settledRecordId?: string | null;
+  currentSessionId?: number | null;
+  followupSessionId?: number | null;
+  dirty: boolean;
+  queued: boolean;
+  submitting: boolean;
+  recordStale: boolean;
+}): boolean => {
+  if (!args.autoSaveEnabled) return false;
+  const currentView = normalizeStringId(args.currentView).toLowerCase();
+  if (currentView !== 'form' && currentView !== 'summary') return false;
+  const currentRecordId = normalizeStringId(args.currentRecordId);
+  const settledRecordId = normalizeStringId(args.settledRecordId);
+  if (!currentRecordId || !settledRecordId || currentRecordId !== settledRecordId) return false;
+  const currentSessionId = Number(args.currentSessionId);
+  const followupSessionId = Number(args.followupSessionId);
+  if (
+    !Number.isFinite(currentSessionId) ||
+    !Number.isFinite(followupSessionId) ||
+    currentSessionId !== followupSessionId
+  ) {
+    return false;
+  }
+  if (args.submitting || args.recordStale) return false;
+  return args.dirty || args.queued;
+};
+
 export const shouldForceAutoSaveOnConfiguredBlur = (args: {
   autoSaveEnabled: boolean;
   isCreateFlow: boolean;
