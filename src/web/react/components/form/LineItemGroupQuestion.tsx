@@ -5703,6 +5703,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     min={(field as any)?.ui?.minDate}
                     max={(field as any)?.ui?.maxDate}
                     correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                    iosNativeCommitMode="deferWhileFocused"
                     readOnly={!!field.valueMap || fieldInputDisabled}
                     ariaLabel={resolveFieldLabel(field, language, field.id)}
                     onChange={next => handleLineFieldChange(q, row.id, field, next)}
@@ -7102,6 +7103,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             min={(field as any)?.ui?.minDate}
                             max={(field as any)?.ui?.maxDate}
                             correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                            iosNativeCommitMode="deferWhileFocused"
                             readOnly={field?.readOnly === true}
                             ariaLabel={labelText}
                             ariaDescribedBy={helperId}
@@ -8561,6 +8563,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             min={(flatField as any)?.ui?.minDate}
                             max={(flatField as any)?.ui?.maxDate}
                             correctionMessages={(flatField as any)?.ui?.dateCorrectionMessages}
+                            iosNativeCommitMode="deferWhileFocused"
                             readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             onChange={next => handleLineFieldChange(targetInfo.group as WebQuestionDefinition, targetRow.id, flatField, next)}
@@ -9923,6 +9926,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             min={(flatField as any)?.ui?.minDate}
                             max={(flatField as any)?.ui?.maxDate}
                             correctionMessages={(flatField as any)?.ui?.dateCorrectionMessages}
+                            iosNativeCommitMode="deferWhileFocused"
                             readOnly={!!flatField.valueMap || isLineFieldInputDisabled(flatField)}
                             ariaLabel={resolveFieldLabel(flatField, language, flatField.id)}
                             ariaDescribedBy={helperId}
@@ -10694,6 +10698,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             min={(field as any)?.ui?.minDate}
                             max={(field as any)?.ui?.maxDate}
                             correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                            iosNativeCommitMode="deferWhileFocused"
                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                             ariaDescribedBy={helperId}
@@ -12020,6 +12025,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 min={(field as any)?.ui?.minDate}
                                 max={(field as any)?.ui?.maxDate}
                                 correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                iosNativeCommitMode="deferWhileFocused"
                                 readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                 ariaLabel={resolveFieldLabel(field, language, field.id)}
                                 ariaDescribedBy={helperId}
@@ -13688,6 +13694,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             min={(field as any)?.ui?.minDate}
                                             max={(field as any)?.ui?.maxDate}
                                             correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                            iosNativeCommitMode="deferWhileFocused"
                                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
@@ -14326,6 +14333,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             min={(field as any)?.ui?.minDate}
                                             max={(field as any)?.ui?.maxDate}
                                             correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                            iosNativeCommitMode="deferWhileFocused"
                                             readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                             ariaLabel={resolveFieldLabel(field, language, field.id)}
                                             ariaDescribedBy={helperId}
@@ -14711,6 +14719,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           min={(field as any)?.ui?.minDate}
                                           max={(field as any)?.ui?.maxDate}
                                           correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                          iosNativeCommitMode="deferWhileFocused"
                                           readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
                                           ariaLabel={labelText}
                                           ariaDescribedBy={helperId}

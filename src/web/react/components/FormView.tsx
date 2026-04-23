@@ -9308,6 +9308,7 @@ const FormView: React.FC<FormViewProps> = ({
                 min={(q as any)?.ui?.minDate}
                 max={(q as any)?.ui?.maxDate}
                 correctionMessages={(q as any)?.ui?.dateCorrectionMessages}
+                iosNativeCommitMode="deferWhileFocused"
                 readOnly={useValueMap || q.readOnly === true}
                 disabled={submitting || isFieldLockedByDedup(q.id)}
                 ariaLabel={resolveLabel(q, language)}
@@ -11685,6 +11686,7 @@ const FormView: React.FC<FormViewProps> = ({
                                         min={(field as any)?.ui?.minDate}
                                         max={(field as any)?.ui?.maxDate}
                                         correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                        iosNativeCommitMode="deferWhileFocused"
                                         readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                         ariaLabel={resolveFieldLabel(field, language, field.id)}
                                         onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
@@ -12518,6 +12520,7 @@ const FormView: React.FC<FormViewProps> = ({
                               min={(field as any)?.ui?.minDate}
                               max={(field as any)?.ui?.maxDate}
                               correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                              iosNativeCommitMode="deferWhileFocused"
                               readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               ariaLabel={resolveFieldLabel(field, language, field.id)}
                               onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
@@ -13132,6 +13135,7 @@ const FormView: React.FC<FormViewProps> = ({
                                   min={(field as any)?.ui?.minDate}
                                   max={(field as any)?.ui?.maxDate}
                                   correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
+                                  iosNativeCommitMode="deferWhileFocused"
                                   readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                   ariaLabel={resolveFieldLabel(field, language, field.id)}
                                   onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}

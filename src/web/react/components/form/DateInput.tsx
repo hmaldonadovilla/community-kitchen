@@ -4,6 +4,11 @@ import type { LangCode, LocalizedString } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
 import { resolveDateInputBound, resolveDateInputValueWithinBounds } from './dateInputBounds';
+import {
+  resolveDateInputRenderedValue,
+  shouldDeferNativeDateInputCommit,
+  type DateInputNativeCommitMode
+} from './dateInputInteraction';
 
 const DATE_INPUT_FEEDBACK_TTL_MS = 4200;
 const transientDateFeedbackStore = new Map<string, { text: string; expiresAt: number }>();
@@ -25,14 +30,33 @@ export const DateInput: React.FC<{
     min?: LocalizedString;
     max?: LocalizedString;
   };
+  iosNativeCommitMode?: DateInputNativeCommitMode;
   ariaLabel?: string;
   ariaDescribedBy?: string;
-}> = ({ id, value, onChange, language, readOnly, disabled, min, max, correctionMessages, ariaLabel, ariaDescribedBy }) => {
+}> = ({
+  id,
+  value,
+  onChange,
+  language,
+  readOnly,
+  disabled,
+  min,
+  max,
+  correctionMessages,
+  iosNativeCommitMode = 'immediate',
+  ariaLabel,
+  ariaDescribedBy
+}) => {
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const deferNativeCommit = useMemo(
+    () => shouldDeferNativeDateInputCommit(iosNativeCommitMode, typeof navigator === 'undefined' ? undefined : navigator),
+    [iosNativeCommitMode]
+  );
   const feedbackTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const pendingCorrectionRef = useRef<'min' | 'max' | null>(null);
+  const pendingFocusedValueRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const generatedFeedbackId = useId();
   const isDisabled = Boolean(disabled || readOnly);
@@ -41,8 +65,14 @@ export const DateInput: React.FC<{
   const feedbackId = `${id || generatedFeedbackId}-feedback`;
   const feedbackStoreKey = (id || ariaLabel || '').toString().trim();
   const describedBy = [ariaDescribedBy, feedback ? feedbackId : ''].filter(Boolean).join(' ') || undefined;
+  const renderedValue = resolveDateInputRenderedValue({
+    value,
+    draftValue: pendingFocusedValueRef.current,
+    deferNativeCommit,
+    focused
+  });
 
-  const isValidYmd = /^\d{4}-\d{2}-\d{2}$/.test((value || '').trim());
+  const isValidYmd = /^\d{4}-\d{2}-\d{2}$/.test((renderedValue || '').trim());
   // Show overlay when:
   // - there's a valid value AND
   // - the user is not actively typing (date pickers don't trigger keydown)
@@ -50,8 +80,8 @@ export const DateInput: React.FC<{
 
   const display = useMemo(() => {
     if (!showOverlay) return '';
-    return formatDateEeeDdMmmYyyy(value, language);
-  }, [language, showOverlay, value]);
+    return formatDateEeeDdMmmYyyy(renderedValue, language);
+  }, [language, renderedValue, showOverlay]);
 
   useEffect(() => {
     return () => {
@@ -119,6 +149,31 @@ export const DateInput: React.FC<{
     }, DATE_INPUT_FEEDBACK_TTL_MS);
   };
 
+  const applyCommittedValue = (next: string) => {
+    const bounded = resolveDateInputValueWithinBounds(next, { min: resolvedMin, max: resolvedMax });
+    onChange(bounded.value);
+    const correction = bounded.corrected ? bounded.correction : pendingCorrectionRef.current;
+    pendingCorrectionRef.current = null;
+    if (!correction) return;
+    const configuredCorrectionMessage = resolveLocalizedString(
+      correction === 'max' ? correctionMessages?.max : correctionMessages?.min,
+      language,
+      ''
+    ).trim();
+    const feedbackKey = correction === 'max' ? 'dateInput.correctedToMax' : 'dateInput.correctedToMin';
+    const fallback = correction === 'max'
+      ? 'This date is no longer allowed. We set the latest allowed date for you.'
+      : 'This date is no longer allowed. We set today\'s date for you.';
+    showTemporaryFeedback(
+      configuredCorrectionMessage ||
+        tSystem(feedbackKey, language, fallback, {
+          min: resolvedMin || '',
+          max: resolvedMax || '',
+          value: bounded.value
+        })
+    );
+  };
+
   return (
     <div className="ck-date-input-wrap">
       <div className="ck-date-input-control">
@@ -127,32 +182,18 @@ export const DateInput: React.FC<{
           id={id}
           type="date"
           className={`ck-date-input${showOverlay ? ' ck-date-input--overlay' : ''}`}
-          value={value}
+          value={renderedValue}
           onChange={e => {
             if (isDisabled) return;
-            const next = e.target.value;
-            const bounded = resolveDateInputValueWithinBounds(next, { min: resolvedMin, max: resolvedMax });
-            onChange(bounded.value);
-            const correction = bounded.corrected ? bounded.correction : pendingCorrectionRef.current;
-            pendingCorrectionRef.current = null;
-            if (!correction) return;
-            const configuredCorrectionMessage = resolveLocalizedString(
-              correction === 'max' ? correctionMessages?.max : correctionMessages?.min,
-              language,
-              ''
-            ).trim();
-            const feedbackKey = correction === 'max' ? 'dateInput.correctedToMax' : 'dateInput.correctedToMin';
-            const fallback = correction === 'max'
-              ? 'This date is no longer allowed. We set the latest allowed date for you.'
-              : 'This date is no longer allowed. We set today\'s date for you.';
-            showTemporaryFeedback(
-              configuredCorrectionMessage ||
-                tSystem(feedbackKey, language, fallback, {
-                  min: resolvedMin || '',
-                  max: resolvedMax || '',
-                  value: bounded.value
-                })
-            );
+            if (deferNativeCommit) {
+              pendingFocusedValueRef.current = e.target.value;
+              return;
+            }
+            applyCommittedValue(e.target.value);
+          }}
+          onInput={e => {
+            if (isDisabled || !deferNativeCommit) return;
+            pendingFocusedValueRef.current = (e.target as HTMLInputElement).value;
           }}
           readOnly={readOnly}
           disabled={isDisabled}
@@ -162,13 +203,21 @@ export const DateInput: React.FC<{
           aria-describedby={describedBy}
           onFocus={() => {
             if (isDisabled) return;
+            pendingFocusedValueRef.current = null;
             setFocused(true);
             setTyping(false);
           }}
           onBlur={() => {
+            if (deferNativeCommit && !isDisabled) {
+              const nextValue = inputRef.current?.value ?? pendingFocusedValueRef.current ?? value;
+              pendingFocusedValueRef.current = null;
+              if (nextValue !== value) applyCommittedValue(nextValue);
+              else pendingCorrectionRef.current = null;
+            } else {
+              pendingCorrectionRef.current = null;
+            }
             setFocused(false);
             setTyping(false);
-            pendingCorrectionRef.current = null;
           }}
           onKeyDown={() => {
             if (isDisabled) return;

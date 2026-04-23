@@ -3,6 +3,10 @@ import {
   resolveDateInputBound,
   resolveDateInputValueWithinBounds
 } from '../../../src/web/react/components/form/dateInputBounds';
+import {
+  resolveDateInputRenderedValue,
+  shouldDeferNativeDateInputCommit
+} from '../../../src/web/react/components/form/dateInputInteraction';
 
 describe('DateInput helpers', () => {
   test('resolves today bounds to the local YYYY-MM-DD date', () => {
@@ -41,5 +45,64 @@ describe('DateInput helpers', () => {
       corrected: false,
       correction: null
     });
+  });
+
+  test('does not defer native commit when the input stays in immediate mode', () => {
+    expect(
+      shouldDeferNativeDateInputCommit('immediate', {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      })
+    ).toBe(false);
+  });
+
+  test('defers native date commit on iPhone-like user agents', () => {
+    expect(
+      shouldDeferNativeDateInputCommit('deferWhileFocused', {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      })
+    ).toBe(true);
+  });
+
+  test('defers native date commit on iPadOS desktop mode', () => {
+    expect(
+      shouldDeferNativeDateInputCommit('deferWhileFocused', {
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+        platform: 'MacIntel',
+        maxTouchPoints: 5
+      })
+    ).toBe(true);
+  });
+
+  test('keeps immediate commit mode on desktop macOS', () => {
+    expect(
+      shouldDeferNativeDateInputCommit('deferWhileFocused', {
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15',
+        platform: 'MacIntel',
+        maxTouchPoints: 0
+      })
+    ).toBe(false);
+  });
+
+  test('renders the in-progress native date value while iOS commit is deferred', () => {
+    expect(
+      resolveDateInputRenderedValue({
+        value: '',
+        draftValue: '2026-04-25',
+        deferNativeCommit: true,
+        focused: true
+      })
+    ).toBe('2026-04-25');
+    expect(
+      resolveDateInputRenderedValue({
+        value: '',
+        draftValue: '2026-04-25',
+        deferNativeCommit: true,
+        focused: false
+      })
+    ).toBe('');
   });
 });
