@@ -7023,7 +7023,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('report.markdownPreview.exception', { buttonId, message: logMessage });
       }
     },
-    [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
+    [definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
   );
 
   const openMarkdown = useCallback(
@@ -7150,7 +7150,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('report.htmlPreview.exception', { buttonId, message: logMessage });
       }
     },
-    [definition, formKey, logEvent, parseButtonRef, resolveTemplateIdForClient]
+    [definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
   );
 
   const openHtml = useCallback(
