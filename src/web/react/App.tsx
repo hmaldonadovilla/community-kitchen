@@ -174,7 +174,12 @@ import {
   selectMilestoneConfirmationDialog
 } from './features/steps/domain/milestoneDialogs';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
-import { applyCopyCurrentRecordDropFields, applyCopyCurrentRecordProfile } from './app/copyProfile';
+import {
+  applyCopyCurrentRecordDropFields,
+  applyCopyCurrentRecordProfile,
+  resolveCopyCurrentRecordDestructiveChangeBypassFieldIds,
+  shouldBypassCopyCurrentRecordDestructiveChange
+} from './app/copyProfile';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
@@ -1194,11 +1199,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const ensureLineOptionsRef = useRef<(groupId: string, field: any) => void>(() => {});
   const fieldChangeDateInitialEntryInProgressRef = useRef<Record<string, boolean>>({});
   const fieldChangeDateInitialEntryCompletedRef = useRef<Record<string, boolean>>({});
+  const copyCurrentRecordDestructiveChangeBypassFieldIdsRef = useRef<Record<string, true>>({});
   const resetFieldChangeTransientState = useCallback(() => {
     fieldChangePendingRef.current = {};
     fieldChangeActiveRef.current = null;
     fieldChangeDateInitialEntryInProgressRef.current = {};
     fieldChangeDateInitialEntryCompletedRef.current = {};
+    copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = {};
   }, []);
   const pendingDeletedRecordIdsRef = useRef<string[]>([]);
   const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
@@ -1617,7 +1624,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           pending.scope === 'top'
             ? definition.questions.find(question => `${question?.id || ''}`.trim() === `${pending.fieldId || ''}`.trim()) || null
             : null;
+        const bypassCopyCurrentRecordDestructiveChange = shouldBypassCopyCurrentRecordDestructiveChange({
+          scope: pending.scope,
+          fieldId: pending.fieldId,
+          isCreateFlow: createFlowRef.current,
+          bypassFieldIds: copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current
+        });
         const shouldApplyClearOnChange =
+          !bypassCopyCurrentRecordDestructiveChange &&
           pending.scope === 'top' &&
           isClearOnChangeEnabled((sourceQuestion as any)?.clearOnChange) &&
           !isEmptyValue((valuesRef.current as any)?.[pending.fieldId]) &&
@@ -1656,6 +1670,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             clearedFieldCount: cleared.clearedFieldIds.length,
             clearedGroupCount: cleared.clearedGroupKeys.length,
             autoAddGroupRebuilds: reconciledState.changedCount
+          });
+        } else if (bypassCopyCurrentRecordDestructiveChange) {
+          logEvent('fieldChangeDialog.copyDraftBypass', {
+            fieldPath: pending.fieldPath,
+            fieldId: pending.fieldId,
+            phase: 'confirm'
           });
         }
 
@@ -1993,6 +2013,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             groupId: args.groupId
           });
           const changeType = (source?.question?.type || source?.field?.type || '').toString().toUpperCase();
+          const bypassCopyCurrentRecordDestructiveChange = shouldBypassCopyCurrentRecordDestructiveChange({
+            scope: args.scope,
+            fieldId,
+            isCreateFlow: createFlowRef.current,
+            bypassFieldIds: copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current
+          });
           const prevValue =
             args.scope === 'line' && args.groupId && args.rowId
               ? (lineItemsRef.current[args.groupId] || []).find(row => row.id === args.rowId)?.values?.[fieldId]
@@ -2013,7 +2039,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             !isEmptyValue(args.nextValue as FieldValue) &&
             prevValue !== args.nextValue;
           const dialogCfg = source?.dialog;
-          if (dialogCfg?.when && hasNonEmptyChange && !suppressInitialDateDialog) {
+          const topQuestionClearOnChangeEnabled =
+            args.scope === 'top' && isClearOnChangeEnabled((source?.question as any)?.clearOnChange);
+          if (
+            bypassCopyCurrentRecordDestructiveChange &&
+            !isEmptyValue(args.nextValue as FieldValue) &&
+            (Boolean(dialogCfg?.when) || topQuestionClearOnChangeEnabled)
+          ) {
+            if (fieldChangePendingRef.current[fieldKey]) {
+              delete fieldChangePendingRef.current[fieldKey];
+            }
+            logEvent('fieldChangeDialog.copyDraftBypass', {
+              fieldPath: fieldKey,
+              fieldId,
+              phase: 'change'
+            });
+          } else if (dialogCfg?.when && hasNonEmptyChange && !suppressInitialDateDialog) {
             const shouldTrigger = evaluateFieldChangeDialogWhen({
               when: dialogCfg.when,
               scope: args.scope,
@@ -6353,6 +6394,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const dropFields = dropFieldsRaw
       .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
       .filter(Boolean);
+    const destructiveChangeBypassFieldIds = resolveCopyCurrentRecordDestructiveChangeBypassFieldIds({
+      definition: definition as any,
+      dropFields
+    });
+    if (destructiveChangeBypassFieldIds.length) {
+      copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = destructiveChangeBypassFieldIds.reduce<
+        Record<string, true>
+      >((acc, fieldId) => {
+        acc[fieldId] = true;
+        return acc;
+      }, {});
+      logEvent('ui.copyCurrent.destructiveChangeBypass', {
+        count: destructiveChangeBypassFieldIds.length,
+        fieldIds: destructiveChangeBypassFieldIds
+      });
+    }
     if (dropFields.length) {
       const dropped = applyCopyCurrentRecordDropFields({
         definition: definition as any,
@@ -11904,6 +11961,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
+      snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     },
     effectOverrides?: Record<string, Record<string, FieldValue>>,
     ignorePending?: boolean,
@@ -11922,8 +11980,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return;
     }
-    const currentValues = snapshots?.values || valuesRef.current;
-    const currentLineItems = snapshots?.lineItems || lineItemsRef.current;
+    const currentValues = opts?.snapshots?.values || snapshots?.values || valuesRef.current;
+    const currentLineItems = opts?.snapshots?.lineItems || snapshots?.lineItems || lineItemsRef.current;
     runSelectionEffectsHelper({
       definition,
       question,

@@ -1,4 +1,9 @@
-import { applyCopyCurrentRecordDropFields, applyCopyCurrentRecordProfile } from '../../../src/web/react/app/copyProfile';
+import {
+  applyCopyCurrentRecordDropFields,
+  applyCopyCurrentRecordProfile,
+  resolveCopyCurrentRecordDestructiveChangeBypassFieldIds,
+  shouldBypassCopyCurrentRecordDestructiveChange
+} from '../../../src/web/react/app/copyProfile';
 
 describe('copyCurrentRecordProfile', () => {
   it('copies only whitelisted top values and whitelisted line item fields', () => {
@@ -146,5 +151,65 @@ describe('copyCurrentRecordProfile', () => {
     });
     expect(out.lineItems).toEqual({ G: [] });
     expect(out.lineItemsCleared).toBe(true);
+  });
+
+  it('marks only dropped top-level fields for destructive-change bypass after copy', () => {
+    const definition: any = {
+      questions: [
+        { id: 'MP_PREP_DATE', type: 'DATE', required: false, label: { en: 'Date' } },
+        { id: 'CONSENT', type: 'CHECKBOX', required: false, label: { en: 'Consent' } },
+        {
+          id: 'G',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          lineItemConfig: { fields: [{ id: 'X', type: 'TEXT', required: false }] }
+        }
+      ]
+    };
+
+    expect(
+      resolveCopyCurrentRecordDestructiveChangeBypassFieldIds({
+        definition,
+        dropFields: ['MP_PREP_DATE', 'G', 'UNKNOWN', 'MP_PREP_DATE']
+      })
+    ).toEqual(['MP_PREP_DATE']);
+  });
+
+  it('bypasses destructive top-level changes only for unsaved copied draft fields', () => {
+    expect(
+      shouldBypassCopyCurrentRecordDestructiveChange({
+        scope: 'top',
+        fieldId: 'MP_PREP_DATE',
+        isCreateFlow: true,
+        bypassFieldIds: { MP_PREP_DATE: true }
+      })
+    ).toBe(true);
+
+    expect(
+      shouldBypassCopyCurrentRecordDestructiveChange({
+        scope: 'top',
+        fieldId: 'MP_PREP_DATE',
+        isCreateFlow: false,
+        bypassFieldIds: { MP_PREP_DATE: true }
+      })
+    ).toBe(false);
+
+    expect(
+      shouldBypassCopyCurrentRecordDestructiveChange({
+        scope: 'line',
+        fieldId: 'MP_PREP_DATE',
+        isCreateFlow: true,
+        bypassFieldIds: ['MP_PREP_DATE']
+      })
+    ).toBe(false);
+
+    expect(
+      shouldBypassCopyCurrentRecordDestructiveChange({
+        scope: 'top',
+        fieldId: 'MP_SERVICE',
+        isCreateFlow: true,
+        bypassFieldIds: ['MP_PREP_DATE']
+      })
+    ).toBe(false);
   });
 });
