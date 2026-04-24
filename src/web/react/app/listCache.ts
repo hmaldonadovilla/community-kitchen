@@ -21,6 +21,9 @@ export type RemoveListCacheArgs = {
 
 const metaKeys = new Set(['id', '__rowNumber', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
 
+export const hasLoadedListResponse = (response: ListResponse | null | undefined): response is ListResponse =>
+  Boolean(response && Array.isArray((response as any).items));
+
 const resolveFieldIdsForNewRow = (definition: WebFormDefinition): Set<string> => {
   const cols: any[] = Array.isArray((definition as any)?.listView?.columns) ? ((definition as any).listView.columns as any[]) : [];
   const dateSearchFieldId = (((definition as any)?.listView?.search as any)?.dateFieldId || '').toString().trim();

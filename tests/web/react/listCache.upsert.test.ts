@@ -1,4 +1,9 @@
-import { removeListCacheRowPure, upsertListCacheRowPure, ListCacheState } from '../../../src/web/react/app/listCache';
+import {
+  hasLoadedListResponse,
+  removeListCacheRowPure,
+  upsertListCacheRowPure,
+  ListCacheState
+} from '../../../src/web/react/app/listCache';
 import { WebFormDefinition } from '../../../src/types';
 
 const baseDefinition: WebFormDefinition = {
@@ -10,6 +15,17 @@ const baseDefinition: WebFormDefinition = {
 } as any;
 
 const blankState: ListCacheState = { response: null, records: {} };
+
+describe('hasLoadedListResponse', () => {
+  it('treats an empty list response as loaded home data', () => {
+    expect(hasLoadedListResponse({ items: [], totalCount: 0 } as any)).toBe(true);
+  });
+
+  it('rejects missing or malformed list responses', () => {
+    expect(hasLoadedListResponse(null)).toBe(false);
+    expect(hasLoadedListResponse({ totalCount: 0 } as any)).toBe(false);
+  });
+});
 
 describe('upsertListCacheRowPure', () => {
   it('updates an existing record and list row while preserving unknown fields', () => {

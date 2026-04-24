@@ -170,7 +170,7 @@ import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
 import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
-import { removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
+import { hasLoadedListResponse, removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
@@ -4162,8 +4162,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   useEffect(() => {
     if (homeTimeToDataMeasuredRef.current) return;
-    const firstCount = listCache.response?.items?.length || 0;
-    if (firstCount <= 0) return;
+    const response = listCache.response;
+    if (!hasLoadedListResponse(response)) return;
+    const firstCount = response.items.length;
     homeTimeToDataMeasuredRef.current = true;
     const measuredAtMs = getPerfNow();
     setHomeFirstDataReadyAtMs(prev => (prev > 0 ? prev : Date.now()));
@@ -4176,7 +4177,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       elapsedMs: measuredAtMs - homeLoadStartedAtRef.current,
       firstItemCount: firstCount
     });
-  }, [formKey, language, listCache.response?.items?.length, perfMark, perfMeasure]);
+  }, [formKey, language, listCache.response, perfMark, perfMeasure]);
 
   useEffect(() => {
     if (view !== 'list') return;
@@ -4258,19 +4259,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [logEvent, pendingDeletedRecordApplyTick]);
 
   useEffect(() => {
-    const firstListItemCount = listCache.response?.items?.length || 0;
-    if (firstListItemCount <= 0) return;
     if (homeFirstDataReadyAtMs <= 0) return;
+    const response = listCache.response;
+    if (!hasLoadedListResponse(response)) return;
+    const firstListItemCount = response.items.length;
     const key = `${formKey}::${language}`;
     if (dataSourcePrefetchKeyRef.current === key) return;
-    dataSourcePrefetchKeyRef.current = key;
     const configs = collectDataSourceConfigsForPrefetch(definition).filter(isHomePrefetchEligibleDataSource);
     if (!configs.length) return;
     const startedAt = Date.now();
     const timer = globalThis.setTimeout(() => {
+      if (dataSourcePrefetchKeyRef.current === key) return;
+      dataSourcePrefetchKeyRef.current = key;
       logEvent('dataSource.prefetch.start', {
         formKey,
         language,
+        firstListItemCount,
         dataSources: configs.length
       });
       void prefetchDataSources(configs, language, { forceRefresh: false })
@@ -4296,7 +4300,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return () => {
       globalThis.clearTimeout(timer);
     };
-  }, [definition, formKey, homeFirstDataReadyAtMs, language, listCache.response?.items?.length, logEvent]);
+  }, [definition, formKey, homeFirstDataReadyAtMs, language, listCache.response, logEvent]);
 
   useEffect(() => {
     if (!hasTemplateRenderTargets) return;
