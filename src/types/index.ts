@@ -5616,6 +5616,10 @@ export interface PaginatedResult<T> {
   nextPageToken?: string;
   totalCount?: number;
   etag?: string;
+  dateFilterFieldId?: string;
+  dateFilterEquals?: string;
+  dateFilterFrom?: string;
+  dateFilterTo?: string;
 }
 
 export interface SubmissionBatchResult<T = Record<string, any>> {

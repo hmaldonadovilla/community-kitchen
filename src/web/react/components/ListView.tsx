@@ -909,6 +909,16 @@ const ListView: React.FC<ListViewProps> = ({
     return normalizeToIsoDateLocal(searchQueryValue);
   }, [dateSearchEnabled, searchQueryValue]);
 
+  const cachedResponseMatchesDateSearch = useMemo(() => {
+    if (!dateSearchEnabled || !dateSearchQueryNormalized || !dateSearchFieldId) return false;
+    const raw = (cachedResponse || {}) as any;
+    const cachedFieldId = (raw.dateFilterFieldId || raw.__dateFieldId || '').toString().trim();
+    if (cachedFieldId !== dateSearchFieldId) return false;
+    const cachedEquals = normalizeToIsoDateLocal(raw.dateFilterEquals || raw.__dateEquals || '');
+    if (cachedEquals !== dateSearchQueryNormalized) return false;
+    return Array.isArray((cachedResponse as any)?.items);
+  }, [cachedResponse, dateSearchEnabled, dateSearchFieldId, dateSearchQueryNormalized]);
+
   const guaranteedPrefetchedItemCount = useMemo(() => {
     const raw = Number((cachedResponse as any)?.contiguousItemCount);
     if (!Number.isFinite(raw) || raw <= 0) return (allItems || []).length;
@@ -934,6 +944,7 @@ const ListView: React.FC<ListViewProps> = ({
 
   const dateSearchUsesServer = useMemo(() => {
     if (!dateSearchEnabled || !dateSearchQueryNormalized) return false;
+    if (cachedResponseMatchesDateSearch) return false;
     if (uiNotice || uiError) return true;
     return shouldUseServerDateSearch({
       queryDate: dateSearchQueryNormalized,
@@ -945,6 +956,7 @@ const ListView: React.FC<ListViewProps> = ({
     });
   }, [
     completePrefetchedData,
+    cachedResponseMatchesDateSearch,
     dateSearchEnabled,
     dateSearchFieldId,
     dateSearchQueryNormalized,
@@ -994,7 +1006,7 @@ const ListView: React.FC<ListViewProps> = ({
           formKey,
           projection: projection.length ? projection : undefined,
           pageSize: fetchPageSize,
-          includePageRecords: true,
+          includePageRecords: false,
           sortField: defaultSortField,
           sortDirection: defaultSortDirection,
           dateFieldId: dateSearchFieldId,
@@ -1052,6 +1064,7 @@ const ListView: React.FC<ListViewProps> = ({
       cancelled = true;
     };
   }, [
+    allItems,
     dateSearchEnabled,
     dateSearchFieldId,
     dateSearchQueryNormalized,

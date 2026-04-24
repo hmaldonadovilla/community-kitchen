@@ -439,18 +439,19 @@ export class ListingService {
       totalCount: entries.length,
       etag
     };
+    if (hasDateFilter) {
+      listResult.dateFilterFieldId = dateFilterFieldId;
+      if (dateFilterEquals) listResult.dateFilterEquals = dateFilterEquals;
+      if (dateFilterFrom) listResult.dateFilterFrom = dateFilterFrom;
+      if (dateFilterTo) listResult.dateFilterTo = dateFilterTo;
+    }
 
     const records: Record<string, WebFormSubmission> = {};
     if (includePageRecords) {
-      // Full record hydration requires reading the row; use the existing row-number fetch (and cache).
-      pageEntries.forEach(e => {
-        const rowNumber = Number((e as any).rowNumber);
-        if (!Number.isFinite(rowNumber) || rowNumber < 2) return;
-        const record = this.fetchSubmissionByRowNumber(form, questions, rowNumber);
-        if (record && record.id) {
-          records[record.id] = record;
-        }
-      });
+      const rowNumbers = pageEntries
+        .map(e => Number((e as any).rowNumber))
+        .filter(rowNumber => Number.isFinite(rowNumber) && rowNumber >= 2);
+      Object.assign(records, this.fetchSubmissionsByRowNumbers(form, questions, rowNumbers));
     }
 
     if (recordIds?.length) {

@@ -340,7 +340,12 @@ describe('WebFormService', () => {
     jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
     jest.spyOn(service as any, 'scriptTodayIso').mockReturnValue('2026-04-23');
     const fetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionsSortedBatch').mockReturnValue({
-      list: { items: [{ id: 'rec-1', DATE: '2026-04-23' }], totalCount: 1 },
+      list: {
+        items: [{ id: 'rec-1', DATE: '2026-04-23' }],
+        totalCount: 1,
+        dateFilterFieldId: 'DATE',
+        dateFilterEquals: '2026-04-23'
+      },
       records: {}
     });
 
@@ -362,6 +367,49 @@ describe('WebFormService', () => {
       })
     );
     expect(res.listResponse?.items).toHaveLength(1);
+    expect(res.listResponse?.dateFilterFieldId).toBe('DATE');
+    expect(res.listResponse?.dateFilterEquals).toBe('2026-04-23');
+  });
+
+  test('fetchSubmissionsSortedBatch returns JSON-safe plain data on the first response', () => {
+    const responseDate = new Date('2026-04-23T00:00:00.000Z');
+    jest.spyOn((service as any).listing, 'fetchSubmissionsSortedBatch').mockReturnValue({
+      list: {
+        items: [
+          {
+            id: 'rec-1',
+            Q1: 'Soup',
+            DATE: responseDate,
+            dropped: undefined
+          }
+        ],
+        totalCount: 1,
+        etag: 'etag-1'
+      },
+      records: {
+        'rec-1': {
+          id: 'rec-1',
+          formKey: 'Config: Delivery',
+          language: 'EN',
+          status: 'Open',
+          values: {
+            Q1: 'Soup',
+            DATE: responseDate,
+            Q2: [{ LI1: 'Carrot', LI2: 2 }]
+          }
+        }
+      }
+    });
+
+    const res = service.fetchSubmissionsSortedBatch('Config: Delivery', ['Q1'], 50, undefined, true, undefined, {
+      fieldId: 'Q1',
+      direction: 'asc'
+    });
+
+    expect(res.list.items[0].DATE).toBe('2026-04-23T00:00:00.000Z');
+    expect(Object.prototype.hasOwnProperty.call(res.list.items[0], 'dropped')).toBe(false);
+    expect((res.records['rec-1'] as any).values.DATE).toBe('2026-04-23T00:00:00.000Z');
+    expect(JSON.parse(JSON.stringify(res))).toEqual(res);
   });
 
   test('fetchDataSource can read records from another form via formKey', () => {
