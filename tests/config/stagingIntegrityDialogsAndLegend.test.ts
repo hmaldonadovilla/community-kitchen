@@ -170,6 +170,7 @@ describe('staging integrity dialogs and list legend config', () => {
           clear: true
         }
       ]);
+
     };
 
     const assertClosedListActions = (root: any) => {
@@ -224,6 +225,29 @@ describe('staging integrity dialogs and list legend config', () => {
 
       const widths = root?.listViewLegendColumnWidths ?? root?.listView?.legendColumnWidths;
       assertLegendColumnWidthsValid(widths);
+    };
+
+    const assertCookOverlayCloseConfirm = (root: any) => {
+      const cookOverlayEffects = collectObjects(
+        root,
+        (entry: any) => entry?.type === 'openOverlay' && entry?.groupId === 'MP_TYPE_LI' && entry?.closeConfirm
+      );
+      expect(cookOverlayEffects.length).toBeGreaterThan(0);
+      cookOverlayEffects.forEach((effect: any) => {
+        expect(effect?.rowFilter?.includeWhen).toEqual({
+          fieldId: 'PREP_TYPE',
+          equals: ['Cook']
+        });
+        const closeConfirmCases = effect?.closeConfirm?.cases || [];
+        expect(closeConfirmCases.length).toBeGreaterThanOrEqual(2);
+        closeConfirmCases.forEach((entry: any) => {
+          const lineItemsClause = entry?.when?.lineItems || entry?.when?.not?.lineItems;
+          if (!lineItemsClause) return;
+          if (lineItemsClause.groupId !== 'MP_MEALS_REQUEST') return;
+          if ((lineItemsClause.subGroupPath || []).join('.') !== 'MP_TYPE_LI.MP_INGREDIENTS_LI') return;
+          expect(lineItemsClause.parentWhen).toBeUndefined();
+        });
+      });
     };
 
     const assertSearchPresets = (questions: any[]) => {
@@ -813,6 +837,8 @@ describe('staging integrity dialogs and list legend config', () => {
     assertPastIncompleteWarningAction(cfg.definition);
     assertMealProductionLegend(cfg.form);
     assertMealProductionLegend(cfg.definition);
+    assertCookOverlayCloseConfirm(cfg.form);
+    assertCookOverlayCloseConfirm(cfg.definition);
     assertSearchPresets(cfg.questions);
     assertSearchPresets(cfg.definition?.questions || []);
     assertUnlockDialog(cfg.questions);

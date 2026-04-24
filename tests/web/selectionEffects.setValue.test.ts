@@ -380,6 +380,326 @@ describe('selectionEffects setValue', () => {
     );
   });
 
+  it('matches datasource rows by stored source id, refreshes parent fields, and bypasses cache', async () => {
+    (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 'recipe-1',
+          QFTD5RD2EM: 'Updated soup  ',
+          Q65ILNUSGL: [{ ING: 'Carrot', QTY: 2, UNIT: 'kg' }],
+          updatedAt: '2026-04-24T10:00:00Z'
+        }
+      ]
+    });
+
+    const syncRecipeIngredientsFromSource = {
+      id: 'syncRecipeIngredientsFromSource',
+      type: 'addLineItemsFromDataSource',
+      groupId: 'INGREDIENTS',
+      lookupField: 'id',
+      lookupFields: ['id', 'QFTD5RD2EM'],
+      lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+      dataField: 'Q65ILNUSGL',
+      parentFieldMapping: {
+        RECIPE_SOURCE_ID: 'id',
+        RECIPE_SOURCE_UPDATED_AT: 'updatedAt',
+        RECIPE: 'QFTD5RD2EM'
+      },
+      lineItemMapping: { ING: 'ING', QTY: 'QTY', UNIT: 'UNIT' },
+      aggregateBy: ['ING', 'UNIT'],
+      aggregateNumericFields: ['QTY'],
+      preserveManualRows: false,
+      sourceSync: { forceRefresh: true, refreshOnInit: true, stopWhen: { fieldId: 'status', equals: 'Closed' } }
+    } as any;
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' },
+                required: false,
+                selectionEffects: [syncRecipeIngredientsFromSource]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                fields: [
+                  { id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' }, required: false },
+                  { id: 'QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' }, required: false },
+                  { id: 'UNIT', type: 'TEXT', label: { en: 'Unit', fr: 'Unit', nl: 'Unit' }, required: false }
+                ]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    const parentRowId = 'meal_1';
+    const childKey = buildSubgroupKey('MEALS', parentRowId, 'INGREDIENTS');
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      MEALS: [{ id: parentRowId, values: { RECIPE: 'Old soup', RECIPE_SOURCE_ID: 'recipe-1' } }],
+      [childKey]: []
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'RECIPE',
+        dataSource: { id: 'Recipes Data', formKey: 'Config: Recipes' },
+        selectionEffects: [syncRecipeIngredientsFromSource]
+      } as any,
+      value: 'Old soup',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: {
+        contextId: `MEALS::${parentRowId}::RECIPE`,
+        lineItem: {
+          groupId: 'MEALS',
+          rowId: parentRowId,
+          rowValues: { RECIPE: 'Old soup', RECIPE_SOURCE_ID: 'recipe-1' }
+        },
+        forceContextReset: true
+      }
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(fetchDataSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'Recipes Data', formKey: 'Config: Recipes' }),
+      'EN',
+      { forceRefresh: true }
+    );
+    expect(fetchDataSource).toHaveBeenCalledTimes(1);
+    expect(lineItems.MEALS[0].values).toEqual(
+      expect.objectContaining({
+        RECIPE: 'Updated soup',
+        RECIPE_SOURCE_ID: 'recipe-1',
+        RECIPE_SOURCE_UPDATED_AT: '2026-04-24T10:00:00Z'
+      })
+    );
+    expect(lineItems[childKey]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({ ING: 'Carrot', QTY: '2', UNIT: 'kg' })
+        })
+      ])
+    );
+    expect(lineItems[childKey]).toHaveLength(1);
+  });
+
+  it('does not refresh datasource-backed selection effects after sourceSync.stopWhen matches', async () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'RECIPE', type: 'CHOICE', label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' }, required: false }],
+            subGroups: [{ id: 'INGREDIENTS', fields: [{ id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' } }] }]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      MEALS: [{ id: 'meal_1', values: { RECIPE: 'Old soup', RECIPE_SOURCE_ID: 'recipe-1' } }]
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'RECIPE',
+        dataSource: { id: 'Recipes Data' },
+        selectionEffects: [
+          {
+            type: 'addLineItemsFromDataSource',
+            groupId: 'INGREDIENTS',
+            lookupField: 'id',
+            lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+            dataField: 'Q65ILNUSGL',
+            sourceSync: { forceRefresh: true, refreshOnInit: true, stopWhen: { fieldId: 'status', equals: 'Closed' } }
+          }
+        ]
+      } as any,
+      value: 'Old soup',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: {
+        lineItem: { groupId: 'MEALS', rowId: 'meal_1', rowValues: { RECIPE: 'Old soup', RECIPE_SOURCE_ID: 'recipe-1' } },
+        forceContextReset: true,
+        topValues: { status: 'Closed' }
+      } as any
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(fetchDataSource).not.toHaveBeenCalled();
+  });
+
+  it('clears stale parent fields when a datasource-backed line-item source no longer matches', async () => {
+    (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 'recipe-2',
+          QFTD5RD2EM: 'Available soup',
+          Q65ILNUSGL: [{ ING: 'Onion', QTY: 1 }],
+          updatedAt: '2026-04-24T11:00:00Z'
+        }
+      ]
+    });
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' },
+                required: false
+              }
+            ],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                fields: [{ id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' } }]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    const parentRowId = 'meal_1';
+    const childKey = buildSubgroupKey('MEALS', parentRowId, 'INGREDIENTS');
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      MEALS: [
+        {
+          id: parentRowId,
+          values: {
+            RECIPE: 'Disabled soup',
+            RECIPE_SOURCE_ID: 'recipe-1',
+            RECIPE_SOURCE_UPDATED_AT: '2026-01-01T00:00:00Z'
+          }
+        }
+      ],
+      [childKey]: [{ id: 'ing_1', values: { ING: 'Stale ingredient' } }]
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'RECIPE',
+        dataSource: { id: 'Recipes Data', formKey: 'Config: Recipes', statusAllowList: ['Active'] },
+        selectionEffects: [
+          {
+            id: 'syncRecipeIngredientsFromSource',
+            type: 'addLineItemsFromDataSource',
+            groupId: 'INGREDIENTS',
+            lookupField: 'id',
+            lookupFields: ['id', 'QFTD5RD2EM'],
+            lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+            dataField: 'Q65ILNUSGL',
+            preserveManualRows: false,
+            clearOnNoMatch: true,
+            parentFieldMapping: {
+              RECIPE_SOURCE_ID: 'id',
+              RECIPE_SOURCE_UPDATED_AT: 'updatedAt',
+              RECIPE: 'QFTD5RD2EM'
+            },
+            lineItemMapping: { ING: 'ING' },
+            sourceSync: { refreshOnInit: true, forceRefresh: true }
+          }
+        ]
+      } as any,
+      value: 'Disabled soup',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: {
+        contextId: `MEALS::${parentRowId}::RECIPE`,
+        lineItem: {
+          groupId: 'MEALS',
+          rowId: parentRowId,
+          rowValues: {
+            RECIPE: 'Disabled soup',
+            RECIPE_SOURCE_ID: 'recipe-1',
+            RECIPE_SOURCE_UPDATED_AT: '2026-01-01T00:00:00Z'
+          }
+        },
+        forceContextReset: true
+      }
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(lineItems.MEALS[0].values).toEqual(
+      expect.objectContaining({
+        RECIPE: null,
+        RECIPE_SOURCE_ID: null,
+        RECIPE_SOURCE_UPDATED_AT: null
+      })
+    );
+    expect(lineItems[childKey]).toEqual([]);
+  });
+
   it('clears values when setValue uses null', () => {
     const definition: WebFormDefinition = {
       title: 'Test',
@@ -548,6 +868,134 @@ describe('selectionEffects setValue', () => {
     expect(lineItems.LINES[0].values.PREP_TYPE).toBe('Entire dish');
     expect(lineItems.LINES[0].values.RECIPE).toBe('Garlic green beans');
     expect(lineItems.LINES[0].values.PREP_QTY).toBe(12);
+  });
+
+  it('refreshes recipe ingredient rows by stored product source id and bypasses cache', async () => {
+    (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 'product-1',
+          INGREDIENT_NAME: 'Updated carrots  ',
+          CATEGORY: 'Fresh vegetables',
+          ALLERGEN: 'None',
+          updatedAt: '2026-04-24T12:00:00.000Z'
+        }
+      ]
+    });
+
+    const definition: WebFormDefinition = {
+      title: 'Recipes',
+      destinationTab: 'Recipes',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'INGREDIENTS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Ingredients', fr: 'Ingredients', nl: 'Ingredients' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              { id: 'ING', type: 'CHOICE', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' }, required: false },
+              { id: 'CAT', type: 'TEXT', label: { en: 'Category', fr: 'Category', nl: 'Category' }, required: false },
+              { id: 'ALLERGEN', type: 'TEXT', label: { en: 'Allergen', fr: 'Allergen', nl: 'Allergen' }, required: false },
+              { id: 'ING_SOURCE_ID', type: 'TEXT', label: { en: 'Source id', fr: 'Source id', nl: 'Source id' }, required: false },
+              {
+                id: 'ING_SOURCE_UPDATED_AT',
+                type: 'TEXT',
+                label: { en: 'Source updated', fr: 'Source updated', nl: 'Source updated' },
+                required: false
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      INGREDIENTS: [
+        {
+          id: 'ingredient_1',
+          values: {
+            ING: 'Old carrots',
+            CAT: 'Tins',
+            ALLERGEN: '',
+            ING_SOURCE_ID: 'product-1',
+            ING_SOURCE_UPDATED_AT: '2026-01-01T00:00:00.000Z'
+          }
+        }
+      ]
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'ING',
+        dataSource: { id: 'Ingredients Data', formKey: 'Config: Ingredients Management' },
+        selectionEffects: [
+          {
+            id: 'syncIngredientFromSource',
+            type: 'setValuesFromDataSource',
+            lookupField: 'id',
+            lookupFields: ['id', 'INGREDIENT_NAME'],
+            lookupSourceFieldId: 'ING_SOURCE_ID',
+            fieldMapping: {
+              ING_SOURCE_ID: 'id',
+              ING_SOURCE_UPDATED_AT: 'updatedAt',
+              ING: 'INGREDIENT_NAME',
+              CAT: 'CATEGORY',
+              ALLERGEN: 'ALLERGEN'
+            },
+            clearOnNoMatch: false,
+            sourceSync: { refreshOnInit: true, forceRefresh: true, stopWhen: { fieldId: 'status', equals: 'Disabled' } }
+          }
+        ]
+      } as any,
+      value: 'Old carrots',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: {
+        lineItem: {
+          groupId: 'INGREDIENTS',
+          rowId: 'ingredient_1',
+          rowValues: {
+            ING: 'Old carrots',
+            CAT: 'Tins',
+            ALLERGEN: '',
+            ING_SOURCE_ID: 'product-1',
+            ING_SOURCE_UPDATED_AT: '2026-01-01T00:00:00.000Z'
+          }
+        },
+        forceContextReset: true,
+        topValues: { status: 'Active' }
+      } as any
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(fetchDataSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'Ingredients Data', formKey: 'Config: Ingredients Management' }),
+      'EN',
+      { forceRefresh: true }
+    );
+    expect(lineItems.INGREDIENTS[0].values).toEqual(
+      expect.objectContaining({
+        ING_SOURCE_ID: 'product-1',
+        ING_SOURCE_UPDATED_AT: '2026-04-24T12:00:00.000Z',
+        ING: 'Updated carrots',
+        CAT: 'Fresh vegetables',
+        ALLERGEN: 'None'
+      })
+    );
   });
 
   it('fans out subgroup rows from all matching data-source rows', async () => {

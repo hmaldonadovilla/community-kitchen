@@ -1,4 +1,7 @@
-import { resolveOverlayCloseConfirm } from '../src/web/react/features/overlays/domain/overlayCloseConfirm';
+import {
+  resolveOverlayCloseConfirm,
+  resolveOverlayCloseVisibilityScope
+} from '../src/web/react/features/overlays/domain/overlayCloseConfirm';
 import {
   applyOverlayCloseDeletePlan,
   resolveOverlayCloseDeletePlan,
@@ -131,6 +134,128 @@ describe('overlay close confirm', () => {
     expect(resolvedMissing?.confirm.title).toEqual({ en: 'Missing quantity/unit' });
     expect(resolvedMissing?.highlightFirstError).toBe(true);
     expect(resolvedMissing?.onConfirmEffects?.length).toBe(1);
+  });
+
+  test('scopes subgroup overlay close confirms to the active nested detail row', () => {
+    const rootGroupId = 'MP_MEALS_REQUEST';
+    const rootRowId = 'meal_1';
+    const overlayGroupKey = `${rootGroupId}::${rootRowId}::MP_TYPE_LI`;
+    const activeRowId = 'cook_1';
+    const activeIngredientsKey = `${overlayGroupKey}::${activeRowId}::MP_INGREDIENTS_LI`;
+    const emptyRowId = 'cook_2';
+    const emptyIngredientsKey = `${overlayGroupKey}::${emptyRowId}::MP_INGREDIENTS_LI`;
+    const closeConfirm = {
+      cases: [
+        {
+          when: {
+            not: {
+              lineItems: {
+                groupId: rootGroupId,
+                subGroupPath: ['MP_TYPE_LI', 'MP_INGREDIENTS_LI'],
+                parentWhen: { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+                match: 'any'
+              }
+            }
+          },
+          title: { en: 'Missing ingredients' },
+          body: { en: 'No ingredients have been added. Do you want to exit?' },
+          confirmLabel: { en: 'Yes' },
+          cancelLabel: { en: 'No' }
+        }
+      ]
+    };
+    const lineItems: any = {
+      [rootGroupId]: [{ id: rootRowId, values: {} }],
+      [overlayGroupKey]: [
+        { id: activeRowId, values: { PREP_TYPE: 'Cook' } },
+        { id: emptyRowId, values: { PREP_TYPE: 'Cook' } }
+      ],
+      [activeIngredientsKey]: [{ id: 'ing_1', values: { ING: 'Salt', QTY: 1, UNIT: 'kg' } }],
+      [emptyIngredientsKey]: []
+    };
+    const ctx = {
+      getValue: () => undefined,
+      getLineValue: () => undefined,
+      getLineItems: (key: string) => lineItems[key] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    };
+    const scope = resolveOverlayCloseVisibilityScope({
+      overlayGroupId: overlayGroupKey,
+      detailSelectionGroupId: overlayGroupKey,
+      detailSelectionRowId: activeRowId
+    });
+
+    expect(scope).toEqual({ rowId: activeRowId, linePrefix: overlayGroupKey });
+    expect(resolveOverlayCloseConfirm({ closeConfirm: closeConfirm as any, ctx: ctx as any, scope })).toBeNull();
+    expect(
+      resolveOverlayCloseConfirm({
+        closeConfirm: closeConfirm as any,
+        ctx: ctx as any,
+        scope: { rowId: emptyRowId, linePrefix: overlayGroupKey }
+      })?.confirm.title
+    ).toEqual({ en: 'Missing ingredients' });
+  });
+
+  test('scopes subgroup overlay close confirms to active alias detail rows', () => {
+    const rootGroupId = 'MP_MEALS_REQUEST';
+    const rootRowId = 'meal_1';
+    const overlayGroupKey = `${rootGroupId}::${rootRowId}::MP_TYPE_LI`;
+    const activeRowId = 'cook_1';
+    const emptyRowId = 'cook_2';
+    const activeIngredientsKey = `MP_TYPE_LI::${activeRowId}::MP_INGREDIENTS_LI`;
+    const emptyIngredientsKey = `MP_TYPE_LI::${emptyRowId}::MP_INGREDIENTS_LI`;
+    const closeConfirm = {
+      cases: [
+        {
+          when: {
+            not: {
+              lineItems: {
+                groupId: rootGroupId,
+                subGroupPath: ['MP_TYPE_LI', 'MP_INGREDIENTS_LI'],
+                match: 'any'
+              }
+            }
+          },
+          title: { en: 'Missing ingredients' },
+          body: { en: 'No ingredients have been added. Do you want to exit?' },
+          confirmLabel: { en: 'Yes' },
+          cancelLabel: { en: 'No' }
+        }
+      ]
+    };
+    const lineItems: any = {
+      [rootGroupId]: [{ id: rootRowId, values: {} }],
+      [overlayGroupKey]: [
+        { id: activeRowId, values: { RECIPE: 'Soup' } },
+        { id: emptyRowId, values: { RECIPE: 'Pasta' } }
+      ],
+      MP_TYPE_LI: [
+        { id: activeRowId, values: { RECIPE: 'Soup' } },
+        { id: emptyRowId, values: { RECIPE: 'Pasta' } }
+      ],
+      [activeIngredientsKey]: [{ id: 'ing_1', values: { ING: 'Salt', QTY: 1, UNIT: 'kg' } }],
+      [emptyIngredientsKey]: []
+    };
+    const ctx = {
+      getValue: () => undefined,
+      getLineValue: () => undefined,
+      getLineItems: (key: string) => lineItems[key] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    };
+    const scope = resolveOverlayCloseVisibilityScope({
+      overlayGroupId: overlayGroupKey,
+      detailSelectionGroupId: overlayGroupKey,
+      detailSelectionRowId: activeRowId
+    });
+
+    expect(resolveOverlayCloseConfirm({ closeConfirm: closeConfirm as any, ctx: ctx as any, scope })).toBeNull();
+    expect(
+      resolveOverlayCloseConfirm({
+        closeConfirm: closeConfirm as any,
+        ctx: ctx as any,
+        scope: { rowId: emptyRowId, linePrefix: overlayGroupKey }
+      })?.confirm.title
+    ).toEqual({ en: 'Missing ingredients' });
   });
 });
 

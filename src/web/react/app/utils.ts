@@ -8,12 +8,26 @@ export const detectDebug = (): boolean => {
   }
 };
 
+const ALWAYS_LOG_DIAGNOSTIC_PREFIXES = [
+  'steps.',
+  'validation.navigate.',
+  'optionFilter.',
+  'paragraphDisclaimer.',
+  'selectionEffects.',
+  'record.freshness.',
+  'datasource.freshness.'
+];
+
+export const shouldAlwaysLogDiagnosticEvent = (event: string): boolean => {
+  const normalized = (event || '').toString();
+  return ALWAYS_LOG_DIAGNOSTIC_PREFIXES.some(prefix => normalized.startsWith(prefix));
+};
+
 export const resolveSelectorLabel = (selector: LineItemSelectorConfig | undefined, language: LangCode): string => {
   if (!selector) return '';
   if (language === 'FR') return selector.labelFr || selector.labelEn || selector.id;
   if (language === 'NL') return selector.labelNl || selector.labelEn || selector.id;
   return selector.labelEn || selector.id;
 };
-
 
 

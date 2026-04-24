@@ -62,6 +62,7 @@ import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
+import { matchesWhenClause } from '../rules/visibility';
 import { ReportOverlay, ReportOverlayState } from './components/app/ReportOverlay';
 import { SummaryView } from './components/app/SummaryView';
 import { ListViewLegend } from './components/app/ListViewLegend';
@@ -119,7 +120,7 @@ import {
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
-import { detectDebug } from './app/utils';
+import { detectDebug, shouldAlwaysLogDiagnosticEvent } from './app/utils';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
@@ -855,13 +856,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
       // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
-      // Guided steps diagnostics are always enabled because they are essential for troubleshooting user flows.
-      const alwaysLog =
-        event.startsWith('steps.') ||
-        event.startsWith('validation.navigate.') ||
-        event.startsWith('optionFilter.') ||
-        event.startsWith('paragraphDisclaimer.') ||
-        event.startsWith('selectionEffects.');
+      // Critical guided-flow and freshness diagnostics stay visible for production troubleshooting.
+      const alwaysLog = shouldAlwaysLogDiagnosticEvent(event);
       if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
       try {
         console.info('[ReactForm]', event, payload || {});
@@ -3244,6 +3240,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition]
   );
 
+  const dataSourceFreshnessWatchIsStopped = useCallback((watch: { stopWhen?: any }): boolean => {
+    if (!watch?.stopWhen) return false;
+    const metaSource: any = selectedRecordSnapshot || lastSubmissionMeta || null;
+    const topValues: Record<string, FieldValue> = {
+      ...((values || {}) as Record<string, FieldValue>),
+      ...(metaSource?.id !== undefined ? { id: metaSource.id as FieldValue } : {}),
+      ...(metaSource?.createdAt !== undefined ? { createdAt: metaSource.createdAt as FieldValue } : {}),
+      ...(metaSource?.updatedAt !== undefined ? { updatedAt: metaSource.updatedAt as FieldValue } : {}),
+      ...(metaSource?.status !== undefined ? { status: metaSource.status as FieldValue, STATUS: metaSource.status as FieldValue } : {}),
+      ...(metaSource?.pdfUrl !== undefined ? { pdfUrl: metaSource.pdfUrl as FieldValue } : {})
+    };
+    return matchesWhenClause(watch.stopWhen, {
+      getValue: (fieldId: string) => topValues[fieldId],
+      getLineItems: (groupId: string) => (lineItems[groupId] || []) as any[],
+      getLineItemKeys: () => Object.keys(lineItems || {})
+    } as any);
+  }, [lastSubmissionMeta, lineItems, selectedRecordSnapshot, values]);
+
+  const resolveRunnableDataSourceFreshnessWatches = useCallback(
+    (stepId?: string | null) =>
+      resolveActiveDataSourceFreshnessWatches({
+        watches: dataSourceFreshnessWatchesRef.current,
+        stepId
+      }).filter(watch => !dataSourceFreshnessWatchIsStopped(watch)),
+    [dataSourceFreshnessWatchIsStopped]
+  );
+
   const clearDataSourceFreshnessTimer = useCallback(() => {
     if (dataSourceFreshnessTimerRef.current) {
       globalThis.clearTimeout(dataSourceFreshnessTimerRef.current);
@@ -3254,10 +3277,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const scheduleDataSourceFreshnessCheck = useCallback(
     (reason: string) => {
       clearDataSourceFreshnessTimer();
-      const activeWatches = resolveActiveDataSourceFreshnessWatches({
-        watches: dataSourceFreshnessWatchesRef.current,
-        stepId: activeGuidedStepIdRef.current
-      });
+      const activeWatches = resolveRunnableDataSourceFreshnessWatches(activeGuidedStepIdRef.current);
       const now = Date.now();
       const primed = primeDataSourceFreshnessWatchBaselines({
         watches: activeWatches,
@@ -3297,15 +3317,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dataSourceIds: Array.from(new Set(activeWatches.flatMap(watch => watch.dataSourceIds)))
       });
     },
-    [clearDataSourceFreshnessTimer, getCurrentOpenRecordId, logEvent]
+    [clearDataSourceFreshnessTimer, getCurrentOpenRecordId, logEvent, resolveRunnableDataSourceFreshnessWatches]
   );
 
   const markDataSourceFreshnessServerTouch = useCallback(
     (args: { reason: string; stepId?: string | null; dataSourceIds?: string[] | null }) => {
-      const activeWatches = resolveActiveDataSourceFreshnessWatches({
-        watches: dataSourceFreshnessWatchesRef.current,
-        stepId: (args.stepId || activeGuidedStepIdRef.current || '').toString().trim()
-      });
+      const activeWatches = resolveRunnableDataSourceFreshnessWatches(
+        (args.stepId || activeGuidedStepIdRef.current || '').toString().trim()
+      );
       const normalizedRequestedIds = new Set(
         (Array.isArray(args.dataSourceIds) ? args.dataSourceIds : [])
           .map(id => normalizeDataSourceVisibilityKey(`${id || ''}`))
@@ -3330,17 +3349,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       scheduleDataSourceFreshnessCheck(args.reason);
     },
-    [getCurrentOpenRecordId, logEvent, scheduleDataSourceFreshnessCheck]
+    [getCurrentOpenRecordId, logEvent, resolveRunnableDataSourceFreshnessWatches, scheduleDataSourceFreshnessCheck]
   );
 
   const performDataSourceFreshnessCheck = useCallback(
     async (reason: string): Promise<void> => {
       const recordId = getCurrentOpenRecordId();
       const stepId = activeGuidedStepIdRef.current;
-      const activeWatches = resolveActiveDataSourceFreshnessWatches({
-        watches: dataSourceFreshnessWatchesRef.current,
-        stepId
-      });
+      const activeWatches = resolveRunnableDataSourceFreshnessWatches(stepId);
       const delayMs = resolveDataSourceFreshnessTimerDelay({
         watches: activeWatches,
         view: viewRef.current,
@@ -3550,6 +3566,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       customConfirm,
       getCurrentOpenRecordId,
       logEvent,
+      resolveRunnableDataSourceFreshnessWatches,
       resolveWatchedDataSourceConfig,
       scheduleDataSourceFreshnessCheck
     ]
@@ -12180,6 +12197,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return;
     }
     const currentValues = opts?.snapshots?.values || snapshots?.values || valuesRef.current;
+    const currentTopValues = {
+      ...(currentValues || {}),
+      ...(formRecordMeta?.id !== undefined ? { id: formRecordMeta.id as FieldValue } : {}),
+      ...(formRecordMeta?.createdAt !== undefined ? { createdAt: formRecordMeta.createdAt as FieldValue } : {}),
+      ...(formRecordMeta?.updatedAt !== undefined ? { updatedAt: formRecordMeta.updatedAt as FieldValue } : {}),
+      ...(formRecordMeta?.status !== undefined
+        ? { status: formRecordMeta.status as FieldValue, STATUS: formRecordMeta.status as FieldValue }
+        : {}),
+      ...(formRecordMeta?.pdfUrl !== undefined ? { pdfUrl: formRecordMeta.pdfUrl as FieldValue } : {})
+    } as Record<string, FieldValue>;
     const currentLineItems = opts?.snapshots?.lineItems || snapshots?.lineItems || lineItemsRef.current;
     runSelectionEffectsHelper({
       definition,
@@ -12213,7 +12240,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }, 0);
       },
       logEvent,
-      opts,
+      opts: {
+        ...(opts || {}),
+        topValues: currentTopValues
+      },
       effectOverrides,
       onRowAppended: ({ anchor, targetKey, rowId, source }) => {
         setExternalScrollAnchor(anchor);

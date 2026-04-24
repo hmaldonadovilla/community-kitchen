@@ -30,6 +30,30 @@ export const getOverlayCloseAllowCloseFromEdit = (value: OverlayCloseConfirmLike
   return value.allowCloseFromEdit === true;
 };
 
+const normalizeId = (raw: unknown): string => {
+  if (raw === undefined || raw === null) return '';
+  try {
+    return raw.toString().trim();
+  } catch {
+    return '';
+  }
+};
+
+export const resolveOverlayCloseVisibilityScope = (args: {
+  overlayGroupId?: string;
+  detailSelectionGroupId?: string;
+  detailSelectionRowId?: string;
+}): { rowId: string; linePrefix: string } | undefined => {
+  const overlayGroupId = normalizeId(args.overlayGroupId);
+  const detailSelectionGroupId = normalizeId(args.detailSelectionGroupId);
+  const detailSelectionRowId = normalizeId(args.detailSelectionRowId);
+  if (!overlayGroupId || !detailSelectionGroupId || !detailSelectionRowId) return undefined;
+  const detailWithinOverlay =
+    detailSelectionGroupId === overlayGroupId || detailSelectionGroupId.startsWith(`${overlayGroupId}::`);
+  if (!detailWithinOverlay) return undefined;
+  return { rowId: detailSelectionRowId, linePrefix: detailSelectionGroupId };
+};
+
 const resolveCaseConfirm = (cfg: OverlayCloseConfirmCaseConfig): RowFlowActionConfirmConfig => {
   const { when: _when, onConfirmEffects: _effects, highlightFirstError: _hf, validateOnReopen: _vor, ...confirm } = cfg;
   return confirm;

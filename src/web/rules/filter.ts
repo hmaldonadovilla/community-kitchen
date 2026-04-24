@@ -484,8 +484,14 @@ export function buildLocalizedOptions(
 
   const buildItem = (value: string, originalIndex: number): OptionItem => {
     const labelIdx = baseOpts.findIndex((opt: string) => opt === value);
+    const rawRow = rawIndex.get(value);
+    const rawOptionLabel =
+      rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow)
+        ? normalizeValue((rawRow as any).__ckOptionLabel)
+        : '';
     const label =
-      labelIdx >= 0
+      rawOptionLabel ||
+      (labelIdx >= 0
         ? labels[labelIdx] || value
         : (() => {
             const fallbackIdx = baseOpts.findIndex((opt: string) => normalizeValue(opt) === value);
@@ -493,26 +499,22 @@ export function buildLocalizedOptions(
               return labels[fallbackIdx] || baseOpts[fallbackIdx];
             }
             return value;
-          })();
+          })());
     const resolvedIndex = labelIdx >= 0 ? labelIdx : baseOpts.findIndex((opt: string) => opt === value);
-    const rawRow = rawIndex.get(value);
+    const resolvedLabels = {
+      en: rawOptionLabel || options.en?.[resolvedIndex] || value,
+      fr: rawOptionLabel || options.fr?.[resolvedIndex] || value,
+      nl: rawOptionLabel || options.nl?.[resolvedIndex] || value
+    };
     return {
       value,
       label,
-      labels: {
-        en: options.en?.[resolvedIndex] || value,
-        fr: options.fr?.[resolvedIndex] || value,
-        nl: options.nl?.[resolvedIndex] || value
-      },
+      labels: resolvedLabels,
       tooltip: (options as any)?.tooltips?.[value],
       searchText: buildSearchText({
         value,
         label,
-        labels: {
-          en: options.en?.[resolvedIndex] || value,
-          fr: options.fr?.[resolvedIndex] || value,
-          nl: options.nl?.[resolvedIndex] || value
-        },
+        labels: resolvedLabels,
         raw: rawRow
       }),
       // carry original index to keep a stable secondary sort

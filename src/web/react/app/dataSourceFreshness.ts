@@ -2,6 +2,7 @@ import type {
   DataSourceConfig,
   DataSourceFreshnessDialogConfig,
   DataSourceFreshnessWatchConfig,
+  WhenClause,
   RecordFreshnessConfig
 } from '../../../types';
 import type { View } from '../types';
@@ -16,6 +17,7 @@ export interface ResolvedDataSourceFreshnessWatch {
   stepId: string;
   dataSourceIds: string[];
   quietWindowMs: number;
+  stopWhen?: WhenClause;
   dialog?: DataSourceFreshnessDialogConfig | null;
 }
 
@@ -75,6 +77,7 @@ export const resolveDataSourceFreshnessWatches = (
       stepId,
       dataSourceIds,
       quietWindowMs: normalizeQuietWindowMs(rawWatch.quietWindowMs),
+      stopWhen: rawWatch.stopWhen,
       dialog: rawWatch.dialog || null
     });
   });

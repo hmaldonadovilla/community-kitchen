@@ -10725,6 +10725,10 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "OK"
               },
               "showCancel": false
+            },
+            "stopWhen": {
+              "fieldId": "status",
+              "equals": "Closed"
             }
           }
         ],
@@ -10936,7 +10940,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fields": [
                   "PREP_TYPE",
                   "PREP_QTY",
-                  "RECIPE"
+                  "RECIPE",
+                  "RECIPE_SOURCE_ID",
+                  "RECIPE_SOURCE_UPDATED_AT"
                 ],
                 "includeWhen": {
                   "all": [
@@ -12652,6 +12658,10 @@ export const BUNDLED_FORM_CONFIGS = [
                       "actionsLayout": "inline",
                       "input": {
                         "labelLayout": "inline"
+                      },
+                      "showWhen": {
+                        "fieldId": "MP_TO_COOK",
+                        "greaterThan": 0
                       }
                     }
                   ],
@@ -12716,12 +12726,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "MP_TYPE_LI",
                                         "MP_INGREDIENTS_LI"
                                       ],
-                                      "parentWhen": {
-                                        "fieldId": "PREP_TYPE",
-                                        "equals": [
-                                          "Cook"
-                                        ]
-                                      },
                                       "match": "any"
                                     }
                                   }
@@ -12748,12 +12752,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
-                                    "parentWhen": {
-                                      "fieldId": "PREP_TYPE",
-                                      "equals": [
-                                        "Cook"
-                                      ]
-                                    },
                                     "when": {
                                       "all": [
                                         {
@@ -12873,7 +12871,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                   },
                                   "statusAllowList": [
                                     "Active"
-                                  ]
+                                  ],
+                                  "formKey": "Config: Recipes",
+                                  "statusFieldId": "status"
                                 },
                                 "optionFilter": {
                                   "dependsOn": "MEAL_TYPE",
@@ -12888,7 +12888,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "type": "addLineItemsFromDataSource",
                                     "groupId": "MP_INGREDIENTS_LI",
                                     "targetPath": "MP_INGREDIENTS_LI",
-                                    "lookupField": "QFTD5RD2EM",
+                                    "lookupField": "id",
                                     "dataField": "Q65ILNUSGL",
                                     "rowMultiplierFieldId": "PREP_QTY",
                                     "dataSourceMultiplierField": "NUM_PORTIONS",
@@ -12901,7 +12901,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "QTY": "QTY",
                                       "UNIT": "UNIT",
                                       "CAT": "CAT",
-                                      "ALLERGEN": "ALLERGEN"
+                                      "ALLERGEN": "ALLERGEN",
+                                      "ING_SOURCE_ID": "ING_SOURCE_ID",
+                                      "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                                     },
                                     "aggregateBy": [
                                       "ING",
@@ -12910,7 +12912,31 @@ export const BUNDLED_FORM_CONFIGS = [
                                     ],
                                     "aggregateNumericFields": [
                                       "QTY"
-                                    ]
+                                    ],
+                                    "id": "syncRecipeIngredientsFromSource",
+                                    "lookupFields": [
+                                      "id",
+                                      "QFTD5RD2EM"
+                                    ],
+                                    "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                                    "parentFieldMapping": {
+                                      "RECIPE_SOURCE_ID": "id",
+                                      "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                                      "RECIPE": "QFTD5RD2EM"
+                                    },
+                                    "sourceSync": {
+                                      "refreshOnInit": true,
+                                      "forceRefresh": true,
+                                      "stopWhen": {
+                                        "fieldId": "status",
+                                        "equals": "Closed"
+                                      }
+                                    },
+                                    "clearOnNoMatch": true,
+                                    "when": {
+                                      "fieldId": "PREP_QTY",
+                                      "greaterThan": 0
+                                    }
                                   },
                                   {
                                     "type": "setValue",
@@ -14634,7 +14660,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 },
                 "statusAllowList": [
                   "Active"
-                ]
+                ],
+                "formKey": "Config: Recipes",
+                "statusFieldId": "status"
               },
               "optionFilter": {
                 "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -14970,8 +14998,11 @@ export const BUNDLED_FORM_CONFIGS = [
                   "DIETARY_APPLICABILITY",
                   "ALLOWED_UNIT",
                   "ALLERGEN",
-                  "STATUS"
-                ]
+                  "STATUS",
+                  "SUPPLIER"
+                ],
+                "formKey": "Config: Ingredients Management",
+                "statusFieldId": "STATUS"
               }
             },
             {
@@ -15148,8 +15179,12 @@ export const BUNDLED_FORM_CONFIGS = [
                       "DIETARY_APPLICABILITY",
                       "ALLOWED_UNIT",
                       "ALLERGEN",
-                      "STATUS"
-                    ]
+                      "STATUS",
+                      "SUPPLIER",
+                      "CATEGORY"
+                    ],
+                    "formKey": "Config: Ingredients Management",
+                    "statusFieldId": "STATUS"
                   },
                   "optionFilter": {
                     "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -15161,7 +15196,35 @@ export const BUNDLED_FORM_CONFIGS = [
                     },
                     "dataSourceField": "DIETARY_APPLICABILITY",
                     "dataSourceDelimiter": ","
-                  }
+                  },
+                  "selectionEffects": [
+                    {
+                      "id": "syncIngredientFromSource",
+                      "type": "setValuesFromDataSource",
+                      "lookupField": "id",
+                      "lookupFields": [
+                        "id",
+                        "INGREDIENT_NAME"
+                      ],
+                      "lookupSourceFieldId": "ING_SOURCE_ID",
+                      "fieldMapping": {
+                        "ING_SOURCE_ID": "id",
+                        "ING_SOURCE_UPDATED_AT": "updatedAt",
+                        "ING": "INGREDIENT_NAME",
+                        "CAT": "CATEGORY",
+                        "ALLERGEN": "ALLERGEN"
+                      },
+                      "clearOnNoMatch": false,
+                      "sourceSync": {
+                        "refreshOnInit": true,
+                        "forceRefresh": true,
+                        "stopWhen": {
+                          "fieldId": "status",
+                          "equals": "Closed"
+                        }
+                      }
+                    }
+                  ]
                 },
                 {
                   "id": "QTY",
@@ -16407,21 +16470,25 @@ export const BUNDLED_FORM_CONFIGS = [
                       "en": "Instructions",
                       "fr": "Instructions",
                       "nl": "Instructies"
-                    }
+                    },
+                    "formKey": "Config: Recipes",
+                    "statusFieldId": "status"
                   },
                   "selectionEffects": [
                     {
                       "type": "addLineItemsFromDataSource",
                       "groupId": "MP_INGREDIENTS_LI",
                       "targetPath": "MP_INGREDIENTS_LI",
-                      "lookupField": "QFTD5RD2EM",
+                      "lookupField": "id",
                       "dataField": "Q65ILNUSGL",
                       "lineItemMapping": {
                         "ING": "ING",
                         "QTY": "QTY",
                         "UNIT": "UNIT",
                         "CAT": "CAT",
-                        "ALLERGEN": "ALLERGEN"
+                        "ALLERGEN": "ALLERGEN",
+                        "ING_SOURCE_ID": "ING_SOURCE_ID",
+                        "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                       },
                       "aggregateBy": [
                         "ING",
@@ -16436,7 +16503,31 @@ export const BUNDLED_FORM_CONFIGS = [
                       "scaleNumericFields": [
                         "QTY"
                       ],
-                      "preserveManualRows": false
+                      "preserveManualRows": false,
+                      "id": "syncRecipeIngredientsFromSource",
+                      "lookupFields": [
+                        "id",
+                        "QFTD5RD2EM"
+                      ],
+                      "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                      "parentFieldMapping": {
+                        "RECIPE_SOURCE_ID": "id",
+                        "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                        "RECIPE": "QFTD5RD2EM"
+                      },
+                      "sourceSync": {
+                        "refreshOnInit": true,
+                        "forceRefresh": true,
+                        "stopWhen": {
+                          "fieldId": "status",
+                          "equals": "Closed"
+                        }
+                      },
+                      "clearOnNoMatch": true,
+                      "when": {
+                        "fieldId": "PREP_QTY",
+                        "greaterThan": 0
+                      }
                     },
                     {
                       "type": "setValue",
@@ -16744,8 +16835,38 @@ export const BUNDLED_FORM_CONFIGS = [
                           "CATEGORY",
                           "ALLERGEN",
                           "STATUS"
-                        ]
-                      }
+                        ],
+                        "formKey": "Config: Ingredients Management",
+                        "statusFieldId": "STATUS"
+                      },
+                      "selectionEffects": [
+                        {
+                          "id": "syncIngredientFromSource",
+                          "type": "setValuesFromDataSource",
+                          "lookupField": "id",
+                          "lookupFields": [
+                            "id",
+                            "INGREDIENT_NAME"
+                          ],
+                          "lookupSourceFieldId": "ING_SOURCE_ID",
+                          "fieldMapping": {
+                            "ING_SOURCE_ID": "id",
+                            "ING_SOURCE_UPDATED_AT": "updatedAt",
+                            "ING": "INGREDIENT_NAME",
+                            "CAT": "CATEGORY",
+                            "ALLERGEN": "ALLERGEN"
+                          },
+                          "clearOnNoMatch": false,
+                          "sourceSync": {
+                            "refreshOnInit": true,
+                            "forceRefresh": true,
+                            "stopWhen": {
+                              "fieldId": "status",
+                              "equals": "Closed"
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
                       "id": "QTY",
@@ -18367,7 +18488,9 @@ export const BUNDLED_FORM_CONFIGS = [
                   },
                   "statusAllowList": [
                     "Active"
-                  ]
+                  ],
+                  "formKey": "Config: Recipes",
+                  "statusFieldId": "status"
                 },
                 "optionFilter": {
                   "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -18703,8 +18826,11 @@ export const BUNDLED_FORM_CONFIGS = [
                     "DIETARY_APPLICABILITY",
                     "ALLOWED_UNIT",
                     "ALLERGEN",
-                    "STATUS"
-                  ]
+                    "STATUS",
+                    "SUPPLIER"
+                  ],
+                  "formKey": "Config: Ingredients Management",
+                  "statusFieldId": "STATUS"
                 }
               },
               {
@@ -18881,8 +19007,12 @@ export const BUNDLED_FORM_CONFIGS = [
                         "DIETARY_APPLICABILITY",
                         "ALLOWED_UNIT",
                         "ALLERGEN",
-                        "STATUS"
-                      ]
+                        "STATUS",
+                        "SUPPLIER",
+                        "CATEGORY"
+                      ],
+                      "formKey": "Config: Ingredients Management",
+                      "statusFieldId": "STATUS"
                     },
                     "optionFilter": {
                       "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -18894,7 +19024,35 @@ export const BUNDLED_FORM_CONFIGS = [
                       },
                       "dataSourceField": "DIETARY_APPLICABILITY",
                       "dataSourceDelimiter": ","
-                    }
+                    },
+                    "selectionEffects": [
+                      {
+                        "id": "syncIngredientFromSource",
+                        "type": "setValuesFromDataSource",
+                        "lookupField": "id",
+                        "lookupFields": [
+                          "id",
+                          "INGREDIENT_NAME"
+                        ],
+                        "lookupSourceFieldId": "ING_SOURCE_ID",
+                        "fieldMapping": {
+                          "ING_SOURCE_ID": "id",
+                          "ING_SOURCE_UPDATED_AT": "updatedAt",
+                          "ING": "INGREDIENT_NAME",
+                          "CAT": "CATEGORY",
+                          "ALLERGEN": "ALLERGEN"
+                        },
+                        "clearOnNoMatch": false,
+                        "sourceSync": {
+                          "refreshOnInit": true,
+                          "forceRefresh": true,
+                          "stopWhen": {
+                            "fieldId": "status",
+                            "equals": "Closed"
+                          }
+                        }
+                      }
+                    ]
                   },
                   {
                     "id": "QTY",
@@ -20208,21 +20366,25 @@ export const BUNDLED_FORM_CONFIGS = [
                         "en": "Instructions",
                         "fr": "Instructions",
                         "nl": "Instructies"
-                      }
+                      },
+                      "formKey": "Config: Recipes",
+                      "statusFieldId": "status"
                     },
                     "selectionEffects": [
                       {
                         "type": "addLineItemsFromDataSource",
                         "groupId": "MP_INGREDIENTS_LI",
                         "targetPath": "MP_INGREDIENTS_LI",
-                        "lookupField": "QFTD5RD2EM",
+                        "lookupField": "id",
                         "dataField": "Q65ILNUSGL",
                         "lineItemMapping": {
                           "ING": "ING",
                           "QTY": "QTY",
                           "UNIT": "UNIT",
                           "CAT": "CAT",
-                          "ALLERGEN": "ALLERGEN"
+                          "ALLERGEN": "ALLERGEN",
+                          "ING_SOURCE_ID": "ING_SOURCE_ID",
+                          "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                         },
                         "aggregateBy": [
                           "ING",
@@ -20237,7 +20399,31 @@ export const BUNDLED_FORM_CONFIGS = [
                         "scaleNumericFields": [
                           "QTY"
                         ],
-                        "preserveManualRows": false
+                        "preserveManualRows": false,
+                        "id": "syncRecipeIngredientsFromSource",
+                        "lookupFields": [
+                          "id",
+                          "QFTD5RD2EM"
+                        ],
+                        "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                        "parentFieldMapping": {
+                          "RECIPE_SOURCE_ID": "id",
+                          "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                          "RECIPE": "QFTD5RD2EM"
+                        },
+                        "sourceSync": {
+                          "refreshOnInit": true,
+                          "forceRefresh": true,
+                          "stopWhen": {
+                            "fieldId": "status",
+                            "equals": "Closed"
+                          }
+                        },
+                        "clearOnNoMatch": true,
+                        "when": {
+                          "fieldId": "PREP_QTY",
+                          "greaterThan": 0
+                        }
                       },
                       {
                         "type": "setValue",
@@ -20545,8 +20731,38 @@ export const BUNDLED_FORM_CONFIGS = [
                             "CATEGORY",
                             "ALLERGEN",
                             "STATUS"
-                          ]
-                        }
+                          ],
+                          "formKey": "Config: Ingredients Management",
+                          "statusFieldId": "STATUS"
+                        },
+                        "selectionEffects": [
+                          {
+                            "id": "syncIngredientFromSource",
+                            "type": "setValuesFromDataSource",
+                            "lookupField": "id",
+                            "lookupFields": [
+                              "id",
+                              "INGREDIENT_NAME"
+                            ],
+                            "lookupSourceFieldId": "ING_SOURCE_ID",
+                            "fieldMapping": {
+                              "ING_SOURCE_ID": "id",
+                              "ING_SOURCE_UPDATED_AT": "updatedAt",
+                              "ING": "INGREDIENT_NAME",
+                              "CAT": "CATEGORY",
+                              "ALLERGEN": "ALLERGEN"
+                            },
+                            "clearOnNoMatch": false,
+                            "sourceSync": {
+                              "refreshOnInit": true,
+                              "forceRefresh": true,
+                              "stopWhen": {
+                                "fieldId": "status",
+                                "equals": "Closed"
+                              }
+                            }
+                          }
+                        ]
                       },
                       {
                         "id": "QTY",
@@ -22056,6 +22272,10 @@ export const BUNDLED_FORM_CONFIGS = [
                 "en": "OK"
               },
               "showCancel": false
+            },
+            "stopWhen": {
+              "fieldId": "status",
+              "equals": "Closed"
             }
           }
         ],
@@ -22219,7 +22439,9 @@ export const BUNDLED_FORM_CONFIGS = [
                 "fields": [
                   "PREP_TYPE",
                   "PREP_QTY",
-                  "RECIPE"
+                  "RECIPE",
+                  "RECIPE_SOURCE_ID",
+                  "RECIPE_SOURCE_UPDATED_AT"
                 ],
                 "includeWhen": {
                   "all": [
@@ -23889,6 +24111,10 @@ export const BUNDLED_FORM_CONFIGS = [
                       "actionsLayout": "inline",
                       "input": {
                         "labelLayout": "inline"
+                      },
+                      "showWhen": {
+                        "fieldId": "MP_TO_COOK",
+                        "greaterThan": 0
                       }
                     }
                   ],
@@ -23953,12 +24179,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                         "MP_TYPE_LI",
                                         "MP_INGREDIENTS_LI"
                                       ],
-                                      "parentWhen": {
-                                        "fieldId": "PREP_TYPE",
-                                        "equals": [
-                                          "Cook"
-                                        ]
-                                      },
                                       "match": "any"
                                     }
                                   }
@@ -23985,12 +24205,6 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
-                                    "parentWhen": {
-                                      "fieldId": "PREP_TYPE",
-                                      "equals": [
-                                        "Cook"
-                                      ]
-                                    },
                                     "when": {
                                       "all": [
                                         {
@@ -24110,7 +24324,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                   },
                                   "statusAllowList": [
                                     "Active"
-                                  ]
+                                  ],
+                                  "formKey": "Config: Recipes",
+                                  "statusFieldId": "status"
                                 },
                                 "optionFilter": {
                                   "dependsOn": "MEAL_TYPE",
@@ -24125,7 +24341,7 @@ export const BUNDLED_FORM_CONFIGS = [
                                     "type": "addLineItemsFromDataSource",
                                     "groupId": "MP_INGREDIENTS_LI",
                                     "targetPath": "MP_INGREDIENTS_LI",
-                                    "lookupField": "QFTD5RD2EM",
+                                    "lookupField": "id",
                                     "dataField": "Q65ILNUSGL",
                                     "rowMultiplierFieldId": "PREP_QTY",
                                     "dataSourceMultiplierField": "NUM_PORTIONS",
@@ -24138,7 +24354,9 @@ export const BUNDLED_FORM_CONFIGS = [
                                       "QTY": "QTY",
                                       "UNIT": "UNIT",
                                       "CAT": "CAT",
-                                      "ALLERGEN": "ALLERGEN"
+                                      "ALLERGEN": "ALLERGEN",
+                                      "ING_SOURCE_ID": "ING_SOURCE_ID",
+                                      "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                                     },
                                     "aggregateBy": [
                                       "ING",
@@ -24147,7 +24365,31 @@ export const BUNDLED_FORM_CONFIGS = [
                                     ],
                                     "aggregateNumericFields": [
                                       "QTY"
-                                    ]
+                                    ],
+                                    "id": "syncRecipeIngredientsFromSource",
+                                    "lookupFields": [
+                                      "id",
+                                      "QFTD5RD2EM"
+                                    ],
+                                    "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                                    "parentFieldMapping": {
+                                      "RECIPE_SOURCE_ID": "id",
+                                      "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                                      "RECIPE": "QFTD5RD2EM"
+                                    },
+                                    "sourceSync": {
+                                      "refreshOnInit": true,
+                                      "forceRefresh": true,
+                                      "stopWhen": {
+                                        "fieldId": "status",
+                                        "equals": "Closed"
+                                      }
+                                    },
+                                    "clearOnNoMatch": true,
+                                    "when": {
+                                      "fieldId": "PREP_QTY",
+                                      "greaterThan": 0
+                                    }
                                   },
                                   {
                                     "type": "setValue",
@@ -25096,7 +25338,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "ebfe22b24100f54a4b8663253e37af0d"
+    "cacheFingerprint": "b28be3afb3311ef53d245a0072a3ebf2"
   },
   {
     "formKey": "Config: Recipes",
@@ -25959,8 +26201,42 @@ export const BUNDLED_FORM_CONFIGS = [
                   "CATEGORY",
                   "ALLERGEN",
                   "STATUS"
-                ]
-              }
+                ],
+                "formKey": "Config: Ingredients Management",
+                "statusFieldId": "STATUS"
+              },
+              "selectionEffects": [
+                {
+                  "id": "syncIngredientFromSource",
+                  "type": "setValuesFromDataSource",
+                  "lookupField": "id",
+                  "lookupFields": [
+                    "id",
+                    "INGREDIENT_NAME"
+                  ],
+                  "lookupSourceFieldId": "ING_SOURCE_ID",
+                  "fieldMapping": {
+                    "ING_SOURCE_ID": "id",
+                    "ING_SOURCE_UPDATED_AT": "updatedAt",
+                    "ING": "INGREDIENT_NAME",
+                    "CAT": "CATEGORY",
+                    "ALLERGEN": "ALLERGEN"
+                  },
+                  "clearOnNoMatch": false,
+                  "sourceSync": {
+                    "refreshOnInit": true,
+                    "forceRefresh": true,
+                    "stopWhen": {
+                      "fieldId": "status",
+                      "equals": [
+                        "Disabled",
+                        "Désactivé",
+                        "Uitgeschakeld"
+                      ]
+                    }
+                  }
+                }
+              ]
             },
             {
               "id": "QTY",
@@ -26796,8 +27072,42 @@ export const BUNDLED_FORM_CONFIGS = [
                     "CATEGORY",
                     "ALLERGEN",
                     "STATUS"
-                  ]
-                }
+                  ],
+                  "formKey": "Config: Ingredients Management",
+                  "statusFieldId": "STATUS"
+                },
+                "selectionEffects": [
+                  {
+                    "id": "syncIngredientFromSource",
+                    "type": "setValuesFromDataSource",
+                    "lookupField": "id",
+                    "lookupFields": [
+                      "id",
+                      "INGREDIENT_NAME"
+                    ],
+                    "lookupSourceFieldId": "ING_SOURCE_ID",
+                    "fieldMapping": {
+                      "ING_SOURCE_ID": "id",
+                      "ING_SOURCE_UPDATED_AT": "updatedAt",
+                      "ING": "INGREDIENT_NAME",
+                      "CAT": "CATEGORY",
+                      "ALLERGEN": "ALLERGEN"
+                    },
+                    "clearOnNoMatch": false,
+                    "sourceSync": {
+                      "refreshOnInit": true,
+                      "forceRefresh": true,
+                      "stopWhen": {
+                        "fieldId": "status",
+                        "equals": [
+                          "Disabled",
+                          "Désactivé",
+                          "Uitgeschakeld"
+                        ]
+                      }
+                    }
+                  }
+                ]
               },
               {
                 "id": "QTY",
@@ -27462,6 +27772,6 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "b2303bd47da05a71831f4147945bf0dd"
+    "cacheFingerprint": "e2ca9d670c3abca640c53c445f4750b5"
   }
 ] as FormConfigExport[];

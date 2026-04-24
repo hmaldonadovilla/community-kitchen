@@ -380,6 +380,15 @@ describe('meal production leftover selection config', () => {
       })
     );
     expect(definitionTarget?.rowFlow?.output?.segments?.[1]?.showWhen).toBeUndefined();
+    expect(definitionTarget?.rowFlow?.prompts?.find((prompt: any) => prompt?.id === 'recipe')).toEqual(
+      expect.objectContaining({
+        fieldRef: 'cookRow.RECIPE',
+        showWhen: {
+          fieldId: 'MP_TO_COOK',
+          greaterThan: 0
+        }
+      })
+    );
     expect(definitionTarget?.rowFlow?.output?.segments?.[2]).toEqual(
       expect.objectContaining({
         fieldRef: 'leftoverRows.LEFTOVER_SUMMARY',
@@ -428,6 +437,17 @@ describe('meal production leftover selection config', () => {
         when: 'always',
         hidden: true
       })
+    );
+  });
+
+  it('copies recipe source metadata when duplicating a closed meal production record', () => {
+    const exported = getExport();
+    const profileSubGroup = exported.form?.copyCurrentRecordProfile?.lineItems?.[0]?.subGroups?.find(
+      (entry: any) => entry?.groupId === 'MP_TYPE_LI'
+    );
+
+    expect(profileSubGroup?.fields).toEqual(
+      expect.arrayContaining(['PREP_TYPE', 'PREP_QTY', 'RECIPE', 'RECIPE_SOURCE_ID', 'RECIPE_SOURCE_UPDATED_AT'])
     );
   });
 

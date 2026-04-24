@@ -274,4 +274,24 @@ describe('buildLocalizedOptions (optionSort)', () => {
     expect(res.map(r => r.value)).toEqual(['B', 'A', 'C']);
   });
 
+  it('uses data-source raw labels while preserving stable option values', () => {
+    const options: any = {
+      en: ['recipe-2', 'recipe-1'],
+      fr: ['recipe-2', 'recipe-1'],
+      nl: ['recipe-2', 'recipe-1'],
+      raw: [
+        { __ckOptionValue: 'recipe-2', __ckOptionLabel: 'Beta stew', status: 'Active' },
+        { __ckOptionValue: 'recipe-1', __ckOptionLabel: 'Apple soup', status: 'Active' }
+      ]
+    };
+
+    const res = buildLocalizedOptions(options, options.en, 'EN');
+
+    expect(res.map(item => [item.value, item.label])).toEqual([
+      ['recipe-1', 'Apple soup'],
+      ['recipe-2', 'Beta stew']
+    ]);
+    expect(res[0].searchText).toContain('active');
+  });
+
 });

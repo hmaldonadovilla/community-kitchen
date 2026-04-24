@@ -1740,11 +1740,45 @@ export class ConfigSheet {
         const normalizedWhen = this.normalizeWhenClause(whenRaw);
         if (normalizedWhen) normalized.when = normalizedWhen;
       }
+      {
+        const stopWhenRaw = effect.stopWhen ?? effect.freezeWhen ?? effect.sourceSync?.stopWhen ?? effect.sync?.stopWhen;
+        const normalizedStopWhen = this.normalizeWhenClause(stopWhenRaw);
+        if (normalizedStopWhen) normalized.stopWhen = normalizedStopWhen;
+      }
+      {
+        const sourceSyncRaw =
+          effect.sourceSync && typeof effect.sourceSync === 'object'
+            ? effect.sourceSync
+            : effect.sync && typeof effect.sync === 'object'
+              ? effect.sync
+              : undefined;
+        const sourceSync: NonNullable<SelectionEffect['sourceSync']> = {};
+        if (sourceSyncRaw?.refreshOnInit !== undefined) {
+          sourceSync.refreshOnInit = Boolean(sourceSyncRaw.refreshOnInit);
+        }
+        if (sourceSyncRaw?.forceRefresh !== undefined) {
+          sourceSync.forceRefresh = Boolean(sourceSyncRaw.forceRefresh);
+        }
+        const sourceSyncStopWhen = this.normalizeWhenClause(sourceSyncRaw?.stopWhen);
+        if (sourceSyncStopWhen) sourceSync.stopWhen = sourceSyncStopWhen;
+        if (effect.refreshOnInit !== undefined) {
+          normalized.refreshOnInit = Boolean(effect.refreshOnInit);
+          if (sourceSync.refreshOnInit === undefined) sourceSync.refreshOnInit = normalized.refreshOnInit;
+        }
+        if (effect.forceRefresh !== undefined) {
+          normalized.forceRefresh = Boolean(effect.forceRefresh);
+          if (sourceSync.forceRefresh === undefined) sourceSync.forceRefresh = normalized.forceRefresh;
+        }
+        if (Object.keys(sourceSync).length) normalized.sourceSync = sourceSync;
+      }
       if (effect.hideRemoveButton !== undefined) {
         normalized.hideRemoveButton = Boolean(effect.hideRemoveButton);
       }
       if (effect.replaceExistingByEffectId !== undefined) {
         normalized.replaceExistingByEffectId = Boolean(effect.replaceExistingByEffectId);
+      }
+      if (effect.clearOnNoMatch !== undefined) {
+        normalized.clearOnNoMatch = Boolean(effect.clearOnNoMatch);
       }
       if (type === 'setValue') {
         const fieldIdCandidate = effect.fieldId ?? effect.targetFieldId ?? effect.fieldRef;
@@ -1771,8 +1805,14 @@ export class ConfigSheet {
         if (effect.lookupField) {
           normalized.lookupField = effect.lookupField.toString();
         }
-        if (effect.clearOnNoMatch !== undefined) {
-          normalized.clearOnNoMatch = Boolean(effect.clearOnNoMatch);
+        if (Array.isArray(effect.lookupFields)) {
+          const lookupFields = effect.lookupFields
+            .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+            .filter(Boolean);
+          if (lookupFields.length) normalized.lookupFields = Array.from(new Set(lookupFields));
+        }
+        if (effect.lookupSourceFieldId) {
+          normalized.lookupSourceFieldId = effect.lookupSourceFieldId.toString().trim();
         }
         if (effect.fieldMapping && typeof effect.fieldMapping === 'object') {
           const mapping: Record<string, string> = {};
@@ -1789,7 +1829,12 @@ export class ConfigSheet {
             normalized.fieldMapping = mapping;
           }
         }
-        if (!normalized.dataSource || !normalized.lookupField || !normalized.fieldMapping || !Object.keys(normalized.fieldMapping).length) {
+        if (
+          !normalized.dataSource ||
+          (!normalized.lookupField && !normalized.lookupFields?.length) ||
+          !normalized.fieldMapping ||
+          !Object.keys(normalized.fieldMapping).length
+        ) {
           return;
         }
       }
@@ -1843,6 +1888,15 @@ export class ConfigSheet {
         if (effect.lookupField) {
           normalized.lookupField = effect.lookupField.toString();
         }
+        if (Array.isArray(effect.lookupFields)) {
+          const lookupFields = effect.lookupFields
+            .map((entry: any) => (entry !== undefined && entry !== null ? entry.toString().trim() : ''))
+            .filter(Boolean);
+          if (lookupFields.length) normalized.lookupFields = Array.from(new Set(lookupFields));
+        }
+        if (effect.lookupSourceFieldId) {
+          normalized.lookupSourceFieldId = effect.lookupSourceFieldId.toString().trim();
+        }
         if (effect.matchField) {
           normalized.matchField = effect.matchField.toString();
         }
@@ -1862,6 +1916,21 @@ export class ConfigSheet {
           });
           if (Object.keys(mapping).length) {
             normalized.lineItemMapping = mapping;
+          }
+        }
+        if (effect.parentFieldMapping && typeof effect.parentFieldMapping === 'object') {
+          const mapping: Record<string, string> = {};
+          Object.keys(effect.parentFieldMapping).forEach(key => {
+            const value = effect.parentFieldMapping[key];
+            if (value !== undefined && value !== null) {
+              const targetFieldId = key.toString().trim();
+              const sourceFieldId = value.toString().trim();
+              if (!targetFieldId || !sourceFieldId) return;
+              mapping[targetFieldId] = sourceFieldId;
+            }
+          });
+          if (Object.keys(mapping).length) {
+            normalized.parentFieldMapping = mapping;
           }
         }
         if (Array.isArray(effect.aggregateBy)) {

@@ -536,6 +536,10 @@
               "en": "OK"
             },
             "showCancel": false
+          },
+          "stopWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
           }
         }
       ],
@@ -747,7 +751,9 @@
               "fields": [
                 "PREP_TYPE",
                 "PREP_QTY",
-                "RECIPE"
+                "RECIPE",
+                "RECIPE_SOURCE_ID",
+                "RECIPE_SOURCE_UPDATED_AT"
               ],
               "includeWhen": {
                 "all": [
@@ -2463,6 +2469,10 @@
                     "actionsLayout": "inline",
                     "input": {
                       "labelLayout": "inline"
+                    },
+                    "showWhen": {
+                      "fieldId": "MP_TO_COOK",
+                      "greaterThan": 0
                     }
                   }
                 ],
@@ -2527,12 +2537,6 @@
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
-                                    "parentWhen": {
-                                      "fieldId": "PREP_TYPE",
-                                      "equals": [
-                                        "Cook"
-                                      ]
-                                    },
                                     "match": "any"
                                   }
                                 }
@@ -2559,12 +2563,6 @@
                                     "MP_TYPE_LI",
                                     "MP_INGREDIENTS_LI"
                                   ],
-                                  "parentWhen": {
-                                    "fieldId": "PREP_TYPE",
-                                    "equals": [
-                                      "Cook"
-                                    ]
-                                  },
                                   "when": {
                                     "all": [
                                       {
@@ -2684,7 +2682,9 @@
                                 },
                                 "statusAllowList": [
                                   "Active"
-                                ]
+                                ],
+                                "formKey": "Config: Recipes",
+                                "statusFieldId": "status"
                               },
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",
@@ -2699,7 +2699,7 @@
                                   "type": "addLineItemsFromDataSource",
                                   "groupId": "MP_INGREDIENTS_LI",
                                   "targetPath": "MP_INGREDIENTS_LI",
-                                  "lookupField": "QFTD5RD2EM",
+                                  "lookupField": "id",
                                   "dataField": "Q65ILNUSGL",
                                   "rowMultiplierFieldId": "PREP_QTY",
                                   "dataSourceMultiplierField": "NUM_PORTIONS",
@@ -2712,7 +2712,9 @@
                                     "QTY": "QTY",
                                     "UNIT": "UNIT",
                                     "CAT": "CAT",
-                                    "ALLERGEN": "ALLERGEN"
+                                    "ALLERGEN": "ALLERGEN",
+                                    "ING_SOURCE_ID": "ING_SOURCE_ID",
+                                    "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                                   },
                                   "aggregateBy": [
                                     "ING",
@@ -2721,7 +2723,31 @@
                                   ],
                                   "aggregateNumericFields": [
                                     "QTY"
-                                  ]
+                                  ],
+                                  "id": "syncRecipeIngredientsFromSource",
+                                  "lookupFields": [
+                                    "id",
+                                    "QFTD5RD2EM"
+                                  ],
+                                  "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                                  "parentFieldMapping": {
+                                    "RECIPE_SOURCE_ID": "id",
+                                    "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                                    "RECIPE": "QFTD5RD2EM"
+                                  },
+                                  "sourceSync": {
+                                    "refreshOnInit": true,
+                                    "forceRefresh": true,
+                                    "stopWhen": {
+                                      "fieldId": "status",
+                                      "equals": "Closed"
+                                    }
+                                  },
+                                  "clearOnNoMatch": true,
+                                  "when": {
+                                    "fieldId": "PREP_QTY",
+                                    "greaterThan": 0
+                                  }
                                 },
                                 {
                                   "type": "setValue",
@@ -4445,7 +4471,9 @@
               },
               "statusAllowList": [
                 "Active"
-              ]
+              ],
+              "formKey": "Config: Recipes",
+              "statusFieldId": "status"
             },
             "optionFilter": {
               "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -4781,8 +4809,11 @@
                 "DIETARY_APPLICABILITY",
                 "ALLOWED_UNIT",
                 "ALLERGEN",
-                "STATUS"
-              ]
+                "STATUS",
+                "SUPPLIER"
+              ],
+              "formKey": "Config: Ingredients Management",
+              "statusFieldId": "STATUS"
             }
           },
           {
@@ -4959,8 +4990,12 @@
                     "DIETARY_APPLICABILITY",
                     "ALLOWED_UNIT",
                     "ALLERGEN",
-                    "STATUS"
-                  ]
+                    "STATUS",
+                    "SUPPLIER",
+                    "CATEGORY"
+                  ],
+                  "formKey": "Config: Ingredients Management",
+                  "statusFieldId": "STATUS"
                 },
                 "optionFilter": {
                   "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -4972,7 +5007,35 @@
                   },
                   "dataSourceField": "DIETARY_APPLICABILITY",
                   "dataSourceDelimiter": ","
-                }
+                },
+                "selectionEffects": [
+                  {
+                    "id": "syncIngredientFromSource",
+                    "type": "setValuesFromDataSource",
+                    "lookupField": "id",
+                    "lookupFields": [
+                      "id",
+                      "INGREDIENT_NAME"
+                    ],
+                    "lookupSourceFieldId": "ING_SOURCE_ID",
+                    "fieldMapping": {
+                      "ING_SOURCE_ID": "id",
+                      "ING_SOURCE_UPDATED_AT": "updatedAt",
+                      "ING": "INGREDIENT_NAME",
+                      "CAT": "CATEGORY",
+                      "ALLERGEN": "ALLERGEN"
+                    },
+                    "clearOnNoMatch": false,
+                    "sourceSync": {
+                      "refreshOnInit": true,
+                      "forceRefresh": true,
+                      "stopWhen": {
+                        "fieldId": "status",
+                        "equals": "Closed"
+                      }
+                    }
+                  }
+                ]
               },
               {
                 "id": "QTY",
@@ -6218,21 +6281,25 @@
                     "en": "Instructions",
                     "fr": "Instructions",
                     "nl": "Instructies"
-                  }
+                  },
+                  "formKey": "Config: Recipes",
+                  "statusFieldId": "status"
                 },
                 "selectionEffects": [
                   {
                     "type": "addLineItemsFromDataSource",
                     "groupId": "MP_INGREDIENTS_LI",
                     "targetPath": "MP_INGREDIENTS_LI",
-                    "lookupField": "QFTD5RD2EM",
+                    "lookupField": "id",
                     "dataField": "Q65ILNUSGL",
                     "lineItemMapping": {
                       "ING": "ING",
                       "QTY": "QTY",
                       "UNIT": "UNIT",
                       "CAT": "CAT",
-                      "ALLERGEN": "ALLERGEN"
+                      "ALLERGEN": "ALLERGEN",
+                      "ING_SOURCE_ID": "ING_SOURCE_ID",
+                      "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                     },
                     "aggregateBy": [
                       "ING",
@@ -6247,7 +6314,31 @@
                     "scaleNumericFields": [
                       "QTY"
                     ],
-                    "preserveManualRows": false
+                    "preserveManualRows": false,
+                    "id": "syncRecipeIngredientsFromSource",
+                    "lookupFields": [
+                      "id",
+                      "QFTD5RD2EM"
+                    ],
+                    "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                    "parentFieldMapping": {
+                      "RECIPE_SOURCE_ID": "id",
+                      "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                      "RECIPE": "QFTD5RD2EM"
+                    },
+                    "sourceSync": {
+                      "refreshOnInit": true,
+                      "forceRefresh": true,
+                      "stopWhen": {
+                        "fieldId": "status",
+                        "equals": "Closed"
+                      }
+                    },
+                    "clearOnNoMatch": true,
+                    "when": {
+                      "fieldId": "PREP_QTY",
+                      "greaterThan": 0
+                    }
                   },
                   {
                     "type": "setValue",
@@ -6555,8 +6646,38 @@
                         "CATEGORY",
                         "ALLERGEN",
                         "STATUS"
-                      ]
-                    }
+                      ],
+                      "formKey": "Config: Ingredients Management",
+                      "statusFieldId": "STATUS"
+                    },
+                    "selectionEffects": [
+                      {
+                        "id": "syncIngredientFromSource",
+                        "type": "setValuesFromDataSource",
+                        "lookupField": "id",
+                        "lookupFields": [
+                          "id",
+                          "INGREDIENT_NAME"
+                        ],
+                        "lookupSourceFieldId": "ING_SOURCE_ID",
+                        "fieldMapping": {
+                          "ING_SOURCE_ID": "id",
+                          "ING_SOURCE_UPDATED_AT": "updatedAt",
+                          "ING": "INGREDIENT_NAME",
+                          "CAT": "CATEGORY",
+                          "ALLERGEN": "ALLERGEN"
+                        },
+                        "clearOnNoMatch": false,
+                        "sourceSync": {
+                          "refreshOnInit": true,
+                          "forceRefresh": true,
+                          "stopWhen": {
+                            "fieldId": "status",
+                            "equals": "Closed"
+                          }
+                        }
+                      }
+                    ]
                   },
                   {
                     "id": "QTY",
@@ -8178,7 +8299,9 @@
                 },
                 "statusAllowList": [
                   "Active"
-                ]
+                ],
+                "formKey": "Config: Recipes",
+                "statusFieldId": "status"
               },
               "optionFilter": {
                 "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -8514,8 +8637,11 @@
                   "DIETARY_APPLICABILITY",
                   "ALLOWED_UNIT",
                   "ALLERGEN",
-                  "STATUS"
-                ]
+                  "STATUS",
+                  "SUPPLIER"
+                ],
+                "formKey": "Config: Ingredients Management",
+                "statusFieldId": "STATUS"
               }
             },
             {
@@ -8692,8 +8818,12 @@
                       "DIETARY_APPLICABILITY",
                       "ALLOWED_UNIT",
                       "ALLERGEN",
-                      "STATUS"
-                    ]
+                      "STATUS",
+                      "SUPPLIER",
+                      "CATEGORY"
+                    ],
+                    "formKey": "Config: Ingredients Management",
+                    "statusFieldId": "STATUS"
                   },
                   "optionFilter": {
                     "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -8705,7 +8835,35 @@
                     },
                     "dataSourceField": "DIETARY_APPLICABILITY",
                     "dataSourceDelimiter": ","
-                  }
+                  },
+                  "selectionEffects": [
+                    {
+                      "id": "syncIngredientFromSource",
+                      "type": "setValuesFromDataSource",
+                      "lookupField": "id",
+                      "lookupFields": [
+                        "id",
+                        "INGREDIENT_NAME"
+                      ],
+                      "lookupSourceFieldId": "ING_SOURCE_ID",
+                      "fieldMapping": {
+                        "ING_SOURCE_ID": "id",
+                        "ING_SOURCE_UPDATED_AT": "updatedAt",
+                        "ING": "INGREDIENT_NAME",
+                        "CAT": "CATEGORY",
+                        "ALLERGEN": "ALLERGEN"
+                      },
+                      "clearOnNoMatch": false,
+                      "sourceSync": {
+                        "refreshOnInit": true,
+                        "forceRefresh": true,
+                        "stopWhen": {
+                          "fieldId": "status",
+                          "equals": "Closed"
+                        }
+                      }
+                    }
+                  ]
                 },
                 {
                   "id": "QTY",
@@ -10019,21 +10177,25 @@
                       "en": "Instructions",
                       "fr": "Instructions",
                       "nl": "Instructies"
-                    }
+                    },
+                    "formKey": "Config: Recipes",
+                    "statusFieldId": "status"
                   },
                   "selectionEffects": [
                     {
                       "type": "addLineItemsFromDataSource",
                       "groupId": "MP_INGREDIENTS_LI",
                       "targetPath": "MP_INGREDIENTS_LI",
-                      "lookupField": "QFTD5RD2EM",
+                      "lookupField": "id",
                       "dataField": "Q65ILNUSGL",
                       "lineItemMapping": {
                         "ING": "ING",
                         "QTY": "QTY",
                         "UNIT": "UNIT",
                         "CAT": "CAT",
-                        "ALLERGEN": "ALLERGEN"
+                        "ALLERGEN": "ALLERGEN",
+                        "ING_SOURCE_ID": "ING_SOURCE_ID",
+                        "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                       },
                       "aggregateBy": [
                         "ING",
@@ -10048,7 +10210,31 @@
                       "scaleNumericFields": [
                         "QTY"
                       ],
-                      "preserveManualRows": false
+                      "preserveManualRows": false,
+                      "id": "syncRecipeIngredientsFromSource",
+                      "lookupFields": [
+                        "id",
+                        "QFTD5RD2EM"
+                      ],
+                      "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                      "parentFieldMapping": {
+                        "RECIPE_SOURCE_ID": "id",
+                        "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                        "RECIPE": "QFTD5RD2EM"
+                      },
+                      "sourceSync": {
+                        "refreshOnInit": true,
+                        "forceRefresh": true,
+                        "stopWhen": {
+                          "fieldId": "status",
+                          "equals": "Closed"
+                        }
+                      },
+                      "clearOnNoMatch": true,
+                      "when": {
+                        "fieldId": "PREP_QTY",
+                        "greaterThan": 0
+                      }
                     },
                     {
                       "type": "setValue",
@@ -10356,8 +10542,38 @@
                           "CATEGORY",
                           "ALLERGEN",
                           "STATUS"
-                        ]
-                      }
+                        ],
+                        "formKey": "Config: Ingredients Management",
+                        "statusFieldId": "STATUS"
+                      },
+                      "selectionEffects": [
+                        {
+                          "id": "syncIngredientFromSource",
+                          "type": "setValuesFromDataSource",
+                          "lookupField": "id",
+                          "lookupFields": [
+                            "id",
+                            "INGREDIENT_NAME"
+                          ],
+                          "lookupSourceFieldId": "ING_SOURCE_ID",
+                          "fieldMapping": {
+                            "ING_SOURCE_ID": "id",
+                            "ING_SOURCE_UPDATED_AT": "updatedAt",
+                            "ING": "INGREDIENT_NAME",
+                            "CAT": "CATEGORY",
+                            "ALLERGEN": "ALLERGEN"
+                          },
+                          "clearOnNoMatch": false,
+                          "sourceSync": {
+                            "refreshOnInit": true,
+                            "forceRefresh": true,
+                            "stopWhen": {
+                              "fieldId": "status",
+                              "equals": "Closed"
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
                       "id": "QTY",
@@ -11867,6 +12083,10 @@
               "en": "OK"
             },
             "showCancel": false
+          },
+          "stopWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
           }
         }
       ],
@@ -12030,7 +12250,9 @@
               "fields": [
                 "PREP_TYPE",
                 "PREP_QTY",
-                "RECIPE"
+                "RECIPE",
+                "RECIPE_SOURCE_ID",
+                "RECIPE_SOURCE_UPDATED_AT"
               ],
               "includeWhen": {
                 "all": [
@@ -13700,6 +13922,10 @@
                     "actionsLayout": "inline",
                     "input": {
                       "labelLayout": "inline"
+                    },
+                    "showWhen": {
+                      "fieldId": "MP_TO_COOK",
+                      "greaterThan": 0
                     }
                   }
                 ],
@@ -13764,12 +13990,6 @@
                                       "MP_TYPE_LI",
                                       "MP_INGREDIENTS_LI"
                                     ],
-                                    "parentWhen": {
-                                      "fieldId": "PREP_TYPE",
-                                      "equals": [
-                                        "Cook"
-                                      ]
-                                    },
                                     "match": "any"
                                   }
                                 }
@@ -13796,12 +14016,6 @@
                                     "MP_TYPE_LI",
                                     "MP_INGREDIENTS_LI"
                                   ],
-                                  "parentWhen": {
-                                    "fieldId": "PREP_TYPE",
-                                    "equals": [
-                                      "Cook"
-                                    ]
-                                  },
                                   "when": {
                                     "all": [
                                       {
@@ -13921,7 +14135,9 @@
                                 },
                                 "statusAllowList": [
                                   "Active"
-                                ]
+                                ],
+                                "formKey": "Config: Recipes",
+                                "statusFieldId": "status"
                               },
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",
@@ -13936,7 +14152,7 @@
                                   "type": "addLineItemsFromDataSource",
                                   "groupId": "MP_INGREDIENTS_LI",
                                   "targetPath": "MP_INGREDIENTS_LI",
-                                  "lookupField": "QFTD5RD2EM",
+                                  "lookupField": "id",
                                   "dataField": "Q65ILNUSGL",
                                   "rowMultiplierFieldId": "PREP_QTY",
                                   "dataSourceMultiplierField": "NUM_PORTIONS",
@@ -13949,7 +14165,9 @@
                                     "QTY": "QTY",
                                     "UNIT": "UNIT",
                                     "CAT": "CAT",
-                                    "ALLERGEN": "ALLERGEN"
+                                    "ALLERGEN": "ALLERGEN",
+                                    "ING_SOURCE_ID": "ING_SOURCE_ID",
+                                    "ING_SOURCE_UPDATED_AT": "ING_SOURCE_UPDATED_AT"
                                   },
                                   "aggregateBy": [
                                     "ING",
@@ -13958,7 +14176,31 @@
                                   ],
                                   "aggregateNumericFields": [
                                     "QTY"
-                                  ]
+                                  ],
+                                  "id": "syncRecipeIngredientsFromSource",
+                                  "lookupFields": [
+                                    "id",
+                                    "QFTD5RD2EM"
+                                  ],
+                                  "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+                                  "parentFieldMapping": {
+                                    "RECIPE_SOURCE_ID": "id",
+                                    "RECIPE_SOURCE_UPDATED_AT": "updatedAt",
+                                    "RECIPE": "QFTD5RD2EM"
+                                  },
+                                  "sourceSync": {
+                                    "refreshOnInit": true,
+                                    "forceRefresh": true,
+                                    "stopWhen": {
+                                      "fieldId": "status",
+                                      "equals": "Closed"
+                                    }
+                                  },
+                                  "clearOnNoMatch": true,
+                                  "when": {
+                                    "fieldId": "PREP_QTY",
+                                    "greaterThan": 0
+                                  }
                                 },
                                 {
                                   "type": "setValue",

@@ -195,4 +195,65 @@ describe('shouldHideField', () => {
     };
     expect(shouldHideField(visibilityAllParents, ctx)).toBe(true);
   });
+
+  it('matches canonical nested paths against overlay alias subgroup keys', () => {
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'meal1', values: { MEAL_TYPE: 'Diabetic' } }],
+      'MP_MEALS_REQUEST::meal1::MP_TYPE_LI': [{ id: 'cook1', values: { PREP_TYPE: 'Cook' } }],
+      'MP_MEALS_REQUEST::meal1::MP_TYPE_LI::cook1::MP_INGREDIENTS_LI': [],
+      MP_TYPE_LI: [{ id: 'cook1', values: { PREP_TYPE: 'Cook' } }],
+      'MP_TYPE_LI::cook1::MP_INGREDIENTS_LI': [{ id: 'ing1', values: { ING: 'Salt' } }]
+    };
+    const ctx: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MP_MEALS_REQUEST',
+          subGroupPath: ['MP_TYPE_LI', 'MP_INGREDIENTS_LI'],
+          parentWhen: { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+          match: 'any'
+        }
+      }
+    };
+
+    expect(shouldHideField(visibility, ctx)).toBe(false);
+  });
+
+  it('matches scoped canonical nested paths against overlay alias subgroup keys', () => {
+    const overlayGroupKey = 'MP_MEALS_REQUEST::meal1::MP_TYPE_LI';
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'meal1', values: { MEAL_TYPE: 'Diabetic' } }],
+      [overlayGroupKey]: [
+        { id: 'cook1', values: { RECIPE: 'Soup' } },
+        { id: 'cook2', values: { RECIPE: 'Pasta' } }
+      ],
+      MP_TYPE_LI: [
+        { id: 'cook1', values: { RECIPE: 'Soup' } },
+        { id: 'cook2', values: { RECIPE: 'Pasta' } }
+      ],
+      'MP_TYPE_LI::cook1::MP_INGREDIENTS_LI': [{ id: 'ing1', values: { ING: 'Salt', QTY: 1, UNIT: 'kg' } }],
+      'MP_TYPE_LI::cook2::MP_INGREDIENTS_LI': []
+    };
+    const ctx: any = {
+      getValue: (_id: string) => '',
+      getLineItems: (groupId: string) => lineItems[groupId] || [],
+      getLineItemKeys: () => Object.keys(lineItems)
+    };
+    const visibility: any = {
+      showWhen: {
+        lineItems: {
+          groupId: 'MP_MEALS_REQUEST',
+          subGroupPath: ['MP_TYPE_LI', 'MP_INGREDIENTS_LI'],
+          match: 'any'
+        }
+      }
+    };
+
+    expect(shouldHideField(visibility, ctx, { rowId: 'cook1', linePrefix: overlayGroupKey })).toBe(false);
+    expect(shouldHideField(visibility, ctx, { rowId: 'cook2', linePrefix: overlayGroupKey })).toBe(true);
+  });
 });

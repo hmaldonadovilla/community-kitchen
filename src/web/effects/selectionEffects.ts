@@ -34,7 +34,12 @@ interface EffectContext {
     groupId: string,
     meta?: { effectId?: string; parentGroupId?: string; parentRowId?: string }
   ) => void;
-  setValue?: (args: { fieldId: string; value: PresetValue | null; lineItem?: SelectionEffectOptions['lineItem'] }) => void;
+  setValue?: (args: {
+    fieldId: string;
+    value: PresetValue | null;
+    lineItem?: SelectionEffectOptions['lineItem'];
+    skipSelectionEffects?: boolean;
+  }) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -85,6 +90,25 @@ function applies(effect: SelectionEffect, value: string | string[] | null | unde
   if (!effect.triggerValues || effect.triggerValues.length === 0) return true;
   const vals = Array.isArray(value) ? value : value ? [value] : [];
   return vals.some(v => effect.triggerValues!.includes(v));
+}
+
+function resolveSourceSyncConfig(effect: SelectionEffect): NonNullable<SelectionEffect['sourceSync']> {
+  const raw = (effect as any)?.sourceSync && typeof (effect as any).sourceSync === 'object' ? (effect as any).sourceSync : {};
+  return {
+    ...(raw as NonNullable<SelectionEffect['sourceSync']>),
+    ...((effect as any)?.refreshOnInit !== undefined ? { refreshOnInit: (effect as any).refreshOnInit === true } : {}),
+    ...((effect as any)?.forceRefresh !== undefined ? { forceRefresh: (effect as any).forceRefresh === true } : {}),
+    ...((effect as any)?.stopWhen ? { stopWhen: (effect as any).stopWhen } : {})
+  };
+}
+
+function sourceSyncStopped(effect: SelectionEffect, whenCtx: VisibilityContext): boolean {
+  const stopWhen = resolveSourceSyncConfig(effect).stopWhen;
+  return stopWhen ? matchesWhenClause(stopWhen as any, whenCtx) : false;
+}
+
+function shouldForceDataSourceRefresh(effect: SelectionEffect): boolean {
+  return resolveSourceSyncConfig(effect).forceRefresh === true;
 }
 
 function isDebug(): boolean {
@@ -173,12 +197,13 @@ export function handleSelectionEffects(
     const targetGroupId = resolveEffectTargetGroupId(effect);
     const match = applies(effect, value);
     const whenMatch = effect.when ? matchesWhenClause(effect.when as any, whenCtx) : true;
-    return { effect, targetGroupId, match, whenMatch };
+    const stopMatch = sourceSyncStopped(effect, whenCtx);
+    return { effect, targetGroupId, match, whenMatch, stopMatch };
   });
   const findMatchingAddEffectById = (targetGroupId: string | undefined, effectId: string): SelectionEffect | null => {
     if (!targetGroupId || !effectId) return null;
     for (const entry of evaluatedEffects) {
-      if (!entry.match || !entry.whenMatch) continue;
+      if (!entry.match || !entry.whenMatch || entry.stopMatch) continue;
       if (entry.effect.type !== 'addLineItems') continue;
       if (entry.targetGroupId !== targetGroupId) continue;
       if (normalizeEffectId(entry.effect) !== effectId) continue;
@@ -189,14 +214,14 @@ export function handleSelectionEffects(
   const hasMatchingDeleteEffectForAdd = (targetGroupId: string | undefined, effectId: string): boolean => {
     if (!targetGroupId || !effectId) return false;
     return evaluatedEffects.some(entry => {
-      if (!entry.match || !entry.whenMatch) return false;
+      if (!entry.match || !entry.whenMatch || entry.stopMatch) return false;
       if (entry.effect.type !== 'deleteLineItems') return false;
       if (entry.targetGroupId !== targetGroupId) return false;
       const targetId = normalizeString((entry.effect as any)?.targetEffectId) || normalizeEffectId(entry.effect);
       return targetId === effectId;
     });
   };
-  evaluatedEffects.forEach(({ effect, targetGroupId, match, whenMatch }) => {
+  evaluatedEffects.forEach(({ effect, targetGroupId, match, whenMatch, stopMatch }) => {
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] effect check', {
         questionId: question.id,
@@ -224,6 +249,24 @@ export function handleSelectionEffects(
           groupId: effect.groupId,
           targetGroupId,
           when: effect.when || null
+        });
+      }
+      return;
+    }
+    if (stopMatch) {
+      ctx.logEvent?.('selectionEffects.sourceSync.stopped', {
+        questionId: question.id,
+        effectType: effect.type,
+        groupId: effect.groupId,
+        targetGroupId,
+        stopWhen: resolveSourceSyncConfig(effect).stopWhen || null
+      });
+      if (debug && typeof console !== 'undefined') {
+        console.info('[SelectionEffects] effect skipped (source sync stopped)', {
+          questionId: question.id,
+          effectType: effect.type,
+          groupId: effect.groupId,
+          targetGroupId
         });
       }
       return;
@@ -430,6 +473,7 @@ interface DataSourceValueMappingParams {
 function buildLookupCandidates(args: {
   normalizedSelections: string[];
   lookupField?: string;
+  lookupFields?: string[];
   lookupSourceValue?: any;
   lineItem?: SelectionEffectOptions['lineItem'];
 }): string[] {
@@ -445,11 +489,14 @@ function buildLookupCandidates(args: {
   push(args.lookupSourceValue);
   (args.normalizedSelections || []).forEach(push);
 
-  const fallback =
-    args.lookupField && args.lineItem?.rowValues
-      ? (args.lineItem.rowValues as Record<string, any>)[args.lookupField]
-      : undefined;
-  push(fallback);
+  const fallbackFields = args.lookupFields?.length ? args.lookupFields : args.lookupField ? [args.lookupField] : [];
+  fallbackFields.forEach(fieldId => {
+    const fallback =
+      fieldId && args.lineItem?.rowValues
+        ? (args.lineItem.rowValues as Record<string, any>)[fieldId]
+        : undefined;
+    push(fallback);
+  });
 
   return candidates;
 }
@@ -604,6 +651,11 @@ function asPresetValue(raw: any): PresetValue | undefined {
   }
 }
 
+function asSourceMappedPresetValue(raw: any): PresetValue | undefined {
+  const value = asPresetValue(raw);
+  return typeof value === 'string' ? value.trim() : value;
+}
+
 function resolvePresetValue(raw: any, options?: SelectionEffectOptions): PresetValue | undefined {
   if (typeof raw !== 'string') return asPresetValue(raw);
   const s = raw.toString().trim();
@@ -691,6 +743,24 @@ function resolveLookupField(effect: SelectionEffect, question: WebQuestionDefini
   return undefined;
 }
 
+function resolveLookupFields(effect: SelectionEffect, question: WebQuestionDefinition, sampleRow: any): string[] {
+  const fields: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: any) => {
+    const field = normalizeString(raw);
+    if (!field || seen.has(field)) return;
+    seen.add(field);
+    fields.push(field);
+  };
+  if (Array.isArray((effect as any)?.lookupFields)) {
+    (effect as any).lookupFields.forEach(push);
+  }
+  push(effect.lookupField);
+  const fallback = resolveLookupField({ ...effect, lookupField: undefined } as SelectionEffect, question, sampleRow);
+  push(fallback);
+  return fields;
+}
+
 function mergeDataSourceConfig(base: DataSourceConfig, override?: DataSourceConfig): DataSourceConfig {
   if (!override) return { ...base };
   const merged: DataSourceConfig = {
@@ -762,6 +832,58 @@ function rowMatchesSelection(args: {
     const candidate = normalizeLookupToken(candidateRaw);
     const candidateValue = (candidate.key || candidate.raw).toLowerCase();
     return !!candidateValue && candidateValue === targetValue;
+  });
+}
+
+function findSourceRowByLookup(args: {
+  rows: any[];
+  lookupFields: string[];
+  lookupCandidates: string[];
+}): { row: any; lookupField: string; selectedValue: string } | null {
+  for (const lookupField of args.lookupFields) {
+    for (const candidateValueRaw of args.lookupCandidates) {
+      const selectedToken = normalizeLookupToken(candidateValueRaw);
+      const normalizedTarget = (selectedToken.key || selectedToken.raw).toLowerCase();
+      if (!normalizedTarget) continue;
+      const found = args.rows.find((candidate: any) => {
+        const candidateToken = normalizeLookupToken(getValueFromSourceRow(candidate, lookupField));
+        const candidateValue = (candidateToken.key || candidateToken.raw).toLowerCase();
+        if (!candidateValue) return false;
+        return candidateValue === normalizedTarget;
+      });
+      if (found) {
+        return { row: found, lookupField, selectedValue: candidateValueRaw };
+      }
+    }
+  }
+  return null;
+}
+
+function applyParentFieldMapping(args: {
+  effect: SelectionEffect;
+  sourceRow: any;
+  ctx: EffectContext;
+  lineItem?: SelectionEffectOptions['lineItem'];
+}): void {
+  const mapping = (args.effect as any)?.parentFieldMapping;
+  if (!mapping || typeof mapping !== 'object' || !args.sourceRow) return;
+  Object.keys(mapping).forEach(fieldId => {
+    const sourceField = mapping[fieldId];
+    const rawValue = getValueFromSourceRow(args.sourceRow, sourceField);
+    const nextValue = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
+    args.ctx.setValue?.({ fieldId, value: nextValue, lineItem: args.lineItem, skipSelectionEffects: true });
+  });
+}
+
+function clearParentFieldMapping(args: {
+  effect: SelectionEffect;
+  ctx: EffectContext;
+  lineItem?: SelectionEffectOptions['lineItem'];
+}): void {
+  const mapping = (args.effect as any)?.parentFieldMapping;
+  if (!mapping || typeof mapping !== 'object') return;
+  Object.keys(mapping).forEach(fieldId => {
+    args.ctx.setValue?.({ fieldId, value: null, lineItem: args.lineItem, skipSelectionEffects: true });
   });
 }
 
@@ -1001,7 +1123,9 @@ function applyValuesFromDataSource({
     return;
   }
 
-  fetchDataSource(sourceConfig, language)
+  (shouldForceDataSourceRefresh(effect)
+    ? fetchDataSource(sourceConfig, language, { forceRefresh: true })
+    : fetchDataSource(sourceConfig, language))
     .then(res => {
       const rows = Array.isArray((res as any)?.items)
         ? (res as any).items
@@ -1017,8 +1141,8 @@ function applyValuesFromDataSource({
         return;
       }
       const sampleRow = rows[0];
-      const lookupField = resolveLookupField(effect, question, sampleRow);
-      if (!lookupField) {
+      const lookupFields = resolveLookupFields(effect, question, sampleRow);
+      if (!lookupFields.length) {
         if (debug && typeof console !== 'undefined') {
           console.warn('[SelectionEffects] setValuesFromDataSource unable to resolve lookupField', {
             questionId: question.id,
@@ -1035,7 +1159,7 @@ function applyValuesFromDataSource({
           : undefined;
       const lookupCandidates = buildLookupCandidates({
         normalizedSelections,
-        lookupField,
+        lookupFields,
         lookupSourceValue,
         lineItem
       });
@@ -1048,25 +1172,8 @@ function applyValuesFromDataSource({
         return;
       }
 
-      let matchedRow: any = null;
-      let matchedSelectionValue = lookupCandidates[lookupCandidates.length - 1];
-      for (const candidateValueRaw of lookupCandidates) {
-        const selectedToken = normalizeLookupToken(candidateValueRaw);
-        const normalizedTarget = (selectedToken.key || selectedToken.raw).toLowerCase();
-        if (!normalizedTarget) continue;
-        const found = rows.find((candidate: any) => {
-          const candidateToken = normalizeLookupToken(candidate?.[lookupField]);
-          const candidateValue = (candidateToken.key || candidateToken.raw).toLowerCase();
-          if (!candidateValue) return false;
-          return candidateValue === normalizedTarget;
-        });
-        if (found) {
-          matchedRow = found;
-          matchedSelectionValue = candidateValueRaw;
-          break;
-        }
-      }
-      if (!matchedRow) {
+      const match = findSourceRowByLookup({ rows, lookupFields, lookupCandidates });
+      if (!match) {
         if (effect.clearOnNoMatch) {
           Object.keys(fieldMapping).forEach(fieldId => {
             ctx.setValue?.({ fieldId, value: null, lineItem });
@@ -1076,25 +1183,26 @@ function applyValuesFromDataSource({
           console.warn('[SelectionEffects] setValuesFromDataSource no matching row', {
             questionId: question.id,
             selectedValue: lookupCandidates[lookupCandidates.length - 1],
-            lookupField,
+            lookupFields,
             sourceId: sourceConfig.id || null
           });
         }
         return;
       }
+      const matchedRow = match.row;
 
       Object.keys(fieldMapping).forEach(fieldId => {
         const sourceField = fieldMapping[fieldId];
         const rawValue = getValueFromSourceRow(matchedRow, sourceField);
-        const nextValue = rawValue === undefined ? null : (rawValue as PresetValue | null);
+        const nextValue = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
         ctx.setValue?.({ fieldId, value: nextValue, lineItem });
       });
 
       if (debug && typeof console !== 'undefined') {
         console.info('[SelectionEffects] setValuesFromDataSource applied', {
           questionId: question.id,
-          selectedValue: matchedSelectionValue,
-          lookupField,
+          selectedValue: match.selectedValue,
+          lookupField: match.lookupField,
           fieldMapping,
           sourceId: sourceConfig.id || null,
           targetScope: lineItem?.groupId ? 'lineItem' : 'top'
@@ -1186,7 +1294,9 @@ function populateLineItemsFromDataSource({
     ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: false });
   }
 
-  fetchDataSource(sourceConfig, language)
+  (shouldForceDataSourceRefresh(effect)
+    ? fetchDataSource(sourceConfig, language, { forceRefresh: true })
+    : fetchDataSource(sourceConfig, language))
     .then(res => {
       if (stateToken !== readContextToken(cache, contextId)) {
         return;
@@ -1197,6 +1307,13 @@ function populateLineItemsFromDataSource({
           ? res
           : [];
       if (!rows.length) {
+        if (effect.clearOnNoMatch) {
+          clearParentFieldMapping({
+            effect,
+            ctx,
+            lineItem
+          });
+        }
         if (debug && typeof console !== 'undefined') {
           console.warn('[SelectionEffects] data-driven effect: no rows returned', {
             questionId: question.id,
@@ -1223,7 +1340,13 @@ function populateLineItemsFromDataSource({
         question.dataSource?.mapping?.id ||
         '';
       const matchField = effect.matchField ? effect.matchField.toString().trim() : '';
-      if (!explicitLookupField && !matchField) {
+      const configuredLookupFields = Array.isArray((effect as any)?.lookupFields)
+        ? (effect as any).lookupFields.map((entry: any) => normalizeString(entry)).filter(Boolean)
+        : [];
+      const lookupFields = explicitLookupField || configuredLookupFields.length
+        ? resolveLookupFields({ ...effect, lookupField: explicitLookupField } as SelectionEffect, question, sampleRow)
+        : [];
+      if (!lookupFields.length && !matchField) {
         const entries = rows.flatMap((entryRow: any) => {
           const payload = effect.dataField ? entryRow[effect.dataField] : entryRow;
           return coerceItemsCollection(payload);
@@ -1254,7 +1377,6 @@ function populateLineItemsFromDataSource({
         });
         return;
       }
-      const lookupField = explicitLookupField || resolveLookupField(effect, question, sampleRow);
       const lookupSourceFieldId =
         typeof effect.lookupSourceFieldId === 'string' ? effect.lookupSourceFieldId.toString().trim() : '';
       const lookupSourceValue =
@@ -1264,7 +1386,7 @@ function populateLineItemsFromDataSource({
       missingSelections.forEach(selectedValue => {
         const lookupCandidates = buildLookupCandidates({
           normalizedSelections: [selectedValue],
-          lookupField,
+          lookupFields,
           lookupSourceValue,
           lineItem
         });
@@ -1283,35 +1405,35 @@ function populateLineItemsFromDataSource({
           ? matchedRows.filter((candidate, index) => matchedRows.indexOf(candidate) === index)
           : [];
         const row =
-          !matchField && lookupField
-            ? lookupCandidates.reduce<any | null>((matched, candidateValueRaw) => {
-                if (matched) return matched;
-                const sel = normalizeLookupToken(candidateValueRaw);
-                const normalizedTarget = (sel.key || sel.raw).toLowerCase();
-                if (!normalizedTarget) return null;
-                return (
-                  rows.find((candidate: any) => {
-                    const cand = normalizeLookupToken(candidate?.[lookupField]);
-                    const candidateValue = (cand.key || cand.raw).toLowerCase();
-                    if (!candidateValue) return false;
-                    return candidateValue === normalizedTarget;
-                  }) || null
-                );
-              }, null)
+          !matchField && lookupFields.length
+            ? findSourceRowByLookup({ rows, lookupFields, lookupCandidates })?.row || null
             : null;
         const matchedEntries = matchField ? dedupedMatchedRows : row ? [row] : [];
         if (!matchedEntries.length) {
+          if (effect.clearOnNoMatch) {
+            clearParentFieldMapping({
+              effect,
+              ctx,
+              lineItem
+            });
+          }
           if (debug && typeof console !== 'undefined') {
             console.warn('[SelectionEffects] no matching row for selection', {
               questionId: question.id,
               selectedValue,
-              lookupField,
+              lookupFields,
               matchField: matchField || undefined
             });
           }
           contextMap.delete(selectedValue);
           return;
         }
+        applyParentFieldMapping({
+          effect,
+          sourceRow: matchedEntries[0],
+          ctx,
+          lineItem
+        });
         const entries = matchedEntries.flatMap(entryRow => {
           const payload = effect.dataField ? entryRow[effect.dataField] : entryRow;
           return coerceItemsCollection(payload);

@@ -24,6 +24,7 @@ type SelectionEffectOpts = {
   contextId?: string;
   forceContextReset?: boolean;
   effectTrail?: string[];
+  topValues?: Record<string, FieldValue>;
 };
 
 const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
@@ -705,7 +706,7 @@ export const runSelectionEffects = (args: {
           return recomputed;
         });
       },
-      setValue: ({ fieldId, value, lineItem }) => {
+      setValue: ({ fieldId, value, lineItem, skipSelectionEffects }) => {
         const target = lineItem || opts?.lineItem;
         if (target?.groupId && target?.rowId) {
           setLineItems(prev => {
@@ -728,14 +729,16 @@ export const runSelectionEffects = (args: {
               nextLineItems: recomputed,
               nextValues
             });
-            scheduleChainedSelectionEffects({
-              fieldId,
-              value: value as FieldValue,
-              groupId: groupKey,
-              rowId: target.rowId,
-              nextValues,
-              nextLineItems: recomputed
-            });
+            if (!skipSelectionEffects) {
+              scheduleChainedSelectionEffects({
+                fieldId,
+                value: value as FieldValue,
+                groupId: groupKey,
+                rowId: target.rowId,
+                nextValues,
+                nextLineItems: recomputed
+              });
+            }
             return recomputed;
           });
           return;
@@ -750,12 +753,14 @@ export const runSelectionEffects = (args: {
           );
           latestLineItemsSnapshot = recomputed;
           setLineItems(recomputed);
-          scheduleChainedSelectionEffects({
-            fieldId,
-            value: value as FieldValue,
-            nextValues: appliedValues,
-            nextLineItems: recomputed
-          });
+          if (!skipSelectionEffects) {
+            scheduleChainedSelectionEffects({
+              fieldId,
+              value: value as FieldValue,
+              nextValues: appliedValues,
+              nextLineItems: recomputed
+            });
+          }
           return appliedValues;
         });
       },
@@ -801,9 +806,9 @@ export const runSelectionEffects = (args: {
           ...opts,
           lineItem: effectiveLineItem,
           contextId: resolvedContextId || opts.contextId,
-          topValues: values,
-          effectOverrides: effectOverrides as any
-        }
+        topValues: opts.topValues || values,
+        effectOverrides: effectOverrides as any
+      }
       : { topValues: values, effectOverrides: effectOverrides as any }
   );
 };

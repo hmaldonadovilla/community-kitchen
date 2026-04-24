@@ -859,8 +859,42 @@
                 "CATEGORY",
                 "ALLERGEN",
                 "STATUS"
-              ]
-            }
+              ],
+              "formKey": "Config: Ingredients Management",
+              "statusFieldId": "STATUS"
+            },
+            "selectionEffects": [
+              {
+                "id": "syncIngredientFromSource",
+                "type": "setValuesFromDataSource",
+                "lookupField": "id",
+                "lookupFields": [
+                  "id",
+                  "INGREDIENT_NAME"
+                ],
+                "lookupSourceFieldId": "ING_SOURCE_ID",
+                "fieldMapping": {
+                  "ING_SOURCE_ID": "id",
+                  "ING_SOURCE_UPDATED_AT": "updatedAt",
+                  "ING": "INGREDIENT_NAME",
+                  "CAT": "CATEGORY",
+                  "ALLERGEN": "ALLERGEN"
+                },
+                "clearOnNoMatch": false,
+                "sourceSync": {
+                  "refreshOnInit": true,
+                  "forceRefresh": true,
+                  "stopWhen": {
+                    "fieldId": "status",
+                    "equals": [
+                      "Disabled",
+                      "Désactivé",
+                      "Uitgeschakeld"
+                    ]
+                  }
+                }
+              }
+            ]
           },
           {
             "id": "QTY",
@@ -1696,8 +1730,42 @@
                   "CATEGORY",
                   "ALLERGEN",
                   "STATUS"
-                ]
-              }
+                ],
+                "formKey": "Config: Ingredients Management",
+                "statusFieldId": "STATUS"
+              },
+              "selectionEffects": [
+                {
+                  "id": "syncIngredientFromSource",
+                  "type": "setValuesFromDataSource",
+                  "lookupField": "id",
+                  "lookupFields": [
+                    "id",
+                    "INGREDIENT_NAME"
+                  ],
+                  "lookupSourceFieldId": "ING_SOURCE_ID",
+                  "fieldMapping": {
+                    "ING_SOURCE_ID": "id",
+                    "ING_SOURCE_UPDATED_AT": "updatedAt",
+                    "ING": "INGREDIENT_NAME",
+                    "CAT": "CATEGORY",
+                    "ALLERGEN": "ALLERGEN"
+                  },
+                  "clearOnNoMatch": false,
+                  "sourceSync": {
+                    "refreshOnInit": true,
+                    "forceRefresh": true,
+                    "stopWhen": {
+                      "fieldId": "status",
+                      "equals": [
+                        "Disabled",
+                        "Désactivé",
+                        "Uitgeschakeld"
+                      ]
+                    }
+                  }
+                }
+              ]
             },
             {
               "id": "QTY",

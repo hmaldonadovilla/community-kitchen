@@ -376,6 +376,7 @@ export interface ChoiceControlArgs {
 export interface LineItemGroupQuestionCtx {
   formKey?: string;
   recordId?: string | null;
+  recordMeta?: { id?: any; createdAt?: any; updatedAt?: any; status?: any; pdfUrl?: any };
   definition: WebFormDefinition;
   language: LangCode;
   values: Record<string, FieldValue>;
@@ -582,6 +583,7 @@ export const LineItemGroupQuestion: React.FC<{
   const {
     formKey,
     recordId,
+    recordMeta,
     definition,
     language,
     values,
@@ -4295,13 +4297,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     () => definition.questions.find(entry => entry.id === q.id) || q,
     [definition, q]
   );
+  const selectionEffectInitTopValues = React.useMemo(
+    () =>
+      ({
+        ...(values as Record<string, FieldValue>),
+        ...(recordMeta?.id !== undefined ? { id: recordMeta.id as FieldValue } : {}),
+        ...(recordMeta?.createdAt !== undefined ? { createdAt: recordMeta.createdAt as FieldValue } : {}),
+        ...(recordMeta?.updatedAt !== undefined ? { updatedAt: recordMeta.updatedAt as FieldValue } : {}),
+        ...(recordMeta?.status !== undefined ? { status: recordMeta.status as FieldValue, STATUS: recordMeta.status as FieldValue } : {}),
+        ...(recordMeta?.pdfUrl !== undefined ? { pdfUrl: recordMeta.pdfUrl as FieldValue } : {})
+      }) as Record<string, FieldValue>,
+    [recordMeta?.createdAt, recordMeta?.id, recordMeta?.pdfUrl, recordMeta?.status, recordMeta?.updatedAt, values]
+  );
 
   React.useEffect(() => {
     if (submitting) return;
     const targets = [
-      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems, values as Record<string, FieldValue>),
+      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues),
       ...collectSubgroupSeedInitTargets(initSourceQuestion, lineItems),
-      ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, values as Record<string, FieldValue>)
+      ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues)
     ];
     if (!targets.length) {
       initializedSelectionEffectsRef.current.clear();
@@ -4331,7 +4345,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     initializedSelectionEffectsRef.current.forEach(signature => {
       if (!nextKeys.has(signature)) initializedSelectionEffectsRef.current.delete(signature);
     });
-  }, [submitting, initSourceQuestion, lineItems, handleLineFieldChange, onDiagnostic]);
+  }, [submitting, initSourceQuestion, lineItems, selectionEffectInitTopValues, handleLineFieldChange, onDiagnostic]);
 
   // Autofill subgroup anchor choice when there is exactly 1 allowed option (avoid extra tap).
   // This covers cases where subgroup rows already exist (e.g., seeded minRows/defaults) and the anchor is still empty.

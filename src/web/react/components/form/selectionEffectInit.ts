@@ -67,6 +67,28 @@ const effectSelectionMatches = (effect: any, rawValue: FieldValue): boolean => {
   return currentSelections.some(entry => triggerValues.includes(entry));
 };
 
+const resolveSourceSyncConfig = (effect: any): Record<string, any> => {
+  const nested =
+    effect?.sourceSync && typeof effect.sourceSync === 'object'
+      ? effect.sourceSync
+      : effect?.sync && typeof effect.sync === 'object'
+        ? effect.sync
+        : {};
+  return {
+    ...nested,
+    ...(effect?.refreshOnInit !== undefined ? { refreshOnInit: effect.refreshOnInit === true } : {}),
+    ...(effect?.forceRefresh !== undefined ? { forceRefresh: effect.forceRefresh === true } : {}),
+    ...(effect?.stopWhen ? { stopWhen: effect.stopWhen } : {})
+  };
+};
+
+const effectRefreshesOnInit = (effect: any): boolean => resolveSourceSyncConfig(effect).refreshOnInit === true;
+
+const effectStopMatches = (effect: any, whenCtx: ReturnType<typeof buildEffectWhenContext>): boolean => {
+  const stopWhen = resolveSourceSyncConfig(effect).stopWhen;
+  return stopWhen ? matchesWhenClause(stopWhen, whenCtx as any) : false;
+};
+
 const buildEffectWhenContext = (args: {
   rowValues: Record<string, FieldValue>;
   topValues: Record<string, FieldValue>;
@@ -117,6 +139,11 @@ const fieldUsesSubgroupSeedInit = (group: WebQuestionDefinition, field: any): bo
     const targetGroupId = normalizeString((effect as any)?.groupId);
     return !!targetGroupId && subGroupIds.includes(targetGroupId);
   });
+};
+
+const fieldHasRefreshOnInitEffect = (field: any): boolean => {
+  const effects = Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
+  return effects.some((effect: any) => effectRefreshesOnInit(effect));
 };
 
 const collectSetValuesFromDataSourceFieldIds = (field: any): string[] => {
@@ -303,8 +330,10 @@ const effectNeedsInit = (args: {
     if (!effect || typeof effect !== 'object') return false;
     if (!effectSelectionMatches(effect, sourceValue)) return false;
     if (effect?.when && !matchesWhenClause((effect as any).when, whenCtx as any)) return false;
+    if (effectStopMatches(effect, whenCtx)) return false;
     switch ((effect.type || '').toString()) {
       case 'setValuesFromDataSource':
+        if (effectRefreshesOnInit(effect)) return true;
         return !fieldHasHydratedDataSourceMappings(args.field, args.rowValues);
       case 'setValue': {
         const fieldId = normalizeString((effect as any)?.fieldId);
@@ -328,6 +357,7 @@ const effectNeedsInit = (args: {
           lineItems: args.lineItems
         }).length > 0;
       case 'addLineItemsFromDataSource':
+        if (effectRefreshesOnInit(effect)) return true;
         return !effectTargetRowsAreHydrated({
           question: args.question,
           rowId: args.rowId,
@@ -394,7 +424,7 @@ const collectSelectionEffectTargetsForGroup = (
   const fieldsWithSelectionEffects = (((group as any)?.lineItemConfig?.fields || (group as any)?.fields || []) as any[]).filter(
     (field: any) =>
       shouldRunSelectionEffectsOnInit(field) &&
-      !fieldUsesSubgroupSeedInit(group, field) &&
+      (!fieldUsesSubgroupSeedInit(group, field) || fieldHasRefreshOnInitEffect(field)) &&
       Array.isArray(field?.selectionEffects) &&
       field.selectionEffects.length > 0
   );
@@ -480,6 +510,7 @@ export const collectSubgroupSeedInitTargets = (
           const effects = (field.selectionEffects || []) as any[];
           effects.forEach((effect: any) => {
             if (effect?.type !== 'addLineItemsFromDataSource') return;
+            if (effectRefreshesOnInit(effect)) return;
             const targetGroupId = normalizeString(effect?.groupId);
             if (!targetGroupId) return;
             const subGroup = subGroups.find((candidate: any) => resolveSubgroupKey(candidate) === targetGroupId);

@@ -180,6 +180,37 @@ describe('rowFlow domain', () => {
     expect(recipePrompt?.visible).toBe(true);
   });
 
+  it('hides a referenced prompt when its showWhen condition does not match the parent row', () => {
+    const rowFlow: any = {
+      references: {
+        cookRow: { groupId: 'TYPE', match: 'first', rowFilter: { includeWhen: { fieldId: 'PREP_TYPE', equals: ['Cook'] } } }
+      },
+      prompts: [
+        {
+          id: 'recipe',
+          fieldRef: 'cookRow.RECIPE',
+          keepVisibleWhenFilled: true,
+          showWhen: { fieldId: 'MP_TO_COOK', greaterThan: 0 }
+        }
+      ]
+    };
+
+    const state = resolveRowFlowState({
+      config: rowFlow,
+      groupId: 'MEALS',
+      rowId: 'r1',
+      rowValues: { MEAL_TYPE: 'Vegan', MP_TO_COOK: 0 },
+      lineItems: {
+        MEALS: [{ id: 'r1', values: { MEAL_TYPE: 'Vegan', MP_TO_COOK: 0 } }],
+        'MEALS::r1::TYPE': [{ id: 't1', values: { PREP_TYPE: 'Cook', RECIPE: 'Pasta' } }]
+      } as any,
+      subGroupIds: ['TYPE']
+    });
+
+    expect(state?.activePromptId).toBeUndefined();
+    expect(state?.prompts.find(prompt => prompt.id === 'recipe')?.visible).toBe(false);
+  });
+
   it('builds action plans for row updates and deletions', () => {
     const lineItems: any = {
       MEALS: [{ id: 'r1', values: { MP_IS_REHEAT: 'Yes' } }],

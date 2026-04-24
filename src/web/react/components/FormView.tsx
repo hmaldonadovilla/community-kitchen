@@ -42,7 +42,11 @@ import type {
 import { ConfirmDialogOverlay } from '../features/overlays/ConfirmDialogOverlay';
 import { useConfirmDialog } from '../features/overlays/useConfirmDialog';
 import type { ConfirmDialogOpenArgs } from '../features/overlays/useConfirmDialog';
-import { getOverlayCloseAllowCloseFromEdit, resolveOverlayCloseConfirm } from '../features/overlays/domain/overlayCloseConfirm';
+import {
+  getOverlayCloseAllowCloseFromEdit,
+  resolveOverlayCloseConfirm,
+  resolveOverlayCloseVisibilityScope
+} from '../features/overlays/domain/overlayCloseConfirm';
 import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/domain/overlayDetailNavigation';
 import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
@@ -4283,6 +4287,11 @@ const FormView: React.FC<FormViewProps> = ({
         getLineItems: groupId => lineItemsRef.current[groupId] || [],
         getLineItemKeys: () => Object.keys(lineItemsRef.current || {})
       };
+      const scope = resolveOverlayCloseVisibilityScope({
+        overlayGroupId: subgroupKey,
+        detailSelectionGroupId: overlayDetailSelection?.groupId,
+        detailSelectionRowId: overlayDetailSelection?.rowId
+      });
       const firstErrorLabel = (() => {
         if (!hasErrors) return '';
         const firstKey = errorKeys[0] || '';
@@ -4298,8 +4307,41 @@ const FormView: React.FC<FormViewProps> = ({
       })();
       const confirmResolved = resolveOverlayCloseConfirm({
         closeConfirm: subgroupOverlay.closeConfirm,
-        ctx: overlayCloseCtx
+        ctx: overlayCloseCtx,
+        scope
       });
+      const shouldBypassPendingIngredientsClose = (() => {
+        if (!confirmResolved || hasErrors || !scope?.rowId || !scope?.linePrefix) return false;
+        if (overlayDetailSelection?.mode !== 'view') return false;
+        const title = resolveLocalizedString(confirmResolved.confirm.title, language, '');
+        if (!title.toString().trim().toLowerCase().includes('missing ingredients')) return false;
+        const subgroupDefs = resolveSubgroupDefs(scope.linePrefix);
+        const overlayDetailSubId = ((subgroupDefs.sub as any)?.ui?.overlayDetail?.body?.subGroupId || '').toString().trim();
+        if (!overlayDetailSubId) return false;
+        const activeRows = lineItemsRef.current[scope.linePrefix] || [];
+        const activeRow = activeRows.find((row: any) => (row?.id || '').toString() === scope.rowId);
+        const activeValues = ((activeRow as any)?.values || {}) as Record<string, FieldValue>;
+        const hasSourceSelection = Boolean(
+          (activeValues.RECIPE_SOURCE_ID || '').toString().trim() ||
+            (activeValues.RECIPE || '').toString().trim()
+        );
+        if (!hasSourceSelection) return false;
+        const childKey = buildSubgroupKey(scope.linePrefix, scope.rowId, overlayDetailSubId);
+        const childRows = lineItemsRef.current[childKey] || [];
+        return childRows.length === 0;
+      })();
+      if (shouldBypassPendingIngredientsClose) {
+        closeSubgroupOverlay();
+        setErrors(prev => clearLineItemGroupErrors(prev, subgroupKey));
+        onDiagnostic?.('subgroup.overlay.close.allowed', {
+          source,
+          subgroupKey,
+          hadErrors: false,
+          confirmShown: false,
+          reason: 'pendingRecipeIngredients'
+        });
+        return;
+      }
       const allowCloseFromEdit = getOverlayCloseAllowCloseFromEdit(subgroupOverlay.closeConfirm);
       if (source === 'button' && !allowCloseFromEdit && !hasErrors) {
         closeSubgroupOverlay();
@@ -4488,8 +4530,10 @@ const FormView: React.FC<FormViewProps> = ({
 	      onSelectionEffect,
 	      openConfirmDialogResolved,
 	      overlayDetailSelection?.groupId,
+	      overlayDetailSelection?.mode,
 	      overlayDetailSelection?.rowId,
 	      resolveLineItemGroupForKey,
+	      resolveSubgroupDefs,
 	      runSelectionEffectsForAncestorRows,
 	      setErrors,
 	      setLineItems,
@@ -5119,10 +5163,11 @@ const FormView: React.FC<FormViewProps> = ({
         getLineItems: groupId => lineItemsRef.current[groupId] || [],
         getLineItemKeys: () => Object.keys(lineItemsRef.current || {})
       };
-      const scope =
-        overlayGroupId && overlayDetailSelection?.groupId === overlayGroupId && overlayDetailSelection?.rowId
-          ? { rowId: overlayDetailSelection.rowId, linePrefix: overlayGroupId }
-          : undefined;
+      const scope = resolveOverlayCloseVisibilityScope({
+        overlayGroupId,
+        detailSelectionGroupId: overlayDetailSelection?.groupId,
+        detailSelectionRowId: overlayDetailSelection?.rowId
+      });
       const closeConfirmResolved = resolveOverlayCloseConfirm({
         closeConfirm: lineItemGroupOverlay.closeConfirm,
         ctx: overlayCloseCtx,
@@ -7519,6 +7564,7 @@ const FormView: React.FC<FormViewProps> = ({
       unlockRecordId: unlockResolution.unlockRecordId || null,
       unlockSource: unlockResolution.source,
       recordId: recordMeta?.id || null,
+              recordMeta,
       reason: bypassReadyForProductionLock ? 'unlockOverride' : effectiveFieldDisableRule ? 'matched' : 'noMatch'
     });
   }, [
@@ -9978,6 +10024,7 @@ const FormView: React.FC<FormViewProps> = ({
             ctx={{
               formKey,
               recordId: recordMeta?.id || null,
+              recordMeta,
               definition,
               language,
               values,
@@ -11269,6 +11316,7 @@ const FormView: React.FC<FormViewProps> = ({
               ctx={{
                 formKey,
                 recordId: recordMeta?.id || null,
+              recordMeta,
                 definition,
                 language,
                 values: { ...values, ...ancestorValues },
@@ -12102,6 +12150,7 @@ const FormView: React.FC<FormViewProps> = ({
                           ctx={{
                               formKey,
                               recordId: recordMeta?.id || null,
+              recordMeta,
                               definition,
                               language,
                               values: detailContextValues,
@@ -14213,6 +14262,7 @@ const FormView: React.FC<FormViewProps> = ({
                             ctx={{
                               formKey,
                               recordId: recordMeta?.id || null,
+              recordMeta,
                               definition,
                               language,
                               values: detailContextValues,
@@ -14287,6 +14337,7 @@ const FormView: React.FC<FormViewProps> = ({
                   ctx={{
                     formKey,
                     recordId: recordMeta?.id || null,
+              recordMeta,
                     definition,
                     language,
                     values,
@@ -14935,6 +14986,7 @@ const FormView: React.FC<FormViewProps> = ({
           ctx={{
             formKey,
             recordId: recordMeta?.id || null,
+              recordMeta,
             definition,
             language,
             values,

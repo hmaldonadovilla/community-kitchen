@@ -319,6 +319,11 @@ export interface DataSourceFreshnessWatchConfig {
    */
   quietWindowMs?: number;
   /**
+   * Optional condition that stops this datasource watch while it matches.
+   * Useful for freezing synchronization once a record reaches a terminal status.
+   */
+  stopWhen?: WhenClause;
+  /**
    * Optional dialog shown when a background refresh changes the watched datasource rows.
    */
   dialog?: DataSourceFreshnessDialogConfig;
@@ -2773,6 +2778,13 @@ export interface SelectionEffect {
    */
   when?: WhenClause;
   /**
+   * Optional condition that freezes this effect while it matches.
+   *
+   * Intended for source synchronization rules that should stop once a record reaches a terminal status
+   * (for example a closed meal-production record).
+   */
+  stopWhen?: WhenClause;
+  /**
    * Preset field values for generated rows.
    * - `addLineItems`: supports literals plus `$row.FIELD_ID` / `$top.FIELD_ID`
    * - `addLineItemsFromDataSource`: also supports literals plus `$row.FIELD_ID` / `$source.FIELD_PATH`
@@ -2805,7 +2817,39 @@ export interface SelectionEffect {
   targetEffectId?: string;
   dataSource?: DataSourceConfig; // optional override source for data-driven effects
   lookupField?: string; // column/field used to match the selected value
+  /**
+   * Ordered fallback lookup columns/fields used for source synchronization.
+   * Put the stable source id first, then legacy natural keys for migration/backfill.
+   */
+  lookupFields?: string[];
   lookupSourceFieldId?: string; // current row/top-level field whose value should drive the data-source lookup
+  /**
+   * For datasource-backed effects, copy values from the matched source row back into the triggering row/top record.
+   * This is where stable source ids and source names can be refreshed alongside generated child rows.
+   */
+  parentFieldMapping?: Record<string, string>;
+  /**
+   * Source synchronization controls for datasource-backed selection effects.
+   */
+  sourceSync?: {
+    /**
+     * Re-run this effect when an existing record is opened/hydrated, even if target fields/rows already exist.
+     */
+    refreshOnInit?: boolean;
+    /**
+     * Bypass the client datasource cache when this effect fetches source rows.
+     */
+    forceRefresh?: boolean;
+    /**
+     * Freeze this synchronization while the condition matches.
+     */
+    stopWhen?: WhenClause;
+  };
+  /**
+   * Backwards-compatible aliases for `sourceSync.refreshOnInit` and `sourceSync.forceRefresh`.
+   */
+  refreshOnInit?: boolean;
+  forceRefresh?: boolean;
   /**
    * For `type: "addLineItemsFromDataSource"`, optionally match all data-source rows whose field value
    * equals the current selection (or the fallback lookup field value in sibling checkbox flows).
@@ -2821,7 +2865,8 @@ export interface SelectionEffect {
   dataSourceMultiplierField?: string; // column/field in the data source describing the default quantity
   scaleNumericFields?: string[]; // override list of mapped numeric fields to scale (defaults to aggregateNumericFields)
   /**
-   * For `type: "setValuesFromDataSource"`, when true clear mapped target fields if no data-source row matches.
+   * For datasource-backed effects, when true clear mapped target fields if no data-source row matches.
+   * `setValuesFromDataSource` clears `fieldMapping`; `addLineItemsFromDataSource` clears `parentFieldMapping`.
    */
   clearOnNoMatch?: boolean;
   /**

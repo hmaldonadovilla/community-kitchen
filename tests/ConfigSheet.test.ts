@@ -261,6 +261,58 @@ describe('ConfigSheet', () => {
     ]);
   });
 
+  test('getQuestions preserves clearOnNoMatch for addLineItemsFromDataSource', () => {
+    const sheet = mockSS.insertSheet('Config: SelectionEffectsDataSourceRows');
+    const exampleRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'Edit'],
+      [
+        'RECIPE',
+        'CHOICE',
+        'Recipe',
+        'Recipe',
+        'Recipe',
+        false,
+        '',
+        '',
+        '',
+        'Active',
+        `{
+          "selectionEffects": [
+            {
+              "type": "addLineItemsFromDataSource",
+              "groupId": "INGREDIENTS",
+              "dataSource": { "id": "Recipes Data" },
+              "lookupField": "id",
+              "lookupSourceFieldId": "RECIPE_SOURCE_ID",
+              "dataField": "Q65ILNUSGL",
+              "parentFieldMapping": {
+                "RECIPE": "QFTD5RD2EM",
+                "RECIPE_SOURCE_ID": "id"
+              },
+              "lineItemMapping": {
+                "ING": "ING"
+              },
+              "clearOnNoMatch": true
+            }
+          ]
+        }`,
+        '',
+        '',
+        ''
+      ]
+    ];
+    (sheet as any).setMockData(exampleRows);
+
+    const questions = ConfigSheet.getQuestions(mockSS as any, 'Config: SelectionEffectsDataSourceRows');
+    expect(questions[0].selectionEffects).toEqual([
+      expect.objectContaining({
+        type: 'addLineItemsFromDataSource',
+        groupId: 'INGREDIENTS',
+        clearOnNoMatch: true
+      })
+    ]);
+  });
+
   test('getQuestions parses derivedValue.template', () => {
     const sheet = mockSS.insertSheet('Config: DerivedTemplate');
     const exampleRows = [

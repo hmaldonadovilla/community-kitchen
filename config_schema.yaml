@@ -3299,6 +3299,9 @@ components:
                   quietWindowMs:
                     type: number
                     description: Quiet window (ms) before the client refreshes the watched datasource(s). Default 30000.
+                  stopWhen:
+                    $ref: '#/components/schemas/WhenClause'
+                    description: Optional condition that stops this datasource watch while it matches.
                   dialog:
                     type: object
                     description: Optional dialog shown when the background refresh changes the watched datasource rows.
@@ -6570,6 +6573,9 @@ components:
         when:
           $ref: '#/components/schemas/WhenClause'
           description: Optional condition that must match for the effect to run.
+        stopWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that freezes the effect while it matches, commonly used to stop source sync once a record reaches a terminal status.
         preset:
           type: object
           additionalProperties:
@@ -6615,6 +6621,11 @@ components:
         lookupField:
           type: string
           description: Column/field used to match the selected value when `type=addLineItemsFromDataSource` or `type=setValuesFromDataSource`.
+        lookupFields:
+          type: array
+          items:
+            type: string
+          description: Ordered fallback lookup columns/fields. Put the stable source id first, followed by legacy natural keys for backfill/migration.
         lookupSourceFieldId:
           type: string
           description: |
@@ -6623,6 +6634,32 @@ components:
 
             Use this when the triggering field value is not the same as the datasource key. For example, a
             quantity or mode change can still regenerate rows using the current row's inventory id.
+        parentFieldMapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            For datasource-backed effects, maps current row/top-level target fields to matched source row keys.
+            Use this to persist stable source ids and refresh source labels/names while child rows are rebuilt.
+        sourceSync:
+          type: object
+          description: Controls datasource-backed synchronization on record open and terminal status freeze rules.
+          properties:
+            refreshOnInit:
+              type: boolean
+              description: Re-run this effect while opening/hydrating an existing record, even if mapped fields or generated rows are already populated.
+            forceRefresh:
+              type: boolean
+              description: Bypass the client datasource cache when this effect fetches source rows.
+            stopWhen:
+              $ref: '#/components/schemas/WhenClause'
+              description: Freeze synchronization while this condition matches.
+        refreshOnInit:
+          type: boolean
+          description: Backwards-compatible alias for `sourceSync.refreshOnInit`.
+        forceRefresh:
+          type: boolean
+          description: Backwards-compatible alias for `sourceSync.forceRefresh`.
         matchField:
           type: string
           description: |
@@ -6671,8 +6708,9 @@ components:
         clearOnNoMatch:
           type: boolean
           description: |
-            For `type=setValuesFromDataSource`, when true the mapped target fields are cleared if the selected value
+            For datasource-backed effects, when true mapped target fields are cleared if the selected value
             no longer matches any row in the configured data source.
+            `setValuesFromDataSource` clears `fieldMapping`; `addLineItemsFromDataSource` clears `parentFieldMapping`.
 
     VisibilityCondition:
       type: object
@@ -7324,6 +7362,8 @@ components:
                       type: string
                   quietWindowMs:
                     type: number
+                  stopWhen:
+                    $ref: '#/components/schemas/WhenClause'
                   dialog:
                     type: object
                     properties:

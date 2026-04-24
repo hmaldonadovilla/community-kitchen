@@ -581,6 +581,15 @@ const matchesLineItemsClause = (
     }
     return true;
   };
+  const isAliasKeyInScope = (key: string, aliasGroupId: string): boolean => {
+    if (!scopedToRow || !scope?.chain.length) return true;
+    const parsed = parseGroupKeyPath(key);
+    if (normalizeScopeKey(parsed.rootId) !== normalizeScopeKey(aliasGroupId)) return false;
+    const active = scope.chain[scope.chain.length - 1];
+    const aliasParent = parsed.parentChain[0];
+    if (!active || !aliasParent) return false;
+    return normalizeScopeKey(aliasParent.rowId) === normalizeScopeKey(active.rowId);
+  };
 
   const buildRowCtx = (
     rowValues: Record<string, FieldValue>,
@@ -661,7 +670,26 @@ const matchesLineItemsClause = (
     return effectiveParentMatchMode === 'all' ? hasAnyParentCandidate : false;
   }
 
-  const candidateKeys = resolveMatchingGroupKeys(groupId, subGroupPath, ctx).filter(isKeyInScope);
+  const primaryCandidateKeys = resolveMatchingGroupKeys(groupId, subGroupPath, ctx).filter(isKeyInScope);
+  let candidateKeys = primaryCandidateKeys;
+  if (subGroupPath.length) {
+    const aliasGroupId = subGroupPath[0];
+    const aliasPath = subGroupPath.slice(1);
+    const aliasCandidateKeys = resolveMatchingGroupKeys(aliasGroupId, aliasPath, ctx).filter(key =>
+      isAliasKeyInScope(key, aliasGroupId)
+    );
+    if (aliasCandidateKeys.length) {
+      const seenCandidateKeys = new Set(candidateKeys);
+      candidateKeys = [
+        ...candidateKeys,
+        ...aliasCandidateKeys.filter(key => {
+          if (seenCandidateKeys.has(key)) return false;
+          seenCandidateKeys.add(key);
+          return true;
+        })
+      ];
+    }
+  }
   if (!candidateKeys.length) return false;
 
   const effectiveParentMatchMode =

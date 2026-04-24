@@ -84,7 +84,12 @@ export async function selectService(frame: Frame, service: string): Promise<void
 }
 
 export async function selectCook(frame: Frame, cookIndex: number): Promise<void> {
-  await frame.locator('select').nth(1).selectOption({ index: cookIndex });
+  const labelledCookSelect = frame.getByLabel(/Responsible cook/i).first();
+  if ((await labelledCookSelect.count()) > 0) {
+    await labelledCookSelect.selectOption({ index: cookIndex });
+    return;
+  }
+  await frame.locator('select').first().selectOption({ index: cookIndex });
 }
 
 export async function selectFirstCook(frame: Frame): Promise<void> {
@@ -460,17 +465,9 @@ export async function checkAllVisibleBoxes(frame: Frame, label: string): Promise
     const box = boxes.nth(index);
     if ((await box.isVisible().catch(() => false)) && !(await box.isChecked().catch(() => false))) {
       await box.scrollIntoViewIfNeeded().catch(() => undefined);
-      await box.click({ force: true }).catch(() => undefined);
-
-      if (!(await box.isChecked().catch(() => false))) {
-        await box
-          .evaluate((el: HTMLInputElement) => {
-            el.checked = true;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          })
-          .catch(() => undefined);
-      }
+      await box.check({ force: true }).catch(async () => {
+        await box.click({ force: true });
+      });
 
       await expect(box).toBeChecked({ timeout: 5_000 });
     }
