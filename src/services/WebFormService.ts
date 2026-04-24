@@ -47,6 +47,11 @@ import { FollowupService } from './webform/followup';
 import { UploadService } from './webform/uploads';
 import { AnalyticsService } from './webform/analytics/service';
 import { AnalyticsPipelineService } from './webform/analytics/pipelineService';
+import {
+  DataSourceIdBackfillOptions,
+  DataSourceIdBackfillResult,
+  DataSourceIdBackfillService
+} from './webform/dataSourceIdBackfill';
 import { buildReactShellTemplate, buildReactTemplate } from './webform/template';
 import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
@@ -1907,6 +1912,41 @@ export class WebFormService {
       return this.fetchFormBackedDataSource(config, locale, projection, limit, pageToken);
     }
     return this.dataSources.fetchDataSource(source, locale, projection, limit, pageToken);
+  }
+
+  public backfillDataSourceIds(
+    formKey: string = 'Config: Meal Production',
+    options?: DataSourceIdBackfillOptions
+  ): DataSourceIdBackfillResult {
+    const targetFormKey = (formKey || 'Config: Meal Production').toString().trim() || 'Config: Meal Production';
+    this.assertDataSourceBackfillCommitAllowed(options);
+    const backfill = new DataSourceIdBackfillService({
+      ss: this.ss,
+      submissions: this.submissions,
+      cacheManager: this.cacheManager,
+      resolveFormContext: (key?: string) => this.getFormContext(key),
+      fetchDataSource: (source: any, locale?: string, projection?: string[], limit?: number, pageToken?: string) =>
+        this.fetchDataSource(source, locale, projection, limit, pageToken)
+    });
+    return toPlainData(backfill.run(targetFormKey, options));
+  }
+
+  private assertDataSourceBackfillCommitAllowed(options?: DataSourceIdBackfillOptions): void {
+    if (options?.dryRun !== false) return;
+    const provided = (((options as any)?.commitToken ?? (options as any)?.token ?? '') || '').toString().trim();
+    const expected = (() => {
+      try {
+        return (this.scriptProperties()?.getProperty('CK_BACKFILL_DATA_SOURCE_IDS_TOKEN') || '').toString().trim();
+      } catch {
+        return '';
+      }
+    })();
+    if (!expected) {
+      throw new Error('Data source ID backfill commit token is not configured.');
+    }
+    if (!provided || provided !== expected) {
+      throw new Error('Invalid data source ID backfill commit token.');
+    }
   }
 
   private fetchFormBackedDataSource(

@@ -5236,4 +5236,12 @@ describe('WebFormService', () => {
     const unmanagedValue = (sheet as any).getRange(2, unmanagedCol, 1, 1).getValues()[0][0];
     expect((unmanagedValue || '').toString()).toBe('Keep me');
   });
+
+  test('backfillDataSourceIds rejects commit runs without the configured token', () => {
+    expect(() =>
+      service.backfillDataSourceIds('Config: Delivery', {
+        dryRun: false
+      } as any)
+    ).toThrow('Data source ID backfill commit token is not configured.');
+  });
 });
