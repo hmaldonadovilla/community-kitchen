@@ -356,6 +356,12 @@ export function rebuildIndexes(formKey?: string): any {
   return res;
 }
 
+export function backfillDataSourceIds(formKey?: string, options?: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.backfillDataSourceIds(formKey || 'Config: Meal Production', options);
+}
+
 export function invalidateWebAppCache(reason?: string): { success: boolean; version?: string | null; message?: string } {
   try {
     const resolvedReason = (reason || '').toString().trim() || 'manual';

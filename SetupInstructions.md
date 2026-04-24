@@ -85,7 +85,38 @@ CI (GitHub Actions):
    - Optional: `CLASP_DEPLOYMENT_ID` to update a specific web app deployment
 2. Run the **Deploy Apps Script** workflow (manual `workflow_dispatch`).
 
-## 2d. Optional: Cloud Run + Firestore backend bootstrap
+## 2d. Optional: Backfill Data Source Identity Fields
+
+When datasource-backed fields gain hidden identity columns such as
+`*_SOURCE_ID` or `*_SOURCE_UPDATED_AT`, historical rows may need a one-time
+backfill before old records can be copied reliably.
+
+Run a dry-run first:
+
+```bash
+npm run backfill:data-source-ids -- \
+  --env staging \
+  --form-key "Config: Meal Production" \
+  --batch-size 50
+```
+
+Commit mode requires the target Apps Script project to have a script property
+named `CK_BACKFILL_DATA_SOURCE_IDS_TOKEN`, and the same value must be provided
+locally:
+
+```bash
+CK_BACKFILL_DATA_SOURCE_IDS_TOKEN="<token>" \
+  npm run backfill:data-source-ids -- \
+  --env staging \
+  --commit \
+  --form-key "Config: Meal Production"
+```
+
+The runner performs a dry-run preflight, commits in batches, writes audit rows,
+and performs a post-check dry-run. Delete the script property after the one-off
+commit run. Full procedure: `docs/data-source-id-backfill.md`.
+
+## 2e. Optional: Cloud Run + Firestore backend bootstrap
 
 Use this only as optional backend preparation so Cloud Run + Firestore can be provisioned and deployed from the CLI in the same env-driven style as `clasp`.
 
