@@ -21,7 +21,7 @@ const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Analytics is available from the dashboard below.',
+    adminSectionNote: 'Reports are available from the dashboard below.',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',

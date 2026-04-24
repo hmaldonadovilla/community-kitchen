@@ -3313,23 +3313,140 @@ export class Dashboard {
       return out;
     };
 
+    const normalizeTextValue = (input: any): string => {
+      if (input === undefined || input === null) return '';
+      if (typeof input === 'string') return input.trim();
+      if (typeof input !== 'object') return `${input ?? ''}`.trim();
+      return (
+        (input as any).en?.toString?.().trim?.() ||
+        (input as any).EN?.toString?.().trim?.() ||
+        (input as any).fr?.toString?.().trim?.() ||
+        (input as any).FR?.toString?.().trim?.() ||
+        ''
+      );
+    };
+
+    const normalizeTextList = (input: any): string[] =>
+      (Array.isArray(input) ? input : input === undefined || input === null || input === '' ? [] : [input])
+        .map(entry => normalizeTextValue(entry))
+        .filter(Boolean);
+
+    const normalizeReportColumn = (raw: any): any | null => {
+      if (!raw || typeof raw !== 'object') return null;
+      const header = normalizeTextValue((raw as any).header ?? (raw as any).label ?? (raw as any).title);
+      if (!header) return null;
+      const out: Record<string, any> = { header };
+      const source = normalizeTextValue((raw as any).source ?? (raw as any).type);
+      const allowedSources = new Set([
+        'recordField',
+        'recordStatus',
+        'lineItemField',
+        'hasLineItem',
+        'lineItemAggregate',
+        'completionStatus',
+        'firstMissingStep',
+        'missingSteps',
+        'constant'
+      ]);
+      if (allowedSources.has(source)) out.source = source;
+      const fieldId = normalizeTextValue((raw as any).fieldId ?? (raw as any).field);
+      if (fieldId) out.fieldId = fieldId;
+      const groupId = normalizeTextValue((raw as any).groupId ?? (raw as any).lineItemGroupId);
+      if (groupId) out.groupId = groupId;
+      const subGroupPath = (raw as any).subGroupPath ?? (raw as any).subGroupId;
+      if (subGroupPath !== undefined) out.subGroupPath = subGroupPath;
+      const when = this.normalizeWhenClause((raw as any).when ?? (raw as any).filter);
+      if (when) out.when = when;
+      const aggregate = normalizeTextValue((raw as any).aggregate).toLowerCase();
+      if (aggregate === 'sum' || aggregate === 'count' || aggregate === 'listunique') {
+        out.aggregate = aggregate === 'listunique' ? 'listUnique' : aggregate;
+      }
+      if ((raw as any).value !== undefined) out.value = (raw as any).value;
+      if ((raw as any).valueMap && typeof (raw as any).valueMap === 'object') out.valueMap = { ...(raw as any).valueMap };
+      ['trueLabel', 'falseLabel', 'emptyLabel', 'completeLabel', 'incompleteLabel', 'missingLabel', 'separator', 'fallback'].forEach(key => {
+        const value = normalizeTextValue((raw as any)[key]);
+        if (value) out[key] = value;
+      });
+      return out;
+    };
+
+    const normalizeRecordTableReport = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const dateFieldId = normalizeTextValue((raw as any).dateFieldId ?? (raw as any).recordDateFieldId);
+      const columnsRaw = Array.isArray((raw as any).columns) ? (raw as any).columns : [];
+      const columns = columnsRaw.map(normalizeReportColumn).filter(Boolean);
+      if (!dateFieldId || !columns.length) return undefined;
+      const out: Record<string, any> = { dateFieldId, columns };
+      const statusFieldId = normalizeTextValue((raw as any).statusFieldId);
+      if (statusFieldId) out.statusFieldId = statusFieldId;
+      ([
+        ['includeStatuses', (raw as any).includeStatuses],
+        ['excludeStatuses', (raw as any).excludeStatuses],
+        ['completedStatuses', (raw as any).completedStatuses]
+      ] as Array<[string, any]>).forEach(([key, value]) => {
+        const list = normalizeTextList(value);
+        if (list.length) out[key] = Array.from(new Set(list));
+      });
+      const when = this.normalizeWhenClause((raw as any).when ?? (raw as any).filter);
+      if (when) out.when = when;
+      const lineItemRaw = (raw as any).lineItem;
+      if (lineItemRaw && typeof lineItemRaw === 'object') {
+        const groupId = normalizeTextValue((lineItemRaw as any).groupId ?? (lineItemRaw as any).lineItemGroupId);
+        if (groupId) {
+          const lineItem: Record<string, any> = { groupId };
+          if ((lineItemRaw as any).subGroupPath !== undefined) lineItem.subGroupPath = (lineItemRaw as any).subGroupPath;
+          const includeWhen = this.normalizeWhenClause((lineItemRaw as any).includeWhen ?? (lineItemRaw as any).when);
+          if (includeWhen) lineItem.includeWhen = includeWhen;
+          const excludeWhen = this.normalizeWhenClause((lineItemRaw as any).excludeWhen);
+          if (excludeWhen) lineItem.excludeWhen = excludeWhen;
+          out.lineItem = lineItem;
+        }
+      }
+      const stepsRaw = Array.isArray((raw as any).steps) ? (raw as any).steps : [];
+      const steps = stepsRaw
+        .map((entry: any): any | null => {
+          if (!entry || typeof entry !== 'object') return null;
+          const label = normalizeTextValue((entry as any).label ?? (entry as any).title);
+          const completeWhen = this.normalizeWhenClause((entry as any).completeWhen ?? (entry as any).whenComplete ?? (entry as any).when);
+          return label && completeWhen ? { label, completeWhen } : null;
+        })
+        .filter(Boolean);
+      if (steps.length) out.steps = steps;
+      const expectedRowsRaw = (raw as any).expectedRows;
+      if (expectedRowsRaw && typeof expectedRowsRaw === 'object') {
+        const expectedRows: Record<string, any> = {};
+        const keyFields = normalizeTextList((expectedRowsRaw as any).keyFields);
+        if (keyFields.length) expectedRows.keyFields = keyFields;
+        if (Array.isArray((expectedRowsRaw as any).daily)) expectedRows.daily = (expectedRowsRaw as any).daily;
+        const maxDays = Number((expectedRowsRaw as any).maxDays);
+        if (Number.isFinite(maxDays) && maxDays > 0) expectedRows.maxDays = Math.round(maxDays);
+        if (Object.keys(expectedRows).length) out.expectedRows = expectedRows;
+      }
+      return out;
+    };
+
     const normalizePipeline = (entry: any): any | null => {
       if (!entry || typeof entry !== 'object') return null;
       const typeRaw = (entry as any).type ?? (entry as any).kind ?? 'ingredientUsageReport';
       const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';
-      if (type !== 'ingredientUsageReport') return null;
+      if (type !== 'ingredientUsageReport' && type !== 'recordTableReport') return null;
       const idRaw = (entry as any).id ?? (entry as any).key ?? (entry as any).name;
       const id = idRaw !== undefined && idRaw !== null ? idRaw.toString().trim() : '';
       if (!id) return null;
-      const report = normalizeIngredientUsageReport((entry as any).report ?? (entry as any).config ?? entry);
+      const report =
+        type === 'ingredientUsageReport'
+          ? normalizeIngredientUsageReport((entry as any).report ?? (entry as any).config ?? entry)
+          : normalizeRecordTableReport((entry as any).report ?? (entry as any).config ?? entry);
       const email = normalizePipelineEmail((entry as any).email);
       if (!report || !email) return null;
       const out: Record<string, any> = {
-        type: 'ingredientUsageReport',
+        type,
         id,
         report,
         email
       };
+      const order = Number((entry as any).order);
+      if (Number.isFinite(order)) out.order = order;
       const title = normalizeLocalized((entry as any).title ?? (entry as any).label);
       if (title !== undefined) out.title = title;
       const description = normalizeLocalized((entry as any).description ?? (entry as any).helperText);

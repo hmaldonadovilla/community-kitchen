@@ -5252,6 +5252,7 @@ export interface AnalyticsIngredientUsagePipelineReportConfig {
 export interface AnalyticsIngredientUsagePipelineConfig {
   id: string;
   type: 'ingredientUsageReport';
+  order?: number;
   sourceFormKey?: string;
   title?: LocalizedString | string;
   description?: LocalizedString | string;
@@ -5262,7 +5263,86 @@ export interface AnalyticsIngredientUsagePipelineConfig {
   report: AnalyticsIngredientUsagePipelineReportConfig;
 }
 
-export type AnalyticsPipelineConfig = AnalyticsIngredientUsagePipelineConfig;
+export type AnalyticsRecordTableColumnSource =
+  | 'recordField'
+  | 'recordStatus'
+  | 'lineItemField'
+  | 'hasLineItem'
+  | 'lineItemAggregate'
+  | 'completionStatus'
+  | 'firstMissingStep'
+  | 'missingSteps'
+  | 'constant';
+
+export interface AnalyticsRecordTableLineItemConfig {
+  groupId: string;
+  subGroupPath?: string | string[];
+  includeWhen?: WhenClause;
+  excludeWhen?: WhenClause;
+}
+
+export interface AnalyticsRecordTableExpectedRowsConfig {
+  keyFields?: string[];
+  daily?: Array<Record<string, any>>;
+  maxDays?: number;
+}
+
+export interface AnalyticsRecordTableStepConfig {
+  label: string;
+  completeWhen: WhenClause;
+}
+
+export interface AnalyticsRecordTableColumnConfig {
+  header: string;
+  source?: AnalyticsRecordTableColumnSource;
+  fieldId?: string;
+  groupId?: string;
+  subGroupPath?: string | string[];
+  when?: WhenClause;
+  aggregate?: 'sum' | 'count' | 'listUnique';
+  value?: any;
+  valueMap?: Record<string, string>;
+  trueLabel?: string;
+  falseLabel?: string;
+  emptyLabel?: string;
+  completeLabel?: string;
+  incompleteLabel?: string;
+  missingLabel?: string;
+  separator?: string;
+  fallback?: string;
+}
+
+export interface AnalyticsRecordTableReportConfig {
+  /**
+   * Top-level record date field used to filter source records.
+   */
+  dateFieldId: string;
+  statusFieldId?: string;
+  includeStatuses?: string[];
+  excludeStatuses?: string[];
+  completedStatuses?: string[];
+  when?: WhenClause;
+  lineItem?: AnalyticsRecordTableLineItemConfig;
+  columns: AnalyticsRecordTableColumnConfig[];
+  steps?: AnalyticsRecordTableStepConfig[];
+  expectedRows?: AnalyticsRecordTableExpectedRowsConfig;
+}
+
+export interface AnalyticsRecordTablePipelineConfig {
+  id: string;
+  type: 'recordTableReport';
+  order?: number;
+  sourceFormKey?: string;
+  title?: LocalizedString | string;
+  description?: LocalizedString | string;
+  placements?: AnalyticsPlacement[];
+  ui?: AnalyticsPipelineUiConfig;
+  email: AnalyticsPipelineEmailConfig;
+  attachment?: AnalyticsPipelineAttachmentConfig;
+  report: AnalyticsRecordTableReportConfig;
+}
+
+export type AnalyticsPipelineConfig = AnalyticsIngredientUsagePipelineConfig | AnalyticsRecordTablePipelineConfig;
 
 export interface AnalyticsAggregateCalculation {
   /**

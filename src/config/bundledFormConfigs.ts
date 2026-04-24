@@ -13846,66 +13846,33 @@ export const BUNDLED_FORM_CONFIGS = [
         ],
         "pipelines": [
           {
-            "id": "ingredients_analysis",
+            "id": "ingredients_used",
             "type": "ingredientUsageReport",
-            "title": {
-              "en": "Ingredients analysis",
-              "fr": "Analyse des ingrédients",
-              "nl": "Ingrediëntenanalyse"
-            },
-            "description": {
-              "en": "Aggregate cooked ingredients used in closed meal production records and receive the spreadsheet by email.",
-              "fr": "Agrège les ingrédients cuisinés utilisés dans les enregistrements de production de repas clôturés et recevez le tableur par e-mail.",
-              "nl": "Bundelt gekookte ingrediënten uit gesloten maaltijdproductierecords en verstuurt het spreadsheet per e-mail."
-            },
+            "order": 10,
+            "title": "Ingredients used",
+            "description": "Select a start date. We’ll email the list of ingredients used since then.",
+            "placements": [
+              "analyticsPage"
+            ],
             "ui": {
-              "dateLabel": {
-                "en": "Start date",
-                "fr": "Date de début",
-                "nl": "Startdatum"
-              },
-              "dateHelperText": {
-                "en": "Select a past date. Closed meal productions from that date through today will be included.",
-                "fr": "Sélectionnez une date passée. Les productions de repas clôturées entre cette date et aujourd’hui seront incluses.",
-                "nl": "Selecteer een datum in het verleden. Gesloten maaltijdproducties van die datum tot vandaag worden opgenomen."
-              },
-              "submitLabel": {
-                "en": "Email ingredients report",
-                "fr": "Envoyer le rapport ingrédients",
-                "nl": "Ingrediëntenrapport e-mailen"
-              },
-              "pendingLabel": {
-                "en": "Queueing...",
-                "fr": "Mise en file...",
-                "nl": "Wordt ingepland..."
-              },
-              "queuedNotice": {
-                "en": "The ingredients report has been queued. The spreadsheet will be sent by email to hmaldonadovilla@outlook.com.",
-                "fr": "Le rapport ingrédients a été mis en file. Le tableur sera envoyé par e-mail à hmaldonadovilla@outlook.com.",
-                "nl": "Het ingrediëntenrapport is ingepland. Het spreadsheet wordt per e-mail verzonden naar hmaldonadovilla@outlook.com."
-              }
+              "dateLabel": "Date",
+              "submitLabel": "Send report",
+              "pendingLabel": "Sending...",
+              "queuedNotice": "Report request sent. We'll email it to the Operations Manager."
             },
             "email": {
               "recipients": [
                 "hmaldonadovilla@outlook.com"
               ],
-              "subject": {
-                "en": "Ingredients analysis | {{START_DATE}} to {{END_DATE}}",
-                "fr": "Analyse des ingrédients | {{START_DATE}} à {{END_DATE}}",
-                "nl": "Ingrediëntenanalyse | {{START_DATE}} tot {{END_DATE}}"
-              },
-              "message": {
-                "en": "The requested ingredients analysis is attached.\n\nRange: {{START_DATE}} to {{END_DATE}}\nClosed meal productions included: {{RECORD_COUNT}}\nAggregated ingredients: {{ROW_COUNT}}",
-                "fr": "L’analyse des ingrédients demandée est jointe.\n\nPériode : {{START_DATE}} à {{END_DATE}}\nProductions de repas clôturées incluses : {{RECORD_COUNT}}\nIngrédients agrégés : {{ROW_COUNT}}",
-                "nl": "De gevraagde ingrediëntenanalyse is bijgevoegd.\n\nPeriode: {{START_DATE}} tot {{END_DATE}}\nOpgenomen gesloten maaltijdproducties: {{RECORD_COUNT}}\nGeaggregeerde ingrediënten: {{ROW_COUNT}}"
-              },
               "from": "operations@communitykitchen.be",
-              "fromName": "Community Kitchen Operations"
+              "fromName": "Community Kitchen Operations",
+              "subject": "Ingredients used report since {{START_DATE}}",
+              "message": "Please find attached the Ingredients used report since {{START_DATE}}."
             },
             "attachment": {
               "format": "xlsx",
-              "fileNameTemplate": "Ingredients analysis {{START_DATE}} to {{END_DATE}}.xlsx",
-              "sheetName": "Ingredients analysis",
+              "fileNameTemplate": "Ingredients used report since {{START_DATE}}.xlsx",
+              "sheetName": "Ingredients used",
               "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
             },
             "report": {
@@ -13926,6 +13893,381 @@ export const BUNDLED_FORM_CONFIGS = [
               "unitFieldId": "UNIT",
               "categoryFieldId": "CAT",
               "supplierLookupColumn": "SUPPLIER"
+            }
+          },
+          {
+            "id": "meals_produced_delivered",
+            "type": "recordTableReport",
+            "order": 20,
+            "sourceFormKey": "Config: Meal Production",
+            "title": "Meals produced and delivered",
+            "description": "Select a start date. We’ll email the list of completed meals since then.",
+            "placements": [
+              "analyticsPage"
+            ],
+            "ui": {
+              "dateLabel": "Date",
+              "submitLabel": "Send report",
+              "pendingLabel": "Sending...",
+              "queuedNotice": "Report request sent. We'll email it to the Operations Manager."
+            },
+            "email": {
+              "recipients": [
+                "hmaldonadovilla@outlook.com"
+              ],
+              "from": "operations@communitykitchen.be",
+              "fromName": "Community Kitchen Operations",
+              "subject": "Meals produced and delivered report since {{START_DATE}}",
+              "message": "Please find attached the Meals produced and delivered report since {{START_DATE}}."
+            },
+            "attachment": {
+              "format": "xlsx",
+              "fileNameTemplate": "Meals produced and delivered report since {{START_DATE}}.xlsx",
+              "sheetName": "Meals produced and delivered",
+              "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
+            },
+            "report": {
+              "dateFieldId": "MP_PREP_DATE",
+              "statusFieldId": "Status",
+              "includeStatuses": [
+                "Closed"
+              ],
+              "completedStatuses": [
+                "Closed"
+              ],
+              "lineItem": {
+                "groupId": "MP_MEALS_REQUEST",
+                "includeWhen": {
+                  "fieldId": "ORD_QTY",
+                  "greaterThan": 0
+                }
+              },
+              "columns": [
+                {
+                  "header": "Date",
+                  "source": "recordField",
+                  "fieldId": "MP_PREP_DATE"
+                },
+                {
+                  "header": "Customer",
+                  "source": "recordField",
+                  "fieldId": "MP_DISTRIBUTOR"
+                },
+                {
+                  "header": "Service",
+                  "source": "recordField",
+                  "fieldId": "MP_SERVICE"
+                },
+                {
+                  "header": "Responsible cook",
+                  "source": "recordField",
+                  "fieldId": "MP_COOK_NAME"
+                },
+                {
+                  "header": "Dietary type",
+                  "source": "lineItemField",
+                  "fieldId": "MEAL_TYPE"
+                },
+                {
+                  "header": "Number of portions delivered",
+                  "source": "lineItemField",
+                  "fieldId": "FINAL_QTY"
+                },
+                {
+                  "header": "Leftover used",
+                  "source": "hasLineItem",
+                  "groupId": "MP_TYPE_LI",
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "notEquals": "Cook"
+                      }
+                    ]
+                  },
+                  "trueLabel": "Yes",
+                  "falseLabel": "No"
+                }
+              ]
+            }
+          },
+          {
+            "id": "meal_productions_incomplete",
+            "type": "recordTableReport",
+            "order": 30,
+            "sourceFormKey": "Config: Meal Production",
+            "title": "Meal productions with incomplete status",
+            "description": "Select a start date. We’ll email the list of incomplete meal productions since then.",
+            "placements": [
+              "analyticsPage"
+            ],
+            "ui": {
+              "dateLabel": "Date",
+              "submitLabel": "Send report",
+              "pendingLabel": "Sending...",
+              "queuedNotice": "Report request sent. We'll email it to the Operations Manager."
+            },
+            "email": {
+              "recipients": [
+                "hmaldonadovilla@outlook.com"
+              ],
+              "from": "operations@communitykitchen.be",
+              "fromName": "Community Kitchen Operations",
+              "subject": "Meal productions with incomplete status report since {{START_DATE}}",
+              "message": "Please find attached the Meal productions with incomplete status report since {{START_DATE}}."
+            },
+            "attachment": {
+              "format": "xlsx",
+              "fileNameTemplate": "Meal productions with incomplete status report since {{START_DATE}}.xlsx",
+              "sheetName": "Incomplete meal productions",
+              "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
+            },
+            "report": {
+              "dateFieldId": "MP_PREP_DATE",
+              "statusFieldId": "Status",
+              "excludeStatuses": [
+                "Closed"
+              ],
+              "completedStatuses": [
+                "Closed"
+              ],
+              "columns": [
+                {
+                  "header": "Date",
+                  "source": "recordField",
+                  "fieldId": "MP_PREP_DATE"
+                },
+                {
+                  "header": "Customer",
+                  "source": "recordField",
+                  "fieldId": "MP_DISTRIBUTOR"
+                },
+                {
+                  "header": "Service",
+                  "source": "recordField",
+                  "fieldId": "MP_SERVICE"
+                },
+                {
+                  "header": "Responsible cook",
+                  "source": "recordField",
+                  "fieldId": "MP_COOK_NAME"
+                },
+                {
+                  "header": "Current status",
+                  "source": "firstMissingStep",
+                  "fallback": "Incomplete"
+                },
+                {
+                  "header": "Missing step(s)",
+                  "source": "missingSteps",
+                  "separator": ", "
+                }
+              ],
+              "steps": [
+                {
+                  "label": "Order",
+                  "completeWhen": {
+                    "all": [
+                      {
+                        "fieldId": "MP_PREP_DATE",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "MP_DISTRIBUTOR",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "MP_SERVICE",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "MP_COOK_NAME",
+                        "notEmpty": true
+                      },
+                      {
+                        "lineItems": {
+                          "groupId": "MP_MEALS_REQUEST",
+                          "match": "any",
+                          "when": {
+                            "fieldId": "ORD_QTY",
+                            "greaterThan": 0
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "label": "Production",
+                  "completeWhen": {
+                    "lineItems": {
+                      "groupId": "MP_MEALS_REQUEST",
+                      "subGroupId": "MP_TYPE_LI",
+                      "parentWhen": {
+                        "fieldId": "ORD_QTY",
+                        "greaterThan": 0
+                      },
+                      "parentMatch": "all",
+                      "match": "any",
+                      "when": {
+                        "any": [
+                          {
+                            "fieldId": "RECIPE",
+                            "notEmpty": true
+                          },
+                          {
+                            "fieldId": "LEFTOVER_ID",
+                            "notEmpty": true
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "Food safety",
+                  "completeWhen": {
+                    "not": {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "match": "any",
+                        "when": {
+                          "all": [
+                            {
+                              "fieldId": "ORD_QTY",
+                              "greaterThan": 0
+                            },
+                            {
+                              "any": [
+                                {
+                                  "fieldId": "MP_COOK_TEMP",
+                                  "notEquals": true
+                                },
+                                {
+                                  "fieldId": "TEMP_EVD",
+                                  "isEmpty": true
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "Portioning",
+                  "completeWhen": {
+                    "not": {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "match": "any",
+                        "when": {
+                          "all": [
+                            {
+                              "fieldId": "ORD_QTY",
+                              "greaterThan": 0
+                            },
+                            {
+                              "fieldId": "FINAL_QTY",
+                              "isEmpty": true
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "Leftover not completed",
+                  "completeWhen": {
+                    "fieldId": "status",
+                    "equals": "Closed"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleaning_storage_checks",
+            "type": "recordTableReport",
+            "order": 40,
+            "sourceFormKey": "Config: Checklist",
+            "title": "Cleaning and storage checks",
+            "description": "Select a start date. We’ll email the list of checks since then.",
+            "placements": [
+              "analyticsPage"
+            ],
+            "ui": {
+              "dateLabel": "Date",
+              "submitLabel": "Send report",
+              "pendingLabel": "Sending...",
+              "queuedNotice": "Report request sent. We'll email it to the Operations Manager."
+            },
+            "email": {
+              "recipients": [
+                "hmaldonadovilla@outlook.com"
+              ],
+              "from": "operations@communitykitchen.be",
+              "fromName": "Community Kitchen Operations",
+              "subject": "Cleaning and storage checks report since {{START_DATE}}",
+              "message": "Please find attached the Cleaning and storage checks report since {{START_DATE}}."
+            },
+            "attachment": {
+              "format": "xlsx",
+              "fileNameTemplate": "Cleaning and storage checks report since {{START_DATE}}.xlsx",
+              "sheetName": "Cleaning and storage checks",
+              "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
+            },
+            "report": {
+              "dateFieldId": "DATE",
+              "statusFieldId": "Status",
+              "completedStatuses": [
+                "Closed"
+              ],
+              "expectedRows": {
+                "keyFields": [
+                  "DATE",
+                  "CHECK_FREQ"
+                ],
+                "daily": [
+                  {
+                    "CHECK_FREQ": "AM"
+                  },
+                  {
+                    "CHECK_FREQ": "PM"
+                  }
+                ],
+                "maxDays": 370
+              },
+              "columns": [
+                {
+                  "header": "Date",
+                  "source": "recordField",
+                  "fieldId": "DATE"
+                },
+                {
+                  "header": "Frequency",
+                  "source": "recordField",
+                  "fieldId": "CHECK_FREQ"
+                },
+                {
+                  "header": "Responsible cook",
+                  "source": "recordField",
+                  "fieldId": "COOK"
+                },
+                {
+                  "header": "Status",
+                  "source": "completionStatus",
+                  "completeLabel": "Complete",
+                  "incompleteLabel": "Incomplete",
+                  "missingLabel": "Missing"
+                }
+              ]
             }
           }
         ]
@@ -25096,7 +25438,7 @@ export const BUNDLED_FORM_CONFIGS = [
       }
     },
     "validationErrors": [],
-    "cacheFingerprint": "ebfe22b24100f54a4b8663253e37af0d"
+    "cacheFingerprint": "af226ca4303a2ed77e5f9c96608f9ffb"
   },
   {
     "formKey": "Config: Recipes",

@@ -2,10 +2,16 @@ import type { AnalyticsDashboardPipeline } from '../../../config/analyticsPageTy
 import {
   AnalyticsIngredientUsagePipelineConfig,
   AnalyticsPipelineConfig,
+  AnalyticsRecordTableColumnConfig,
+  AnalyticsRecordTableLineItemConfig,
+  AnalyticsRecordTablePipelineConfig,
+  AnalyticsRecordTableReportConfig,
   FormConfig,
   QuestionConfig,
+  WhenClause,
   WebFormSubmission
 } from '../../../types';
+import { matchesWhenClause } from '../../../web/rules/visibility';
 import { exportDriveApiFile, trashDriveApiFile } from '../driveApi';
 import { debugLog } from '../debug';
 import { resolveOutputTarget } from '../followup/docRenderer.copy';
@@ -13,12 +19,13 @@ import { resolveLocalizedStringValue, resolveRecipients } from '../followup/reci
 import { normalizeToIsoDate } from '../followup/utils';
 import { SubmissionService } from '../submissions';
 import { DataSourceService } from '../dataSources';
+import { buildRecordVisibilityContext, buildRowVisibilityContext } from '../updateRecordDependencies';
 
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const DEFAULT_DATE_LABEL = 'Start date';
+const DEFAULT_DATE_LABEL = 'Date';
 const DEFAULT_SUBMIT_LABEL = 'Send report';
-const DEFAULT_PENDING_LABEL = 'Queueing...';
-const DEFAULT_QUEUED_NOTICE = 'The report has been queued. The spreadsheet will be sent by email.';
+const DEFAULT_PENDING_LABEL = 'Sending...';
+const DEFAULT_QUEUED_NOTICE = "Report request sent. We'll email it to the Operations Manager.";
 const EXPORT_SYNC_ATTEMPTS = 4;
 const EXPORT_SYNC_SLEEP_MS = 1_500;
 
@@ -32,6 +39,22 @@ type IngredientUsageRow = {
 
 type IngredientUsageAggregation = {
   rows: IngredientUsageRow[];
+  recordCount: number;
+};
+
+type RecordTableRowContext = {
+  record: WebFormSubmission;
+  questions: QuestionConfig[];
+  topCtx: ReturnType<typeof buildRecordVisibilityContext>['ctx'];
+  row?: Record<string, any>;
+  parentValues?: Record<string, any>;
+  groupKey?: string;
+  syntheticMissing?: boolean;
+};
+
+type RecordTableAggregation = {
+  headers: string[];
+  rows: any[][];
   recordCount: number;
 };
 
@@ -84,6 +107,7 @@ const parseLineItemRows = (raw: any): Array<Record<string, any>> => {
 const toNumber = (raw: any): number | null => {
   if (raw === undefined || raw === null || raw === '') return null;
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === 'boolean') return raw ? 1 : 0;
   const text = raw.toString().trim();
   if (!text) return null;
   const direct = Number(text.replace(/\s+/g, '').replace(',', '.'));
@@ -93,14 +117,21 @@ const toNumber = (raw: any): number | null => {
 const normalizeStatusToken = (value: any): string =>
   (value === undefined || value === null ? '' : value.toString().trim().toLowerCase());
 
+const normalizeStringList = (value: any): string[] =>
+  (Array.isArray(value) ? value : value === undefined || value === null || value === '' ? [] : [value])
+    .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+    .filter(Boolean);
+
+const normalizePathList = (value: any): string[] =>
+  (Array.isArray(value) ? value : typeof value === 'string' ? value.split('.') : [])
+    .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+    .filter(Boolean);
+
 const replaceTemplateTokens = (template: string, placeholders: Record<string, string>): string =>
   (template || '').replace(/{{\s*([A-Za-z0-9_]+)\s*}}/g, (_match, token) => placeholders[`{{${token}}}`] ?? '');
 
-const resolveCurrentStatus = (
-  record: WebFormSubmission,
-  config: AnalyticsIngredientUsagePipelineConfig
-): string => {
-  const statusFieldId = (config.report.statusFieldId || '').toString().trim();
+const resolveRecordStatus = (record: WebFormSubmission, statusFieldIdRaw?: string): string => {
+  const statusFieldId = (statusFieldIdRaw || '').toString().trim();
   if (statusFieldId) {
     const fromValues = (record.values || {})[statusFieldId];
     if (fromValues !== undefined && fromValues !== null && fromValues !== '') {
@@ -112,6 +143,11 @@ const resolveCurrentStatus = (
   }
   return (record.status || '').toString().trim();
 };
+
+const resolveCurrentStatus = (
+  record: WebFormSubmission,
+  config: AnalyticsIngredientUsagePipelineConfig
+): string => resolveRecordStatus(record, config.report.statusFieldId);
 
 const resolveClosedStatuses = (form: FormConfig, config: AnalyticsIngredientUsagePipelineConfig): string[] => {
   const explicit = Array.isArray(config.report.closedStatuses) ? config.report.closedStatuses : [];
@@ -234,14 +270,16 @@ export class AnalyticsPipelineService {
         const ownerFormTitle = (form.title || ownerFormKey).toString().trim() || ownerFormKey;
         return (Array.isArray(form.analytics?.pipelines) ? form.analytics?.pipelines : [])
           .filter(hasAnalyticsPagePlacement)
-          .map(pipeline => {
+          .map((pipeline, index) => {
             const sourceFormKey = (pipeline.sourceFormKey || ownerFormKey).toString().trim() || ownerFormKey;
             const sourceFormTitle =
               (byFormKey.get(sourceFormKey)?.title || sourceFormKey).toString().trim() || sourceFormKey;
             const title = resolveDisplayText(pipeline.title) || ownerFormTitle;
+            const order = Number(pipeline.order);
             return {
               dashboardPipelineId: `${ownerFormKey}::${pipeline.id}`,
               pipelineId: pipeline.id,
+              order: Number.isFinite(order) ? order : 1000 + index,
               ownerFormKey,
               title,
               description: resolveDisplayText(pipeline.description) || undefined,
@@ -256,6 +294,8 @@ export class AnalyticsPipelineService {
           });
       })
       .sort((left, right) => {
+        const orderCompare = (left.order ?? 1000) - (right.order ?? 1000);
+        if (orderCompare !== 0) return orderCompare;
         const titleCompare = left.title.localeCompare(right.title);
         if (titleCompare !== 0) return titleCompare;
         return left.sourceFormTitle.localeCompare(right.sourceFormTitle);
@@ -269,10 +309,6 @@ export class AnalyticsPipelineService {
     pipeline: AnalyticsPipelineConfig;
     startDate: string;
   }): { success: boolean; message?: string; summary?: AnalyticsPipelineExecutionSummary } {
-    if (args.pipeline.type !== 'ingredientUsageReport') {
-      return { success: false, message: `Unsupported analytics pipeline type: ${args.pipeline.type}` };
-    }
-
     const startDate = normalizeToIsoDate(args.startDate);
     const endDate = normalizeToIsoDate(new Date());
     if (!startDate || !endDate) {
@@ -282,31 +318,68 @@ export class AnalyticsPipelineService {
       return { success: false, message: 'Start date must be today or earlier.' };
     }
 
-    const aggregation = this.aggregateIngredientUsage({
-      form: args.sourceForm,
-      questions: args.sourceQuestions,
-      pipeline: args.pipeline,
-      startDate,
-      endDate
-    });
-    const artifact = this.buildWorkbookArtifact({
-      ownerForm: args.ownerForm,
-      sourceForm: args.sourceForm,
-      pipeline: args.pipeline,
-      rows: aggregation.rows,
-      startDate,
-      endDate,
-      recordCount: aggregation.recordCount
-    });
+    const built = (() => {
+      if (args.pipeline.type === 'ingredientUsageReport') {
+        const aggregation = this.aggregateIngredientUsage({
+          form: args.sourceForm,
+          questions: args.sourceQuestions,
+          pipeline: args.pipeline,
+          startDate,
+          endDate
+        });
+        return {
+          recordCount: aggregation.recordCount,
+          rowCount: aggregation.rows.length,
+          artifact: this.buildIngredientUsageWorkbookArtifact({
+            ownerForm: args.ownerForm,
+            sourceForm: args.sourceForm,
+            pipeline: args.pipeline,
+            rows: aggregation.rows,
+            startDate,
+            endDate,
+            recordCount: aggregation.recordCount
+          })
+        };
+      }
+
+      if (args.pipeline.type === 'recordTableReport') {
+        const aggregation = this.aggregateRecordTable({
+          form: args.sourceForm,
+          questions: args.sourceQuestions,
+          pipeline: args.pipeline,
+          startDate,
+          endDate
+        });
+        return {
+          recordCount: aggregation.recordCount,
+          rowCount: aggregation.rows.length,
+          artifact: this.buildSpreadsheetArtifact({
+            sourceForm: args.sourceForm,
+            pipeline: args.pipeline,
+            values: [aggregation.headers, ...aggregation.rows],
+            startDate,
+            endDate,
+            recordCount: aggregation.recordCount,
+            rowCount: aggregation.rows.length
+          })
+        };
+      }
+
+      return null;
+    })();
+
+    if (!built) {
+      return { success: false, message: `Unsupported report pipeline type: ${(args.pipeline as any).type}` };
+    }
 
     this.sendPipelineEmail({
       sourceForm: args.sourceForm,
       pipeline: args.pipeline,
-      artifact,
+      artifact: built.artifact,
       startDate,
       endDate,
-      recordCount: aggregation.recordCount,
-      rowCount: aggregation.rows.length
+      recordCount: built.recordCount,
+      rowCount: built.rowCount
     });
 
     debugLog('analytics.pipeline.completed', {
@@ -315,9 +388,9 @@ export class AnalyticsPipelineService {
       pipelineId: args.pipeline.id,
       startDate,
       endDate,
-      recordCount: aggregation.recordCount,
-      rowCount: aggregation.rows.length,
-      attachmentName: artifact.fileName
+      recordCount: built.recordCount,
+      rowCount: built.rowCount,
+      attachmentName: built.artifact.fileName
     });
 
     return {
@@ -325,11 +398,11 @@ export class AnalyticsPipelineService {
       summary: {
         startDate,
         endDate,
-        recordCount: aggregation.recordCount,
-        rowCount: aggregation.rows.length,
-        attachmentName: artifact.fileName,
-        attachmentFileId: artifact.fileId,
-        attachmentUrl: artifact.url
+        recordCount: built.recordCount,
+        rowCount: built.rowCount,
+        attachmentName: built.artifact.fileName,
+        attachmentFileId: built.artifact.fileId,
+        attachmentUrl: built.artifact.url
       }
     };
   }
@@ -420,7 +493,354 @@ export class AnalyticsPipelineService {
     };
   }
 
-  private buildWorkbookArtifact(args: {
+  private aggregateRecordTable(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    pipeline: AnalyticsRecordTablePipelineConfig;
+    startDate: string;
+    endDate: string;
+  }): RecordTableAggregation {
+    const report = args.pipeline.report;
+    const columns = Array.isArray(report.columns) ? report.columns : [];
+    const headers = columns.map(column => (column.header || '').toString().trim() || 'Column');
+    const records = this.loadAllRecords(args.form, args.questions);
+    const includeStatuses = new Set(normalizeStringList(report.includeStatuses).map(normalizeStatusToken));
+    const excludeStatuses = new Set(normalizeStringList(report.excludeStatuses).map(normalizeStatusToken));
+    const contexts: RecordTableRowContext[] = [];
+    const expectedKeys = new Set<string>();
+    let recordCount = 0;
+
+    records.forEach(record => {
+      const recordDate = normalizeToIsoDate((record.values || {})[report.dateFieldId]);
+      if (!recordDate || recordDate < args.startDate || recordDate > args.endDate) return;
+      const status = normalizeStatusToken(resolveRecordStatus(record, report.statusFieldId));
+      if (includeStatuses.size && !includeStatuses.has(status)) return;
+      if (excludeStatuses.size && excludeStatuses.has(status)) return;
+
+      const { ctx: topCtx } = buildRecordVisibilityContext(record, args.questions);
+      if (report.when && !matchesWhenClause(report.when as WhenClause, topCtx, { now: new Date() })) return;
+
+      const recordContexts = this.collectRecordTableContexts({
+        record,
+        questions: args.questions,
+        report,
+        topCtx
+      });
+      if (!recordContexts.length) return;
+      recordCount += 1;
+      recordContexts.forEach(context => {
+        contexts.push(context);
+        const expectedKey = this.resolveExpectedRecordKey(report, context.record);
+        if (expectedKey) expectedKeys.add(expectedKey);
+      });
+    });
+
+    this.appendExpectedRecordTableRows({
+      contexts,
+      expectedKeys,
+      report,
+      questions: args.questions,
+      sourceFormKey: args.form.configSheet || args.form.title || '',
+      startDate: args.startDate,
+      endDate: args.endDate
+    });
+
+    contexts.sort((left, right) => this.compareRecordTableContexts(report, left, right));
+
+    return {
+      headers: headers.length ? headers : ['Report'],
+      rows: contexts.map(context => columns.map(column => this.resolveRecordTableColumnValue(report, context, column))),
+      recordCount
+    };
+  }
+
+  private collectRecordTableContexts(args: {
+    record: WebFormSubmission;
+    questions: QuestionConfig[];
+    report: AnalyticsRecordTableReportConfig;
+    topCtx: ReturnType<typeof buildRecordVisibilityContext>['ctx'];
+  }): RecordTableRowContext[] {
+    const lineItem = args.report.lineItem;
+    if (!lineItem?.groupId) {
+      return [{ record: args.record, questions: args.questions, topCtx: args.topCtx }];
+    }
+
+    return this.collectLineItemRowsFromContainer(
+      args.record.values || {},
+      lineItem.groupId,
+      normalizePathList(lineItem.subGroupPath)
+    )
+      .filter(entry =>
+        this.matchesRecordTableLineItemFilter({
+          entry,
+          lineItem,
+          topCtx: args.topCtx
+        })
+      )
+      .map(entry => ({
+        record: args.record,
+        questions: args.questions,
+        topCtx: args.topCtx,
+        row: entry.row,
+        parentValues: entry.parentValues,
+        groupKey: entry.groupKey
+      }));
+  }
+
+  private matchesRecordTableLineItemFilter(args: {
+    entry: { row: Record<string, any>; parentValues?: Record<string, any>; groupKey: string };
+    lineItem: AnalyticsRecordTableLineItemConfig;
+    topCtx: ReturnType<typeof buildRecordVisibilityContext>['ctx'];
+  }): boolean {
+    const rowCtx = buildRowVisibilityContext({
+      row: args.entry.row,
+      groupKey: args.entry.groupKey,
+      parentValues: args.entry.parentValues,
+      topCtx: args.topCtx
+    });
+    if (args.lineItem.includeWhen && !matchesWhenClause(args.lineItem.includeWhen as WhenClause, rowCtx.ctx, { now: new Date() })) {
+      return false;
+    }
+    if (args.lineItem.excludeWhen && matchesWhenClause(args.lineItem.excludeWhen as WhenClause, rowCtx.ctx, { now: new Date() })) {
+      return false;
+    }
+    return true;
+  }
+
+  private collectLineItemRowsFromContainer(
+    container: Record<string, any>,
+    groupId: string,
+    subGroupPath: string[] = []
+  ): Array<{ row: Record<string, any>; parentValues?: Record<string, any>; groupKey: string }> {
+    const rootRows = parseLineItemRows((container || {})[groupId] || (container || {})[`${groupId}_json`]);
+    if (!subGroupPath.length) {
+      return rootRows.map(row => ({ row, groupKey: groupId }));
+    }
+
+    const collect = (
+      rows: Record<string, any>[],
+      path: string[],
+      parentValues: Record<string, any> | undefined,
+      groupKey: string
+    ): Array<{ row: Record<string, any>; parentValues?: Record<string, any>; groupKey: string }> => {
+      if (!path.length) return rows.map(row => ({ row, parentValues, groupKey }));
+      const [nextGroupId, ...rest] = path;
+      return rows.flatMap(row => {
+        const childRows = parseLineItemRows(row[nextGroupId] || row[`${nextGroupId}_json`]);
+        return collect(childRows, rest, row, nextGroupId);
+      });
+    };
+
+    return collect(rootRows, subGroupPath, undefined, groupId);
+  }
+
+  private resolveExpectedRecordKey(report: AnalyticsRecordTableReportConfig, record: WebFormSubmission): string {
+    const keyFields = normalizeStringList(report.expectedRows?.keyFields);
+    if (!keyFields.length) return '';
+    return keyFields.map(fieldId => this.stringifyRecordTableCell(this.resolveRecordFieldValue(record, fieldId))).join('::');
+  }
+
+  private appendExpectedRecordTableRows(args: {
+    contexts: RecordTableRowContext[];
+    expectedKeys: Set<string>;
+    report: AnalyticsRecordTableReportConfig;
+    questions: QuestionConfig[];
+    sourceFormKey: string;
+    startDate: string;
+    endDate: string;
+  }): void {
+    const expected = args.report.expectedRows;
+    const dailyRows = Array.isArray(expected?.daily) ? expected?.daily || [] : [];
+    const keyFields = normalizeStringList(expected?.keyFields);
+    if (!dailyRows.length || !keyFields.length) return;
+
+    const maxDays = Math.max(1, Math.min(750, Number(expected?.maxDays || 370) || 370));
+    const cursor = new Date(`${args.startDate}T00:00:00Z`);
+    const end = new Date(`${args.endDate}T00:00:00Z`);
+    let dayCount = 0;
+    while (cursor <= end && dayCount < maxDays) {
+      const dateIso = cursor.toISOString().slice(0, 10);
+      dailyRows.forEach(template => {
+        const values = {
+          ...(template || {}),
+          [args.report.dateFieldId]: dateIso
+        };
+        const key = keyFields.map(fieldId => this.stringifyRecordTableCell(values[fieldId])).join('::');
+        if (!key || args.expectedKeys.has(key)) return;
+        args.expectedKeys.add(key);
+        const record: WebFormSubmission = {
+          formKey: args.sourceFormKey,
+          language: 'EN',
+          status: '',
+          values
+        };
+        const { ctx: topCtx } = buildRecordVisibilityContext(record, args.questions);
+        args.contexts.push({
+          record,
+          questions: args.questions,
+          topCtx,
+          syntheticMissing: true
+        });
+      });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      dayCount += 1;
+    }
+  }
+
+  private compareRecordTableContexts(
+    report: AnalyticsRecordTableReportConfig,
+    left: RecordTableRowContext,
+    right: RecordTableRowContext
+  ): number {
+    const leftDate = normalizeToIsoDate((left.record.values || {})[report.dateFieldId]) || '';
+    const rightDate = normalizeToIsoDate((right.record.values || {})[report.dateFieldId]) || '';
+    if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
+    const leftKey = this.resolveExpectedRecordKey(report, left.record);
+    const rightKey = this.resolveExpectedRecordKey(report, right.record);
+    return leftKey.localeCompare(rightKey);
+  }
+
+  private resolveRecordTableColumnValue(
+    report: AnalyticsRecordTableReportConfig,
+    context: RecordTableRowContext,
+    column: AnalyticsRecordTableColumnConfig
+  ): any {
+    const source = column.source || (context.row && column.fieldId ? 'lineItemField' : 'recordField');
+    let rawValue: any = '';
+    if (source === 'recordField') rawValue = this.resolveRecordFieldValue(context.record, column.fieldId || '');
+    else if (source === 'recordStatus') rawValue = resolveRecordStatus(context.record, report.statusFieldId);
+    else if (source === 'lineItemField') rawValue = this.resolveLineItemFieldValue(context.row, column.fieldId || '');
+    else if (source === 'hasLineItem') rawValue = this.resolveHasLineItemColumn(context, column);
+    else if (source === 'lineItemAggregate') rawValue = this.resolveLineItemAggregateColumn(context, column);
+    else if (source === 'completionStatus') rawValue = this.resolveCompletionStatusColumn(report, context, column);
+    else if (source === 'firstMissingStep') rawValue = this.resolveMissingStepLabels(report, context)[0] || column.fallback || '';
+    else if (source === 'missingSteps') rawValue = this.resolveMissingStepLabels(report, context).join(column.separator || ', ');
+    else if (source === 'constant') rawValue = column.value;
+
+    const mapped = this.applyRecordTableValueMap(rawValue, column);
+    return this.stringifyRecordTableCell(mapped);
+  }
+
+  private resolveRecordFieldValue(record: WebFormSubmission, fieldId: string): any {
+    const id = (fieldId || '').toString().trim();
+    if (!id) return '';
+    if (Object.prototype.hasOwnProperty.call(record.values || {}, id)) return (record.values || {})[id];
+    const lower = id.toLowerCase();
+    if (lower === 'status') return record.status || '';
+    if (lower === 'id') return record.id || '';
+    if (lower === 'createdat') return record.createdAt || '';
+    if (lower === 'updatedat') return record.updatedAt || '';
+    if (lower === 'pdfurl') return record.pdfUrl || '';
+    return '';
+  }
+
+  private resolveLineItemFieldValue(row: Record<string, any> | undefined, fieldId: string): any {
+    if (!row || !fieldId) return '';
+    if (Object.prototype.hasOwnProperty.call(row, fieldId)) return row[fieldId];
+    return '';
+  }
+
+  private resolveHasLineItemColumn(context: RecordTableRowContext, column: AnalyticsRecordTableColumnConfig): string {
+    const rows = this.collectColumnLineItemRows(context, column);
+    const hasMatch = rows.some(entry => this.matchesColumnLineItemWhen(context, column, entry));
+    return hasMatch ? column.trueLabel || 'Yes' : column.falseLabel || 'No';
+  }
+
+  private resolveLineItemAggregateColumn(context: RecordTableRowContext, column: AnalyticsRecordTableColumnConfig): any {
+    const rows = this.collectColumnLineItemRows(context, column).filter(entry =>
+      this.matchesColumnLineItemWhen(context, column, entry)
+    );
+    const aggregate = (column.aggregate || 'sum').toString();
+    if (aggregate === 'count') return rows.length;
+    if (aggregate === 'listUnique') {
+      const seen = new Set<string>();
+      rows.forEach(entry => {
+        const value = this.stringifyRecordTableCell(this.resolveLineItemFieldValue(entry.row, column.fieldId || ''));
+        if (value) seen.add(value);
+      });
+      return Array.from(seen).join(column.separator || ', ');
+    }
+    return rows.reduce((sum, entry) => sum + (toNumber(this.resolveLineItemFieldValue(entry.row, column.fieldId || '')) || 0), 0);
+  }
+
+  private collectColumnLineItemRows(
+    context: RecordTableRowContext,
+    column: AnalyticsRecordTableColumnConfig
+  ): Array<{ row: Record<string, any>; parentValues?: Record<string, any>; groupKey: string }> {
+    const groupId = (column.groupId || '').toString().trim();
+    if (!groupId) return [];
+    const source = context.row && (
+      Object.prototype.hasOwnProperty.call(context.row, groupId) ||
+      Object.prototype.hasOwnProperty.call(context.row, `${groupId}_json`)
+    )
+      ? context.row
+      : context.record.values || {};
+    return this.collectLineItemRowsFromContainer(source, groupId, normalizePathList(column.subGroupPath));
+  }
+
+  private matchesColumnLineItemWhen(
+    context: RecordTableRowContext,
+    column: AnalyticsRecordTableColumnConfig,
+    entry: { row: Record<string, any>; parentValues?: Record<string, any>; groupKey: string }
+  ): boolean {
+    if (!column.when) return true;
+    const rowCtx = buildRowVisibilityContext({
+      row: entry.row,
+      groupKey: entry.groupKey,
+      parentValues: entry.parentValues || context.row,
+      topCtx: context.topCtx
+    });
+    return matchesWhenClause(column.when as WhenClause, rowCtx.ctx, { now: new Date() });
+  }
+
+  private resolveCompletionStatusColumn(
+    report: AnalyticsRecordTableReportConfig,
+    context: RecordTableRowContext,
+    column: AnalyticsRecordTableColumnConfig
+  ): string {
+    if (context.syntheticMissing) return column.missingLabel || 'Missing';
+    const completedStatuses = new Set(normalizeStringList(report.completedStatuses).map(normalizeStatusToken));
+    const status = normalizeStatusToken(resolveRecordStatus(context.record, report.statusFieldId));
+    const complete = completedStatuses.size ? completedStatuses.has(status) : status === 'closed';
+    return complete ? column.completeLabel || 'Complete' : column.incompleteLabel || 'Incomplete';
+  }
+
+  private resolveMissingStepLabels(report: AnalyticsRecordTableReportConfig, context: RecordTableRowContext): string[] {
+    return (Array.isArray(report.steps) ? report.steps : [])
+      .filter(step => {
+        if (!step?.completeWhen) return false;
+        return !matchesWhenClause(step.completeWhen as WhenClause, context.topCtx, { now: new Date() });
+      })
+      .map(step => (step.label || '').toString().trim())
+      .filter(Boolean);
+  }
+
+  private applyRecordTableValueMap(value: any, column: AnalyticsRecordTableColumnConfig): any {
+    const valueMap = column.valueMap && typeof column.valueMap === 'object' ? column.valueMap : null;
+    if (!valueMap) return value;
+    const text = this.stringifyRecordTableCell(value);
+    if (Object.prototype.hasOwnProperty.call(valueMap, text)) return valueMap[text];
+    const lower = text.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(valueMap, lower)) return valueMap[lower];
+    return value;
+  }
+
+  private stringifyRecordTableCell(value: any): string {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'number') return Number.isFinite(value) ? value.toString() : '';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (typeof value === 'string') return value.trim();
+    if (Array.isArray(value)) {
+      return value.map(entry => this.stringifyRecordTableCell(entry)).filter(Boolean).join(', ');
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return `${value}`;
+    }
+  }
+
+  private buildIngredientUsageWorkbookArtifact(args: {
     ownerForm: FormConfig;
     sourceForm: FormConfig;
     pipeline: AnalyticsIngredientUsagePipelineConfig;
@@ -429,14 +849,40 @@ export class AnalyticsPipelineService {
     endDate: string;
     recordCount: number;
   }): { blob: GoogleAppsScript.Base.Blob; fileName: string; fileId?: string; url?: string } {
-    const title = resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Analytics';
+    const values: any[][] = [['ING', 'UNIT', 'QTY', 'CAT', 'SUPPLIER']];
+    args.rows.forEach(row => {
+      values.push([row.ING, row.UNIT, row.QTY, row.CAT, row.SUPPLIER]);
+    });
+    return this.buildSpreadsheetArtifact({
+      sourceForm: args.sourceForm,
+      pipeline: args.pipeline,
+      values,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      recordCount: args.recordCount,
+      rowCount: args.rows.length,
+      defaultSheetName: 'Ingredients'
+    });
+  }
+
+  private buildSpreadsheetArtifact(args: {
+    sourceForm: FormConfig;
+    pipeline: AnalyticsPipelineConfig;
+    values: any[][];
+    startDate: string;
+    endDate: string;
+    recordCount: number;
+    rowCount: number;
+    defaultSheetName?: string;
+  }): { blob: GoogleAppsScript.Base.Blob; fileName: string; fileId?: string; url?: string } {
+    const title = resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Report';
     const fileName = this.resolveAttachmentFileName({
       title,
       attachmentConfig: args.pipeline.attachment,
       startDate: args.startDate,
       endDate: args.endDate,
       recordCount: args.recordCount,
-      rowCount: args.rows.length
+      rowCount: args.rowCount
     });
     const createSpreadsheet = resolveTempSpreadsheetCreate();
     const temp = createSpreadsheet(fileName.replace(/\.xlsx$/i, ''));
@@ -444,7 +890,7 @@ export class AnalyticsPipelineService {
 
     try {
       const sheet = temp.getSheets()[0] || temp.insertSheet('Report');
-      const sheetName = (args.pipeline.attachment?.sheetName || 'Ingredients').toString().trim();
+      const sheetName = (args.pipeline.attachment?.sheetName || args.defaultSheetName || 'Report').toString().trim();
       if (sheetName && typeof sheet.setName === 'function') {
         try {
           sheet.setName(sheetName.slice(0, 99));
@@ -452,10 +898,7 @@ export class AnalyticsPipelineService {
           // keep the default name when renaming fails
         }
       }
-      const values: any[][] = [['ING', 'UNIT', 'QTY', 'CAT', 'SUPPLIER']];
-      args.rows.forEach(row => {
-        values.push([row.ING, row.UNIT, row.QTY, row.CAT, row.SUPPLIER]);
-      });
+      const values = args.values.length ? args.values : [['No data']];
       sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
       sheet.getRange(1, 1, 1, values[0].length).setFontWeight('bold');
 
@@ -484,7 +927,7 @@ export class AnalyticsPipelineService {
 
   private sendPipelineEmail(args: {
     sourceForm: FormConfig;
-    pipeline: AnalyticsIngredientUsagePipelineConfig;
+    pipeline: AnalyticsPipelineConfig;
     artifact: { blob: GoogleAppsScript.Base.Blob; fileName: string; fileId?: string; url?: string };
     startDate: string;
     endDate: string;
@@ -497,7 +940,7 @@ export class AnalyticsPipelineService {
       values: {}
     };
     const placeholders: Record<string, string> = {
-      '{{PIPELINE_TITLE}}': resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Analytics report',
+      '{{PIPELINE_TITLE}}': resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Report',
       '{{START_DATE}}': args.startDate,
       '{{END_DATE}}': args.endDate,
       '{{RECORD_COUNT}}': `${args.recordCount}`,
@@ -507,7 +950,7 @@ export class AnalyticsPipelineService {
     };
     const toRecipients = resolveRecipients(this.dataSources, args.pipeline.email.recipients, placeholders, syntheticRecord);
     if (!toRecipients.length) {
-      throw new Error('Resolved analytics pipeline recipients are empty.');
+      throw new Error('Resolved report recipients are empty.');
     }
     const ccRecipients = resolveRecipients(this.dataSources, args.pipeline.email.cc, placeholders, syntheticRecord);
     const bccRecipients = resolveRecipients(this.dataSources, args.pipeline.email.bcc, placeholders, syntheticRecord);
@@ -515,7 +958,7 @@ export class AnalyticsPipelineService {
       resolveLocalizedStringValue(args.pipeline.email.subject, 'EN') || '{{PIPELINE_TITLE}} | {{START_DATE}} to {{END_DATE}}';
     const messageTemplate =
       resolveLocalizedStringValue(args.pipeline.email.message, 'EN') ||
-      'The requested analytics export is attached.\n\nRange: {{START_DATE}} to {{END_DATE}}\nClosed records included: {{RECORD_COUNT}}\nAggregated rows: {{ROW_COUNT}}';
+      'The requested report is attached.\n\nRange: {{START_DATE}} to {{END_DATE}}\nRecords included: {{RECORD_COUNT}}\nRows: {{ROW_COUNT}}';
     const subject = replaceTemplateTokens(subjectTemplate, placeholders).trim();
     const body = replaceTemplateTokens(messageTemplate, placeholders).trim();
     const from = replaceTemplateTokens((args.pipeline.email.from || '').toString(), placeholders).trim();
@@ -529,7 +972,7 @@ export class AnalyticsPipelineService {
       attachmentName: args.artifact.fileName
     });
 
-    GmailApp.sendEmail(toRecipients.join(','), subject || 'Analytics report', body || 'See attached report.', {
+    GmailApp.sendEmail(toRecipients.join(','), subject || 'Report', body || 'See attached report.', {
       htmlBody: (body || 'See attached report.').replace(/\n/g, '<br/>'),
       attachments: [args.artifact.blob],
       cc: ccRecipients.length ? ccRecipients.join(',') : undefined,
@@ -541,7 +984,7 @@ export class AnalyticsPipelineService {
 
   private resolveAttachmentFileName(args: {
     title: string;
-    attachmentConfig: AnalyticsIngredientUsagePipelineConfig['attachment'] | undefined;
+    attachmentConfig: AnalyticsPipelineConfig['attachment'] | undefined;
     startDate: string;
     endDate: string;
     recordCount: number;
@@ -559,7 +1002,7 @@ export class AnalyticsPipelineService {
       .replace(/[\\/:*?"<>|]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    const withExtension = /\.xlsx$/i.test(text) ? text : `${text || 'analytics-report'}.xlsx`;
+    const withExtension = /\.xlsx$/i.test(text) ? text : `${text || 'report'}.xlsx`;
     return withExtension;
   }
 

@@ -59,6 +59,7 @@ export interface AnalyticsDashboardWidget extends AnalyticsSnapshotItem {
 export interface AnalyticsDashboardPipeline {
   dashboardPipelineId: string;
   pipelineId: string;
+  order?: number;
   title: string;
   description?: string;
   ownerFormKey: string;
