@@ -12,7 +12,7 @@ const buildAnalyticsUrl = (): string => {
   return url.toString();
 };
 
-test('queues the ingredients analysis pipeline from the centralized analytics page', async ({ page }) => {
+test('queues the ingredients used report from the Reports page', async ({ page }) => {
   await page.goto(buildAnalyticsUrl(), {
     waitUntil: 'domcontentloaded',
     timeout: 120_000
@@ -20,17 +20,15 @@ test('queues the ingredients analysis pipeline from the centralized analytics pa
 
   const appFrame = await waitForAppFrame(page);
 
-  await expect(appFrame.getByRole('heading', { level: 1, name: 'Analytics' })).toBeVisible({ timeout: 30_000 });
-  await expect(appFrame.getByRole('heading', { level: 3, name: 'Ingredients analysis' })).toBeVisible({
+  await expect(appFrame.getByRole('heading', { level: 1, name: 'Reports' })).toBeVisible({ timeout: 30_000 });
+  await expect(appFrame.getByRole('heading', { level: 3, name: 'Ingredients used' })).toBeVisible({
     timeout: 30_000
   });
 
-  const startDateInput = appFrame.getByLabel('Start date');
+  const startDateInput = appFrame.getByLabel('Date');
   await startDateInput.fill('2026-04-01');
 
-  await appFrame.getByRole('button', { name: 'Email ingredients report' }).click();
+  await appFrame.getByRole('button', { name: 'Send report' }).click();
 
-  await expect(
-    appFrame.getByText('The ingredients report has been queued. The spreadsheet will be sent by email to hmaldonadovilla@outlook.com.')
-  ).toBeVisible();
+  await expect(appFrame.getByText("Report request sent. We'll email it to the Operations Manager.")).toBeVisible();
 });

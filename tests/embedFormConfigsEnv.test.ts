@@ -30,7 +30,7 @@ describe('embed-form-configs env helpers', () => {
   test('embedded landing page config is generated from the export file', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledLandingPageConfig.ts'), 'utf8');
     expect(raw).toContain('"heroTitle": "Welcome to the Community Kitchen"');
-    expect(raw).toContain('"adminSectionNote": "Analytics is available from the dashboard below."');
+    expect(raw).toContain('"adminSectionNote": "Reports are available from the dashboard below."');
     expect(raw).toContain('"logoFormKey": "Config: Meal Production"');
     expect(raw).toContain('"imageUrl": "data:image/');
   });
@@ -42,9 +42,9 @@ describe('embed-form-configs env helpers', () => {
 
   test('embedded analytics page config is generated from the export file', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledAnalyticsPageConfig.ts'), 'utf8');
-    expect(raw).toContain('"pageTitle": "Analytics"');
+    expect(raw).toContain('"pageTitle": "Reports"');
     expect(raw).toContain('"logoFormKey": "Config: Meal Production"');
-    expect(raw).toContain('"sourceWidgetId": "portions_delivered"');
+    expect(raw).toContain('"sections": []');
     expect(raw).toContain('"pendingNavigationTitle": "Please wait"');
     expect(raw).toContain('"pendingNavigationMessage": "Opening forms..."');
     expect(raw).toContain('"imageUrl": "data:image/');

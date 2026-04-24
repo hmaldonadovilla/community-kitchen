@@ -144,7 +144,7 @@ if ! run_clasp show-authorized-user >/dev/null 2>&1; then
   exit 1
 fi
 
-run_clasp push
+run_clasp push --force
 
 if [[ -n "${CLASP_DEPLOYMENT_ID:-}" ]]; then
   run_webapp_type_check "pre-deploy"

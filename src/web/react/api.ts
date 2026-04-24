@@ -88,6 +88,10 @@ export interface ListResponse extends PaginatedResult<ListItem> {
   notModified?: boolean;
   contiguousItemCount?: number;
   completeData?: boolean;
+  dateFilterFieldId?: string;
+  dateFilterEquals?: string;
+  dateFilterFrom?: string;
+  dateFilterTo?: string;
 }
 
 export interface BatchResponse {

@@ -13,18 +13,18 @@ import type {
 } from './analyticsPageTypes';
 
 const DEFAULT_ANALYTICS_PAGE_CONFIG: AnalyticsPageConfig = {
-  pageTitle: 'Analytics',
-  pageDescription: 'Review analytics across configured forms.',
+  pageTitle: 'Reports',
+  pageDescription: 'Send operational reports to the Operations Manager.',
   copy: {
-    loadingLabel: 'Loading analytics...',
-    emptyLabel: 'No analytics widgets are configured for this dashboard.',
-    backToLandingLabel: '← Apps',
+    loadingLabel: 'Loading reports...',
+    emptyLabel: 'No reports are available.',
+    backToLandingLabel: 'Apps',
     pendingNavigationTitle: 'Please wait',
     pendingNavigationMessage: 'Opening forms...'
   },
   landingTile: {
-    title: 'Analytics',
-    description: 'Review analytics across configured forms.',
+    title: 'Reports',
+    description: 'Send operational reports by email.',
     section: 'admin',
     order: 999
   },

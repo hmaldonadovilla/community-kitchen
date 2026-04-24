@@ -2616,7 +2616,9 @@ export class WebFormService {
     }
   ): SubmissionBatchResult<Record<string, any>> {
     const { form, questions } = this.getFormContextLite(formKey);
-    return this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, sort);
+    return toPlainData(
+      this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, sort)
+    );
   }
 
   public fetchSubmissionById(formKey: string, id: string): WebFormSubmission | null {

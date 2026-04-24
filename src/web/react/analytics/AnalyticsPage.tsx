@@ -46,14 +46,14 @@ const ANALYTICS_PAGE_STYLES = `
     font-size: 48px;
     line-height: 1.1;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
   .ck-analytics-pill {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
     padding: 0 14px;
-    border-radius: 999px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.28);
     background: transparent;
     color: var(--text);
@@ -67,7 +67,7 @@ const ANALYTICS_PAGE_STYLES = `
     justify-content: center;
     min-height: 44px;
     padding: 0 16px;
-    border-radius: 16px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.28);
     background: transparent;
     color: var(--text);
@@ -123,7 +123,7 @@ const ANALYTICS_PAGE_STYLES = `
     font-size: clamp(30px, calc(var(--ck-font-group-title) * 1.55), 40px);
     line-height: 1.04;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
   .ck-analytics-section-description {
     margin: 0;
@@ -137,7 +137,7 @@ const ANALYTICS_PAGE_STYLES = `
     gap: 16px;
   }
   .ck-analytics-card {
-    border-radius: 24px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.36);
     background: rgba(255, 255, 255, 0.94);
     padding: 22px;
@@ -161,14 +161,14 @@ const ANALYTICS_PAGE_STYLES = `
     font-size: 32px;
     line-height: 1.12;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
   .ck-analytics-card-value {
     margin: 0;
     font-size: 48px;
     line-height: 1;
     font-weight: 600;
-    letter-spacing: -0.04em;
+    letter-spacing: 0;
     word-break: break-word;
   }
   .ck-analytics-card-description {
@@ -188,7 +188,7 @@ const ANALYTICS_PAGE_STYLES = `
     grid-template-columns: minmax(0, 1fr);
   }
   .ck-analytics-pipeline-card {
-    border-radius: 24px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.36);
     background: rgba(255, 255, 255, 0.94);
     padding: 22px;
@@ -221,7 +221,7 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-date-input {
     min-height: 46px;
-    border-radius: 16px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.28);
     background: #fff;
     color: var(--text);
@@ -277,7 +277,7 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-submit {
     min-height: 48px;
     border: 0;
-    border-radius: 16px;
+    border-radius: 8px;
     background: rgba(11, 87, 208, 0.96);
     color: #fff;
     font-size: calc(var(--ck-font-label) * 0.95);
@@ -381,11 +381,12 @@ const AnalyticsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<AnalyticsDashboardPayload | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState(false);
-  const [pendingPipelineId, setPendingPipelineId] = useState<string | null>(null);
+  const [pendingPipelineIds, setPendingPipelineIds] = useState<Record<string, boolean>>({});
   const [pipelineDates, setPipelineDates] = useState<Record<string, string>>({});
   const [pipelineErrors, setPipelineErrors] = useState<Record<string, string>>({});
   const [pipelineNotices, setPipelineNotices] = useState<Record<string, string>>({});
   const [focusedPipelineId, setFocusedPipelineId] = useState<string | null>(null);
+  const pendingPipelineIdsRef = useRef<Set<string>>(new Set());
   const pointerSubmittedPipelineIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -426,19 +427,22 @@ const AnalyticsPage: React.FC = () => {
   const errors = Array.isArray(payload?.errors) ? payload.errors : [];
 
   const submitPipeline = async (pipeline: AnalyticsDashboardPipeline): Promise<void> => {
+    const dashboardPipelineId = pipeline.dashboardPipelineId;
+    if (pendingPipelineIdsRef.current.has(dashboardPipelineId)) return;
     const startDate =
-      (pipelineDates[pipeline.dashboardPipelineId] || '').toString().trim() ||
-      readPipelineDateInputValue(pipeline.dashboardPipelineId);
+      (pipelineDates[dashboardPipelineId] || '').toString().trim() ||
+      readPipelineDateInputValue(dashboardPipelineId);
     if (!startDate) {
-      setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: 'Select a date.' }));
+      setPipelineErrors(prev => ({ ...prev, [dashboardPipelineId]: 'Select a date.' }));
       return;
     }
     if (startDate > todayIso) {
-      setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: 'The selected date must be today or earlier.' }));
+      setPipelineErrors(prev => ({ ...prev, [dashboardPipelineId]: 'The selected date must be today or earlier.' }));
       return;
     }
-    setPendingPipelineId(pipeline.dashboardPipelineId);
-    setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+    pendingPipelineIdsRef.current.add(dashboardPipelineId);
+    setPendingPipelineIds(prev => ({ ...prev, [dashboardPipelineId]: true }));
+    setPipelineErrors(prev => ({ ...prev, [dashboardPipelineId]: '' }));
     try {
       const result = await queueAnalyticsPipelineRunApi({
         ownerFormKey: pipeline.ownerFormKey,
@@ -446,23 +450,28 @@ const AnalyticsPage: React.FC = () => {
         startDate
       });
       const notice = (result?.message || pipeline.queuedNotice || '').toString().trim();
-      setPipelineNotices(prev => ({ ...prev, [pipeline.dashboardPipelineId]: notice }));
-      setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+      setPipelineNotices(prev => ({ ...prev, [dashboardPipelineId]: notice }));
+      setPipelineDates(prev => ({ ...prev, [dashboardPipelineId]: '' }));
       logEvent('dashboard.pipeline.queue.success', {
         ownerFormKey: pipeline.ownerFormKey,
         pipelineId: pipeline.pipelineId,
         startDate
       });
     } catch (err: any) {
-      const message = (err?.message || err?.toString?.() || 'Failed to queue analytics pipeline.').toString();
-      setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: message }));
+      const message = (err?.message || err?.toString?.() || 'Failed to send report request.').toString();
+      setPipelineErrors(prev => ({ ...prev, [dashboardPipelineId]: message }));
       logEvent('dashboard.pipeline.queue.error', {
         ownerFormKey: pipeline.ownerFormKey,
         pipelineId: pipeline.pipelineId,
         message
       });
     } finally {
-      setPendingPipelineId(null);
+      pendingPipelineIdsRef.current.delete(dashboardPipelineId);
+      setPendingPipelineIds(prev => {
+        const next = { ...prev };
+        delete next[dashboardPipelineId];
+        return next;
+      });
     }
   };
 
@@ -550,29 +559,22 @@ const AnalyticsPage: React.FC = () => {
 
         {pipelines.length ? (
           <section className="ck-analytics-section">
-            <div className="ck-analytics-section-head">
-              <h2 className="ck-analytics-section-title">Exports</h2>
-              <p className="ck-analytics-section-description">
-                Queue spreadsheet exports and receive the results by email.
-              </p>
-            </div>
             <div
               className={`ck-analytics-pipeline-grid${pipelines.length === 1 ? ' ck-analytics-pipeline-grid--single' : ''}`}
             >
               {pipelines.map(pipeline => {
-                const pending = pendingPipelineId === pipeline.dashboardPipelineId;
+                const pending = Boolean(pendingPipelineIds[pipeline.dashboardPipelineId]);
                 const pipelineDateValue = pipelineDates[pipeline.dashboardPipelineId] || '';
                 const showFormattedPipelineDate = Boolean(
                   pipelineDateValue && focusedPipelineId !== pipeline.dashboardPipelineId
                 );
                 const pipelineDateDisplay = showFormattedPipelineDate
-                  ? formatDateEeeDdMmmYyyy(pipelineDateValue, language)
+                  ? formatDateEeeDdMmmYyyy(pipelineDateValue, 'EN')
                   : '';
                 return (
                   <article key={pipeline.dashboardPipelineId} className="ck-analytics-pipeline-card">
                     <div className="ck-analytics-card-meta">
                       <h3 className="ck-analytics-card-title">{pipeline.title}</h3>
-                      <p className="ck-analytics-card-source">{pipeline.sourceFormTitle}</p>
                     </div>
                     {pipeline.description ? <p className="ck-analytics-card-description">{pipeline.description}</p> : null}
                     <div className="ck-analytics-pipeline-form">
@@ -581,7 +583,7 @@ const AnalyticsPage: React.FC = () => {
                           className="ck-analytics-field-label"
                           htmlFor={resolvePipelineDateInputId(pipeline.dashboardPipelineId)}
                         >
-                          {pipeline.dateLabel || 'Start date'}
+                          {pipeline.dateLabel || 'Date'}
                         </label>
                         <div className="ck-analytics-date-field">
                           <input
@@ -621,7 +623,7 @@ const AnalyticsPage: React.FC = () => {
                         onPointerDown={() => handlePipelineSubmitPointerDown(pipeline)}
                         onClick={() => handlePipelineSubmitClick(pipeline)}
                       >
-                        {pending ? pipeline.pendingLabel || 'Queueing...' : pipeline.submitLabel || 'Send report'}
+                        {pending ? pipeline.pendingLabel || 'Sending...' : pipeline.submitLabel || 'Send report'}
                       </button>
                       {pipelineErrors[pipeline.dashboardPipelineId] ? (
                         <p className="ck-analytics-error" role="alert">

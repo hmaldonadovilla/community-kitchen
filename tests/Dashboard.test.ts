@@ -452,6 +452,28 @@ describe('Dashboard', () => {
               categoryFieldId: 'CAT',
               supplierLookupColumn: 'SUPPLIER'
             }
+          },
+          {
+            id: 'meals_report',
+            type: 'recordTableReport',
+            order: 20,
+            title: 'Meals produced and delivered',
+            email: {
+              recipients: ['ops@example.com']
+            },
+            report: {
+              dateFieldId: 'MP_PREP_DATE',
+              statusFieldId: 'Status',
+              includeStatuses: ['Closed'],
+              lineItem: {
+                groupId: 'MP_MEALS_REQUEST',
+                includeWhen: { fieldId: 'ORD_QTY', greaterThan: 0 }
+              },
+              columns: [
+                { header: 'Date', source: 'recordField', fieldId: 'MP_PREP_DATE' },
+                { header: 'Number of portions delivered', source: 'lineItemField', fieldId: 'FINAL_QTY' }
+              ]
+            }
           }
         ]
       }
@@ -498,6 +520,29 @@ describe('Dashboard', () => {
             unitFieldId: 'UNIT',
             categoryFieldId: 'CAT',
             supplierLookupColumn: 'SUPPLIER'
+          }
+        },
+        {
+          id: 'meals_report',
+          type: 'recordTableReport',
+          order: 20,
+          title: 'Meals produced and delivered',
+          placements: ['analyticsPage'],
+          email: {
+            recipients: ['ops@example.com']
+          },
+          report: {
+            dateFieldId: 'MP_PREP_DATE',
+            statusFieldId: 'Status',
+            includeStatuses: ['Closed'],
+            lineItem: {
+              groupId: 'MP_MEALS_REQUEST',
+              includeWhen: { fieldId: 'ORD_QTY', greaterThan: 0 }
+            },
+            columns: [
+              { header: 'Date', source: 'recordField', fieldId: 'MP_PREP_DATE' },
+              { header: 'Number of portions delivered', source: 'lineItemField', fieldId: 'FINAL_QTY' }
+            ]
           }
         }
       ]

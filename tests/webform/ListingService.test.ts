@@ -228,6 +228,8 @@ describe('ListingService', () => {
     } as any);
 
     expect(res.list.totalCount).toBe(1);
+    expect(res.list.dateFilterFieldId).toBe('DATE');
+    expect(res.list.dateFilterEquals).toBe('2025-07-24');
     expect((res.list.items || []).map((row: any) => row.id)).toEqual(['id-205']);
     expect((res.list.items || [])[0]?.DATE instanceof Date).toBe(true);
     expect(((res.list.items || [])[0]?.DATE as Date).toISOString()).toBe(targetDate.toISOString());
@@ -273,6 +275,9 @@ describe('ListingService', () => {
     } as any);
 
     expect(res.list.totalCount).toBe(2);
+    expect(res.list.dateFilterFieldId).toBe('DATE');
+    expect(res.list.dateFilterFrom).toBe('2026-02-03');
+    expect(res.list.dateFilterTo).toBe('2026-02-08');
     expect((res.list.items || []).map((row: any) => row.id)).toEqual(['id-2', 'id-3']);
   });
 

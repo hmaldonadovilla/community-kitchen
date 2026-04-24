@@ -1,36 +1,22 @@
 {
-  "pageTitle": "Analytics",
-  "pageDescription": "Review analytics across applications.",
+  "pageTitle": "Reports",
+  "pageDescription": "Send operational reports to the Operations Manager.",
   "appHeader": {
     "logoFormKey": "Config: Meal Production"
   },
   "landingTile": {
-    "title": "Analytics",
-    "description": "Review analytics across applications.",
+    "title": "Reports",
+    "description": "Send operational reports by email.",
     "section": "admin",
     "order": 40,
     "imagePath": "docs/images/analytics.png"
   },
   "copy": {
-    "loadingLabel": "Loading analytics...",
-    "emptyLabel": "No analytics widgets are configured for this dashboard.",
-    "backToLandingLabel": "← Apps",
+    "loadingLabel": "Loading reports...",
+    "emptyLabel": "No reports are available.",
+    "backToLandingLabel": "Apps",
     "pendingNavigationTitle": "Please wait",
     "pendingNavigationMessage": "Opening forms..."
   },
-  "sections": [
-    {
-      "id": "operations",
-      "title": "Operations",
-      "description": "Operational metrics.",
-      "widgets": [
-        {
-          "id": "meal_production_portions_delivered",
-          "sourceFormKey": "Config: Meal Production",
-          "sourceWidgetId": "portions_delivered",
-          "title": "Portions delivered"
-        }
-      ]
-    }
-  ]
+  "sections": []
 }

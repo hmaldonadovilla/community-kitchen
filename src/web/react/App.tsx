@@ -559,8 +559,7 @@ const HOME_LIST_LOCAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
 const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
 const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
-const HOME_RECORD_PREFETCH_PRIME_DELAY_MS = 250;
-const HOME_RECORD_PREFETCH_REST_DELAY_MS = 2400;
+const HOME_RECORD_PREFETCH_DELAY_MS = 250;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
 
 type HomeListLocalCachePayload = {
@@ -694,6 +693,21 @@ const clearHomeListLocalCache = (key: string): void => {
   } catch (_) {
     // ignore storage errors
   }
+};
+
+const annotateListResponseWithInitialDateFilter = (response: ListResponse | null | undefined, listView: any): ListResponse | null => {
+  if (!response || !Array.isArray((response as any).items)) return response || null;
+  if ((response.dateFilterFieldId || '').toString().trim() && (response.dateFilterEquals || '').toString().trim()) return response;
+  const search = listView?.search;
+  if ((search?.mode || '').toString().trim() !== 'date') return response;
+  const dateFieldId = ((search as any)?.dateFieldId || '').toString().trim();
+  const initialDate = resolveInitialListSearchValue(search);
+  if (!dateFieldId || !initialDate) return response;
+  return {
+    ...response,
+    dateFilterFieldId: dateFieldId,
+    dateFilterEquals: initialDate
+  };
 };
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {
@@ -3981,7 +3995,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition.listView, formKey, homeListCacheVersion]
   );
   const initialHomeListCache = useMemo(() => readHomeListLocalCache(homeListLocalCacheKey), [homeListLocalCacheKey]);
-  const initialHomeListResponse = initialHomeListCache?.response || null;
+  const rawInitialHomeListResponse = initialHomeListCache?.response || null;
+  const initialHomeListResponse = useMemo(
+    () => annotateListResponseWithInitialDateFilter(rawInitialHomeListResponse, definition.listView),
+    [definition.listView, rawInitialHomeListResponse]
+  );
   const initialHomeListSource = useMemo<'bootstrap' | 'localStorage' | 'none'>(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
@@ -4006,7 +4024,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const [listCache, setListCache] = useState<{ response: ListResponse | null; records: Record<string, WebFormSubmission> }>(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    const response = bootstrap?.listResponse || initialHomeListResponse || null;
+    const response = annotateListResponseWithInitialDateFilter(bootstrap?.listResponse || initialHomeListResponse || null, definition.listView);
     const records = bootstrap?.records || {};
     return { response, records };
   });
@@ -4328,39 +4346,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return;
     }
 
-    const primeRowHints = rowHints.slice(0, 1);
-    const restRowHints = rowHints.slice(1);
-
     let cancelled = false;
-    let primeTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
-    let restTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
-    let restIdleHandle: number | null = null;
+    let prefetchTimerHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
 
-    const runPrefetch = async (
-      phase: 'prime' | 'rest',
-      hints: number[],
-      metricName: string
-    ) => {
-      if (cancelled || !hints.length) return;
+    const runPrefetch = async () => {
+      if (cancelled || !rowHints.length) return;
       const startedAt = Date.now();
+      const metricName = 'ck.list.records.prefetch.rpc';
       const startMark = `${metricName}.start.${startedAt}`;
       const endMark = `${metricName}.end.${startedAt}`;
       logEvent('list.records.prefetch.start', {
         formKey,
-        phase,
+        phase: 'batch',
         topCount,
         missingCount: missingTopRows.length,
-        rowHintCount: hints.length,
+        rowHintCount: rowHints.length,
         etag: etag || null
       });
       perfMark(startMark);
+      let requestPromise: Promise<Record<string, WebFormSubmission>> | undefined;
       try {
         // Fetch by row numbers so we avoid re-running expensive sorted list assembly.
-        const requestPromise = fetchRecordsByRowNumbers(formKey, hints);
-        hints.forEach(rowNumber => {
-          listRecordSnapshotPrefetchByRowRef.current.set(rowNumber, requestPromise);
+        requestPromise = fetchRecordsByRowNumbers(formKey, rowHints);
+        const activeRequest = requestPromise;
+        rowHints.forEach(rowNumber => {
+          listRecordSnapshotPrefetchByRowRef.current.set(rowNumber, activeRequest);
         });
-        const prefetchedRecords = await requestPromise;
+        const prefetchedRecords = await activeRequest;
         if (cancelled) return;
         perfMark(endMark);
         const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
@@ -4372,17 +4384,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         perfMeasure(metricName, startMark, endMark, {
           formKey,
-          phase,
+          phase: 'batch',
           requested: topCount,
-          requestedRows: hints.length,
+          requestedRows: rowHints.length,
           missing: missingTopRows.length,
           received: receivedIds.length
         });
         logEvent('list.records.prefetch.ok', {
           formKey,
-          phase,
+          phase: 'batch',
           requested: topCount,
-          requestedRows: hints.length,
+          requestedRows: rowHints.length,
           missing: missingTopRows.length,
           received: receivedIds.length,
           durationMs: Date.now() - startedAt
@@ -4391,68 +4403,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         perfMark(endMark);
         perfMeasure(metricName, startMark, endMark, {
           formKey,
-          phase,
+          phase: 'batch',
           requested: topCount,
-          requestedRows: hints.length,
+          requestedRows: rowHints.length,
           missing: missingTopRows.length,
           failed: true
         });
         const msg = (err?.message || err?.toString?.() || 'failed').toString();
         logEvent('list.records.prefetch.error', {
           formKey,
-          phase,
+          phase: 'batch',
           requested: topCount,
-          requestedRows: hints.length,
+          requestedRows: rowHints.length,
           missing: missingTopRows.length,
           message: msg,
           durationMs: Date.now() - startedAt
         });
       } finally {
-        hints.forEach(rowNumber => {
+        rowHints.forEach(rowNumber => {
           const inFlight = listRecordSnapshotPrefetchByRowRef.current.get(rowNumber);
-          if (inFlight) {
+          if (requestPromise && inFlight === requestPromise) {
             listRecordSnapshotPrefetchByRowRef.current.delete(rowNumber);
           }
         });
       }
     };
 
-    const scheduleRestPrefetch = () => {
-      if (cancelled || !restRowHints.length) return;
-      try {
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-          restIdleHandle = (window as any).requestIdleCallback(
-            () => {
-              restIdleHandle = null;
-              void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
-            },
-            { timeout: 2500 }
-          ) as number;
-          return;
-        }
-      } catch {
-        // fall through to timeout path
-      }
-      restTimerHandle = globalThis.setTimeout(() => {
-        restTimerHandle = null;
-        void runPrefetch('rest', restRowHints, 'ck.list.records.prefetch.rest.rpc');
-      }, HOME_RECORD_PREFETCH_REST_DELAY_MS);
-    };
-
-    primeTimerHandle = globalThis.setTimeout(() => {
-      primeTimerHandle = null;
-      void runPrefetch('prime', primeRowHints, 'ck.list.records.prefetch.rpc').finally(() => {
-        scheduleRestPrefetch();
-      });
-    }, HOME_RECORD_PREFETCH_PRIME_DELAY_MS);
+    prefetchTimerHandle = globalThis.setTimeout(() => {
+      prefetchTimerHandle = null;
+      void runPrefetch();
+    }, HOME_RECORD_PREFETCH_DELAY_MS);
 
     return () => {
       cancelled = true;
-      if (primeTimerHandle !== null) globalThis.clearTimeout(primeTimerHandle);
-      if (restTimerHandle !== null) globalThis.clearTimeout(restTimerHandle);
-      if (restIdleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(restIdleHandle);
-      }
+      if (prefetchTimerHandle !== null) globalThis.clearTimeout(prefetchTimerHandle);
     };
   }, [
     formKey,
@@ -4634,7 +4618,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               }
               const homeList = (() => {
                 const maybeList = (bootstrapRes as any)?.listResponse;
-                return maybeList && Array.isArray((maybeList as any).items) ? (maybeList as ListResponse) : null;
+                return maybeList && Array.isArray((maybeList as any).items)
+                  ? annotateListResponseWithInitialDateFilter(maybeList as ListResponse, definition.listView)
+                  : null;
               })();
               if (homeList) {
                 const homeBatch = {

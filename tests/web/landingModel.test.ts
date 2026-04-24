@@ -28,7 +28,7 @@ const landingConfigFixture: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Analytics is available from the dashboard below.',
+    adminSectionNote: 'Reports are available from the dashboard below.',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',
@@ -437,8 +437,8 @@ describe('landing model helpers', () => {
           order: 15,
           illustration: 'analytics',
           targetUrl: 'https://example.test/analytics',
-          title: 'Analytics',
-          description: 'Review analytics across configured forms.',
+          title: 'Reports',
+          description: 'Send operational reports by email.',
           imageUrl: 'data:image/jpeg;base64,analytics'
         }
       ])
@@ -466,10 +466,10 @@ describe('landing model helpers', () => {
         },
         {
           formKey: '__analytics__',
-          title: 'Analytics',
+          title: 'Reports',
           targetUrl: 'https://example.test/analytics',
-          displayTitle: 'Analytics',
-          displayDescription: 'Review analytics across configured forms.',
+          displayTitle: 'Reports',
+          displayDescription: 'Send operational reports by email.',
           illustration: 'analytics',
           imageUrl: 'data:image/jpeg;base64,analytics'
         },
