@@ -3819,6 +3819,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     lineItemsRef.current = lineItems;
   }, [lineItems]);
+
+  const setValuesFromFormView = useCallback(
+    (next: React.SetStateAction<Record<string, FieldValue>>) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (prev: Record<string, FieldValue>) => Record<string, FieldValue>)(valuesRef.current)
+          : next;
+      valuesRef.current = resolved;
+      setValues(resolved);
+    },
+    [setValues]
+  );
+
+  const setLineItemsFromFormView = useCallback(
+    (next: React.SetStateAction<LineItemState>) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (prev: LineItemState) => LineItemState)(lineItemsRef.current)
+          : next;
+      lineItemsRef.current = resolved;
+      setLineItems(resolved);
+    },
+    [setLineItems]
+  );
+
   useEffect(() => {
     if (view !== 'form') return;
     const nextPaths = new Set<string>();
@@ -9310,6 +9335,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatusLevel('error');
           return { success: false, message };
         }
+        const saveResult = await flushPendingDraftSaveForAction(
+          `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}:uploadComplete`
+        );
+        if (!saveResult.ok) {
+          const message = (
+            saveResult.message ||
+            tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
+          ).toString();
+          setStatus(message);
+          setStatusLevel('error');
+          return { success: false, message };
+        }
         return { success: true };
       } finally {
         guidedStepAdvanceBusy.unlock(seq, {
@@ -9319,7 +9356,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
       }
     },
-    [guidedStepAdvanceBusy, resolveGuidedUploadWaitDialog, waitForBackgroundSaves]
+    [flushPendingDraftSaveForAction, guidedStepAdvanceBusy, resolveGuidedUploadWaitDialog, waitForBackgroundSaves]
   );
 
   useEffect(() => {
@@ -14653,9 +14690,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dedupKeyFieldIdMap={dedupTriggerFieldIdMap}
           language={language}
           values={values}
-          setValues={setValues}
+          setValues={setValuesFromFormView}
           lineItems={lineItems}
-          setLineItems={setLineItems}
+          setLineItems={setLineItemsFromFormView}
           onSubmit={handleSubmit}
           submitActionRef={formSubmitActionRef}
           guidedBackActionRef={formBackActionRef}

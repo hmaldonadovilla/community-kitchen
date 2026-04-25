@@ -288,6 +288,24 @@ interface FileOverlayState {
   fieldPath?: string;
 }
 
+type FileUploadOrderedEntryCheckArgs =
+  | {
+      scope: 'top';
+      question: WebQuestionDefinition;
+      fieldPath?: string;
+      source?: string;
+      validate?: boolean;
+    }
+  | {
+      scope: 'line';
+      group: WebQuestionDefinition;
+      rowId: string;
+      field: any;
+      fieldPath: string;
+      source?: string;
+      validate?: boolean;
+    };
+
 type OverlayStackEntry =
   | { kind: 'subgroup'; state: SubgroupOverlayState }
   | { kind: 'lineItem'; state: LineItemGroupOverlayState };
@@ -832,6 +850,7 @@ const FormView: React.FC<FormViewProps> = ({
   const [overlayDetailHtmlError, setOverlayDetailHtmlError] = useState('');
   const [overlayDetailHtmlLoading, setOverlayDetailHtmlLoading] = useState(false);
   const orderedEntryGateRef = useRef<(args: { targetQuestionId: string; source: string }) => boolean>(() => false);
+  const fileUploadOrderedEntryGateRef = useRef<(args: FileUploadOrderedEntryCheckArgs) => boolean>(() => false);
   const [subgroupOverlay, setSubgroupOverlay] = useState<SubgroupOverlayState>({ open: false });
   const overlayStackRef = useRef<OverlayStackEntry[]>([]);
   const [infoOverlay, setInfoOverlay] = useState<InfoOverlayState>({ open: false });
@@ -1876,12 +1895,15 @@ const FormView: React.FC<FormViewProps> = ({
       stepId: string;
       stepIndex: number;
     }): { errors: FormErrors; firstInvalidStepId: string | null } => {
+      const currentValues = valuesRef.current;
+      const currentLineItems = lineItemsRef.current;
+
       if (args.scope === 'fullForm') {
         const nextErrors = validateForm({
           definition,
           language,
-          values,
-          lineItems,
+          values: currentValues,
+          lineItems: currentLineItems,
           collapsedRows,
           collapsedSubgroups,
           virtualState: guidedVirtualState
@@ -1912,8 +1934,8 @@ const FormView: React.FC<FormViewProps> = ({
         const nextErrors = validateForm({
           definition: stepDefinition,
           language,
-          values,
-          lineItems,
+          values: currentValues,
+          lineItems: currentLineItems,
           collapsedRows,
           collapsedSubgroups,
           requiredMode,
@@ -1938,9 +1960,9 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState,
       guidedVisibleSteps,
       language,
-      lineItems,
       normalizeForwardGate,
-      values
+      valuesRef,
+      lineItemsRef
     ]
   );
 
@@ -2121,13 +2143,15 @@ const FormView: React.FC<FormViewProps> = ({
       guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: true, armed: false };
 
       const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId) || definition;
+      const validationValues = valuesRef.current;
+      const validationLineItems = lineItemsRef.current;
 
       if (forwardGate === 'whenComplete' && !stepStatus?.complete) {
         const nextErrors = validateForm({
           definition: stepDefinition,
           language,
-          values,
-          lineItems,
+          values: validationValues,
+          lineItems: validationLineItems,
           collapsedRows,
           collapsedSubgroups,
           requiredMode: 'stepComplete',
@@ -2168,8 +2192,8 @@ const FormView: React.FC<FormViewProps> = ({
       const nextErrors = validateForm({
         definition: stepDefinition,
         language,
-        values,
-        lineItems,
+        values: validationValues,
+        lineItems: validationLineItems,
         collapsedRows,
         collapsedSubgroups,
         virtualState: guidedVirtualState
@@ -2309,7 +2333,6 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState,
       guidedVisibleSteps,
       language,
-      lineItems,
       normalizeForwardGate,
       onBeforeGuidedStepAdvance,
       onDiagnostic,
@@ -2317,8 +2340,7 @@ const FormView: React.FC<FormViewProps> = ({
       setPendingScrollAnchor,
       setErrors,
       selectGuidedStep,
-      validateGuidedStepScope,
-      values
+      validateGuidedStepScope
     ]
   );
 
@@ -6337,6 +6359,28 @@ const FormView: React.FC<FormViewProps> = ({
   const openFileOverlay = useCallback(
     (next: Omit<FileOverlayState, 'open'>) => {
       if (submitting) return;
+      const orderedEntryBlocked = (() => {
+        if (next.scope === 'top' && next.question) {
+          return fileUploadOrderedEntryGateRef.current({
+            scope: 'top',
+            question: next.question,
+            fieldPath: next.fieldPath || next.question.id,
+            source: 'overlay'
+          });
+        }
+        if (next.scope === 'line' && next.group && next.rowId && next.field && next.fieldPath) {
+          return fileUploadOrderedEntryGateRef.current({
+            scope: 'line',
+            group: next.group,
+            rowId: next.rowId,
+            field: next.field,
+            fieldPath: next.fieldPath,
+            source: 'overlay'
+          });
+        }
+        return false;
+      })();
+      if (orderedEntryBlocked) return;
       // Close multi-add overlay if open to avoid stacking confusion.
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
@@ -6663,7 +6707,7 @@ const FormView: React.FC<FormViewProps> = ({
     errorMessage?: string
   ) => {
     if (onStatusClear) onStatusClear();
-    setValues(prev => ({ ...prev, [question.id]: items as unknown as FieldValue }));
+    setValuesSynced(prev => ({ ...prev, [question.id]: items as unknown as FieldValue }));
     const fieldLabel = resolveFieldLabel(question as any, language, question.id);
     const validationMessage = errorMessage
       ? ''
@@ -6689,7 +6733,7 @@ const FormView: React.FC<FormViewProps> = ({
 
   const processIncomingFiles = (question: WebQuestionDefinition, incoming: File[]) => {
     if (!incoming.length) return;
-    const existing = toUploadItems(values[question.id]);
+    const existing = toUploadItems(valuesRef.current[question.id]);
     const { items, errorMessage } = applyUploadConstraints(question, existing, incoming, language);
     handleFileFieldChange(question, items, errorMessage);
     const accepted = Math.max(0, items.length - existing.length);
@@ -6743,6 +6787,17 @@ const FormView: React.FC<FormViewProps> = ({
       resetNativeFileInput(question.id);
       return;
     }
+    if (
+      fileUploadOrderedEntryGateRef.current({
+        scope: 'top',
+        question,
+        fieldPath: question.id,
+        source: 'input'
+      })
+    ) {
+      resetNativeFileInput(question.id);
+      return;
+    }
     processIncomingFiles(question, Array.from(list));
     resetNativeFileInput(question.id);
   };
@@ -6752,6 +6807,17 @@ const FormView: React.FC<FormViewProps> = ({
     if (submitting) return;
     if (question.readOnly === true) return;
     if (!event.dataTransfer?.files?.length) return;
+    if (
+      fileUploadOrderedEntryGateRef.current({
+        scope: 'top',
+        question,
+        fieldPath: question.id,
+        source: 'drop'
+      })
+    ) {
+      resetDrag(question.id);
+      return;
+    }
     processIncomingFiles(question, Array.from(event.dataTransfer.files));
     onDiagnostic?.('upload.drop', { questionId: question.id, count: event.dataTransfer.files.length });
     resetDrag(question.id);
@@ -6760,7 +6826,7 @@ const FormView: React.FC<FormViewProps> = ({
   const removeFile = (question: WebQuestionDefinition, index: number) => {
     if (submitting) return;
     if (question.readOnly === true) return;
-    const existing = toUploadItems(values[question.id]);
+    const existing = toUploadItems(valuesRef.current[question.id]);
     if (!existing.length) return;
     const removed = existing[index];
     const next = existing.filter((_, idx) => idx !== index);
@@ -8117,6 +8183,82 @@ const FormView: React.FC<FormViewProps> = ({
     [onDiagnostic]
   );
 
+  const checkFileUploadOrderedEntry = useCallback(
+    (args: FileUploadOrderedEntryCheckArgs): boolean => {
+      if (!orderedEntryEnabled) return false;
+      const source = args.source || 'upload';
+      const target: OrderedEntryTarget =
+        args.scope === 'top'
+          ? { scope: 'top', questionId: args.question.id }
+          : {
+              scope: 'line',
+              groupId: args.group.id,
+              rowId: args.rowId,
+              fieldId: (args.field?.id || '').toString()
+            };
+      const targetGroup = args.scope === 'line' ? args.group : undefined;
+      const orderedBlock = resolveOrderedEntryBlock(target, targetGroup);
+      if (!orderedBlock) return false;
+
+      const fieldPath =
+        args.scope === 'top'
+          ? args.fieldPath || args.question.id
+          : args.fieldPath || `${args.group.id}__${(args.field?.id || '').toString()}__${args.rowId}`;
+      const shouldValidate = args.validate !== false;
+      if (shouldValidate) {
+        blurActiveElement('orderedEntry.uploadBlocked', {
+          scope: args.scope,
+          fieldPath
+        });
+        triggerOrderedEntryValidation(target, orderedBlock.missingFieldPath, {
+          source,
+          allowOverlayOpen: false
+        });
+      }
+      if (shouldValidate) {
+        onDiagnostic?.('upload.orderedEntry.blocked', {
+          scope: args.scope,
+          fieldPath,
+          missingFieldPath: orderedBlock.missingFieldPath,
+          source
+        });
+      }
+      return true;
+    },
+    [
+      blurActiveElement,
+      onDiagnostic,
+      orderedEntryEnabled,
+      resolveOrderedEntryBlock,
+      triggerOrderedEntryValidation
+    ]
+  );
+
+  useEffect(() => {
+    fileUploadOrderedEntryGateRef.current = checkFileUploadOrderedEntry;
+  }, [checkFileUploadOrderedEntry]);
+
+  const checkLineFileUploadOrderedEntry = useCallback(
+    (args: {
+      group: WebQuestionDefinition;
+      rowId: string;
+      field: any;
+      fieldPath: string;
+      source?: string;
+      validate?: boolean;
+    }) =>
+      checkFileUploadOrderedEntry({
+        scope: 'line',
+        group: args.group,
+        rowId: args.rowId,
+        field: args.field,
+        fieldPath: args.fieldPath,
+        source: args.source,
+        validate: args.validate
+      }),
+    [checkFileUploadOrderedEntry]
+  );
+
   const handleFieldChange = (q: WebQuestionDefinition, value: FieldValue) => {
     if (submitting) return;
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
@@ -8526,7 +8668,7 @@ const FormView: React.FC<FormViewProps> = ({
   }) => {
     const { group, rowId, field, fieldPath, incoming } = args;
     if (!incoming.length) return;
-    const existingRows = lineItems[group.id] || [];
+    const existingRows = lineItemsRef.current[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
     const pseudo = { uploadConfig: field.uploadConfig } as unknown as WebQuestionDefinition;
@@ -8604,6 +8746,19 @@ const FormView: React.FC<FormViewProps> = ({
       resetNativeFileInput(fieldPath);
       return;
     }
+    if (
+      fileUploadOrderedEntryGateRef.current({
+        scope: 'line',
+        group,
+        rowId,
+        field,
+        fieldPath,
+        source: 'input'
+      })
+    ) {
+      resetNativeFileInput(fieldPath);
+      return;
+    }
     processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(list) });
     resetNativeFileInput(fieldPath);
   };
@@ -8620,6 +8775,19 @@ const FormView: React.FC<FormViewProps> = ({
     if (submitting) return;
     if (field?.readOnly === true) return;
     if (!event.dataTransfer?.files?.length) return;
+    if (
+      fileUploadOrderedEntryGateRef.current({
+        scope: 'line',
+        group,
+        rowId,
+        field,
+        fieldPath,
+        source: 'drop'
+      })
+    ) {
+      resetDrag(fieldPath);
+      return;
+    }
     processIncomingFilesForLineField({ group, rowId, field, fieldPath, incoming: Array.from(event.dataTransfer.files) });
     onDiagnostic?.('upload.drop', { fieldPath, count: event.dataTransfer.files.length, scope: 'line' });
     resetDrag(fieldPath);
@@ -8635,7 +8803,7 @@ const FormView: React.FC<FormViewProps> = ({
     const { group, rowId, field, fieldPath, index } = args;
     if (submitting) return;
     if (field?.readOnly === true) return;
-    const existingRows = lineItems[group.id] || [];
+    const existingRows = lineItemsRef.current[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
     if (!existingFiles.length) return;
@@ -9633,14 +9801,22 @@ const FormView: React.FC<FormViewProps> = ({
         const hasFiles = items.length > 0;
         const viewMode = readOnly || locked || maxed || hasFiles;
         const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-	        const leftLabel = viewMode
-	          ? tSystem('files.view', language, 'View photos')
-	          : tSystem('files.add', language, 'Add photo');
-	        const cameraStyleBase = buttonStyles.primary;
-	        if (renderAsLabel) {
-	          const displayContent =
-	            items.length === 0
-	              ? null
+        const leftLabel = viewMode
+          ? tSystem('files.view', language, 'View photos')
+          : tSystem('files.add', language, 'Add photo');
+        const cameraStyleBase = buttonStyles.primary;
+        const orderedUploadBlocked = checkFileUploadOrderedEntry({
+          scope: 'top',
+          question: q,
+          fieldPath: q.id,
+          source: 'render',
+          validate: false
+        });
+        const uploadInteractionBlocked = submitting || orderedUploadBlocked;
+        if (renderAsLabel) {
+          const displayContent =
+            items.length === 0
+              ? null
               : items.map((item: any, idx: number) => (
                   <div key={`${q.id}-file-${idx}`} className="ck-readonly-file">
                     {describeUploadItem(item as any)}
@@ -9665,12 +9841,12 @@ const FormView: React.FC<FormViewProps> = ({
               <button
                 type="button"
                 className="ck-upload-camera-btn"
-                disabled={submitting}
-                style={withDisabled(cameraStyleBase, submitting)}
+                disabled={uploadInteractionBlocked}
+                style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
                 aria-label={leftLabel}
                 title={leftLabel}
-              onClick={() => {
-                  if (submitting) return;
+                onClick={() => {
+                  if (uploadInteractionBlocked) return;
                   if (viewMode) {
                     onDiagnostic?.('upload.view.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
                     openFileOverlay({
@@ -9682,8 +9858,18 @@ const FormView: React.FC<FormViewProps> = ({
                     return;
                   }
                   if (readOnly) return;
+                  if (
+                    checkFileUploadOrderedEntry({
+                      scope: 'top',
+                      question: q,
+                      fieldPath: q.id,
+                      source: 'add'
+                    })
+                  ) {
+                    return;
+                  }
                   onDiagnostic?.('upload.add.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
-                fileInputsRef.current[q.id]?.click();
+                  fileInputsRef.current[q.id]?.click();
                 }}
               >
                 <LeftIcon style={{ width: '62%', height: '62%' }} />
@@ -9691,14 +9877,16 @@ const FormView: React.FC<FormViewProps> = ({
               <button
                 type="button"
                 className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
-                aria-disabled={submitting ? 'true' : undefined}
+                disabled={uploadInteractionBlocked}
+                style={withDisabled({}, uploadInteractionBlocked)}
+                aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
                 aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                   'files.title',
                   language,
                   'Photos'
                 )} ${pillText}`}
                 onClick={() => {
-                  if (submitting) return;
+                  if (uploadInteractionBlocked) return;
                   openFileOverlay({
                     scope: 'top',
                     title: resolveLabel(q, language),
@@ -9720,7 +9908,7 @@ const FormView: React.FC<FormViewProps> = ({
                     <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
                     {tSystem('common.more', language, '+{count} more', { count: missing })}
                   </span>
-              </div>
+                </div>
               ) : null}
             </div>
             {helperNode}
@@ -9734,7 +9922,7 @@ const FormView: React.FC<FormViewProps> = ({
               type="file"
               multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
               accept={acceptAttr}
-                disabled={submitting || locked || readOnly}
+              disabled={submitting || locked || readOnly || orderedUploadBlocked}
               style={{ display: 'none' }}
               onChange={e => handleFileInputChange(q, e.target.files)}
             />
@@ -10056,6 +10244,7 @@ const FormView: React.FC<FormViewProps> = ({
               renderChoiceControl,
               openInfoOverlay,
               openFileOverlay,
+              checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
               openSubgroupOverlay,
               openLineItemGroupOverlay,
               addLineItemRowManual,
@@ -11349,6 +11538,7 @@ const FormView: React.FC<FormViewProps> = ({
                 renderChoiceControl,
                 openInfoOverlay,
                 openFileOverlay,
+                checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
                 openSubgroupOverlay,
                 openLineItemGroupOverlay,
                 addLineItemRowManual,
@@ -12182,6 +12372,7 @@ const FormView: React.FC<FormViewProps> = ({
                             renderChoiceControl,
                             openInfoOverlay,
                             openFileOverlay,
+                            checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
                             openSubgroupOverlay,
                             openLineItemGroupOverlay,
                             addLineItemRowManual,
@@ -13047,6 +13238,15 @@ const FormView: React.FC<FormViewProps> = ({
                             : isEmpty
                               ? buttonStyles.primary
                               : buttonStyles.secondary;
+                          const orderedUploadBlocked = checkLineFileUploadOrderedEntry({
+                            group: subGroupDef,
+                            rowId: subRow.id,
+                            field,
+                            fieldPath,
+                            source: 'render',
+                            validate: false
+                          });
+                          const uploadInteractionBlocked = submitting || orderedUploadBlocked;
                           const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
                             ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
                           );
@@ -13070,12 +13270,12 @@ const FormView: React.FC<FormViewProps> = ({
                                 <button
                                   type="button"
                                   className="ck-upload-camera-btn"
-                                  disabled={submitting}
-                                  style={withDisabled(cameraStyleBase, submitting)}
+                                  disabled={uploadInteractionBlocked}
+                                  style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
                                   aria-label={leftLabel}
                                   title={leftLabel}
                                   onClick={() => {
-                                    if (submitting) return;
+                                    if (uploadInteractionBlocked) return;
                                     if (viewMode) {
                                       onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                       openFileOverlay({
@@ -13089,6 +13289,17 @@ const FormView: React.FC<FormViewProps> = ({
                                       return;
                                     }
                                     if (readOnly) return;
+                                    if (
+                                      checkLineFileUploadOrderedEntry({
+                                        group: subGroupDef,
+                                        rowId: subRow.id,
+                                        field,
+                                        fieldPath,
+                                        source: 'add'
+                                      })
+                                    ) {
+                                      return;
+                                    }
                                     onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                     fileInputsRef.current[fieldPath]?.click();
                                   }}
@@ -13098,14 +13309,16 @@ const FormView: React.FC<FormViewProps> = ({
                                 <button
                                   type="button"
                                   className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
-                                  aria-disabled={submitting ? 'true' : undefined}
+                                  disabled={uploadInteractionBlocked}
+                                  style={withDisabled({}, uploadInteractionBlocked)}
+                                  aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
                                   aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                                     'files.title',
                                     language,
                                     'Photos'
                                   )} ${pillText}`}
                                   onClick={() => {
-                                    if (submitting) return;
+                                    if (uploadInteractionBlocked) return;
                                     openFileOverlay({
                                       scope: 'line',
                                       title: resolveFieldLabel(field, language, field.id),
@@ -13144,6 +13357,7 @@ const FormView: React.FC<FormViewProps> = ({
                                 type="file"
                                 multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
                                 accept={acceptAttr}
+                                disabled={uploadInteractionBlocked || readOnly}
                                 style={{ display: 'none' }}
                                 onChange={e =>
                                   handleLineFileInputChange({
@@ -14294,6 +14508,7 @@ const FormView: React.FC<FormViewProps> = ({
                               renderChoiceControl,
                               openInfoOverlay,
                               openFileOverlay,
+                              checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
                               openSubgroupOverlay,
                               openLineItemGroupOverlay,
                               addLineItemRowManual,
@@ -14369,6 +14584,7 @@ const FormView: React.FC<FormViewProps> = ({
                     renderChoiceControl,
                     openInfoOverlay,
                     openFileOverlay,
+                    checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
                     openSubgroupOverlay,
                     openLineItemGroupOverlay,
                     addLineItemRowManual,
@@ -14454,6 +14670,23 @@ const FormView: React.FC<FormViewProps> = ({
     const fieldPath = isTop ? (fileOverlay.question!.id || '') : (fileOverlay.fieldPath || '');
     const uploadConfig: any = isTop ? (fileOverlay.question as any)?.uploadConfig || {} : (fileOverlay.field as any)?.uploadConfig || {};
     const readOnly = Boolean(isTop ? (fileOverlay.question as any)?.readOnly : (fileOverlay.field as any)?.readOnly);
+    const orderedUploadBlocked = isTop
+      ? checkFileUploadOrderedEntry({
+          scope: 'top',
+          question: fileOverlay.question!,
+          fieldPath,
+          source: 'render',
+          validate: false
+        })
+      : checkLineFileUploadOrderedEntry({
+          group: fileOverlay.group!,
+          rowId: fileOverlay.rowId as string,
+          field: fileOverlay.field,
+          fieldPath,
+          source: 'render',
+          validate: false
+        });
+    const overlayReadOnly = readOnly || orderedUploadBlocked;
     const items = (() => {
       if (isTop) return toUploadItems(values[(fileOverlay.question as any).id]);
       const groupId = (fileOverlay.group as any).id;
@@ -14468,6 +14701,28 @@ const FormView: React.FC<FormViewProps> = ({
 
     const onAdd = () => {
       if (submitting || readOnly) return;
+      if (isTop) {
+        if (
+          checkFileUploadOrderedEntry({
+            scope: 'top',
+            question: fileOverlay.question!,
+            fieldPath,
+            source: 'overlay.add'
+          })
+        ) {
+          return;
+        }
+      } else if (
+        checkLineFileUploadOrderedEntry({
+          group: fileOverlay.group!,
+          rowId: fileOverlay.rowId as string,
+          field: fileOverlay.field,
+          fieldPath,
+          source: 'overlay.add'
+        })
+      ) {
+        return;
+      }
       if (maxed) return;
       fileInputsRef.current[fieldPath]?.click();
     };
@@ -14507,7 +14762,7 @@ const FormView: React.FC<FormViewProps> = ({
         language={language}
         title={title}
         submitting={submitting}
-        readOnly={readOnly}
+        readOnly={overlayReadOnly}
         items={items}
         uploadConfig={uploadConfig}
         onAdd={onAdd}
@@ -15018,6 +15273,7 @@ const FormView: React.FC<FormViewProps> = ({
             renderChoiceControl,
             openInfoOverlay,
             openFileOverlay,
+            checkFileUploadOrderedEntry: checkLineFileUploadOrderedEntry,
             openSubgroupOverlay,
             openLineItemGroupOverlay,
             addLineItemRowManual,

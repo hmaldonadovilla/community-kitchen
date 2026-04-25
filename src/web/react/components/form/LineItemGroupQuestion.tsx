@@ -358,6 +358,15 @@ export interface OpenFileOverlayArgs {
   fieldPath?: string;
 }
 
+export interface LineFileUploadOrderedEntryCheckArgs {
+  group: WebQuestionDefinition;
+  rowId: string;
+  field: any;
+  fieldPath: string;
+  source?: string;
+  validate?: boolean;
+}
+
 export interface ChoiceControlArgs {
   fieldPath: string;
   value: string;
@@ -414,6 +423,7 @@ export interface LineItemGroupQuestionCtx {
 
   openInfoOverlay: (title: string, text: string) => void;
   openFileOverlay: (args: OpenFileOverlayArgs) => void;
+  checkFileUploadOrderedEntry?: (args: LineFileUploadOrderedEntryCheckArgs) => boolean;
   openSubgroupOverlay: (
     subKey: string,
     options?: {
@@ -604,6 +614,7 @@ export const LineItemGroupQuestion: React.FC<{
     renderChoiceControl,
     openInfoOverlay,
     openFileOverlay,
+    checkFileUploadOrderedEntry,
     openSubgroupOverlay,
     openLineItemGroupOverlay,
     addLineItemRowManual,
@@ -636,6 +647,11 @@ export const LineItemGroupQuestion: React.FC<{
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const isFileUploadOrderedEntryBlocked = React.useCallback(
+    (args: LineFileUploadOrderedEntryCheckArgs): boolean => Boolean(checkFileUploadOrderedEntry?.(args)),
+    [checkFileUploadOrderedEntry]
+  );
 
   const resolveTopValue = React.useCallback(
     (fieldId: string): FieldValue | undefined => {
@@ -5487,13 +5503,22 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               const hasFiles = items.length > 0;
               const viewMode = readOnly || maxed || hasFiles;
               const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-	              const leftLabel = viewMode
-	                ? tSystem('files.view', language, 'View photos')
-	                : tSystem('files.add', language, 'Add photo');
-	              const cameraStyleBase = buttonStyles.primary;
-	              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-	                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-	              );
+              const leftLabel = viewMode
+                ? tSystem('files.view', language, 'View photos')
+                : tSystem('files.add', language, 'Add photo');
+              const cameraStyleBase = buttonStyles.primary;
+              const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
+                group: q,
+                rowId: row.id,
+                field,
+                fieldPath,
+                source: 'render',
+                validate: false
+              });
+              const uploadInteractionBlocked = fieldInteractionBlocked || orderedUploadBlocked;
+              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+              );
               const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                 .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                 .filter(Boolean);
@@ -5530,12 +5555,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     <button
                       type="button"
                       className="ck-upload-camera-btn"
-                      disabled={fieldInteractionBlocked}
-                      style={withDisabled(cameraStyleBase, fieldInteractionBlocked)}
+                      disabled={uploadInteractionBlocked}
+                      style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
                       aria-label={leftLabel}
                       title={leftLabel}
                       onClick={() => {
-                        if (fieldInteractionBlocked) return;
+                        if (uploadInteractionBlocked) return;
                         if (viewMode) {
                           onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                           openFileOverlay({
@@ -5549,6 +5574,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           return;
                         }
                         if (readOnly) return;
+                        if (
+                          isFileUploadOrderedEntryBlocked({
+                            group: q,
+                            rowId: row.id,
+                            field,
+                            fieldPath,
+                            source: 'add'
+                          })
+                        ) {
+                          return;
+                        }
                         onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                         fileInputsRef.current[fieldPath]?.click();
                       }}
@@ -5558,14 +5594,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     <button
                       type="button"
                       className={`ck-progress-pill ck-upload-pill-btn ck-upload-pill-btn--table ${pillClass}`}
-                      aria-disabled={fieldInteractionBlocked ? 'true' : undefined}
+                      disabled={uploadInteractionBlocked}
+                      style={withDisabled({}, uploadInteractionBlocked)}
+                      aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
                       aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                         'files.title',
                         language,
                         'Photos'
                       )} ${pillText}`}
                       onClick={() => {
-                        if (fieldInteractionBlocked) return;
+                        if (uploadInteractionBlocked) return;
                         onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                         openFileOverlay({
                           scope: 'line',
@@ -5596,6 +5634,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     type="file"
                     multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
                     accept={acceptAttr}
+                    disabled={uploadInteractionBlocked}
                     style={{ display: 'none' }}
                     onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
                   />
@@ -10506,13 +10545,23 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       return renderReadOnlyLine(displayNode);
                     }
                     const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
+                    const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
+                      group: q,
+                      rowId: row.id,
+                      field,
+                      fieldPath,
+                      source: 'render',
+                      validate: false
+                    });
                     const onAdd = () => {
                       if (submitting || readOnly) return;
+                      if (isFileUploadOrderedEntryBlocked({ group: q, rowId: row.id, field, fieldPath, source: 'add' })) return;
                       if (maxed) return;
                       fileInputsRef.current[fieldPath]?.click();
                     };
                     const onClearAll = () => {
                       if (submitting || readOnly) return;
+                      if (isFileUploadOrderedEntryBlocked({ group: q, rowId: row.id, field, fieldPath, source: 'clearAll' })) return;
                       clearLineFiles({ group: q, rowId: row.id, field, fieldPath });
                     };
                     const onRemoveAt = (idx: number) => {
@@ -10548,7 +10597,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             <button
                               type="button"
                               className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
-                              aria-disabled={submitting || readOnly ? 'true' : undefined}
+                              disabled={submitting || readOnly || orderedUploadBlocked}
+                              style={withDisabled({}, submitting || readOnly || orderedUploadBlocked)}
+                              aria-disabled={submitting || readOnly || orderedUploadBlocked ? 'true' : undefined}
                               onClick={onAdd}
                             >
                               <span>{tSystem('files.add', language, 'Add')}</span>
@@ -10558,7 +10609,9 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <button
                                 type="button"
                                 className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
-                                aria-disabled={submitting || readOnly ? 'true' : undefined}
+                                disabled={submitting || readOnly || orderedUploadBlocked}
+                                style={withDisabled({}, submitting || readOnly || orderedUploadBlocked)}
+                                aria-disabled={submitting || readOnly || orderedUploadBlocked ? 'true' : undefined}
                                 onClick={onClearAll}
                               >
                                 <span>{tSystem('files.clearAll', language, 'Clear all')}</span>
@@ -10591,6 +10644,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                             type="file"
                             multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
                             accept={acceptAttr}
+                            disabled={submitting || readOnly || orderedUploadBlocked}
                             style={{ display: 'none' }}
                             onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
                           />
@@ -11801,13 +11855,22 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           const hasFiles = items.length > 0;
                           const viewMode = readOnly || maxed || hasFiles;
                           const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-	                          const leftLabel = viewMode
-	                            ? tSystem('files.view', language, 'View photos')
-	                            : tSystem('files.add', language, 'Add photo');
-	                          const cameraStyleBase = buttonStyles.primary;
-	                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-	                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-	                          );
+                          const leftLabel = viewMode
+                            ? tSystem('files.view', language, 'View photos')
+                            : tSystem('files.add', language, 'Add photo');
+                          const cameraStyleBase = buttonStyles.primary;
+                          const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
+                            group: q,
+                            rowId: row.id,
+                            field,
+                            fieldPath,
+                            source: 'render',
+                            validate: false
+                          });
+                          const uploadInteractionBlocked = submitting || orderedUploadBlocked;
+                          const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                            ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+                          );
                           const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                             .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                             .filter(Boolean);
@@ -11839,12 +11902,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 <button
                                   type="button"
                                   className="ck-upload-camera-btn"
-                                  disabled={submitting}
-                                  style={withDisabled(cameraStyleBase, submitting)}
+                                  disabled={uploadInteractionBlocked}
+                                  style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
                                   aria-label={leftLabel}
                                   title={leftLabel}
                                   onClick={() => {
-                                    if (submitting) return;
+                                    if (uploadInteractionBlocked) return;
                                     if (viewMode) {
                                       onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                       openFileOverlay({
@@ -11858,6 +11921,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       return;
                                     }
                                     if (readOnly) return;
+                                    if (isFileUploadOrderedEntryBlocked({ group: q, rowId: row.id, field, fieldPath, source: 'add' })) return;
                                     onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                     fileInputsRef.current[fieldPath]?.click();
                                   }}
@@ -11867,14 +11931,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 <button
                                   type="button"
                                   className={`ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn ${pillClass}`}
-                                  aria-disabled={submitting ? 'true' : undefined}
+                                  disabled={uploadInteractionBlocked}
+                                  style={withDisabled({}, uploadInteractionBlocked)}
+                                  aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
                                   aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
                                     'files.title',
                                     language,
                                     'Photos'
                                   )} ${pillText}`}
                                   onClick={() => {
-                                    if (submitting) return;
+                                    if (uploadInteractionBlocked) return;
                                     openFileOverlay({
                                       scope: 'line',
                                       title: resolveFieldLabel(field, language, field.id),
@@ -11914,6 +11980,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 type="file"
                                 multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
                                 accept={acceptAttr}
+                                disabled={uploadInteractionBlocked || readOnly}
                                 style={{ display: 'none' }}
                                 onChange={e =>
                                   handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })
@@ -14130,13 +14197,22 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       const hasFiles = items.length > 0;
                                       const viewMode = readOnly || maxed || hasFiles;
                                       const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-	                                      const leftLabel = viewMode
-	                                        ? tSystem('files.view', language, 'View photos')
-	                                        : tSystem('files.add', language, 'Add photo');
-	                                      const cameraStyleBase = buttonStyles.primary;
-	                                      const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-	                                        ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-	                                      );
+                                      const leftLabel = viewMode
+                                        ? tSystem('files.view', language, 'View photos')
+                                        : tSystem('files.add', language, 'Add photo');
+                                      const cameraStyleBase = buttonStyles.primary;
+                                      const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
+                                        group: targetGroup,
+                                        rowId: subRow.id,
+                                        field,
+                                        fieldPath,
+                                        source: 'render',
+                                        validate: false
+                                      });
+                                      const uploadInteractionBlocked = submitting || orderedUploadBlocked;
+                                      const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
+                                        ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
+                                      );
                                       const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
                                         .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
                                         .filter(Boolean);
@@ -14157,12 +14233,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             <button
                                               type="button"
                                               className="ck-upload-camera-btn"
-                                              disabled={submitting}
-                                              style={withDisabled(cameraStyleBase, submitting)}
+                                              disabled={uploadInteractionBlocked}
+                                              style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
                                               aria-label={leftLabel}
                                               title={leftLabel}
                                               onClick={() => {
-                                                if (submitting) return;
+                                                if (uploadInteractionBlocked) return;
                                                 if (viewMode) {
                                                   onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
                                                   openFileOverlay({
@@ -14176,6 +14252,17 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                   return;
                                                 }
                                                 if (readOnly) return;
+                                                if (
+                                                  isFileUploadOrderedEntryBlocked({
+                                                    group: targetGroup,
+                                                    rowId: subRow.id,
+                                                    field,
+                                                    fieldPath,
+                                                    source: 'add'
+                                                  })
+                                                ) {
+                                                  return;
+                                                }
                                                 onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
                                                 fileInputsRef.current[fieldPath]?.click();
                                               }}
@@ -14185,14 +14272,16 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             <button
                                               type="button"
                                               className={`ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn ${pillClass}`}
-                                              aria-disabled={submitting ? 'true' : undefined}
+                                              disabled={uploadInteractionBlocked}
+                                              style={withDisabled({}, uploadInteractionBlocked)}
+                                              aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
                                               aria-label={`${tSystem(
                                                 'files.open',
                                                 language,
                                                 tSystem('common.open', language, 'Open')
                                               )} ${tSystem('files.title', language, 'Photos')} ${pillText}`}
                                               onClick={() => {
-                                                if (submitting) return;
+                                                if (uploadInteractionBlocked) return;
                                                 openFileOverlay({
                                                   scope: 'line',
                                                   title: resolveFieldLabel(field, language, field.id),
@@ -14231,6 +14320,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                             type="file"
                                             multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
                                             accept={acceptAttr}
+                                            disabled={uploadInteractionBlocked || readOnly}
                                             style={{ display: 'none' }}
                                             onChange={e =>
                                               handleLineFileInputChange({

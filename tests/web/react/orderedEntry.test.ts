@@ -138,6 +138,56 @@ describe('ordered entry blocking', () => {
     });
   });
 
+  test('blocks line-item file uploads behind an earlier required confirmation field', () => {
+    const group = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [
+          { id: 'TEMP_CONFIRM', type: 'CHECKBOX', required: true, labelEn: 'All pots >=63C' },
+          { id: 'TEMP_PHOTO', type: 'FILE_UPLOAD', required: true, labelEn: 'Add photo', uploadConfig: { minFiles: 1 } }
+        ]
+      }
+    };
+    const definition: any = {
+      title: 'Test',
+      destinationTab: 'Tab',
+      languages: ['EN'],
+      questions: [group]
+    };
+    const target = { scope: 'line' as const, groupId: 'MEALS', rowId: 'row1', fieldId: 'TEMP_PHOTO' };
+
+    const blocked = findOrderedEntryBlock({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems: { MEALS: [{ id: 'row1', values: {} }] },
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions,
+      target,
+      targetGroup: group as any
+    });
+    expect(blocked).toEqual({
+      missingFieldPath: 'MEALS__TEMP_CONFIRM__row1',
+      scope: 'line',
+      reason: 'missingRequired'
+    });
+
+    const unblocked = findOrderedEntryBlock({
+      definition,
+      language: 'EN',
+      values: {},
+      lineItems: { MEALS: [{ id: 'row1', values: { TEMP_CONFIRM: true } }] },
+      resolveVisibilityValue: () => undefined,
+      getTopValue: () => undefined,
+      orderedQuestions: definition.questions,
+      target,
+      targetGroup: group as any
+    });
+    expect(unblocked).toBeNull();
+  });
+
   test('treats line-level ordered-entry issues as invalid even without explicit field errors', () => {
     expect(
       isOrderedEntryValid({
