@@ -1808,7 +1808,7 @@ describe('Dashboard', () => {
     sheet.setMockData(mockData);
     const dashboard = new Dashboard(mockSS as any);
     const forms = dashboard.getForms();
-    expect(forms[0].appHeader?.logoUrl).toBe(`https://drive.google.com/uc?export=view&id=${driveId}`);
+    expect(forms[0].appHeader?.logoUrl).toBe(`https://drive.google.com/thumbnail?id=${driveId}&sz=w256`);
   });
 
   test('getForms parses appHeader sidebarEnabled control', () => {

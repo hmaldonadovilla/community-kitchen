@@ -1040,16 +1040,18 @@ export class Dashboard {
         return undefined;
       };
 
-      // Full URL: if it's a Drive share link, convert it to a direct-view URL.
+      const toDriveThumbnailUrl = (id: string) => `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w256`;
+
+      // Full URL: if it's a Drive share link, convert it to an embeddable thumbnail URL.
       if (/^https?:\/\//i.test(raw)) {
         const id = extractDriveId(raw);
-        if (id) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+        if (id) return toDriveThumbnailUrl(id);
         return raw;
       }
 
       // Bare Drive file id: treat it as a Drive image.
       if (/^[a-zA-Z0-9_-]{10,}$/.test(raw)) {
-        return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(raw)}`;
+        return toDriveThumbnailUrl(raw);
       }
 
       return undefined;

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
+import { buildAppLogoCandidates } from './appLogoCandidates';
 
 type DrawerAction = {
   id: string;
@@ -63,43 +64,7 @@ export const AppHeader: React.FC<{
     return joined.trim() || first.toUpperCase();
   }, [title]);
 
-  const logoCandidates = useMemo(() => {
-    const raw = (logoUrl || '').toString().trim();
-    if (!raw) return [];
-
-    const candidates: string[] = [];
-    const push = (value?: string) => {
-      const next = (value || '').toString().trim();
-      if (!next || candidates.includes(next)) return;
-      candidates.push(next);
-    };
-
-    const extractDriveId = (value: string): string | undefined => {
-      const byPath = value.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
-      if (byPath?.[1]) return byPath[1];
-      const byQuery = value.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
-      if (byQuery?.[1]) return byQuery[1];
-      const byGoogleusercontent = value.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/);
-      if (byGoogleusercontent?.[1]) return byGoogleusercontent[1];
-      if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) return value;
-      return undefined;
-    };
-
-    push(raw);
-
-    const driveId = extractDriveId(raw);
-    if (driveId) {
-      const encoded = encodeURIComponent(driveId);
-      push(`https://drive.google.com/thumbnail?id=${encoded}&sz=w256`);
-      push(`https://drive.google.com/thumbnail?id=${encoded}&sz=w512`);
-      push(`https://drive.google.com/uc?export=view&id=${encoded}`);
-      push(`https://drive.google.com/uc?export=download&id=${encoded}`);
-      push(`https://lh3.googleusercontent.com/d/${encoded}=w256`);
-      push(`https://lh3.googleusercontent.com/d/${encoded}=w512`);
-    }
-
-    return candidates;
-  }, [logoUrl]);
+  const logoCandidates = useMemo(() => buildAppLogoCandidates(logoUrl), [logoUrl]);
 
   const logoSrc = logoCandidates[logoCandidateIndex] || undefined;
   const showLogo = Boolean(logoSrc) && !logoFailed;
