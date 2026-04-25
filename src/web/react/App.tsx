@@ -173,6 +173,11 @@ import {
 } from './app/uploadFieldInvalidation';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
+import {
+  resolveSubmitPreparationMessageKey,
+  shouldShowSubmitPreparationOverlay,
+  type SubmitWaitQueuePolicy
+} from './app/submitPreparation';
 import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
 import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
@@ -1126,6 +1131,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const updateRecordBusy = useBlockingOverlay({ eventPrefix: 'button.updateRecord.busy', onDiagnostic: logEvent });
   const navigateHomeBusy = useBlockingOverlay({ eventPrefix: 'navigate.home.busy', onDiagnostic: logEvent });
   const copyRecordBusy = useBlockingOverlay({ eventPrefix: 'record.copy.busy', onDiagnostic: logEvent });
+  const submitPreparationBusy = useBlockingOverlay({ eventPrefix: 'submit.prepare.busy', onDiagnostic: logEvent });
   const recordSyncBusy = useBlockingOverlay({ eventPrefix: 'record.sync.busy', onDiagnostic: logEvent });
   const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const guidedMilestoneBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.milestone.busy', onDiagnostic: logEvent });
@@ -12459,8 +12465,67 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('submit.blocked.closed');
       return;
     }
+    const submitStepsMode = ((definition as any)?.steps?.mode || '').toString();
+    let submitPreparationBusySeq: number | null = null;
+    const resolveSubmitPreparationMessage = (key: 'navigation.waitPhotos' | 'navigation.waitSaving'): string => {
+      if (key === 'navigation.waitPhotos') {
+        return tSystem(
+          'navigation.waitPhotos',
+          languageRef.current,
+          'Please wait while your photos finish uploading.'
+        );
+      }
+      return tSystem(
+        'navigation.waitSaving',
+        languageRef.current,
+        'Please wait while we save your changes...'
+      );
+    };
+    const lockSubmitPreparationIfNeeded = (args: {
+      waitForQueue?: SubmitWaitQueuePolicy | string | null;
+      reason: string;
+      recordSyncInFlight?: boolean;
+    }): void => {
+      const snapshot = {
+        stepsMode: submitStepsMode,
+        waitForQueue: args.waitForQueue,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        uploadsInFlight: uploadQueueRef.current.size,
+        recordSyncInFlight: args.recordSyncInFlight
+      };
+      if (!shouldShowSubmitPreparationOverlay(snapshot)) return;
+      const message = resolveSubmitPreparationMessage(resolveSubmitPreparationMessageKey(snapshot));
+      if (submitPreparationBusySeq !== null) {
+        submitPreparationBusy.setMessage(submitPreparationBusySeq, message);
+        return;
+      }
+      submitPreparationBusySeq = submitPreparationBusy.lock({
+        title: tSystem('navigation.waitTitle', languageRef.current, 'Please wait'),
+        message,
+        kind: 'submitPreparation',
+        diagnosticMeta: {
+          reason: args.reason,
+          waitForQueue: args.waitForQueue || null,
+          autoSaveInFlight: snapshot.autoSaveInFlight,
+          draftSaveInFlight: snapshot.draftSaveInFlight,
+          uploadsInFlight: snapshot.uploadsInFlight,
+          recordSyncInFlight: snapshot.recordSyncInFlight || false
+        }
+      });
+    };
+    const unlockSubmitPreparation = (): void => {
+      if (submitPreparationBusySeq === null) return;
+      submitPreparationBusy.unlock(submitPreparationBusySeq);
+      submitPreparationBusySeq = null;
+    };
     if (recordSyncPromiseRef.current) {
-      await recordSyncPromiseRef.current;
+      lockSubmitPreparationIfNeeded({ reason: 'submit.recordSync', recordSyncInFlight: true });
+      try {
+        await recordSyncPromiseRef.current;
+      } finally {
+        unlockSubmitPreparation();
+      }
       if (recordStaleRef.current) {
         logEvent('submit.blocked.recordStale.afterSync', { recordId: recordStaleRef.current.recordId });
         return;
@@ -12475,7 +12540,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const submitQueuePolicy =
       definition.submissionAfterSubmit?.waitForQueue ||
       'all';
-    const waitRes = await waitForBackgroundSaves('submit', submitQueuePolicy);
+    lockSubmitPreparationIfNeeded({ reason: 'submit.backgroundQueue', waitForQueue: submitQueuePolicy });
+    let waitRes: { ok: boolean; message?: string };
+    try {
+      waitRes = await waitForBackgroundSaves('submit', submitQueuePolicy);
+    } finally {
+      unlockSubmitPreparation();
+    }
     if (!waitRes.ok) {
       const msg = (waitRes.message || tSystem('actions.submitFailed', language, 'Submit failed')).toString();
       setStatus(msg);
@@ -14909,6 +14980,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('ui.copyCurrent.dialog.confirm');
           closeCopyCurrentRecordDialog();
         }}
+      />
+
+      <BlockingOverlay
+        open={submitPreparationBusy.state.open && !submitting}
+        title={submitPreparationBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+        message={submitPreparationBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
+        zIndex={12039}
       />
 
       <BlockingOverlay
