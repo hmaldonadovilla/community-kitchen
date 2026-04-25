@@ -1033,6 +1033,65 @@ describe('WebFormService', () => {
     expect(service.getRecordVersion('Config: Delivery', 'REC-BATCH-1').dataVersion).toBe((saved.meta?.dataVersion || 0) + 2);
   });
 
+  test('triggerFollowupActions reuses a PDF created earlier in the same batch for email', () => {
+    const followups = (service as any).followups || (service as any);
+    const blob = { getName: () => 'delivery.pdf' } as any;
+    const generatePdfArtifact = jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'https://drive.google.com/file/d/batchPdfFile12345/view',
+      fileId: 'batchPdfFile12345',
+      blob
+    });
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-BATCH-PDF-1',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    const result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-BATCH-PDF-1', [
+      'CREATE_PDF',
+      'SEND_EMAIL'
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(generatePdfArtifact).toHaveBeenCalledTimes(1);
+    const optionsArg = (global as any).GmailApp.sendEmail.mock.calls[0]?.[3] || {};
+    expect(optionsArg.attachments).toEqual([blob]);
+  });
+
+  test('triggerFollowupActions only bumps home revision instead of rebuilding home caches', () => {
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-FOLLOWUP-REFRESH',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    const refreshMutationSpy = jest.spyOn(service as any, 'refreshMutationCaches');
+    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
+    const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
+
+    const result = service.triggerFollowupActions('Config: Delivery', 'REC-FOLLOWUP-REFRESH', ['CLOSE_RECORD']);
+
+    expect(result.success).toBe(true);
+    expect(refreshMutationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ configSheet: 'Config: Delivery' }),
+      expect.any(Array),
+      'triggerFollowupActions',
+      'revisionOnly'
+    );
+    expect(refreshAnalyticsSpy).not.toHaveBeenCalled();
+    expect(bumpSpy).toHaveBeenCalledWith('Config: Delivery', 'triggerFollowupActions');
+  });
+
   test('emailTemplateId supports conditional cases based on record field values', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 

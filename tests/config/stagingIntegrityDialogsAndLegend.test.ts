@@ -490,6 +490,18 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
+      expect(leftovers?.navigation?.milestoneAction?.progressDialogCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            dialog: expect.objectContaining({
+              title: expect.objectContaining({ en: 'Leftovers' }),
+              message: expect.objectContaining({
+                en: 'Please do not leave the screen and wait for the Leftover ID to be generated'
+              })
+            })
+          })
+        ])
+      );
       ['orderInfo', 'deliveryForm'].forEach(stepId => {
         const step = items.find((entry: any) => entry?.id === stepId);
         expect(step?.excludeWhen).toEqual({

@@ -330,6 +330,11 @@ export interface PrefetchTemplatesResult {
     htmlLoaded: number;
     htmlSkippedCache: number;
     htmlFailed: number;
+    docTextRequested: number;
+    docTextCacheHit: number;
+    docTextLoaded: number;
+    docTextSkippedCache: number;
+    docTextFailed: number;
     docOk: number;
     docFailed: number;
   };

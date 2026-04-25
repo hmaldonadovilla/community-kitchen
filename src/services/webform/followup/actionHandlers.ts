@@ -16,6 +16,7 @@ import { resolveLocalizedStringValue, resolveRecipients, resolveTemplateId } fro
 import { resolveStatusTransitionValue } from '../../../domain/statusTransitions';
 import { fetchDriveFileBlob, findDriveFileByNameInFolder } from '../driveApi';
 import { resolveOutputTarget, resolveRecordFileLabel, trashFileById } from './docRenderer.copy';
+import { readDocTextTemplateBody } from './docTextTemplateCache';
 
 const extractDriveFileId = (value: string): string => {
   const text = (value || '').toString().trim();
@@ -41,6 +42,14 @@ const isBundledHtmlPdfTemplate = (templateId: string | undefined | null): boolea
   return normalized.startsWith('bundle:') && normalized.endsWith('.pdf.html');
 };
 
+export type GeneratedPdfArtifact = {
+  success: boolean;
+  message?: string;
+  url?: string;
+  fileId?: string;
+  blob?: GoogleAppsScript.Base.Blob;
+};
+
 const shouldReuseExistingPdf = (followup: FollowupConfig, record: WebFormSubmission): boolean => {
   const templateId = resolveTemplateId(followup.pdfTemplateId, record);
   return !isBundledHtmlPdfTemplate(templateId);
@@ -49,12 +58,14 @@ const shouldReuseExistingPdf = (followup: FollowupConfig, record: WebFormSubmiss
 const resolveExistingPdfFile = (
   form: FormConfig,
   followup: FollowupConfig,
-  ctx: RecordContext
+  ctx: RecordContext,
+  opts?: { searchByExpectedName?: boolean }
 ): { fileId: string; url?: string } | null => {
   if (!ctx.record) return null;
   const existingUrl = (ctx.record?.pdfUrl || '').toString().trim();
   const existingFileId = extractDriveFileId(existingUrl);
   if (existingFileId) return { fileId: existingFileId, url: existingUrl };
+  if (opts?.searchByExpectedName === false) return null;
   try {
     const ss = ctx.sheet.getParent();
     const outputTarget = resolveOutputTarget(ss, followup.pdfFolderId, followup);
@@ -116,9 +127,10 @@ export const handleCreatePdfAction = (args: {
     questions: QuestionConfig[],
     record: WebFormSubmission,
     followup: FollowupConfig
-  ) => { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob };
+  ) => GeneratedPdfArtifact;
+  onPdfArtifact?: (artifact: GeneratedPdfArtifact) => void;
 }): FollowupActionResult => {
-  const { form, questions, followup, context: ctx, submissionService, generatePdfArtifact } = args;
+  const { form, questions, followup, context: ctx, submissionService, generatePdfArtifact, onPdfArtifact } = args;
   if (!followup.pdfTemplateId) {
     return { success: false, message: 'PDF template ID missing in follow-up config.' };
   }
@@ -126,7 +138,7 @@ export const handleCreatePdfAction = (args: {
     return { success: false, message: 'Record not found.' };
   }
   const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
-  const existing = resolveExistingPdfFile(form, followup, ctx);
+  const existing = resolveExistingPdfFile(form, followup, ctx, { searchByExpectedName: allowReuse });
   if (allowReuse && existing?.fileId) {
     if (ctx.columns.pdfUrl && existing.url) {
       ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(existing.url);
@@ -172,6 +184,7 @@ export const handleCreatePdfAction = (args: {
   if (!pdfArtifact.success) {
     return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
   }
+  onPdfArtifact?.(pdfArtifact);
   if (ctx.columns.pdfUrl && pdfArtifact.url) {
     ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
   }
@@ -225,7 +238,8 @@ export const handleSendEmailAction = (args: {
     questions: QuestionConfig[],
     record: WebFormSubmission,
     followup: FollowupConfig
-  ) => { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob };
+  ) => GeneratedPdfArtifact;
+  pdfArtifact?: GeneratedPdfArtifact | null;
 }): FollowupActionResult => {
   const { form, questions, followup, context: ctx, submissionService, dataSources, generatePdfArtifact } = args;
   if (!followup.emailTemplateId) {
@@ -244,19 +258,27 @@ export const handleSendEmailAction = (args: {
   const validationWarnings = collectValidationWarnings(questions, ctx.record);
   addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
 
-  let pdfArtifact: { success: boolean; message?: string; url?: string; fileId?: string; blob?: GoogleAppsScript.Base.Blob } | null = null;
+  let pdfArtifact: GeneratedPdfArtifact | null = null;
   const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
   if (followup.pdfTemplateId) {
-    const existing = allowReuse ? resolveExistingPdfFile(form, followup, ctx) : null;
-    if (existing?.fileId) {
-      const blob = fetchDriveFileBlob(existing.fileId, 'followup.email.existingPdf');
-      if (blob) {
-        pdfArtifact = { success: true, url: existing.url, fileId: existing.fileId, blob };
-        debugLog('followup.email.reusePdf', { fileId: existing.fileId });
+    if (args.pdfArtifact?.success && args.pdfArtifact.blob) {
+      pdfArtifact = args.pdfArtifact;
+      debugLog('followup.email.reuseBatchPdf', {
+        fileId: pdfArtifact.fileId || '',
+        hasUrl: Boolean(pdfArtifact.url)
+      });
+    } else {
+      const existing = allowReuse ? resolveExistingPdfFile(form, followup, ctx) : null;
+      if (existing?.fileId) {
+        const blob = fetchDriveFileBlob(existing.fileId, 'followup.email.existingPdf');
+        if (blob) {
+          pdfArtifact = { success: true, url: existing.url, fileId: existing.fileId, blob };
+          debugLog('followup.email.reusePdf', { fileId: existing.fileId });
+        }
       }
-    }
-    if (!pdfArtifact) {
-      pdfArtifact = generatePdfArtifact(form, questions, ctx.record, followup);
+      if (!pdfArtifact) {
+        pdfArtifact = generatePdfArtifact(form, questions, ctx.record, followup);
+      }
     }
     if (!pdfArtifact || !pdfArtifact.success) {
       return { success: false, message: pdfArtifact?.message || 'Failed to generate PDF.' };
@@ -277,8 +299,11 @@ export const handleSendEmailAction = (args: {
     return { success: false, message: 'No email template matched the record values/language.' };
   }
   try {
-    const templateDoc = DocumentApp.openById(templateId);
-    const templateBody = templateDoc.getBody().getText();
+    const templateBodyResult = readDocTextTemplateBody(templateId, form.templateCacheTtlSeconds);
+    if (!templateBodyResult.success || templateBodyResult.raw === undefined) {
+      return { success: false, message: templateBodyResult.message || 'Failed to read follow-up email template.' };
+    }
+    const templateBody = templateBodyResult.raw;
     const body = applyPlaceholders(templateBody, placeholders);
     const htmlBody = body.replace(/\n/g, '<br/>');
     const subject =

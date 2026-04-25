@@ -3593,7 +3593,46 @@
                 "confirmLabel": {
                   "en": "OK"
                 }
-              }
+              },
+              "progressDialogCases": [
+                {
+                  "when": {
+                    "any": [
+                      {
+                        "lineItems": {
+                          "groupId": "MP_MEALS_REQUEST",
+                          "subGroupPath": [
+                            "MP_TYPE_LI"
+                          ],
+                          "match": "any",
+                          "when": {
+                            "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                            "greaterThan": 0
+                          }
+                        }
+                      },
+                      {
+                        "lineItems": {
+                          "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                          "match": "any",
+                          "when": {
+                            "fieldId": "LEFTOVER_INGREDIENT",
+                            "notEmpty": true
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "dialog": {
+                    "title": {
+                      "en": "Leftovers"
+                    },
+                    "message": {
+                      "en": "Please do not leave the screen and wait for the Leftover ID to be generated"
+                    }
+                  }
+                }
+              ]
             }
           }
         }
@@ -15447,7 +15486,46 @@
                 "confirmLabel": {
                   "en": "OK"
                 }
-              }
+              },
+              "progressDialogCases": [
+                {
+                  "when": {
+                    "any": [
+                      {
+                        "lineItems": {
+                          "groupId": "MP_MEALS_REQUEST",
+                          "subGroupPath": [
+                            "MP_TYPE_LI"
+                          ],
+                          "match": "any",
+                          "when": {
+                            "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                            "greaterThan": 0
+                          }
+                        }
+                      },
+                      {
+                        "lineItems": {
+                          "groupId": "MP_LEFTOVER_CAPTURE_LI",
+                          "match": "any",
+                          "when": {
+                            "fieldId": "LEFTOVER_INGREDIENT",
+                            "notEmpty": true
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "dialog": {
+                    "title": {
+                      "en": "Leftovers"
+                    },
+                    "message": {
+                      "en": "Please do not leave the screen and wait for the Leftover ID to be generated"
+                    }
+                  }
+                }
+              ]
             }
           }
         }

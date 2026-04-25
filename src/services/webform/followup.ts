@@ -9,7 +9,12 @@ import { DataSourceService } from './dataSources';
 import { SubmissionService } from './submissions';
 import { RecordContext } from './types';
 import { validateFollowupRequirements } from './followup/validation';
-import { handleCloseRecordAction, handleCreatePdfAction, handleSendEmailAction } from './followup/actionHandlers';
+import {
+  handleCloseRecordAction,
+  handleCreatePdfAction,
+  handleSendEmailAction,
+  type GeneratedPdfArtifact
+} from './followup/actionHandlers';
 import {
   renderDocPreviewFromTemplate,
   renderHtmlFromTemplate,
@@ -50,7 +55,8 @@ export class FollowupService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    action: string
+    action: string,
+    runtime?: { pdfArtifact?: GeneratedPdfArtifact | null }
   ): FollowupActionResult {
     if (!recordId) {
       return { success: false, message: 'Record ID is required.' };
@@ -77,7 +83,10 @@ export class FollowupService {
           followup,
           context,
           submissionService: this.submissionService,
-          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a)
+          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
+          onPdfArtifact: artifact => {
+            if (runtime) runtime.pdfArtifact = artifact;
+          }
         });
       case 'SEND_EMAIL':
         return handleSendEmailAction({
@@ -88,7 +97,8 @@ export class FollowupService {
           context,
           submissionService: this.submissionService,
           dataSources: this.dataSources,
-          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a)
+          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
+          pdfArtifact: runtime?.pdfArtifact || null
         });
       case 'CLOSE_RECORD':
         return handleCloseRecordAction({
@@ -120,8 +130,9 @@ export class FollowupService {
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
+    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {};
     for (const action of normalizedActions) {
-      const result = this.triggerFollowupAction(form, questions, recordId, action);
+      const result = this.triggerFollowupAction(form, questions, recordId, action, runtime);
       results.push({ action, result });
     }
     const allOk = results.every(entry => !!entry.result?.success);

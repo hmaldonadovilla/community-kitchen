@@ -2542,14 +2542,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }, [blockLandscape, isLandscape, isMobile, logEvent, portraitOnlyEnabled]);
 
+  const definitionFollowupConfig = definition.followup || null;
   const hasTemplateRenderTargets = useMemo(() => {
     if (definition.summaryViewEnabled !== false && !!definition.summaryHtmlTemplateId) return true;
+    if (definitionFollowupConfig?.pdfTemplateId || definitionFollowupConfig?.emailTemplateId) return true;
     return (definition.questions || []).some(q => {
       if (!q || q.type !== 'BUTTON') return false;
       const action = ((((q as any)?.button || {}) as any).action || '').toString().trim();
       return action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate';
     });
-  }, [definition.questions, definition.summaryHtmlTemplateId, definition.summaryViewEnabled]);
+  }, [definition.questions, definition.summaryHtmlTemplateId, definition.summaryViewEnabled, definitionFollowupConfig]);
 
   // Prefetch Drive/HTML templates in the background as early as possible (including Home/list),
   // so report + summary renders can reuse warmed templates when users open records/actions.
@@ -12635,13 +12637,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
       }) || '';
+    const submitBlockingMessage =
+      resolveDialogTemplate(
+        submitProgressDialogConfig?.message,
+        tSystem('actions.submitting', languageRef.current, 'Submitting…')
+      ) || tSystem('actions.submitting', languageRef.current, 'Submitting…');
     if (submitRecordId && pendingFollowupBatchPromisesRef.current.has(submitRecordId)) {
       setStatus(
-        tSystem(
-          'submit.waitPreviousAction',
-          languageRef.current,
-          'Please wait while we finish the previous action...'
-        )
+        submitProgressDialogConfig?.message
+          ? submitBlockingMessage
+          : tSystem(
+              'submit.waitPreviousAction',
+              languageRef.current,
+              'Please wait while we finish the previous action...'
+            )
       );
       setStatusLevel('info');
       const followupWait = await waitForPendingFollowupBatch({
@@ -12659,12 +12668,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return;
       }
     }
-    const submitBlockingMessage =
-      resolveLocalizedString(
-        submitProgressDialogConfig?.message,
-        languageRef.current,
-        tSystem('actions.submitting', languageRef.current, 'Submitting…')
-      ) || tSystem('actions.submitting', languageRef.current, 'Submitting…');
     setStatus(submitBlockingMessage);
     setStatusLevel('info');
     logEvent('submit.begin', {

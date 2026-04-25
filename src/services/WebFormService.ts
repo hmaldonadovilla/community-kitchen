@@ -44,6 +44,7 @@ import { DataSourceService } from './webform/dataSources';
 import { SubmissionService } from './webform/submissions';
 import { ListingService } from './webform/listing';
 import { FollowupService } from './webform/followup';
+import type { GeneratedPdfArtifact } from './webform/followup/actionHandlers';
 import { UploadService } from './webform/uploads';
 import { AnalyticsService } from './webform/analytics/service';
 import { AnalyticsPipelineService } from './webform/analytics/pipelineService';
@@ -58,6 +59,7 @@ import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
+import { prefetchDocTextTemplateIds } from './webform/followup/docTextTemplateCache';
 import { hydrateMealProductionPrepIngredientsFromLeftovers } from './webform/followup/mealProductionLeftoverIngredients';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
@@ -3967,7 +3969,8 @@ export class WebFormService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    action: string
+    action: string,
+    runtime?: { pdfArtifact?: GeneratedPdfArtifact | null }
   ): FollowupActionResult {
     const normalizedAction = (action || '').toString().trim().toUpperCase();
     if (normalizedAction === 'RECONCILE_RESERVATIONS') {
@@ -4006,7 +4009,7 @@ export class WebFormService {
       };
     }
 
-    let result = this.followups.triggerFollowupAction(form, questions, recordId, action);
+    let result = this.followups.triggerFollowupAction(form, questions, recordId, action, runtime);
     if (result?.success && normalizedAction === 'CLOSE_RECORD') {
       const closeStatus = (result.status || form.followupConfig?.statusTransitions?.onClose || '').toString().trim();
       const submitEffectsResult = this.applySubmitEffectsForCurrentRecordState({
@@ -4060,7 +4063,8 @@ export class WebFormService {
     questions: QuestionConfig[],
     recordId: string,
     action: string,
-    touchLaneOwner?: () => void
+    touchLaneOwner?: () => void,
+    runtime?: { pdfArtifact?: GeneratedPdfArtifact | null }
   ): FollowupActionResult {
     const normalizedAction = (action || '').toString().trim().toUpperCase();
     const retryDelaysMs =
@@ -4079,7 +4083,7 @@ export class WebFormService {
         sleepWithUtilities(delayMs);
       }
       if (touchLaneOwner) touchLaneOwner();
-      const result = this.runFollowupActionWithLifecycle(formKey, form, questions, recordId, action);
+      const result = this.runFollowupActionWithLifecycle(formKey, form, questions, recordId, action, runtime);
       lastResult = result;
       if (result.success || !isRetryableMutationLockErrorMessage(result.message)) {
         return result;
@@ -4140,7 +4144,8 @@ export class WebFormService {
           updatedAt: args.updatedAt || context.record.updatedAt,
           operation: args.operation
         }
-      }
+      },
+      refreshMode: 'revisionOnly'
     });
   }
 
@@ -4721,7 +4726,14 @@ export class WebFormService {
       );
     }
     if (result?.success) {
-      this.refreshAnalyticsAndHomeBootstrap(form, questions, 'triggerFollowupActions');
+      const refreshStartedAt = Date.now();
+      this.refreshMutationCaches(form, questions, 'triggerFollowupActions', 'revisionOnly');
+      debugLog('followup.batch.refresh.done', {
+        formKey,
+        recordId: normalizedRecordId || null,
+        mode: 'revisionOnly',
+        durationMs: Date.now() - refreshStartedAt
+      });
     }
     return result;
   }
@@ -4778,9 +4790,11 @@ export class WebFormService {
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
+    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {};
     try {
       for (let actionIndex = 0; actionIndex < normalizedActions.length; actionIndex += 1) {
         const action = normalizedActions[actionIndex];
+        const actionStartedAt = Date.now();
         this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket);
         const result = this.runFollowupActionWithResilience(
           formKey,
@@ -4788,8 +4802,16 @@ export class WebFormService {
           questions,
           normalizedRecordId,
           action,
-          () => this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket as FollowupLaneTicket)
+          () => this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket as FollowupLaneTicket),
+          runtime
         );
+        debugLog('followup.batch.action.done', {
+          formKey,
+          recordId: normalizedRecordId,
+          action: (action || '').toString().trim().toUpperCase(),
+          success: Boolean(result?.success),
+          durationMs: Date.now() - actionStartedAt
+        });
         results.push({ action, result });
         if (!result.success) {
           for (let remainingIndex = actionIndex + 1; remainingIndex < normalizedActions.length; remainingIndex += 1) {
@@ -4907,7 +4929,8 @@ export class WebFormService {
    * Prefetch Doc/Markdown templates to make subsequent render actions faster.
    *
    * - Markdown templates: read template text from Drive and store in CacheService (when small enough).
-   * - Doc templates: best-effort warmup of Drive file metadata (Doc body/copies cannot be cached safely).
+   * - Doc templates: best-effort warmup of Drive file metadata.
+   * - Email Doc text: cache plain text bodies so follow-up emails avoid reopening the Doc.
    */
   public prefetchTemplates(formKey: string): {
     success: boolean;
@@ -4923,6 +4946,11 @@ export class WebFormService {
       htmlLoaded: number;
       htmlSkippedCache: number;
       htmlFailed: number;
+      docTextRequested: number;
+      docTextCacheHit: number;
+      docTextLoaded: number;
+      docTextSkippedCache: number;
+      docTextFailed: number;
       docOk: number;
       docFailed: number;
     };
@@ -4934,10 +4962,14 @@ export class WebFormService {
     const markdownMaps: any[] = [];
     const htmlMaps: any[] = [];
     const docMaps: any[] = [];
+    const docTextMaps: any[] = [];
 
     // Follow-up templates (Doc-based)
     if (form.followupConfig?.pdfTemplateId) docMaps.push(form.followupConfig.pdfTemplateId);
-    if (form.followupConfig?.emailTemplateId) docMaps.push(form.followupConfig.emailTemplateId);
+    if (form.followupConfig?.emailTemplateId) {
+      docMaps.push(form.followupConfig.emailTemplateId);
+      docTextMaps.push(form.followupConfig.emailTemplateId);
+    }
     // Summary replacement (HTML)
     if (form.summaryHtmlTemplateId) htmlMaps.push(form.summaryHtmlTemplateId);
 
@@ -4977,18 +5009,28 @@ export class WebFormService {
           .filter(Boolean)
       )
     );
+    const docTextTemplateIds = Array.from(
+      new Set(
+        docTextMaps
+          .flatMap(map => collectTemplateIdsFromMap(map))
+          .map(id => (id || '').toString().trim())
+          .filter(Boolean)
+      )
+    );
 
     debugLog('templates.prefetch.start', {
       formKey: key,
       markdown: markdownTemplateIds.length,
       html: htmlTemplateIds.length,
-      doc: docTemplateIds.length
+      doc: docTemplateIds.length,
+      docText: docTextTemplateIds.length
     });
 
     const ttlSeconds = form.templateCacheTtlSeconds;
     debugLog('templates.prefetch.cacheTtl', { formKey: key, ttlSeconds: ttlSeconds ?? null });
     const md = prefetchMarkdownTemplateIds(markdownTemplateIds, ttlSeconds);
     const html = prefetchHtmlTemplateIds(htmlTemplateIds, ttlSeconds);
+    const docText = prefetchDocTextTemplateIds(docTextTemplateIds, ttlSeconds);
 
     let docOk = 0;
     let docFailed = 0;
@@ -5005,7 +5047,7 @@ export class WebFormService {
       }
     });
 
-    debugLog('templates.prefetch.done', { formKey: key, markdown: md, html, docOk, docFailed });
+    debugLog('templates.prefetch.done', { formKey: key, markdown: md, html, docText, docOk, docFailed });
 
     return {
       success: true,
@@ -5021,6 +5063,11 @@ export class WebFormService {
         htmlLoaded: html.loaded,
         htmlSkippedCache: html.skipped,
         htmlFailed: html.failed,
+        docTextRequested: docText.requested,
+        docTextCacheHit: docText.cacheHit,
+        docTextLoaded: docText.loaded,
+        docTextSkippedCache: docText.skipped,
+        docTextFailed: docText.failed,
         docOk,
         docFailed
       }
@@ -6404,6 +6451,7 @@ export class WebFormService {
     formKey: string;
     formObject: WebFormSubmission;
     saveResult: { success: boolean; message: string; meta: any };
+    refreshMode?: 'full' | 'revisionOnly' | 'none';
   }): { success: boolean; message?: string; meta?: any } {
     const effects = Array.isArray(args.form.followupConfig?.submitEffects) ? args.form.followupConfig?.submitEffects || [] : [];
     if (!effects.length) {
@@ -6556,8 +6604,9 @@ export class WebFormService {
       };
     }
 
+    const refreshMode = args.refreshMode || 'full';
     touchedForms.forEach(target => {
-      this.refreshAnalyticsAndHomeBootstrap(target.form, target.questions, 'saveSubmissionWithId.submitEffects');
+      this.refreshMutationCaches(target.form, target.questions, 'saveSubmissionWithId.submitEffects', refreshMode);
     });
 
     debugLog('submitEffects.ok', {
