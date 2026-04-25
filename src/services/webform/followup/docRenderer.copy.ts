@@ -6,6 +6,7 @@ import {
   createDriveApiFile,
   exportDriveApiFile,
   getDriveApiFile,
+  readDriveBlobAsText,
   readDriveFileAsString,
   resolveDriveApiFolderTarget,
   trashDriveApiFile
@@ -242,24 +243,26 @@ export const readDriveTemplateRawWithFallback = (
   try {
     const file = DriveApp.getFileById(id);
     const mimeType = (file.getMimeType ? file.getMimeType() : '').toString();
-    let raw = '';
-    try {
-      raw = file.getBlob().getDataAsString();
-    } catch (_) {
-      // ignore; try other exports
-    }
-    if (!raw && mimeType === 'application/vnd.google-apps.document') {
+    const isGoogleWorkspaceFile = mimeType.startsWith('application/vnd.google-apps.');
+    if (isGoogleWorkspaceFile) {
       for (const exportType of preferredExportMimeTypes) {
+        let raw = '';
         try {
-          raw = file.getAs(exportType).getDataAsString();
-        } catch (_) {
+          raw = readDriveBlobAsText(file.getAs(exportType), exportType) || '';
+        } catch {
           // ignore
         }
-        if (raw) break;
+        if (raw) return { raw, mimeType: exportType };
+      }
+    } else {
+      try {
+        const raw = readDriveBlobAsText(file.getBlob(), mimeType);
+        if (raw) return { raw, mimeType };
+      } catch {
+        // ignore; fallback to Drive API below
       }
     }
-    if (raw && raw.trim()) return { raw, mimeType };
-  } catch (_) {
+  } catch {
     // fallback to Drive API below
   }
   const fallback = readDriveFileAsString(id, preferredExportMimeTypes, context || 'template.read');

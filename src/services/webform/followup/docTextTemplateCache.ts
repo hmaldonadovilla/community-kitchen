@@ -1,4 +1,5 @@
 import { debugLog } from '../debug';
+import { isLikelyBinaryDriveString } from '../driveApi';
 import { readDriveTemplateRawWithFallback } from './docRenderer.copy';
 import { getTemplateCacheEpoch } from './templateCacheEpoch';
 
@@ -68,12 +69,22 @@ export const readDocTextTemplateBody = (
 
   const cached = getCachedDocTextTemplate(id);
   if (cached && cached.trim()) {
-    debugLog('followup.docTextTemplate.cacheHit', { templateId: id });
-    return { success: true, raw: cached, cacheHit: true };
+    if (!isLikelyBinaryDriveString(cached)) {
+      debugLog('followup.docTextTemplate.cacheHit', { templateId: id });
+      return { success: true, raw: cached, cacheHit: true };
+    }
+    debugLog('followup.docTextTemplate.cacheIgnoredBinary', { templateId: id });
   }
 
   const loaded = readDriveTemplateRawWithFallback(id, ['text/plain'], 'followup.docTextTemplate');
   let raw = (loaded?.raw || '').toString();
+  if (raw && isLikelyBinaryDriveString(raw)) {
+    debugLog('followup.docTextTemplate.ignoredBinaryRead', {
+      templateId: id,
+      mimeType: loaded?.mimeType || null
+    });
+    raw = '';
+  }
   let openedDoc = false;
   if (!raw.trim()) {
     try {

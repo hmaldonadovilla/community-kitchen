@@ -1001,6 +1001,64 @@ describe('WebFormService', () => {
     expect(optionsArg.name).toBe('Community Kitchen');
   });
 
+  test('triggerFollowupAction ignores rendered PDF bytes when reading email template docs', () => {
+    const followups = (service as any).followups || (service as any);
+    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'http://pdf',
+      fileId: 'file-1',
+      blob: null
+    });
+
+    const getBlob = jest.fn(() => ({
+      getContentType: () => 'application/pdf',
+      getDataAsString: () => '%PDF-1.4\nraw rendered PDF bytes'
+    }));
+    const getAs = jest.fn(() => {
+      throw new Error('text export unavailable');
+    });
+    const serverCache = installServerCacheMocks();
+    serverCache.cache.get.mockReturnValue('%PDF-1.4\ncached rendered PDF bytes');
+
+    try {
+      service.saveSubmissionWithId({
+        formKey: 'Config: Delivery',
+        language: 'EN',
+        id: 'REC-EMAIL-PDF-BODY',
+        Q1: 'Alice',
+        Q2_json: JSON.stringify([]),
+        Q3: [],
+        Q4: 'ACME'
+      } as any);
+
+      jest.spyOn((global as any).DriveApp, 'getFileById').mockReturnValue({
+        getMimeType: () => 'application/vnd.google-apps.document',
+        getAs,
+        getBlob
+      });
+      (global as any).DocumentApp.openById.mockImplementationOnce(() => ({
+        getBody: () => ({
+          getText: () => 'Hello {{Q1}}'
+        }),
+        saveAndClose: jest.fn()
+      }));
+
+      const result = service.triggerFollowupAction('Config: Delivery', 'REC-EMAIL-PDF-BODY', 'SEND_EMAIL');
+
+      expect(result.success).toBe(true);
+      expect(getAs).toHaveBeenCalledWith('text/plain');
+      expect(getBlob).not.toHaveBeenCalled();
+      expect((global as any).DocumentApp.openById).toHaveBeenCalledWith('email-template-en');
+      expect(serverCache.cache.put).toHaveBeenCalledWith(expect.any(String), 'Hello {{Q1}}', expect.any(Number));
+      const call = (global as any).GmailApp.sendEmail.mock.calls[0];
+      expect(call[2]).toBe('Hello Alice');
+      expect(call[3]?.htmlBody).toBe('Hello Alice');
+      expect(call[2]).not.toContain('%PDF-');
+    } finally {
+      serverCache.restore();
+    }
+  });
+
   test('triggerFollowupActions batches actions and returns per-action results', () => {
     const followups = (service as any).followups || (service as any);
     jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({

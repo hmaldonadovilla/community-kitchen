@@ -1,6 +1,55 @@
 import { debugLog } from './debug';
 
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+export const GOOGLE_APPS_DOCUMENT_MIME = 'application/vnd.google-apps.document';
+
+const normalizeMimeType = (mimeType?: string | null): string => (mimeType || '').toString().trim().toLowerCase();
+
+export const isDriveTextMimeType = (mimeType?: string | null): boolean => {
+  const normalized = normalizeMimeType(mimeType);
+  if (!normalized) return false;
+  if (normalized.startsWith('text/')) return true;
+  if (normalized === 'application/json' || normalized === 'application/xml' || normalized === 'application/xhtml+xml') {
+    return true;
+  }
+  return normalized.endsWith('+json') || normalized.endsWith('+xml');
+};
+
+const isKnownBinaryDriveMimeType = (mimeType?: string | null): boolean => {
+  const normalized = normalizeMimeType(mimeType);
+  if (!normalized) return false;
+  if (normalized === 'application/pdf' || normalized === 'application/octet-stream') return true;
+  return (
+    normalized.startsWith('image/') ||
+    normalized.startsWith('audio/') ||
+    normalized.startsWith('video/') ||
+    normalized.startsWith('font/') ||
+    normalized.includes('zip') ||
+    normalized.includes('compressed')
+  );
+};
+
+export const isLikelyBinaryDriveString = (raw: string): boolean => {
+  const value = (raw || '').toString();
+  if (!value) return false;
+  return value.trimStart().startsWith('%PDF-');
+};
+
+export const readDriveBlobAsText = (
+  blob: GoogleAppsScript.Base.Blob,
+  fallbackMimeType?: string | null
+): string | null => {
+  if (!blob || typeof blob.getDataAsString !== 'function') return null;
+  const blobContentType =
+    typeof blob.getContentType === 'function' ? blob.getContentType() || fallbackMimeType : fallbackMimeType;
+  const contentType = isDriveTextMimeType(fallbackMimeType) ? fallbackMimeType : blobContentType;
+  if (isKnownBinaryDriveMimeType(contentType)) return null;
+  const raw = blob.getDataAsString();
+  if (!raw || !raw.trim()) return null;
+  if (isLikelyBinaryDriveString(raw)) return null;
+  if (!contentType || isDriveTextMimeType(contentType)) return raw;
+  return null;
+};
 
 const getDriveService = (): any => {
   const drive = (Drive as any) || null;
@@ -133,7 +182,7 @@ export const readDriveFileAsString = (
   const mimeCandidates =
     preferredExportMimeTypes && preferredExportMimeTypes.length
       ? preferredExportMimeTypes
-      : mimeType === 'application/vnd.google-apps.document'
+      : mimeType === GOOGLE_APPS_DOCUMENT_MIME
       ? ['text/plain']
       : [];
   for (const preferred of mimeCandidates) {
@@ -141,15 +190,15 @@ export const readDriveFileAsString = (
     if (!url) continue;
     const blob = fetchDriveUrl(url);
     if (!blob) continue;
-    const raw = blob.getDataAsString();
-    if (raw && raw.trim()) return { raw, mimeType: preferred };
+    const raw = readDriveBlobAsText(blob, preferred);
+    if (raw) return { raw, mimeType: preferred };
   }
   const downloadUrl = (meta as any).downloadUrl || (meta as any).webContentLink || '';
   if (downloadUrl) {
     const blob = fetchDriveUrl(downloadUrl);
     if (blob) {
-      const raw = blob.getDataAsString();
-      if (raw && raw.trim()) return { raw, mimeType };
+      const raw = readDriveBlobAsText(blob, mimeType);
+      if (raw) return { raw, mimeType };
     }
   }
   return null;
