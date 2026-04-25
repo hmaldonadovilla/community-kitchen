@@ -21,6 +21,61 @@ describe('evaluateFieldChangeDialogWhen', () => {
     expect(result).toBe(false);
   });
 
+  it('can evaluate downstream data when clearing an existing value is allowed', () => {
+    const when: any = { fieldId: 'ING_EVD', notEmpty: true };
+    const values: any = { ING_EVD: [{ url: 'https://example.test/receipt.jpg' }], TARGET: 'old' };
+
+    const result = evaluateFieldChangeDialogWhen({
+      when,
+      scope: 'top',
+      fieldId: 'TARGET',
+      nextValue: '',
+      values,
+      lineItems: {},
+      allowEmptyNextValue: true
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('treats pending file uploads as downstream data before upload completion', () => {
+    const receipt =
+      typeof File !== 'undefined'
+        ? new File(['receipt'], 'receipt.svg', { type: 'image/svg+xml' })
+        : new Blob(['receipt'], { type: 'image/svg+xml' });
+
+    const result = evaluateFieldChangeDialogWhen({
+      when: { fieldId: 'ING_EVD', notEmpty: true } as any,
+      scope: 'top',
+      fieldId: 'TARGET',
+      nextValue: '',
+      values: { ING_EVD: [receipt], TARGET: 'old' } as any,
+      lineItems: {},
+      allowEmptyNextValue: true
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('can evaluate parent row data for a line-item clear', () => {
+    const result = evaluateFieldChangeDialogWhen({
+      when: { any: [{ fieldId: 'MP_COOK_TEMP', equals: true }, { fieldId: 'TEMP_EVD', notEmpty: true }] } as any,
+      scope: 'line',
+      fieldId: 'RECIPE',
+      groupId: 'MP_MEALS_REQUEST::meal1::MP_TYPE_LI',
+      rowId: 'prep1',
+      nextValue: '',
+      values: {},
+      lineItems: {
+        MP_MEALS_REQUEST: [{ id: 'meal1', values: { MP_COOK_TEMP: true } }],
+        'MP_MEALS_REQUEST::meal1::MP_TYPE_LI': [{ id: 'prep1', values: { RECIPE: 'Old recipe' } }]
+      } as any,
+      allowEmptyNextValue: true
+    });
+
+    expect(result).toBe(true);
+  });
+
   it('triggers when the next value is non-empty and when clause matches', () => {
     const when: any = { fieldId: 'STATUS', equals: ['Open'] };
     const values: any = { STATUS: 'Open', TARGET: 'old' };
@@ -104,6 +159,30 @@ describe('shouldDeferFieldChangeMutation', () => {
         prevValue: '',
         nextValue: '2026-04-16',
         suppressInitialDateDialog: true
+      })
+    ).toBe(false);
+  });
+
+  it('defers clearing an existing guarded choice until the dialog is confirmed', () => {
+    expect(
+      shouldDeferFieldChangeMutation({
+        dialog: { when: { fieldId: 'ING_EVD', notEmpty: true } as any } as any,
+        fieldType: 'CHOICE',
+        shouldTrigger: true,
+        prevValue: 'One pot creamy pasta',
+        nextValue: ''
+      })
+    ).toBe(true);
+  });
+
+  it('does not defer setting an initially empty guarded choice', () => {
+    expect(
+      shouldDeferFieldChangeMutation({
+        dialog: { when: { fieldId: 'ING_EVD', notEmpty: true } as any } as any,
+        fieldType: 'CHOICE',
+        shouldTrigger: true,
+        prevValue: '',
+        nextValue: 'One pot creamy pasta'
       })
     ).toBe(false);
   });

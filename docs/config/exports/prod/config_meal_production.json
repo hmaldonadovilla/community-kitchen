@@ -1099,8 +1099,20 @@
                               ],
                               "changeDialog": {
                                 "when": {
-                                  "fieldId": "__ckRecipeIngredientsDirty",
-                                  "equals": true
+                                  "any": [
+                                    {
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
+                                      "equals": true
+                                    },
+                                    {
+                                      "fieldId": "TEMP_EVD",
+                                      "notEmpty": true
+                                    }
+                                  ]
                                 },
                                 "title": "Change recipe?",
                                 "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
@@ -1331,8 +1343,20 @@
                               ],
                               "changeDialog": {
                                 "when": {
-                                  "fieldId": "__ckRecipeIngredientsDirty",
-                                  "equals": true
+                                  "any": [
+                                    {
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
+                                      "equals": true
+                                    },
+                                    {
+                                      "fieldId": "TEMP_EVD",
+                                      "notEmpty": true
+                                    }
+                                  ]
                                 },
                                 "title": "Change recipe?",
                                 "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
@@ -3518,8 +3542,20 @@
                 ],
                 "changeDialog": {
                   "when": {
-                    "fieldId": "__ckRecipeIngredientsDirty",
-                    "equals": true
+                    "any": [
+                      {
+                        "fieldId": "ING_EVD",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "MP_COOK_TEMP",
+                        "equals": true
+                      },
+                      {
+                        "fieldId": "TEMP_EVD",
+                        "notEmpty": true
+                      }
+                    ]
                   },
                   "title": "Change recipe?",
                   "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
@@ -5955,8 +5991,20 @@
                   ],
                   "changeDialog": {
                     "when": {
-                      "fieldId": "__ckRecipeIngredientsDirty",
-                      "equals": true
+                      "any": [
+                        {
+                          "fieldId": "ING_EVD",
+                          "notEmpty": true
+                        },
+                        {
+                          "fieldId": "MP_COOK_TEMP",
+                          "equals": true
+                        },
+                        {
+                          "fieldId": "TEMP_EVD",
+                          "notEmpty": true
+                        }
+                      ]
                     },
                     "title": "Change recipe?",
                     "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
@@ -8025,8 +8073,20 @@
                               ],
                               "changeDialog": {
                                 "when": {
-                                  "fieldId": "__ckRecipeIngredientsDirty",
-                                  "equals": true
+                                  "any": [
+                                    {
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
+                                      "equals": true
+                                    },
+                                    {
+                                      "fieldId": "TEMP_EVD",
+                                      "notEmpty": true
+                                    }
+                                  ]
                                 },
                                 "title": "Change recipe?",
                                 "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",
@@ -8257,8 +8317,20 @@
                               ],
                               "changeDialog": {
                                 "when": {
-                                  "fieldId": "__ckRecipeIngredientsDirty",
-                                  "equals": true
+                                  "any": [
+                                    {
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
+                                      "equals": true
+                                    },
+                                    {
+                                      "fieldId": "TEMP_EVD",
+                                      "notEmpty": true
+                                    }
+                                  ]
                                 },
                                 "title": "Change recipe?",
                                 "message": "You have modified the ingredients for this recipe. If you change the recipe now, all ingredient changes will be lost. Do you want to continue?",

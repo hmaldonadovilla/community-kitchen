@@ -76,7 +76,7 @@ export const shouldDeferFieldChangeMutation = (args: {
   if (!args.shouldTrigger) return false;
   if (!args.dialog?.when) return false;
   if (args.suppressInitialDateDialog) return false;
-  if (isDialogEmptyValue(args.prevValue) || isDialogEmptyValue(args.nextValue)) return false;
+  if (isDialogEmptyValue(args.prevValue)) return false;
   const fieldType = normalizeId(args.fieldType).toUpperCase();
   return fieldType === 'CHOICE' || fieldType === 'CHECKBOX' || fieldType === 'FILE_UPLOAD' || fieldType === 'DATE';
 };
@@ -189,12 +189,13 @@ export const evaluateFieldChangeDialogWhen = (args: {
   nextValue: FieldValue;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
+  allowEmptyNextValue?: boolean;
 }): boolean => {
-  const { when, scope, fieldId, groupId, rowId, nextValue, values, lineItems } = args;
+  const { when, scope, fieldId, groupId, rowId, nextValue, values, lineItems, allowEmptyNextValue } = args;
   if (!when) return false;
   const normalizedFieldId = normalizeId(fieldId);
   if (!normalizedFieldId) return false;
-  if (isDialogEmptyValue(nextValue)) return false;
+  if (!allowEmptyNextValue && isDialogEmptyValue(nextValue)) return false;
   if (scope === 'top') {
     const nextValues = { ...values, [normalizedFieldId]: nextValue };
     return matchesWhenClause(when, {
@@ -237,6 +238,7 @@ export const evaluateFieldChangeDialogWhenWithFallback = (args: {
   lineItems: LineItemState;
   fallbackValues?: Record<string, FieldValue>;
   fallbackLineItems?: LineItemState;
+  allowEmptyNextValue?: boolean;
 }): { matches: boolean; matchedOn: 'current' | 'fallback' | null } => {
   const { fallbackValues, fallbackLineItems, ...baseArgs } = args;
   if (evaluateFieldChangeDialogWhen(baseArgs)) {

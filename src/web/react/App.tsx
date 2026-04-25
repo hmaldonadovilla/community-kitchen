@@ -277,11 +277,59 @@ type FieldChangePending = {
   selectionEffects?: SelectionEffect[];
   prevSnapshot: { values: Record<string, FieldValue>; lineItems: LineItemState };
   nextValue: FieldValue;
+  allowEmptyNextValue?: boolean;
   autoSaveSnapshot: {
     dirty: boolean;
     queued: boolean;
     lastSeen: { values: Record<string, FieldValue>; lineItems: LineItemState } | null;
   };
+};
+
+type UploadedFieldValueOverride = {
+  scope: 'top' | 'line';
+  questionId?: string;
+  groupId?: string;
+  rowId?: string;
+  fieldId?: string;
+  items: Array<string | File>;
+};
+
+const applyUploadedFieldOverridesToState = (args: {
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  overrides: Map<string, UploadedFieldValueOverride>;
+}): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
+  const overrides = args.overrides;
+  if (!overrides.size) return { values: args.values, lineItems: args.lineItems };
+  let nextValues = args.values;
+  let nextLineItems = args.lineItems;
+  overrides.forEach(entry => {
+    if (entry.scope === 'top' && entry.questionId) {
+      nextValues = {
+        ...nextValues,
+        [entry.questionId]: entry.items as unknown as FieldValue
+      };
+      return;
+    }
+    if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
+      const rows = nextLineItems[entry.groupId] || [];
+      const nextRows = rows.map(row => {
+        if (row.id !== entry.rowId) return row;
+        return {
+          ...row,
+          values: {
+            ...(row.values || {}),
+            [entry.fieldId as string]: entry.items
+          }
+        };
+      });
+      nextLineItems = {
+        ...nextLineItems,
+        [entry.groupId]: nextRows
+      };
+    }
+  });
+  return { values: nextValues, lineItems: nextLineItems };
 };
 
 const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, any>): string => {
@@ -2103,10 +2151,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
             initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
           });
-          const hasNonEmptyChange =
+          const hasExistingValueChange =
             !isEmptyValue(prevValue as FieldValue) &&
-            !isEmptyValue(args.nextValue as FieldValue) &&
             prevValue !== args.nextValue;
+          const allowEmptyNextValue = hasExistingValueChange && isEmptyValue(args.nextValue as FieldValue);
           const dialogCfg = source?.dialog;
           const topQuestionClearOnChangeEnabled =
             args.scope === 'top' && isClearOnChangeEnabled((source?.question as any)?.clearOnChange);
@@ -2123,7 +2171,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               fieldId,
               phase: 'change'
             });
-          } else if (dialogCfg?.when && hasNonEmptyChange && !suppressInitialDateDialog) {
+          } else if (dialogCfg?.when && hasExistingValueChange && !suppressInitialDateDialog) {
+            const dialogEvaluationState = applyUploadedFieldOverridesToState({
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              overrides: uploadedFieldValueOverridesRef.current
+            });
             const shouldTrigger = evaluateFieldChangeDialogWhen({
               when: dialogCfg.when,
               scope: args.scope,
@@ -2131,14 +2184,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               groupId: args.groupId,
               rowId: args.rowId,
               nextValue: args.nextValue,
-              values: valuesRef.current,
-              lineItems: lineItemsRef.current
+              values: dialogEvaluationState.values,
+              lineItems: dialogEvaluationState.lineItems,
+              allowEmptyNextValue
             });
             if (shouldTrigger) {
               const existing = fieldChangePendingRef.current[fieldKey];
               const prevSnapshot = existing?.prevSnapshot || {
-                values: valuesRef.current,
-                lineItems: lineItemsRef.current
+                values: dialogEvaluationState.values,
+                lineItems: dialogEvaluationState.lineItems
               };
               const pending: FieldChangePending = {
                 fieldPath: fieldKey,
@@ -2151,6 +2205,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 selectionEffects: (source?.question || source?.field)?.selectionEffects || [],
                 prevSnapshot,
                 nextValue: args.nextValue,
+                allowEmptyNextValue,
                 autoSaveSnapshot: {
                   dirty: autoSaveDirtyBefore,
                   queued: autoSaveQueuedBefore,
@@ -2234,6 +2289,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
           const pending = fieldChangePendingRef.current[fieldKey];
           if (pending) {
+            const dialogEvaluationState = applyUploadedFieldOverridesToState({
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              overrides: uploadedFieldValueOverridesRef.current
+            });
             const validity = evaluateFieldChangeDialogWhenWithFallback({
               when: pending.dialog?.when,
               scope: pending.scope,
@@ -2241,10 +2301,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               groupId: pending.groupId,
               rowId: pending.rowId,
               nextValue: pending.nextValue,
-              values: valuesRef.current,
-              lineItems: lineItemsRef.current,
+              values: dialogEvaluationState.values,
+              lineItems: dialogEvaluationState.lineItems,
               fallbackValues: pending.prevSnapshot.values,
-              fallbackLineItems: pending.prevSnapshot.lineItems
+              fallbackLineItems: pending.prevSnapshot.lineItems,
+              allowEmptyNextValue: pending.allowEmptyNextValue
             });
             if (!validity.matches) {
               delete fieldChangePendingRef.current[fieldKey];
@@ -2695,19 +2756,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
-  const uploadedFieldValueOverridesRef = useRef<
-    Map<
-      string,
-      {
-        scope: 'top' | 'line';
-        questionId?: string;
-        groupId?: string;
-        rowId?: string;
-        fieldId?: string;
-        items: Array<string | File>;
-      }
-    >
-  >(new Map());
+  const uploadedFieldValueOverridesRef = useRef<Map<string, UploadedFieldValueOverride>>(new Map());
   const uploadFieldInvalidationVersionsRef = useRef<Map<string, number>>(new Map());
   const [, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
   const listOpenViewSubmitTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -3593,37 +3642,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       values: Record<string, FieldValue>;
       lineItems: LineItemState;
     }): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
-      const overrides = uploadedFieldValueOverridesRef.current;
-      if (!overrides.size) return args;
-      let nextValues = args.values;
-      let nextLineItems = args.lineItems;
-      overrides.forEach(entry => {
-        if (entry.scope === 'top' && entry.questionId) {
-          nextValues = {
-            ...nextValues,
-            [entry.questionId]: entry.items as unknown as FieldValue
-          };
-          return;
-        }
-        if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
-          const rows = nextLineItems[entry.groupId] || [];
-          const nextRows = rows.map(row => {
-            if (row.id !== entry.rowId) return row;
-            return {
-              ...row,
-              values: {
-                ...(row.values || {}),
-                [entry.fieldId as string]: entry.items
-              }
-            };
-          });
-          nextLineItems = {
-            ...nextLineItems,
-            [entry.groupId]: nextRows
-          };
-        }
+      return applyUploadedFieldOverridesToState({
+        values: args.values,
+        lineItems: args.lineItems,
+        overrides: uploadedFieldValueOverridesRef.current
       });
-      return { values: nextValues, lineItems: nextLineItems };
     },
     []
   );
@@ -11784,6 +11807,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       const sessionAtStart = recordSessionRef.current;
       const queueKey = `record:${sessionAtStart}:${args.fieldPath}`;
+      const pendingItems = Array.isArray(args.items) ? args.items : [];
+      if (pendingItems.length) {
+        uploadedFieldValueOverridesRef.current.set(args.fieldPath, {
+          scope: args.scope,
+          questionId: args.questionId,
+          groupId: args.groupId,
+          rowId: args.rowId,
+          fieldId: args.fieldId,
+          items: pendingItems
+        });
+      }
       const run = async (): Promise<{ success: boolean; message?: string }> => {
         // Ensure we don't have a pending debounced draft save that might race with this sequence.
         if (autoSaveTimerRef.current) {

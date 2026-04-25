@@ -149,6 +149,12 @@ export function matchesWhen(
     if (v instanceof Date) return !Number.isNaN(v.getTime());
     if (Array.isArray(v)) return v.some(isNonEmpty);
     if (typeof v === 'object') {
+      try {
+        if (typeof File !== 'undefined' && v instanceof File) return true;
+        if (typeof Blob !== 'undefined' && v instanceof Blob) return true;
+      } catch {
+        // ignore browser type detection failures
+      }
       const url = (v as any)?.url;
       if (typeof url === 'string') return url.trim() !== '';
       try {

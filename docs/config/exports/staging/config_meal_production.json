@@ -2769,11 +2769,15 @@
                                 "when": {
                                   "any": [
                                     {
-                                      "fieldId": "__ckRecipeIngredientsDirty",
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
                                       "equals": true
                                     },
                                     {
-                                      "fieldId": "ING_EVD",
+                                      "fieldId": "TEMP_EVD",
                                       "notEmpty": true
                                     }
                                   ]
@@ -6713,11 +6717,15 @@
                   "when": {
                     "any": [
                       {
-                        "fieldId": "__ckRecipeIngredientsDirty",
+                        "fieldId": "ING_EVD",
+                        "notEmpty": true
+                      },
+                      {
+                        "fieldId": "MP_COOK_TEMP",
                         "equals": true
                       },
                       {
-                        "fieldId": "ING_EVD",
+                        "fieldId": "TEMP_EVD",
                         "notEmpty": true
                       }
                     ]
@@ -10626,11 +10634,15 @@
                     "when": {
                       "any": [
                         {
-                          "fieldId": "__ckRecipeIngredientsDirty",
+                          "fieldId": "ING_EVD",
+                          "notEmpty": true
+                        },
+                        {
+                          "fieldId": "MP_COOK_TEMP",
                           "equals": true
                         },
                         {
-                          "fieldId": "ING_EVD",
+                          "fieldId": "TEMP_EVD",
                           "notEmpty": true
                         }
                       ]
@@ -14608,11 +14620,15 @@
                                 "when": {
                                   "any": [
                                     {
-                                      "fieldId": "__ckRecipeIngredientsDirty",
+                                      "fieldId": "ING_EVD",
+                                      "notEmpty": true
+                                    },
+                                    {
+                                      "fieldId": "MP_COOK_TEMP",
                                       "equals": true
                                     },
                                     {
-                                      "fieldId": "ING_EVD",
+                                      "fieldId": "TEMP_EVD",
                                       "notEmpty": true
                                     }
                                   ]

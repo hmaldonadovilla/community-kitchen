@@ -145,8 +145,9 @@ describe('staging integrity dialogs and list legend config', () => {
         ?.fields?.find((field: any) => field?.id === 'RECIPE');
       expect(recipe?.changeDialog?.when).toEqual({
         any: [
-          { fieldId: '__ckRecipeIngredientsDirty', equals: true },
-          { fieldId: 'ING_EVD', notEmpty: true }
+          { fieldId: 'ING_EVD', notEmpty: true },
+          { fieldId: 'MP_COOK_TEMP', equals: true },
+          { fieldId: 'TEMP_EVD', notEmpty: true }
         ]
       });
       expect(recipe?.changeDialog?.title).toBe('Change recipe?');
