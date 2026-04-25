@@ -199,7 +199,19 @@ describe('WebFormService analytics integration', () => {
     service.renderForm(undefined, { app: 'analytics' } as any);
 
     expect(shellSpy).toHaveBeenCalledTimes(1);
-    expect(shellSpy).toHaveBeenCalledWith('', 'analytics', { app: 'analytics' }, undefined);
+    expect(shellSpy).toHaveBeenCalledWith(
+      '',
+      'analytics',
+      { app: 'analytics' },
+      undefined,
+      expect.objectContaining({
+        configSource: 'analyticsDashboard',
+        analyticsDashboard: expect.objectContaining({
+          sections: expect.any(Array),
+          pipelines: expect.any(Array)
+        })
+      })
+    );
     expect(embeddedSpy).not.toHaveBeenCalled();
     expect(createHtmlOutputSpy).toHaveBeenCalledWith('<html>shell</html>');
     expect(htmlOutput.setTitle).toHaveBeenCalledWith('Community Kitchen');

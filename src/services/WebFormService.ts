@@ -1271,8 +1271,31 @@ export class WebFormService {
 
     const html = (() => {
       if (!bundled) {
-        return serverTiming?.measure('renderForm.buildShellHtmlMs', () => buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming))
-          ?? buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming);
+        const normalizedBundleTarget = (bundleTarget || '').toString().trim().toLowerCase();
+        const shellBootstrap = serverTiming?.measure('renderForm.buildShellBootstrapMs', () => {
+          const bootstrap = { configSource: 'shell', configEnv, envTag } as any;
+          if (normalizedBundleTarget === 'landing') {
+            bootstrap.configSource = 'catalog';
+            bootstrap.formCatalog = this.fetchFormCatalog();
+          } else if (normalizedBundleTarget === 'analytics' || normalizedBundleTarget === 'reports') {
+            bootstrap.configSource = 'analyticsDashboard';
+            bootstrap.analyticsDashboard = this.fetchAnalyticsDashboard();
+          }
+          return bootstrap;
+        }) ?? (() => {
+          const bootstrap = { configSource: 'shell', configEnv, envTag } as any;
+          if (normalizedBundleTarget === 'landing') {
+            bootstrap.configSource = 'catalog';
+            bootstrap.formCatalog = this.fetchFormCatalog();
+          } else if (normalizedBundleTarget === 'analytics' || normalizedBundleTarget === 'reports') {
+            bootstrap.configSource = 'analyticsDashboard';
+            bootstrap.analyticsDashboard = this.fetchAnalyticsDashboard();
+          }
+          return bootstrap;
+        })();
+        return serverTiming?.measure('renderForm.buildShellHtmlMs', () =>
+          buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming, shellBootstrap)
+        ) ?? buildReactShellTemplate(targetKey, bundleTarget, requestParams, serverTiming, shellBootstrap);
       }
       const def =
         serverTiming?.measure(
@@ -7620,7 +7643,7 @@ export class WebFormService {
       const raw = props.getProperty(this.homeRevisionPropertyKey(formKey));
       const parsed = Number(raw || '0');
       return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-    } catch (_) {
+    } catch {
       return 0;
     }
   }
@@ -7633,7 +7656,7 @@ export class WebFormService {
     if (props) {
       try {
         props.setProperty(this.homeRevisionPropertyKey(key), String(next));
-      } catch (_) {
+      } catch {
         // ignore
       }
     }

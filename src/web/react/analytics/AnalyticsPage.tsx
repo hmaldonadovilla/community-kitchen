@@ -325,6 +325,16 @@ const logEvent = (event: string, payload?: Record<string, unknown>): void => {
   }
 };
 
+const readBootstrappedAnalyticsDashboard = (): AnalyticsDashboardPayload | null => {
+  try {
+    const globalAny = globalThis as any;
+    const payload = globalAny?.__WEB_FORM_BOOTSTRAP__?.analyticsDashboard;
+    return payload && typeof payload === 'object' ? (payload as AnalyticsDashboardPayload) : null;
+  } catch {
+    return null;
+  }
+};
+
 const resolveLanguage = (): 'EN' | 'FR' | 'NL' => {
   try {
     const nav = (typeof navigator !== 'undefined' ? navigator.language : 'en').toLowerCase();
@@ -377,9 +387,10 @@ const AnalyticsPage: React.FC = () => {
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const serviceUrl = useMemo(() => resolveServiceUrl(), []);
   const todayIso = useMemo(() => resolveTodayIso(), []);
-  const [loading, setLoading] = useState(true);
+  const bootstrappedPayload = useMemo(() => readBootstrappedAnalyticsDashboard(), []);
+  const [loading, setLoading] = useState(() => !bootstrappedPayload);
   const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<AnalyticsDashboardPayload | null>(null);
+  const [payload, setPayload] = useState<AnalyticsDashboardPayload | null>(() => bootstrappedPayload);
   const [pendingNavigation, setPendingNavigation] = useState(false);
   const [pendingPipelineIds, setPendingPipelineIds] = useState<Record<string, boolean>>({});
   const [pipelineDates, setPipelineDates] = useState<Record<string, string>>({});
@@ -390,6 +401,17 @@ const AnalyticsPage: React.FC = () => {
   const pointerSubmittedPipelineIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (bootstrappedPayload) {
+      setPayload(bootstrappedPayload);
+      setError(null);
+      setLoading(false);
+      logEvent('dashboard.bootstrap.used', {
+        sectionCount: Array.isArray(bootstrappedPayload.sections) ? bootstrappedPayload.sections.length : 0,
+        pipelineCount: Array.isArray(bootstrappedPayload.pipelines) ? bootstrappedPayload.pipelines.length : 0,
+        errorCount: Array.isArray(bootstrappedPayload.errors) ? bootstrappedPayload.errors.length : 0
+      });
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -417,7 +439,7 @@ const AnalyticsPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [adminEnabled]);
+  }, [adminEnabled, bootstrappedPayload]);
 
   const backUrl = useMemo(() => buildLandingUrl(serviceUrl, adminEnabled), [adminEnabled, serviceUrl]);
   const updatedAt = (payload?.updatedAt || '').toString().trim();

@@ -7460,7 +7460,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const handleCustomButton = useCallback(
-    (buttonId: string) => {
+    (buttonId: string, opts?: { skipConfirm?: boolean }) => {
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
       const qIdx = parsedRef.qIdx;
@@ -7640,7 +7640,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
 
         const runDefaultFlow = () => {
-          if (confirmMessage) {
+          if (confirmMessage && !opts?.skipConfirm) {
             const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
             const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
             const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
@@ -13300,7 +13300,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     openRecordPerfRef.current = { recordId: row.id, startedAt: openStartedAt, startMark: openStartMark };
     perfMark(openStartMark);
 
-    const scheduleListOpenSubmit = (args: { recordId: string; source: string }) => {
+    const scheduleListOpenSubmit = (args: { recordId: string; source: string; preconfirmed?: boolean }) => {
       const recordId = (args.recordId || '').toString().trim();
       if (!recordId) return;
       // Cancel any previous scheduled submit.
@@ -13345,10 +13345,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
         listOpenViewSubmitTimerRef.current = null;
-        submitConfirmedRef.current = false;
+        submitConfirmedRef.current = args.preconfirmed === true;
         logEvent('list.openView.submit.fire', {
           recordId,
           source: args.source,
+          preconfirmed: args.preconfirmed === true,
           attempt,
           waitMs: Date.now() - startedAt
         });
@@ -13423,7 +13424,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     selectedRecordSnapshotRef.current = null;
     setLastSubmissionMeta(null);
     lastSubmissionMetaRef.current = null;
-    const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
+    const resolveListTriggeredButton = (buttonRef: string) => {
       const parsed = parseButtonRef(buttonRef || '');
       const baseId = parsed.id;
       const qIdx = parsed.qIdx;
@@ -13434,6 +13435,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
       const cfg: any = btn ? (btn as any).button : null;
       const action = (cfg?.action || '').toString().trim();
+      return { baseId, qIdx, btn, cfg, action };
+    };
+    const isAllowedListTriggeredAction = (buttonRef: string): boolean => {
+      const { action } = resolveListTriggeredButton(buttonRef);
       return (
         action === 'renderDocTemplate' ||
         action === 'renderMarkdownTemplate' ||
@@ -13462,6 +13467,122 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       !shouldSubmit &&
       resolvedOpenView === 'summary' &&
       Boolean(definition.summaryHtmlTemplateId);
+
+    const hydrateRecordForConfirmedListAction = async (source: string): Promise<boolean> => {
+      if (sourceRecord) {
+        applyRecordSnapshot(sourceRecord);
+        setView('form');
+        logEvent('list.confirmedAction.hydrate.cached', { recordId: row.id, source });
+        return true;
+      }
+
+      const loadingId = row.id || (hintedRow ? `row:${hintedRow}` : null);
+      setLastSubmissionMeta({
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        status: row.status ? row.status.toString() : null
+      });
+      if (loadingId) {
+        setRecordLoadingId(loadingId);
+        recordLoadingIdRef.current = loadingId;
+        setRecordLoadError(null);
+      }
+      setView('form');
+      logEvent('list.confirmedAction.hydrate.start', {
+        recordId: row.id,
+        rowNumberHint: hintedRow || null,
+        source
+      });
+      const ok = await loadRecordSnapshot(row.id, hintedRow);
+      const stillSelected = selectedRecordIdRef.current === row.id;
+      logEvent(ok && stillSelected ? 'list.confirmedAction.hydrate.ok' : 'list.confirmedAction.hydrate.skip', {
+        recordId: row.id,
+        rowNumberHint: hintedRow || null,
+        source,
+        ok,
+        stillSelected
+      });
+      return ok && stillSelected;
+    };
+
+    const openImmediateListSubmitConfirm = (): boolean => {
+      if (!shouldSubmit) return false;
+      const rawMessage = resolveLocalizedString(
+        submitConfirmationDialogConfig?.message,
+        language,
+        tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
+      ).toString();
+      customConfirm.openConfirm({
+        title: submitConfirmTitle,
+        message: rawMessage,
+        confirmLabel: submitConfirmConfirmLabelResolved,
+        cancelLabel: submitConfirmCancelLabelResolved,
+        kind: 'list.submit',
+        refId: row.id,
+        onConfirm: () => {
+          void (async () => {
+            const ok = await hydrateRecordForConfirmedListAction(sourceRecord ? 'submit.cached' : 'submit.fetched');
+            if (!ok) return;
+            logEvent('list.openView.submit', { recordId: row.id, source: sourceRecord ? 'confirmed.cached' : 'confirmed.fetched' });
+            setView('form');
+            scheduleListOpenSubmit({
+              recordId: row.id,
+              source: sourceRecord ? 'confirmed.cached' : 'confirmed.fetched',
+              preconfirmed: true
+            });
+          })();
+        }
+      });
+      logEvent('list.openView.submit.confirm.open', {
+        recordId: row.id,
+        source: sourceRecord ? 'cached' : 'list',
+        rowNumberHint: hintedRow || null
+      });
+      return true;
+    };
+
+    const openImmediateListUpdateRecordConfirm = (): boolean => {
+      if (!shouldTriggerButton) return false;
+      const { baseId, qIdx, cfg, action } = resolveListTriggeredButton(openButtonId);
+      if (action !== 'updateRecord') return false;
+      const confirmCfg = (cfg?.confirm || cfg?.confirmation || null) as any;
+      const confirmMessage = confirmCfg ? resolveLocalizedString(confirmCfg?.message, languageRef.current, '').toString().trim() : '';
+      if (!confirmMessage) return false;
+      const confirmTitle = confirmCfg ? resolveLocalizedString(confirmCfg?.title, languageRef.current, '').toString().trim() : '';
+      const confirmLabel = confirmCfg ? resolveLocalizedString(confirmCfg?.confirmLabel, languageRef.current, '').toString().trim() : '';
+      const cancelLabel = confirmCfg ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim() : '';
+      customConfirm.openConfirm({
+        title: confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm'),
+        message: confirmMessage,
+        confirmLabel: confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
+        cancelLabel: cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
+        kind: 'list.updateRecord',
+        refId: openButtonId,
+        onConfirm: () => {
+          void (async () => {
+            const ok = await hydrateRecordForConfirmedListAction(sourceRecord ? 'updateRecord.cached' : 'updateRecord.fetched');
+            if (!ok) return;
+            logEvent('list.openButton.trigger', {
+              openButtonId,
+              source: sourceRecord ? 'confirmed.cached' : 'confirmed.fetched'
+            });
+            handleCustomButton(openButtonId, { skipConfirm: true });
+          })();
+        }
+      });
+      logEvent('list.openButton.confirm.open', {
+        buttonId: baseId,
+        qIdx: qIdx ?? null,
+        recordId: row.id,
+        rowNumberHint: hintedRow || null,
+        source: sourceRecord ? 'cached' : 'list'
+      });
+      return true;
+    };
+
+    if (openImmediateListSubmitConfirm()) return;
+    if (openImmediateListUpdateRecordConfirm()) return;
 
     const triggerOpenButtonIfNeeded = () => {
       if (!shouldTriggerButton) return;

@@ -1511,9 +1511,13 @@ export function buildWebFormHtml(
           // ignore
         }
 
-        // Start config bootstrap fetch as early as possible for non-bundled shells.
+        // Start config bootstrap fetch as early as possible for non-bundled form shells.
         try {
-          if (!window.__WEB_FORM_DEF__ && !window.__CK_BOOTSTRAP_PROMISE__ && window.google && window.google.script && window.google.script.run) {
+          var bootstrapRequestParams = window.__WEB_FORM_REQUEST_PARAMS__ || {};
+          var bootstrapAppTarget = ((bootstrapRequestParams.app || bootstrapRequestParams.page || '') + '').trim().toLowerCase();
+          var skipFormConfigBootstrap =
+            bootstrapAppTarget === 'landing' || bootstrapAppTarget === 'analytics' || bootstrapAppTarget === 'reports';
+          if (!skipFormConfigBootstrap && !window.__WEB_FORM_DEF__ && !window.__CK_BOOTSTRAP_PROMISE__ && window.google && window.google.script && window.google.script.run) {
             var startedAt = Date.now();
             var key = (window.__WEB_FORM_KEY__ || '').toString().trim();
             log('bootstrap.prefetch.start', { formKey: key || null });

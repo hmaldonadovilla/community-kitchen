@@ -512,6 +512,16 @@ const logEvent = (event: string, payload?: Record<string, unknown>): void => {
   }
 };
 
+const readBootstrappedFormCatalog = (): FormCatalogItem[] => {
+  try {
+    const globalAny = globalThis as any;
+    const list = globalAny?.__WEB_FORM_BOOTSTRAP__?.formCatalog;
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+};
+
 const scheduleTopLevelNavigation = (targetUrl: string): void => {
   globalThis.requestAnimationFrame?.(() => {
     globalThis.requestAnimationFrame?.(() => {
@@ -706,13 +716,17 @@ const LandingActionCard: React.FC<{
 
 const LandingPage: React.FC = () => {
   const bundledItems = useMemo(() => buildBundledLandingCatalog(BUNDLED_FORM_CONFIGS as any), []);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<FormCatalogItem[]>([]);
-  const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const envTag = useMemo(() => resolveEnvTag(), []);
   const serviceUrl = useMemo(() => resolveServiceUrl(), []);
+  const bootstrappedCatalog = useMemo(() => readBootstrappedFormCatalog(), []);
+  const hasBootstrappedCatalog = bootstrappedCatalog.length > 0;
+  const [loading, setLoading] = useState(() => !hasBootstrappedCatalog);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<FormCatalogItem[]>(() =>
+    hasBootstrappedCatalog ? filterNavigableLandingItems(bootstrappedCatalog, adminEnabled) : []
+  );
+  const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
   const landingCopy = LANDING_PAGE_CONFIG.copy;
   const catalogItems = useMemo(() => resolveLandingCatalogItems(items, adminEnabled), [adminEnabled, items]);
   const headerLogoItems = useMemo(() => {
@@ -747,6 +761,18 @@ const LandingPage: React.FC = () => {
   );
 
   React.useEffect(() => {
+    if (hasBootstrappedCatalog) {
+      const resolvedItems = filterNavigableLandingItems(bootstrappedCatalog, adminEnabled);
+      setItems(resolvedItems);
+      setError(null);
+      setLoading(false);
+      logEvent('catalog.bootstrap.used', {
+        count: bootstrappedCatalog.length,
+        resolvedCount: resolvedItems.length,
+        adminEnabled
+      });
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -780,7 +806,7 @@ const LandingPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [adminEnabled, bundledItems]);
+  }, [adminEnabled, bootstrappedCatalog, bundledItems, hasBootstrappedCatalog]);
 
   const showPrimaryApps = !loading && !error && landingLayout.primaryApps.length > 0;
   const showAdminSection = !loading && !error && adminEnabled && landingLayout.adminApps.length > 0;

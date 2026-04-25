@@ -17,7 +17,8 @@ export const buildReactShellTemplate = (
   formKey: string,
   bundleTarget?: string,
   requestParams?: Record<string, string>,
-  serverTiming?: ServerTimingRecorder | null
+  serverTiming?: ServerTimingRecorder | null,
+  bootstrap?: any
 ): string => {
-  return buildWebFormHtml(null, formKey, null, bundleTarget, requestParams, serverTiming);
+  return buildWebFormHtml(null, formKey, bootstrap, bundleTarget, requestParams, serverTiming);
 };
