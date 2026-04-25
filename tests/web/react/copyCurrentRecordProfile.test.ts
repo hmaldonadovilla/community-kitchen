@@ -228,7 +228,7 @@ describe('copyCurrentRecordProfile', () => {
     ).toEqual(['MP_PREP_DATE']);
   });
 
-  it('bypasses destructive top-level changes only for unsaved copied draft fields', () => {
+  it('bypasses destructive top-level changes for copied draft fields until consumed', () => {
     expect(
       shouldBypassCopyCurrentRecordDestructiveChange({
         scope: 'top',
@@ -245,7 +245,7 @@ describe('copyCurrentRecordProfile', () => {
         isCreateFlow: false,
         bypassFieldIds: { MP_PREP_DATE: true }
       })
-    ).toBe(false);
+    ).toBe(true);
 
     expect(
       shouldBypassCopyCurrentRecordDestructiveChange({

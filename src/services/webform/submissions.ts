@@ -95,6 +95,15 @@ export class SubmissionService {
     return undefined;
   }
 
+  private writeSubmissionFieldValue(formObject: WebFormSubmission | Record<string, any>, fieldId: string, value: any): void {
+    const key = (fieldId || '').toString().trim();
+    if (!key) return;
+    if ((formObject as any)?.values && typeof (formObject as any).values === 'object') {
+      ((formObject as any).values as Record<string, any>)[key] = value;
+    }
+    (formObject as any)[key] = value;
+  }
+
   private readSubmissionLineItemGroupValue(formObject: WebFormSubmission | Record<string, any>, fieldId: string): any {
     const jsonKey = `${fieldId}_json`;
     const jsonValue = this.readSubmissionFieldValue(formObject, jsonKey);
@@ -315,6 +324,7 @@ export class SubmissionService {
     }
 
     const candidateValues: Record<string, any> = {};
+    const autoIncrementValues: Record<string, string> = {};
     questions.filter(q => q.type !== 'BUTTON').forEach(q => {
       if (q.type === 'TEXT' && q.autoIncrement) {
         const currentVal = this.readSubmissionFieldValue(formObject, q.id);
@@ -327,13 +337,17 @@ export class SubmissionService {
             return raw === undefined || raw === null ? '' : raw.toString();
           })();
           if (existingAutoIncrementValue) {
-            (formObject as any)[q.id] = existingAutoIncrementValue;
+            this.writeSubmissionFieldValue(formObject, q.id, existingAutoIncrementValue);
           } else {
             const generated = this.generateAutoIncrementValue(form.configSheet, q.id, q.autoIncrement, formObject);
             if (generated) {
-              (formObject as any)[q.id] = generated;
+              this.writeSubmissionFieldValue(formObject, q.id, generated);
             }
           }
+        }
+        const resolvedVal = this.readSubmissionFieldValue(formObject, q.id);
+        if (resolvedVal !== undefined && resolvedVal !== null && resolvedVal.toString().trim()) {
+          autoIncrementValues[q.id] = resolvedVal.toString().trim();
         }
       }
     });
@@ -360,10 +374,10 @@ export class SubmissionService {
           try {
             const processed = this.applyUploadsToLineItemRows(parsed, q.lineItemConfig);
             value = JSON.stringify(processed);
-          } catch (_) {
+          } catch {
             try {
               value = JSON.stringify(parsed);
-            } catch (_) {
+            } catch {
               value = '';
             }
           }
@@ -372,7 +386,7 @@ export class SubmissionService {
         } else if (rawLineItems) {
           try {
             value = JSON.stringify(rawLineItems);
-          } catch (_) {
+          } catch {
             value = '';
           }
         }
@@ -524,6 +538,9 @@ export class SubmissionService {
       rowNumber: destinationRowNumber,
       operation: existingRowIdx >= 0 ? 'update' : 'create'
     };
+    if (Object.keys(autoIncrementValues).length) {
+      meta.autoIncrementValues = autoIncrementValues;
+    }
 
     let newEtag = this.cacheManager.bumpSheetEtag(
       sheet,

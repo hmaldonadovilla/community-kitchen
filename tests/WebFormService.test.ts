@@ -1120,6 +1120,27 @@ describe('WebFormService', () => {
     expect(values[2][mealCol]).toBe('MP-AA000002');
   });
 
+  test('draft saves return generated auto increment values in metadata', () => {
+    const result = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      values: {
+        Q1: 'Copied',
+        Q2_json: JSON.stringify([]),
+        Q3: [],
+        Q4: 'ACME',
+        Q5: ''
+      },
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.meta?.autoIncrementValues).toEqual({ Q5: 'MP-AA000001' });
+    const saved = service.fetchSubmissionById('Config: Delivery', result.meta?.id);
+    expect(saved?.values?.Q5).toBe('MP-AA000001');
+  });
+
   test('auto increment can partition prefixes by another field value', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [

@@ -168,6 +168,8 @@ import {
 } from './app/uploadFieldInvalidation';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
+import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
+import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
 import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
 import { hasLoadedListResponse, removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
@@ -1273,6 +1275,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     fieldChangeDateInitialEntryCompletedRef.current = {};
     copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = {};
   }, []);
+  const consumeCopyCurrentRecordDestructiveChangeBypass = useCallback((fieldIdRaw: string | undefined) => {
+    const fieldId = (fieldIdRaw || '').toString().trim();
+    if (!fieldId) return;
+    if (!copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current[fieldId]) return;
+    delete copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current[fieldId];
+  }, []);
   const pendingDeletedRecordIdsRef = useRef<string[]>([]);
   const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
   const [pendingDeletedRecordApplyTick, setPendingDeletedRecordApplyTick] = useState(0);
@@ -1744,6 +1752,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             autoAddGroupRebuilds: reconciledState.changedCount
           });
         } else if (bypassCopyCurrentRecordDestructiveChange) {
+          consumeCopyCurrentRecordDestructiveChangeBypass(pending.fieldId);
           logEvent('fieldChangeDialog.copyDraftBypass', {
             fieldPath: pending.fieldPath,
             fieldId: pending.fieldId,
@@ -1986,6 +1995,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       formKey,
       language,
       logEvent,
+      consumeCopyCurrentRecordDestructiveChangeBypass,
       revertFieldChangePending,
       setExternalScrollAnchor,
       setLineItems,
@@ -2166,6 +2176,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (fieldChangePendingRef.current[fieldKey]) {
               delete fieldChangePendingRef.current[fieldKey];
             }
+            consumeCopyCurrentRecordDestructiveChangeBypass(fieldId);
             logEvent('fieldChangeDialog.copyDraftBypass', {
               fieldPath: fieldKey,
               fieldId,
@@ -2436,6 +2447,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       autoSaveEnableFieldIds,
       ingredientsFormActive,
       logEvent,
+      consumeCopyCurrentRecordDestructiveChangeBypass,
       openFieldChangeDialog,
       prefetchedSummaryHtml,
       setErrors,
@@ -6475,115 +6487,150 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     resetFieldChangeTransientState
   ]);
 
-  const handleDuplicateCurrent = useCallback(() => {
+  const handleDuplicateCurrent = useCallback(async (args?: { busyAlreadyOpen?: boolean }) => {
+    const busySeq = args?.busyAlreadyOpen
+      ? null
+      : copyRecordBusy.lock({
+          title: tSystem('navigation.waitTitle', language, 'Please wait'),
+          message: tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...'),
+          diagnosticMeta: {}
+        });
     bumpRecordSession({ reason: 'duplicateCurrent', nextRecordId: null });
-    createFlowRef.current = true;
-    createFlowUserEditedRef.current = false;
-    autoSaveUserEditedRef.current = false;
-    dedupHoldRef.current = false;
-    resetFieldChangeTransientState();
-    // Preserve current values/line items but clear record context so the next submit creates a new record.
-    autoSaveDirtyRef.current = false;
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    setDraftSave({ phase: 'idle' });
-    setDedupChecking(false);
-    setDedupConflict(null);
-    setDedupNotice(null);
-    dedupCheckingRef.current = false;
-    dedupConflictRef.current = null;
-    lastDedupCheckedSignatureRef.current = '';
-    dedupBaselineSignatureRef.current = '';
-    dedupKeyFingerprintBaselineRef.current = '';
-    dedupDeleteOnKeyChangeInFlightRef.current = false;
-    recordStaleRef.current = null;
-    setRecordStale(null);
-    recordDataVersionRef.current = null;
-    optimisticClientDataVersionRef.current = null;
-    recordRowNumberRef.current = null;
-    const profiled = applyCopyCurrentRecordProfile({
-      definition: definition as any,
-      values: valuesRef.current,
-      lineItems: lineItemsRef.current
-    });
-    if (profiled) {
-      logEvent('ui.copyCurrent.profile.applied', {
-        keepValueCount: Object.keys(profiled.values || {}).length,
-        groupCount: Object.keys(profiled.lineItems || {}).length
-      });
-    }
-    const base = profiled || { values: valuesRef.current, lineItems: lineItemsRef.current };
-    const cleared = clearAutoIncrementFields(definition, base.values, base.lineItems);
-    const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
-    const dropFields = dropFieldsRaw
-      .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
-      .filter(Boolean);
-    const destructiveChangeBypassFieldIds = resolveCopyCurrentRecordDestructiveChangeBypassFieldIds({
-      definition: definition as any,
-      dropFields
-    });
-    if (destructiveChangeBypassFieldIds.length) {
-      copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = destructiveChangeBypassFieldIds.reduce<
-        Record<string, true>
-      >((acc, fieldId) => {
-        acc[fieldId] = true;
-        return acc;
-      }, {});
-      logEvent('ui.copyCurrent.destructiveChangeBypass', {
-        count: destructiveChangeBypassFieldIds.length,
-        fieldIds: destructiveChangeBypassFieldIds
-      });
-    }
-    if (dropFields.length) {
-      const dropped = applyCopyCurrentRecordDropFields({
+    const copySession = recordSessionRef.current;
+    try {
+      createFlowRef.current = true;
+      createFlowUserEditedRef.current = false;
+      autoSaveUserEditedRef.current = false;
+      dedupHoldRef.current = false;
+      resetFieldChangeTransientState();
+      // Preserve current values/line items but clear record context so the next submit creates a new record.
+      autoSaveDirtyRef.current = false;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave({ phase: 'idle' });
+      setDedupChecking(false);
+      setDedupConflict(null);
+      setDedupNotice(null);
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      lastDedupCheckedSignatureRef.current = '';
+      dedupBaselineSignatureRef.current = '';
+      dedupKeyFingerprintBaselineRef.current = '';
+      dedupDeleteOnKeyChangeInFlightRef.current = false;
+      recordStaleRef.current = null;
+      setRecordStale(null);
+      recordDataVersionRef.current = null;
+      optimisticClientDataVersionRef.current = null;
+      recordRowNumberRef.current = null;
+      const profiled = applyCopyCurrentRecordProfile({
         definition: definition as any,
-        values: cleared.values as any,
-        lineItems: cleared.lineItems,
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current
+      });
+      if (profiled) {
+        logEvent('ui.copyCurrent.profile.applied', {
+          keepValueCount: Object.keys(profiled.values || {}).length,
+          groupCount: Object.keys(profiled.lineItems || {}).length
+        });
+      }
+      const base = profiled || { values: valuesRef.current, lineItems: lineItemsRef.current };
+      const cleared = clearAutoIncrementFields(definition, base.values, base.lineItems);
+      const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
+      const dropFields = dropFieldsRaw
+        .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
+        .filter(Boolean);
+      const destructiveChangeBypassFieldIds = resolveCopyCurrentRecordDestructiveChangeBypassFieldIds({
+        definition: definition as any,
         dropFields
       });
-      const nextValues: Record<string, any> = { ...(dropped.values as any) };
-      const nextLineItems: any = dropped.lineItems;
-      logEvent('ui.copyCurrent.dropFields', {
-        count: dropFields.length,
-        droppedValuesCount: dropped.droppedValues.length,
-        droppedValues: dropped.droppedValues,
-        lineItemsCleared: dropped.lineItemsCleared
-      });
-      // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
-      valuesRef.current = nextValues as any;
-      lineItemsRef.current = nextLineItems;
-      rememberAutoSaveSeenState(nextValues as any, nextLineItems);
-      setValues(nextValues as any);
-      setLineItems(nextLineItems);
-    } else {
-      // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
-      valuesRef.current = cleared.values as any;
-      lineItemsRef.current = cleared.lineItems;
-      rememberAutoSaveSeenState(cleared.values, cleared.lineItems);
-      setValues(cleared.values);
-      setLineItems(cleared.lineItems);
+      if (destructiveChangeBypassFieldIds.length) {
+        copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = destructiveChangeBypassFieldIds.reduce<
+          Record<string, true>
+        >((acc, fieldId) => {
+          acc[fieldId] = true;
+          return acc;
+        }, {});
+        logEvent('ui.copyCurrent.destructiveChangeBypass', {
+          count: destructiveChangeBypassFieldIds.length,
+          fieldIds: destructiveChangeBypassFieldIds
+        });
+      }
+      if (dropFields.length) {
+        const dropped = applyCopyCurrentRecordDropFields({
+          definition: definition as any,
+          values: cleared.values as any,
+          lineItems: cleared.lineItems,
+          dropFields
+        });
+        const nextValues: Record<string, any> = { ...(dropped.values as any) };
+        const nextLineItems: any = dropped.lineItems;
+        logEvent('ui.copyCurrent.dropFields', {
+          count: dropFields.length,
+          droppedValuesCount: dropped.droppedValues.length,
+          droppedValues: dropped.droppedValues,
+          lineItemsCleared: dropped.lineItemsCleared
+        });
+        // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
+        valuesRef.current = nextValues as any;
+        lineItemsRef.current = nextLineItems;
+        rememberAutoSaveSeenState(nextValues as any, nextLineItems);
+        setValues(nextValues as any);
+        setLineItems(nextLineItems);
+      } else {
+        // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
+        valuesRef.current = cleared.values as any;
+        lineItemsRef.current = cleared.lineItems;
+        rememberAutoSaveSeenState(cleared.values, cleared.lineItems);
+        setValues(cleared.values);
+        setLineItems(cleared.lineItems);
+      }
+      setSelectedRecordId('');
+      // Keep refs in sync immediately so autosave/submit flows do not treat the copied draft
+      // as an update of the currently selected (potentially Closed) record.
+      selectedRecordIdRef.current = '';
+      setSelectedRecordSnapshot(null);
+      selectedRecordSnapshotRef.current = null;
+      setLastSubmissionMeta(null);
+      lastSubmissionMetaRef.current = null;
+      setErrors({});
+      setValidationWarnings({ top: [], byField: {} });
+      setValidationAttempted(false);
+      setValidationNoticeHidden(false);
+      setStatus(null);
+      setStatusLevel(null);
+      setView('form');
+
+      const ensureRecordId = ensureDraftRecordIdActionRef.current;
+      if (!ensureRecordId) {
+        openCopyCurrentRecordDialogIfConfigured();
+        return;
+      }
+      const ensured = await ensureRecordId({ reason: 'copyCurrentRecord' });
+      if (recordSessionRef.current !== copySession) return;
+      if (!ensured.success || !ensured.recordId) {
+        const message = (ensured.message || 'Could not create the copied draft record.').toString();
+        setStatus(message);
+        setStatusLevel('error');
+        logEvent('ui.copyCurrent.ensureRecordId.failed', { message });
+        return;
+      }
+      logEvent('ui.copyCurrent.ensureRecordId.done', { recordId: ensured.recordId });
+      openCopyCurrentRecordDialogIfConfigured();
+    } finally {
+      if (busySeq !== null) {
+        copyRecordBusy.unlock(busySeq, {
+          source: 'copyCurrentRecord',
+          session: copySession
+        });
+      }
     }
-    setSelectedRecordId('');
-    // Keep refs in sync immediately so autosave/submit flows do not treat the copied draft
-    // as an update of the currently selected (potentially Closed) record.
-    selectedRecordIdRef.current = '';
-    setSelectedRecordSnapshot(null);
-    selectedRecordSnapshotRef.current = null;
-    setLastSubmissionMeta(null);
-    lastSubmissionMetaRef.current = null;
-    setErrors({});
-    setValidationWarnings({ top: [], byField: {} });
-    setValidationAttempted(false);
-    setValidationNoticeHidden(false);
-    setStatus(null);
-    setStatusLevel(null);
-    setView('form');
-    openCopyCurrentRecordDialogIfConfigured();
   }, [
     bumpRecordSession,
+    copyRecordBusy,
     definition,
+    language,
     logEvent,
     openCopyCurrentRecordDialogIfConfigured,
     rememberAutoSaveSeenState,
@@ -8489,6 +8536,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     view
   ]);
 
+  const applyServerGeneratedTopValues = useCallback(
+    (response: any, source: string): Record<string, FieldValue> => {
+      const generatedValues = extractServerGeneratedTopValues(response);
+      const generatedFieldIds = Object.keys(generatedValues);
+      if (!generatedFieldIds.length) return {};
+      const nextValues = mergeServerGeneratedTopValues(valuesRef.current, generatedValues);
+      valuesRef.current = nextValues;
+      setValues(prev => mergeServerGeneratedTopValues(prev, generatedValues));
+      setSelectedRecordSnapshot(prev =>
+        prev
+          ? {
+              ...prev,
+              values: mergeServerGeneratedTopValues((prev.values || {}) as Record<string, FieldValue>, generatedValues)
+            }
+          : prev
+      );
+      selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current
+        ? ({
+            ...selectedRecordSnapshotRef.current,
+            values: mergeServerGeneratedTopValues(
+              (selectedRecordSnapshotRef.current.values || {}) as Record<string, FieldValue>,
+              generatedValues
+            )
+          } as WebFormSubmission)
+        : selectedRecordSnapshotRef.current;
+      logEvent('serverGeneratedValues.applied', {
+        source,
+        fieldIds: generatedFieldIds
+      });
+      return generatedValues;
+    },
+    [logEvent]
+  );
+
   const performAutoSave: (reason: string) => Promise<void> = useCallback(
     async (reason: string): Promise<void> => {
       if (!autoSaveEnabled) return;
@@ -8770,9 +8851,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const nextDataVersion = Number.isFinite(dv) && dv > 0 ? dv : undefined;
         const rn = Number((res as any)?.meta?.rowNumber);
         const nextRowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
+        const serverGeneratedValues = applyServerGeneratedTopValues(res, 'autosave');
+        const savedValues =
+          Object.keys(serverGeneratedValues).length
+            ? { ...(((payload as any).values || {}) as Record<string, any>), ...serverGeneratedValues }
+            : ((payload as any).values as any);
         if (newId) {
           savedDraftFingerprint = buildDraftSaveFingerprint({
             ...payload,
+            values: savedValues,
             id: newId
           });
         }
@@ -8782,7 +8869,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           // Only patch keys that already exist in list rows (upsertListCacheRow does this safely).
           // IMPORTANT: use the fully serialized draft payload values so list cache retains line item groups/subgroups.
           // (Top-level `values` state does NOT include line item JSON; it's derived from `lineItems`.)
-          values: (payload as any).values as any,
+          values: savedValues,
           createdAt: (res?.meta?.createdAt || '').toString() || undefined,
           updatedAt: updatedAt || undefined,
           status: statusForSave,
@@ -8931,6 +9018,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       markRecordFreshnessServerTouch,
       matchesClosedStatus,
+      applyServerGeneratedTopValues,
       isRetryableRecordBusyMessage,
       resolveLogMessage,
       resolveUiErrorMessage,
@@ -9805,11 +9893,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (Number.isFinite(rn) && rn >= 2) {
           recordRowNumberRef.current = rn;
         }
+        const serverGeneratedValues = applyServerGeneratedTopValues(res, 'ensureDraftRecordId');
+        const savedValues =
+          Object.keys(serverGeneratedValues).length
+            ? { ...(((draft as any).values || {}) as Record<string, any>), ...serverGeneratedValues }
+            : ((draft as any).values as any);
         setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
         markRecordFreshnessServerTouch({ reason: 'record.ensureDraftId', recordId });
         upsertListCacheRow({
           recordId,
-          values: (draft as any).values as any,
+          values: savedValues,
           createdAt: (res?.meta?.createdAt || '').toString() || undefined,
           updatedAt: (res?.meta?.updatedAt || '').toString() || undefined,
           status: draftStatus,
@@ -9843,6 +9936,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyUploadedFieldPayloadOverrides,
+      applyServerGeneratedTopValues,
       definition,
       formKey,
       logEvent,
@@ -10071,6 +10165,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const nextDataVersion = Number(meta?.dataVersion);
       const nextRowNumber = Number(meta?.rowNumber);
       const payloadValues = (((args.payload as any)?.values || {}) as Record<string, any>) || {};
+      const serverGeneratedValues = applyServerGeneratedTopValues(args.response, 'submissionState');
+      const nextPayloadValues =
+        Object.keys(serverGeneratedValues).length
+          ? { ...payloadValues, ...serverGeneratedValues }
+          : payloadValues;
       const nextMeta = {
         id: recordId,
         createdAt: nextCreatedAt,
@@ -10118,8 +10217,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           pdfUrl: nextPdfUrl || prev.pdfUrl,
           dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : (prev as any).dataVersion,
           __rowNumber: Number.isFinite(nextRowNumber) ? nextRowNumber : (prev as any).__rowNumber,
-          values: payloadValues && Object.keys(payloadValues).length
-            ? { ...(prev.values || {}), ...payloadValues }
+          values: nextPayloadValues && Object.keys(nextPayloadValues).length
+            ? { ...(prev.values || {}), ...nextPayloadValues }
             : prev.values
         };
         selectedRecordSnapshotRef.current = nextSnapshot as WebFormSubmission;
@@ -10128,7 +10227,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       upsertListCacheRow({
         recordId,
-        values: payloadValues,
+        values: nextPayloadValues,
         createdAt: nextCreatedAt,
         updatedAt: nextUpdatedAt,
         status: nextStatus,
@@ -10138,7 +10237,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       markRecordFreshnessServerTouch({ reason: 'record.persist', recordId });
     },
-    [markRecordFreshnessServerTouch, upsertListCacheRow]
+    [applyServerGeneratedTopValues, markRecordFreshnessServerTouch, upsertListCacheRow]
   );
 
   const applyLocalRecordStatus = useCallback(
@@ -10181,6 +10280,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         lineItems: LineItemState;
         language?: LangCode;
       };
+      force?: boolean;
     }): Promise<{ success: boolean; response?: any; payload?: any; recordId?: string; message?: string }> => {
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -10215,11 +10315,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
       if (
-        args.mode === 'draft' &&
-        args.existingRecordId &&
-        !draftSaveRequestInFlightRef.current &&
-        !autoSaveDirtyRef.current &&
-        !autoSaveQueuedRef.current
+        shouldSkipCleanDraftSnapshotSave({
+          mode: args.mode,
+          existingRecordId: args.existingRecordId,
+          draftSaveRequestInFlight: draftSaveRequestInFlightRef.current,
+          autoSaveDirty: autoSaveDirtyRef.current,
+          autoSaveQueued: autoSaveQueuedRef.current,
+          force: args.force
+        })
       ) {
         logEvent('snapshot.save.skipped.cleanDraft', {
           reason: args.reason,
@@ -11443,26 +11546,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId = ensured.recordId;
         }
 
-        const snapshotSavedByEnsure = !existingRecordId && !!recordId;
-        if (!snapshotSavedByEnsure) {
-          const snapshotResult = await persistCurrentSnapshot({
-            reason: `${reason}.snapshot`,
-            mode: 'draft',
-            existingRecordId: recordId
+        const snapshotResult = await persistCurrentSnapshot({
+          reason: `${reason}.snapshot`,
+          mode: 'draft',
+          existingRecordId: recordId,
+          force: true
+        });
+        if (!snapshotResult.success || !snapshotResult.recordId) {
+          const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent('guidedStep.milestone.snapshot.failed', {
+            stepId: args.stepId,
+            recordId: recordId || null,
+            message
           });
-          if (!snapshotResult.success || !snapshotResult.recordId) {
-            const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
-            setStatus(message);
-            setStatusLevel('error');
-            logEvent('guidedStep.milestone.snapshot.failed', {
-              stepId: args.stepId,
-              recordId: recordId || null,
-              message
-            });
-            return { success: false, message };
-          }
-          recordId = snapshotResult.recordId;
+          return { success: false, message };
         }
+        recordId = snapshotResult.recordId;
 
         const requiresReservationSyncDrain = [...preActions, ...effectiveBackgroundActions]
           .map(entry => (entry || '').toString().trim().toUpperCase())
@@ -13139,7 +13240,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       if (shouldCopy) {
         logEvent('list.openView.copy', { recordId: row.id, source: 'resumeLocalEdits' });
-        handleDuplicateCurrent();
+        void handleDuplicateCurrent();
         return;
       }
       if (shouldSubmit) {
@@ -13253,7 +13354,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (!ok) return;
           if (selectedRecordIdRef.current !== row.id) return;
           logEvent('list.openView.copy', { recordId: row.id, source });
-          handleDuplicateCurrent();
+          await handleDuplicateCurrent({ busyAlreadyOpen: busySeq !== null });
         } finally {
           if (busySeq !== null) {
             copyRecordBusy.unlock(busySeq, {
@@ -13544,7 +13645,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (selectedRecordIdRef.current !== row.id) return;
           if (shouldCopy) {
             logEvent('list.openView.copy', { recordId: row.id, source: 'fetched' });
-            handleDuplicateCurrent();
+            await handleDuplicateCurrent({ busyAlreadyOpen: copyBusySeq !== null });
             return;
           }
           if (shouldSubmit) {
@@ -14455,7 +14556,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         notice={topBarNotice}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
-        onCreateCopy={handleDuplicateCurrent}
+        onCreateCopy={() => {
+          void handleDuplicateCurrent();
+        }}
         onEdit={() => setView('form')}
         onSummary={handleGoSummary}
         onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}
@@ -14828,7 +14931,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         onBack={() => formBackActionRef.current?.()}
         onHome={handleGoHome}
         onCreateNew={handleSubmitAnother}
-        onCreateCopy={handleDuplicateCurrent}
+        onCreateCopy={() => {
+          void handleDuplicateCurrent();
+        }}
         onEdit={() => setView('form')}
         onSummary={handleGoSummary}
         onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}

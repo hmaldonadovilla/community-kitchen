@@ -251,7 +251,7 @@ export const shouldBypassCopyCurrentRecordDestructiveChange = (args: {
   isCreateFlow: boolean;
   bypassFieldIds: string[] | Record<string, true>;
 }): boolean => {
-  if (!args.isCreateFlow || args.scope !== 'top') return false;
+  if (args.scope !== 'top') return false;
   const fieldId = (args.fieldId || '').toString().trim();
   if (!fieldId) return false;
   if (Array.isArray(args.bypassFieldIds)) {
