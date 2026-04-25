@@ -477,6 +477,19 @@ describe('meal production leftover selection config', () => {
     );
   });
 
+  it('sets delivered portions from ordered portions when duplicating a closed meal production record', () => {
+    const exported = getExport();
+    const profileGroup = exported.form?.copyCurrentRecordProfile?.lineItems?.find(
+      (entry: any) => entry?.groupId === 'MP_MEALS_REQUEST'
+    );
+
+    expect(profileGroup?.fields).toEqual(expect.arrayContaining(['MEAL_TYPE', 'ORD_QTY']));
+    expect(profileGroup?.fields || []).not.toContain('FINAL_QTY');
+    expect(profileGroup?.fieldValues).toEqual({
+      FINAL_QTY: '$row.ORD_QTY'
+    });
+  });
+
   it('configures the Leftovers step LE capture as a rowFlow sentence with combined ingredient references', () => {
     const definition = getDefinition();
     const leftoversStep = definition.steps?.items?.find((step: any) => step.id === 'leftovers');

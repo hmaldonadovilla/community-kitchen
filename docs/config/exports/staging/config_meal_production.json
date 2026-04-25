@@ -770,7 +770,10 @@
                 ]
               }
             }
-          ]
+          ],
+          "fieldValues": {
+            "FINAL_QTY": "$row.ORD_QTY"
+          }
         }
       ]
     },
@@ -12667,7 +12670,10 @@
                 ]
               }
             }
-          ]
+          ],
+          "fieldValues": {
+            "FINAL_QTY": "$row.ORD_QTY"
+          }
         }
       ]
     },

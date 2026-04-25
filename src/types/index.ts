@@ -4829,6 +4829,11 @@ export interface CopyCurrentRecordLineItemProfile {
    */
   fields: string[];
   /**
+   * Optional row field values to assign after copying whitelisted fields.
+   * Supports `$row.FIELD_ID` and `$top.FIELD_ID` references.
+   */
+  fieldValues?: Record<string, PresetValue | null>;
+  /**
    * Optional row filter to choose which rows to copy.
    * Evaluated against row values, with best-effort fallback to top-level values.
    */

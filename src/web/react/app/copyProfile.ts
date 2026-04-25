@@ -23,16 +23,46 @@ const normalizeLineItemProfiles = (raw: any): CopyCurrentRecordLineItemProfile[]
       const fields = normalizeIdList(v.fields || v.keepFields);
       const includeWhen = v.includeWhen || v.rows || undefined;
       const subGroups = normalizeLineItemProfiles(v.subGroups || v.lineItems);
-      return { groupId, fields, includeWhen, subGroups } as CopyCurrentRecordLineItemProfile;
+      const fieldValues =
+        v.fieldValues && typeof v.fieldValues === 'object' && !Array.isArray(v.fieldValues)
+          ? { ...(v.fieldValues as Record<string, FieldValue>) }
+          : undefined;
+      return { groupId, fields, fieldValues, includeWhen, subGroups } as CopyCurrentRecordLineItemProfile;
     })
     .filter(v => v.groupId && v.fields.length);
 };
 
-const cloneRowWithFields = (row: any, fields: string[]): any => {
+const resolveCopyProfileValue = (
+  raw: FieldValue,
+  rowValues: Record<string, FieldValue>,
+  topValues: Record<string, FieldValue>
+): FieldValue => {
+  if (typeof raw !== 'string') return raw;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('$row.')) {
+    return rowValues[trimmed.slice('$row.'.length)];
+  }
+  if (trimmed.startsWith('$top.')) {
+    return topValues[trimmed.slice('$top.'.length)];
+  }
+  return raw;
+};
+
+const cloneRowWithFields = (
+  row: any,
+  fields: string[],
+  fieldValues: Record<string, FieldValue> | undefined,
+  topValues: Record<string, FieldValue>
+): any => {
   const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
   const nextRowValues: Record<string, FieldValue> = {};
   fields.forEach(fid => {
     if (Object.prototype.hasOwnProperty.call(rowValues, fid)) nextRowValues[fid] = rowValues[fid];
+  });
+  Object.entries(fieldValues || {}).forEach(([fieldId, raw]) => {
+    if (!fieldId) return;
+    const resolved = resolveCopyProfileValue(raw as FieldValue, rowValues, topValues);
+    if (resolved !== undefined) nextRowValues[fieldId] = resolved;
   });
   // Preserve internal/system row attributes (e.g. __ckRowSource) so addMode="auto" reconciliation
   // can correctly recognize auto-generated rows and avoid duplicate auto-add behavior.
@@ -83,7 +113,7 @@ const copyLineItemGroup = (args: {
     includeWhen: profile.includeWhen,
     topValues,
     lineState
-  }).map(row => cloneRowWithFields(row, normalizeIdList(profile.fields)));
+  }).map(row => cloneRowWithFields(row, normalizeIdList(profile.fields), (profile as any).fieldValues, topValues));
   if (!filtered.length) return nextLineItems;
   nextLineItems = { ...nextLineItems, [sourceGroupKey]: filtered };
 

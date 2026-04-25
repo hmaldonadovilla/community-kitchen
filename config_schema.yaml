@@ -4989,6 +4989,12 @@ components:
           description: List of row field ids to keep (all other row values are dropped).
           items:
             type: string
+        fieldValues:
+          type: object
+          description: |
+            Optional row field values to assign after copying whitelisted fields.
+            Supports `$row.FIELD_ID` and `$top.FIELD_ID` references.
+          additionalProperties: true
         includeWhen:
           $ref: '#/components/schemas/WhenClause'
           description: Optional row filter to choose which rows to copy.

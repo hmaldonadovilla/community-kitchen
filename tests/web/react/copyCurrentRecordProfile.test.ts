@@ -51,6 +51,59 @@ describe('copyCurrentRecordProfile', () => {
     expect(Object.keys(out?.lineItems || {})).toEqual(['G']);
   });
 
+  it('sets copied row values from source row fields without copying stale target values', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          lineItemConfig: {
+            fields: [
+              { id: 'MEAL_TYPE', type: 'CHOICE', required: false },
+              { id: 'ORD_QTY', type: 'NUMBER', required: false },
+              { id: 'FINAL_QTY', type: 'NUMBER', required: false }
+            ]
+          }
+        }
+      ],
+      copyCurrentRecordProfile: {
+        lineItems: [
+          {
+            groupId: 'MP_MEALS_REQUEST',
+            fields: ['MEAL_TYPE', 'ORD_QTY'],
+            fieldValues: {
+              FINAL_QTY: '$row.ORD_QTY'
+            }
+          }
+        ]
+      }
+    };
+
+    const out = applyCopyCurrentRecordProfile({
+      definition,
+      values: {} as any,
+      lineItems: {
+        MP_MEALS_REQUEST: [
+          {
+            id: 'meal1',
+            values: {
+              MEAL_TYPE: 'Diabetic',
+              ORD_QTY: 50,
+              FINAL_QTY: 60
+            }
+          }
+        ]
+      } as any
+    });
+
+    expect(out?.lineItems?.MP_MEALS_REQUEST?.[0]?.values).toEqual({
+      MEAL_TYPE: 'Diabetic',
+      ORD_QTY: 50,
+      FINAL_QTY: 50
+    });
+  });
+
   it('copies configured nested subgroup rows without copying other subgroup data', () => {
     const definition: any = {
       questions: [

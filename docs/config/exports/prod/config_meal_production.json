@@ -294,9 +294,11 @@
           "groupId": "MP_MEALS_REQUEST",
           "fields": [
             "MEAL_TYPE",
-            "ORD_QTY",
-            "FINAL_QTY"
-          ]
+            "ORD_QTY"
+          ],
+          "fieldValues": {
+            "FINAL_QTY": "$row.ORD_QTY"
+          }
         }
       ]
     },
@@ -7288,9 +7290,11 @@
           "groupId": "MP_MEALS_REQUEST",
           "fields": [
             "MEAL_TYPE",
-            "ORD_QTY",
-            "FINAL_QTY"
-          ]
+            "ORD_QTY"
+          ],
+          "fieldValues": {
+            "FINAL_QTY": "$row.ORD_QTY"
+          }
         }
       ]
     },
