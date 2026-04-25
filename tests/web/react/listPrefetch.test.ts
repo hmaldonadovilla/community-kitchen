@@ -1,4 +1,8 @@
-import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from '../../../src/web/react/app/listPrefetch';
+import {
+  aggregateContiguousPrefetchedPageItems,
+  aggregatePrefetchedPageItems,
+  isCompletePrefetchedListResponse
+} from '../../../src/web/react/app/listPrefetch';
 
 describe('listPrefetch', () => {
   test('keeps successfully fetched later pages even when an intermediate page is missing', () => {
@@ -28,5 +32,17 @@ describe('listPrefetch', () => {
       'page-1-b',
       'page-2-a'
     ]);
+  });
+
+  test('treats a bootstrap response at the client cap as complete for home rendering', () => {
+    const items = Array.from({ length: 200 }, (_, idx) => ({ id: `item-${idx}` }));
+
+    expect(isCompletePrefetchedListResponse({ items, totalCount: 350, nextPageToken: 'next' }, 200)).toBe(true);
+  });
+
+  test('keeps partial bootstrap responses eligible for background fetch', () => {
+    const items = Array.from({ length: 50 }, (_, idx) => ({ id: `item-${idx}` }));
+
+    expect(isCompletePrefetchedListResponse({ items, totalCount: 75, nextPageToken: 'next' }, 200)).toBe(false);
   });
 });

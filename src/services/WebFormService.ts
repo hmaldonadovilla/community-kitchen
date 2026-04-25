@@ -88,6 +88,8 @@ const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
 const HOME_REV_PROPERTY_PREFIX = 'CK_HOME_REV_';
 const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~100KB item limit.
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
+const HOME_BOOTSTRAP_CACHE_SCHEMA_VERSION = 'v2';
+const HOME_BOOTSTRAP_LIST_MAX_ITEMS = 200;
 const FOLLOWUP_LANE_PROPERTY_PREFIX = 'CK_FOLLOWUP_LANE_';
 const FOLLOWUP_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const FOLLOWUP_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
@@ -1744,12 +1746,14 @@ export class WebFormService {
             direction?: string;
             __dateFieldId?: string;
             __dateEquals?: string;
+            __maxPageSize?: number;
           }
         | undefined =
         def.listView?.defaultSort?.fieldId || homeDateFilter
           ? {
               fieldId: def.listView?.defaultSort?.fieldId,
               direction: (def.listView?.defaultSort?.direction || 'desc') as any,
+              ...(fetchPageSize > 50 ? { __maxPageSize: HOME_BOOTSTRAP_LIST_MAX_ITEMS } : {}),
               ...(homeDateFilter
                 ? {
                     __dateFieldId: homeDateFilter.fieldId,
@@ -1757,7 +1761,9 @@ export class WebFormService {
                   }
                 : {})
             }
-          : undefined;
+          : fetchPageSize > 50
+            ? { __maxPageSize: HOME_BOOTSTRAP_LIST_MAX_ITEMS }
+            : undefined;
       const batch =
         serverTiming?.measure(
           `${labelPrefix}.fetchSortedBatchMs`,
@@ -1787,11 +1793,25 @@ export class WebFormService {
       if (!listResponse || !Array.isArray((listResponse as any).items)) {
         return Object.keys(out).length ? out : null;
       }
+      const listItems = ((listResponse as any).items || []) as any[];
+      const totalCountRaw = Number((listResponse as any).totalCount || 0);
+      const cappedTotalCount = Number.isFinite(totalCountRaw) && totalCountRaw > 0
+        ? Math.min(totalCountRaw, HOME_BOOTSTRAP_LIST_MAX_ITEMS)
+        : listItems.length;
+      const completeData =
+        listItems.length >= cappedTotalCount ||
+        (!(listResponse as any).nextPageToken && (!Number.isFinite(totalCountRaw) || totalCountRaw <= 0 || listItems.length >= totalCountRaw));
+      const normalizedListResponse = {
+        ...listResponse,
+        contiguousItemCount: listItems.length,
+        completeData
+      };
       debugLog('renderForm.bootstrap.listPrefetch', {
         formKey,
         pageSize: fetchPageSize,
-        items: (listResponse as any).items?.length || 0,
+        items: listItems.length,
         totalCount: (listResponse as any).totalCount || 0,
+        completeData,
         dateFilterFieldId: homeDateFilter?.fieldId || null,
         dateFilterEquals: homeDateFilter?.equals || null,
         durationMs: Date.now() - startedAt
@@ -1803,7 +1823,7 @@ export class WebFormService {
         summaryMode: true,
         durationMs: Date.now() - startedAt
       });
-      out.listResponse = listResponse;
+      out.listResponse = normalizedListResponse;
       out.records = {};
       return out;
     } catch (err: any) {
@@ -2658,8 +2678,14 @@ export class WebFormService {
     }
   ): SubmissionBatchResult<Record<string, any>> {
     const { form, questions } = this.getFormContextLite(formKey);
+    const publicSort = sort
+      ? ({
+          ...sort,
+          __maxPageSize: undefined
+        } as any)
+      : sort;
     return toPlainData(
-      this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, sort)
+      this.listing.fetchSubmissionsSortedBatch(form, questions, projection, pageSize, pageToken, includePageRecords, recordIds, publicSort)
     );
   }
 
@@ -7617,7 +7643,20 @@ export class WebFormService {
 
   private resolveHomeSummaryPageSize(def: WebFormDefinition): number {
     const configured = Number(def.listView?.pageSize || 10);
-    return Number.isFinite(configured) && configured > 0 ? Math.max(1, Math.min(Math.floor(configured), 50)) : 10;
+    const pageSize = Number.isFinite(configured) && configured > 0 ? Math.max(1, Math.min(Math.floor(configured), 50)) : 10;
+    if (this.shouldFetchFullHomeSummaryList(def)) {
+      return HOME_BOOTSTRAP_LIST_MAX_ITEMS;
+    }
+    return pageSize;
+  }
+
+  private shouldFetchFullHomeSummaryList(def: WebFormDefinition): boolean {
+    const listView = def?.listView;
+    if (!listView?.columns?.length) return false;
+    if (!listView.search) return false;
+    if (listView.paginationControlsEnabled === false) return false;
+    const mode = (((listView.search as any)?.mode || 'text') || '').toString().trim().toLowerCase();
+    return mode === 'text' || mode === 'advanced' || mode === '';
   }
 
   private buildHomeSummaryProjection(def: WebFormDefinition): string[] {
@@ -7675,6 +7714,20 @@ export class WebFormService {
     addProjection((def.listView?.dateHeading as any)?.fieldId);
     collectWhenFieldIds((def.listView as any)?.defaultWhen);
 
+    const searchConfig = (def.listView?.search || {}) as any;
+    addProjection(searchConfig?.dateFieldId);
+    const searchFieldsRaw = searchConfig?.fields;
+    if (Array.isArray(searchFieldsRaw)) {
+      searchFieldsRaw.forEach(addProjection);
+    } else if (searchFieldsRaw !== undefined && searchFieldsRaw !== null) {
+      searchFieldsRaw
+        .toString()
+        .split(',')
+        .map((fieldId: string) => fieldId.trim())
+        .filter(Boolean)
+        .forEach(addProjection);
+    }
+
     const presets = Array.isArray((def.listView?.search as any)?.presets) ? ((def.listView?.search as any).presets as any[]) : [];
     presets.forEach(preset => {
       collectWhenFieldIds((preset as any)?.when);
@@ -7685,11 +7738,11 @@ export class WebFormService {
   }
 
   private homeBootstrapCacheKey(formKey: string): string {
-    return this.cacheManager.makeCacheKey('HOME_BOOTSTRAP_LATEST', [(formKey || '').toString().trim()]);
+    return this.cacheManager.makeCacheKey('HOME_BOOTSTRAP_LATEST', [HOME_BOOTSTRAP_CACHE_SCHEMA_VERSION, (formKey || '').toString().trim()]);
   }
 
   private homeBootstrapChunkBaseKey(formKey: string): string {
-    return this.cacheManager.makeCacheKey('HOME_BOOTSTRAP_CHUNK', [(formKey || '').toString().trim()]);
+    return this.cacheManager.makeCacheKey('HOME_BOOTSTRAP_CHUNK', [HOME_BOOTSTRAP_CACHE_SCHEMA_VERSION, (formKey || '').toString().trim()]);
   }
 
   private homeBootstrapChunkMetaKey(baseKey: string): string {

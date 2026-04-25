@@ -371,6 +371,50 @@ describe('WebFormService', () => {
     expect(res.listResponse?.dateFilterEquals).toBe('2026-04-23');
   });
 
+  test('fetchHomeBootstrap fetches searchable paginated home lists in one capped bootstrap batch', () => {
+    jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(0);
+    jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);
+    jest.spyOn(service as any, 'resolveBundledConfig').mockReturnValue(null);
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({
+      listView: {
+        columns: [{ fieldId: 'NAME' }],
+        pageSize: 5,
+        paginationControlsEnabled: true,
+        defaultSort: { fieldId: 'NAME', direction: 'asc' },
+        search: { mode: 'text' }
+      }
+    });
+    jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
+    const items = Array.from({ length: 60 }, (_, idx) => ({ id: `rec-${idx}`, NAME: `Recipe ${idx}` }));
+    const fetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionsSortedBatch').mockReturnValue({
+      list: {
+        items,
+        totalCount: 60
+      },
+      records: {}
+    });
+
+    const res = service.fetchHomeBootstrap('Config: Delivery');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      200,
+      undefined,
+      false,
+      undefined,
+      expect.objectContaining({
+        fieldId: 'NAME',
+        direction: 'asc',
+        __maxPageSize: 200
+      })
+    );
+    expect(res.listResponse?.items).toHaveLength(60);
+    expect((res.listResponse as any)?.contiguousItemCount).toBe(60);
+    expect((res.listResponse as any)?.completeData).toBe(true);
+  });
+
   test('fetchSubmissionsSortedBatch returns JSON-safe plain data on the first response', () => {
     const responseDate = new Date('2026-04-23T00:00:00.000Z');
     jest.spyOn((service as any).listing, 'fetchSubmissionsSortedBatch').mockReturnValue({

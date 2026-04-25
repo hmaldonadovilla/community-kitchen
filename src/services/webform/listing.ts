@@ -88,6 +88,7 @@ export class ListingService {
       __dateEquals?: string;
       __dateFrom?: string;
       __dateTo?: string;
+      __maxPageSize?: number;
     }
   ): SubmissionBatchResult<Record<string, any>> {
     const startedAt = Date.now();
@@ -110,7 +111,9 @@ export class ListingService {
     const etag = this.cacheManager.getSheetEtag(sheet, columns);
 
     const maxRows = Math.max(0, sheet.getLastRow() - 1);
-    const size = Math.max(1, Math.min(pageSize || 10, 50));
+    const maxPageSizeRaw = Number((sort as any)?.__maxPageSize || 50);
+    const maxPageSize = Number.isFinite(maxPageSizeRaw) && maxPageSizeRaw > 50 ? Math.min(Math.floor(maxPageSizeRaw), 200) : 50;
+    const size = Math.max(1, Math.min(pageSize || 10, maxPageSize));
     const offset = decodePageToken(pageToken);
 
     const fieldIds = projection && projection.length ? projection : questions.map(q => q.id);

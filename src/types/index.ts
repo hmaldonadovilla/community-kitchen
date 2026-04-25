@@ -5671,6 +5671,8 @@ export interface PaginatedResult<T> {
   dateFilterEquals?: string;
   dateFilterFrom?: string;
   dateFilterTo?: string;
+  contiguousItemCount?: number;
+  completeData?: boolean;
 }
 
 export interface SubmissionBatchResult<T = Record<string, any>> {

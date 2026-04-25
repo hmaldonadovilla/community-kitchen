@@ -181,7 +181,11 @@ import {
 import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
 import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
-import { aggregateContiguousPrefetchedPageItems, aggregatePrefetchedPageItems } from './app/listPrefetch';
+import {
+  aggregateContiguousPrefetchedPageItems,
+  aggregatePrefetchedPageItems,
+  isCompletePrefetchedListResponse
+} from './app/listPrefetch';
 import { hasLoadedListResponse, removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
@@ -4872,13 +4876,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             : first.list;
         const totalCountRaw = Number((firstList as any).totalCount || 0);
         const hasNextToken = Boolean((firstList as any).nextPageToken);
+        const firstListComplete = isCompletePrefetchedListResponse(firstList, 200);
         const cappedTotalCount =
           Number.isFinite(totalCountRaw) && totalCountRaw > 0
             ? Math.min(totalCountRaw, 200)
             : hasNextToken
               ? 200
               : Math.min((firstList.items || []).length, 200);
-        const totalPages = Math.max(1, Math.ceil(cappedTotalCount / pageSize));
+        const totalPages = firstListComplete ? 1 : Math.max(1, Math.ceil(cappedTotalCount / pageSize));
 
         const itemsByPage = new Map<number, ListItem[]>();
         const failedPages = new Map<number, string>();
@@ -4896,7 +4901,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const contiguous = buildContiguous();
           const resolvedPageCount = itemsByPage.size + failedPages.size;
           const hasMore = resolvedPageCount < totalPages;
-          const completeData = !hasMore && failedPages.size === 0 && aggregated.length >= cappedTotalCount && cappedTotalCount < 200;
+          const completeData = firstListComplete || (!hasMore && failedPages.size === 0 && aggregated.length >= cappedTotalCount && cappedTotalCount < 200);
           setListCache(prev => ({
             response: {
               ...firstList,

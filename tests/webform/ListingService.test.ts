@@ -36,6 +36,42 @@ describe('ListingService', () => {
     expect((withRecords.records['id-2'] as any).values.DISH).toBe('Salad');
   });
 
+  test('fetchSubmissionsSortedBatch keeps public pages capped at 50 but allows internal bootstrap pages up to 200', () => {
+    const ss = new MockSpreadsheet() as any;
+    const sheet = ss.insertSheet('Responses');
+    const rows = [
+      ['Language', 'NAME', 'Record ID', 'Created At', 'Updated At', 'Status', 'PDF URL'],
+      ...Array.from({ length: 60 }, (_, idx) => [
+        'EN',
+        `Ingredient ${idx + 1}`,
+        `id-${idx + 1}`,
+        new Date('2025-01-01T00:00:00Z'),
+        new Date('2025-01-01T00:00:00Z'),
+        'Open',
+        ''
+      ])
+    ];
+    sheet.setMockData(rows);
+
+    const cacheManager = new CacheEtagManager(null, null);
+    const uploads = new UploadService(ss);
+    const submissions = new SubmissionService(ss, uploads, cacheManager, null);
+    const listing = new ListingService(submissions, cacheManager);
+
+    const form: any = { title: 'Test', configSheet: 'Config: Test', destinationTab: 'Responses' };
+    const questions: any[] = [{ id: 'NAME', qEn: 'Name', qFr: 'Name', qNl: 'Name', type: 'TEXT', status: 'Active', required: false }];
+
+    const publicPage = listing.fetchSubmissionsSortedBatch(form, questions, ['NAME'], 75, undefined, false);
+    const bootstrapPage = listing.fetchSubmissionsSortedBatch(form, questions, ['NAME'], 75, undefined, false, undefined, {
+      __maxPageSize: 200
+    } as any);
+
+    expect(publicPage.list.items).toHaveLength(50);
+    expect(publicPage.list.nextPageToken).toBeTruthy();
+    expect(bootstrapPage.list.items).toHaveLength(60);
+    expect(bootstrapPage.list.nextPageToken).toBeUndefined();
+  });
+
   test('fetchSubmissionsSortedBatch sorts by listViewSort priorities as tie-breakers', () => {
     const ss = new MockSpreadsheet() as any;
     const sheet = ss.insertSheet('Responses');
