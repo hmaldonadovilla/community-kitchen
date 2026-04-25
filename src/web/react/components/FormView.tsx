@@ -104,7 +104,12 @@ import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
 import { PageSection } from './form/PageSection';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
-import { computeChoiceControlVariant, resolveNoneLabel, type OptionLike } from './form/choiceControls';
+import {
+  computeChoiceControlVariant,
+  resolveNoneLabel,
+  shouldUseSearchableChoiceControl,
+  type OptionLike
+} from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
@@ -3970,13 +3975,12 @@ const FormView: React.FC<FormViewProps> = ({
 
       const placeholder =
         (placeholderOverride || '').toString().trim() || tSystem('common.selectPlaceholder', language, 'Select…');
-      const shouldUseSearchableSelect = (() => {
-        if (decision.variant !== 'select') return false;
-        if (searchEnabled === true) return true;
-        if (searchEnabled === false) return false;
-        // Auto: only for "large" option sets.
-        return options.length >= 20;
-      })();
+      const shouldUseSearchableSelect = shouldUseSearchableChoiceControl({
+        variant: decision.variant,
+        optionCount: options.length,
+        searchEnabled,
+        override
+      });
 
       const renderSelectControl = () => {
         if (shouldUseSearchableSelect) {

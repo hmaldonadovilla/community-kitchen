@@ -88,3 +88,18 @@ export const computeChoiceControlVariant = (
   return { variant: 'select', booleanDetected: !!booleanMap };
 };
 
+export const shouldUseSearchableChoiceControl = (args: {
+  variant: ChoiceControlVariant;
+  optionCount: number;
+  searchEnabled?: boolean;
+  override?: string | null;
+}): boolean => {
+  if (args.variant !== 'select') return false;
+  if (args.searchEnabled === true) return true;
+  if (args.searchEnabled === false) return false;
+  const normalizedOverride = (args.override || '').toString().trim().toLowerCase();
+  if (normalizedOverride === 'select') return false;
+  // Auto: only for large option sets when the config has not explicitly asked
+  // for a native select control.
+  return args.optionCount >= 20;
+};
