@@ -97,7 +97,12 @@ import { buildValidationContext } from './app/validation';
 import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
-import { shouldApplyPrefetchedRecordPreview, shouldDiscardRecordLoadResult } from './app/recordLoadGuard';
+import {
+  shouldApplyPrefetchedRecordPreview,
+  shouldDiscardRecordLoadResult,
+  shouldWaitForRecordPrefetchBeforeIndividualFetch,
+  type RecordSnapshotPrefetchSource
+} from './app/recordLoadGuard';
 import {
   resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessMetaOnlyAdoptionRule,
@@ -740,9 +745,16 @@ const clearHomeListLocalCache = (key: string): void => {
   try {
     pruneHomeListLocalCacheFamily(storage, key);
     storage.removeItem(key);
-  } catch (_) {
+  } catch {
     // ignore storage errors
   }
+};
+
+type RecordSnapshotPrefetchRequest = {
+  promise: Promise<Record<string, WebFormSubmission>>;
+  source: RecordSnapshotPrefetchSource;
+  startedAt: number;
+  rowNumbers: number[];
 };
 
 const annotateListResponseWithInitialDateFilter = (response: ListResponse | null | undefined, listView: any): ListResponse | null => {
@@ -4106,7 +4118,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const dataSourcePrefetchKeyRef = useRef<string>('');
   const formDataSourceRefreshKeyRef = useRef<string>('');
   const listRecordSnapshotPrefetchKeyRef = useRef<string>('');
-  const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, Promise<Record<string, WebFormSubmission>>>>(new Map());
+  const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, RecordSnapshotPrefetchRequest>>(new Map());
   const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [, setDataSourceVisibilityVersion] = useState(0);
@@ -4408,11 +4420,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       try {
         // Fetch by row numbers so we avoid re-running expensive sorted list assembly.
         requestPromise = fetchRecordsByRowNumbers(formKey, rowHints);
-        const activeRequest = requestPromise;
+        const activeRequest: RecordSnapshotPrefetchRequest = {
+          promise: requestPromise,
+          source: 'homeList',
+          startedAt,
+          rowNumbers: rowHints
+        };
         rowHints.forEach(rowNumber => {
           listRecordSnapshotPrefetchByRowRef.current.set(rowNumber, activeRequest);
         });
-        const prefetchedRecords = await activeRequest;
+        const prefetchedRecords = await activeRequest.promise;
         if (cancelled) return;
         perfMark(endMark);
         const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
@@ -4462,7 +4479,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       } finally {
         rowHints.forEach(rowNumber => {
           const inFlight = listRecordSnapshotPrefetchByRowRef.current.get(rowNumber);
-          if (requestPromise && inFlight === requestPromise) {
+          if (requestPromise && inFlight?.promise === requestPromise) {
             listRecordSnapshotPrefetchByRowRef.current.delete(rowNumber);
           }
         });
@@ -5300,6 +5317,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setDraftSave({ phase: 'idle' });
         rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
         setRecordLoadingId(null);
+        recordLoadingIdRef.current = null;
         setRecordLoadError(null);
         selectedRecordSnapshotRef.current = snapshot;
         setSelectedRecordSnapshot(snapshot);
@@ -5440,6 +5458,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         status: snapshot.status || null
       };
       setRecordLoadingId(null);
+      recordLoadingIdRef.current = null;
       setRecordLoadError(null);
       setListCache(prev => ({
         response: prev.response,
@@ -5497,7 +5516,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const sessionAtStart = recordSessionRef.current;
       const startedAt = Date.now();
       if (!background) {
-        setRecordLoadingId(recordId || (candidateRow ? `row:${candidateRow}` : null));
+        const loadingId = recordId || (candidateRow ? `row:${candidateRow}` : null);
+        setRecordLoadingId(loadingId);
+        recordLoadingIdRef.current = loadingId;
         setRecordLoadError(null);
       }
       logEvent('record.fetch.start', { recordId: recordId || null, rowNumberHint: candidateRow || null, background });
@@ -5567,6 +5588,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!background) {
           setRecordLoadError(uiMessage);
           setRecordLoadingId(null);
+          recordLoadingIdRef.current = null;
         }
         logEvent('record.fetch.error', {
           recordId,
@@ -9315,6 +9337,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         lastSubmissionMetaRef.current = null;
         setPrefetchedSummaryHtml(null);
         setRecordLoadingId(null);
+        recordLoadingIdRef.current = null;
         setRecordLoadError(null);
         recordDataVersionRef.current = null;
         optimisticClientDataVersionRef.current = null;
@@ -13345,7 +13368,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
 
     const fetchFullSnapshotThenCopy = (source: string, busySeq: number | null) => {
-      setRecordLoadingId(row.id || (hintedRow ? `row:${hintedRow}` : null));
+      const loadingId = row.id || (hintedRow ? `row:${hintedRow}` : null);
+      setRecordLoadingId(loadingId);
+      recordLoadingIdRef.current = loadingId;
       setRecordLoadError(null);
       const startedAt = Date.now();
       void (async () => {
@@ -13470,14 +13495,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     } else {
       // No cached record (or no cached version): fetch the full snapshot.
+      const loadingId = row.id || (hintedRow ? `row:${hintedRow}` : null);
+      const shouldShowLoadingShell = !shouldTriggerButton && !shouldCopy && !shouldSubmit && Boolean(loadingId);
       setLastSubmissionMeta({
         id: row.id,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         status: row.status ? row.status.toString() : null
       });
-      if (shouldUseCombinedSummaryFetch) {
-        setRecordLoadingId(row.id || (hintedRow ? `row:${hintedRow}` : null));
+      if (shouldShowLoadingShell) {
+        setRecordLoadingId(loadingId);
+        recordLoadingIdRef.current = loadingId;
         setRecordLoadError(null);
       }
       let copyBusyDelegated = false;
@@ -13487,16 +13515,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!hintedRow || hintedRow < 2) return false;
         const pending = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
         if (!pending) return false;
-        const awaited = await Promise.race([
-          pending.then(res => res || null).catch(() => null),
-          new Promise<null>(resolve => {
-            globalThis.setTimeout(() => resolve(null), 2200);
-          })
-        ]);
+        const shouldWaitForBatch = shouldWaitForRecordPrefetchBeforeIndividualFetch({
+          hasPending: true,
+          source: pending.source
+        });
+        logEvent('record.open.prefetch.await', {
+          recordId: row.id,
+          rowNumberHint: hintedRow,
+          source: pending.source,
+          waitMode: shouldWaitForBatch ? 'batch' : 'bounded',
+          pendingMs: Date.now() - pending.startedAt
+        });
+        const awaited = shouldWaitForBatch
+          ? await pending.promise.then(res => res || null).catch(() => null)
+          : await Promise.race([
+              pending.promise.then(res => res || null).catch(() => null),
+              new Promise<null>(resolve => {
+                globalThis.setTimeout(() => resolve(null), 2200);
+              })
+            ]);
         if (!awaited) return false;
         if (selectedRecordIdRef.current !== row.id) return true;
+        const receivedIds = Object.keys(awaited);
+        if (receivedIds.length) {
+          setListCache(prev => ({
+            response: prev.response,
+            records: { ...(prev.records || {}), ...awaited }
+          }));
+        }
         const prefetchedRecord = awaited[row.id];
-        if (!prefetchedRecord) return false;
+        if (!prefetchedRecord) {
+          logEvent('record.open.prefetch.miss', {
+            recordId: row.id,
+            rowNumberHint: hintedRow,
+            source: pending.source,
+            received: receivedIds.length
+          });
+          return false;
+        }
+        logEvent('record.open.prefetch.apply', {
+          recordId: row.id,
+          rowNumberHint: hintedRow,
+          source: pending.source,
+          received: receivedIds.length
+        });
         applyRecordSnapshot(prefetchedRecord);
         if (shouldCopy) {
           copyBusyDelegated = true;
@@ -13526,7 +13588,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           rowNumberHint: hintedRow
         });
         const requestPromise = fetchRecordsByRowNumbers(formKey, [hintedRow]);
-        listRecordSnapshotPrefetchByRowRef.current.set(hintedRow, requestPromise);
+        const prefetchRequest: RecordSnapshotPrefetchRequest = {
+          promise: requestPromise,
+          source: 'recordPreview',
+          startedAt,
+          rowNumbers: [hintedRow]
+        };
+        listRecordSnapshotPrefetchByRowRef.current.set(hintedRow, prefetchRequest);
         void requestPromise
           .then(prefetchedRecords => {
             const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
@@ -13571,7 +13639,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           })
           .finally(() => {
             const inFlight = listRecordSnapshotPrefetchByRowRef.current.get(hintedRow);
-            if (inFlight === requestPromise) {
+            if (inFlight?.promise === requestPromise) {
               listRecordSnapshotPrefetchByRowRef.current.delete(hintedRow);
             }
           });
@@ -13627,6 +13695,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             const logMessage = resolveLogMessage(err, 'Failed to load summary.');
             setRecordLoadError(uiMessage);
             setRecordLoadingId(null);
+            recordLoadingIdRef.current = null;
             logEvent('summary.fetchCombined.error', {
               recordId: row.id,
               rowNumberHint: hintedRow || null,
@@ -13781,6 +13850,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const currentRecord = selectedRecordSnapshot || (selectedRecordId && !recordLoadingId ? listCache.records[selectedRecordId] : null);
   const showFormRecordLoadingPlaceholder = shouldShowRecordLoadingPlaceholder({
     recordLoading: Boolean(recordLoadingId),
+    recordLoadError: Boolean(recordLoadError),
     hasCurrentRecord: Boolean(currentRecord)
   });
   const headerSaveIndicator = useMemo(() => {

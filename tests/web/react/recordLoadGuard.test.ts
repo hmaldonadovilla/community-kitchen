@@ -1,6 +1,7 @@
 import {
   shouldApplyPrefetchedRecordPreview,
-  shouldDiscardRecordLoadResult
+  shouldDiscardRecordLoadResult,
+  shouldWaitForRecordPrefetchBeforeIndividualFetch
 } from '../../../src/web/react/app/recordLoadGuard';
 
 describe('shouldDiscardRecordLoadResult', () => {
@@ -75,6 +76,35 @@ describe('shouldDiscardRecordLoadResult', () => {
         hasSelectedSnapshot: false,
         sessionAtStart: 2,
         currentSession: 3
+      })
+    ).toBe(false);
+  });
+});
+
+describe('shouldWaitForRecordPrefetchBeforeIndividualFetch', () => {
+  it('waits for the home list batch prefetch before falling back to an individual fetch', () => {
+    expect(
+      shouldWaitForRecordPrefetchBeforeIndividualFetch({
+        hasPending: true,
+        source: 'homeList'
+      })
+    ).toBe(true);
+  });
+
+  it('keeps preview prefetch bounded so record open cannot hang indefinitely', () => {
+    expect(
+      shouldWaitForRecordPrefetchBeforeIndividualFetch({
+        hasPending: true,
+        source: 'recordPreview'
+      })
+    ).toBe(false);
+  });
+
+  it('does not wait when no matching prefetch is pending', () => {
+    expect(
+      shouldWaitForRecordPrefetchBeforeIndividualFetch({
+        hasPending: false,
+        source: 'homeList'
       })
     ).toBe(false);
   });

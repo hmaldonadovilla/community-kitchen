@@ -21,3 +21,13 @@ export function shouldApplyPrefetchedRecordPreview(args: {
   if (args.hasSelectedSnapshot) return false;
   return args.sessionAtStart === args.currentSession;
 }
+
+export type RecordSnapshotPrefetchSource = 'homeList' | 'recordPreview';
+
+export function shouldWaitForRecordPrefetchBeforeIndividualFetch(args: {
+  hasPending: boolean;
+  source?: RecordSnapshotPrefetchSource | string | null;
+}): boolean {
+  if (!args.hasPending) return false;
+  return args.source === 'homeList';
+}

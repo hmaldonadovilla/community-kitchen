@@ -197,7 +197,7 @@ export const SummaryView: React.FC<{
     summaryPhase: summaryHtml.phase,
     hasSummaryHtml: Boolean(resolvedHtml)
   });
-  const showSummaryContentCard = !useSummaryHtml || Boolean(resolvedHtml) || summaryHtml.phase === 'error';
+  const showSummaryContentCard = !recordLoadingId && (!useSummaryHtml || Boolean(resolvedHtml) || summaryHtml.phase === 'error');
 
   return (
     <div

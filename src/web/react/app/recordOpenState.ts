@@ -3,7 +3,8 @@ export type RecordOpenView = 'form' | 'summary' | 'list';
 export const shouldShowRecordLoadingPlaceholder = (args: {
   recordLoading: boolean;
   hasCurrentRecord: boolean;
-}): boolean => Boolean(args.recordLoading) && !args.hasCurrentRecord;
+  recordLoadError?: boolean;
+}): boolean => Boolean(args.recordLoading || args.recordLoadError) && !args.hasCurrentRecord;
 
 export const shouldShowSummaryLoadingCard = (args: {
   recordLoading: boolean;

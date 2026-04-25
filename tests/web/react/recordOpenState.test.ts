@@ -10,6 +10,24 @@ describe('recordOpenState', () => {
     expect(shouldShowRecordLoadingPlaceholder({ recordLoading: false, hasCurrentRecord: false })).toBe(false);
   });
 
+  it('keeps the record placeholder visible for load errors without a current record', () => {
+    expect(
+      shouldShowRecordLoadingPlaceholder({
+        recordLoading: false,
+        recordLoadError: true,
+        hasCurrentRecord: false
+      })
+    ).toBe(true);
+
+    expect(
+      shouldShowRecordLoadingPlaceholder({
+        recordLoading: false,
+        recordLoadError: true,
+        hasCurrentRecord: true
+      })
+    ).toBe(false);
+  });
+
   it('collapses summary loading into a single loading card', () => {
     expect(
       shouldShowSummaryLoadingCard({

@@ -67,6 +67,7 @@ description: Development Rules
 ## Miscellaneous
 
 - When the user request that you commit changes to the repository, always use Conventional Commits format.
+- Commit messages must include a brief description of the changes in the commit body, not only the subject line.
 
 ## UI Hygiene & Typography Contract – Authoritative Reset
 
