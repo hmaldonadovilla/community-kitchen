@@ -77,6 +77,7 @@ describe('DataSourceIdBackfillService', () => {
                       lookupField: 'id',
                       lookupFields: ['id', 'QFTD5RD2EM'],
                       lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+                      when: { fieldId: 'PREP_TYPE', equals: ['Cook'] },
                       parentFieldMapping: {
                         RECIPE_SOURCE_ID: 'id',
                         RECIPE_SOURCE_UPDATED_AT: 'updatedAt',
@@ -108,6 +109,7 @@ describe('DataSourceIdBackfillService', () => {
                           lookupField: 'id',
                           lookupFields: ['id', 'INGREDIENT_NAME'],
                           lookupSourceFieldId: 'ING_SOURCE_ID',
+                          when: { fieldId: 'PREP_TYPE', equals: ['Cook'] },
                           fieldMapping: {
                             ING_SOURCE_ID: 'id',
                             ING_SOURCE_UPDATED_AT: 'updatedAt',
@@ -206,6 +208,7 @@ describe('DataSourceIdBackfillService', () => {
               MP_TYPE_LI: [
                 {
                   __ckRowId: 'prep-1',
+                  PREP_TYPE: 'Cook',
                   PREP_QTY: 10,
                   RECIPE: 'Vegetable soup',
                   RECIPE_SOURCE_ID: '',
@@ -217,6 +220,23 @@ describe('DataSourceIdBackfillService', () => {
                       ING_SOURCE_ID: '',
                       ING_SOURCE_UPDATED_AT: '',
                       QTY: 2
+                    }
+                  ]
+                },
+                {
+                  __ckRowId: 'prep-leftover-1',
+                  PREP_TYPE: 'Multi-ingredient',
+                  PREP_QTY: 5,
+                  RECIPE: 'Vegetable soup',
+                  RECIPE_SOURCE_ID: '',
+                  RECIPE_SOURCE_UPDATED_AT: '',
+                  MP_INGREDIENTS_LI: [
+                    {
+                      __ckRowId: 'ing-leftover-1',
+                      ING: 'Carrot',
+                      ING_SOURCE_ID: '',
+                      ING_SOURCE_UPDATED_AT: '',
+                      QTY: 1
                     }
                   ]
                 }
@@ -258,6 +278,8 @@ describe('DataSourceIdBackfillService', () => {
     const mealRows = readMealRows(ctx);
     expect(mealRows[0].MP_TYPE_LI[0].RECIPE_SOURCE_ID).toBe('');
     expect(mealRows[0].MP_TYPE_LI[0].MP_INGREDIENTS_LI[0].ING_SOURCE_ID).toBe('');
+    expect(mealRows[0].MP_TYPE_LI[1].RECIPE_SOURCE_ID).toBe('');
+    expect(mealRows[0].MP_TYPE_LI[1].MP_INGREDIENTS_LI[0].ING_SOURCE_ID).toBe('');
   });
 
   test('commit fills only hidden source id fields and writes an audit log', () => {
@@ -283,6 +305,8 @@ describe('DataSourceIdBackfillService', () => {
     expect(ingredientRow.ING).toBe('Carrot');
     expect(ingredientRow.ING_SOURCE_ID).toBe('ingredient-1');
     expect(ingredientRow.ING_SOURCE_UPDATED_AT).toContain('T');
+    expect(mealRows[0].MP_TYPE_LI[1].RECIPE_SOURCE_ID).toBe('');
+    expect(mealRows[0].MP_TYPE_LI[1].MP_INGREDIENTS_LI[0].ING_SOURCE_ID).toBe('');
 
     const audit = ctx.ss.getSheetByName('Data Source ID Backfill Log');
     expect(audit).toBeDefined();

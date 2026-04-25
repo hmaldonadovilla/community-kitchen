@@ -37,6 +37,66 @@ describe('applyFieldChangeDialogTargets', () => {
     expect(result.lineItems.ITEMS[0].values.QTY).toEqual(3);
   });
 
+  it('clears stale datasource source metadata when a guarded line source field changes', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                selectionEffects: [
+                  {
+                    type: 'addLineItemsFromDataSource',
+                    lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+                    parentFieldMapping: {
+                      RECIPE_SOURCE_ID: 'id',
+                      RECIPE_SOURCE_UPDATED_AT: 'updatedAt',
+                      RECIPE: 'QFTD5RD2EM'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const result = applyFieldChangeDialogTargets({
+      definition,
+      values: {},
+      lineItems: {
+        MEALS: [
+          {
+            id: 'row1',
+            values: {
+              RECIPE: 'Old soup',
+              RECIPE_SOURCE_ID: 'recipe-1',
+              RECIPE_SOURCE_UPDATED_AT: 'old-updated'
+            }
+          }
+        ]
+      },
+      updates: [
+        {
+          target: { scope: 'row', fieldId: 'RECIPE' },
+          value: 'New soup'
+        }
+      ],
+      context: { scope: 'line', groupId: 'MEALS', rowId: 'row1' }
+    });
+
+    expect(result.lineItems.MEALS[0].values).toEqual({
+      RECIPE: 'New soup',
+      RECIPE_SOURCE_ID: null,
+      RECIPE_SOURCE_UPDATED_AT: null
+    });
+  });
+
   it('updates parent row values when in a subgroup', () => {
     const result = applyFieldChangeDialogTargets({
       values: {},

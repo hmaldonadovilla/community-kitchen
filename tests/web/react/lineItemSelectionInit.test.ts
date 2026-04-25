@@ -761,6 +761,67 @@ describe('collectSelectionEffectInitTargets', () => {
     expect(collectSelectionEffectInitTargets(question, lineItems, {})).toEqual([]);
   });
 
+  it('evaluates child row init when clauses against the immediate parent row', () => {
+    const question: any = {
+      id: 'MEALS',
+      type: 'LINE_ITEM_GROUP',
+      lineItemConfig: {
+        fields: [{ id: 'MEAL_TYPE', type: 'TEXT' }],
+        subGroups: [
+          {
+            id: 'PREP_ROWS',
+            fields: [{ id: 'PREP_TYPE', type: 'CHOICE' }],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                fields: [
+                  {
+                    id: 'ING',
+                    type: 'CHOICE',
+                    selectionEffects: [
+                      {
+                        type: 'setValuesFromDataSource',
+                        lookupField: 'ING',
+                        sourceSync: { refreshOnInit: true },
+                        when: { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+                        fieldMapping: {
+                          ING_SOURCE_ID: 'id'
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const prepRowsKey = buildSubgroupKey('MEALS', 'meal-1', 'PREP_ROWS');
+    const cookIngredientsKey = buildSubgroupKey(prepRowsKey, 'prep-cook', 'INGREDIENTS');
+    const leftoverIngredientsKey = buildSubgroupKey(prepRowsKey, 'prep-leftover', 'INGREDIENTS');
+    const lineItems: any = {
+      MEALS: [{ id: 'meal-1', values: { MEAL_TYPE: 'Standard' } }],
+      [prepRowsKey]: [
+        { id: 'prep-cook', values: { PREP_TYPE: 'Cook' } },
+        { id: 'prep-leftover', values: { PREP_TYPE: 'Multi-ingredient' } }
+      ],
+      [cookIngredientsKey]: [{ id: 'ing-cook', values: { ING: 'Carrot' } }],
+      [leftoverIngredientsKey]: [{ id: 'ing-leftover', values: { ING: 'Carrot' } }]
+    };
+
+    const targets = collectSelectionEffectInitTargets(question, lineItems, {});
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        groupKey: cookIngredientsKey,
+        rowId: 'ing-cook',
+        rawValue: 'Carrot'
+      })
+    ]);
+  });
+
   it('includes computed selection-effect fields that are derived from the current row state', () => {
     const question: any = {
       id: 'MEALS',

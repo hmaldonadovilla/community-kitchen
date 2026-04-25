@@ -65,9 +65,12 @@ Review the totals before committing:
 
 - `fieldUpdates`: fields that can be filled
 - `changedRows`: destination rows that would be updated
+- `alreadyFilled`: identity fields already present; this should increase in
+  the post-check after a successful commit
 - `skippedNoLegacyValue`: blank legacy values; these are expected to remain blank
 - `skippedNoMatch`: legacy values that no longer match a source row; inspect if
-  the count is unexpected
+  the count is unexpected. These rows are intentionally not guessed because the
+  original name may have changed before an identity field existed.
 - `skippedAmbiguous`: duplicate matches; do not commit until resolved unless the
   operator intentionally accepts leaving those fields untouched
 - `skippedInvalidJson`: malformed line-item JSON; resolve before commit
@@ -93,6 +96,10 @@ The commit pass:
 2. Commits in row batches.
 3. Writes audit rows to `Data Source ID Backfill Log`.
 4. Runs a post-check dry-run and fails if fillable fields remain.
+
+A successful post-check should report `fieldUpdates: 0` and `changedRows: 0`.
+`skippedNoMatch` can remain non-zero when historical labels no longer exist in
+the datasource; those rows need manual review if they must be linked.
 
 Use `--start-row` to resume manually from a known row if a run is interrupted:
 
@@ -129,8 +136,22 @@ Commit mode still requires the target Apps Script project to have the matching
 - Do not use `clasp run` for this operation unless the target project is also
   deployed as an Apps Script API executable. This project is operated as a web
   app, so the runner calls the deployed web app through `google.script.run`.
+- Do not create temporary deployments or admin web endpoints just to set the
+  commit token. Prefer the Apps Script Project Settings script property flow so
+  the migration does not leave extra executable surfaces behind.
 - Keep batches small enough for Apps Script limits. `50` rows is the default and
   was used for the staging backfill.
 - Keep the audit sheet until the migration has been reviewed.
 - Remove `CK_BACKFILL_DATA_SOURCE_IDS_TOKEN` after the migration so commit mode
   cannot be triggered accidentally.
+
+## Matching Scope Notes
+
+- The backfill follows the same datasource identity configuration as the form
+  runtime, including `when` clauses on source-sync fields.
+- Meal Production cook rows are eligible for recipe and ingredient identity
+  backfill only when they are actual `Cook` rows. Saved leftover/reheat rows are
+  intentionally left as historical snapshots because their recipe and ingredient
+  details must reflect what was cooked at the time.
+- Backfill only adds missing identity metadata. It does not refresh labels,
+  quantities, allergens, categories, or other user-visible values.

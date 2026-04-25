@@ -16,6 +16,7 @@ import {
 import { resolveLocalizedString } from '../../i18n';
 import { tSystem } from '../../systemStrings';
 import { selectionEffectDependsOnField } from '../app/selectionEffectDependencies';
+import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
 import {
   FieldValue,
   LangCode,
@@ -566,6 +567,7 @@ interface FormViewProps {
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
+      preferLookupSourceValue?: boolean;
       snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     }
   ) => void;
@@ -8315,7 +8317,10 @@ const FormView: React.FC<FormViewProps> = ({
     const currentValues = valuesRef.current;
     const existingRows = currentLineItems[group.id] || [];
     const currentRow = existingRows.find(r => r.id === rowId);
-    const nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
+    let nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
+    if (changeSource !== 'selectionEffectInit') {
+      nextRowValues = clearSelectionEffectSourceMetadata(nextRowValues, field, (field?.id || '').toString());
+    }
     const dedupRules = normalizeLineItemDedupRules((group.lineItemConfig as any)?.dedupRules);
     const dedupRuleMessages = dedupRules
       .map(rule => {
@@ -8477,6 +8482,7 @@ const FormView: React.FC<FormViewProps> = ({
               contextId,
               lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
               forceContextReset: true,
+              ...(changeSource === 'selectionEffectInit' ? { preferLookupSourceValue: true } : {}),
               snapshots: {
                 values: nextValues,
                 lineItems: syncedLineItems
@@ -8494,6 +8500,7 @@ const FormView: React.FC<FormViewProps> = ({
             contextId,
             lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
             forceContextReset: true,
+            ...(changeSource === 'selectionEffectInit' ? { preferLookupSourceValue: true } : {}),
             snapshots: {
               values: nextValues,
               lineItems: syncedLineItems

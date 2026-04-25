@@ -2,6 +2,7 @@ import { FieldValue, WebQuestionDefinition } from '../../../types';
 import { matchesWhenClause } from '../../../core';
 import {
   buildSubgroupKey,
+  parseSubgroupKey,
   resolveSubgroupKey,
   ROW_PARENT_GROUP_ID_KEY,
   ROW_PARENT_ROW_ID_KEY,
@@ -91,11 +92,13 @@ const effectStopMatches = (effect: any, whenCtx: ReturnType<typeof buildEffectWh
 
 const buildEffectWhenContext = (args: {
   rowValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
   topValues: Record<string, FieldValue>;
   lineItems: LineItemState;
 }) => ({
   getValue: (fieldId: string) => {
     if (Object.prototype.hasOwnProperty.call(args.rowValues, fieldId)) return args.rowValues[fieldId];
+    if (args.parentValues && Object.prototype.hasOwnProperty.call(args.parentValues, fieldId)) return args.parentValues[fieldId];
     if (Object.prototype.hasOwnProperty.call(args.topValues, fieldId)) return args.topValues[fieldId];
     return undefined;
   },
@@ -316,6 +319,7 @@ const effectNeedsInit = (args: {
   rowId: string;
   field: any;
   rowValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
   lineItems: LineItemState;
   topValues: Record<string, FieldValue>;
 }): boolean => {
@@ -323,6 +327,7 @@ const effectNeedsInit = (args: {
   const sourceValue = args.rowValues[(args.field?.id || '').toString()] as FieldValue;
   const whenCtx = buildEffectWhenContext({
     rowValues: args.rowValues,
+    parentValues: args.parentValues,
     topValues: args.topValues,
     lineItems: args.lineItems
   });
@@ -414,6 +419,17 @@ const visitLineItemGroups = (args: {
   });
 };
 
+const resolveImmediateParentValues = (
+  groupKey: string,
+  lineItems: LineItemState
+): Record<string, FieldValue> | undefined => {
+  const parsed = parseSubgroupKey(groupKey);
+  if (!parsed) return undefined;
+  const parentRows = (lineItems[parsed.parentGroupKey] || []) as any[];
+  const parentRow = parentRows.find(row => row?.id === parsed.parentRowId);
+  return parentRow?.values || undefined;
+};
+
 const collectSelectionEffectTargetsForGroup = (
   group: WebQuestionDefinition,
   groupKey: string,
@@ -431,6 +447,7 @@ const collectSelectionEffectTargetsForGroup = (
   if (!fieldsWithSelectionEffects.length || !rows.length) return [];
 
   const targets: SelectionEffectInitTarget[] = [];
+  const parentValues = resolveImmediateParentValues(groupKey, lineItems);
   rows.forEach(row => {
     const rowValues = row?.values || {};
     fieldsWithSelectionEffects.forEach((field: any) => {
@@ -442,6 +459,7 @@ const collectSelectionEffectTargetsForGroup = (
           rowId: row?.id || '',
           field,
           rowValues,
+          parentValues,
           lineItems,
           topValues
         })
@@ -558,6 +576,7 @@ export const collectComputedSelectionEffectInitTargets = (
     lineItems,
     visit: entry => {
       const currentRows = entry.rows;
+      const parentValues = resolveImmediateParentValues(entry.groupKey, lineItems);
       const groupFields = (((entry.question as any)?.lineItemConfig?.fields || []) as any[]).filter(Boolean);
       const effectFields = groupFields.filter(
         (field: any) =>
@@ -590,6 +609,7 @@ export const collectComputedSelectionEffectInitTargets = (
               rowId,
               field,
               rowValues: computedValues as Record<string, FieldValue>,
+              parentValues,
               lineItems,
               topValues
             })

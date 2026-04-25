@@ -283,4 +283,52 @@ describe('derivedValue', () => {
     const updatedRow = (computed.MP_MEALS_REQUEST || []).find((row: any) => row.id === rowId);
     expect(updatedRow?.values?.MP_TO_COOK).toBe(7);
   });
+
+  it('calc clamps numeric results to a configured minimum', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              { id: 'ORD_QTY', type: 'NUMBER' },
+              {
+                id: 'MP_TO_COOK',
+                type: 'NUMBER',
+                derivedValue: {
+                  op: 'calc',
+                  expression: '{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)',
+                  min: 0,
+                  lineItemFilters: [
+                    { ref: 'MP_TYPE_LI.PREP_QTY', when: { fieldId: 'PREP_TYPE', equals: ['Multi-ingredient'] } }
+                  ]
+                }
+              }
+            ],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                fields: [
+                  { id: 'PREP_QTY', type: 'NUMBER' },
+                  { id: 'PREP_TYPE', type: 'CHOICE' }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const rowId = 'row_1';
+    const subgroupKey = buildSubgroupKey('MP_MEALS_REQUEST', rowId, 'MP_TYPE_LI');
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [{ id: rowId, values: { ORD_QTY: 10 } }],
+      [subgroupKey]: [{ id: 'sub_1', values: { PREP_QTY: 14, PREP_TYPE: 'Multi-ingredient' } }]
+    };
+
+    const { lineItems: computed } = applyValueMapsToForm(definition, {} as any, lineItems, { mode: 'change' });
+    const updatedRow = (computed.MP_MEALS_REQUEST || []).find((row: any) => row.id === rowId);
+    expect(updatedRow?.values?.MP_TO_COOK).toBe(0);
+  });
 });

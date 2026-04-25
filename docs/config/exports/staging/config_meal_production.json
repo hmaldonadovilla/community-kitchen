@@ -2745,8 +2745,18 @@
                                   },
                                   "clearOnNoMatch": true,
                                   "when": {
-                                    "fieldId": "PREP_QTY",
-                                    "greaterThan": 0
+                                    "all": [
+                                      {
+                                        "fieldId": "PREP_QTY",
+                                        "greaterThan": 0
+                                      },
+                                      {
+                                        "fieldId": "PREP_TYPE",
+                                        "equals": [
+                                          "Cook"
+                                        ]
+                                      }
+                                    ]
                                   }
                                 },
                                 {
@@ -5564,7 +5574,7 @@
           "Options (EN)": "",
           "Options (FR)": "",
           "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+          "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ],\n    \"min\": 0\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -6017,7 +6027,8 @@
                     ]
                   }
                 }
-              ]
+              ],
+              "min": 0
             }
           },
           {
@@ -6678,8 +6689,18 @@
                     },
                     "clearOnNoMatch": true,
                     "when": {
-                      "fieldId": "PREP_QTY",
-                      "greaterThan": 0
+                      "all": [
+                        {
+                          "fieldId": "PREP_QTY",
+                          "greaterThan": 0
+                        },
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": [
+                            "Cook"
+                          ]
+                        }
+                      ]
                     }
                   },
                   {
@@ -7017,6 +7038,12 @@
                             "fieldId": "status",
                             "equals": "Closed"
                           }
+                        },
+                        "when": {
+                          "fieldId": "PREP_TYPE",
+                          "equals": [
+                            "Cook"
+                          ]
                         }
                       }
                     ]
@@ -9514,7 +9541,7 @@
             "Options (EN)": "",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ]\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
+            "Config (JSON/REF)": "{\n  \"derivedValue\": {\n    \"op\": \"calc\",\n    \"expression\": \"{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)\",\n    \"lineItemFilters\": [\n      {\n        \"ref\": \"MP_TYPE_LI.PREP_QTY\",\n        \"when\": {\n          \"fieldId\": \"PREP_TYPE\",\n          \"equals\": [\n            \"Multi-ingredient\"\n          ]\n        }\n      }\n    ],\n    \"min\": 0\n  },\n  \"selectionEffects\": [\n    {\n      \"id\": \"delete_mp_to_cook_sync\",\n      \"type\": \"deleteLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"targetEffectId\": \"mp_to_cook_sync\"\n    },\n    {\n      \"id\": \"mp_to_cook_sync\",\n      \"type\": \"addLineItems\",\n      \"groupId\": \"MP_TYPE_LI\",\n      \"when\": {\n        \"fieldId\": \"MP_TO_COOK\",\n        \"greaterThan\": 0\n      },\n      \"preset\": {\n        \"PREP_QTY\": \"$row.MP_TO_COOK\",\n        \"PREP_TYPE\": \"Cook\"\n      },\n      \"hideRemoveButton\": true\n    }\n  ]\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -9934,7 +9961,8 @@
                       ]
                     }
                   }
-                ]
+                ],
+                "min": 0
               }
             },
             {
@@ -10574,8 +10602,18 @@
                       },
                       "clearOnNoMatch": true,
                       "when": {
-                        "fieldId": "PREP_QTY",
-                        "greaterThan": 0
+                        "all": [
+                          {
+                            "fieldId": "PREP_QTY",
+                            "greaterThan": 0
+                          },
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Cook"
+                            ]
+                          }
+                        ]
                       }
                     },
                     {
@@ -10913,6 +10951,12 @@
                               "fieldId": "status",
                               "equals": "Closed"
                             }
+                          },
+                          "when": {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Cook"
+                            ]
                           }
                         }
                       ]
@@ -14540,8 +14584,18 @@
                                   },
                                   "clearOnNoMatch": true,
                                   "when": {
-                                    "fieldId": "PREP_QTY",
-                                    "greaterThan": 0
+                                    "all": [
+                                      {
+                                        "fieldId": "PREP_QTY",
+                                        "greaterThan": 0
+                                      },
+                                      {
+                                        "fieldId": "PREP_TYPE",
+                                        "equals": [
+                                          "Cook"
+                                        ]
+                                      }
+                                    ]
                                   }
                                 },
                                 {

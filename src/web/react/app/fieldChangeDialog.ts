@@ -11,6 +11,7 @@ import {
 import { LineItemState } from '../types';
 import { matchesWhenClause } from '../../rules/visibility';
 import { parseSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { clearSelectionEffectSourceMetadata } from './selectionEffectSourceMetadata';
 
 export type FieldChangeDialogScope = 'top' | 'line';
 
@@ -258,26 +259,31 @@ const updateRowField = (
   groupKey: string,
   rowId: string,
   fieldId: string,
-  value: FieldValue
+  value: FieldValue,
+  field?: LineItemFieldConfig
 ): LineItemState => {
   const rows = lineItems[groupKey] || [];
   const idx = rows.findIndex(r => normalizeId(r.id) === rowId);
   if (idx < 0) return lineItems;
   const nextRows = [...rows];
   const row = nextRows[idx];
-  const nextValues = { ...row.values };
+  let nextValues = { ...row.values };
   nextValues[fieldId] = value;
+  if (field) {
+    nextValues = clearSelectionEffectSourceMetadata(nextValues, field, fieldId);
+  }
   nextRows[idx] = { ...row, values: nextValues };
   return { ...lineItems, [groupKey]: nextRows };
 };
 
 export const applyFieldChangeDialogTargets = (args: {
+  definition?: WebFormDefinition;
   values: Record<string, FieldValue>;
   lineItems: LineItemState;
   updates: FieldChangeDialogTargetUpdate[];
   context: { scope: FieldChangeDialogScope; groupId?: string; rowId?: string };
 }): { values: Record<string, FieldValue>; lineItems: LineItemState; effectOverrides: Record<string, Record<string, FieldValue>> } => {
-  const { values, lineItems, updates, context } = args;
+  const { definition, values, lineItems, updates, context } = args;
   let nextValues = values;
   let nextLineItems = lineItems;
   const effectOverrides: Record<string, Record<string, FieldValue>> = {};
@@ -304,12 +310,14 @@ export const applyFieldChangeDialogTargets = (args: {
     }
     if (target.scope === 'row') {
       if (!normalizedGroupId || !normalizedRowId) return;
-      nextLineItems = updateRowField(nextLineItems, normalizedGroupId, normalizedRowId, fieldId, value);
+      const field = definition ? resolveLineItemFieldConfig(definition, normalizedGroupId, fieldId).field : undefined;
+      nextLineItems = updateRowField(nextLineItems, normalizedGroupId, normalizedRowId, fieldId, value, field);
       return;
     }
     if (target.scope === 'parent') {
       if (parsed?.parentGroupId && parsed?.parentRowId) {
-        nextLineItems = updateRowField(nextLineItems, parsed.parentGroupId, parsed.parentRowId, fieldId, value);
+        const field = definition ? resolveLineItemFieldConfig(definition, parsed.parentGroupId, fieldId).field : undefined;
+        nextLineItems = updateRowField(nextLineItems, parsed.parentGroupId, parsed.parentRowId, fieldId, value, field);
       } else {
         if (nextValues === values) nextValues = { ...values };
         (nextValues as any)[fieldId] = value;

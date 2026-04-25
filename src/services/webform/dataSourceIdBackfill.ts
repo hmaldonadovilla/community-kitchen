@@ -5,8 +5,10 @@ import {
   LineItemGroupConfig,
   PaginatedResult,
   QuestionConfig,
-  SelectionEffect
+  SelectionEffect,
+  WhenClause
 } from '../../types';
+import { matchesWhenClause } from '../../web/rules/visibility';
 import { CacheEtagManager } from './cache';
 import { debugLog } from './debug';
 import { ensureRecordIndexSheet } from './recordIndex';
@@ -86,6 +88,7 @@ type BackfillSpec = {
   lookupSourceFieldId?: string;
   lookupFields: string[];
   targetMapping: Record<string, string>;
+  when?: WhenClause;
 };
 
 type ApplySpecResult =
@@ -321,6 +324,7 @@ export class DataSourceIdBackfillService {
         const result = this.applySpec({
           row: values,
           spec,
+          parentValues: undefined,
           rowNumber: args.rowNumber,
           recordId: args.recordId,
           path: spec.fieldId,
@@ -405,6 +409,7 @@ export class DataSourceIdBackfillService {
     sampleLimit: number;
     formKey: string;
     basePath: string;
+    parentValues?: Record<string, any>;
   }): boolean {
     let changed = false;
     if (!Array.isArray(args.rows)) return false;
@@ -417,6 +422,7 @@ export class DataSourceIdBackfillService {
           const result = this.applySpec({
             row,
             spec,
+            parentValues: args.parentValues,
             rowNumber: args.rowNumber,
             recordId: args.recordId,
             path: `${rowPath}.${spec.fieldId}`,
@@ -442,7 +448,8 @@ export class DataSourceIdBackfillService {
           ...args,
           rows: childRows,
           groupPath: [...args.groupPath, childGroupId],
-          basePath: `${rowPath}.${childGroupId}`
+          basePath: `${rowPath}.${childGroupId}`,
+          parentValues: row
         });
         changed = childChanged || changed;
       });
@@ -453,6 +460,7 @@ export class DataSourceIdBackfillService {
   private applySpec(args: {
     row: Record<string, any>;
     spec: BackfillSpec;
+    parentValues?: Record<string, any>;
     rowNumber: number;
     recordId: string;
     path: string;
@@ -461,6 +469,9 @@ export class DataSourceIdBackfillService {
     honorStatusAllowList: boolean;
     formKey: string;
   }): ApplySpecResult {
+    if (!this.matchesSpecWhen(args.row, args.parentValues, args.spec)) {
+      return { status: 'alreadyFilled' };
+    }
     const missingTargets = Object.keys(args.spec.targetMapping).filter(fieldId => this.isBlank(args.row[fieldId]));
     if (!missingTargets.length) {
       return { status: 'alreadyFilled' };
@@ -581,6 +592,34 @@ export class DataSourceIdBackfillService {
     return { status: 'updated', updatedFields, entries };
   }
 
+  private matchesSpecWhen(
+    row: Record<string, any>,
+    parentValues: Record<string, any> | undefined,
+    spec: BackfillSpec
+  ): boolean {
+    if (!spec.when) return true;
+    try {
+      const ctx = {
+        getValue: (fieldIdRaw: string) => {
+          const fieldId = (fieldIdRaw || '').toString().trim();
+          if (!fieldId) return undefined;
+          if (Object.prototype.hasOwnProperty.call(row || {}, fieldId)) return row[fieldId];
+          if (parentValues && Object.prototype.hasOwnProperty.call(parentValues || {}, fieldId)) {
+            return parentValues[fieldId];
+          }
+          return undefined;
+        }
+      };
+      return matchesWhenClause(spec.when as any, ctx as any);
+    } catch (err: any) {
+      debugLog('datasourceIdBackfill.when.error', {
+        fieldId: spec.fieldId,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+      return true;
+    }
+  }
+
   private applySpecResult(
     result: ApplySpecResult,
     stats: {
@@ -654,7 +693,8 @@ export class DataSourceIdBackfillService {
           dataSource: source,
           lookupSourceFieldId: effect.lookupSourceFieldId,
           lookupFields,
-          targetMapping
+          targetMapping,
+          when: effect.when as WhenClause | undefined
         });
       });
     };

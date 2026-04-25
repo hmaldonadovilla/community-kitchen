@@ -1704,6 +1704,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         const applied = applyFieldChangeDialogTargets({
+          definition,
           values: nextBaseValues,
           lineItems: nextBaseLineItems,
           updates: remainingUpdates,
@@ -12167,6 +12168,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
+      preferLookupSourceValue?: boolean;
       snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     },
     effectOverrides?: Record<string, Record<string, FieldValue>>,

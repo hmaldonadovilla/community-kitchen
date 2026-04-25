@@ -16,7 +16,17 @@ interface EffectContext {
       replaceExistingByEffectId?: boolean;
     }
   ) => void;
-  clearLineItems?: (groupId: string, contextId?: string, meta?: { preserveManualRows?: boolean }) => void;
+  clearLineItems?: (
+    groupId: string,
+    contextId?: string,
+    meta?: {
+      preserveManualRows?: boolean;
+      preserveAutoRows?: boolean;
+      effectId?: string;
+      parentGroupId?: string;
+      parentRowId?: string;
+    }
+  ) => void;
   updateAutoLineItems?: (
     groupId: string,
     presets: Array<Record<string, PresetValue>>,
@@ -45,6 +55,11 @@ interface EffectContext {
 
 export interface SelectionEffectOptions {
   contextId?: string;
+  /**
+   * Use the stored source id before the visible value. Intended for init/freshness refreshes;
+   * user edits should leave this false so the newly selected visible value wins.
+   */
+  preferLookupSourceValue?: boolean;
   /**
    * Snapshot of current top-level form values (used for preset references like `$top.FIELD_ID`).
    */
@@ -394,7 +409,8 @@ export function handleSelectionEffects(
         diff: diffPreview,
         lineItem: options?.lineItem,
         topValues: options?.topValues,
-        effectOverrides: options?.effectOverrides
+        effectOverrides: options?.effectOverrides,
+        preferLookupSourceValue: options?.preferLookupSourceValue === true
       });
       return;
     }
@@ -422,7 +438,8 @@ export function handleSelectionEffects(
         ctx,
         debug,
         normalizedSelections,
-        lineItem: options?.lineItem
+        lineItem: options?.lineItem,
+        preferLookupSourceValue: options?.preferLookupSourceValue === true
       });
     }
   });
@@ -445,6 +462,7 @@ interface DataDrivenEffectParams {
   lineItem?: SelectionEffectOptions['lineItem'];
   topValues?: Record<string, any>;
   effectOverrides?: Record<string, Record<string, PresetValue>>;
+  preferLookupSourceValue?: boolean;
 }
 
 interface FieldPayloadEffectParams {
@@ -468,6 +486,7 @@ interface DataSourceValueMappingParams {
   debug: boolean;
   normalizedSelections: string[];
   lineItem?: SelectionEffectOptions['lineItem'];
+  preferLookupSourceValue?: boolean;
 }
 
 function buildLookupCandidates(args: {
@@ -476,6 +495,7 @@ function buildLookupCandidates(args: {
   lookupFields?: string[];
   lookupSourceValue?: any;
   lineItem?: SelectionEffectOptions['lineItem'];
+  preferLookupSourceValue?: boolean;
 }): string[] {
   const candidates: string[] = [];
   const seen = new Set<string>();
@@ -486,8 +506,13 @@ function buildLookupCandidates(args: {
     candidates.push(value);
   };
 
-  push(args.lookupSourceValue);
-  (args.normalizedSelections || []).forEach(push);
+  if (args.preferLookupSourceValue) {
+    push(args.lookupSourceValue);
+    (args.normalizedSelections || []).forEach(push);
+  } else {
+    (args.normalizedSelections || []).forEach(push);
+    push(args.lookupSourceValue);
+  }
 
   const fallbackFields = args.lookupFields?.length ? args.lookupFields : args.lookupField ? [args.lookupField] : [];
   fallbackFields.forEach(fieldId => {
@@ -840,8 +865,8 @@ function findSourceRowByLookup(args: {
   lookupFields: string[];
   lookupCandidates: string[];
 }): { row: any; lookupField: string; selectedValue: string } | null {
-  for (const lookupField of args.lookupFields) {
-    for (const candidateValueRaw of args.lookupCandidates) {
+  for (const candidateValueRaw of args.lookupCandidates) {
+    for (const lookupField of args.lookupFields) {
       const selectedToken = normalizeLookupToken(candidateValueRaw);
       const normalizedTarget = (selectedToken.key || selectedToken.raw).toLowerCase();
       if (!normalizedTarget) continue;
@@ -1108,7 +1133,8 @@ function applyValuesFromDataSource({
   ctx,
   debug,
   normalizedSelections,
-  lineItem
+  lineItem,
+  preferLookupSourceValue
 }: DataSourceValueMappingParams): void {
   const sourceConfig = resolveEffectDataSourceConfig(definition, question, effect.dataSource);
   const fieldMapping = effect.fieldMapping && typeof effect.fieldMapping === 'object' ? effect.fieldMapping : {};
@@ -1161,7 +1187,8 @@ function applyValuesFromDataSource({
         normalizedSelections,
         lookupFields,
         lookupSourceValue,
-        lineItem
+        lineItem,
+        preferLookupSourceValue
       });
       if (!lookupCandidates.length) {
         if (effect.clearOnNoMatch) {
@@ -1229,7 +1256,8 @@ function populateLineItemsFromDataSource({
   diff,
   lineItem,
   topValues,
-  effectOverrides
+  effectOverrides,
+  preferLookupSourceValue
 }: DataDrivenEffectParams): void {
   const sourceConfig = resolveEffectDataSourceConfig(definition, question, effect.dataSource);
   if (!sourceConfig) {
@@ -1257,6 +1285,13 @@ function populateLineItemsFromDataSource({
   const preserveManualRows = effect.preserveManualRows !== false;
   if (!normalizedSelections.length) {
     contextMap.clear();
+    if (effect.clearOnNoMatch) {
+      clearParentFieldMapping({
+        effect,
+        ctx,
+        lineItem
+      });
+    }
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] context cleared (no selections)', { questionId: question.id, contextId });
     }
@@ -1268,6 +1303,7 @@ function populateLineItemsFromDataSource({
       ctx,
       debug,
       contextId,
+      lineItem,
       effectOverrides
     });
     return;
@@ -1282,6 +1318,7 @@ function populateLineItemsFromDataSource({
       ctx,
       debug,
       contextId,
+      lineItem,
       effectOverrides
     });
     return;
@@ -1291,7 +1328,13 @@ function populateLineItemsFromDataSource({
   // When manual rows should be discarded, clear immediately so stale/manual rows
   // don't linger while the data source fetch resolves.
   if (!preserveManualRows && effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: false });
+    ctx.clearLineItems(targetGroupId, resolveAutoRowEffectContextId(contextId, effect), {
+      preserveManualRows: false,
+      preserveAutoRows: true,
+      effectId: normalizeEffectId(effect) || undefined,
+      parentGroupId: lineItem?.groupId,
+      parentRowId: lineItem?.rowId
+    });
   }
 
   (shouldForceDataSourceRefresh(effect)
@@ -1329,6 +1372,7 @@ function populateLineItemsFromDataSource({
           ctx,
           debug,
           contextId,
+          lineItem,
           effectOverrides
         });
         return;
@@ -1373,6 +1417,7 @@ function populateLineItemsFromDataSource({
           ctx,
           debug,
           contextId,
+          lineItem,
           effectOverrides
         });
         return;
@@ -1388,7 +1433,8 @@ function populateLineItemsFromDataSource({
           normalizedSelections: [selectedValue],
           lookupFields,
           lookupSourceValue,
-          lineItem
+          lineItem,
+          preferLookupSourceValue
         });
         const matchedRows = matchField
           ? lookupCandidates.flatMap(candidateValueRaw =>
@@ -1534,6 +1580,7 @@ function populateLineItemsFromDataSource({
         ctx,
         debug,
         contextId,
+        lineItem,
         effectOverrides
       });
     })
@@ -1574,10 +1621,16 @@ function populateLineItemsFromFieldPayload({
   const payload = payloadSource ? (payloadSource as Record<string, any>)[dataField] : undefined;
   const entries = coerceItemsCollection(payload);
   const preserveManualRows = effect.preserveManualRows !== false;
+  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
 
   if (!entries.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-      ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
+      ctx.clearLineItems(targetGroupId, effectContextId, {
+        preserveManualRows: preserveManualRows ? undefined : false,
+        effectId: normalizeEffectId(effect) || undefined,
+        parentGroupId: lineItem?.groupId,
+        parentRowId: lineItem?.rowId
+      });
     }
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] field-payload effect produced no entries', {
@@ -1597,7 +1650,6 @@ function populateLineItemsFromFieldPayload({
     : aggregatedPresets;
   const { numericFieldIds, nonNumericFieldIds } = resolveAggregationFields(effect, targetConfig.fields);
   const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
-  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
 
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
@@ -1612,7 +1664,12 @@ function populateLineItemsFromFieldPayload({
   }
 
   if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
+    ctx.clearLineItems(targetGroupId, effectContextId, {
+      preserveManualRows: preserveManualRows ? undefined : false,
+      effectId: normalizeEffectId(effect) || undefined,
+      parentGroupId: lineItem?.groupId,
+      parentRowId: lineItem?.rowId
+    });
   }
 
   mergedPresets.forEach(preset => {
@@ -1818,6 +1875,7 @@ interface RenderParams {
   ctx: EffectContext;
   debug: boolean;
   contextId: string;
+  lineItem?: SelectionEffectOptions['lineItem'];
   effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
@@ -1832,7 +1890,7 @@ function resolveAutoRowEffectContextId(baseContextId: string, effect: SelectionE
   return baseContextId ? `${baseContextId}::${effectId}` : effectId;
 }
 
-function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, effectOverrides }: RenderParams): void {
+function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, lineItem, effectOverrides }: RenderParams): void {
   const entriesForAllSelections: any[] = [];
   const contextMap = getContextMap(cache, contextId);
   if (contextMap) {
@@ -1844,10 +1902,18 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
   }
   const numericTargets = resolveNumericTargets(effect, targetConfig.fields);
   const { nonNumericFieldIds } = resolveAggregationFields(effect, targetConfig.fields);
+  const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
+  const preserveManualRows = (effect as any)?.preserveManualRows !== false;
+  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
 
   if (!entriesForAllSelections.length) {
     if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-      ctx.clearLineItems(targetGroupId, contextId);
+      ctx.clearLineItems(targetGroupId, effectContextId, {
+        preserveManualRows: preserveManualRows ? undefined : false,
+        effectId: normalizeEffectId(effect) || undefined,
+        parentGroupId: lineItem?.groupId,
+        parentRowId: lineItem?.rowId
+      });
     }
     if (debug && typeof console !== 'undefined') {
       console.warn('[SelectionEffects] data-driven effect produced no entries after filtering', {
@@ -1861,9 +1927,6 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
   const mergedPresets = override
     ? aggregatedPresets.map(preset => mergePresetOverrides(preset as any, override))
     : aggregatedPresets;
-  const hideRemoveButton = (effect as any)?.hideRemoveButton === true;
-  const preserveManualRows = (effect as any)?.preserveManualRows !== false;
-  const effectContextId = resolveAutoRowEffectContextId(contextId, effect);
 
   if (ctx.updateAutoLineItems) {
     ctx.updateAutoLineItems(targetGroupId, mergedPresets, {
@@ -1879,7 +1942,12 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
   }
 
   if (effect.clearGroupBeforeAdd !== false && typeof ctx.clearLineItems === 'function') {
-    ctx.clearLineItems(targetGroupId, contextId, { preserveManualRows: preserveManualRows ? undefined : false });
+    ctx.clearLineItems(targetGroupId, effectContextId, {
+      preserveManualRows: preserveManualRows ? undefined : false,
+      effectId: normalizeEffectId(effect) || undefined,
+      parentGroupId: lineItem?.groupId,
+      parentRowId: lineItem?.rowId
+    });
   }
   mergedPresets.forEach(preset => {
     ctx.addLineItemRow(targetGroupId, preset, {

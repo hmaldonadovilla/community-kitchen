@@ -440,6 +440,32 @@ describe('meal production leftover selection config', () => {
     );
   });
 
+  it('limits recipe and ingredient datasource freshness to cook rows only', () => {
+    const definition = getDefinition();
+    const exported = getExport();
+    const question = definition.questions.find(q => q.id === 'MP_MEALS_REQUEST') as any;
+    const typeGroup = (question?.lineItemConfig?.subGroups || []).find((entry: any) => entry?.id === 'MP_TYPE_LI');
+    const recipeField = (typeGroup?.fields || []).find((entry: any) => entry?.id === 'RECIPE');
+    const recipeSync = (recipeField?.selectionEffects || []).find((entry: any) => entry?.id === 'syncRecipeIngredientsFromSource');
+    const ingredientsGroup = (typeGroup?.subGroups || []).find((entry: any) => entry?.id === 'MP_INGREDIENTS_LI');
+    const ingredientField = (ingredientsGroup?.fields || []).find((entry: any) => entry?.id === 'ING');
+    const ingredientSync = (ingredientField?.selectionEffects || []).find((entry: any) => entry?.id === 'syncIngredientFromSource');
+    const toCookField = (question?.lineItemConfig?.fields || []).find((entry: any) => entry?.id === 'MP_TO_COOK');
+    const rawQuestion = (exported.questions || []).find((entry: any) => entry?.id === 'MP_MEALS_REQUEST');
+    const rawToCook = (rawQuestion?.optionsRaw || []).find((entry: any) => entry?.ID === 'MP_TO_COOK');
+    const rawConfig = JSON.parse(rawToCook?.['Config (JSON/REF)'] || '{}');
+
+    expect(recipeSync?.when).toEqual({
+      all: [
+        { fieldId: 'PREP_QTY', greaterThan: 0 },
+        { fieldId: 'PREP_TYPE', equals: ['Cook'] }
+      ]
+    });
+    expect(ingredientSync?.when).toEqual({ fieldId: 'PREP_TYPE', equals: ['Cook'] });
+    expect(toCookField?.derivedValue).toEqual(expect.objectContaining({ min: 0 }));
+    expect(rawConfig?.derivedValue).toEqual(expect.objectContaining({ min: 0 }));
+  });
+
   it('copies recipe source metadata when duplicating a closed meal production record', () => {
     const exported = getExport();
     const profileSubGroup = exported.form?.copyCurrentRecordProfile?.lineItems?.[0]?.subGroups?.find(
