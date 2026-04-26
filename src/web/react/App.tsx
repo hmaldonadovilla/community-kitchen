@@ -2702,6 +2702,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveDirtyRef = useRef<boolean>(false);
   const autoSaveInFlightRef = useRef<boolean>(false);
   const autoSaveQueuedRef = useRef<boolean>(false);
+  const autoSaveInFlightBlockerLogRef = useRef<{ blocker: string; token: unknown } | null>(null);
   const draftSaveRequestInFlightRef = useRef<boolean>(false);
   const draftSaveRequestPromiseRef = useRef<Promise<any> | null>(null);
   const submissionRequestPromiseRef = useRef<Promise<any> | null>(null);
@@ -2827,6 +2828,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [logEvent]
   );
 
+  const blockAutoSaveForInFlight = useCallback(
+    (args: { blocker: string; token: unknown; eventName: string; details: Record<string, unknown> }) => {
+      autoSaveQueuedRef.current = true;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      const previous = autoSaveInFlightBlockerLogRef.current;
+      if (previous?.blocker === args.blocker && previous.token === args.token) return;
+      autoSaveInFlightBlockerLogRef.current = {
+        blocker: args.blocker,
+        token: args.token
+      };
+      logEvent(args.eventName, args.details);
+    },
+    [logEvent]
+  );
+
   const rememberAutoSaveSeenState = useCallback(
     (nextValues: Record<string, FieldValue>, nextLineItems: LineItemState) => {
       lastAutoSaveSeenRef.current = { values: nextValues, lineItems: nextLineItems };
@@ -2896,14 +2915,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         logEvent('draftSave.serialized', { reason });
       }
       void promise.finally(() => {
+        const hadQueuedAutoSave = autoSaveDirtyRef.current || autoSaveQueuedRef.current;
         if (draftSaveRequestPromiseRef.current === promise) {
           draftSaveRequestPromiseRef.current = null;
           draftSaveRequestInFlightRef.current = false;
         }
+        if (!submittingRef.current && hadQueuedAutoSave) {
+          scheduleLatestAutoSave('draftSave.release', 0);
+        }
       });
       return promise;
     },
-    [logEvent]
+    [logEvent, scheduleLatestAutoSave]
   );
 
   const runSerializedSubmissionRequest = useCallback(
@@ -3342,9 +3365,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const dataSourceFreshnessWatchIsStopped = useCallback((watch: { stopWhen?: any }): boolean => {
     if (!watch?.stopWhen) return false;
-    const metaSource: any = selectedRecordSnapshot || lastSubmissionMeta || null;
+    const metaSource: any = selectedRecordSnapshotRef.current || lastSubmissionMetaRef.current || null;
+    const currentValues = valuesRef.current || {};
+    const currentLineItems = lineItemsRef.current || {};
     const topValues: Record<string, FieldValue> = {
-      ...((values || {}) as Record<string, FieldValue>),
+      ...(currentValues as Record<string, FieldValue>),
       ...(metaSource?.id !== undefined ? { id: metaSource.id as FieldValue } : {}),
       ...(metaSource?.createdAt !== undefined ? { createdAt: metaSource.createdAt as FieldValue } : {}),
       ...(metaSource?.updatedAt !== undefined ? { updatedAt: metaSource.updatedAt as FieldValue } : {}),
@@ -3353,10 +3378,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     };
     return matchesWhenClause(watch.stopWhen, {
       getValue: (fieldId: string) => topValues[fieldId],
-      getLineItems: (groupId: string) => (lineItems[groupId] || []) as any[],
-      getLineItemKeys: () => Object.keys(lineItems || {})
+      getLineItems: (groupId: string) => (currentLineItems[groupId] || []) as any[],
+      getLineItemKeys: () => Object.keys(currentLineItems || {})
     } as any);
-  }, [lastSubmissionMeta, lineItems, selectedRecordSnapshot, values]);
+  }, []);
 
   const resolveRunnableDataSourceFreshnessWatches = useCallback(
     (stepId?: string | null) =>
@@ -8637,23 +8662,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // Avoid racing uploads: file upload flow already persists changes (and uses optimistic locking).
       // Running autosave concurrently can create spurious "stale" banners and duplicate saves.
       if (uploadQueueRef.current.size > 0) {
-        autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
-        logEvent('autosave.blocked.uploadInFlight', { reason, inFlight: uploadQueueRef.current.size });
+        blockAutoSaveForInFlight({
+          blocker: 'upload',
+          token: uploadQueueRef.current.size,
+          eventName: 'autosave.blocked.uploadInFlight',
+          details: { reason, inFlight: uploadQueueRef.current.size }
+        });
         return;
       }
 
       if (recordSyncPromiseRef.current) {
-        autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
-        logEvent('autosave.blocked.recordSyncInFlight', { reason });
+        blockAutoSaveForInFlight({
+          blocker: 'recordSync',
+          token: recordSyncPromiseRef.current,
+          eventName: 'autosave.blocked.recordSyncInFlight',
+          details: { reason }
+        });
         return;
       }
 
       if (guidedStepImmediateSyncPromiseRef.current) {
-        autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
-        logEvent('autosave.blocked.guidedStepLiveSync', { reason });
+        blockAutoSaveForInFlight({
+          blocker: 'guidedStepLiveSync',
+          token: guidedStepImmediateSyncPromiseRef.current,
+          eventName: 'autosave.blocked.guidedStepLiveSync',
+          details: { reason }
+        });
         return;
       }
 
@@ -8775,12 +8812,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
       if (draftSaveRequestInFlightRef.current) {
-        autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
-        logEvent('autosave.blocked.draftSaveInFlight', { reason });
+        blockAutoSaveForInFlight({
+          blocker: 'draftSave',
+          token: draftSaveRequestPromiseRef.current,
+          eventName: 'autosave.blocked.draftSaveInFlight',
+          details: { reason }
+        });
         return;
       }
 
+      autoSaveInFlightBlockerLogRef.current = null;
       autoSaveInFlightRef.current = true;
       autoSaveQueuedRef.current = false;
       // Clear the dirty flag for this attempt; it will be re-set by the change effect if edits continue.
@@ -9067,6 +9109,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       autoSaveDebounceMs,
       autoSaveEnabled,
       autoSaveEnableFieldIds,
+      blockAutoSaveForInFlight,
       dedupPrecheckRules,
       resolveAutoSaveStatus,
       closedStatusLabel,
@@ -9625,6 +9668,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [
     autoSaveDebounceMs,
     autoSaveEnabled,
+    blockAutoSaveForInFlight,
     definition,
     dedupChecking,
     dedupConflict,
@@ -9748,14 +9792,41 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return;
     }
+    if (recordSyncPromiseRef.current) {
+      blockAutoSaveForInFlight({
+        blocker: 'recordSync',
+        token: recordSyncPromiseRef.current,
+        eventName: 'autosave.blocked.recordSyncInFlight',
+        details: { reason: 'debouncedTrigger' }
+      });
+      return;
+    }
     if (uploadQueueRef.current.size > 0) {
       // Don't schedule autosave while uploads are persisting (avoid stale self-races).
-      autoSaveQueuedRef.current = true;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      logEvent('autosave.blocked.uploadInFlight', { reason: 'debouncedTrigger', inFlight: uploadQueueRef.current.size });
+      blockAutoSaveForInFlight({
+        blocker: 'upload',
+        token: uploadQueueRef.current.size,
+        eventName: 'autosave.blocked.uploadInFlight',
+        details: { reason: 'debouncedTrigger', inFlight: uploadQueueRef.current.size }
+      });
+      return;
+    }
+    if (guidedStepImmediateSyncPromiseRef.current) {
+      blockAutoSaveForInFlight({
+        blocker: 'guidedStepLiveSync',
+        token: guidedStepImmediateSyncPromiseRef.current,
+        eventName: 'autosave.blocked.guidedStepLiveSync',
+        details: { reason: 'debouncedTrigger' }
+      });
+      return;
+    }
+    if (draftSaveRequestInFlightRef.current) {
+      blockAutoSaveForInFlight({
+        blocker: 'draftSave',
+        token: draftSaveRequestPromiseRef.current,
+        eventName: 'autosave.blocked.draftSaveInFlight',
+        details: { reason: 'debouncedTrigger' }
+      });
       return;
     }
     if (dedupHoldRef.current || dedupCheckingRef.current) {
@@ -9771,6 +9842,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (prev.phase === 'dirty') return prev;
       return { phase: 'dirty' };
     });
+    autoSaveInFlightBlockerLogRef.current = null;
     const scheduledTimerId = scheduleLatestAutoSave(
       'debounced',
       resolveDebouncedAutoSaveDelay({

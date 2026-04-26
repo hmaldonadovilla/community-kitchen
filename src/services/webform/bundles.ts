@@ -1,4 +1,4 @@
-import { getReactBundle } from '../../web/react/reactBundle';
+import { getReactBundle, getReactBundleHash } from '../../web/react/reactBundle';
 
 const normalizeBundleKey = (raw?: string | null): string => {
   const key = (raw || '').toString().trim().toLowerCase();
@@ -12,3 +12,5 @@ export const renderReactBundle = (app?: string | null): GoogleAppsScript.Content
   output.setMimeType(ContentService.MimeType.JAVASCRIPT);
   return output;
 };
+
+export const getReactBundleCacheKey = (app?: string | null): string => getReactBundleHash(normalizeBundleKey(app));

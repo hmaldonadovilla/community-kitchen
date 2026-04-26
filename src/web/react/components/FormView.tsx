@@ -8391,6 +8391,7 @@ const FormView: React.FC<FormViewProps> = ({
     options?: { source?: 'user' | 'selectionEffectInit' }
   ) => {
     if (submitting) return;
+    const changeSource = options?.source === 'selectionEffectInit' ? 'selectionEffectInit' : 'user';
     // Allow edits to proceed; readOnly/valueMap are enforced at the input level.
     if (field?.readOnly === true) {
       onDiagnostic?.('field.change.blocked', { scope: 'line', fieldPath: `${group.id}__${field?.id || ''}__${rowId}`, reason: 'readOnly' });
@@ -8413,7 +8414,7 @@ const FormView: React.FC<FormViewProps> = ({
       },
       group
     );
-    if (orderedBlock) {
+    if (orderedBlock && changeSource !== 'selectionEffectInit') {
       blurActiveElement('orderedEntry.blocked', {
         scope: 'line',
         groupId: group.id,
@@ -8432,7 +8433,6 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
-    const changeSource = options?.source === 'selectionEffectInit' ? 'selectionEffectInit' : 'user';
     let userEditResult: { deferMutation?: boolean } | void = undefined;
     if (changeSource === 'selectionEffectInit') {
       onAutomatedMutation?.({
@@ -8542,16 +8542,18 @@ const FormView: React.FC<FormViewProps> = ({
       rowValues: nextRowValues,
       config: (field as any)?.ui?.exclusiveLineSelection
     });
-    const marked = markRecipeIngredientsDirtyForGroupKey(updatedLineItems, group.id);
-    if (marked.changed) {
-      updatedLineItems = marked.lineItems;
-      onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
-        groupId: group.id,
-        parentGroupKey: marked.parentGroupKey || null,
-        parentRowId: marked.parentRowId || null,
-        reason: 'fieldChange',
-        fieldId: (field?.id || '').toString()
-      });
+    if (changeSource !== 'selectionEffectInit') {
+      const marked = markRecipeIngredientsDirtyForGroupKey(updatedLineItems, group.id);
+      if (marked.changed) {
+        updatedLineItems = marked.lineItems;
+        onDiagnostic?.('ck-75.recipe.ingredientsDirty.set', {
+          groupId: group.id,
+          parentGroupKey: marked.parentGroupKey || null,
+          parentRowId: marked.parentRowId || null,
+          reason: 'fieldChange',
+          fieldId: (field?.id || '').toString()
+        });
+      }
     }
     const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(
       definition,

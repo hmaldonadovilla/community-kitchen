@@ -30,7 +30,7 @@ describe('WebFormTemplate', () => {
   test('includes request ts in the bundled react script URL', () => {
     const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production', { ts: '1741513400' });
 
-    expect(html).toContain('bundle=react&app=meal-production&v=cache-v-test&ts=1741513400');
+    expect(html).toMatch(/bundle=react&app=meal-production&v=cache-v-test\.[a-f0-9]{12}&ts=1741513400/);
   });
 
   test('exposes the service url to the client bootstrap globals', () => {

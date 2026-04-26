@@ -1,6 +1,7 @@
 import { WebFormDefinition } from '../types';
 import { SYSTEM_FONT_STACK } from '../constants/typography';
 import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
+import { getReactBundleCacheKey } from './webform/bundles';
 import { isDebugEnabled } from './webform/debug';
 import { getUiEnvTag } from './webform/envTag';
 import { ServerTimingRecorder } from './webform/serverTiming';
@@ -56,7 +57,9 @@ const buildBundleSrc = (
   const target = (bundleTarget || '').toString().trim();
   const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
   const cacheVersion = (cacheVersionOverride || resolveCacheVersion() || '').toString().trim();
-  const versionParam = cacheVersion ? `&v=${encodeURIComponent(cacheVersion)}` : '';
+  const bundleCacheKey = getReactBundleCacheKey(target);
+  const versionKey = [cacheVersion, bundleCacheKey].filter(Boolean).join('.');
+  const versionParam = versionKey ? `&v=${encodeURIComponent(versionKey)}` : '';
   const tsParamRaw = (requestParams?.ts || requestParams?.t || '').toString().trim();
   const tsParam = tsParamRaw ? `&ts=${encodeURIComponent(tsParamRaw)}` : '';
   const query = `bundle=react${appParam}${versionParam}${tsParam}`;
@@ -1478,6 +1481,7 @@ export function buildWebFormHtml(
 
         // Non-bundled forms: hydrate from a long-lived localStorage cache keyed by server cache version.
         // Version bump is controlled by createAllForms() (server-side), which invalidates __CK_CACHE_VERSION__.
+        // The React bundle URL also includes a bundle hash, so code-only deploys still bust browser caches.
         try {
           var hasDef = !!window.__WEB_FORM_DEF__;
           var cacheVersion = (window.__CK_CACHE_VERSION__ || '').toString().trim();

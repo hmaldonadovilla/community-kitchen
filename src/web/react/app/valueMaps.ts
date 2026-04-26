@@ -136,6 +136,25 @@ const shallowEqualFieldValue = (a: FieldValue, b: FieldValue): boolean => {
   return false;
 };
 
+const hasOwnField = (values: Record<string, FieldValue>, fieldId: string): boolean =>
+  Object.prototype.hasOwnProperty.call(values, fieldId);
+
+const shallowEqualLineRowValues = (
+  a: Record<string, FieldValue> | undefined | null,
+  b: Record<string, FieldValue> | undefined | null
+): boolean => {
+  const left = a || {};
+  const right = b || {};
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (const key of leftKeys) {
+    if (!hasOwnField(right, key)) return false;
+    if (!shallowEqualFieldValue(left[key], right[key])) return false;
+  }
+  return true;
+};
+
 const resolveLineItemFieldsForKey = (definition: WebFormDefinition, groupKey: string): any[] => {
   const parsed = parseSubgroupKey(groupKey);
   if (!parsed) {
@@ -656,7 +675,7 @@ export const applyValueMapsToLineRow = (
       if (field.valueMap) {
         const getValue = (fieldId: string) => {
           if (fieldId === undefined || fieldId === null) return undefined;
-          if (rowValues.hasOwnProperty(fieldId)) return nextValues[fieldId];
+          if (hasOwnField(nextValues, fieldId)) return nextValues[fieldId];
           return topValues[fieldId];
         };
         const computed = resolveValueMapValue(field.valueMap, getValue);
@@ -672,7 +691,7 @@ export const applyValueMapsToLineRow = (
         if (field.derivedValue?.op === 'copy') {
           const sourceId = (field.derivedValue?.dependsOn || '').toString().trim();
           if (!sourceId) return;
-          const source = Object.prototype.hasOwnProperty.call(rowValues, sourceId) ? nextValues[sourceId] : topValues[sourceId];
+          const source = hasOwnField(nextValues, sourceId) ? nextValues[sourceId] : topValues[sourceId];
           const derived = computeCopyValue({ config: field.derivedValue, current: nextValues[field.id], source });
           if (derived !== undefined && derived !== nextValues[field.id]) {
             nextValues[field.id] = derived;
@@ -706,7 +725,7 @@ export const applyValueMapsToLineRow = (
         if (when === 'empty' && !isEmptyValue(nextValues[field.id])) return;
         const derived = resolveDerivedValue(field.derivedValue, fid => {
           if (fid === undefined || fid === null) return undefined;
-          if (rowValues.hasOwnProperty(fid)) return nextValues[fid];
+          if (hasOwnField(nextValues, fid)) return nextValues[fid];
           return topValues[fid];
         });
         if (derived !== undefined && derived !== nextValues[field.id]) {
@@ -743,7 +762,7 @@ export const applyValueMapsToForm = (
   options?: ApplyValueMapsOptions
 ): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
   let values = { ...currentValues };
-  let lineItems = { ...currentLineItems };
+  let lineItems = currentLineItems || {};
   const mode: ApplyValueMapsMode = options?.mode || 'change';
   const lockedTopFields = Array.isArray(options?.lockedTopFields) ? options?.lockedTopFields : [];
   const lockedTopValues: Record<string, FieldValue> = {};
@@ -837,15 +856,23 @@ export const applyValueMapsToForm = (
         const { groupCfg, groupKey, rows, contextValues } = args;
         if (!groupCfg) return;
         const fields = (groupCfg?.fields || []) as any[];
-        const updatedRows = rows.map(row => ({
-          ...row,
-          values: applyValueMapsToLineRow(fields, row.values, contextValues, options, {
+        let rowsChanged = false;
+        const updatedRows = rows.map(row => {
+          const nextRowValues = applyValueMapsToLineRow(fields, row.values || {}, contextValues, options, {
             groupKey,
             rowId: row.id,
             lineItems
-          })
-        }));
-        lineItems = { ...lineItems, [groupKey]: updatedRows };
+          });
+          if (shallowEqualLineRowValues(row.values, nextRowValues)) return row;
+          rowsChanged = true;
+          return {
+            ...row,
+            values: nextRowValues
+          };
+        });
+        if (rowsChanged) {
+          lineItems = { ...lineItems, [groupKey]: updatedRows };
+        }
 
         const subGroups = (groupCfg?.subGroups || []) as any[];
         if (!subGroups.length) return;

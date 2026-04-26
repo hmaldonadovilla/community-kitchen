@@ -12,6 +12,7 @@ import {
 import { applyValueMapsToLineRow } from './valueMaps';
 import { LineItemState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
+import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../app/recipeIngredientsDirty';
 
 export interface SelectionEffectInitTarget {
   group: WebQuestionDefinition;
@@ -314,6 +315,11 @@ const effectTargetRowsAreHydrated = (args: {
   });
 };
 
+const isRecipeIngredientsDirty = (rowValues: Record<string, FieldValue>): boolean => {
+  const raw = (rowValues as any)?.[CK_RECIPE_INGREDIENTS_DIRTY_KEY];
+  return raw === true || (typeof raw === 'string' && raw.trim().toLowerCase() === 'true');
+};
+
 const effectNeedsInit = (args: {
   question: WebQuestionDefinition;
   rowId: string;
@@ -362,6 +368,7 @@ const effectNeedsInit = (args: {
           lineItems: args.lineItems
         }).length > 0;
       case 'addLineItemsFromDataSource':
+        if (isRecipeIngredientsDirty(args.rowValues)) return false;
         if (effectRefreshesOnInit(effect)) return true;
         return !effectTargetRowsAreHydrated({
           question: args.question,

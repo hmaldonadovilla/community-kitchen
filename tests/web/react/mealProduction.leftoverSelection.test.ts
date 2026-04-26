@@ -1,4 +1,6 @@
 import { WebFormDefinition } from '../../../src/types';
+import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
+import { applyValueMapsToForm } from '../../../src/web/react/app/valueMaps';
 
 const getDefinition = (): WebFormDefinition =>
   JSON.parse(
@@ -438,6 +440,49 @@ describe('meal production leftover selection config', () => {
         hidden: true
       })
     );
+  });
+
+  it('computes selected leftover summary templates in a single value-map pass', () => {
+    const definition = getDefinition();
+    const parentRowId = 'meal-row';
+    const typeGroupKey = buildSubgroupKey('MP_MEALS_REQUEST', parentRowId, 'MP_TYPE_LI');
+    const lineItems: any = {
+      MP_MEALS_REQUEST: [
+        {
+          id: parentRowId,
+          values: {
+            MEAL_TYPE: 'Vegetarian',
+            ORD_QTY: 50
+          }
+        }
+      ],
+      [typeGroupKey]: [
+        {
+          id: 'leftover-row',
+          values: {
+            PREP_TYPE: 'Multi-ingredient',
+            PREP_QTY: '15',
+            LEFTOVER_ID: 'MI-8',
+            LEFTOVER_USAGE_MODE: 'Reheat',
+            LEFTOVER_DISPLAY_UNIT: 'portions',
+            LEFTOVER_SUMMARY_ACTION: 'reheat ',
+            LEFTOVER_SUMMARY_AMOUNT_SOURCE: '15',
+            LEFTOVER_SUMMARY_UNIT_PREFIX: ' ',
+            RECIPE: 'One pot creamy pasta'
+          }
+        }
+      ]
+    };
+
+    const first = applyValueMapsToForm(definition, {} as any, lineItems, { mode: 'change' });
+    const leftoverRow = first.lineItems[typeGroupKey][0];
+    expect(leftoverRow.values.LEFTOVER_SUMMARY_UNIT).toBe(' portions');
+    expect(leftoverRow.values.LEFTOVER_SUMMARY_AMOUNT).toBe('15 portions');
+    expect(leftoverRow.values.LEFTOVER_SUMMARY).toBe('MI-8 | One pot creamy pasta | reheat 15 portions');
+
+    const second = applyValueMapsToForm(definition, first.values, first.lineItems, { mode: 'change' });
+    expect(second.lineItems).toBe(first.lineItems);
+    expect(second.lineItems[typeGroupKey][0]).toBe(leftoverRow);
   });
 
   it('limits recipe and ingredient datasource freshness to cook rows only', () => {

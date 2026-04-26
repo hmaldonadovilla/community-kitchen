@@ -1,4 +1,5 @@
 import { buildSubgroupKey } from '../../src/web/react/app/lineItems';
+import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../src/web/react/app/recipeIngredientsDirty';
 import { collectSelectionEffectInitTargets } from '../../src/web/react/components/form/selectionEffectInit';
 import { WebQuestionDefinition } from '../../src/types';
 
@@ -128,6 +129,29 @@ describe('selection effect init source sync', () => {
         [ingredientKey]: [{ id: 'ing_1', values: { ING: 'Carrot', QTY: 1 } }]
       },
       { status: 'Closed' }
+    );
+
+    expect(targets).toEqual([]);
+  });
+
+  it('does not replay recipe ingredient source sync after ingredients were edited manually', () => {
+    const ingredientKey = buildSubgroupKey('MEALS', 'meal_1', 'INGREDIENTS');
+    const targets = collectSelectionEffectInitTargets(
+      buildMealQuestion({ sourceSync: { refreshOnInit: true, forceRefresh: true } }),
+      {
+        MEALS: [
+          {
+            id: 'meal_1',
+            values: {
+              RECIPE: 'Old soup',
+              RECIPE_SOURCE_ID: 'recipe-1',
+              [CK_RECIPE_INGREDIENTS_DIRTY_KEY]: true
+            }
+          }
+        ],
+        [ingredientKey]: [{ id: 'ing_1', values: { ING: 'Carrot', QTY: 1 } }]
+      },
+      { status: 'Open' }
     );
 
     expect(targets).toEqual([]);
