@@ -22,6 +22,25 @@ export const shouldDeferReservationSync = (args: {
   return touchesQuantity && !touchesSelection;
 };
 
+export const buildReservationFieldPatch = (args: {
+  fieldId: string;
+  value: any;
+  selectedFieldId?: string;
+  selectedValue?: unknown;
+  quantityFieldId?: string;
+}): Record<string, any> => {
+  const fieldId = (args.fieldId || '').toString().trim();
+  if (!fieldId) return {};
+  const patch: Record<string, any> = { [fieldId]: args.value };
+  const selectedFieldId = (args.selectedFieldId || '').toString().trim();
+  if (!selectedFieldId || selectedFieldId === fieldId) return patch;
+  const quantityFieldId = (args.quantityFieldId || '').toString().trim();
+  const isQuantityField = !!quantityFieldId && quantityFieldId === fieldId;
+  if (isQuantityField && args.selectedValue === true) return patch;
+  patch[selectedFieldId] = true;
+  return patch;
+};
+
 const normalizeReservationValue = (value: unknown): string | null => {
   if (value === undefined || value === null) return null;
   const text = `${value}`.trim();

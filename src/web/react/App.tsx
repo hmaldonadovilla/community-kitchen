@@ -9868,6 +9868,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [
     autoSaveDebounceMs,
     autoSaveEnabled,
+    blockAutoSaveForInFlight,
     definition,
     formKey,
     isClosedRecord,

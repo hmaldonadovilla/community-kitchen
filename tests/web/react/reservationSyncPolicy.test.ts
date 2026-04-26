@@ -1,4 +1,5 @@
 import {
+  buildReservationFieldPatch,
   buildReservationFailureMessage,
   getReservationCommitMode,
   shouldImmediatelySyncStepReservationChange,
@@ -17,6 +18,55 @@ describe('reservationSyncPolicy', () => {
         quantityFieldId: 'LEFTOVER_USE_QTY'
       })
     ).toBe(true);
+  });
+
+  test('builds quantity-only patches for already-selected reservations', () => {
+    const patch = buildReservationFieldPatch({
+      fieldId: 'LEFTOVER_USE_QTY',
+      value: '5',
+      selectedFieldId: 'LEFTOVER_SELECTED',
+      selectedValue: true,
+      quantityFieldId: 'LEFTOVER_USE_QTY'
+    });
+
+    expect(patch).toEqual({ LEFTOVER_USE_QTY: '5' });
+    expect(
+      shouldDeferReservationSync({
+        patch,
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY'
+      })
+    ).toBe(true);
+  });
+
+  test('keeps non-quantity reservation field patches selection-aware', () => {
+    expect(
+      buildReservationFieldPatch({
+        fieldId: 'LEFTOVER_USAGE_MODE',
+        value: 'Combine',
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        selectedValue: true,
+        quantityFieldId: 'LEFTOVER_USE_QTY'
+      })
+    ).toEqual({
+      LEFTOVER_SELECTED: true,
+      LEFTOVER_USAGE_MODE: 'Combine'
+    });
+  });
+
+  test('selects the reservation when quantity is edited before selection state exists', () => {
+    expect(
+      buildReservationFieldPatch({
+        fieldId: 'LEFTOVER_USE_QTY',
+        value: '5',
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        selectedValue: false,
+        quantityFieldId: 'LEFTOVER_USE_QTY'
+      })
+    ).toEqual({
+      LEFTOVER_SELECTED: true,
+      LEFTOVER_USE_QTY: '5'
+    });
   });
 
   test('does not defer reservation sync when the selection state is part of the patch', () => {

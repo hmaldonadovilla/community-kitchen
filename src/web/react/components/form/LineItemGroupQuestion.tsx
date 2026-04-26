@@ -98,6 +98,7 @@ import {
 } from './reservationConflictDialog';
 import {
   buildReservationFailureMessage,
+  buildReservationFieldPatch,
   isStepReservationCommitEnabled,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
@@ -2723,6 +2724,55 @@ export const LineItemGroupQuestion: React.FC<{
       updateStepDataSourceAvailabilityOptimistically,
       validateVirtualFieldRules
     ]
+  );
+
+  const buildDeferredStepReservationTimerKey = React.useCallback(
+    (parentRowId: string, sourceKey: string): string =>
+      `${q.id}::stepReservationDeferred::${parentRowId || ''}::${sourceKey || ''}`,
+    [q.id]
+  );
+
+  const cancelDeferredStepReservationSync = React.useCallback(
+    (args: { parentRowId: string; sourceKey: string }) => {
+      const timerKey = buildDeferredStepReservationTimerKey(args.parentRowId, args.sourceKey);
+      const timer = reservationDebounceTimersRef.current[timerKey];
+      if (!timer) return;
+      clearTimeout(timer);
+      delete reservationDebounceTimersRef.current[timerKey];
+    },
+    [buildDeferredStepReservationTimerKey]
+  );
+
+  const queueDeferredStepReservationSync = React.useCallback(
+    (args: {
+      config: any;
+      parentRow: LineItemRowState;
+      sourceRow: Record<string, any>;
+      sourceKey: string;
+      patch: Record<string, FieldValue>;
+    }) => {
+      const reservationConfig = args.config?.reservation && typeof args.config.reservation === 'object'
+        ? args.config.reservation
+        : null;
+      if (!isStepReservationCommitEnabled(reservationConfig)) return;
+      if (!args.sourceKey) return;
+      const timerKey = buildDeferredStepReservationTimerKey(args.parentRow.id, args.sourceKey);
+      const previousTimer = reservationDebounceTimersRef.current[timerKey];
+      if (previousTimer) clearTimeout(previousTimer);
+      const debounceMs = Number.isFinite(Number(reservationConfig?.debounceMs))
+        ? Number(reservationConfig.debounceMs)
+        : 300;
+      reservationDebounceTimersRef.current[timerKey] = setTimeout(() => {
+        delete reservationDebounceTimersRef.current[timerKey];
+        syncStepDataSourceOutputRowWithReservation({
+          config: args.config,
+          parentRow: args.parentRow,
+          sourceRow: args.sourceRow,
+          patch: args.patch
+        });
+      }, Math.max(0, debounceMs));
+    },
+    [buildDeferredStepReservationTimerKey, syncStepDataSourceOutputRowWithReservation]
   );
 
   const rollbackRejectedStepReservations = React.useCallback(
@@ -6420,20 +6470,24 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         const normalizedNext =
                           nextValue === null || nextValue === undefined ? null : `${nextValue}`;
                         if (normalizedNext === currentValue) return;
-                        const patch: Record<string, FieldValue> = {
-                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                          [fieldId]: nextValue
-                        };
+                        const patch = buildReservationFieldPatch({
+                          fieldId,
+                          value: nextValue,
+                          selectedFieldId: args.selectedFieldId,
+                          selectedValue: args.selectedFieldId ? args.virtualValues[args.selectedFieldId] : true,
+                          quantityFieldId: `${args.config?.quantityFieldId || ''}`.trim()
+                        }) as Record<string, FieldValue>;
                         const deferReservation = shouldDeferReservationSync({
                           patch,
                           selectedFieldId: args.selectedFieldId,
                           quantityFieldId: `${args.config?.quantityFieldId || ''}`.trim()
                         });
+                        const sourceKey = `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
                         if (deferReservation) {
                           seedReservationCommittedValues({
                             config: args.config,
                             parentRowId: args.parentRow.id,
-                            sourceKey: `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim(),
+                            sourceKey,
                             virtualValues: args.virtualValues as Record<string, FieldValue>
                           });
                         }
@@ -6445,13 +6499,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         }, {
                           skipReservation: deferReservation
                         });
+                        if (deferReservation) {
+                          queueDeferredStepReservationSync({
+                            config: args.config,
+                            parentRow: args.parentRow,
+                            sourceRow: args.sourceRow,
+                            sourceKey,
+                            patch
+                          });
+                        }
                       }}
                       onBlur={next => {
                         const nextValue = next === '' ? null : next;
-                        const patch: Record<string, FieldValue> = {
-                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                          [fieldId]: nextValue
-                        };
+                        const patch = buildReservationFieldPatch({
+                          fieldId,
+                          value: nextValue,
+                          selectedFieldId: args.selectedFieldId,
+                          selectedValue: args.selectedFieldId ? args.virtualValues[args.selectedFieldId] : true,
+                          quantityFieldId: `${args.config?.quantityFieldId || ''}`.trim()
+                        }) as Record<string, FieldValue>;
                         const sourceKey = `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
                         if (!sourceKey) return;
                         if (
@@ -6464,6 +6530,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         ) {
                           return;
                         }
+                        cancelDeferredStepReservationSync({
+                          parentRowId: args.parentRow.id,
+                          sourceKey
+                        });
                         syncStepDataSourceOutputRowWithReservation({
                           config: args.config,
                           parentRow: args.parentRow,
@@ -12772,10 +12842,13 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                       const normalizedNext =
                                                         nextValue === null || nextValue === undefined ? null : `${nextValue}`;
                                                       if (normalizedNext === currentValue) return;
-                                                      const patch: Record<string, FieldValue> = {
-                                                        ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                        [fieldId]: nextValue
-                                                      };
+                                                      const patch = buildReservationFieldPatch({
+                                                        fieldId,
+                                                        value: nextValue,
+                                                        selectedFieldId,
+                                                        selectedValue: selectedFieldId ? virtualValues[selectedFieldId] : true,
+                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
+                                                      }) as Record<string, FieldValue>;
                                                       const deferReservation = shouldDeferReservationSync({
                                                         patch,
                                                         selectedFieldId,
@@ -12797,13 +12870,25 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                       }, {
                                                         skipReservation: deferReservation
                                                       });
+                                                      if (deferReservation) {
+                                                        queueDeferredStepReservationSync({
+                                                          config,
+                                                          parentRow: row,
+                                                          sourceRow,
+                                                          sourceKey,
+                                                          patch
+                                                        });
+                                                      }
                                                     }}
                                                     onBlur={next => {
                                                       const nextValue = next === '' ? null : next;
-                                                      const patch: Record<string, FieldValue> = {
-                                                        ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                        [fieldId]: nextValue
-                                                      };
+                                                      const patch = buildReservationFieldPatch({
+                                                        fieldId,
+                                                        value: nextValue,
+                                                        selectedFieldId,
+                                                        selectedValue: selectedFieldId ? virtualValues[selectedFieldId] : true,
+                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
+                                                      }) as Record<string, FieldValue>;
                                                       if (
                                                         !hasPendingDeferredReservationChange({
                                                           config,
@@ -12814,6 +12899,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                                       ) {
                                                         return;
                                                       }
+                                                      cancelDeferredStepReservationSync({
+                                                        parentRowId: row.id,
+                                                        sourceKey
+                                                      });
                                                       syncStepDataSourceOutputRowWithReservation({
                                                         config,
                                                         parentRow: row,
