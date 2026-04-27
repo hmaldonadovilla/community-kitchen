@@ -9394,6 +9394,100 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [autoSaveEnabled, isClosedRecord, logEvent, performAutoSave]
   );
 
+  const waitForPendingAutoSaveAfterAction = useCallback(
+    async (reason: string, timeoutMs = 18000): Promise<boolean> => {
+      const startedAt = Date.now();
+      const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+      let forcedFlushAttempted = false;
+      logEvent('action.flush.pendingAutosave.wait.start', {
+        reason,
+        dirty: autoSaveDirtyRef.current,
+        queued: autoSaveQueuedRef.current,
+        autosaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        guidedBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
+      });
+
+      while (Date.now() - startedAt < timeoutMs) {
+        if (lastDraftSaveFailureRef.current || recordStaleRef.current) break;
+        if (
+          !autoSaveDirtyRef.current &&
+          !autoSaveQueuedRef.current &&
+          !autoSaveInFlightRef.current &&
+          !draftSaveRequestInFlightRef.current &&
+          !guidedStepBackgroundSyncPromiseRef.current
+        ) {
+          logEvent('action.flush.pendingAutosave.wait.done', {
+            reason,
+            durationMs: Date.now() - startedAt
+          });
+          return true;
+        }
+
+        if (draftSaveRequestInFlightRef.current) {
+          await waitForDraftSaveRequest(`action.flush.pendingAutosave:${reason}`, 5000);
+          continue;
+        }
+
+        if (guidedStepBackgroundSyncPromiseRef.current) {
+          const pending = guidedStepBackgroundSyncPromiseRef.current;
+          await Promise.race([pending.catch(() => undefined), sleep(300)]);
+          continue;
+        }
+
+        if (autoSaveInFlightRef.current) {
+          await sleep(80);
+          continue;
+        }
+
+        if (autoSaveDirtyRef.current) {
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          autoSaveQueuedRef.current = false;
+          if (!forcedFlushAttempted) {
+            forcedFlushAttempted = true;
+            logEvent('action.flush.pendingAutosave.force', { reason });
+          }
+          await performAutoSave(`${reason}.pendingAutosave`);
+          continue;
+        }
+
+        if (autoSaveQueuedRef.current && !autoSaveDirtyRef.current) {
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          autoSaveQueuedRef.current = false;
+          logEvent('action.flush.pendingAutosave.clearedEmptyQueue', { reason });
+          continue;
+        }
+
+        await sleep(80);
+      }
+
+      const settled =
+        !autoSaveDirtyRef.current &&
+        !autoSaveQueuedRef.current &&
+        !autoSaveInFlightRef.current &&
+        !draftSaveRequestInFlightRef.current &&
+        !guidedStepBackgroundSyncPromiseRef.current;
+      logEvent('action.flush.pendingAutosave.wait.timeout', {
+        reason,
+        durationMs: Date.now() - startedAt,
+        dirty: autoSaveDirtyRef.current,
+        queued: autoSaveQueuedRef.current,
+        autosaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        guidedBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
+        settled
+      });
+      return settled;
+    },
+    [logEvent, performAutoSave, waitForDraftSaveRequest]
+  );
+
   const flushPendingDraftSaveForAction = useCallback(
     async (reason: string): Promise<{ ok: boolean; message?: string }> => {
       const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
@@ -9457,6 +9551,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
 
       if (autoSaveDirtyRef.current || autoSaveQueuedRef.current) {
+        if (!lastDraftSaveFailureRef.current) {
+          const settled = await waitForPendingAutoSaveAfterAction(reason);
+          if (settled) {
+            clearSaveFailureStatusAfterSuccessfulSave('action.flush.pendingAutosave.settled');
+          }
+        }
+      }
+
+      if (autoSaveDirtyRef.current || autoSaveQueuedRef.current) {
         const message = lastDraftSaveFailureRef.current?.message || 'Could not save the latest changes.';
         logEvent('action.flush.pendingAutosave.failed', {
           reason,
@@ -9485,7 +9588,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       return { ok: true };
     },
-    [flushAutoSaveBeforeNavigate, logEvent, waitForDraftSaveRequest]
+    [
+      clearSaveFailureStatusAfterSuccessfulSave,
+      flushAutoSaveBeforeNavigate,
+      logEvent,
+      waitForDraftSaveRequest,
+      waitForPendingAutoSaveAfterAction
+    ]
   );
   flushPendingDraftSaveActionRef.current = flushPendingDraftSaveForAction;
 

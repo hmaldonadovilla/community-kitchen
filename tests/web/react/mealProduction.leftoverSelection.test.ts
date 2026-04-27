@@ -542,7 +542,7 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.label?.en).toBe('Multi-ingredient leftovers');
     expect(target?.helperText?.en).toBe(
-      'Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.'
+      'Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.'
     );
     expect((target?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
       expect.arrayContaining([
@@ -874,7 +874,7 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         op: 'addMonths',
         dependsOn: 'MP_PREP_DATE',
-        offsetMonths: 6,
+        offsetMonths: 3,
         hidden: true
       })
     );
