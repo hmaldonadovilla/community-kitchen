@@ -842,9 +842,6 @@
               "display": "inline"
             },
             "edit"
-          ],
-          "primary": [
-            "submit"
           ]
         }
       },
@@ -12781,9 +12778,6 @@
               "display": "inline"
             },
             "edit"
-          ],
-          "primary": [
-            "submit"
           ]
         }
       },

@@ -460,6 +460,7 @@ describe('staging integrity dialogs and list legend config', () => {
         equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
       });
       expect(root?.submitButtonLabel?.en).toBe('Complete');
+      expect(root?.actionBars?.bottom?.summary?.primary || []).not.toContain('submit');
       expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([

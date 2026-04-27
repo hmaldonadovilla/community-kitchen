@@ -625,6 +625,7 @@ const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
 const HOME_RECORD_PREFETCH_DELAY_MS = 250;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
+const DRAFT_SNAPSHOT_RETRY_DELAYS_MS = [0, 1500, 3000];
 
 type HomeListLocalCachePayload = {
   savedAtMs: number;
@@ -7428,8 +7429,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       if (handled) return;
 
+      bumpRecordSession({ reason: 'createRecordPreset', nextRecordId: null });
       createFlowRef.current = true;
       createFlowUserEditedRef.current = false;
+      autoSaveUserEditedRef.current = false;
       dedupHoldRef.current = false;
       resetFieldChangeTransientState();
       // Creating a preset record is a "new record" flow: clear draft autosave and record context.
@@ -7455,14 +7458,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordRowNumberRef.current = null;
 
       rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
+      valuesRef.current = mapped.values;
+      lineItemsRef.current = mapped.lineItems;
       setValues(mapped.values);
       setLineItems(mapped.lineItems);
       setErrors({});
+      setValidationWarnings({ top: [], byField: {} });
+      setValidationAttempted(false);
+      setValidationNoticeHidden(false);
       setStatus(null);
       setStatusLevel(null);
+      setRecordLoadError(null);
+      setPrefetchedSummaryHtml(null);
       setSelectedRecordId('');
+      selectedRecordIdRef.current = '';
       setSelectedRecordSnapshot(null);
+      selectedRecordSnapshotRef.current = null;
       setLastSubmissionMeta(null);
+      lastSubmissionMetaRef.current = null;
       setView('form');
 
       logEvent('button.createRecordPreset.apply', {
@@ -7474,6 +7487,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
     },
     [
+      bumpRecordSession,
       definition,
       logEvent,
       parseButtonRef,
@@ -9212,6 +9226,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { ok: false, message: dedupConflict.message.toString() };
       }
 
+      if (guidedStepImmediateSyncPromiseRef.current) {
+        logEvent('action.flush.waitGuidedLiveSync.start', { reason });
+        const startedAt = Date.now();
+        while (guidedStepImmediateSyncPromiseRef.current) {
+          const pending = guidedStepImmediateSyncPromiseRef.current;
+          await pending.catch(() => undefined);
+          if (Date.now() - startedAt > 30_000) {
+            logEvent('action.flush.waitGuidedLiveSync.timeout', {
+              reason,
+              waitMs: Date.now() - startedAt
+            });
+            break;
+          }
+        }
+        logEvent('action.flush.waitGuidedLiveSync.done', {
+          reason,
+          waitMs: Date.now() - startedAt,
+          stillInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current)
+        });
+      }
+
       const flushed = await flushAutoSaveBeforeNavigate(reason);
       if (flushed && draftSaveRequestInFlightRef.current) {
         await waitForDraftSaveRequest(`action.flush:${reason}`);
@@ -10553,12 +10588,55 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           );
         }
       }
-      const response =
+      const runSnapshotRequest = () =>
         args.mode === 'draft'
-          ? await runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
+          ? runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
               submitCurrentRecordMutation(`snapshot:${args.reason}`, nextPayload)
             )
-          : await submitCurrentRecordMutation(`submit:${args.reason}`, payload);
+          : submitCurrentRecordMutation(`submit:${args.reason}`, payload);
+      let response: any;
+      if (args.mode === 'draft') {
+        for (let attemptIndex = 0; attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+          const delayMs = DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex];
+          if (delayMs > 0) {
+            await new Promise<void>(resolve => globalThis.setTimeout(resolve, delayMs));
+          }
+          try {
+            response = await runSnapshotRequest();
+          } catch (err: any) {
+            const message =
+              resolveUiErrorMessage(err, 'Failed to save the current record.') ||
+              resolveLogMessage(err, 'Failed to save the current record.');
+            if (isRetryableRecordBusyMessage(message) && attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length - 1) {
+              setDraftSave({ phase: 'saving' });
+              logEvent('snapshot.save.retryableBusy.retryScheduled', {
+                reason: args.reason,
+                attempt: attemptIndex + 1,
+                attempts: DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length,
+                delayMs: DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex + 1],
+                message
+              });
+              continue;
+            }
+            throw err;
+          }
+          const retryableFailure = !response?.success && isRetryableRecordBusyMessage(response?.message);
+          if (retryableFailure && attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length - 1) {
+            setDraftSave({ phase: 'saving' });
+            logEvent('snapshot.save.retryableBusy.retryScheduled', {
+              reason: args.reason,
+              attempt: attemptIndex + 1,
+              attempts: DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length,
+              delayMs: DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex + 1],
+              message: (response?.message || '').toString()
+            });
+            continue;
+          }
+          break;
+        }
+      } else {
+        response = await runSnapshotRequest();
+      }
       const ok = Boolean(response?.success);
       const recordId = (((response as any)?.meta?.id) || args.existingRecordId || '').toString().trim();
       if (!ok) {
@@ -10600,8 +10678,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       definition,
       formKey,
       ingredientsFormActive,
+      isRetryableRecordBusyMessage,
       logEvent,
+      resolveLogMessage,
       resolveAutoSaveStatus,
+      resolveUiErrorMessage,
       runCoalescedDraftSaveRequest,
       submitPreviousActionRetryMessage,
       submitCurrentRecordMutation,
