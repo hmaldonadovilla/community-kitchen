@@ -193,6 +193,10 @@ import {
   removeListCacheRowPure,
   upsertListCacheRowPure
 } from './app/listCache';
+import {
+  releaseDeferredAnalyticsPrefetchKey,
+  reserveDeferredAnalyticsPrefetchKey
+} from './app/deferredAnalyticsPrefetch';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
@@ -4335,10 +4339,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (!hasListViewAnalyticsWidgets) return;
     if (analyticsSnapshot && Array.isArray(analyticsSnapshot.items) && analyticsSnapshot.items.length > 0) return;
     const key = `${formKey}::${homeRevRef.current ?? 'novrev'}`;
-    if (deferredAnalyticsPrefetchKeyRef.current === key) return;
-    deferredAnalyticsPrefetchKeyRef.current = key;
+    if (!reserveDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key)) return;
 
     let cancelled = false;
+    let settled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
     let idleHandle: number | null = null;
     const run = () => {
@@ -4350,7 +4354,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       fetchBootstrapContextApi(formKey, { includeAnalytics: true })
         .then(res => {
-          if (cancelled) return;
+          settled = true;
+          if (cancelled) {
+            releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
+            return;
+          }
           const snapshot = ((res as any)?.analytics || null) as AnalyticsSnapshot | null;
           setAnalyticsSnapshot(snapshot);
           const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
@@ -4362,6 +4370,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
         })
         .catch((err: any) => {
+          settled = true;
+          releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
           if (cancelled) return;
           logEvent('analytics.listView.prefetch.error', {
             formKey,
@@ -4383,6 +4393,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
     return () => {
       cancelled = true;
+      if (!settled) {
+        releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
+      }
       if (timer !== null) globalThis.clearTimeout(timer);
       if (idleHandle !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
         (window as any).cancelIdleCallback(idleHandle);
