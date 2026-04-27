@@ -3729,7 +3729,10 @@
             "fieldId": "FINAL_QTY",
             "when": {
               "fieldId": "status",
-              "equals": "Final report emailed"
+              "equals": [
+                "Final report emailed",
+                "Closed"
+              ]
             }
           }
         }
@@ -3769,7 +3772,8 @@
             "dateFieldId": "MP_PREP_DATE",
             "statusFieldId": "Status",
             "closedStatuses": [
-              "Final report emailed"
+              "Final report emailed",
+              "Closed"
             ],
             "mealGroupId": "MP_MEALS_REQUEST",
             "prepGroupId": "MP_TYPE_LI",
@@ -3820,10 +3824,12 @@
             "dateFieldId": "MP_PREP_DATE",
             "statusFieldId": "Status",
             "includeStatuses": [
-              "Final report emailed"
+              "Final report emailed",
+              "Closed"
             ],
             "completedStatuses": [
-              "Final report emailed"
+              "Final report emailed",
+              "Closed"
             ],
             "lineItem": {
               "groupId": "MP_MEALS_REQUEST",
@@ -15631,7 +15637,10 @@
             "fieldId": "FINAL_QTY",
             "when": {
               "fieldId": "status",
-              "equals": "Final report emailed"
+              "equals": [
+                "Final report emailed",
+                "Closed"
+              ]
             }
           }
         }

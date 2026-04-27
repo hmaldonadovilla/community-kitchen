@@ -916,7 +916,7 @@ describe('staging integrity dialogs and list legend config', () => {
 
   test('meal production delivery analytics count final emailed reports', () => {
     const cfg = readConfig('config_meal_production.json');
-    const expectedStatus = 'Final report emailed';
+    const expectedStatuses = ['Final report emailed', 'Closed'];
     const findWidget = (root: any, id: string) =>
       (root?.analytics?.widgets || []).find((widget: any) => widget?.id === id);
     const findPipeline = (id: string) =>
@@ -924,14 +924,14 @@ describe('staging integrity dialogs and list legend config', () => {
 
     expect(findWidget(cfg.form, 'portions_delivered')?.calculation?.when).toEqual({
       fieldId: 'status',
-      equals: expectedStatus
+      equals: expectedStatuses
     });
     expect(findWidget(cfg.definition, 'portions_delivered')?.calculation?.when).toEqual({
       fieldId: 'status',
-      equals: expectedStatus
+      equals: expectedStatuses
     });
-    expect(findPipeline('ingredients_used')?.report?.closedStatuses).toEqual([expectedStatus]);
-    expect(findPipeline('meals_produced_delivered')?.report?.includeStatuses).toEqual([expectedStatus]);
-    expect(findPipeline('meals_produced_delivered')?.report?.completedStatuses).toEqual([expectedStatus]);
+    expect(findPipeline('ingredients_used')?.report?.closedStatuses).toEqual(expectedStatuses);
+    expect(findPipeline('meals_produced_delivered')?.report?.includeStatuses).toEqual(expectedStatuses);
+    expect(findPipeline('meals_produced_delivered')?.report?.completedStatuses).toEqual(expectedStatuses);
   });
 });
