@@ -1194,6 +1194,50 @@ describe('WebFormService', () => {
     expect(bumpSpy).toHaveBeenCalledWith('Config: Delivery', 'triggerFollowupActions');
   });
 
+  test('triggerFollowupActions fully refreshes analytics for status changes on analytics-enabled forms', () => {
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-FOLLOWUP-ANALYTICS',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({
+      analytics: {
+        widgets: [
+          {
+            id: 'closed_records',
+            calculation: {
+              type: 'aggregate',
+              aggregate: 'count',
+              when: { fieldId: 'status', equals: 'Closed' }
+            }
+          }
+        ]
+      }
+    });
+    const refreshMutationSpy = jest.spyOn(service as any, 'refreshMutationCaches');
+    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+
+    const result = service.triggerFollowupActions('Config: Delivery', 'REC-FOLLOWUP-ANALYTICS', ['CLOSE_RECORD']);
+
+    expect(result.success).toBe(true);
+    expect(refreshMutationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ configSheet: 'Config: Delivery' }),
+      expect.any(Array),
+      'triggerFollowupActions',
+      'full'
+    );
+    expect(refreshAnalyticsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ configSheet: 'Config: Delivery' }),
+      expect.any(Array),
+      'triggerFollowupActions'
+    );
+  });
+
   test('emailTemplateId supports conditional cases based on record field values', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
 

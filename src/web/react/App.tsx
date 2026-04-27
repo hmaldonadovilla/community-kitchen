@@ -204,6 +204,7 @@ import {
   selectMilestoneConfirmationDialog,
   selectMilestoneProgressDialog
 } from './features/steps/domain/milestoneDialogs';
+import { applyRecordDeltaToAnalyticsSnapshot } from './analytics/liveSnapshot';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
 import {
   applyCopyCurrentRecordDropFields,
@@ -4156,6 +4157,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
     return Number.isFinite(rev) && rev >= 0 ? rev : 0;
   });
+  const analyticsSnapshotRef = useRef<AnalyticsSnapshot | null>(analyticsSnapshot);
   const hasListViewAnalyticsWidgets = useMemo(() => {
     const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
     return widgets.some(widget => {
@@ -4163,6 +4165,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return placements.some(token => (token || '').toString().trim() === 'listView');
     });
   }, [definition.analytics?.widgets]);
+  const applyLiveAnalyticsRecordDelta = useCallback(
+    (args: {
+      previousRecord?: WebFormSubmission | null;
+      nextRecord?: WebFormSubmission | null;
+      reason: string;
+      recordId?: string | null;
+    }) => {
+      if (!hasListViewAnalyticsWidgets) return;
+      const result = applyRecordDeltaToAnalyticsSnapshot({
+        snapshot: analyticsSnapshotRef.current,
+        widgets: definition.analytics?.widgets,
+        previousRecord: args.previousRecord,
+        nextRecord: args.nextRecord
+      });
+      if (!result.changed) return;
+      analyticsSnapshotRef.current = result.snapshot;
+      setAnalyticsSnapshot(result.snapshot);
+      setAnalyticsSnapshotRev(prev => Math.max(prev + 1, Number(result.snapshot?.revision || 0) || 0));
+      logEvent('analytics.listView.localDelta', {
+        reason: args.reason,
+        recordId: args.recordId || args.nextRecord?.id || args.previousRecord?.id || null,
+        widgetIds: result.changedWidgetIds
+      });
+    },
+    [definition.analytics?.widgets, hasListViewAnalyticsWidgets, logEvent]
+  );
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
@@ -4260,8 +4288,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
-    setAnalyticsSnapshot((bootstrap?.analytics || analytics || null) as AnalyticsSnapshot | null);
+    const nextSnapshot = (bootstrap?.analytics || analytics || null) as AnalyticsSnapshot | null;
+    analyticsSnapshotRef.current = nextSnapshot;
+    setAnalyticsSnapshot(nextSnapshot);
   }, [analytics, formKey]);
+  useEffect(() => {
+    analyticsSnapshotRef.current = analyticsSnapshot;
+  }, [analyticsSnapshot]);
   useEffect(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
@@ -5342,6 +5375,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         lastRecordSnapshotApplyModeRef.current = { mode: 'ignored', recordId: id, dataVersion: incomingDataVersion };
         return 'ignored';
       }
+      const previousRecordForAnalytics =
+        currentRecordId && currentRecordId === id
+          ? selectedRecordSnapshotRef.current
+          : selectedRecordSnapshotRef.current?.id === id
+            ? selectedRecordSnapshotRef.current
+            : null;
       const nextMappedValues = incomingDraftState.values;
       const nextMappedLineItems = incomingDraftState.lineItems;
       const currentStatusRaw =
@@ -5374,6 +5413,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         language: languageRef.current
       });
       if (shouldAdoptMetaOnly) {
+        if (previousRecordForAnalytics) {
+          applyLiveAnalyticsRecordDelta({
+            previousRecord: previousRecordForAnalytics,
+            nextRecord: snapshot,
+            reason: 'record.snapshot.metaOnly',
+            recordId: id
+          });
+        }
         recordStaleRef.current = null;
         setRecordStale(null);
         pendingDeferredRecordFreshnessSyncRef.current = null;
@@ -5477,6 +5524,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!isReloadingCurrentCreateFlow) {
         autoSaveUserEditedRef.current = false;
       }
+      if (previousRecordForAnalytics) {
+        applyLiveAnalyticsRecordDelta({
+          previousRecord: previousRecordForAnalytics,
+          nextRecord: snapshot,
+          reason: 'record.snapshot.applied',
+          recordId: id
+        });
+      }
       dedupHoldRef.current = false;
       // Treat the loaded snapshot's dedup signature as "already checked" so we don't spam dedup checks
       // on every record navigation. Subsequent edits of dedup-key fields will force a re-check.
@@ -5572,6 +5627,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       definition,
       formKey,
       logEvent,
+      applyLiveAnalyticsRecordDelta,
       rememberAutoSaveSeenState,
       resetFieldChangeTransientState,
       upsertListCacheRow
@@ -10165,6 +10221,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           result,
           currentDataVersion: recordDataVersionRef.current
         });
+        const previousRecordForAnalytics =
+          selectedRecordSnapshotRef.current?.id === args.recordId
+            ? selectedRecordSnapshotRef.current
+            : listRecordsRef.current[args.recordId] || null;
+        const nextSnapshotStatus =
+          nextMeta.status !== undefined ? (nextMeta.status || undefined) : selectedRecordSnapshotRef.current?.status;
+        const nextRecordForAnalytics =
+          previousRecordForAnalytics && nextMeta.status !== undefined
+            ? ({
+                ...previousRecordForAnalytics,
+                updatedAt: nextMeta.updatedAt || result.updatedAt || previousRecordForAnalytics.updatedAt,
+                status: nextSnapshotStatus,
+                pdfUrl: nextMeta.pdfUrl || result.pdfUrl || previousRecordForAnalytics.pdfUrl,
+                dataVersion: nextMeta.dataVersion ?? (previousRecordForAnalytics as any).dataVersion,
+                __rowNumber: nextMeta.rowNumber ?? (previousRecordForAnalytics as any).__rowNumber
+              } as WebFormSubmission)
+            : null;
+        if (nextRecordForAnalytics) {
+          applyLiveAnalyticsRecordDelta({
+            previousRecord: previousRecordForAnalytics,
+            nextRecord: nextRecordForAnalytics,
+            reason: args.reason,
+            recordId: args.recordId
+          });
+        }
         upsertListCacheRow({
           recordId: args.recordId,
           updatedAt: nextMeta.updatedAt,
@@ -10207,8 +10288,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               ? nextMeta.status
               : prev?.status || null
         }));
-        const nextSnapshotStatus =
-          nextMeta.status !== undefined ? (nextMeta.status || undefined) : selectedRecordSnapshotRef.current?.status;
         selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current
           ? ({
               ...selectedRecordSnapshotRef.current,
@@ -10235,7 +10314,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       return { followupErrors, byAction };
     },
-    [logEvent, markRecordFreshnessServerTouch, upsertListCacheRow]
+    [applyLiveAnalyticsRecordDelta, logEvent, markRecordFreshnessServerTouch, upsertListCacheRow]
   );
 
   const refreshGuidedDataSourcesInBackground = useCallback(
@@ -10436,6 +10515,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const recordId = (args.recordId || '').toString().trim();
       if (!recordId) return;
       const nextStatus = (args.status || '').toString().trim() || null;
+      const previousRecord =
+        selectedRecordSnapshotRef.current?.id === recordId
+          ? selectedRecordSnapshotRef.current
+          : listRecordsRef.current[recordId] || null;
+      const nextRecord =
+        previousRecord
+          ? ({
+              ...previousRecord,
+              id: previousRecord.id || recordId,
+              status: nextStatus || previousRecord.status || undefined
+            } as WebFormSubmission)
+          : null;
+      if (nextRecord) {
+        applyLiveAnalyticsRecordDelta({
+          previousRecord,
+          nextRecord,
+          reason: 'record.status.local',
+          recordId
+        });
+      }
       setLastSubmissionMeta(prev => ({
         ...(prev || { id: recordId }),
         id: recordId,
@@ -10450,13 +10549,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             }
           : prev
       );
+      selectedRecordSnapshotRef.current =
+        selectedRecordSnapshotRef.current?.id === recordId && nextRecord
+          ? nextRecord
+          : selectedRecordSnapshotRef.current;
       upsertListCacheRow({
         recordId,
         status: nextStatus,
         dataVersion: getCurrentKnownClientDataVersion()
       });
     },
-    [getCurrentKnownClientDataVersion, upsertListCacheRow]
+    [applyLiveAnalyticsRecordDelta, getCurrentKnownClientDataVersion, upsertListCacheRow]
   );
 
   const persistCurrentSnapshot = useCallback(

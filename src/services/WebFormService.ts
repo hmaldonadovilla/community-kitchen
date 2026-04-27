@@ -4776,15 +4776,36 @@ export class WebFormService {
     }
     if (result?.success) {
       const refreshStartedAt = Date.now();
-      this.refreshMutationCaches(form, questions, 'triggerFollowupActions', 'revisionOnly');
+      const refreshMode = this.shouldRefreshAnalyticsAfterFollowupStatusChange(formKey, result) ? 'full' : 'revisionOnly';
+      this.refreshMutationCaches(form, questions, 'triggerFollowupActions', refreshMode);
       debugLog('followup.batch.refresh.done', {
         formKey,
         recordId: normalizedRecordId || null,
-        mode: 'revisionOnly',
+        mode: refreshMode,
         durationMs: Date.now() - refreshStartedAt
       });
     }
     return result;
+  }
+
+  private shouldRefreshAnalyticsAfterFollowupStatusChange(
+    formKey: string,
+    result: { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> }
+  ): boolean {
+    const statusChanged = Array.isArray(result?.results)
+      ? result.results.some(entry => entry?.result?.success && entry.result.status !== undefined)
+      : false;
+    if (!statusChanged) return false;
+    try {
+      const definition = this.getOrBuildDefinition(formKey);
+      return Array.isArray(definition?.analytics?.widgets) && definition.analytics.widgets.length > 0;
+    } catch (err: any) {
+      debugLog('analytics.followupRefresh.check.error', {
+        formKey,
+        message: err?.message || err?.toString?.() || 'unknown'
+      });
+      return false;
+    }
   }
 
   private runQueuedFollowupActions(
