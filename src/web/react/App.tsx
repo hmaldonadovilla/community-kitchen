@@ -30,7 +30,6 @@ import {
   BootstrapContext,
   applyInventoryReservationPlanApi,
   submit,
-  fetchBootstrapContextApi,
   previewUpdateRecordDependenciesApi,
   applyUpdateRecordWithDependenciesApi,
   checkDedupConflictApi,
@@ -179,6 +178,7 @@ import {
   type SubmitWaitQueuePolicy
 } from './app/submitPreparation';
 import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
+import { shouldClearStatusAfterSuccessfulSave } from './app/saveFailureStatus';
 import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
 import {
@@ -850,6 +850,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const nonMatchWarningPathsRef = useRef<Set<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
   const [statusLevel, setStatusLevel] = useState<'info' | 'success' | 'error' | null>(null);
+  const statusRef = useRef<string | null>(status);
+  const statusLevelRef = useRef<'info' | 'success' | 'error' | null>(statusLevel);
   type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
   type DedupProgressState = {
     open: boolean;
@@ -964,6 +966,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [debugEnabled]
+  );
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    statusLevelRef.current = statusLevel;
+  }, [statusLevel]);
+  const clearSaveFailureStatusAfterSuccessfulSave = useCallback(
+    (reason: string) => {
+      if (
+        !shouldClearStatusAfterSuccessfulSave({
+          status: statusRef.current,
+          statusTone: statusLevelRef.current
+        })
+      ) {
+        return;
+      }
+      statusRef.current = null;
+      statusLevelRef.current = null;
+      setStatus(null);
+      setStatusLevel(null);
+      logEvent('status.saveFailure.cleared', { reason });
+    },
+    [logEvent]
   );
   const resolveUiErrorMessage = useCallback(
     (err: any, fallback: string) => resolveUserFacingErrorMessage(err, fallback),
@@ -4163,9 +4189,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return Number.isFinite(rev) && rev >= 0 ? rev : 0;
   });
   const [analyticsRefreshToken, setAnalyticsRefreshToken] = useState(0);
+  const [homeAnalyticsRefreshToken, setHomeAnalyticsRefreshToken] = useState(0);
   const analyticsSnapshotRef = useRef<AnalyticsSnapshot | null>(analyticsSnapshot);
   const analyticsSnapshotStaleRef = useRef(false);
   const analyticsRefreshTokenRef = useRef(analyticsRefreshToken);
+  const previousAnalyticsViewRef = useRef<View | null>(null);
   const hasListViewAnalyticsWidgets = useMemo(() => {
     const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
     return widgets.some(widget => {
@@ -4173,6 +4201,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return placements.some(token => (token || '').toString().trim() === 'listView');
     });
   }, [definition.analytics?.widgets]);
+  const requestHomeAnalyticsRefresh = useCallback(
+    (args: { reason: string; previousView?: View | null; recordId?: string | null }) => {
+      if (!hasListViewAnalyticsWidgets) return;
+      setHomeAnalyticsRefreshToken(prev => {
+        const next = prev + 1;
+        logEvent('analytics.listView.refreshRequested', {
+          reason: args.reason,
+          previousView: args.previousView || null,
+          recordId: args.recordId || null,
+          token: next
+        });
+        return next;
+      });
+    },
+    [hasListViewAnalyticsWidgets, logEvent]
+  );
   const applyLiveAnalyticsRecordDelta = useCallback(
     (args: {
       previousRecord?: WebFormSubmission | null;
@@ -4331,6 +4375,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [analytics, analyticsRev, formKey]);
 
   useEffect(() => {
+    const previous = previousAnalyticsViewRef.current;
+    previousAnalyticsViewRef.current = view;
+    if (view !== 'list') return;
+    if (previous === 'list') return;
+    requestHomeAnalyticsRefresh({
+      reason: previous ? 'returnHome' : 'initialHome',
+      previousView: previous || null
+    });
+  }, [requestHomeAnalyticsRefresh, view]);
+
+  useEffect(() => {
     const response = listCache.response;
     if (!homeListLocalCacheKey || !response || !Array.isArray(response.items)) return;
     if (!response.items.length) return;
@@ -4362,9 +4417,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (homeFirstDataReadyAtMs <= 0) return;
     const snapshotItemCount = Array.isArray(analyticsSnapshot?.items) ? analyticsSnapshot.items.length : 0;
     const stale = analyticsSnapshotStaleRef.current;
-    if (!shouldPrefetchDeferredAnalytics({ hasListViewAnalyticsWidgets, snapshotItemCount, stale })) return;
+    const refreshRequested = homeAnalyticsRefreshToken > 0;
+    if (!shouldPrefetchDeferredAnalytics({ hasListViewAnalyticsWidgets, snapshotItemCount, refreshRequested, stale })) return;
     const refreshTokenAtStart = analyticsRefreshToken;
-    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}::${refreshTokenAtStart}::${stale ? 'stale' : 'missing'}`;
+    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}::${refreshTokenAtStart}::home${homeAnalyticsRefreshToken}::${stale ? 'stale' : refreshRequested ? 'home' : 'missing'}`;
     if (!reserveDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key)) return;
 
     let cancelled = false;
@@ -4376,17 +4432,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const startedAt = Date.now();
       logEvent('analytics.listView.prefetch.start', {
         formKey,
+        refreshRequested,
+        homeRefreshToken: homeAnalyticsRefreshToken,
         startedAfterHomeDataMs: Math.max(0, Date.now() - homeFirstDataReadyAtMs)
       });
-      fetchBootstrapContextApi(formKey, { includeAnalytics: true })
+      fetchHomeBootstrapApi(formKey, null)
         .then(res => {
           settled = true;
           if (cancelled) {
             releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
             return;
           }
+          const pendingFollowupCount = pendingFollowupBatchPromisesRef.current.size;
+          if (pendingFollowupCount > 0) {
+            analyticsSnapshotStaleRef.current = true;
+            releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
+            logEvent('analytics.listView.prefetch.deferredPendingFollowup', {
+              formKey,
+              refreshRequested,
+              homeRefreshToken: homeAnalyticsRefreshToken,
+              pendingFollowupCount,
+              durationMs: Date.now() - startedAt
+            });
+            return;
+          }
           if (analyticsRefreshTokenRef.current === refreshTokenAtStart) {
             analyticsSnapshotStaleRef.current = false;
+          }
+          const revRaw = Number((res as any)?.rev);
+          if (Number.isFinite(revRaw) && revRaw >= 0) {
+            setHomeRev(prev => (prev === revRaw ? prev : revRaw));
+          }
+          const homeList = (() => {
+            const maybeList = (res as any)?.listResponse;
+            return maybeList && Array.isArray((maybeList as any).items)
+              ? annotateListResponseWithInitialDateFilter(maybeList as ListResponse, definition.listView)
+              : null;
+          })();
+          if (homeList) {
+            const records = ((res as any)?.records || {}) as Record<string, WebFormSubmission>;
+            setListCache(prev => ({
+              response: homeList,
+              records: mergeListRecordSnapshotCache(prev.records, records)
+            }));
           }
           const snapshot = ((res as any)?.analytics || null) as AnalyticsSnapshot | null;
           setAnalyticsSnapshot(snapshot);
@@ -4394,7 +4482,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
           logEvent('analytics.listView.prefetch.ok', {
             formKey,
+            refreshRequested,
+            homeRefreshToken: homeAnalyticsRefreshToken,
             itemCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+            homeItemCount: Array.isArray(homeList?.items) ? homeList.items.length : null,
+            cache: (res as any)?.cache || null,
             durationMs: Date.now() - startedAt
           });
         })
@@ -4430,7 +4522,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (window as any).cancelIdleCallback(idleHandle);
       }
     };
-  }, [analyticsRefreshToken, analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
+  }, [analyticsRefreshToken, analyticsSnapshot, definition.listView, formKey, hasListViewAnalyticsWidgets, homeAnalyticsRefreshToken, homeFirstDataReadyAtMs, logEvent, view]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -6042,6 +6134,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return Promise.all(tasks).then(() => undefined);
   }, [definition.questions, loadOptionsForField]);
   const clearStatus = useCallback(() => {
+    statusRef.current = null;
+    statusLevelRef.current = null;
     setStatus(null);
     setStatusLevel(null);
     logEvent('status.cleared');
@@ -9143,6 +9237,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dedupKeyFingerprintBaselineRef.current = currentDedupFingerprint;
         retryableAutoSaveFailureCountRef.current = 0;
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
+        clearSaveFailureStatusAfterSuccessfulSave('record.autosave');
         uploadedFieldValueOverridesRef.current.clear();
         markRecordFreshnessServerTouch({ reason: 'record.autosave', recordId: newId || existingRecordId || null });
         logEvent('autosave.success', {
@@ -9232,6 +9327,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       autoSaveEnabled,
       autoSaveEnableFieldIds,
       blockAutoSaveForInFlight,
+      clearSaveFailureStatusAfterSuccessfulSave,
       dedupPrecheckRules,
       resolveAutoSaveStatus,
       closedStatusLabel,
@@ -9393,6 +9489,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   flushPendingDraftSaveActionRef.current = flushPendingDraftSaveForAction;
 
+  const hasPendingUploadFilesInFormState = useCallback((): boolean => {
+    const isFile = (value: unknown): boolean => {
+      try {
+        return typeof File !== 'undefined' && value instanceof File;
+      } catch {
+        return false;
+      }
+    };
+    const visit = (value: unknown, depth = 0): boolean => {
+      if (!value || depth > 8) return false;
+      if (isFile(value)) return true;
+      if (Array.isArray(value)) return value.some(item => visit(item, depth + 1));
+      if (typeof value === 'object') {
+        return Object.values(value as Record<string, unknown>).some(item => visit(item, depth + 1));
+      }
+      return false;
+    };
+    return visit(valuesRef.current) || visit(lineItemsRef.current);
+  }, []);
+
   const waitForBackgroundSaves = useCallback(
     async (
       reason: string,
@@ -9432,8 +9548,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         if (failures.length) {
           const message = failures[0] || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.');
-          logEvent('backgroundQueue.wait.uploads.failed', { reason, waitForQueue, message });
-          return { ok: false, message };
+          const pendingUploadFiles = hasPendingUploadFilesInFormState();
+          logEvent('backgroundQueue.wait.uploads.failed', { reason, waitForQueue, message, pendingUploadFiles });
+          if (!pendingUploadFiles) {
+            clearSaveFailureStatusAfterSuccessfulSave('backgroundQueue.uploadFailure.stale');
+            logEvent('backgroundQueue.wait.uploads.failureIgnored', { reason, waitForQueue });
+          } else {
+            return { ok: false, message };
+          }
         }
       }
 
@@ -9492,7 +9614,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       return { ok: true };
     },
-    [logEvent, waitForDraftSaveRequest]
+    [clearSaveFailureStatusAfterSuccessfulSave, hasPendingUploadFilesInFormState, logEvent, waitForDraftSaveRequest]
   );
 
   const waitForGuidedStepAdvance = useCallback(
@@ -9504,6 +9626,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }): Promise<{ success: boolean; message?: string }> => {
       const uploadsInFlight = uploadQueueRef.current.size;
       if (uploadsInFlight <= 0) {
+        if (!hasPendingUploadFilesInFormState()) {
+          clearSaveFailureStatusAfterSuccessfulSave('guidedStepAdvance.noUploadsPending');
+        }
         return { success: true };
       }
       const copy = resolveGuidedUploadWaitDialog(args.waitDialog);
@@ -9544,6 +9669,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatusLevel('error');
           return { success: false, message };
         }
+        clearSaveFailureStatusAfterSuccessfulSave('guidedStepAdvance.uploadComplete');
         return { success: true };
       } finally {
         guidedStepAdvanceBusy.unlock(seq, {
@@ -9553,7 +9679,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
       }
     },
-    [flushPendingDraftSaveForAction, guidedStepAdvanceBusy, resolveGuidedUploadWaitDialog, waitForBackgroundSaves]
+    [
+      clearSaveFailureStatusAfterSuccessfulSave,
+      flushPendingDraftSaveForAction,
+      guidedStepAdvanceBusy,
+      hasPendingUploadFilesInFormState,
+      resolveGuidedUploadWaitDialog,
+      waitForBackgroundSaves
+    ]
   );
 
   useEffect(() => {
@@ -10188,6 +10321,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             ? { ...(((draft as any).values || {}) as Record<string, any>), ...serverGeneratedValues }
             : ((draft as any).values as any);
         setDraftSave({ phase: 'saved', updatedAt: (res?.meta?.updatedAt || '').toString() || undefined });
+        clearSaveFailureStatusAfterSuccessfulSave('record.ensureDraftId');
         markRecordFreshnessServerTouch({ reason: 'record.ensureDraftId', recordId });
         upsertListCacheRow({
           recordId,
@@ -10226,6 +10360,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [
       applyUploadedFieldPayloadOverrides,
       applyServerGeneratedTopValues,
+      clearSaveFailureStatusAfterSuccessfulSave,
       definition,
       formKey,
       logEvent,
@@ -10831,6 +10966,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         phase: 'saved',
         updatedAt: ((response?.meta?.updatedAt || '') as string).toString() || undefined
       });
+      clearSaveFailureStatusAfterSuccessfulSave(`snapshot.${args.reason}`);
       logEvent('snapshot.save.success', {
         reason: args.reason,
         mode: args.mode,
@@ -10843,6 +10979,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       applySuccessfulSubmissionState,
       applyUploadedFieldPayloadOverrides,
       applyUploadedFieldOverrides,
+      clearSaveFailureStatusAfterSuccessfulSave,
       definition,
       formKey,
       ingredientsFormActive,
@@ -12126,8 +12263,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             };
           })().finally(() => {
             const pending = pendingFollowupBatchPromisesRef.current.get(recordId);
+            let pendingCleared = false;
             if (pending === backgroundPromise) {
               pendingFollowupBatchPromisesRef.current.delete(recordId);
+              pendingCleared = true;
             }
             const currentRecordId =
               resolveExistingRecordId({
@@ -12161,6 +12300,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 dirty: autoSaveDirtyRef.current,
                 queued: autoSaveQueuedRef.current,
                 view: viewRef.current
+              });
+            }
+            if (pendingCleared && viewRef.current === 'list') {
+              analyticsSnapshotStaleRef.current = true;
+              requestHomeAnalyticsRefresh({
+                reason: 'followup.pending.settled',
+                recordId
               });
             }
             logEvent('followup.pending.settled', {
@@ -12264,6 +12410,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       persistCurrentSnapshot,
       refreshAfterFollowupBatch,
       resolveLogMessage,
+      requestHomeAnalyticsRefresh,
       runSerializedFollowupBatchRequest,
       scheduleLatestAutoSave,
       statusTransitions,
@@ -12559,6 +12706,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             urls: mergedItems.filter(it => typeof it === 'string').length,
             respectedCurrentValue: completionState.hasValue
           });
+          clearSaveFailureStatusAfterSuccessfulSave('upload.urls.localMerged');
           return { success: true };
         } catch (err: any) {
           const uiMessage = resolveUiErrorMessage(
@@ -12605,6 +12753,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       autoSaveDebounceMs,
+      clearSaveFailureStatusAfterSuccessfulSave,
       ensureDraftRecordId,
       isClosedRecord,
       language,

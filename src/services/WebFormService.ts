@@ -878,6 +878,8 @@ export class WebFormService {
     rev: number;
     listResponse?: PaginatedResult<Record<string, any>>;
     records?: Record<string, WebFormSubmission>;
+    analytics?: AnalyticsSnapshot;
+    analyticsRev?: number;
     cache?: 'hit' | 'miss';
   } {
     const canonicalKey = this.resolveCanonicalFormKey(formKey) || (formKey || '').toString().trim();
@@ -888,26 +890,34 @@ export class WebFormService {
       return { notModified: true, rev, cache: 'hit' };
     }
 
+    const bundled = this.resolveBundledConfig(canonicalKey || formKey);
+    const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(canonicalKey || formKey);
+    const expectsHomeList = Boolean(def?.listView?.columns?.length);
+    const expectsAnalytics = Boolean(def?.analytics?.widgets?.length);
     const cached = this.readCachedHomeBootstrap(canonicalKey, rev);
-    if (cached?.listResponse) {
+    const cachedHasExpectedHomeList = !expectsHomeList || Boolean(cached?.listResponse);
+    const cachedHasExpectedAnalytics = !expectsAnalytics || Boolean(cached?.analytics);
+    if (cached && cachedHasExpectedHomeList && cachedHasExpectedAnalytics) {
       return {
         notModified: false,
         rev,
         listResponse: cached.listResponse,
         records: cached.records || {},
+        analytics: cached.analytics,
+        analyticsRev: Number(cached.analyticsRev || cached.analytics?.revision || 0) || 0,
         cache: 'hit'
       };
     }
 
-    const bundled = this.resolveBundledConfig(canonicalKey || formKey);
-    const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(canonicalKey || formKey);
-    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true });
+    const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true, includeAnalytics: true });
     this.cacheHomeBootstrap(canonicalKey || formKey, rev, bootstrap || null, 'fetchHomeBootstrap.cacheMiss');
     return {
       notModified: false,
       rev,
       listResponse: (bootstrap as any)?.listResponse,
       records: (bootstrap as any)?.records || {},
+      analytics: (bootstrap as any)?.analytics,
+      analyticsRev: Number((bootstrap as any)?.analyticsRev || (bootstrap as any)?.analytics?.revision || 0) || 0,
       cache: 'miss'
     };
   }
@@ -7945,10 +7955,18 @@ export class WebFormService {
       if (lock) hasLock = !!lock.tryLock(150);
       const expectedRev = Number.isFinite(Number(rev)) ? Number(rev) : this.readHomeRevision(key);
       const cached = this.readCachedHomeBootstrap(key, expectedRev);
-      if (cached?.listResponse) return;
       const bundled = this.resolveBundledConfig(key);
       const def = bundled ? this.buildBundledDefinition(bundled) : this.getOrBuildDefinition(key);
-      const bootstrap = this.buildBootstrap(key, def, { includeHomeData: true });
+      const expectsHomeList = Boolean(def?.listView?.columns?.length);
+      const expectsAnalytics = Boolean(def?.analytics?.widgets?.length);
+      if (
+        cached &&
+        (!expectsHomeList || Boolean(cached.listResponse)) &&
+        (!expectsAnalytics || Boolean(cached.analytics))
+      ) {
+        return;
+      }
+      const bootstrap = this.buildBootstrap(key, def, { includeHomeData: true, includeAnalytics: true });
       this.cacheHomeBootstrap(key, expectedRev, bootstrap || null, reason || 'primeHomeBootstrapCache');
     } catch (_) {
       // ignore warm failures

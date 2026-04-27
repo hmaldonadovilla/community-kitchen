@@ -129,7 +129,10 @@ describe('WebFormService analytics integration', () => {
     expect(home.notModified).toBe(false);
     expect(home.cache === 'hit' || home.cache === 'miss').toBe(true);
     expect(home.listResponse).toBeUndefined();
-    expect((home as any).analytics).toBeUndefined();
+    expect(home.analytics).toBeDefined();
+    expect(home.analyticsRev).toBeGreaterThanOrEqual(1);
+    const homeMetric = (home.analytics?.items || []).find(item => item.id === 'closed_qty');
+    expect(homeMetric?.value).toBe(9);
 
     const notModified = service.fetchHomeBootstrap('Config: Analytics', home.rev);
     expect(notModified.notModified).toBe(true);

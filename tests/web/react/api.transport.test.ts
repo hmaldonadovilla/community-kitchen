@@ -5,6 +5,7 @@ import {
   fetchBootstrapContextApi,
   invalidateClientSharedDataCaches,
   peekSummaryHtmlTemplateCache,
+  resolveUserFacingErrorMessage,
   seedSummaryHtmlTemplateCache,
   upsertInventoryReservationApi,
   reconcileInventoryReservationsApi,
@@ -73,6 +74,24 @@ describe('react api transport', () => {
 
     expect(clearFetchDataSourceCache).toHaveBeenCalledWith({ includePersisted: true });
     expect(peekSummaryHtmlTemplateCache(payload)).toBeNull();
+  });
+
+  test('maps Drive storage internals to the caller fallback message', () => {
+    expect(
+      resolveUserFacingErrorMessage(
+        new Error(
+          'Upload folder not accessible (id=abc). Service error: Drive. If this is a shared drive, ensure the script executes as a user who is a member of that drive.'
+        ),
+        'Could not add photos.'
+      )
+    ).toBe('Could not add photos.');
+
+    expect(
+      resolveUserFacingErrorMessage(
+        new Error('Drive createFile failed (folderId=abc, name=photo.jpg, sizeMb=1). Service error: Drive.'),
+        'Failed to render preview.'
+      )
+    ).toBe('Failed to render preview.');
   });
 
   test('routes inventory reservation upsert through the backend transport', async () => {

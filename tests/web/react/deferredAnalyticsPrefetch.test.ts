@@ -31,11 +31,12 @@ describe('deferred analytics prefetch keys', () => {
     expect(ref.current).toBe('form::2');
   });
 
-  it('prefetches when analytics are missing or marked stale', () => {
+  it('prefetches when analytics are missing, stale, or explicitly refreshed', () => {
     expect(
       shouldPrefetchDeferredAnalytics({
         hasListViewAnalyticsWidgets: true,
         snapshotItemCount: 0,
+        refreshRequested: false,
         stale: false
       })
     ).toBe(true);
@@ -43,6 +44,7 @@ describe('deferred analytics prefetch keys', () => {
       shouldPrefetchDeferredAnalytics({
         hasListViewAnalyticsWidgets: true,
         snapshotItemCount: 1,
+        refreshRequested: false,
         stale: true
       })
     ).toBe(true);
@@ -50,6 +52,15 @@ describe('deferred analytics prefetch keys', () => {
       shouldPrefetchDeferredAnalytics({
         hasListViewAnalyticsWidgets: true,
         snapshotItemCount: 1,
+        refreshRequested: true,
+        stale: false
+      })
+    ).toBe(true);
+    expect(
+      shouldPrefetchDeferredAnalytics({
+        hasListViewAnalyticsWidgets: true,
+        snapshotItemCount: 1,
+        refreshRequested: false,
         stale: false
       })
     ).toBe(false);
@@ -57,6 +68,7 @@ describe('deferred analytics prefetch keys', () => {
       shouldPrefetchDeferredAnalytics({
         hasListViewAnalyticsWidgets: false,
         snapshotItemCount: 0,
+        refreshRequested: true,
         stale: true
       })
     ).toBe(false);

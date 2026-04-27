@@ -434,6 +434,15 @@ const emitAppsScriptDiagnostic = (payload: Record<string, unknown>): void => {
 export const resolveUserFacingErrorMessage = (err: any, fallback: string): string | null => {
   if (err?.code === APPS_SCRIPT_CONNECTION_ERROR_CODE) return null;
   const message = (err?.message || err?.toString?.() || fallback || '').toString().trim();
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('upload folder not accessible') ||
+    normalized.includes('drive createfile failed') ||
+    normalized.includes('drive api not available') ||
+    normalized.includes('service error: drive')
+  ) {
+    return fallback || tSystem('files.error.uploadFailed', resolveErrorLanguage(), 'Could not add photos.');
+  }
   return message || (fallback || null);
 };
 

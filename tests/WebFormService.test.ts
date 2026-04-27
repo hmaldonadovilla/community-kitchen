@@ -321,6 +321,37 @@ describe('WebFormService', () => {
     expect((service as any).buildBootstrap).toHaveBeenCalled();
   });
 
+  test('fetchHomeBootstrap rebuilds cached home data when analytics are missing', () => {
+    jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(3);
+    jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue({
+      rev: 3,
+      listResponse: { items: [{ id: 'rec-1', Q4: 'ACME' }], totalCount: 1 },
+      records: {}
+    });
+    jest.spyOn(service as any, 'resolveBundledConfig').mockReturnValue(null);
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({
+      listView: { columns: [{ fieldId: 'Q4' }] },
+      analytics: { widgets: [{ id: 'total', placements: ['listView'] }] }
+    });
+    const buildSpy = jest.spyOn(service as any, 'buildBootstrap').mockReturnValue({
+      listResponse: { items: [{ id: 'rec-1', Q4: 'ACME' }], totalCount: 1 },
+      records: {},
+      analytics: { revision: 12, items: [{ id: 'total', value: 1 }] },
+      analyticsRev: 12
+    });
+    jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
+
+    const res = service.fetchHomeBootstrap('Config: Delivery', null as any);
+
+    expect(buildSpy).toHaveBeenCalledWith(
+      'Config: Delivery',
+      expect.anything(),
+      expect.objectContaining({ includeHomeData: true, includeAnalytics: true })
+    );
+    expect(res.analyticsRev).toBe(12);
+    expect(res.analytics?.items).toHaveLength(1);
+  });
+
   test('fetchHomeBootstrap applies the initial date search value to the bootstrap query', () => {
     jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(0);
     jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);

@@ -23,8 +23,9 @@ export const releaseDeferredAnalyticsPrefetchKey = (
 export const shouldPrefetchDeferredAnalytics = (args: {
   hasListViewAnalyticsWidgets: boolean;
   snapshotItemCount: number;
+  refreshRequested?: boolean;
   stale: boolean;
 }): boolean => {
   if (!args.hasListViewAnalyticsWidgets) return false;
-  return args.stale || args.snapshotItemCount <= 0;
+  return Boolean(args.refreshRequested) || args.stale || args.snapshotItemCount <= 0;
 };
