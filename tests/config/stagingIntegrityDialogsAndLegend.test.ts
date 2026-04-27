@@ -913,4 +913,25 @@ describe('staging integrity dialogs and list legend config', () => {
       : false;
     expect(hasCopyColumn).toBe(false);
   });
+
+  test('meal production delivery analytics count final emailed reports', () => {
+    const cfg = readConfig('config_meal_production.json');
+    const expectedStatus = 'Final report emailed';
+    const findWidget = (root: any, id: string) =>
+      (root?.analytics?.widgets || []).find((widget: any) => widget?.id === id);
+    const findPipeline = (id: string) =>
+      (cfg.form?.analytics?.pipelines || []).find((pipeline: any) => pipeline?.id === id);
+
+    expect(findWidget(cfg.form, 'portions_delivered')?.calculation?.when).toEqual({
+      fieldId: 'status',
+      equals: expectedStatus
+    });
+    expect(findWidget(cfg.definition, 'portions_delivered')?.calculation?.when).toEqual({
+      fieldId: 'status',
+      equals: expectedStatus
+    });
+    expect(findPipeline('ingredients_used')?.report?.closedStatuses).toEqual([expectedStatus]);
+    expect(findPipeline('meals_produced_delivered')?.report?.includeStatuses).toEqual([expectedStatus]);
+    expect(findPipeline('meals_produced_delivered')?.report?.completedStatuses).toEqual([expectedStatus]);
+  });
 });

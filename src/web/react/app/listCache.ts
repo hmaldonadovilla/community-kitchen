@@ -1,5 +1,5 @@
 import { LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
-import { ListResponse } from '../api';
+import { ListItem, ListResponse } from '../api';
 import { collectListViewRuleColumnDependencies } from './listViewRuleColumns';
 
 export type ListCacheState = { response: ListResponse | null; records: Record<string, WebFormSubmission> };
@@ -21,8 +21,113 @@ export type RemoveListCacheArgs = {
 
 const metaKeys = new Set(['id', '__rowNumber', 'createdAt', 'updatedAt', 'status', 'pdfUrl']);
 
+const resolvePositiveNumber = (value: any): number | null => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const resolveTimestampMs = (value: any): number | null => {
+  const raw = (value || '').toString().trim();
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const mergeEqualSnapshotRevision = (
+  cached: WebFormSubmission,
+  incoming: WebFormSubmission
+): WebFormSubmission => {
+  const cachedValues = ((cached as any).values || {}) as Record<string, any>;
+  const incomingValues = ((incoming as any).values || {}) as Record<string, any>;
+  const cachedLineItems = ((cached as any).lineItems || {}) as Record<string, any>;
+  const incomingLineItems = ((incoming as any).lineItems || {}) as Record<string, any>;
+  return {
+    ...incoming,
+    ...cached,
+    createdAt: cached.createdAt || incoming.createdAt,
+    updatedAt: cached.updatedAt || incoming.updatedAt,
+    status: cached.status !== undefined ? cached.status : incoming.status,
+    pdfUrl: (cached as any).pdfUrl !== undefined ? (cached as any).pdfUrl : (incoming as any).pdfUrl,
+    values: { ...incomingValues, ...cachedValues },
+    lineItems: { ...incomingLineItems, ...cachedLineItems },
+    dataVersion: (cached as any).dataVersion ?? (incoming as any).dataVersion,
+    __rowNumber: (cached as any).__rowNumber ?? (incoming as any).__rowNumber
+  } as any;
+};
+
 export const hasLoadedListResponse = (response: ListResponse | null | undefined): response is ListResponse =>
   Boolean(response && Array.isArray((response as any).items));
+
+export const mergeListRecordSnapshot = (
+  cached: WebFormSubmission | null | undefined,
+  incoming: WebFormSubmission | null | undefined
+): WebFormSubmission | null => {
+  if (!incoming) return cached || null;
+  if (!cached) return incoming;
+
+  const cachedVersion = resolvePositiveNumber((cached as any).dataVersion);
+  const incomingVersion = resolvePositiveNumber((incoming as any).dataVersion);
+  if (cachedVersion !== null && incomingVersion !== null) {
+    if (incomingVersion > cachedVersion) return incoming;
+    if (incomingVersion < cachedVersion) return cached;
+    return mergeEqualSnapshotRevision(cached, incoming);
+  }
+  if (cachedVersion !== null && incomingVersion === null) return cached;
+  if (cachedVersion === null && incomingVersion !== null) return incoming;
+
+  const cachedUpdatedAt = resolveTimestampMs((cached as any).updatedAt);
+  const incomingUpdatedAt = resolveTimestampMs((incoming as any).updatedAt);
+  if (cachedUpdatedAt !== null && incomingUpdatedAt !== null) {
+    if (incomingUpdatedAt > cachedUpdatedAt) return incoming;
+    if (incomingUpdatedAt < cachedUpdatedAt) return cached;
+    return mergeEqualSnapshotRevision(cached, incoming);
+  }
+
+  return mergeEqualSnapshotRevision(cached, incoming);
+};
+
+export const mergeListRecordSnapshotCache = (
+  cached: Record<string, WebFormSubmission> | null | undefined,
+  incoming: Record<string, WebFormSubmission> | null | undefined
+): Record<string, WebFormSubmission> => {
+  const next: Record<string, WebFormSubmission> = { ...(cached || {}) };
+  const incomingRecords = incoming || {};
+  Object.keys(incomingRecords).forEach(recordId => {
+    const merged = mergeListRecordSnapshot(next[recordId], incomingRecords[recordId]);
+    if (merged) next[recordId] = merged;
+  });
+  return next;
+};
+
+export const mergeListItemsWithRecordCache = (
+  items: ListItem[],
+  records: Record<string, WebFormSubmission> | null | undefined
+): ListItem[] => {
+  if (!Array.isArray(items) || !items.length) return items || [];
+  const cache = records || {};
+  return items.map(row => {
+    const recordId = (row?.id || '').toString();
+    const record = recordId ? cache[recordId] : null;
+    if (!record) return row;
+
+    const recordUpdatedAt = resolveTimestampMs((record as any).updatedAt);
+    const rowUpdatedAt = resolveTimestampMs((row as any).updatedAt);
+    if (recordUpdatedAt !== null && rowUpdatedAt !== null && recordUpdatedAt < rowUpdatedAt) return row;
+
+    const patched: ListItem = { ...row };
+    const values = ((record as any).values || {}) as Record<string, any>;
+    if ((record as any).__rowNumber !== undefined) patched.__rowNumber = (record as any).__rowNumber;
+    if ((record as any).createdAt) patched.createdAt = (record as any).createdAt;
+    if ((record as any).updatedAt) patched.updatedAt = (record as any).updatedAt;
+    if ((record as any).status !== undefined) patched.status = (record as any).status;
+    if ((record as any).pdfUrl !== undefined) patched.pdfUrl = (record as any).pdfUrl;
+    Object.keys(patched).forEach(key => {
+      if (metaKeys.has(key)) return;
+      if (values[key] !== undefined) patched[key] = values[key];
+    });
+    return patched;
+  });
+};
 
 const resolveFieldIdsForNewRow = (definition: WebFormDefinition): Set<string> => {
   const cols: any[] = Array.isArray((definition as any)?.listView?.columns) ? ((definition as any).listView.columns as any[]) : [];

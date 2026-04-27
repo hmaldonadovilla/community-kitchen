@@ -1,5 +1,7 @@
 import {
   hasLoadedListResponse,
+  mergeListItemsWithRecordCache,
+  mergeListRecordSnapshotCache,
   removeListCacheRowPure,
   upsertListCacheRowPure,
   ListCacheState
@@ -118,6 +120,137 @@ describe('upsertListCacheRowPure', () => {
       language: 'en'
     });
     expect(next).toBe(prev);
+  });
+});
+
+describe('mergeListRecordSnapshotCache', () => {
+  it('keeps a locally newer record when a bootstrap response returns an older snapshot', () => {
+    const next = mergeListRecordSnapshotCache(
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          status: 'Final report emailed',
+          values: { name: 'Fresh' },
+          lineItems: {},
+          dataVersion: 9
+        } as any
+      },
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:00:00.000Z',
+          status: 'In progress',
+          values: { name: 'Stale' },
+          lineItems: {},
+          dataVersion: 8
+        } as any
+      }
+    );
+
+    expect(next.r1.status).toBe('Final report emailed');
+    expect((next.r1 as any).dataVersion).toBe(9);
+    expect(next.r1.values).toMatchObject({ name: 'Fresh' });
+  });
+
+  it('preserves local metadata on equal revisions while accepting missing incoming values', () => {
+    const next = mergeListRecordSnapshotCache(
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          status: 'Final report emailed',
+          values: { localOnly: 'kept' },
+          lineItems: {},
+          dataVersion: 9
+        } as any
+      },
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          status: 'In progress',
+          values: { serverOnly: 'added' },
+          lineItems: {},
+          dataVersion: 9
+        } as any
+      }
+    );
+
+    expect(next.r1.status).toBe('Final report emailed');
+    expect(next.r1.values).toMatchObject({ localOnly: 'kept', serverOnly: 'added' });
+  });
+});
+
+describe('mergeListItemsWithRecordCache', () => {
+  it('patches list rows from an equally fresh cached record so Home does not display regressed status', () => {
+    const items = mergeListItemsWithRecordCache(
+      [
+        {
+          id: 'r1',
+          status: 'In progress',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          name: 'Stale Row'
+        }
+      ] as any,
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          status: 'Final report emailed',
+          values: { name: 'Fresh Row' },
+          lineItems: {},
+          dataVersion: 9
+        } as any
+      }
+    );
+
+    expect(items[0]).toMatchObject({
+      id: 'r1',
+      status: 'Final report emailed',
+      name: 'Fresh Row'
+    });
+  });
+
+  it('does not patch a newer server row with an older cached record', () => {
+    const items = mergeListItemsWithRecordCache(
+      [
+        {
+          id: 'r1',
+          status: 'Final report emailed',
+          updatedAt: '2026-04-27T08:10:00.000Z',
+          name: 'Server Row'
+        }
+      ] as any,
+      {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          updatedAt: '2026-04-27T08:05:00.000Z',
+          status: 'In progress',
+          values: { name: 'Cached Row' },
+          lineItems: {},
+          dataVersion: 8
+        } as any
+      }
+    );
+
+    expect(items[0]).toMatchObject({
+      id: 'r1',
+      status: 'Final report emailed',
+      name: 'Server Row'
+    });
   });
 });
 

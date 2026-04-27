@@ -186,7 +186,13 @@ import {
   aggregatePrefetchedPageItems,
   isCompletePrefetchedListResponse
 } from './app/listPrefetch';
-import { hasLoadedListResponse, removeListCacheRowPure, upsertListCacheRowPure } from './app/listCache';
+import {
+  hasLoadedListResponse,
+  mergeListItemsWithRecordCache,
+  mergeListRecordSnapshotCache,
+  removeListCacheRowPure,
+  upsertListCacheRowPure
+} from './app/listCache';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
@@ -4499,7 +4505,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (receivedIds.length) {
           setListCache(prev => ({
             response: prev.response,
-            records: { ...(prev.records || {}), ...prefetchedRecords }
+            records: mergeListRecordSnapshotCache(prev.records, prefetchedRecords)
           }));
         }
         perfMeasure(metricName, startMark, endMark, {
@@ -4928,17 +4934,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const resolvedPageCount = itemsByPage.size + failedPages.size;
           const hasMore = resolvedPageCount < totalPages;
           const completeData = firstListComplete || (!hasMore && failedPages.size === 0 && aggregated.length >= cappedTotalCount && cappedTotalCount < 200);
-          setListCache(prev => ({
-            response: {
-              ...firstList,
-              notModified: undefined,
-              items: aggregated,
-              nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined,
-              contiguousItemCount: contiguous.length,
-              completeData
-            },
-            records: { ...(prev.records || {}), ...recordsAccum }
-          }));
+          setListCache(prev => {
+            const records = mergeListRecordSnapshotCache(prev.records, recordsAccum);
+            const items = mergeListItemsWithRecordCache(aggregated, records);
+            return {
+              response: {
+                ...firstList,
+                notModified: undefined,
+                items,
+                nextPageToken: hasMore ? ((firstList as any).nextPageToken || '__prefetching__') : undefined,
+                contiguousItemCount: contiguous.length,
+                completeData
+              },
+              records
+            };
+          });
           setListFetch({
             phase: phaseOverride || (hasMore ? 'prefetching' : 'idle'),
             loaded: aggregated.length,
@@ -10442,10 +10452,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       );
       upsertListCacheRow({
         recordId,
-        status: nextStatus
+        status: nextStatus,
+        dataVersion: getCurrentKnownClientDataVersion()
       });
     },
-    [upsertListCacheRow]
+    [getCurrentKnownClientDataVersion, upsertListCacheRow]
   );
 
   const persistCurrentSnapshot = useCallback(
@@ -13931,7 +13942,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (receivedIds.length) {
           setListCache(prev => ({
             response: prev.response,
-            records: { ...(prev.records || {}), ...awaited }
+            records: mergeListRecordSnapshotCache(prev.records, awaited)
           }));
         }
         const prefetchedRecord = awaited[row.id];
@@ -13992,7 +14003,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (receivedIds.length) {
               setListCache(prev => ({
                 response: prev.response,
-                records: { ...(prev.records || {}), ...prefetchedRecords }
+                records: mergeListRecordSnapshotCache(prev.records, prefetchedRecords)
               }));
             }
             const prefetchedRecord = prefetchedRecords?.[row.id];
