@@ -3466,9 +3466,9 @@
                 "nl": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
-                "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
-                "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.",
+                "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.",
+                "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
               },
               "groupOverride": {
                 "totals": []
@@ -5140,7 +5140,7 @@
             "derivedValue": {
               "op": "addMonths",
               "dependsOn": "MP_PREP_DATE",
-              "offsetMonths": 6,
+              "offsetMonths": 3,
               "hidden": true
             }
           },
@@ -6554,7 +6554,7 @@
             "derivedValue": {
               "op": "addMonths",
               "dependsOn": "MP_PREP_DATE",
-              "offsetMonths": 6,
+              "offsetMonths": 3,
               "hidden": true
             }
           },
@@ -8989,7 +8989,7 @@
               "derivedValue": {
                 "op": "addMonths",
                 "dependsOn": "MP_PREP_DATE",
-                "offsetMonths": 6,
+                "offsetMonths": 3,
                 "hidden": true
               }
             },
@@ -10471,7 +10471,7 @@
               "derivedValue": {
                 "op": "addMonths",
                 "dependsOn": "MP_PREP_DATE",
-                "offsetMonths": 6,
+                "offsetMonths": 3,
                 "hidden": true
               }
             },
@@ -15362,9 +15362,9 @@
                 "nl": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
-                "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage.",
-                "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +6 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.",
+                "fr": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.",
+                "nl": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
               },
               "groupOverride": {
                 "totals": []
