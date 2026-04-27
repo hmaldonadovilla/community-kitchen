@@ -1,6 +1,7 @@
 import {
   releaseDeferredAnalyticsPrefetchKey,
-  reserveDeferredAnalyticsPrefetchKey
+  reserveDeferredAnalyticsPrefetchKey,
+  shouldPrefetchDeferredAnalytics
 } from '../../../src/web/react/app/deferredAnalyticsPrefetch';
 
 describe('deferred analytics prefetch keys', () => {
@@ -28,5 +29,36 @@ describe('deferred analytics prefetch keys', () => {
     ref.current = 'form::2';
     releaseDeferredAnalyticsPrefetchKey(ref, 'form::1');
     expect(ref.current).toBe('form::2');
+  });
+
+  it('prefetches when analytics are missing or marked stale', () => {
+    expect(
+      shouldPrefetchDeferredAnalytics({
+        hasListViewAnalyticsWidgets: true,
+        snapshotItemCount: 0,
+        stale: false
+      })
+    ).toBe(true);
+    expect(
+      shouldPrefetchDeferredAnalytics({
+        hasListViewAnalyticsWidgets: true,
+        snapshotItemCount: 1,
+        stale: true
+      })
+    ).toBe(true);
+    expect(
+      shouldPrefetchDeferredAnalytics({
+        hasListViewAnalyticsWidgets: true,
+        snapshotItemCount: 1,
+        stale: false
+      })
+    ).toBe(false);
+    expect(
+      shouldPrefetchDeferredAnalytics({
+        hasListViewAnalyticsWidgets: false,
+        snapshotItemCount: 0,
+        stale: true
+      })
+    ).toBe(false);
   });
 });

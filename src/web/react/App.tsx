@@ -195,7 +195,8 @@ import {
 } from './app/listCache';
 import {
   releaseDeferredAnalyticsPrefetchKey,
-  reserveDeferredAnalyticsPrefetchKey
+  reserveDeferredAnalyticsPrefetchKey,
+  shouldPrefetchDeferredAnalytics
 } from './app/deferredAnalyticsPrefetch';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
@@ -4161,7 +4162,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
     return Number.isFinite(rev) && rev >= 0 ? rev : 0;
   });
+  const [analyticsRefreshToken, setAnalyticsRefreshToken] = useState(0);
   const analyticsSnapshotRef = useRef<AnalyticsSnapshot | null>(analyticsSnapshot);
+  const analyticsSnapshotStaleRef = useRef(false);
+  const analyticsRefreshTokenRef = useRef(analyticsRefreshToken);
   const hasListViewAnalyticsWidgets = useMemo(() => {
     const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
     return widgets.some(widget => {
@@ -4194,6 +4198,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
     },
     [definition.analytics?.widgets, hasListViewAnalyticsWidgets, logEvent]
+  );
+  const markAnalyticsSnapshotStale = useCallback(
+    (args: { reason: string; recordId?: string | null; status?: string | null }) => {
+      if (!hasListViewAnalyticsWidgets) return;
+      analyticsSnapshotStaleRef.current = true;
+      setAnalyticsRefreshToken(prev => {
+        const next = prev + 1;
+        analyticsRefreshTokenRef.current = next;
+        return next;
+      });
+      logEvent('analytics.listView.stale', {
+        reason: args.reason,
+        recordId: args.recordId || null,
+        status: args.status || null
+      });
+    },
+    [hasListViewAnalyticsWidgets, logEvent]
   );
   const [listRefreshToken, setListRefreshToken] = useState(0);
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
@@ -4300,6 +4321,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     analyticsSnapshotRef.current = analyticsSnapshot;
   }, [analyticsSnapshot]);
   useEffect(() => {
+    analyticsRefreshTokenRef.current = analyticsRefreshToken;
+  }, [analyticsRefreshToken]);
+  useEffect(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
@@ -4336,9 +4360,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     if (view !== 'list') return;
     if (homeFirstDataReadyAtMs <= 0) return;
-    if (!hasListViewAnalyticsWidgets) return;
-    if (analyticsSnapshot && Array.isArray(analyticsSnapshot.items) && analyticsSnapshot.items.length > 0) return;
-    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}`;
+    const snapshotItemCount = Array.isArray(analyticsSnapshot?.items) ? analyticsSnapshot.items.length : 0;
+    const stale = analyticsSnapshotStaleRef.current;
+    if (!shouldPrefetchDeferredAnalytics({ hasListViewAnalyticsWidgets, snapshotItemCount, stale })) return;
+    const refreshTokenAtStart = analyticsRefreshToken;
+    const key = `${formKey}::${homeRevRef.current ?? 'novrev'}::${refreshTokenAtStart}::${stale ? 'stale' : 'missing'}`;
     if (!reserveDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key)) return;
 
     let cancelled = false;
@@ -4358,6 +4384,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (cancelled) {
             releaseDeferredAnalyticsPrefetchKey(deferredAnalyticsPrefetchKeyRef, key);
             return;
+          }
+          if (analyticsRefreshTokenRef.current === refreshTokenAtStart) {
+            analyticsSnapshotStaleRef.current = false;
           }
           const snapshot = ((res as any)?.analytics || null) as AnalyticsSnapshot | null;
           setAnalyticsSnapshot(snapshot);
@@ -4401,7 +4430,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (window as any).cancelIdleCallback(idleHandle);
       }
     };
-  }, [analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
+  }, [analyticsRefreshToken, analyticsSnapshot, formKey, hasListViewAnalyticsWidgets, homeFirstDataReadyAtMs, logEvent, view]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -10259,6 +10288,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             recordId: args.recordId
           });
         }
+        if (nextMeta.status !== undefined) {
+          markAnalyticsSnapshotStale({
+            reason: args.reason,
+            recordId: args.recordId,
+            status: nextMeta.status || null
+          });
+        }
         upsertListCacheRow({
           recordId: args.recordId,
           updatedAt: nextMeta.updatedAt,
@@ -10327,7 +10363,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       return { followupErrors, byAction };
     },
-    [applyLiveAnalyticsRecordDelta, logEvent, markRecordFreshnessServerTouch, upsertListCacheRow]
+    [applyLiveAnalyticsRecordDelta, logEvent, markAnalyticsSnapshotStale, markRecordFreshnessServerTouch, upsertListCacheRow]
   );
 
   const refreshGuidedDataSourcesInBackground = useCallback(
@@ -10548,6 +10584,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId
         });
       }
+      markAnalyticsSnapshotStale({
+        reason: 'record.status.local',
+        recordId,
+        status: nextStatus
+      });
       setLastSubmissionMeta(prev => ({
         ...(prev || { id: recordId }),
         id: recordId,
@@ -10572,7 +10613,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dataVersion: getCurrentKnownClientDataVersion()
       });
     },
-    [applyLiveAnalyticsRecordDelta, getCurrentKnownClientDataVersion, upsertListCacheRow]
+    [applyLiveAnalyticsRecordDelta, getCurrentKnownClientDataVersion, markAnalyticsSnapshotStale, upsertListCacheRow]
   );
 
   const persistCurrentSnapshot = useCallback(
