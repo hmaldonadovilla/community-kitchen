@@ -500,9 +500,15 @@ describe('meal production leftover selection config', () => {
     const rawToCook = (rawQuestion?.optionsRaw || []).find((entry: any) => entry?.ID === 'MP_TO_COOK');
     const rawConfig = JSON.parse(rawToCook?.['Config (JSON/REF)'] || '{}');
 
+    expect(recipeField?.validationRules?.[0]?.when).toEqual({
+      all: [
+        { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+        { fieldId: 'MP_TO_COOK', greaterThan: 0 }
+      ]
+    });
     expect(recipeSync?.when).toEqual({
       all: [
-        { fieldId: 'PREP_QTY', greaterThan: 0 },
+        { fieldId: 'MP_TO_COOK', greaterThan: 0 },
         { fieldId: 'PREP_TYPE', equals: ['Cook'] }
       ]
     });

@@ -143,6 +143,12 @@ describe('staging integrity dialogs and list legend config', () => {
       const recipe = (meals?.lineItemConfig?.subGroups || [])
         .find((entry: any) => entry?.id === 'MP_TYPE_LI')
         ?.fields?.find((field: any) => field?.id === 'RECIPE');
+      expect(recipe?.validationRules?.[0]?.when).toEqual({
+        all: [
+          { fieldId: 'PREP_TYPE', equals: ['Cook'] },
+          { fieldId: 'MP_TO_COOK', greaterThan: 0 }
+        ]
+      });
       expect(recipe?.changeDialog?.when).toEqual({
         any: [
           { fieldId: 'ING_EVD', notEmpty: true },

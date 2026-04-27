@@ -2747,7 +2747,7 @@
                                   "when": {
                                     "all": [
                                       {
-                                        "fieldId": "PREP_QTY",
+                                        "fieldId": "MP_TO_COOK",
                                         "greaterThan": 0
                                       },
                                       {
@@ -6649,9 +6649,17 @@
                 "validationRules": [
                   {
                     "when": {
-                      "fieldId": "PREP_TYPE",
-                      "equals": [
-                        "Cook"
+                      "all": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": [
+                            "Cook"
+                          ]
+                        },
+                        {
+                          "fieldId": "MP_TO_COOK",
+                          "greaterThan": 0
+                        }
                       ]
                     },
                     "then": {
@@ -6740,7 +6748,7 @@
                     "when": {
                       "all": [
                         {
-                          "fieldId": "PREP_QTY",
+                          "fieldId": "MP_TO_COOK",
                           "greaterThan": 0
                         },
                         {
@@ -10566,9 +10574,17 @@
                   "validationRules": [
                     {
                       "when": {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Cook"
+                        "all": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Cook"
+                            ]
+                          },
+                          {
+                            "fieldId": "MP_TO_COOK",
+                            "greaterThan": 0
+                          }
                         ]
                       },
                       "then": {
@@ -10657,7 +10673,7 @@
                       "when": {
                         "all": [
                           {
-                            "fieldId": "PREP_QTY",
+                            "fieldId": "MP_TO_COOK",
                             "greaterThan": 0
                           },
                           {
@@ -14643,7 +14659,7 @@
                                   "when": {
                                     "all": [
                                       {
-                                        "fieldId": "PREP_QTY",
+                                        "fieldId": "MP_TO_COOK",
                                         "greaterThan": 0
                                       },
                                       {
