@@ -170,6 +170,7 @@ import {
   resolveInvalidatedUploadFieldPathsFromDialogUpdates,
   wasUploadFieldInvalidated
 } from './app/uploadFieldInvalidation';
+import { resolveUploadBusyOverlayTransition } from './app/uploadBusyOverlay';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import {
@@ -1179,6 +1180,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const destructiveChangeBusy = useBlockingOverlay({ eventPrefix: 'fieldChange.destructive.busy', onDiagnostic: logEvent });
   const guidedMilestoneBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.milestone.busy', onDiagnostic: logEvent });
   const guidedStepAdvanceBusy = useBlockingOverlay({ eventPrefix: 'guidedStep.advance.busy', onDiagnostic: logEvent });
+  const uploadBusy = useBlockingOverlay({ eventPrefix: 'upload.busy', onDiagnostic: logEvent });
   const updateRecordBusyOpen = updateRecordBusy.state.open;
   const recordSyncBusyOpen = recordSyncBusy.state.open;
 
@@ -2859,6 +2861,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
+  const uploadBusySeqRef = useRef<number | null>(null);
   const uploadedFieldValueOverridesRef = useRef<Map<string, UploadedFieldValueOverride>>(new Map());
   const uploadFieldInvalidationVersionsRef = useRef<Map<string, number>>(new Map());
   const [, setUploadQueueSize] = useState<number>(() => uploadQueueRef.current.size);
@@ -2866,8 +2869,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
-    setUploadQueueSize(uploadQueueRef.current.size);
-  }, []);
+    const uploadsInFlight = uploadQueueRef.current.size;
+    setUploadQueueSize(uploadsInFlight);
+    const transition = resolveUploadBusyOverlayTransition({
+      uploadsInFlight,
+      activeSeq: uploadBusySeqRef.current
+    });
+    if (transition === 'lock') {
+      uploadBusySeqRef.current = uploadBusy.lock({
+        title: tSystem('navigation.waitTitle', language, 'Please wait'),
+        message: tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.'),
+        kind: 'upload',
+        diagnosticMeta: { uploadsInFlight }
+      });
+      return;
+    }
+    if (transition === 'unlock') {
+      const seq = uploadBusySeqRef.current;
+      uploadBusySeqRef.current = null;
+      if (seq !== null) uploadBusy.unlock(seq, { uploadsInFlight });
+    }
+  }, [language, uploadBusy]);
 
   const scheduleLatestAutoSave = useCallback(
     (reason: string, delayMs: number): number | null => {
@@ -15867,6 +15889,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         open={guidedStepAdvanceBusy.state.open}
         title={guidedStepAdvanceBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
         message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
+        zIndex={12047}
+      />
+
+      <BlockingOverlay
+        open={uploadBusy.state.open}
+        title={uploadBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+        message={uploadBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
         zIndex={12047}
       />
 
