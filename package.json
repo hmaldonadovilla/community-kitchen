@@ -17,7 +17,7 @@
     "gcp:setup": "bash scripts/setup-gcp-backend.sh",
     "gcp:status": "bash scripts/check-gcp-backend.sh",
     "deploy:cloud-run": "bash scripts/deploy-cloud-run.sh",
-    "test": "node scripts/embed-html-templates.js && node scripts/embed-form-configs.js && jest",
+    "test": "node scripts/embed-html-templates.js && CK_CONFIG_BUNDLE_MODE=full node scripts/embed-form-configs.js && jest --maxWorkers=50%",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:regression": "playwright test --grep @regression",

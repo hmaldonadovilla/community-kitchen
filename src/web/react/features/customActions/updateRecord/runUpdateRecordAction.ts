@@ -307,7 +307,8 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
 
       // Apply requested updates (status + selected top-level scalar fields).
       const setObj = req.set || {};
-      if (Object.prototype.hasOwnProperty.call(setObj, 'status')) {
+      const hasStatusUpdate = Object.prototype.hasOwnProperty.call(setObj, 'status');
+      if (hasStatusUpdate) {
         const nextStatusRaw = (setObj as any).status;
         const nextStatus = nextStatusRaw === null || nextStatusRaw === undefined ? '' : nextStatusRaw.toString();
         draft.__ckStatus = nextStatus;
@@ -395,10 +396,21 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       if (nextRowNumber) deps.refs.recordRowNumberRef.current = nextRowNumber;
 
       const nextStatus =
-        Object.prototype.hasOwnProperty.call(setObj, 'status') && (setObj as any).status !== undefined && (setObj as any).status !== null
+        hasStatusUpdate && (setObj as any).status !== undefined && (setObj as any).status !== null
           ? (setObj as any).status.toString()
-          : deps.refs.lastSubmissionMetaRef.current?.status || deps.refs.selectedRecordSnapshotRef.current?.status || null;
+          : hasStatusUpdate
+            ? null
+            : deps.refs.lastSubmissionMetaRef.current?.status || deps.refs.selectedRecordSnapshotRef.current?.status || null;
+      const nextStatusValue = nextStatus === undefined || nextStatus === null ? '' : nextStatus.toString();
 
+      const nextMeta = {
+        ...(deps.refs.lastSubmissionMetaRef.current || {}),
+        id: recordId,
+        updatedAt: updatedAt || deps.refs.lastSubmissionMetaRef.current?.updatedAt,
+        dataVersion: nextDataVersion ?? deps.refs.lastSubmissionMetaRef.current?.dataVersion,
+        status: (nextStatus || null) as any
+      };
+      deps.refs.lastSubmissionMetaRef.current = nextMeta;
       deps.setLastSubmissionMeta(prev => ({
         ...(prev || {}),
         id: recordId,
@@ -407,10 +419,19 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
         status: (nextStatus || null) as any
       }));
 
+      const localValuePatch: Record<string, FieldValue> = {};
       if (appliedValueFields.length) {
-        const patch: Record<string, FieldValue> = {};
         appliedValueFields.forEach(fid => {
-          (patch as any)[fid] = (draft as any).values?.[fid] as any;
+          (localValuePatch as any)[fid] = (draft as any).values?.[fid] as any;
+        });
+      }
+      if (hasStatusUpdate) {
+        (localValuePatch as any).status = nextStatusValue as FieldValue;
+      }
+      if (Object.keys(localValuePatch).length) {
+        const patch: Record<string, FieldValue> = {};
+        Object.keys(localValuePatch).forEach(fid => {
+          (patch as any)[fid] = (localValuePatch as any)[fid] as any;
         });
         deps.refs.valuesRef.current = { ...(deps.refs.valuesRef.current || {}), ...(patch as any) };
         deps.setValues(prev => {
@@ -429,16 +450,26 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
           qIdx: req.qIdx ?? null,
           recordId,
           fields: appliedValueFields.slice(0, 25),
-          fieldCount: appliedValueFields.length
+          fieldCount: appliedValueFields.length,
+          statusPatched: hasStatusUpdate
         });
       }
 
       // Keep record snapshot + list cache consistent (avoid refetch on navigation).
-      deps.setSelectedRecordSnapshot(prev => {
+      const patchSnapshot = (prev: WebFormSubmission | null): WebFormSubmission | null => {
         if (!prev) return prev;
-        const nextValues = appliedValueFields.length ? { ...(prev.values || {}), ...(draft as any).values } : prev.values || {};
+        const nextValues =
+          appliedValueFields.length || hasStatusUpdate
+            ? {
+                ...(prev.values || {}),
+                ...(appliedValueFields.length ? ((draft as any).values || {}) : {}),
+                ...(hasStatusUpdate ? { status: nextStatusValue } : {})
+              }
+            : prev.values || {};
         return { ...prev, status: (nextStatus || prev.status) as any, values: nextValues };
-      });
+      };
+      deps.refs.selectedRecordSnapshotRef.current = patchSnapshot(deps.refs.selectedRecordSnapshotRef.current);
+      deps.setSelectedRecordSnapshot(prev => patchSnapshot(prev));
       deps.upsertListCacheRow({
         recordId,
         values: (draft as any).values as any,

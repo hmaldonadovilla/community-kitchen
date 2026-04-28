@@ -1,6 +1,6 @@
 export {};
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { normalizeEnvName, resolveConfigsDir } = require('../scripts/embed-form-configs');
+const { normalizeEnvName, resolveConfigsDir, resolveLanguageMode } = require('../scripts/embed-form-configs');
 const { resolveLandingPageConfigPath } = require('../scripts/embed-landing-page-config');
 const { resolveAnalyticsPageConfigPath } = require('../scripts/embed-analytics-page-config');
 const path = require('path');
@@ -15,6 +15,17 @@ describe('embed-form-configs env helpers', () => {
   test('resolves env-specific config dirs', () => {
     const dir = resolveConfigsDir('staging');
     expect(path.normalize(dir)).toMatch(/docs[\\/]+config[\\/]+exports[\\/]+staging$/);
+  });
+
+  test('defaults bundled form configs to English-only payloads', () => {
+    expect(resolveLanguageMode()).toBe('en');
+    const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledFormConfigs.ts'), 'utf8');
+    expect(raw).toContain('"languages": [');
+    expect(raw).toContain('"EN"');
+    expect(raw).not.toContain('"qFr"');
+    expect(raw).not.toContain('"qNl"');
+    expect(raw).not.toContain('"optionsFr"');
+    expect(raw).not.toContain('"optionsNl"');
   });
 
   test('exported configs include a stable cache fingerprint', () => {
@@ -32,7 +43,7 @@ describe('embed-form-configs env helpers', () => {
     expect(raw).toContain('"heroTitle": "Welcome to the Community Kitchen"');
     expect(raw).toContain('"adminSectionNote": "Reports are available from the dashboard below."');
     expect(raw).toContain('"logoFormKey": "Config: Meal Production"');
-    expect(raw).toContain('"imageUrl": "data:image/');
+    expect(raw).not.toContain('"imageUrl": "data:image/');
   });
 
   test('resolves env-specific analytics page config path', () => {
@@ -47,6 +58,6 @@ describe('embed-form-configs env helpers', () => {
     expect(raw).toContain('"sections": []');
     expect(raw).toContain('"pendingNavigationTitle": "Please wait"');
     expect(raw).toContain('"pendingNavigationMessage": "Opening forms..."');
-    expect(raw).toContain('"imageUrl": "data:image/');
+    expect(raw).not.toContain('"imageUrl": "data:image/');
   });
 });

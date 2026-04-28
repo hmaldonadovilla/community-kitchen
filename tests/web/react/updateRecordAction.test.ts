@@ -123,4 +123,36 @@ describe('runUpdateRecordAction', () => {
       expect.objectContaining({ buttonId: 'MP_READY_FOR_PRODUCTION', message: 'Could not save the latest changes.' })
     );
   });
+
+  test('patches local status values and snapshot after a status update', async () => {
+    const { deps, refs } = buildDeps();
+    refs.selectedRecordIdRef.current = 'rec-1';
+    refs.valuesRef.current = { status: 'In progress', MP_DISTRIBUTOR: 'Le Phare' };
+    refs.selectedRecordSnapshotRef.current = {
+      id: 'rec-1',
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      status: 'In progress',
+      values: { status: 'In progress', MP_DISTRIBUTOR: 'Le Phare' },
+      lineItems: {}
+    };
+    refs.lastSubmissionMetaRef.current = { id: 'rec-1', status: 'In progress', dataVersion: 1 };
+
+    await runUpdateRecordAction(deps, {
+      buttonId: 'MP_READY_FOR_PRODUCTION',
+      buttonRef: 'MP_READY_FOR_PRODUCTION',
+      navigateTo: 'form',
+      set: { status: 'In production' }
+    });
+
+    expect(refs.valuesRef.current.status).toBe('In production');
+    expect(refs.selectedRecordSnapshotRef.current?.status).toBe('In production');
+    expect(refs.selectedRecordSnapshotRef.current?.values?.status).toBe('In production');
+    expect(refs.lastSubmissionMetaRef.current?.status).toBe('In production');
+    const patcher = deps.setValues.mock.calls.find(([arg]: any[]) => typeof arg === 'function')?.[0];
+    expect(patcher({ status: 'In progress', MP_DISTRIBUTOR: 'Le Phare' })).toMatchObject({
+      status: 'In production',
+      MP_DISTRIBUTOR: 'Le Phare'
+    });
+  });
 });

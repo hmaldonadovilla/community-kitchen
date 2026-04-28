@@ -1,5 +1,6 @@
 import { expect, test, type Frame } from 'playwright/test';
 
+import { e2eEnv } from '../fixtures/env';
 import { mealProductionFixtures } from '../fixtures/mealProduction';
 import { expectAnyVisible } from '../helpers/assertions';
 import { futureDate, nextSunday, today } from '../helpers/dates';
@@ -21,6 +22,7 @@ import {
   fillOrderedPortions,
   openNewOrderFromPreset,
   openExistingRecordIfDuplicatePresent,
+  openSummary,
   openRecipeEditor,
   prepareHubLunchOrderForDate,
   selectCook,
@@ -358,7 +360,60 @@ test.describe('Meal Production manual script scenarios', () => {
     }
   });
 
-  pendingScenario('09', 'ready for production lock and summary unlock flow');
+  test('@regression Scenario 09 - ready for production lock and summary unlock flow', async ({ page }) => {
+    test.skip(!e2eEnv.adminEnabled, 'Unlock for Editing is only visible in admin mode.');
+    test.setTimeout(180_000);
+    const productionDate = futureDate(31);
+    const orderKey = {
+      customerValue: mealProductionFixtures.customerValues.lePhare,
+      service: mealProductionFixtures.services.lunch,
+      date: productionDate
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, orderKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.lePhare);
+
+    try {
+      await setProductionDate(frame, productionDate);
+      await selectService(frame, mealProductionFixtures.services.lunch);
+      await selectCook(frame, mealProductionFixtures.cooks.aline);
+      await fillFirstOrderedPortions(frame, '50');
+
+      const readyButton = frame.getByRole('button', { name: /Ready for Production/i });
+      await expect(readyButton).toBeVisible({ timeout: 15_000 });
+      await readyButton.click();
+      await expect(frame.getByRole('button', { name: 'Yes, lock for production' })).toBeVisible({ timeout: 10_000 });
+      await confirmDialog(frame, 'Yes, lock for production');
+      await waitForLoadingToSettle(frame);
+      await waitForSaved(frame);
+
+      await expect(frame.getByText('In production')).toBeVisible({ timeout: 15_000 });
+      await expect(readyButton).toBeHidden({ timeout: 10_000 });
+      await frame.getByRole('button', { name: /^Order$/ }).click();
+      await waitForLoadingToSettle(frame);
+      await expect(frame.locator('input[aria-label="Date"]').first()).toBeDisabled();
+      await expect(frame.locator('input[aria-label="Ordered"]').first()).toBeDisabled();
+
+      await openSummary(frame);
+      const unlockButton = frame.getByRole('button', { name: /Unlock for Editing/i });
+      await expect(unlockButton).toBeVisible({ timeout: 15_000 });
+      await unlockButton.click();
+      await expect(frame.getByRole('button', { name: 'Unlock record for editing' })).toBeVisible({ timeout: 10_000 });
+      await confirmDialog(frame, 'Unlock record for editing');
+      await waitForLoadingToSettle(frame);
+      await waitForSaved(frame);
+
+      await expect(frame.getByText('In progress')).toBeVisible({ timeout: 15_000 });
+      await frame.getByRole('button', { name: /^Order$/ }).click();
+      await waitForLoadingToSettle(frame);
+      await expect(frame.locator('input[aria-label="Date"]').first()).toBeEnabled();
+      await expect(frame.locator('input[aria-label="Ordered"]').first()).toBeEnabled();
+      await expect(readyButton).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);
+    }
+  });
 
   test('@smoke Scenario 10 - Belliard Sunday lunch includes Standard', async ({ page }) => {
     const productionDate = nextSunday();
