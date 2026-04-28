@@ -784,7 +784,7 @@
         "nl": "Record kopiëren"
       },
       "message": {
-        "en": "Select a future production date and verify the customer, service, responsible cook, ordered portions and selected recipes. Ingredient changes and receipt photos are not copied. All changes will be auto-saved and a future dated record will be created.",
+        "en": "Select a production date = or > today's date and verify the customer, service, responsible cook, ordered portions and selected recipes. Any changes to the ingredients that was recorded in the selected meal production record to copy from and its ingredients receipt photos will not be copied. All changes will be auto-saved and a new record will be created with the production date that you will select.",
         "fr": "Sélectionnez une date de production future et vérifiez le client, le service, le cuisinier responsable, les portions demandées et les recettes sélectionnées. Les modifications d'ingrédients et les photos de réception ne sont pas copiées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté dans le futur sera créé.",
         "nl": "Selecteer een toekomstige productiedatum en controleer de klant, service, verantwoordelijke kok, gevraagde porties en geselecteerde recepten. Ingrediëntenwijzigingen en ontvangstfoto's worden niet gekopieerd. Alle wijzigingen worden automatisch opgeslagen en een record met een toekomstige datum wordt aangemaakt."
       },
@@ -12742,7 +12742,7 @@
         "nl": "Record kopiëren"
       },
       "message": {
-        "en": "Select a future production date and verify the customer, service, responsible cook, ordered portions and selected recipes. Ingredient changes and receipt photos are not copied. All changes will be auto-saved and a future dated record will be created.",
+        "en": "Select a production date = or > today's date and verify the customer, service, responsible cook, ordered portions and selected recipes. Any changes to the ingredients that was recorded in the selected meal production record to copy from and its ingredients receipt photos will not be copied. All changes will be auto-saved and a new record will be created with the production date that you will select.",
         "fr": "Sélectionnez une date de production future et vérifiez le client, le service, le cuisinier responsable, les portions demandées et les recettes sélectionnées. Les modifications d'ingrédients et les photos de réception ne sont pas copiées. Toutes les modifications seront enregistrées automatiquement et un enregistrement daté dans le futur sera créé.",
         "nl": "Selecteer een toekomstige productiedatum en controleer de klant, service, verantwoordelijke kok, gevraagde porties en geselecteerde recepten. Ingrediëntenwijzigingen en ontvangstfoto's worden niet gekopieerd. Alle wijzigingen worden automatisch opgeslagen en een record met een toekomstige datum wordt aangemaakt."
       },
