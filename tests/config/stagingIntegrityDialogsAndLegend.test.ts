@@ -429,6 +429,10 @@ describe('staging integrity dialogs and list legend config', () => {
           decimalPlaces: 0
         }
       ]);
+      expect(deliveryForm?.navigation).toEqual({
+        forwardGate: 'whenValid',
+        autoAdvance: 'onValid'
+      });
       expect(root?.recordFreshness).toEqual(
         expect.objectContaining({
           enabled: true,

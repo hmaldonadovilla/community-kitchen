@@ -2849,7 +2849,8 @@
             "nl": "Productieformulier"
           },
           "navigation": {
-            "autoAdvance": "off"
+            "forwardGate": "whenValid",
+            "autoAdvance": "onValid"
           },
           "render": {
             "subGroups": {
@@ -14647,7 +14648,8 @@
             "nl": "Productieformulier"
           },
           "navigation": {
-            "autoAdvance": "off"
+            "forwardGate": "whenValid",
+            "autoAdvance": "onValid"
           },
           "render": {
             "subGroups": {
