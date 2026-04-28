@@ -199,6 +199,7 @@ import {
   reserveDeferredAnalyticsPrefetchKey,
   shouldPrefetchDeferredAnalytics
 } from './app/deferredAnalyticsPrefetch';
+import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
@@ -10607,10 +10608,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   ensureDraftRecordIdActionRef.current = ensureDraftRecordId;
 
   const applyFollowupBatchResults = useCallback(
-    (args: { recordId: string; actions: string[]; batch: FollowupBatchResponse; reason: string }) => {
+    (args: { recordId: string; actions: string[]; batch: FollowupBatchResponse; reason: string; sessionId?: number | null }) => {
       const followupErrors: string[] = [];
       const byAction = new Map<string, any>();
       const entries = Array.isArray(args.batch?.results) ? args.batch.results : [];
+      const applicationTarget = resolveFollowupResultApplicationTarget({
+        settledRecordId: args.recordId,
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+        currentSessionId: recordSessionRef.current,
+        followupSessionId: args.sessionId ?? null,
+        currentView: viewRef.current
+      });
+      const activeRecordUpdate = applicationTarget.applyToActiveRecord;
+      if (!activeRecordUpdate) {
+        logEvent('followup.batch.detachedResult', {
+          recordId: args.recordId,
+          currentRecordId: applicationTarget.currentRecordId || null,
+          sessionChanged: applicationTarget.sessionChanged,
+          viewAllowsActiveRecord: applicationTarget.viewAllowsActiveRecord,
+          reason: args.reason
+        });
+      }
       entries.forEach(entry => {
         const key = (entry?.action || '').toString().trim().toUpperCase();
         if (key) byAction.set(key, entry?.result || null);
@@ -10624,16 +10643,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('followup.batch.error', { action, recordId: args.recordId, message: msg, reason: args.reason });
           continue;
         }
+        const cachedRecordForMeta =
+          selectedRecordSnapshotRef.current?.id === args.recordId
+            ? selectedRecordSnapshotRef.current
+            : listRecordsRef.current[args.recordId] || null;
         const nextMeta = resolveFollowupActionResultMeta({
           result,
-          currentDataVersion: recordDataVersionRef.current
+          currentDataVersion: activeRecordUpdate ? recordDataVersionRef.current : (cachedRecordForMeta as any)?.dataVersion
         });
         const previousRecordForAnalytics =
           selectedRecordSnapshotRef.current?.id === args.recordId
             ? selectedRecordSnapshotRef.current
             : listRecordsRef.current[args.recordId] || null;
         const nextSnapshotStatus =
-          nextMeta.status !== undefined ? (nextMeta.status || undefined) : selectedRecordSnapshotRef.current?.status;
+          nextMeta.status !== undefined ? (nextMeta.status || undefined) : previousRecordForAnalytics?.status;
         const nextRecordForAnalytics =
           previousRecordForAnalytics && nextMeta.status !== undefined
             ? ({
@@ -10660,7 +10683,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             status: nextMeta.status || null
           });
           const nextStatusValue = (nextMeta.status || '').toString();
-          if (selectedRecordIdRef.current === args.recordId) {
+          if (activeRecordUpdate) {
             valuesRef.current = {
               ...valuesRef.current,
               status: nextStatusValue
@@ -10678,11 +10701,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           rowNumber: nextMeta.rowNumber
         });
         markRecordFreshnessServerTouch({ reason: 'record.followupBatch', recordId: args.recordId });
-        if (nextMeta.dataVersion !== undefined) {
+        if (activeRecordUpdate && nextMeta.dataVersion !== undefined) {
           recordDataVersionRef.current = nextMeta.dataVersion;
           optimisticClientDataVersionRef.current = nextMeta.dataVersion;
         }
-        if (nextMeta.rowNumber !== undefined) {
+        if (activeRecordUpdate && nextMeta.rowNumber !== undefined) {
           recordRowNumberRef.current = nextMeta.rowNumber;
         }
         logEvent('followup.batch.success', {
@@ -10692,61 +10715,63 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dataVersion: nextMeta.dataVersion ?? null,
           reason: args.reason
         });
-        lastSubmissionMetaRef.current = {
-          ...(lastSubmissionMetaRef.current || { id: args.recordId }),
-          id: args.recordId,
-          updatedAt: nextMeta.updatedAt || result.updatedAt || lastSubmissionMetaRef.current?.updatedAt,
-          dataVersion: nextMeta.dataVersion ?? lastSubmissionMetaRef.current?.dataVersion,
-          status:
-            nextMeta.status !== undefined
-              ? nextMeta.status || null
-              : lastSubmissionMetaRef.current?.status || null
-        };
-        setLastSubmissionMeta(prev => ({
-          ...(prev || { id: args.recordId }),
-          updatedAt: nextMeta.updatedAt || result.updatedAt || prev?.updatedAt,
-          dataVersion: nextMeta.dataVersion ?? prev?.dataVersion,
-          status:
-            nextMeta.status !== undefined
-              ? nextMeta.status
-              : prev?.status || null
-        }));
-        selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current
-          ? ({
-              ...selectedRecordSnapshotRef.current,
-              updatedAt: nextMeta.updatedAt || result.updatedAt || selectedRecordSnapshotRef.current.updatedAt,
-              status: nextSnapshotStatus,
-              pdfUrl: nextMeta.pdfUrl || result.pdfUrl || selectedRecordSnapshotRef.current.pdfUrl,
-              dataVersion: nextMeta.dataVersion ?? (selectedRecordSnapshotRef.current as any).dataVersion,
-              __rowNumber: nextMeta.rowNumber ?? (selectedRecordSnapshotRef.current as any).__rowNumber,
-              values:
-                nextMeta.status !== undefined
-                  ? {
-                      ...((selectedRecordSnapshotRef.current.values || {}) as Record<string, any>),
-                      status: (nextMeta.status || '').toString()
-                    }
-                  : selectedRecordSnapshotRef.current.values
-            } as any)
-          : selectedRecordSnapshotRef.current;
-        setSelectedRecordSnapshot(prev =>
-          prev
+        if (activeRecordUpdate) {
+          lastSubmissionMetaRef.current = {
+            ...(lastSubmissionMetaRef.current || { id: args.recordId }),
+            id: args.recordId,
+            updatedAt: nextMeta.updatedAt || result.updatedAt || lastSubmissionMetaRef.current?.updatedAt,
+            dataVersion: nextMeta.dataVersion ?? lastSubmissionMetaRef.current?.dataVersion,
+            status:
+              nextMeta.status !== undefined
+                ? nextMeta.status || null
+                : lastSubmissionMetaRef.current?.status || null
+          };
+          setLastSubmissionMeta(prev => ({
+            ...(prev || { id: args.recordId }),
+            updatedAt: nextMeta.updatedAt || result.updatedAt || prev?.updatedAt,
+            dataVersion: nextMeta.dataVersion ?? prev?.dataVersion,
+            status:
+              nextMeta.status !== undefined
+                ? nextMeta.status
+                : prev?.status || null
+          }));
+          selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current?.id === args.recordId
             ? ({
-                ...prev,
-                updatedAt: nextMeta.updatedAt || result.updatedAt || prev.updatedAt,
-                status: nextMeta.status !== undefined ? (nextMeta.status || undefined) : prev.status,
-                pdfUrl: nextMeta.pdfUrl || result.pdfUrl || prev.pdfUrl,
-                dataVersion: nextMeta.dataVersion ?? (prev as any).dataVersion,
-                __rowNumber: nextMeta.rowNumber ?? (prev as any).__rowNumber,
+                ...selectedRecordSnapshotRef.current,
+                updatedAt: nextMeta.updatedAt || result.updatedAt || selectedRecordSnapshotRef.current.updatedAt,
+                status: nextSnapshotStatus,
+                pdfUrl: nextMeta.pdfUrl || result.pdfUrl || selectedRecordSnapshotRef.current.pdfUrl,
+                dataVersion: nextMeta.dataVersion ?? (selectedRecordSnapshotRef.current as any).dataVersion,
+                __rowNumber: nextMeta.rowNumber ?? (selectedRecordSnapshotRef.current as any).__rowNumber,
                 values:
                   nextMeta.status !== undefined
                     ? {
-                        ...((prev.values || {}) as Record<string, any>),
+                        ...((selectedRecordSnapshotRef.current.values || {}) as Record<string, any>),
                         status: (nextMeta.status || '').toString()
                       }
-                    : prev.values
+                    : selectedRecordSnapshotRef.current.values
               } as any)
-            : prev
-        );
+            : selectedRecordSnapshotRef.current;
+          setSelectedRecordSnapshot(prev =>
+            prev && prev.id === args.recordId
+              ? ({
+                  ...prev,
+                  updatedAt: nextMeta.updatedAt || result.updatedAt || prev.updatedAt,
+                  status: nextMeta.status !== undefined ? (nextMeta.status || undefined) : prev.status,
+                  pdfUrl: nextMeta.pdfUrl || result.pdfUrl || prev.pdfUrl,
+                  dataVersion: nextMeta.dataVersion ?? (prev as any).dataVersion,
+                  __rowNumber: nextMeta.rowNumber ?? (prev as any).__rowNumber,
+                  values:
+                    nextMeta.status !== undefined
+                      ? {
+                          ...((prev.values || {}) as Record<string, any>),
+                          status: (nextMeta.status || '').toString()
+                        }
+                      : prev.values
+                } as any)
+              : prev
+          );
+        }
       }
 
       return { followupErrors, byAction };
@@ -10953,6 +10978,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!recordId) return;
       const nextStatus = (args.status || '').toString().trim() || null;
       const nextStatusValue = nextStatus || '';
+      const applicationTarget = resolveFollowupResultApplicationTarget({
+        settledRecordId: recordId,
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+        currentSessionId: recordSessionRef.current,
+        currentView: viewRef.current
+      });
       const previousRecord =
         selectedRecordSnapshotRef.current?.id === recordId
           ? selectedRecordSnapshotRef.current
@@ -10982,40 +11014,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordId,
         status: nextStatus
       });
-      setLastSubmissionMeta(prev => ({
-        ...(prev || { id: recordId }),
-        id: recordId,
-        status: nextStatus
-      }));
-      if (selectedRecordIdRef.current === recordId) {
+      if (applicationTarget.applyToActiveRecord) {
+        setLastSubmissionMeta(prev => ({
+          ...(prev || { id: recordId }),
+          id: recordId,
+          status: nextStatus
+        }));
         valuesRef.current = {
           ...valuesRef.current,
           status: nextStatusValue
         };
         setValues(prev => ({ ...prev, status: nextStatusValue }));
-      }
-      setSelectedRecordSnapshot(prev =>
-        prev
-          ? {
-              ...prev,
-              id: prev.id || recordId,
-              status: nextStatus || prev.status || undefined,
-              values: {
-                ...((prev.values || {}) as Record<string, any>),
-                status: nextStatusValue
+        setSelectedRecordSnapshot(prev =>
+          prev && prev.id === recordId
+            ? {
+                ...prev,
+                status: nextStatus || prev.status || undefined,
+                values: {
+                  ...((prev.values || {}) as Record<string, any>),
+                  status: nextStatusValue
+                }
               }
-            }
-          : prev
-      );
-      selectedRecordSnapshotRef.current =
-        selectedRecordSnapshotRef.current?.id === recordId && nextRecord
-          ? nextRecord
-          : selectedRecordSnapshotRef.current;
+            : prev
+        );
+        selectedRecordSnapshotRef.current =
+          selectedRecordSnapshotRef.current?.id === recordId && nextRecord
+            ? nextRecord
+            : selectedRecordSnapshotRef.current;
+      }
       upsertListCacheRow({
         recordId,
         values: { status: nextStatusValue },
         status: nextStatus,
-        dataVersion: getCurrentKnownClientDataVersion()
+        dataVersion: applicationTarget.applyToActiveRecord ? getCurrentKnownClientDataVersion() : undefined
       });
     },
     [applyLiveAnalyticsRecordDelta, getCurrentKnownClientDataVersion, markAnalyticsSnapshotStale, upsertListCacheRow]
@@ -12388,8 +12419,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
         const runBatch = async (
           actions: string[],
-          batchReason: string
+          batchReason: string,
+          options?: { sessionId?: number | null }
         ): Promise<{ success: boolean; message?: string; byAction?: Map<string, any> }> => {
+          const batchApplicationTarget = () =>
+            resolveFollowupResultApplicationTarget({
+              settledRecordId: recordId,
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+              currentSessionId: recordSessionRef.current,
+              followupSessionId: options?.sessionId ?? null,
+              currentView: viewRef.current
+            });
           try {
             logEvent('guidedStep.milestone.followup.begin', {
               stepId: args.stepId,
@@ -12407,7 +12448,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               recordId,
               actions,
               batch,
-              reason: batchReason
+              reason: batchReason,
+              sessionId: options?.sessionId ?? null
             });
             const { followupErrors } = batchOutcome;
             await refreshAfterFollowupBatch({
@@ -12417,8 +12459,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             if (followupErrors.length) {
               const message = followupErrors.join(' · ');
-              setStatus(message);
-              setStatusLevel('error');
+              const target = batchApplicationTarget();
+              if (target.applyToActiveRecord) {
+                setStatus(message);
+                setStatusLevel('error');
+              } else {
+                logEvent('guidedStep.milestone.followup.detachedError', {
+                  stepId: args.stepId,
+                  recordId,
+                  currentRecordId: target.currentRecordId || null,
+                  sessionChanged: target.sessionChanged,
+                  message
+                });
+              }
               return { success: false, message };
             }
             logEvent('guidedStep.milestone.followup.done', {
@@ -12430,9 +12483,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           } catch (err: any) {
             const uiMessage = resolveUiErrorMessage(err, 'Failed to run follow-up actions.');
             const logMessage = resolveLogMessage(err, 'Failed to run follow-up actions.');
-            if (uiMessage) {
+            const target = batchApplicationTarget();
+            if (uiMessage && target.applyToActiveRecord) {
               setStatus(uiMessage);
               setStatusLevel('error');
+            } else if (uiMessage) {
+              logEvent('guidedStep.milestone.followup.detachedException', {
+                stepId: args.stepId,
+                recordId,
+                currentRecordId: target.currentRecordId || null,
+                sessionChanged: target.sessionChanged,
+                message: logMessage
+              });
             }
             logEvent('guidedStep.milestone.followup.exception', {
               stepId: args.stepId,
@@ -12510,7 +12572,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
           const followupSessionId = recordSessionRef.current;
           const backgroundPromise = (async () => {
-            const outcome = await runBatch(allBackgroundActions, `${reason}.background`);
+            const outcome = await runBatch(allBackgroundActions, `${reason}.background`, { sessionId: followupSessionId });
             if (outcome.success) {
               await refreshDetachedRecordSnapshotCache({
                 recordId,
@@ -12528,7 +12590,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               pendingFollowupStatusByRecordRef.current.delete(recordId);
               applyLocalRecordStatus({ recordId, status: previousStatus || null });
             }
-            setRequestedGuidedStepId(args.stepId || null);
+            const target = resolveFollowupResultApplicationTarget({
+              settledRecordId: recordId,
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+              currentSessionId: recordSessionRef.current,
+              followupSessionId,
+              currentView: viewRef.current
+            });
+            if (target.applyToActiveRecord) {
+              setRequestedGuidedStepId(args.stepId || null);
+            } else {
+              logEvent('guidedStep.milestone.failureNavigation.skippedDetached', {
+                stepId: args.stepId,
+                recordId,
+                currentRecordId: target.currentRecordId || null,
+                sessionChanged: target.sessionChanged
+              });
+            }
             return {
               success: false,
               message: outcome.message || '',
@@ -12622,7 +12701,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
         let preOutcomeByAction: Map<string, any> | undefined;
         if (preActions.length) {
-          const preOutcome = await runBatch(preActions, `${reason}.pre`);
+          const preOutcome = await runBatch(preActions, `${reason}.pre`, { sessionId: recordSessionRef.current });
           if (!preOutcome.success) {
             return { success: false, advanceToNext: false, message: preOutcome.message };
           }
@@ -12630,7 +12709,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         const outcome = effectiveBackgroundActions.length
-          ? await runBatch(effectiveBackgroundActions, `${reason}.background`)
+          ? await runBatch(effectiveBackgroundActions, `${reason}.background`, { sessionId: recordSessionRef.current })
           : { success: true as const, byAction: undefined as Map<string, any> | undefined };
         guidedMilestoneBusy.unlock(busySeq, {
           stepId: args.stepId,
