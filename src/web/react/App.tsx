@@ -2792,6 +2792,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }>
     >
   >(new Map());
+  const pendingFollowupStatusByRecordRef = useRef<Map<string, string>>(new Map());
+  const applyPendingFollowupStatusesToRecordCache = useCallback(
+    (records: Record<string, WebFormSubmission>): Record<string, WebFormSubmission> => {
+      const pending = pendingFollowupStatusByRecordRef.current;
+      if (!pending.size) return records;
+      let next = records;
+      pending.forEach((status, recordId) => {
+        const id = (recordId || '').toString().trim();
+        const statusValue = (status || '').toString();
+        const existing = id ? next[id] : null;
+        if (!existing || !statusValue) return;
+        const existingValues = ((existing as any).values || {}) as Record<string, any>;
+        if (existing.status === statusValue && existingValues.status === statusValue) return;
+        if (next === records) next = { ...records };
+        next[id] = {
+          ...existing,
+          status: statusValue,
+          values: {
+            ...existingValues,
+            status: statusValue
+          }
+        } as any;
+      });
+      return next;
+    },
+    []
+  );
   const reservationSyncMetaRef = useRef<{
     recordId: string;
     stepId: string;
@@ -4054,7 +4081,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       pendingDeferredRecordFreshnessSyncRef.current = null;
       dataSourceFreshnessCheckPromiseRef.current = null;
       lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current = {};
-      pendingFollowupBatchPromisesRef.current.clear();
       lastDraftSaveFailureRef.current = null;
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;
@@ -5102,7 +5128,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const hasMore = resolvedPageCount < totalPages;
           const completeData = firstListComplete || (!hasMore && failedPages.size === 0 && aggregated.length >= cappedTotalCount && cappedTotalCount < 200);
           setListCache(prev => {
-            const records = mergeListRecordSnapshotCache(prev.records, recordsAccum);
+            const records = applyPendingFollowupStatusesToRecordCache(
+              mergeListRecordSnapshotCache(prev.records, recordsAccum)
+            );
             const items = mergeListItemsWithRecordCache(aggregated, records);
             return {
               response: {
@@ -5296,6 +5324,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // Cancel when leaving the list view so opening a record does not keep issuing
     // background list page requests the user can no longer benefit from.
   }, [
+    applyPendingFollowupStatusesToRecordCache,
     definition.listView,
     disableListBackgroundPrefetch,
     formKey,
@@ -5342,6 +5371,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [definition, formKey, language]
   );
+
+  const mergeRecordSnapshotIntoListCache = useCallback((snapshot: WebFormSubmission | null | undefined) => {
+    const recordId = (snapshot?.id || '').toString().trim();
+    if (!snapshot || !recordId) return;
+    setListCache(prev => {
+      const records = applyPendingFollowupStatusesToRecordCache(
+        mergeListRecordSnapshotCache(prev.records, { [recordId]: snapshot })
+      );
+      const response =
+        prev.response && Array.isArray((prev.response as any).items)
+          ? {
+              ...(prev.response as any),
+              items: mergeListItemsWithRecordCache((prev.response.items || []) as ListItem[], records)
+            }
+          : prev.response;
+      return { response, records };
+    });
+  }, [applyPendingFollowupStatusesToRecordCache]);
 
   useEffect(() => {
     const unlockRecordId = (readyForProductionUnlockResolution.unlockRecordId || '').toString().trim();
@@ -5865,6 +5912,58 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [applyRecordSnapshot, formKey, logEvent, markRecordFreshnessServerTouch, resolveLogMessage, resolveUiErrorMessage]
+  );
+
+  const refreshDetachedRecordSnapshotCache = useCallback(
+    async (args: { recordId: string; reason: string }): Promise<boolean> => {
+      const recordId = (args.recordId || '').toString().trim();
+      if (!recordId) return false;
+      const currentRecordId = (selectedRecordIdRef.current || '').toString().trim();
+      if (currentRecordId === recordId && viewRef.current !== 'list') {
+        logEvent('record.detachedCacheRefresh.skipped', {
+          recordId,
+          reason: args.reason,
+          currentView: viewRef.current
+        });
+        return false;
+      }
+      const startedAt = Date.now();
+      logEvent('record.detachedCacheRefresh.start', {
+        recordId,
+        reason: args.reason,
+        currentView: viewRef.current,
+        currentRecordId: currentRecordId || null
+      });
+      try {
+        const snapshot = await fetchRecordById(formKey, recordId);
+        if (!snapshot) {
+          logEvent('record.detachedCacheRefresh.miss', {
+            recordId,
+            reason: args.reason,
+            durationMs: Date.now() - startedAt
+          });
+          return false;
+        }
+        mergeRecordSnapshotIntoListCache(snapshot);
+        markRecordFreshnessServerTouch({ reason: args.reason, recordId: snapshot.id || recordId });
+        logEvent('record.detachedCacheRefresh.done', {
+          recordId: snapshot.id || recordId,
+          status: snapshot.status || null,
+          dataVersion: Number.isFinite(Number((snapshot as any).dataVersion)) ? Number((snapshot as any).dataVersion) : null,
+          durationMs: Date.now() - startedAt
+        });
+        return true;
+      } catch (err: any) {
+        logEvent('record.detachedCacheRefresh.error', {
+          recordId,
+          reason: args.reason,
+          message: err?.message || err?.toString?.() || 'failed',
+          durationMs: Date.now() - startedAt
+        });
+        return false;
+      }
+    },
+    [formKey, logEvent, markRecordFreshnessServerTouch, mergeRecordSnapshotIntoListCache]
   );
 
   useEffect(() => {
@@ -10538,9 +10637,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             recordId: args.recordId,
             status: nextMeta.status || null
           });
+          const nextStatusValue = (nextMeta.status || '').toString();
+          if (selectedRecordIdRef.current === args.recordId) {
+            valuesRef.current = {
+              ...valuesRef.current,
+              status: nextStatusValue
+            };
+            setValues(prev => ({ ...prev, status: nextStatusValue }));
+          }
         }
         upsertListCacheRow({
           recordId: args.recordId,
+          values: nextMeta.status !== undefined ? { status: (nextMeta.status || '').toString() } : undefined,
           updatedAt: nextMeta.updatedAt,
           status: nextMeta.status as any,
           pdfUrl: nextMeta.pdfUrl,
@@ -10588,7 +10696,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               status: nextSnapshotStatus,
               pdfUrl: nextMeta.pdfUrl || result.pdfUrl || selectedRecordSnapshotRef.current.pdfUrl,
               dataVersion: nextMeta.dataVersion ?? (selectedRecordSnapshotRef.current as any).dataVersion,
-              __rowNumber: nextMeta.rowNumber ?? (selectedRecordSnapshotRef.current as any).__rowNumber
+              __rowNumber: nextMeta.rowNumber ?? (selectedRecordSnapshotRef.current as any).__rowNumber,
+              values:
+                nextMeta.status !== undefined
+                  ? {
+                      ...((selectedRecordSnapshotRef.current.values || {}) as Record<string, any>),
+                      status: (nextMeta.status || '').toString()
+                    }
+                  : selectedRecordSnapshotRef.current.values
             } as any)
           : selectedRecordSnapshotRef.current;
         setSelectedRecordSnapshot(prev =>
@@ -10599,7 +10714,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 status: nextMeta.status !== undefined ? (nextMeta.status || undefined) : prev.status,
                 pdfUrl: nextMeta.pdfUrl || result.pdfUrl || prev.pdfUrl,
                 dataVersion: nextMeta.dataVersion ?? (prev as any).dataVersion,
-                __rowNumber: nextMeta.rowNumber ?? (prev as any).__rowNumber
+                __rowNumber: nextMeta.rowNumber ?? (prev as any).__rowNumber,
+                values:
+                  nextMeta.status !== undefined
+                    ? {
+                        ...((prev.values || {}) as Record<string, any>),
+                        status: (nextMeta.status || '').toString()
+                      }
+                    : prev.values
               } as any)
             : prev
         );
@@ -10808,6 +10930,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const recordId = (args.recordId || '').toString().trim();
       if (!recordId) return;
       const nextStatus = (args.status || '').toString().trim() || null;
+      const nextStatusValue = nextStatus || '';
       const previousRecord =
         selectedRecordSnapshotRef.current?.id === recordId
           ? selectedRecordSnapshotRef.current
@@ -10817,7 +10940,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ? ({
               ...previousRecord,
               id: previousRecord.id || recordId,
-              status: nextStatus || previousRecord.status || undefined
+              status: nextStatus || previousRecord.status || undefined,
+              values: {
+                ...(((previousRecord as any).values || {}) as Record<string, any>),
+                status: nextStatusValue
+              }
             } as WebFormSubmission)
           : null;
       if (nextRecord) {
@@ -10838,12 +10965,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         id: recordId,
         status: nextStatus
       }));
+      if (selectedRecordIdRef.current === recordId) {
+        valuesRef.current = {
+          ...valuesRef.current,
+          status: nextStatusValue
+        };
+        setValues(prev => ({ ...prev, status: nextStatusValue }));
+      }
       setSelectedRecordSnapshot(prev =>
         prev
           ? {
               ...prev,
               id: prev.id || recordId,
-              status: nextStatus || prev.status || undefined
+              status: nextStatus || prev.status || undefined,
+              values: {
+                ...((prev.values || {}) as Record<string, any>),
+                status: nextStatusValue
+              }
             }
           : prev
       );
@@ -10853,6 +10991,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           : selectedRecordSnapshotRef.current;
       upsertListCacheRow({
         recordId,
+        values: { status: nextStatusValue },
         status: nextStatus,
         dataVersion: getCurrentKnownClientDataVersion()
       });
@@ -12344,12 +12483,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
           const optimisticStatus = resolveOptimisticStatusForActions(allBackgroundActions);
           if (optimisticStatus) {
+            pendingFollowupStatusByRecordRef.current.set(recordId, optimisticStatus);
             applyLocalRecordStatus({ recordId, status: optimisticStatus });
           }
           const followupSessionId = recordSessionRef.current;
           const backgroundPromise = (async () => {
             const outcome = await runBatch(allBackgroundActions, `${reason}.background`);
             if (outcome.success) {
+              await refreshDetachedRecordSnapshotCache({
+                recordId,
+                reason: `${reason}.background.settled`
+              });
               return {
                 success: true,
                 recordId,
@@ -12359,6 +12503,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               };
             }
             if (optimisticStatus) {
+              pendingFollowupStatusByRecordRef.current.delete(recordId);
               applyLocalRecordStatus({ recordId, status: previousStatus || null });
             }
             setRequestedGuidedStepId(args.stepId || null);
@@ -12375,6 +12520,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             let pendingCleared = false;
             if (pending === backgroundPromise) {
               pendingFollowupBatchPromisesRef.current.delete(recordId);
+              pendingFollowupStatusByRecordRef.current.delete(recordId);
               pendingCleared = true;
             }
             const currentRecordId =
@@ -12517,6 +12663,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       openConfiguredConfirmDialog,
       persistCurrentSnapshot,
+      refreshDetachedRecordSnapshotCache,
       refreshAfterFollowupBatch,
       resolveLogMessage,
       requestHomeAnalyticsRefresh,

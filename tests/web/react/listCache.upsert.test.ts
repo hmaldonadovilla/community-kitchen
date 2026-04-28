@@ -77,6 +77,48 @@ describe('upsertListCacheRowPure', () => {
     expect((next.response?.items?.[0] as any).extra).toBeUndefined();
   });
 
+  it('mirrors status updates into cached record values for condition evaluation on reopen', () => {
+    const prev: ListCacheState = {
+      response: {
+        items: [{ id: 'r1', status: 'In progress', createdAt: 't1' }],
+        totalCount: 1
+      } as any,
+      records: {
+        r1: {
+          id: 'r1',
+          formKey: 'f',
+          language: 'en',
+          createdAt: 't1',
+          updatedAt: 't1',
+          status: 'In progress',
+          values: { status: 'In progress', name: 'Meal' }
+        } as any
+      }
+    };
+
+    const next = upsertListCacheRowPure({
+      prev,
+      update: {
+        recordId: 'r1',
+        status: 'Final report emailed',
+        dataVersion: 8
+      },
+      definition: baseDefinition,
+      formKey: 'f',
+      language: 'en'
+    });
+
+    expect(next.records.r1.status).toBe('Final report emailed');
+    expect(next.records.r1.values).toMatchObject({
+      status: 'Final report emailed',
+      name: 'Meal'
+    });
+    expect(next.response?.items?.[0]).toMatchObject({
+      id: 'r1',
+      status: 'Final report emailed'
+    });
+  });
+
   it('inserts a new row when the record is not yet cached', () => {
     const definition: WebFormDefinition = {
       ...baseDefinition,

@@ -165,15 +165,24 @@ export const upsertListCacheRowPure = (args: {
   const rn = Number(update.rowNumber);
   const rowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
   const values = (update.values || {}) as any;
+  const valuesWithStatus =
+    update.status !== undefined
+      ? { ...values, status: update.status || '' }
+      : values;
+  const shouldUpdateValues = Boolean(update.values) || update.status !== undefined;
 
   if (existing) {
+    const existingValues = (existing.values || {}) as Record<string, any>;
     nextRecords[recordId] = {
       ...existing,
       createdAt: update.createdAt || existing.createdAt,
       updatedAt: update.updatedAt || existing.updatedAt,
       status: update.status !== undefined ? (update.status as any) : existing.status,
       pdfUrl: update.pdfUrl !== undefined ? (update.pdfUrl as any) : (existing as any).pdfUrl,
-      values: update.values ? { ...(existing.values as any), ...(update.values as any) } : existing.values,
+      values:
+        shouldUpdateValues
+          ? { ...existingValues, ...valuesWithStatus }
+          : existing.values,
       ...(dataVersion ? { dataVersion } : null),
       ...(rowNumber ? { __rowNumber: rowNumber } : null)
     } as any;
@@ -186,7 +195,7 @@ export const upsertListCacheRowPure = (args: {
       updatedAt: update.updatedAt,
       status: update.status || undefined,
       pdfUrl: update.pdfUrl,
-      values: update.values || {},
+      values: shouldUpdateValues ? valuesWithStatus : {},
       lineItems: {},
       submittedAt: undefined,
       ...(dataVersion ? { dataVersion } : null),
