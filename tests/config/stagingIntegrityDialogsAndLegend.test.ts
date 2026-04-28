@@ -73,6 +73,14 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(defActionIcons.has('view')).toBe(true);
   });
 
+  test('meal production and recipes do not expose the No-salt dietary category', () => {
+    const mealProduction = readConfig('config_meal_production.json');
+    const recipes = readConfig('config_recipes.json');
+
+    const serialized = JSON.stringify({ mealProduction, recipes });
+    expect(serialized).not.toMatch(/No-salt|Sans sel|Zonder zout|no_salt/);
+  });
+
   test('meal production keeps critical data-integrity dialogs wired', () => {
     const cfg = readConfig('config_meal_production.json');
 
@@ -169,11 +177,11 @@ describe('staging integrity dialogs and list legend config', () => {
           clear: true
         },
         {
-          target: { scope: 'parent', fieldId: 'MP_COOK_TEMP' },
+          target: { scope: 'top', fieldId: 'MP_COOK_TEMP' },
           clear: true
         },
         {
-          target: { scope: 'parent', fieldId: 'TEMP_EVD' },
+          target: { scope: 'top', fieldId: 'TEMP_EVD' },
           clear: true
         }
       ]);
@@ -434,6 +442,17 @@ describe('staging integrity dialogs and list legend config', () => {
         })
       );
       expect(portioning?.label?.en).toBe('Portioning');
+      const foodSafetyQuestionIds = new Set(
+        (foodSafety?.include || [])
+          .filter((entry: any) => entry?.kind === 'question')
+          .map((entry: any) => entry?.id)
+      );
+      expect(foodSafetyQuestionIds.has('MP_COOK_TEMP')).toBe(true);
+      expect(foodSafetyQuestionIds.has('TEMP_EVD')).toBe(true);
+      expect((foodSafety?.include || []).some((entry: any) => entry?.kind === 'lineGroup')).toBe(false);
+      expect(foodSafety?.helpText?.en).toBe(
+        'Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.'
+      );
       expect(foodSafety?.excludeWhen).toEqual({
         any: [
           {
@@ -726,6 +745,16 @@ describe('staging integrity dialogs and list legend config', () => {
 
       const meals = findQuestion(questions || [], 'MP_MEALS_REQUEST');
       const mealFields = Array.isArray(meals?.lineItemConfig?.fields) ? meals.lineItemConfig.fields : [];
+      const topTemp = findQuestion(questions || [], 'MP_COOK_TEMP');
+      const topTempEvidence = findQuestion(questions || [], 'TEMP_EVD');
+      expect(topTemp?.type).toBe('CHECKBOX');
+      expect(topTemp?.required).toBe(true);
+      expect(topTempEvidence?.type).toBe('FILE_UPLOAD');
+      expect(topTempEvidence?.required).toBe(true);
+      expect(topTempEvidence?.uploadConfig?.minFiles).toBe(1);
+      expect(topTempEvidence?.uploadConfig?.maxFiles).toBe(10);
+      expect(mealFields.some((entry: any) => entry?.id === 'MP_COOK_TEMP')).toBe(false);
+      expect(mealFields.some((entry: any) => entry?.id === 'TEMP_EVD')).toBe(false);
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');
       const leftoverFrozenField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_FROZEN_CAPTURE');
       const leftoverStorageField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_STORAGE_CAPTURE');

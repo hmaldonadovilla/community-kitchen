@@ -2689,10 +2689,7 @@
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",
                                 "dataSourceField": "DISH_TYPE",
-                                "dataSourceDelimiter": ",",
-                                "bypassValues": [
-                                  "No-salt"
-                                ]
+                                "dataSourceDelimiter": ","
                               },
                               "selectionEffects": [
                                 {
@@ -2796,14 +2793,14 @@
                                   },
                                   {
                                     "target": {
-                                      "scope": "parent",
+                                      "scope": "top",
                                       "fieldId": "MP_COOK_TEMP"
                                     },
                                     "clear": true
                                   },
                                   {
                                     "target": {
-                                      "scope": "parent",
+                                      "scope": "top",
                                       "fieldId": "TEMP_EVD"
                                     },
                                     "clear": true
@@ -2907,29 +2904,12 @@
               "renderAsLabel": true
             },
             {
-              "kind": "lineGroup",
-              "id": "MP_MEALS_REQUEST",
-              "presentation": "liftedRowFields",
-              "fields": [
-                {
-                  "id": "MEAL_TYPE",
-                  "renderAsLabel": true
-                },
-                "MP_COOK_TEMP",
-                "TEMP_EVD"
-              ],
-              "readOnlyFields": [
-                "MEAL_TYPE",
-                "ORD_QTY"
-              ],
-              "rows": {
-                "includeWhen": {
-                  "fieldId": "ORD_QTY",
-                  "greaterThan": 0
-                }
-              },
-              "collapsedFieldsInHeader": true,
-              "displayMode": "inline"
+              "kind": "question",
+              "id": "MP_COOK_TEMP"
+            },
+            {
+              "kind": "question",
+              "id": "TEMP_EVD"
             }
           ],
           "label": {
@@ -2942,9 +2922,9 @@
             "autoAdvance": "onValid"
           },
           "helpText": {
-            "en": "Confirm that all cooking pots reached at least 63°C and add one photo per pot for each dietary type, including reheated leftover full dish.",
-            "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo par marmite pour chaque type de régime, y compris les restes réchauffés du plat complet.",
-            "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per pot toe voor elk dieettype, inclusief opgewarmde restanten van het volledige gerecht."
+            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
+            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
+            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
           }
         },
         {
@@ -3755,7 +3735,8 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com", "que0106@gmail.com"
+              "hmaldonadovilla@outlook.com",
+              "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
             "fromName": "Community Kitchen Operations",
@@ -3807,7 +3788,8 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com", "que0106@gmail.com"
+              "hmaldonadovilla@outlook.com",
+              "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
             "fromName": "Community Kitchen Operations",
@@ -3909,7 +3891,8 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com", "que0106@gmail.com"
+              "hmaldonadovilla@outlook.com",
+              "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
             "fromName": "Community Kitchen Operations",
@@ -4027,32 +4010,16 @@
               {
                 "label": "Food safety",
                 "completeWhen": {
-                  "not": {
-                    "lineItems": {
-                      "groupId": "MP_MEALS_REQUEST",
-                      "match": "any",
-                      "when": {
-                        "all": [
-                          {
-                            "fieldId": "ORD_QTY",
-                            "greaterThan": 0
-                          },
-                          {
-                            "any": [
-                              {
-                                "fieldId": "MP_COOK_TEMP",
-                                "notEquals": true
-                              },
-                              {
-                                "fieldId": "TEMP_EVD",
-                                "isEmpty": true
-                              }
-                            ]
-                          }
-                        ]
-                      }
+                  "all": [
+                    {
+                      "fieldId": "MP_COOK_TEMP",
+                      "equals": true
+                    },
+                    {
+                      "fieldId": "TEMP_EVD",
+                      "notEmpty": true
                     }
-                  }
+                  ]
                 }
               },
               {
@@ -4106,7 +4073,8 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com", "que0106@gmail.com"
+              "hmaldonadovilla@outlook.com",
+              "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
             "fromName": "Community Kitchen Operations",
@@ -4730,21 +4698,18 @@
               "Vegetarian",
               "Vegan",
               "Diabetic",
-              "No-salt",
               "Standard"
             ],
             "optionsFr": [
               "Végétarien",
               "Vegan",
               "Diabétique",
-              "Sans sel",
               "Standard"
             ],
             "optionsNl": [
               "Vegetarisch",
               "Vegan",
               "Diabetisch",
-              "Zonder zout",
               "Standaard"
             ],
             "optionFilter": {
@@ -4761,20 +4726,17 @@
                   "Vegetarian",
                   "Vegan",
                   "Diabetic",
-                  "No-salt",
                   "Standard"
                 ],
                 "Belliard||Lunch": [
                   "Vegetarian",
                   "Vegan",
-                  "Diabetic",
-                  "No-salt"
+                  "Diabetic"
                 ],
                 "Belliard||Dinner": [
                   "Vegetarian",
                   "Vegan",
                   "Diabetic",
-                  "No-salt",
                   "Standard"
                 ],
                 "Le Phare": [
@@ -4879,10 +4841,7 @@
             "optionFilter": {
               "dependsOn": "LEFTOVER_MEAL_TYPE",
               "dataSourceField": "DISH_TYPE",
-              "dataSourceDelimiter": ",",
-              "bypassValues": [
-                "No-salt"
-              ]
+              "dataSourceDelimiter": ","
             },
             "selectionEffects": [
               {
@@ -5535,8 +5494,6 @@
         "MEAL_HEADER_INFO",
         "MP_TO_COOK",
         "LEFTOVER_VAL",
-        "MP_COOK_TEMP",
-        "TEMP_EVD",
         "FINAL_QTY",
         "MP_LEFTOVER_PORTIONS_CAPTURE"
       ],
@@ -5546,8 +5503,6 @@
         "TEXT",
         "NUMBER",
         "NUMBER",
-        "CHECKBOX",
-        "FILE_UPLOAD",
         "NUMBER"
       ],
       "optionsNl": [
@@ -5556,8 +5511,6 @@
         "Meal header",
         "To Cook",
         "Leftover",
-        "All pots ≥63°C: Confirm",
-        "Add photo",
         "Delivered Portions",
         "Leftover portions"
       ],
@@ -5572,7 +5525,7 @@
           "Options (EN)": "REF:PortionTypeOptions",
           "Options (FR)": "",
           "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+          "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -5646,40 +5599,6 @@
           "List View?": "",
           "Edit Options": "",
           "__ckOptionValue": "LEFTOVER_VAL"
-        },
-        {
-          "ID": "MP_COOK_TEMP",
-          "Type": "CHECKBOX",
-          "Label EN": "All pots ≥63°C: Confirm",
-          "Label FR": "Toutes les marmites ≥63°C : confirmer",
-          "Label NL": "Alle kookpotten ≥63°C: bevestigen",
-          "Required?": true,
-          "Options (EN)": [],
-          "Options (FR)": [],
-          "Options (NL)": [],
-          "Config (JSON/REF)": "{\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Confirm that all pots reached at least 63°C.\",\n    \"fr\": \"Confirmez que toutes les marmites ont atteint au moins 63°C.\",\n    \"nl\": \"Bevestig dat alle kookpotten minstens 63°C hebben bereikt.\"\n  }\n}",
-          "Option Filter (JSON)": "",
-          "Validation Rules (JSON)": "",
-          "List View?": "",
-          "Edit Options": "",
-          "__ckOptionValue": "MP_COOK_TEMP"
-        },
-        {
-          "ID": "TEMP_EVD",
-          "Type": "FILE_UPLOAD",
-          "Label EN": "Add photo",
-          "Label FR": "Ajouter une photo",
-          "Label NL": "Foto toevoegen",
-          "Required?": true,
-          "Options (EN)": "",
-          "Options (FR)": "",
-          "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
-          "Option Filter (JSON)": "",
-          "Validation Rules (JSON)": "",
-          "List View?": "",
-          "Edit Options": "",
-          "__ckOptionValue": "TEMP_EVD"
         },
         {
           "ID": "FINAL_QTY",
@@ -5818,22 +5737,19 @@
               "Standard",
               "Vegetarian",
               "Vegan",
-              "Diabetic",
-              "No-salt"
+              "Diabetic"
             ],
             "optionsFr": [
               "Standard",
               "Végétarien",
               "Végan",
-              "Diabétique",
-              "Sans sel"
+              "Diabétique"
             ],
             "optionsNl": [
               "Standard_NL",
               "Végétarien_NL",
               "Végan_NL",
-              "Diabétique_NL",
-              "Sans sel_NL"
+              "Diabétique_NL"
             ],
             "optionsRaw": [
               {
@@ -5863,13 +5779,6 @@
                 "optionNl": "Diabétique_NL",
                 "Icon": "🩺",
                 "__ckOptionValue": "Diabetic"
-              },
-              {
-                "optionEn": "No-salt",
-                "optionFr": "Sans sel",
-                "optionNl": "Sans sel_NL",
-                "Icon": "svg:no_salt.min.svg",
-                "__ckOptionValue": "No-salt"
               }
             ],
             "optionFilter": {
@@ -5886,20 +5795,17 @@
                   "Vegetarian",
                   "Vegan",
                   "Diabetic",
-                  "No-salt",
                   "Standard"
                 ],
                 "Belliard||Lunch": [
                   "Vegetarian",
                   "Vegan",
-                  "Diabetic",
-                  "No-salt"
+                  "Diabetic"
                 ],
                 "Belliard||Dinner": [
                   "Vegetarian",
                   "Vegan",
                   "Diabetic",
-                  "No-salt",
                   "Standard"
                 ],
                 "Le Phare": [
@@ -6098,155 +6004,6 @@
               "showWhen": {
                 "fieldId": "LEFTOVER_VAL",
                 "greaterThan": 0
-              }
-            }
-          },
-          {
-            "id": "MP_COOK_TEMP",
-            "type": "CHECKBOX",
-            "labelEn": "All pots ≥63°C: Confirm",
-            "labelFr": "Toutes les marmites ≥63°C : confirmer",
-            "labelNl": "Alle kookpotten ≥63°C: bevestigen",
-            "required": true,
-            "requiredMessage": {
-              "en": "Confirm that all pots reached at least 63°C.",
-              "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
-              "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
-            },
-            "validationRules": [
-              {
-                "when": {
-                  "all": [
-                    {
-                      "not": {
-                        "fieldId": "MP_COOK_TEMP",
-                        "equals": [
-                          "__never__"
-                        ]
-                      }
-                    },
-                    {
-                      "fieldId": "MP_PREP_DATE",
-                      "isInFuture": true
-                    },
-                    {
-                      "fieldId": "__ckStep",
-                      "equals": [
-                        "foodSafety"
-                      ]
-                    }
-                  ]
-                },
-                "message": {
-                  "en": "Food safety and portioning can only be recorded on the day of production.",
-                  "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
-                  "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
-                }
-              }
-            ],
-            "pair": "core_temp",
-            "options": [],
-            "optionsFr": [],
-            "optionsNl": []
-          },
-          {
-            "id": "TEMP_EVD",
-            "type": "FILE_UPLOAD",
-            "labelEn": "Add photo",
-            "labelFr": "Ajouter une photo",
-            "labelNl": "Foto toevoegen",
-            "required": true,
-            "requiredMessage": {
-              "en": "Add one photo per cooking pot.",
-              "fr": "Ajoutez une photo par marmite de cuisson.",
-              "nl": "Voeg één foto per kookpot toe."
-            },
-            "validationRules": [
-              {
-                "when": {
-                  "all": [
-                    {
-                      "not": {
-                        "fieldId": "TEMP_EVD",
-                        "equals": [
-                          "__never__"
-                        ]
-                      }
-                    },
-                    {
-                      "fieldId": "MP_PREP_DATE",
-                      "isInFuture": true
-                    },
-                    {
-                      "fieldId": "__ckStep",
-                      "equals": [
-                        "foodSafety"
-                      ]
-                    }
-                  ]
-                },
-                "message": {
-                  "en": "Food safety and portioning can only be recorded on the day of production.",
-                  "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
-                  "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
-                }
-              }
-            ],
-            "pair": "core_temp",
-            "options": [],
-            "optionsFr": [],
-            "optionsNl": [],
-            "uploadConfig": {
-              "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-              "minFiles": 0,
-              "maxFiles": 10,
-              "maxFileSizeMb": 10,
-              "allowedMimeTypes": [
-                "image/*"
-              ],
-              "errorMessages": {
-                "minFiles": {
-                  "en": "Add one photo per cooking pot.",
-                  "fr": "Ajoutez une photo par marmite de cuisson.",
-                  "nl": "Voeg één foto per kookpot toe."
-                },
-                "maxFiles": {
-                  "en": "The maximum number of photos is {max}",
-                  "fr": "Le nombre maximum de photos est de {max}",
-                  "nl": "Het maximum aantal foto's is {max}"
-                },
-                "maxFileSizeMb": {
-                  "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
-                  "fr": "La taille maximale de la photo est de {mb}MB",
-                  "nl": "De maximale bestandsgrootte is {mb}MB"
-                }
-              },
-              "helperText": {
-                "remainingOne": {
-                  "en": "You need to add {count} more photo",
-                  "fr": "Vous devez ajouter {count} photo supplémentaire",
-                  "nl": "Je moet {count} foto toevoegen"
-                },
-                "remainingMany": {
-                  "en": "You need to add {count} more photos",
-                  "fr": "Vous devez ajouter {count} photos supplémentaires",
-                  "nl": "Je moet {count} foto's toevoegen"
-                }
-              },
-              "linkLabel": {
-                "en": "Photo {n}",
-                "fr": "Photo {n}",
-                "nl": "Foto {n}"
-              },
-              "ui": {
-                "variant": "progressive"
-              },
-              "compression": {
-                "images": {
-                  "maxDimension": 1280,
-                  "quality": 0.78,
-                  "outputType": "keep"
-                }
               }
             }
           },
@@ -6641,10 +6398,7 @@
                 "optionFilter": {
                   "dependsOn": "MEAL_TYPE",
                   "dataSourceField": "DISH_TYPE",
-                  "dataSourceDelimiter": ",",
-                  "bypassValues": [
-                    "No-salt"
-                  ]
+                  "dataSourceDelimiter": ","
                 },
                 "validationRules": [
                   {
@@ -6797,14 +6551,14 @@
                     },
                     {
                       "target": {
-                        "scope": "parent",
+                        "scope": "top",
                         "fieldId": "MP_COOK_TEMP"
                       },
                       "clear": true
                     },
                     {
                       "target": {
-                        "scope": "parent",
+                        "scope": "top",
                         "fieldId": "TEMP_EVD"
                       },
                       "clear": true
@@ -7620,6 +7374,179 @@
           }
         }
       }
+    },
+    {
+      "id": "MP_COOK_TEMP",
+      "type": "CHECKBOX",
+      "qEn": "All pots ≥63°C: Confirm",
+      "qFr": "Toutes les marmites ≥63°C : confirmer",
+      "qNl": "Alle kookpotten ≥63°C: bevestigen",
+      "required": true,
+      "pair": "core_temp",
+      "requiredMessage": {
+        "en": "Confirm that all pots reached at least 63°C.",
+        "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
+        "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
+      },
+      "listView": false,
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "hideWhen": {
+          "fieldId": "MP_PREP_DATE",
+          "isInFuture": true
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "fieldId": "MP_COOK_TEMP",
+                  "equals": [
+                    "__never__"
+                  ]
+                }
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              },
+              {
+                "fieldId": "__ckStep",
+                "equals": [
+                  "foodSafety"
+                ]
+              }
+            ]
+          },
+          "message": {
+            "en": "Food safety and portioning can only be recorded on the day of production.",
+            "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+            "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+          }
+        }
+      ]
+    },
+    {
+      "id": "TEMP_EVD",
+      "type": "FILE_UPLOAD",
+      "qEn": "Food safety photo",
+      "qFr": "Photo de sécurité alimentaire",
+      "qNl": "Foto voedselveiligheid",
+      "required": true,
+      "pair": "core_temp",
+      "requiredMessage": {
+        "en": "Add at least one food safety photo.",
+        "fr": "Ajoutez au moins une photo de sécurité alimentaire.",
+        "nl": "Voeg minstens één foto voor voedselveiligheid toe."
+      },
+      "listView": false,
+      "ui": {
+        "helperText": {
+          "en": "Take photo evidence for all pots before portioning.",
+          "fr": "Prenez une photo de preuve pour toutes les marmites avant le portionnement.",
+          "nl": "Neem fotobewijs van alle kookpotten vóór het portioneren."
+        },
+        "helperPlacement": "belowLabel"
+      },
+      "options": [],
+      "optionsFr": [],
+      "optionsNl": [],
+      "status": "Active",
+      "visibility": {
+        "hideWhen": {
+          "fieldId": "MP_PREP_DATE",
+          "isInFuture": true
+        }
+      },
+      "uploadConfig": {
+        "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+        "minFiles": 1,
+        "maxFiles": 10,
+        "maxFileSizeMb": 10,
+        "allowedMimeTypes": [
+          "image/*"
+        ],
+        "errorMessages": {
+          "minFiles": {
+            "en": "Add at least one food safety photo.",
+            "fr": "Ajoutez au moins une photo de sécurité alimentaire.",
+            "nl": "Voeg minstens één foto voor voedselveiligheid toe."
+          },
+          "maxFiles": {
+            "en": "The maximum number of photos is {max}",
+            "fr": "Le nombre maximum de photos est de {max}",
+            "nl": "Het maximum aantal foto's is {max}"
+          },
+          "maxFileSizeMb": {
+            "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
+            "fr": "La taille maximale de la photo est de {mb}MB",
+            "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "helperText": {
+          "remainingOne": {
+            "en": "You need to add {count} more photo",
+            "fr": "Vous devez ajouter {count} photo supplémentaire",
+            "nl": "Je moet {count} foto toevoegen"
+          },
+          "remainingMany": {
+            "en": "You need to add {count} more photos",
+            "fr": "Vous devez ajouter {count} photos supplémentaires",
+            "nl": "Je moet {count} foto's toevoegen"
+          }
+        },
+        "linkLabel": {
+          "en": "Photo {n}",
+          "fr": "Photo {n}",
+          "nl": "Foto {n}"
+        },
+        "ui": {
+          "variant": "progressive"
+        },
+        "compression": {
+          "images": {
+            "maxDimension": 1280,
+            "quality": 0.78,
+            "outputType": "keep"
+          }
+        }
+      },
+      "validationRules": [
+        {
+          "when": {
+            "all": [
+              {
+                "not": {
+                  "fieldId": "TEMP_EVD",
+                  "equals": [
+                    "__never__"
+                  ]
+                }
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              },
+              {
+                "fieldId": "__ckStep",
+                "equals": [
+                  "foodSafety"
+                ]
+              }
+            ]
+          },
+          "message": {
+            "en": "Food safety and portioning can only be recorded on the day of production.",
+            "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+            "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+          }
+        }
+      ]
     },
     {
       "id": "MP_NOTES",
@@ -8587,21 +8514,18 @@
                 "Vegetarian",
                 "Vegan",
                 "Diabetic",
-                "No-salt",
                 "Standard"
               ],
               "optionsFr": [
                 "Végétarien",
                 "Vegan",
                 "Diabétique",
-                "Sans sel",
                 "Standard"
               ],
               "optionsNl": [
                 "Vegetarisch",
                 "Vegan",
                 "Diabetisch",
-                "Zonder zout",
                 "Standaard"
               ],
               "optionFilter": {
@@ -8618,20 +8542,17 @@
                     "Vegetarian",
                     "Vegan",
                     "Diabetic",
-                    "No-salt",
                     "Standard"
                   ],
                   "Belliard||Lunch": [
                     "Vegetarian",
                     "Vegan",
-                    "Diabetic",
-                    "No-salt"
+                    "Diabetic"
                   ],
                   "Belliard||Dinner": [
                     "Vegetarian",
                     "Vegan",
                     "Diabetic",
-                    "No-salt",
                     "Standard"
                   ],
                   "Le Phare": [
@@ -8736,10 +8657,7 @@
               "optionFilter": {
                 "dependsOn": "LEFTOVER_MEAL_TYPE",
                 "dataSourceField": "DISH_TYPE",
-                "dataSourceDelimiter": ",",
-                "bypassValues": [
-                  "No-salt"
-                ]
+                "dataSourceDelimiter": ","
               },
               "selectionEffects": [
                 {
@@ -9535,8 +9453,6 @@
           "MEAL_TYPE",
           "ORD_QTY",
           "MP_TO_COOK",
-          "MP_COOK_TEMP",
-          "TEMP_EVD",
           "FINAL_QTY",
           "MP_LEFTOVER_PORTIONS_CAPTURE"
         ],
@@ -9544,16 +9460,12 @@
           "CHOICE",
           "NUMBER",
           "NUMBER",
-          "CHECKBOX",
-          "FILE_UPLOAD",
           "NUMBER"
         ],
         "optionsNl": [
           "Dietary category",
           "Ordered",
           "To Cook",
-          "All pots ≥63°C: Confirm",
-          "Add photo",
           "Delivered Portions",
           "Leftover portions"
         ],
@@ -9568,7 +9480,7 @@
             "Options (EN)": "REF:PortionTypeOptions",
             "Options (FR)": "",
             "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\"MP_DISTRIBUTOR\", \"MP_SERVICE\", \"MP_PREP_DATE\"],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"No-salt\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -9608,40 +9520,6 @@
             "List View?": "",
             "Edit Options": "",
             "__ckOptionValue": "MP_TO_COOK"
-          },
-          {
-            "ID": "MP_COOK_TEMP",
-            "Type": "CHECKBOX",
-            "Label EN": "All pots ≥63°C: Confirm",
-            "Label FR": "Toutes les marmites ≥63°C : confirmer",
-            "Label NL": "Alle kookpotten ≥63°C: bevestigen",
-            "Required?": true,
-            "Options (EN)": [],
-            "Options (FR)": [],
-            "Options (NL)": [],
-            "Config (JSON/REF)": "{\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Confirm that all pots reached at least 63°C.\",\n    \"fr\": \"Confirmez que toutes les marmites ont atteint au moins 63°C.\",\n    \"nl\": \"Bevestig dat alle kookpotten minstens 63°C hebben bereikt.\"\n  }\n}",
-            "Option Filter (JSON)": "",
-            "Validation Rules (JSON)": "",
-            "List View?": "",
-            "Edit Options": "",
-            "__ckOptionValue": "MP_COOK_TEMP"
-          },
-          {
-            "ID": "TEMP_EVD",
-            "Type": "FILE_UPLOAD",
-            "Label EN": "Add photo",
-            "Label FR": "Ajouter une photo",
-            "Label NL": "Foto toevoegen",
-            "Required?": true,
-            "Options (EN)": "",
-            "Options (FR)": "",
-            "Options (NL)": "",
-            "Config (JSON/REF)": "{\n  \"uploadConfig\": {\n    \"destinationFolderId\": \"1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx\",\n    \"linkLabel\": {\n      \"en\": \"Photo {n}\",\n      \"fr\": \"Photo {n}\",\n      \"nl\": \"Foto {n}\"\n    },\n    \"minFiles\": 1,\n    \"maxFiles\": 5,\n    \"maxFileSizeMb\": 10,\n    \"allowedMimeTypes\": [\n      \"image/*\"\n    ],\n    \"errorMessages\": {\n      \"minFiles\": {\n        \"en\": \"Add one photo per cooking pot.\",\n        \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n        \"nl\": \"Voeg één foto per kookpot toe.\"\n      },\n      \"maxFiles\": {\n        \"en\": \"The maximum number of photos is {max}\",\n        \"fr\": \"Le nombre maximum de photos est de {max}\",\n        \"nl\": \"Het maximum aantal foto's is {max}\"\n      },\n      \"maxFileSizeMb\": {\n        \"en\": \"The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).\",\n        \"fr\": \"La taille maximale de la photo est de {mb}MB\",\n        \"nl\": \"De maximale bestandsgrootte is {mb}MB\"\n      }\n    },\n    \"compression\": {\n      \"images\": {\n        \"maxDimension\": 1600,\n        \"quality\": 0.82,\n        \"outputType\": \"keep\"\n      }\n    },\n    \"helperText\": {\n      \"remainingOne\": {\n        \"en\": \"You need to add {count} more photo\",\n        \"fr\": \"Vous devez ajouter {count} photo supplémentaire\",\n        \"nl\": \"Je moet {count} foto toevoegen\"\n      },\n      \"remainingMany\": {\n        \"en\": \"You need to add {count} more photos\",\n        \"fr\": \"Vous devez ajouter {count} photos supplémentaires\",\n        \"nl\": \"Je moet {count} foto's toevoegen\"\n      }\n    },\n    \"ui\": {\n      \"variant\": \"progressive\"\n    }\n  },\n  \"pair\": \"core_temp\",\n  \"requiredMessage\": {\n    \"en\": \"Add one photo per cooking pot.\",\n    \"fr\": \"Ajoutez une photo par marmite de cuisson.\",\n    \"nl\": \"Voeg één foto per kookpot toe.\"\n  }\n}",
-            "Option Filter (JSON)": "",
-            "Validation Rules (JSON)": "",
-            "List View?": "",
-            "Edit Options": "",
-            "__ckOptionValue": "TEMP_EVD"
           },
           {
             "ID": "FINAL_QTY",
@@ -9780,22 +9658,19 @@
                 "Standard",
                 "Vegetarian",
                 "Vegan",
-                "Diabetic",
-                "No-salt"
+                "Diabetic"
               ],
               "optionsFr": [
                 "Standard",
                 "Végétarien",
                 "Végan",
-                "Diabétique",
-                "Sans sel"
+                "Diabétique"
               ],
               "optionsNl": [
                 "Standard_NL",
                 "Végétarien_NL",
                 "Végan_NL",
-                "Diabétique_NL",
-                "Sans sel_NL"
+                "Diabétique_NL"
               ],
               "optionsRaw": [
                 {
@@ -9825,13 +9700,6 @@
                   "optionNl": "Diabétique_NL",
                   "Icon": "🩺",
                   "__ckOptionValue": "Diabetic"
-                },
-                {
-                  "optionEn": "No-salt",
-                  "optionFr": "Sans sel",
-                  "optionNl": "Sans sel_NL",
-                  "Icon": "svg:no_salt.min.svg",
-                  "__ckOptionValue": "No-salt"
                 }
               ],
               "optionFilter": {
@@ -9848,20 +9716,17 @@
                     "Vegetarian",
                     "Vegan",
                     "Diabetic",
-                    "No-salt",
                     "Standard"
                   ],
                   "Belliard||Lunch": [
                     "Vegetarian",
                     "Vegan",
-                    "Diabetic",
-                    "No-salt"
+                    "Diabetic"
                   ],
                   "Belliard||Dinner": [
                     "Vegetarian",
                     "Vegan",
                     "Diabetic",
-                    "No-salt",
                     "Standard"
                   ],
                   "Le Phare": [
@@ -10024,155 +9889,6 @@
                   }
                 ],
                 "min": 0
-              }
-            },
-            {
-              "id": "MP_COOK_TEMP",
-              "type": "CHECKBOX",
-              "labelEn": "All pots ≥63°C: Confirm",
-              "labelFr": "Toutes les marmites ≥63°C : confirmer",
-              "labelNl": "Alle kookpotten ≥63°C: bevestigen",
-              "required": true,
-              "requiredMessage": {
-                "en": "Confirm that all pots reached at least 63°C.",
-                "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
-                "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
-              },
-              "validationRules": [
-                {
-                  "when": {
-                    "all": [
-                      {
-                        "not": {
-                          "fieldId": "MP_COOK_TEMP",
-                          "equals": [
-                            "__never__"
-                          ]
-                        }
-                      },
-                      {
-                        "fieldId": "MP_PREP_DATE",
-                        "isInFuture": true
-                      },
-                      {
-                        "fieldId": "__ckStep",
-                        "equals": [
-                          "foodSafety"
-                        ]
-                      }
-                    ]
-                  },
-                  "message": {
-                    "en": "Food safety and portioning can only be recorded on the day of production.",
-                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
-                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
-                  }
-                }
-              ],
-              "pair": "core_temp",
-              "options": [],
-              "optionsFr": [],
-              "optionsNl": []
-            },
-            {
-              "id": "TEMP_EVD",
-              "type": "FILE_UPLOAD",
-              "labelEn": "Add photo",
-              "labelFr": "Ajouter une photo",
-              "labelNl": "Foto toevoegen",
-              "required": true,
-              "requiredMessage": {
-                "en": "Add one photo per cooking pot.",
-                "fr": "Ajoutez une photo par marmite de cuisson.",
-                "nl": "Voeg één foto per kookpot toe."
-              },
-              "validationRules": [
-                {
-                  "when": {
-                    "all": [
-                      {
-                        "not": {
-                          "fieldId": "TEMP_EVD",
-                          "equals": [
-                            "__never__"
-                          ]
-                        }
-                      },
-                      {
-                        "fieldId": "MP_PREP_DATE",
-                        "isInFuture": true
-                      },
-                      {
-                        "fieldId": "__ckStep",
-                        "equals": [
-                          "foodSafety"
-                        ]
-                      }
-                    ]
-                  },
-                  "message": {
-                    "en": "Food safety and portioning can only be recorded on the day of production.",
-                    "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
-                    "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
-                  }
-                }
-              ],
-              "pair": "core_temp",
-              "options": [],
-              "optionsFr": [],
-              "optionsNl": [],
-              "uploadConfig": {
-                "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
-                "minFiles": 0,
-                "maxFiles": 10,
-                "maxFileSizeMb": 10,
-                "allowedMimeTypes": [
-                  "image/*"
-                ],
-                "errorMessages": {
-                  "minFiles": {
-                    "en": "Add one photo per cooking pot.",
-                    "fr": "Ajoutez une photo par marmite de cuisson.",
-                    "nl": "Voeg één foto per kookpot toe."
-                  },
-                  "maxFiles": {
-                    "en": "The maximum number of photos is {max}",
-                    "fr": "Le nombre maximum de photos est de {max}",
-                    "nl": "Het maximum aantal foto's is {max}"
-                  },
-                  "maxFileSizeMb": {
-                    "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
-                    "fr": "La taille maximale de la photo est de {mb}MB",
-                    "nl": "De maximale bestandsgrootte is {mb}MB"
-                  }
-                },
-                "helperText": {
-                  "remainingOne": {
-                    "en": "You need to add {count} more photo",
-                    "fr": "Vous devez ajouter {count} photo supplémentaire",
-                    "nl": "Je moet {count} foto toevoegen"
-                  },
-                  "remainingMany": {
-                    "en": "You need to add {count} more photos",
-                    "fr": "Vous devez ajouter {count} photos supplémentaires",
-                    "nl": "Je moet {count} foto's toevoegen"
-                  }
-                },
-                "linkLabel": {
-                  "en": "Photo {n}",
-                  "fr": "Photo {n}",
-                  "nl": "Foto {n}"
-                },
-                "ui": {
-                  "variant": "progressive"
-                },
-                "compression": {
-                  "images": {
-                    "maxDimension": 1280,
-                    "quality": 0.78,
-                    "outputType": "keep"
-                  }
-                }
               }
             },
             {
@@ -10566,10 +10282,7 @@
                   "optionFilter": {
                     "dependsOn": "MEAL_TYPE",
                     "dataSourceField": "DISH_TYPE",
-                    "dataSourceDelimiter": ",",
-                    "bypassValues": [
-                      "No-salt"
-                    ]
+                    "dataSourceDelimiter": ","
                   },
                   "validationRules": [
                     {
@@ -10722,14 +10435,14 @@
                       },
                       {
                         "target": {
-                          "scope": "parent",
+                          "scope": "top",
                           "fieldId": "MP_COOK_TEMP"
                         },
                         "clear": true
                       },
                       {
                         "target": {
-                          "scope": "parent",
+                          "scope": "top",
                           "fieldId": "TEMP_EVD"
                         },
                         "clear": true
@@ -11545,6 +11258,179 @@
             }
           }
         }
+      },
+      {
+        "id": "MP_COOK_TEMP",
+        "type": "CHECKBOX",
+        "qEn": "All pots ≥63°C: Confirm",
+        "qFr": "Toutes les marmites ≥63°C : confirmer",
+        "qNl": "Alle kookpotten ≥63°C: bevestigen",
+        "required": true,
+        "pair": "core_temp",
+        "requiredMessage": {
+          "en": "Confirm that all pots reached at least 63°C.",
+          "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C.",
+          "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt."
+        },
+        "listView": false,
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "hideWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "all": [
+                {
+                  "not": {
+                    "fieldId": "MP_COOK_TEMP",
+                    "equals": [
+                      "__never__"
+                    ]
+                  }
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                },
+                {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "foodSafety"
+                  ]
+                }
+              ]
+            },
+            "message": {
+              "en": "Food safety and portioning can only be recorded on the day of production.",
+              "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+              "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+            }
+          }
+        ]
+      },
+      {
+        "id": "TEMP_EVD",
+        "type": "FILE_UPLOAD",
+        "qEn": "Food safety photo",
+        "qFr": "Photo de sécurité alimentaire",
+        "qNl": "Foto voedselveiligheid",
+        "required": true,
+        "pair": "core_temp",
+        "requiredMessage": {
+          "en": "Add at least one food safety photo.",
+          "fr": "Ajoutez au moins une photo de sécurité alimentaire.",
+          "nl": "Voeg minstens één foto voor voedselveiligheid toe."
+        },
+        "listView": false,
+        "ui": {
+          "helperText": {
+            "en": "Take photo evidence for all pots before portioning.",
+            "fr": "Prenez une photo de preuve pour toutes les marmites avant le portionnement.",
+            "nl": "Neem fotobewijs van alle kookpotten vóór het portioneren."
+          },
+          "helperPlacement": "belowLabel"
+        },
+        "options": [],
+        "optionsFr": [],
+        "optionsNl": [],
+        "status": "Active",
+        "visibility": {
+          "hideWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          }
+        },
+        "uploadConfig": {
+          "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+          "minFiles": 1,
+          "maxFiles": 10,
+          "maxFileSizeMb": 10,
+          "allowedMimeTypes": [
+            "image/*"
+          ],
+          "errorMessages": {
+            "minFiles": {
+              "en": "Add at least one food safety photo.",
+              "fr": "Ajoutez au moins une photo de sécurité alimentaire.",
+              "nl": "Voeg minstens één foto voor voedselveiligheid toe."
+            },
+            "maxFiles": {
+              "en": "The maximum number of photos is {max}",
+              "fr": "Le nombre maximum de photos est de {max}",
+              "nl": "Het maximum aantal foto's is {max}"
+            },
+            "maxFileSizeMb": {
+              "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
+              "fr": "La taille maximale de la photo est de {mb}MB",
+              "nl": "De maximale bestandsgrootte is {mb}MB"
+            }
+          },
+          "helperText": {
+            "remainingOne": {
+              "en": "You need to add {count} more photo",
+              "fr": "Vous devez ajouter {count} photo supplémentaire",
+              "nl": "Je moet {count} foto toevoegen"
+            },
+            "remainingMany": {
+              "en": "You need to add {count} more photos",
+              "fr": "Vous devez ajouter {count} photos supplémentaires",
+              "nl": "Je moet {count} foto's toevoegen"
+            }
+          },
+          "linkLabel": {
+            "en": "Photo {n}",
+            "fr": "Photo {n}",
+            "nl": "Foto {n}"
+          },
+          "ui": {
+            "variant": "progressive"
+          },
+          "compression": {
+            "images": {
+              "maxDimension": 1280,
+              "quality": 0.78,
+              "outputType": "keep"
+            }
+          }
+        },
+        "validationRules": [
+          {
+            "when": {
+              "all": [
+                {
+                  "not": {
+                    "fieldId": "TEMP_EVD",
+                    "equals": [
+                      "__never__"
+                    ]
+                  }
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isInFuture": true
+                },
+                {
+                  "fieldId": "__ckStep",
+                  "equals": [
+                    "foodSafety"
+                  ]
+                }
+              ]
+            },
+            "message": {
+              "en": "Food safety and portioning can only be recorded on the day of production.",
+              "fr": "La sécurité alimentaire et la portionnement ne peuvent être enregistrés que le jour de la production.",
+              "nl": "Voedselveiligheid en portieering kunnen alleen worden vastgelegd op de dag van productie."
+            }
+          }
+        ]
       },
       {
         "id": "MP_NOTES",
@@ -14601,10 +14487,7 @@
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",
                                 "dataSourceField": "DISH_TYPE",
-                                "dataSourceDelimiter": ",",
-                                "bypassValues": [
-                                  "No-salt"
-                                ]
+                                "dataSourceDelimiter": ","
                               },
                               "selectionEffects": [
                                 {
@@ -14708,14 +14591,14 @@
                                   },
                                   {
                                     "target": {
-                                      "scope": "parent",
+                                      "scope": "top",
                                       "fieldId": "MP_COOK_TEMP"
                                     },
                                     "clear": true
                                   },
                                   {
                                     "target": {
-                                      "scope": "parent",
+                                      "scope": "top",
                                       "fieldId": "TEMP_EVD"
                                     },
                                     "clear": true
@@ -14819,29 +14702,12 @@
               "renderAsLabel": true
             },
             {
-              "kind": "lineGroup",
-              "id": "MP_MEALS_REQUEST",
-              "presentation": "liftedRowFields",
-              "fields": [
-                {
-                  "id": "MEAL_TYPE",
-                  "renderAsLabel": true
-                },
-                "MP_COOK_TEMP",
-                "TEMP_EVD"
-              ],
-              "readOnlyFields": [
-                "MEAL_TYPE",
-                "ORD_QTY"
-              ],
-              "rows": {
-                "includeWhen": {
-                  "fieldId": "ORD_QTY",
-                  "greaterThan": 0
-                }
-              },
-              "collapsedFieldsInHeader": true,
-              "displayMode": "inline"
+              "kind": "question",
+              "id": "MP_COOK_TEMP"
+            },
+            {
+              "kind": "question",
+              "id": "TEMP_EVD"
             }
           ],
           "label": {
@@ -14854,9 +14720,9 @@
             "autoAdvance": "onValid"
           },
           "helpText": {
-            "en": "Confirm that all cooking pots reached at least 63°C and add one photo per pot for each dietary type, including reheated leftover full dish.",
-            "fr": "Confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo par marmite pour chaque type de régime, y compris les restes réchauffés du plat complet.",
-            "nl": "Bevestig dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per pot toe voor elk dieettype, inclusief opgewarmde restanten van het volledige gerecht."
+            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
+            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
+            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
           }
         },
         {

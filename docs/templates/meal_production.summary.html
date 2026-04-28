@@ -145,6 +145,21 @@
     min-width: 0;
   }
 
+  .ck-evidence-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+
+  .ck-evidence-row .ck-label {
+    flex: 0 0 auto;
+  }
+
+  .ck-evidence-row .ck-value {
+    flex: 0 1 auto;
+  }
+
   .ck-action-row {
     display: flex;
     align-items: center;
@@ -284,9 +299,19 @@
     <div class="ck-action-row">
       <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
     </div>
-    <div class="ck-total-row">
+    <div class="ck-total-row ck-evidence-row">
       <div class="ck-label">{{LABEL(ING_EVD)}}</div>
       <div class="ck-value">{{FILES_ICON(ING_EVD)}}</div>
+    </div>
+    <div class="ck-hidden" data-top-core-temp-raw>{{MP_COOK_TEMP}}</div>
+    <span class="ck-hidden" data-top-temp-photos="{{TEMP_EVD}}"></span>
+    <div class="ck-total-row ck-evidence-row">
+      <div class="ck-label">{{LABEL(MP_COOK_TEMP)}}:</div>
+      <div class="ck-value" data-food-safety-confirmation-value>{{MP_COOK_TEMP}}</div>
+    </div>
+    <div class="ck-total-row ck-evidence-row">
+      <div class="ck-label">{{LABEL(TEMP_EVD)}}</div>
+      <div class="ck-value" data-food-safety-photo-value>{{FILES_ICON(TEMP_EVD)}}</div>
     </div>
   </div>
   <div class="ck-hidden" data-generated-leftovers-json>{{__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON}}</div>
@@ -365,6 +390,10 @@
       if (!text || text === '—') return false;
       if (isTemplateToken(text)) return false;
       return true;
+    };
+    var isConfirmedValue = function (value) {
+      var text = normalize(value);
+      return text === 'true' || text === 'yes' || text === '1' || text === '✔' || text === '✅';
     };
     var parseNumber = function (value) {
       var n = Number((value || '').toString().trim());
@@ -447,6 +476,11 @@
       };
     };
 
+    var topCoreTempRawNode = root.querySelector('[data-top-core-temp-raw]');
+    var topTempPhotosEl = root.querySelector('[data-top-temp-photos]');
+    var topCoreTempRaw = toText(topCoreTempRawNode ? topCoreTempRawNode.textContent : '');
+    var topTempPhotoUrls = extractUrls(topTempPhotosEl ? topTempPhotosEl.getAttribute('data-top-temp-photos') : '');
+
     var entries = dataTables.map(function (table) {
       var getText = function (selector) {
         var el = table.querySelector(selector);
@@ -476,6 +510,22 @@
       };
     });
 
+    if (!topTempPhotoUrls.length) {
+      var fallbackTopTempPhotoUrls = [];
+      entries.forEach(function (entry) {
+        fallbackTopTempPhotoUrls = fallbackTopTempPhotoUrls.concat(entry.tempPhotoUrls || []);
+      });
+      topTempPhotoUrls = uniq(fallbackTopTempPhotoUrls);
+    }
+    if (!hasMeaningfulValue(topCoreTempRaw)) {
+      for (var topCoreTempIndex = 0; topCoreTempIndex < entries.length; topCoreTempIndex += 1) {
+        if (hasMeaningfulValue(entries[topCoreTempIndex].coreTemp)) {
+          topCoreTempRaw = entries[topCoreTempIndex].coreTemp;
+          break;
+        }
+      }
+    }
+
     var groups = new Map();
     entries.forEach(function (entry) {
       var key = entry.mealIndex || entry.mealType || '__unknown__';
@@ -495,29 +545,34 @@
       return !isTemplateToken(requestedText);
     };
 
-    var foodSafetyComplete = true;
-    groups.forEach(function (group) {
-      if (!foodSafetyComplete) return;
-      if (!group || !group.entries || !group.entries.length) return;
-      var requestedRaw = '';
-      for (var i = 0; i < group.entries.length; i += 1) {
-        if (hasMeaningfulValue(group.entries[i].ordQty)) {
-          requestedRaw = group.entries[i].ordQty;
-          break;
+    var foodSafetyComplete = false;
+    if (hasMeaningfulValue(topCoreTempRaw) || topTempPhotoUrls.length) {
+      foodSafetyComplete = isConfirmedValue(topCoreTempRaw) && topTempPhotoUrls.length > 0;
+    } else {
+      foodSafetyComplete = true;
+      groups.forEach(function (group) {
+        if (!foodSafetyComplete) return;
+        if (!group || !group.entries || !group.entries.length) return;
+        var requestedRaw = '';
+        for (var i = 0; i < group.entries.length; i += 1) {
+          if (hasMeaningfulValue(group.entries[i].ordQty)) {
+            requestedRaw = group.entries[i].ordQty;
+            break;
+          }
         }
-      }
-      if (!rowRequiresFoodSafety(requestedRaw)) return;
+        if (!rowRequiresFoodSafety(requestedRaw)) return;
 
-      var hasCoreTemp = group.entries.some(function (entry) {
-        return hasMeaningfulValue(entry.coreTemp);
+        var hasCoreTemp = group.entries.some(function (entry) {
+          return isConfirmedValue(entry.coreTemp);
+        });
+        var hasTempEvidence = group.entries.some(function (entry) {
+          return Array.isArray(entry.tempPhotoUrls) && entry.tempPhotoUrls.length > 0;
+        });
+        if (!hasCoreTemp || !hasTempEvidence) {
+          foodSafetyComplete = false;
+        }
       });
-      var hasTempEvidence = group.entries.some(function (entry) {
-        return Array.isArray(entry.tempPhotoUrls) && entry.tempPhotoUrls.length > 0;
-      });
-      if (!hasCoreTemp || !hasTempEvidence) {
-        foodSafetyComplete = false;
-      }
-    });
+    }
 
     var formatPortions = function (rawValue, fallbackValue) {
       var n = parseNumber(rawValue);
@@ -538,8 +593,8 @@
     };
     var formatConfirmation = function (rawValue) {
       var text = normalize(rawValue);
-      if (!text) return 'Not confirmed';
-      if (text === 'true' || text === 'yes' || text === '1') return 'Yes';
+      if (!text || text === '—' || isTemplateToken(rawValue)) return 'Not confirmed';
+      if (isConfirmedValue(rawValue)) return '✔';
       if (text === 'false' || text === 'no' || text === '0') return 'No';
       return toText(rawValue);
     };
@@ -596,31 +651,20 @@
       inline.appendChild(photoItem);
     };
 
-    var appendMealEvidence = function (mealBlock, coreTempLabel, coreTempValue, photoUrls) {
-      var label = toText(coreTempLabel);
-      var value = toText(coreTempValue);
-      var hasValue = label || value;
-      var hasPhotos = photoUrls && photoUrls.length;
-      if (!hasValue && !hasPhotos) return;
-
-      var inline = document.createElement('div');
-      inline.className = 'ck-inline';
-
-      if (hasValue) {
-        var tempItem = document.createElement('span');
-        tempItem.className = 'ck-inline-item';
-        tempItem.textContent = (label ? label + ': ' : '') + formatConfirmation(value);
-        inline.appendChild(tempItem);
+    var topConfirmationValue = root.querySelector('[data-food-safety-confirmation-value]');
+    if (topConfirmationValue) {
+      topConfirmationValue.textContent = formatConfirmation(topCoreTempRaw);
+    }
+    var topPhotoValue = root.querySelector('[data-food-safety-photo-value]');
+    if (topPhotoValue && topTempPhotoUrls.length && !topPhotoValue.querySelector('[data-ck-file-field]')) {
+      var topPhotoInline = document.createElement('div');
+      topPhotoInline.className = 'ck-inline';
+      appendPhotoIcon(topPhotoInline, topTempPhotoUrls);
+      if (topPhotoInline.children.length) {
+        topPhotoValue.textContent = '';
+        topPhotoValue.appendChild(topPhotoInline);
       }
-
-      appendPhotoIcon(inline, photoUrls || []);
-
-      if (!inline.children.length) return;
-      var details = document.createElement('div');
-      details.className = 'ck-prep-details';
-      details.appendChild(inline);
-      mealBlock.appendChild(details);
-    };
+    }
 
     var appendDetailLine = function (container, data) {
       var inline = document.createElement('div');
@@ -668,20 +712,12 @@
       var mealType = '';
       var requested = '';
       var toCook = '';
-      var coreTemp = '';
-      var coreTempLabel = '';
-      var tempPhotoUrls = [];
 
       for (var i = 0; i < group.entries.length; i += 1) {
         var entry = group.entries[i];
         if (!mealType) mealType = entry.mealType;
         if (!requested) requested = entry.ordQty;
         if (!toCook) toCook = entry.toCook;
-        if (!coreTemp) coreTemp = entry.coreTemp;
-        if (!coreTempLabel) coreTempLabel = entry.coreTempLabel;
-        if (!tempPhotoUrls.length && entry.tempPhotoUrls && entry.tempPhotoUrls.length) {
-          tempPhotoUrls = entry.tempPhotoUrls.slice();
-        }
       }
 
       var cookEntries = group.entries.filter(function (entry) {
@@ -708,7 +744,6 @@
       }
       title.textContent = titleText;
       mealBlock.appendChild(title);
-      appendMealEvidence(mealBlock, coreTempLabel, coreTemp, tempPhotoUrls);
 
       var cookedIngredients = cookEntry ? cookEntry.ingredients.slice() : [];
       var cookedAllergens = cookEntry ? cookEntry.allergens.slice() : [];

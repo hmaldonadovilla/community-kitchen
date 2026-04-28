@@ -57,6 +57,8 @@ const questions: QuestionConfig[] = [
   { id: 'MP_PREP_DATE', type: 'DATE', qEn: 'Prep Date', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'MP_ID', type: 'TEXT', qEn: 'Meal Production ID', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'ING_EVD', type: 'FILE_UPLOAD', qEn: 'Evidence', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
+  { id: 'MP_COOK_TEMP', type: 'CHECKBOX', qEn: 'All pots ≥63°C: Confirm', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
+  { id: 'TEMP_EVD', type: 'FILE_UPLOAD', qEn: 'Food safety photo', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   mealProductionGroup
 ];
 
@@ -85,6 +87,8 @@ const recordValues = {
   MP_PREP_DATE: '2026-03-20',
   MP_ID: 'MP-AA000818',
   ING_EVD: 'https://example.com/photo-1',
+  MP_COOK_TEMP: true,
+  TEMP_EVD: 'https://example.com/temp-photo-1',
   MP_MEALS_REQUEST: [
     {
       [ROW_ID_KEY]: 'meal-1',
@@ -284,6 +288,9 @@ describe('meal production bundled HTML rendering', () => {
     expect(summary.success).toBe(true);
     expect(summary.html).toContain('Green beans - frozen');
     expect(summary.html).toContain('Salt');
+    expect(summary.html).toContain('data-food-safety-confirmation-value>✅</div>');
+    expect(summary.html).toContain("text === '✔' || text === '✅'");
+    expect(summary.html).toContain('data-food-safety-photo-value>');
     expect(recipe.success).toBe(true);
     expect(recipe.html).toContain('Green beans - frozen');
     expect(recipe.html).toContain('Salt');

@@ -1007,11 +1007,6 @@
             "fr": "Pour {value}, n'utilisez pas : {keys}.",
             "nl": "Voor {value}, gebruik niet: {keys}."
           },
-          "message": {
-            "en": "No-salt portions must be served first before adding salt. Remember to record and photograph the core temperature.",
-            "fr": "N'oubliez pas d'ajouter le sel uniquement après avoir réservé les portions sans sel.",
-            "nl": "Onthoud dat je alleen zout toevoegt na het reserveren van niet-zoute porties."
-          },
           "editable": true
         }
       },
@@ -1879,11 +1874,6 @@
               "en": "For {value}, do not use: {keys}.",
               "fr": "Pour {value}, n'utilisez pas : {keys}.",
               "nl": "Voor {value}, gebruik niet: {keys}."
-            },
-            "message": {
-              "en": "No-salt portions must be served first before adding salt. Remember to record and photograph the core temperature.",
-              "fr": "N'oubliez pas d'ajouter le sel uniquement après avoir réservé les portions sans sel.",
-              "nl": "Onthoud dat je alleen zout toevoegt na het reserveren van niet-zoute porties."
             },
             "editable": true
           }

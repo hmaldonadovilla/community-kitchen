@@ -127,7 +127,6 @@ test.describe('Meal Production manual script scenarios', () => {
       await selectService(frame, mealProductionFixtures.services.lunch);
       await expectMealTypesVisible(frame, [
         mealProductionFixtures.mealTypes.diabetic,
-        mealProductionFixtures.mealTypes.noSalt,
         mealProductionFixtures.mealTypes.vegan,
         mealProductionFixtures.mealTypes.vegetarian
       ]);
@@ -148,8 +147,8 @@ test.describe('Meal Production manual script scenarios', () => {
       await fillOrderedPortions(frame, [15, 0, 3]);
       await expectTotalOrdered(frame, 18);
       await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
-      await ordered.nth(3).fill('57');
-      await ordered.nth(3).dispatchEvent('change');
+      await ordered.nth(1).fill('57');
+      await ordered.nth(1).dispatchEvent('change');
       await expectTotalOrdered(frame, 75);
       await fillFirstOrderedPortions(frame, '16');
       await expectTotalOrdered(frame, 76);
@@ -166,15 +165,14 @@ test.describe('Meal Production manual script scenarios', () => {
       await expect(frame.locator('button[title="Dinner"]')).toHaveAttribute('aria-checked', 'true');
       await expectMealTypesVisible(frame, [
         mealProductionFixtures.mealTypes.diabetic,
-        mealProductionFixtures.mealTypes.noSalt,
         mealProductionFixtures.mealTypes.standard,
         mealProductionFixtures.mealTypes.vegan,
         mealProductionFixtures.mealTypes.vegetarian
       ]);
 
       await selectCook(frame, mealProductionFixtures.cooks.aline);
-      await fillOrderedPortions(frame, [15, 1, 57, 3, 3]);
-      await expectTotalOrdered(frame, 79);
+      await fillOrderedPortions(frame, [15, 57, 3, 3]);
+      await expectTotalOrdered(frame, 78);
       await waitForSaved(frame);
       await clickNext(frame);
       await expect
@@ -195,7 +193,6 @@ test.describe('Meal Production manual script scenarios', () => {
       await waitForLoadingToSettle(frame);
       const productionBody = await frame.locator('body').innerText();
       expect(productionBody).toMatch(/Diabetic\s*\|\s*To cook:\s*15/);
-      expect(productionBody).toMatch(/No-salt\s*\|\s*To cook:\s*1/);
       expect(productionBody).toMatch(/Standard\s*\|\s*To cook:\s*57/);
       expect(productionBody).toMatch(/Vegan\s*\|\s*To cook:\s*3/);
       expect(productionBody).toMatch(/Vegetarian\s*\|\s*To cook:\s*3/);
@@ -381,7 +378,6 @@ test.describe('Meal Production manual script scenarios', () => {
 
       await expectMealTypesVisible(frame, [
         mealProductionFixtures.mealTypes.diabetic,
-        mealProductionFixtures.mealTypes.noSalt,
         mealProductionFixtures.mealTypes.standard,
         mealProductionFixtures.mealTypes.vegan,
         mealProductionFixtures.mealTypes.vegetarian
@@ -409,7 +405,6 @@ test.describe('Meal Production manual script scenarios', () => {
       await expectMealTypesVisible(frame, [mealProductionFixtures.mealTypes.vegetarian]);
       await expectMealTypesHidden(frame, [
         mealProductionFixtures.mealTypes.diabetic,
-        mealProductionFixtures.mealTypes.noSalt,
         mealProductionFixtures.mealTypes.standard,
         mealProductionFixtures.mealTypes.vegan
       ]);

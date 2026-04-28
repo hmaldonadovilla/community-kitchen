@@ -24,7 +24,6 @@ export const mealProductionFixtures = {
   },
   mealTypes: {
     diabetic: 'Diabetic',
-    noSalt: 'No-salt',
     standard: 'Standard',
     vegan: 'Vegan',
     vegetarian: 'Vegetarian'

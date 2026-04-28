@@ -10,14 +10,13 @@ describe('uploadFieldInvalidation', () => {
   const definition: any = {
     questions: [
       { id: 'ING_EVD', type: 'FILE_UPLOAD' },
+      { id: 'TEMP_EVD', type: 'FILE_UPLOAD' },
+      { id: 'MP_COOK_TEMP', type: 'CHECKBOX', options: [] },
       {
         id: 'MP_MEALS_REQUEST',
         type: 'LINE_ITEM_GROUP',
         lineItemConfig: {
-          fields: [
-            { id: 'TEMP_EVD', type: 'FILE_UPLOAD' },
-            { id: 'MP_COOK_TEMP', type: 'CHECKBOX', options: [] }
-          ],
+          fields: [],
           subGroups: [
             {
               id: 'MP_TYPE_LI',
@@ -35,13 +34,13 @@ describe('uploadFieldInvalidation', () => {
       definition,
       updates: [
         { target: { scope: 'top', fieldId: 'ING_EVD' }, value: [] },
-        { target: { scope: 'parent', fieldId: 'TEMP_EVD' }, value: [] },
-        { target: { scope: 'parent', fieldId: 'MP_COOK_TEMP' }, value: false }
+        { target: { scope: 'top', fieldId: 'TEMP_EVD' }, value: [] },
+        { target: { scope: 'top', fieldId: 'MP_COOK_TEMP' }, value: false }
       ],
       context: { scope: 'line', groupId, rowId: 'recipe-row-1' }
     });
 
-    expect(invalidated).toEqual(['ING_EVD', 'MP_MEALS_REQUEST__TEMP_EVD__meal-row-1']);
+    expect(invalidated).toEqual(['ING_EVD', 'TEMP_EVD']);
   });
 
   it('ignores non-empty upload updates', () => {
