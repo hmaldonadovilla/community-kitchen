@@ -431,7 +431,7 @@ describe('staging integrity dialogs and list legend config', () => {
       ]);
       expect(deliveryForm?.navigation).toEqual({
         forwardGate: 'whenValid',
-        autoAdvance: 'onValid'
+        autoAdvance: 'off'
       });
       expect(root?.recordFreshness).toEqual(
         expect.objectContaining({
@@ -457,6 +457,10 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(foodSafety?.helpText?.en).toBe(
         'Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.'
       );
+      expect(foodSafety?.navigation).toEqual({
+        forwardGate: 'whenValid',
+        autoAdvance: 'off'
+      });
       expect(foodSafety?.excludeWhen).toEqual({
         any: [
           {

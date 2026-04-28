@@ -837,6 +837,7 @@ const FormView: React.FC<FormViewProps> = ({
   } | null>(null);
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
   const overlayDetailRenderSignatureRef = useRef<string>('');
+  const overlayDetailRenderSeqRef = useRef(0);
   const overlaySessionSnapshotsRef = useRef<
     Record<
       string,
@@ -6012,6 +6013,13 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   useEffect(() => {
+    const resetOverlayDetailRender = () => {
+      overlayDetailRenderSeqRef.current += 1;
+      overlayDetailRenderSignatureRef.current = '';
+      setOverlayDetailHtml('');
+      setOverlayDetailHtmlError('');
+      setOverlayDetailHtmlLoading(false);
+    };
     const activeGroupKey =
       lineItemGroupOverlay.open && lineItemGroupOverlay.groupId
         ? lineItemGroupOverlay.groupId
@@ -6019,17 +6027,11 @@ const FormView: React.FC<FormViewProps> = ({
           ? subgroupOverlay.subKey
           : '';
     if (!activeGroupKey) {
-      overlayDetailRenderSignatureRef.current = '';
-      setOverlayDetailHtml('');
-      setOverlayDetailHtmlError('');
-      setOverlayDetailHtmlLoading(false);
+      resetOverlayDetailRender();
       return;
     }
     if (!overlayDetailSelection || overlayDetailSelection.mode !== 'view' || overlayDetailSelection.groupId !== activeGroupKey) {
-      overlayDetailRenderSignatureRef.current = '';
-      setOverlayDetailHtml('');
-      setOverlayDetailHtmlError('');
-      setOverlayDetailHtmlLoading(false);
+      resetOverlayDetailRender();
       return;
     }
 
@@ -6057,15 +6059,13 @@ const FormView: React.FC<FormViewProps> = ({
     })();
 
     if (!context || !context.groupId) {
-      overlayDetailRenderSignatureRef.current = '';
-      setOverlayDetailHtml('');
-      setOverlayDetailHtmlError('');
-      setOverlayDetailHtmlLoading(false);
+      resetOverlayDetailRender();
       return;
     }
 
     const templateIdMap = context.overlayDetail?.body?.view?.templateId;
     if (!templateIdMap) {
+      overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
@@ -6073,6 +6073,7 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
     if (context.type === 'sub' && Array.isArray(context.path) && context.path.length > 1) {
+      overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
@@ -6091,6 +6092,7 @@ const FormView: React.FC<FormViewProps> = ({
     const rootGroup = definition.questions.find(q => q.id === context.groupId && q.type === 'LINE_ITEM_GROUP');
     const rootGroupCfg = (rootGroup as any)?.lineItemConfig;
     if (!rootGroupCfg) {
+      overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
@@ -6146,6 +6148,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
     if (!resolvedTemplateId) {
+      overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
@@ -6169,10 +6172,13 @@ const FormView: React.FC<FormViewProps> = ({
     }
     overlayDetailRenderSignatureRef.current = renderSignature;
 
+    const renderKey = `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}:${resolvedTemplateId}`;
+    const renderSeq = ++overlayDetailRenderSeqRef.current;
     setOverlayDetailHtmlLoading(true);
     setOverlayDetailHtmlError('');
-    renderInlineHtmlTemplateApi(payload, templateIdMap as any, `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}:${resolvedTemplateId}`)
+    renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
       .then(res => {
+        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         if (res?.success && res?.html) {
           setOverlayDetailHtml(res.html);
           setOverlayDetailHtmlError('');
@@ -6193,6 +6199,7 @@ const FormView: React.FC<FormViewProps> = ({
         });
       })
       .catch(err => {
+        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         setOverlayDetailHtml('');
         const message = (err?.message || tSystem('overlay.detail.templateFailed', language, 'Unable to render template.')).toString();
         setOverlayDetailHtmlError(message);
@@ -6203,6 +6210,7 @@ const FormView: React.FC<FormViewProps> = ({
         });
       })
       .finally(() => {
+        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         setOverlayDetailHtmlLoading(false);
       });
   }, [
@@ -6800,27 +6808,6 @@ const FormView: React.FC<FormViewProps> = ({
     }
     processIncomingFiles(question, Array.from(list));
     resetNativeFileInput(question.id);
-  };
-
-  const handleFileDrop = (question: WebQuestionDefinition, event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    if (submitting) return;
-    if (question.readOnly === true) return;
-    if (!event.dataTransfer?.files?.length) return;
-    if (
-      fileUploadOrderedEntryGateRef.current({
-        scope: 'top',
-        question,
-        fieldPath: question.id,
-        source: 'drop'
-      })
-    ) {
-      resetDrag(question.id);
-      return;
-    }
-    processIncomingFiles(question, Array.from(event.dataTransfer.files));
-    onDiagnostic?.('upload.drop', { questionId: question.id, count: event.dataTransfer.files.length });
-    resetDrag(question.id);
   };
 
   const removeFile = (question: WebQuestionDefinition, index: number) => {
@@ -7644,6 +7631,7 @@ const FormView: React.FC<FormViewProps> = ({
     bypassReadyForProductionLock,
     effectiveFieldDisableRule,
     onDiagnostic,
+    recordMeta,
     recordMeta?.id,
     unlockResolution
   ]);
@@ -13620,9 +13608,6 @@ const FormView: React.FC<FormViewProps> = ({
     const overlaySessionBulkSelectionLabel = overlaySessionAllRowsSelected
       ? tSystem('common.deselectAll', language, 'Deselect all')
       : tSystem('common.selectAll', language, 'Select all');
-    const overlayBreadcrumb = tSystem('lineItems.breadcrumbRoot', language, 'Line items');
-    const breadcrumbText = `${overlayBreadcrumb} / ${title}`;
-
     const locked = submitting || isFieldLockedByDedup(groupId);
     const addModeRaw = groupCfg?.addMode;
     const addMode = addModeRaw ? addModeRaw.toString().trim().toLowerCase() : 'inline';
