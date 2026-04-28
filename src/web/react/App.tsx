@@ -199,6 +199,10 @@ import {
   reserveDeferredAnalyticsPrefetchKey,
   shouldPrefetchDeferredAnalytics
 } from './app/deferredAnalyticsPrefetch';
+import {
+  isDeleteOnKeyChangeSettledForRecord,
+  shouldApplyDedupPrecheckResult
+} from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
@@ -1513,17 +1517,73 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
       if (!dedupDeleteOnKeyChangeEnabledLocal) return false;
       if (submittingRef.current) return false;
-      if (dedupDeleteOnKeyChangeInFlightRef.current) return false;
       const extraMeta = extra ? { ...extra } : {};
       const forceDelete = (extraMeta as any).force === true;
+      const requestedRecordId = ((extraMeta as any).recordId || '').toString().trim();
       if ((extraMeta as any).force !== undefined) delete (extraMeta as any).force;
+      if ((extraMeta as any).recordId !== undefined) delete (extraMeta as any).recordId;
 
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-      });
-      if (!existingRecordId) return false;
+      }) || (forceDelete ? requestedRecordId : '');
+      if (!existingRecordId) {
+        if (forceDelete && requestedRecordId) {
+          logEvent('dedupDeleteOnKeyChange.delete.noCurrentRecord', {
+            source,
+            requestedRecordId,
+            forceDelete,
+            ...extraMeta
+          });
+          return true;
+        }
+        return false;
+      }
+
+      if (dedupDeleteOnKeyChangeInFlightRef.current) {
+        const waitStartedAt = Date.now();
+        logEvent('dedupDeleteOnKeyChange.delete.joinInFlight.start', {
+          source,
+          recordId: existingRecordId,
+          forceDelete,
+          ...extraMeta
+        });
+        while (dedupDeleteOnKeyChangeInFlightRef.current) {
+          if (Date.now() - waitStartedAt > 15_000) {
+            logEvent('dedupDeleteOnKeyChange.delete.joinInFlight.timeout', {
+              source,
+              recordId: existingRecordId,
+              durationMs: Date.now() - waitStartedAt,
+              forceDelete,
+              ...extraMeta
+            });
+            return false;
+          }
+          await new Promise<void>(resolve => globalThis.setTimeout(resolve, 80));
+        }
+        const currentRecordId =
+          resolveExistingRecordId({
+            selectedRecordId: selectedRecordIdRef.current,
+            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+          }) || '';
+        const settled = isDeleteOnKeyChangeSettledForRecord({
+          targetRecordId: existingRecordId,
+          currentRecordId,
+          deletedRecordIds: pendingDeletedRecordIdsRef.current
+        });
+        logEvent('dedupDeleteOnKeyChange.delete.joinInFlight.done', {
+          source,
+          recordId: existingRecordId,
+          currentRecordId: currentRecordId || null,
+          settled,
+          durationMs: Date.now() - waitStartedAt,
+          forceDelete,
+          ...extraMeta
+        });
+        return settled;
+      }
 
       const currentFingerprint = computeDedupKeyFingerprint((definition as any)?.dedupRules, valuesRef.current as any);
       const baselineFingerprint = (dedupKeyFingerprintBaselineRef.current || '').toString();
@@ -8812,7 +8872,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
     }
     const seq = ++dedupCheckSeqRef.current;
-    logEvent('dedup.check.start', { recordId: candidateId || null, signatureLen: signature.length });
+    const sessionAtStart = recordSessionRef.current;
+    const shouldApplyCheckResult = (phase: string): boolean => {
+      const apply = shouldApplyDedupPrecheckResult({
+        requestSeq: seq,
+        currentSeq: dedupCheckSeqRef.current,
+        sessionAtStart,
+        currentSession: recordSessionRef.current,
+        signatureAtStart: signature,
+        currentSignature: dedupSignatureRef.current,
+        currentView: viewRef.current
+      });
+      if (!apply) {
+        logEvent('dedup.check.staleResultDiscarded', {
+          phase,
+          recordId: candidateId || null,
+          requestSeq: seq,
+          currentSeq: dedupCheckSeqRef.current,
+          sessionAtStart,
+          currentSession: recordSessionRef.current,
+          view: viewRef.current,
+          signatureLen: signature.length,
+          currentSignatureLen: (dedupSignatureRef.current || '').toString().length
+        });
+      }
+      return apply;
+    };
+    logEvent('dedup.check.start', { recordId: candidateId || null, signatureLen: signature.length, sessionAtStart });
 
     // Debounce to avoid spamming Apps Script while the user is still selecting values.
     dedupCheckTimerRef.current = globalThis.setTimeout(() => {
@@ -8827,7 +8913,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       checkDedupConflictApi(payload)
         .then(res => {
-          if (seq !== dedupCheckSeqRef.current) return;
+          if (!shouldApplyCheckResult('success')) return;
           dedupCheckingRef.current = false;
           setDedupChecking(false);
 
@@ -8902,7 +8988,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         })
         .catch(err => {
-          if (seq !== dedupCheckSeqRef.current) return;
+          if (!shouldApplyCheckResult('error')) return;
           dedupCheckingRef.current = false;
           setDedupChecking(false);
           const uiMessage = resolveUiErrorMessage(err, 'Failed to check duplicates.');
