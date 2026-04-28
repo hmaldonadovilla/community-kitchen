@@ -2,14 +2,14 @@
   "pageTitle": "Reports",
   "pageDescription": "Send operational reports to the Operations Manager.",
   "appHeader": {
-    "logoFormKey": "Config: Meal Production"
+    "logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"
   },
   "landingTile": {
     "title": "Reports",
     "description": "Send operational reports by email.",
     "section": "admin",
     "order": 40,
-    "imagePath": "docs/images/analytics.png"
+    "imageUrl": "https://lh3.googleusercontent.com/d/1_wGMM5C-vCiU4lImejfLb2Uz0BOL9PND=w512"
   },
   "copy": {
     "loadingLabel": "Loading reports...",

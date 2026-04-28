@@ -42,7 +42,8 @@ describe('embed-form-configs env helpers', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledLandingPageConfig.ts'), 'utf8');
     expect(raw).toContain('"heroTitle": "Welcome to the Community Kitchen"');
     expect(raw).toContain('"adminSectionNote": "Reports are available from the dashboard below."');
-    expect(raw).toContain('"logoFormKey": "Config: Meal Production"');
+    expect(raw).toContain('"logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"');
+    expect(raw).toContain('"imageUrl": "https://lh3.googleusercontent.com/d/15Zz26t7dFw52_ahCGMeZlmx4OwNGh2ax=w512"');
     expect(raw).not.toContain('"imageUrl": "data:image/');
   });
 
@@ -54,7 +55,8 @@ describe('embed-form-configs env helpers', () => {
   test('embedded analytics page config is generated from the export file', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledAnalyticsPageConfig.ts'), 'utf8');
     expect(raw).toContain('"pageTitle": "Reports"');
-    expect(raw).toContain('"logoFormKey": "Config: Meal Production"');
+    expect(raw).toContain('"logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"');
+    expect(raw).toContain('"imageUrl": "https://lh3.googleusercontent.com/d/1_wGMM5C-vCiU4lImejfLb2Uz0BOL9PND=w512"');
     expect(raw).toContain('"sections": []');
     expect(raw).toContain('"pendingNavigationTitle": "Please wait"');
     expect(raw).toContain('"pendingNavigationMessage": "Opening forms..."');

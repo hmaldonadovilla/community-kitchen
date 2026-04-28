@@ -3,7 +3,7 @@
   "heroTitle": "Welcome to the Community Kitchen",
   "heroDescription": "Select an app below to begin managing operations.",
   "appHeader": {
-    "logoFormKey": "Config: Meal Production"
+    "logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"
   },
   "copy": {
     "refreshLabel": "Refresh",
@@ -27,7 +27,7 @@
       "section": "primary",
       "order": 10,
       "illustration": "checks",
-      "imagePath": "docs/images/storage-cleaning.png",
+      "imageUrl": "https://lh3.googleusercontent.com/d/1JnbA60VErDwfbYJBsoz8cm8GUlYOxB_P=w512",
       "title": "Storage & cleaning checks",
       "description": "Conduct cleaning inspections and check food storage."
     },
@@ -36,7 +36,7 @@
       "section": "primary",
       "order": 20,
       "illustration": "meal",
-      "imagePath": "docs/images/meal-prod.png",
+      "imageUrl": "https://lh3.googleusercontent.com/d/15Zz26t7dFw52_ahCGMeZlmx4OwNGh2ax=w512",
       "title": "Meal Production",
       "description": "Plan, produce, and manage daily meals."
     },
@@ -45,7 +45,7 @@
       "section": "admin",
       "order": 10,
       "illustration": "customers",
-      "imagePath": "docs/images/customers.png",
+      "imageUrl": "https://lh3.googleusercontent.com/d/1gGfiNznHG3jgNcU7kRLBzfx0H7huKr-C=w512",
       "title": "Customer Management",
       "description": "Manage and communicate with customers."
     },
@@ -54,7 +54,7 @@
       "section": "admin",
       "order": 20,
       "illustration": "ingredients",
-      "imagePath": "docs/images/ingredients.png",
+      "imageUrl": "https://lh3.googleusercontent.com/d/1wga8nEJJoEgm7pI1MxF_hnmbkfPe0GV7=w512",
       "title": "Ingredient Management",
       "description": "Track inventory of ingredients and supplies."
     },
@@ -63,7 +63,7 @@
       "section": "admin",
       "order": 30,
       "illustration": "recipes",
-      "imagePath": "docs/images/recipes.png",
+      "imageUrl": "https://lh3.googleusercontent.com/d/1Ypc1IlQ3v__6C1thgrBPg3gtCquf_kuJ=w512",
       "title": "Recipe Management",
       "description": "Create, edit, and organize cooking recipes."
     },
