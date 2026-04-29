@@ -17,6 +17,7 @@ import { resolveLocalizedString } from '../../i18n';
 import { tSystem } from '../../systemStrings';
 import { selectionEffectDependsOnField } from '../app/selectionEffectDependencies';
 import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
+import { resolveUploadBlockUntilSaved } from '../app/uploadTransaction';
 import {
   FieldValue,
   LangCode,
@@ -286,6 +287,9 @@ interface FileOverlayState {
   rowId?: string;
   field?: any;
   fieldPath?: string;
+  draftItems?: Array<string | File>;
+  originalSignature?: string;
+  saving?: boolean;
 }
 
 type FileUploadOrderedEntryCheckArgs =
@@ -6345,6 +6349,35 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('tooltip.overlay.close');
   }, [onDiagnostic]);
 
+  const fileItemsSignature = useCallback((items: Array<string | File>): string => {
+    return (items || [])
+      .map(item => {
+        if (typeof item === 'string') return `url:${item}`;
+        return `file:${item.name}:${item.size}:${item.lastModified}:${item.type || ''}`;
+      })
+      .join('|');
+  }, []);
+
+  const resolveFileOverlayItems = useCallback((state: Omit<FileOverlayState, 'open'> | FileOverlayState): Array<string | File> => {
+    if (state.scope === 'top' && state.question) {
+      return toUploadItems(valuesRef.current[(state.question as any).id]);
+    }
+    if (state.scope === 'line' && state.group && state.rowId && state.field) {
+      const groupId = (state.group as any).id;
+      const rowId = state.rowId as string;
+      const fieldId = (state.field as any).id;
+      const rows = lineItemsRef.current[groupId] || [];
+      const row = rows.find(r => r.id === rowId);
+      return toUploadItems((row?.values || {})[fieldId] as any);
+    }
+    return [];
+  }, []);
+
+  const dismissFileOverlay = useCallback(() => {
+    setFileOverlay({ open: false });
+    onDiagnostic?.('upload.overlay.close');
+  }, [onDiagnostic]);
+
   const openInfoOverlay = useCallback(
     (title: string, text: string) => {
       if (!text) return;
@@ -6360,9 +6393,34 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const closeFileOverlay = useCallback(() => {
-    setFileOverlay({ open: false });
-    onDiagnostic?.('upload.overlay.close');
-  }, [onDiagnostic]);
+    const current = fileOverlay;
+    if (current.open && current.saving) return;
+    const draftSignature = fileItemsSignature(current.draftItems || []);
+    const dirty = current.open && draftSignature !== (current.originalSignature || '');
+    if (dirty) {
+      const uploadConfig =
+        current.scope === 'top' && current.question
+          ? ((current.question as any).uploadConfig || {})
+          : current.scope === 'line' && current.field
+            ? ((current.field as any).uploadConfig || {})
+            : {};
+      const configuredMessage = resolveLocalizedString((uploadConfig as any).discardChangesConfirm, language, '').trim();
+      const msg =
+        configuredMessage ||
+        tSystem(
+          'files.discardChangesConfirm',
+          language,
+          'The photos you changed are not saved yet. Close without saving them?'
+        );
+      const ok =
+        typeof globalThis !== 'undefined' && typeof (globalThis as any).confirm === 'function'
+          ? (globalThis as any).confirm(msg)
+          : true;
+      if (!ok) return;
+      onDiagnostic?.('upload.overlay.discard', { scope: current.scope, title: current.title || null });
+    }
+    dismissFileOverlay();
+  }, [dismissFileOverlay, fileItemsSignature, fileOverlay, language, onDiagnostic]);
 
   const openFileOverlay = useCallback(
     (next: Omit<FileOverlayState, 'open'>) => {
@@ -6393,10 +6451,17 @@ const FormView: React.FC<FormViewProps> = ({
       if (overlay.open) {
         setOverlay({ open: false, options: [], selected: [] });
       }
-      setFileOverlay({ open: true, ...next });
+      const draftItems = resolveFileOverlayItems(next);
+      setFileOverlay({
+        open: true,
+        ...next,
+        draftItems,
+        originalSignature: fileItemsSignature(draftItems),
+        saving: false
+      });
       onDiagnostic?.('upload.overlay.open', { scope: next.scope, title: next.title });
     },
-    [onDiagnostic, overlay.open, submitting]
+    [fileItemsSignature, onDiagnostic, overlay.open, resolveFileOverlayItems, submitting]
   );
 
   useEffect(() => {
@@ -6667,6 +6732,63 @@ const FormView: React.FC<FormViewProps> = ({
     }
   };
 
+  const stageFilesInOverlay = useCallback(
+    (args: {
+      scope: 'top' | 'line';
+      fieldPath: string;
+      question?: WebQuestionDefinition;
+      field?: any;
+      incoming: File[];
+    }): boolean => {
+      if (!fileOverlay.open) return false;
+      const overlayFieldPath =
+        fileOverlay.scope === 'top' && fileOverlay.question
+          ? fileOverlay.question.id
+          : fileOverlay.scope === 'line'
+            ? fileOverlay.fieldPath || ''
+            : '';
+      if (fileOverlay.scope !== args.scope || overlayFieldPath !== args.fieldPath) return false;
+      const uploadField = (args.question || args.field || {}) as WebQuestionDefinition;
+      const existing = fileOverlay.draftItems || [];
+      const { items, errorMessage } = applyUploadConstraints(uploadField, existing, args.incoming, language);
+      const accepted = Math.max(0, items.length - existing.length);
+      setFileOverlay(prev => {
+        if (!prev.open) return prev;
+        const prevFieldPath =
+          prev.scope === 'top' && prev.question
+            ? prev.question.id
+            : prev.scope === 'line'
+              ? prev.fieldPath || ''
+              : '';
+        if (prev.scope !== args.scope || prevFieldPath !== args.fieldPath) return prev;
+        return { ...prev, draftItems: items };
+      });
+      if (errorMessage) {
+        announceUpload(args.fieldPath, errorMessage);
+        onDiagnostic?.('upload.overlay.error', { fieldPath: args.fieldPath, error: errorMessage, scope: args.scope });
+      } else if (accepted > 0) {
+        announceUpload(
+          args.fieldPath,
+          accepted === 1
+            ? tSystem('files.selectedOne', language, '1 photo added')
+            : tSystem('files.selectedMany', language, '{count} photos added', { count: accepted })
+        );
+      } else {
+        announceUpload(args.fieldPath, tSystem('common.noChange', language, 'No change.'));
+      }
+      onDiagnostic?.('upload.overlay.stage', {
+        fieldPath: args.fieldPath,
+        attempted: args.incoming.length,
+        accepted,
+        total: items.length,
+        error: Boolean(errorMessage),
+        scope: args.scope
+      });
+      return true;
+    },
+    [announceUpload, fileOverlay, language, onDiagnostic]
+  );
+
   // Auto-scroll when subgroup rows increase (works for inline add and overlay add)
   useEffect(() => {
     Object.entries(lineItems).forEach(([key, rows]) => {
@@ -6801,6 +6923,17 @@ const FormView: React.FC<FormViewProps> = ({
         question,
         fieldPath: question.id,
         source: 'input'
+      })
+    ) {
+      resetNativeFileInput(question.id);
+      return;
+    }
+    if (
+      stageFilesInOverlay({
+        scope: 'top',
+        fieldPath: question.id,
+        question,
+        incoming: Array.from(list)
       })
     ) {
       resetNativeFileInput(question.id);
@@ -8048,7 +8181,7 @@ const FormView: React.FC<FormViewProps> = ({
           language
         });
         const current = currentValues[q.id] === undefined || currentValues[q.id] === null ? '' : currentValues[q.id]?.toString?.() || '';
-        const { userText, sectionText: storedSection, hasDisclaimer, marker } = splitParagraphDisclaimerValue({
+        const { userText, sectionText: _storedSection, hasDisclaimer, marker } = splitParagraphDisclaimerValue({
           rawValue: current,
           separator
         });
@@ -8744,6 +8877,17 @@ const FormView: React.FC<FormViewProps> = ({
         field,
         fieldPath,
         source: 'input'
+      })
+    ) {
+      resetNativeFileInput(fieldPath);
+      return;
+    }
+    if (
+      stageFilesInOverlay({
+        scope: 'line',
+        fieldPath,
+        field,
+        incoming: Array.from(list)
       })
     ) {
       resetNativeFileInput(fieldPath);
@@ -10736,7 +10880,7 @@ const FormView: React.FC<FormViewProps> = ({
         const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
         try {
           focusable?.focus({ preventScroll: true } as any);
-        } catch (_) {
+        } catch {
           // ignore focus issues
         }
       }
@@ -14674,15 +14818,8 @@ const FormView: React.FC<FormViewProps> = ({
           validate: false
         });
     const overlayReadOnly = readOnly || orderedUploadBlocked;
-    const items = (() => {
-      if (isTop) return toUploadItems(values[(fileOverlay.question as any).id]);
-      const groupId = (fileOverlay.group as any).id;
-      const rowId = fileOverlay.rowId as string;
-      const fieldId = (fileOverlay.field as any).id;
-      const existingRows = lineItems[groupId] || [];
-      const row = existingRows.find(r => r.id === rowId);
-      return toUploadItems((row?.values || {})[fieldId] as any);
-    })();
+    const items = fileOverlay.draftItems || resolveFileOverlayItems(fileOverlay);
+    const dirty = fileItemsSignature(items) !== (fileOverlay.originalSignature || fileItemsSignature(resolveFileOverlayItems(fileOverlay)));
 
     const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
 
@@ -14716,30 +14853,94 @@ const FormView: React.FC<FormViewProps> = ({
 
     const onClearAll = () => {
       if (submitting || readOnly) return;
-      if (isTop) {
-        clearFiles(fileOverlay.question!);
-      } else {
-        clearLineFiles({
-          group: fileOverlay.group!,
-          rowId: fileOverlay.rowId as string,
-          field: fileOverlay.field,
-          fieldPath: fileOverlay.fieldPath as string
-        });
-      }
+      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [] } : prev));
+      announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
+      onDiagnostic?.('upload.overlay.clear', { fieldPath });
     };
 
     const onRemoveAt = (idx: number) => {
       if (submitting || readOnly) return;
-      if (isTop) {
-        removeFile(fileOverlay.question!, idx);
-      } else {
-        removeLineFile({
-          group: fileOverlay.group!,
-          rowId: fileOverlay.rowId as string,
-          field: fileOverlay.field,
-          fieldPath: fileOverlay.fieldPath as string,
-          index: idx
+      const removed = items[idx];
+      const nextItems = items.filter((_, itemIdx) => itemIdx !== idx);
+      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems } : prev));
+      announceUpload(
+        fieldPath,
+        removed
+          ? `${tSystem('lineItems.remove', language, 'Remove')} ${describeUploadItem(removed as any)}.`
+          : tSystem('lineItems.remove', language, 'Remove')
+      );
+      onDiagnostic?.('upload.overlay.remove', { fieldPath, removed: describeUploadItem(removed as any), remaining: nextItems.length });
+    };
+
+    const onSave = async () => {
+      if (submitting || readOnly || fileOverlay.saving) return;
+      if (!dirty) {
+        dismissFileOverlay();
+        return;
+      }
+      setFileOverlay(prev => (prev.open ? { ...prev, saving: true } : prev));
+      const shouldWaitForSave = resolveUploadBlockUntilSaved(uploadConfig);
+      try {
+        if (isTop) {
+          handleFileFieldChange(fileOverlay.question!, items);
+        } else {
+          handleLineFieldChange(
+            fileOverlay.group!,
+            fileOverlay.rowId as string,
+            fileOverlay.field,
+            items as unknown as FieldValue
+          );
+        }
+        onDiagnostic?.('upload.overlay.save', {
+          fieldPath,
+          total: items.length,
+          scope: isTop ? 'top' : 'line',
+          wait: shouldWaitForSave
         });
+        const uploadPromise: Promise<{ success: boolean; message?: string }> = onUploadFiles
+          ? onUploadFiles({
+              scope: isTop ? 'top' : 'line',
+              fieldPath,
+              questionId: isTop ? (fileOverlay.question as any).id : undefined,
+              groupId: isLine ? (fileOverlay.group as any).id : undefined,
+              rowId: isLine ? (fileOverlay.rowId as string) : undefined,
+              fieldId: isLine ? (fileOverlay.field as any).id : undefined,
+              items,
+              uploadConfig
+            })
+          : Promise.resolve({ success: true });
+        if (shouldWaitForSave) {
+          announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
+          const res = await uploadPromise;
+          if (!res?.success) {
+            announceUpload(
+              fieldPath,
+              (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
+            );
+            setFileOverlay(prev => (prev.open ? { ...prev, saving: false } : prev));
+            return;
+          }
+          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+          dismissFileOverlay();
+          return;
+        }
+        void uploadPromise.then(res => {
+          if (!res?.success) {
+            announceUpload(
+              fieldPath,
+              (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
+            );
+            return;
+          }
+          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+        });
+        dismissFileOverlay();
+      } catch (err: any) {
+        announceUpload(
+          fieldPath,
+          (err?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
+        );
+        setFileOverlay(prev => (prev.open ? { ...prev, saving: false } : prev));
       }
     };
 
@@ -14752,7 +14953,10 @@ const FormView: React.FC<FormViewProps> = ({
         readOnly={overlayReadOnly}
         items={items}
         uploadConfig={uploadConfig}
+        dirty={dirty}
+        saving={fileOverlay.saving === true}
         onAdd={onAdd}
+        onSave={onSave}
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}
         onClose={closeFileOverlay}

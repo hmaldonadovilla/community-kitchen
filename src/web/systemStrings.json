@@ -420,6 +420,11 @@
     "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
     "clearAll": { "en": "Remove all", "fr": "Tout supprimer", "nl": "Alles verwijderen" },
     "clearAllConfirm": { "en": "Remove all photos?", "fr": "Supprimer toutes les photos ?", "nl": "Alle foto's verwijderen?" },
+    "discardChangesConfirm": {
+      "en": "The photos you changed are not saved yet. Close without saving them?",
+      "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
+      "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+    },
     "noneSelected": { "en": "No photo added.", "fr": "Aucune photo ajoutée.", "nl": "Geen foto toegevoegd." },
     "selectedOne": { "en": "1 photo added", "fr": "1 photo ajoutée", "nl": "1 foto toegevoegd" },
     "selectedMany": { "en": "{count} photos added", "fr": "{count} photos ajoutées", "nl": "{count} foto's toegevoegd" },

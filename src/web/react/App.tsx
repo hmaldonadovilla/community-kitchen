@@ -34,7 +34,6 @@ import {
   applyUpdateRecordWithDependenciesApi,
   checkDedupConflictApi,
   triggerFollowupBatch,
-  uploadFilesApi,
   prefetchTemplatesApi,
   renderDocTemplatePdfPreviewApi,
   renderMarkdownTemplateApi,
@@ -77,6 +76,7 @@ import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fi
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import {
   buildDraftPayload,
+  buildUploadDraftPayload,
   buildSubmissionPayload,
   chainSerializedSubmissionRequest,
   collectValidationWarnings,
@@ -162,15 +162,22 @@ import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
 import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange';
 import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
-import { buildFilePayload } from './app/filePayload';
-import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
 import {
   bumpUploadFieldInvalidationVersion,
   getUploadFieldInvalidationVersion,
   resolveInvalidatedUploadFieldPathsFromDialogUpdates,
   wasUploadFieldInvalidated
 } from './app/uploadFieldInvalidation';
+import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
 import { resolveUploadBusyOverlayTransition } from './app/uploadBusyOverlay';
+import { resolveUploadBlockUntilSaved } from './app/uploadTransaction';
+import {
+  applyUploadValueToFormState,
+  applyUploadValueToPayloadValues,
+  buildUploadNonTargetFingerprint,
+  extractUploadValueFromMeta,
+  splitUploadValue
+} from './app/uploadTransactionState';
 import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import {
@@ -2922,6 +2929,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
+  const uploadQueueBlockingRef = useRef<Map<string, boolean>>(new Map());
   const uploadBusySeqRef = useRef<number | null>(null);
   const uploadedFieldValueOverridesRef = useRef<Map<string, UploadedFieldValueOverride>>(new Map());
   const uploadFieldInvalidationVersionsRef = useRef<Map<string, number>>(new Map());
@@ -2931,9 +2939,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
     const uploadsInFlight = uploadQueueRef.current.size;
+    const blockingUploadsInFlight = Array.from(uploadQueueBlockingRef.current.values()).filter(Boolean).length;
     setUploadQueueSize(uploadsInFlight);
     const transition = resolveUploadBusyOverlayTransition({
-      uploadsInFlight,
+      uploadsInFlight: blockingUploadsInFlight,
       activeSeq: uploadBusySeqRef.current
     });
     if (transition === 'lock') {
@@ -2941,14 +2950,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         title: tSystem('navigation.waitTitle', language, 'Please wait'),
         message: tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.'),
         kind: 'upload',
-        diagnosticMeta: { uploadsInFlight }
+        diagnosticMeta: { uploadsInFlight, blockingUploadsInFlight }
       });
       return;
     }
     if (transition === 'unlock') {
       const seq = uploadBusySeqRef.current;
       uploadBusySeqRef.current = null;
-      if (seq !== null) uploadBusy.unlock(seq, { uploadsInFlight });
+      if (seq !== null) uploadBusy.unlock(seq, { uploadsInFlight, blockingUploadsInFlight });
     }
   }, [language, uploadBusy]);
 
@@ -12891,19 +12900,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
       }
 
+      const target =
+        args.scope === 'top' && args.questionId
+          ? ({ scope: 'top', questionId: args.questionId } as const)
+          : args.scope === 'line' && args.groupId && args.rowId && args.fieldId
+            ? ({ scope: 'line', groupId: args.groupId, rowId: args.rowId, fieldId: args.fieldId } as const)
+            : null;
+      if (!target) return { success: false, message: 'Invalid upload field.' };
+
       const sessionAtStart = recordSessionRef.current;
       const queueKey = `record:${sessionAtStart}:${args.fieldPath}`;
-      const pendingItems = Array.isArray(args.items) ? args.items : [];
-      if (pendingItems.length) {
-        uploadedFieldValueOverridesRef.current.set(args.fieldPath, {
-          scope: args.scope,
-          questionId: args.questionId,
-          groupId: args.groupId,
-          rowId: args.rowId,
-          fieldId: args.fieldId,
-          items: pendingItems
-        });
-      }
+      const blockUntilSaved = resolveUploadBlockUntilSaved(args.uploadConfig);
       const run = async (): Promise<{ success: boolean; message?: string }> => {
         // Ensure we don't have a pending debounced draft save that might race with this sequence.
         if (autoSaveTimerRef.current) {
@@ -12936,46 +12943,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         };
 
-        const splitUrlList = (raw: string): string[] => {
-          const trimmed = (raw || '').toString().trim();
-          if (!trimmed) return [];
-          const commaParts = trimmed
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean);
-          if (commaParts.length > 1) return commaParts;
-          const matches = trimmed.match(/https?:\/\/[^\s,]+/gi);
-          if (matches && matches.length > 1) return matches.map(m => m.trim()).filter(Boolean);
-          return [trimmed];
-        };
-
-        // Step 1: ensure we have a record id saved to the destination tab before uploading (prevents orphan uploads).
-        const ensuredRecord = await ensureDraftRecordId({ reason: 'upload', fieldPath: args.fieldPath });
-        const recordId = `${ensuredRecord.recordId || ''}`.trim();
-        if (!ensuredRecord.success || !recordId) {
-          return { success: false, message: ensuredRecord.message || 'Failed to create draft record.' };
-        }
-
-        ensureSession('afterEnsureRecord');
-        if (
-          wasUploadFieldInvalidated({
-            versions: uploadFieldInvalidationVersionsRef.current,
-            fieldPath: args.fieldPath,
-            expectedVersion: uploadFieldInvalidationVersionAtStart
-          })
-        ) {
-          logEvent('upload.files.skipped.invalidated', {
-            fieldPath: args.fieldPath,
-            invalidationVersionAtStart: uploadFieldInvalidationVersionAtStart,
-            invalidationVersionCurrent: getUploadFieldInvalidationVersion(
-              uploadFieldInvalidationVersionsRef.current,
-              args.fieldPath
-            )
-          });
-          return { success: true };
-        }
-
-        // Step 2: upload file payloads to Drive and get final URL list.
         const readStateItems = (): { items: Array<string | File>; hasValue: boolean } => {
           try {
             if (args.scope === 'top' && args.questionId) {
@@ -13013,56 +12980,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
 
         const stateSnapshot = readStateItems();
-        const stateItems = stateSnapshot.items;
-        const fileItemsFromState = stateItems.filter(isFile);
-        const fileItemsFromArgs = (args.items || []).filter(isFile);
-        const fileItems = fileItemsFromState.length ? fileItemsFromState : fileItemsFromArgs;
-        if (!fileItems.length) {
-          // Nothing new to upload (e.g., only URLs).
-          return { success: true };
-        }
-
+        const targetItemsAtStart = stateSnapshot.hasValue ? stateSnapshot.items : (args.items || []);
+        const fileItemsAtStart = targetItemsAtStart.filter(isFile);
+        const existingUrlsAtStart = targetItemsAtStart
+          .filter((item): item is string => typeof item === 'string')
+          .flatMap(item => splitUploadValue(item));
+        const nonTargetFingerprintAtStart = buildUploadNonTargetFingerprint({
+          values: valuesRef.current,
+          lineItems: lineItemsRef.current,
+          target
+        });
         try {
-          const payloads = await buildFilePayload(fileItems, undefined, args.uploadConfig);
-          logEvent('upload.files.parallel.start', {
-            fieldPath: args.fieldPath,
-            fileCount: payloads.length
-          });
-          const uploadedUrls = await runWithConcurrencyLimit(
-            payloads,
-            Math.min(3, Math.max(1, payloads.length)),
-            async (payload, index) => {
-              const uploadRes = await uploadFilesApi([payload], args.uploadConfig);
-              if (!uploadRes?.success) {
-                const msg = (
-                  uploadRes?.message || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
-                ).toString();
-                throw new Error(msg);
-              }
-              const urls = splitUrlList(uploadRes?.urls || '');
-              const firstUrl = (urls[0] || '').toString().trim();
-              if (!firstUrl) {
-                throw new Error('Upload returned no URLs.');
-              }
-              logEvent('upload.files.parallel.item.done', {
-                fieldPath: args.fieldPath,
-                index,
-                total: payloads.length
-              });
-              return firstUrl;
-            }
-          );
-          if (!uploadedUrls.length) {
-            const msg = 'Upload returned no URLs.';
-            logEvent('upload.files.empty', { fieldPath: args.fieldPath });
-            return { success: false, message: msg };
+          if (draftSaveRequestInFlightRef.current) {
+            logEvent('upload.transaction.waitDraftSave', { fieldPath: args.fieldPath });
+            await waitForDraftSaveRequest(`upload:${args.fieldPath}`);
           }
-          logEvent('upload.files.parallel.done', {
-            fieldPath: args.fieldPath,
-            fileCount: uploadedUrls.length
-          });
 
-          const allowUiAfterUpload = ensureSession('afterUpload') && allowUiUpdates;
           if (
             wasUploadFieldInvalidated({
               versions: uploadFieldInvalidationVersionsRef.current,
@@ -13070,7 +13003,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               expectedVersion: uploadFieldInvalidationVersionAtStart
             })
           ) {
-            logEvent('upload.urls.discarded.invalidated', {
+            logEvent('upload.transaction.skipped.invalidated', {
               fieldPath: args.fieldPath,
               invalidationVersionAtStart: uploadFieldInvalidationVersionAtStart,
               invalidationVersionCurrent: getUploadFieldInvalidationVersion(
@@ -13080,76 +13013,178 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return { success: true };
           }
-          const completionState = readStateItems();
-          const mergedItems = mergeUploadedFieldItems({
-            currentItems: completionState.items,
-            hasCurrentValue: completionState.hasValue,
-            fallbackItems: args.items,
-            uploadedFiles: fileItems,
-            uploadedUrls
-          }) as Array<string | File>;
 
-          // Step 3: update local state with URL(s) (replace uploaded File objects), then save draft again to persist URL(s) to the sheet.
-          const applyTopLevelMerge = (baseValues: Record<string, FieldValue>) => ({
-            ...baseValues,
-            [args.questionId as string]: mergedItems as unknown as FieldValue
+          const existingRecordId =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+          const statusRaw =
+            ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
+            '';
+          const statusForSave = resolveAutoSaveStatus(statusRaw);
+          const payload = await buildUploadDraftPayload({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current,
+            existingRecordId,
+            target
           });
-          const applyLineMerge = (baseLineItems: LineItemState): LineItemState => {
-            const rows = baseLineItems[args.groupId!] || [];
-            const nextRows = rows.map(r => {
-              if (r.id !== args.rowId) return r;
-              return { ...r, values: { ...(r.values || {}), [args.fieldId!]: mergedItems } };
+          payload.__ckSaveMode = 'draft';
+          payload.__ckStatus = statusForSave;
+          payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
+          payload.__ckReturnUploadValues = true;
+          const baseVersion = recordDataVersionRef.current;
+          if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
+            payload.__ckClientDataVersion = Number(baseVersion);
+          }
+
+          logEvent('upload.transaction.start', {
+            fieldPath: args.fieldPath,
+            fileCount: fileItemsAtStart.length,
+            blockUntilSaved
+          });
+
+          let response: any;
+          for (let attemptIndex = 0; attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+            const delayMs = DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex];
+            if (delayMs > 0) {
+              await new Promise<void>(resolve => globalThis.setTimeout(resolve, delayMs));
+            }
+            try {
+              setDraftSave({ phase: 'saving' });
+              response = await runDraftSaveRequest(`upload:${args.fieldPath}`, () =>
+                submitCurrentRecordMutation(`upload:${args.fieldPath}`, payload)
+              );
+            } catch (err: any) {
+              const message =
+                resolveUiErrorMessage(err, 'Failed to save uploaded photos.') ||
+                resolveLogMessage(err, 'Failed to save uploaded photos.');
+              if (isRetryableRecordBusyMessage(message) && attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length - 1) {
+                logEvent('upload.transaction.retryableBusy.retryScheduled', {
+                  fieldPath: args.fieldPath,
+                  attempt: attemptIndex + 1,
+                  attempts: DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length,
+                  delayMs: DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex + 1],
+                  message
+                });
+                continue;
+              }
+              throw err;
+            }
+            const retryableFailure = !response?.success && isRetryableRecordBusyMessage(response?.message);
+            if (retryableFailure && attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length - 1) {
+              logEvent('upload.transaction.retryableBusy.retryScheduled', {
+                fieldPath: args.fieldPath,
+                attempt: attemptIndex + 1,
+                attempts: DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length,
+                delayMs: DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex + 1],
+                message: (response?.message || '').toString()
+              });
+              continue;
+            }
+            break;
+          }
+
+          const ok = Boolean(response?.success);
+          const responseMessage = (response?.message || '').toString();
+          if (!ok) {
+            if (isSubmissionStaleMessage(responseMessage)) {
+              const serverVersionRaw = Number((response as any)?.meta?.dataVersion);
+              await synchronizeStaleRecord({
+                reason: 'upload.transaction.rejected.stale',
+                recordId: existingRecordId || selectedRecordIdRef.current || '',
+                cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
+                serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
+                serverRow: null
+              });
+            }
+            logEvent('upload.transaction.error', {
+              fieldPath: args.fieldPath,
+              message: responseMessage || 'failed'
             });
-            return { ...baseLineItems, [args.groupId!]: nextRows };
-          };
+            return {
+              success: false,
+              message: responseMessage || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
+            };
+          }
 
-          const nextValues =
-            args.scope === 'top' && args.questionId ? applyTopLevelMerge(valuesRef.current) : valuesRef.current;
-
-          const nextLineItems =
-            args.scope === 'line' && args.groupId && args.rowId && args.fieldId
-              ? applyLineMerge(lineItemsRef.current)
-              : lineItemsRef.current;
-
-          valuesRef.current = nextValues;
-          lineItemsRef.current = nextLineItems;
-          uploadedFieldValueOverridesRef.current.set(args.fieldPath, {
-            scope: args.scope,
-            questionId: args.questionId,
-            groupId: args.groupId,
-            rowId: args.rowId,
-            fieldId: args.fieldId,
+          const recordId = (((response as any)?.meta?.id) || existingRecordId || '').toString().trim();
+          const savedUploadValue =
+            extractUploadValueFromMeta((response as any)?.meta?.uploadValues || null, target) ??
+            existingUrlsAtStart.join(', ');
+          const savedUrls = splitUploadValue(savedUploadValue);
+          const existingUrlSet = new Set(existingUrlsAtStart);
+          const uploadedUrls = savedUrls.filter(url => !existingUrlSet.has(url)).slice(0, fileItemsAtStart.length);
+          const completionState = readStateItems();
+          const mergedItems = fileItemsAtStart.length
+            ? (mergeUploadedFieldItems({
+                currentItems: completionState.items,
+                hasCurrentValue: completionState.hasValue,
+                fallbackItems: targetItemsAtStart,
+                uploadedFiles: fileItemsAtStart,
+                uploadedUrls
+              }) as Array<string | File>)
+            : savedUrls;
+          const nextState = applyUploadValueToFormState({
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current,
+            target,
+            value: savedUploadValue,
             items: mergedItems
           });
 
+          const allowUiAfterUpload = ensureSession('afterSave') && allowUiUpdates;
+          valuesRef.current = nextState.values;
+          lineItemsRef.current = nextState.lineItems;
+          uploadedFieldValueOverridesRef.current.delete(args.fieldPath);
+
           if (allowUiAfterUpload) {
-            if (args.scope === 'top' && args.questionId) {
-              setValues(prev => {
-                const merged = applyTopLevelMerge(prev);
-                valuesRef.current = merged;
-                return merged;
-              });
-            }
-            if (args.scope === 'line' && args.groupId && args.rowId && args.fieldId) {
-              setLineItems(prev => {
-                const merged = applyLineMerge(prev);
-                lineItemsRef.current = merged;
-                return merged;
-              });
-            }
+            setValues(nextState.values);
+            setLineItems(nextState.lineItems);
           }
 
-          ensureSession('afterLocalMerge');
-          autoSaveDirtyRef.current = true;
-          autoSaveQueuedRef.current = true;
-          setDraftSave(prev => (prev.phase === 'saving' ? prev : { phase: 'dirty' }));
-          logEvent('upload.urls.localMerged', {
+          const payloadValues = applyUploadValueToPayloadValues({
+            payloadValues: (((payload as any).values || {}) as Record<string, any>) || {},
+            target,
+            value: savedUploadValue
+          });
+          applySuccessfulSubmissionState({
+            recordId,
+            payload: { ...payload, values: payloadValues },
+            response,
+            statusFallback: statusForSave
+          });
+
+          const nonTargetFingerprintNow = buildUploadNonTargetFingerprint({
+            values: nextState.values,
+            lineItems: nextState.lineItems,
+            target
+          });
+          if (nonTargetFingerprintNow === nonTargetFingerprintAtStart) {
+            autoSaveDirtyRef.current = false;
+            autoSaveQueuedRef.current = false;
+            if (autoSaveTimerRef.current) {
+              globalThis.clearTimeout(autoSaveTimerRef.current);
+              autoSaveTimerRef.current = null;
+            }
+            rememberAutoSaveSeenState(nextState.values, nextState.lineItems);
+          }
+          setDraftSave({
+            phase: 'saved',
+            updatedAt: ((response?.meta?.updatedAt || '') as string).toString() || undefined
+          });
+          logEvent('upload.transaction.success', {
             fieldPath: args.fieldPath,
             recordId,
-            urls: mergedItems.filter(it => typeof it === 'string').length,
-            respectedCurrentValue: completionState.hasValue
+            urls: savedUrls.length,
+            preservedPendingLocalFiles: mergedItems.some(item => typeof item !== 'string'),
+            otherChangesDuringUpload: nonTargetFingerprintNow !== nonTargetFingerprintAtStart
           });
-          clearSaveFailureStatusAfterSuccessfulSave('upload.urls.localMerged');
+          clearSaveFailureStatusAfterSuccessfulSave('upload.transaction');
           return { success: true };
         } catch (err: any) {
           const uiMessage = resolveUiErrorMessage(
@@ -13160,7 +13195,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             err,
             tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
           );
-          logEvent('upload.files.exception', { fieldPath: args.fieldPath, message: logMessage });
+          logEvent('upload.transaction.exception', { fieldPath: args.fieldPath, message: logMessage });
           return { success: false, message: uiMessage || '' };
         }
       };
@@ -13170,10 +13205,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         .catch(() => ({ success: false } as any))
         .then(() => run());
       uploadQueueRef.current.set(queueKey, next);
+      uploadQueueBlockingRef.current.set(queueKey, blockUntilSaved);
       syncUploadQueueSize();
       void next.finally(() => {
         try {
-          if (uploadQueueRef.current.get(queueKey) === next) uploadQueueRef.current.delete(queueKey);
+          if (uploadQueueRef.current.get(queueKey) === next) {
+            uploadQueueRef.current.delete(queueKey);
+            uploadQueueBlockingRef.current.delete(queueKey);
+          }
           syncUploadQueueSize();
           // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
           if (
@@ -13195,15 +13234,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return next;
     },
     [
+      applySuccessfulSubmissionState,
       autoSaveDebounceMs,
       clearSaveFailureStatusAfterSuccessfulSave,
-      ensureDraftRecordId,
+      definition,
+      formKey,
+      isRetryableRecordBusyMessage,
       isClosedRecord,
       language,
       logEvent,
+      rememberAutoSaveSeenState,
       resolveLogMessage,
+      resolveAutoSaveStatus,
       resolveUiErrorMessage,
-      syncUploadQueueSize
+      runDraftSaveRequest,
+      submitCurrentRecordMutation,
+      synchronizeStaleRecord,
+      syncUploadQueueSize,
+      waitForDraftSaveRequest
     ]
   );
 

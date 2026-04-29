@@ -326,9 +326,12 @@ Home page runtime strategy in the current Apps Script architecture:
   - `errorMessages` (optional localized overrides for upload validation text)
   - `helperText` (optional localized helper text shown under the upload control; falls back to system strings)
   - `linkLabel` (optional localized label template used for file links in Summary/PDF; e.g. `"Photo {n}"`)
+  - `discardChangesConfirm` (optional localized confirmation shown when closing the photo overlay with unsaved add/remove changes; falls back to `files.discardChangesConfirm`)
   - `ui.variant` (optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`)
   - `ui.slotIcon` (`"camera"` | `"clip"`, optional; controls the icon shown in progressive slots)
+  - `blockUntilSaved` (optional boolean; when true, the UI blocks with the wait message until the upload-and-save transaction finishes)
   - `compression` (optional client-side image compression; videos are uploaded as-is — prefer enforcing `maxFileSizeMb`)
+  - Upload changes are saved through the queued record mutation lane. The file management overlay stages add/remove changes locally and sends one transaction when the user clicks **Save photos**.
 - **Filters**: Add `optionFilter` in the Config JSON to filter CHOICE/CHECKBOX options (works in line items too). `dependsOn` accepts a single field ID or an array for multi-field dependencies; for line items, it can also reference top-level fields. Build composite keys in `optionMap` by joining dependency values with `||`, plus a `*` fallback.  
   - If one dependency is a DATE value (for example `MP_PREP_DATE`), you can use weekday composite keys like `Distributor||Service||Sunday`. The filter also falls back to the non-date composite key (for example `Distributor||Service`) when no weekday-specific key matches.
   - Use `matchMode: "or"` to union allowed options when the dependency is multi-select; rows that don’t satisfy all selected keys are tagged with `__ckNonMatchOptions` and show warnings during editing.  

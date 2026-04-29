@@ -32,6 +32,11 @@ const resolveSubgroupKey = (sub?: any): string => {
   return '';
 };
 
+const ROW_ID_KEY = '__ckRowId';
+
+const buildSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string): string =>
+  `${parentGroupId}::${parentRowId}::${subGroupId}`;
+
 export class SubmissionService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private uploadService: UploadService;
@@ -102,6 +107,90 @@ export class SubmissionService {
       ((formObject as any).values as Record<string, any>)[key] = value;
     }
     (formObject as any)[key] = value;
+  }
+
+  private shouldReturnUploadValues(formObject: WebFormSubmission): boolean {
+    const raw = (formObject as any).__ckReturnUploadValues;
+    return raw === true || raw === 'true' || raw === '1' || raw === 1;
+  }
+
+  private normalizeUploadValueForMeta(raw: any): string {
+    if (raw === undefined || raw === null) return '';
+    if (Array.isArray(raw)) {
+      return raw
+        .map(item => this.normalizeUploadValueForMeta(item))
+        .map(part => part.trim())
+        .filter(Boolean)
+        .join(', ');
+    }
+    if (typeof raw === 'object' && typeof raw.url === 'string') return raw.url.trim();
+    try {
+      return raw.toString().trim();
+    } catch {
+      return '';
+    }
+  }
+
+  private buildUploadValuesMeta(
+    questions: QuestionConfig[],
+    candidateValues: Record<string, any>
+  ): {
+    top: Record<string, string>;
+    line: Array<{ groupId: string; rowId: string; fieldId: string; value: string }>;
+  } {
+    const top: Record<string, string> = {};
+    const line: Array<{ groupId: string; rowId: string; fieldId: string; value: string }> = [];
+
+    const collectRows = (groupKey: string, groupCfg: any, rows: any[]) => {
+      const fields = Array.isArray(groupCfg?.fields) ? groupCfg.fields : [];
+      const fileFields = fields.filter((field: any) => field && field.type === 'FILE_UPLOAD' && field.id);
+      const subGroups = Array.isArray(groupCfg?.subGroups) ? groupCfg.subGroups : [];
+
+      (Array.isArray(rows) ? rows : []).forEach(row => {
+        if (!row || typeof row !== 'object') return;
+        const rowId = ((row as any)[ROW_ID_KEY] || (row as any).id || '').toString().trim();
+        if (rowId) {
+          fileFields.forEach((field: any) => {
+            line.push({
+              groupId: groupKey,
+              rowId,
+              fieldId: field.id.toString(),
+              value: this.normalizeUploadValueForMeta((row as any)[field.id])
+            });
+          });
+        }
+
+        subGroups.forEach((sub: any) => {
+          const subId = resolveSubgroupKey(sub);
+          if (!subId || !Array.isArray((row as any)[subId])) return;
+          collectRows(buildSubgroupKey(groupKey, rowId, subId), sub, (row as any)[subId]);
+        });
+      });
+    };
+
+    questions.filter(q => q.type !== 'BUTTON').forEach(q => {
+      if (q.type === 'FILE_UPLOAD') {
+        top[q.id] = this.normalizeUploadValueForMeta(candidateValues[q.id]);
+        return;
+      }
+      if (q.type !== 'LINE_ITEM_GROUP' || !q.lineItemConfig) return;
+      const rawRows = candidateValues[q.id];
+      const rows = (() => {
+        if (Array.isArray(rawRows)) return rawRows;
+        if (typeof rawRows === 'string' && rawRows.trim()) {
+          try {
+            const parsed = JSON.parse(rawRows);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      })();
+      collectRows(q.id, q.lineItemConfig, rows);
+    });
+
+    return { top, line };
   }
 
   private readSubmissionLineItemGroupValue(formObject: WebFormSubmission | Record<string, any>, fieldId: string): any {
@@ -214,7 +303,7 @@ export class SubmissionService {
         const raw = existingRowValues[columns.dataVersion - 1];
         const n = Number(raw);
         return Number.isFinite(n) && n > 0 ? n : 0;
-      } catch (_) {
+      } catch {
         return 0;
       }
     })();
@@ -238,7 +327,7 @@ export class SubmissionService {
           try {
             const raw = existingRowValues[columns.updatedAt - 1];
             return this.asIso(raw);
-          } catch (_) {
+          } catch {
             return undefined;
           }
         })();
@@ -271,7 +360,7 @@ export class SubmissionService {
       try {
         const raw = existingRowValues[colIdx - 1];
         return raw === undefined || raw === null ? '' : raw.toString();
-      } catch (_) {
+      } catch {
         return '';
       }
     };
@@ -414,19 +503,23 @@ export class SubmissionService {
         ? true
         : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
     if (existingRowIdx >= 0 && !hasMeaningfulChanges) {
+      const meta: Record<string, any> = {
+        id: recordId,
+        createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+        updatedAt:
+          this.readRecordMetadataIso(existingRowValues, columns.updatedAt) ||
+          this.readRecordMetadataIso(existingRowValues, columns.createdAt),
+        dataVersion: previousVersion || undefined,
+        rowNumber: destinationRowNumber,
+        operation: 'noop'
+      };
+      if (this.shouldReturnUploadValues(formObject)) {
+        meta.uploadValues = this.buildUploadValuesMeta(questions, candidateValues);
+      }
       return {
         success: true,
         message: 'No changes to save.',
-        meta: {
-          id: recordId,
-          createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
-          updatedAt:
-            this.readRecordMetadataIso(existingRowValues, columns.updatedAt) ||
-            this.readRecordMetadataIso(existingRowValues, columns.createdAt),
-          dataVersion: previousVersion || undefined,
-          rowNumber: destinationRowNumber,
-          operation: 'noop'
-        }
+        meta: meta as RecordMetadata
       };
     }
 
@@ -500,7 +593,7 @@ export class SubmissionService {
             };
           }
         }
-      } catch (_) {
+      } catch {
         // If index is unavailable, fall back to the legacy scan-based approach (small sheets / tests).
         const existingRows = Math.max(0, sheet.getLastRow() - 1);
         if (existingRows > 0) {
@@ -541,6 +634,9 @@ export class SubmissionService {
     if (Object.keys(autoIncrementValues).length) {
       meta.autoIncrementValues = autoIncrementValues;
     }
+    if (this.shouldReturnUploadValues(formObject)) {
+      (meta as any).uploadValues = this.buildUploadValuesMeta(questions, candidateValues);
+    }
 
     let newEtag = this.cacheManager.bumpSheetEtag(
       sheet,
@@ -571,7 +667,7 @@ export class SubmissionService {
         createdAtIso: meta.createdAt ? meta.createdAt.toString() : '',
         dedupSignatures
       });
-    } catch (_) {
+    } catch {
       // ignore
     }
 

@@ -1454,6 +1454,16 @@ export interface FileUploadConfig {
    * When omitted, the default dropzone + Files button UI is used.
    */
   ui?: FileUploadUiConfig;
+  /**
+   * When true, the UI blocks the user with a wait message until the upload
+   * and record save transaction has completed. Defaults to false.
+   */
+  blockUntilSaved?: boolean;
+  /**
+   * Optional localized confirmation shown when closing the photo overlay with
+   * unsaved add/remove changes. Falls back to the built-in system string.
+   */
+  discardChangesConfirm?: LocalizedString;
 }
 
 export interface FileUploadErrorMessages {

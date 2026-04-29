@@ -915,14 +915,25 @@ components:
 
             Variables:
             - `{n}`: 1-based index of the file within this field
+        discardChangesConfirm:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized confirmation shown when the user closes the photo overlay after adding/removing photos without saving.
+            Use simple non-technical wording. When omitted, the UI falls back to the built-in `files.discardChangesConfirm` system string.
         ui:
           $ref: '#/components/schemas/FileUploadUiConfig'
           description: Optional UI customization for how the upload control is rendered.
+        blockUntilSaved:
+          type: boolean
+          description: |
+            When true, the form shows the blocking wait overlay until this field's upload-and-save transaction completes.
+            Use for step-based photo gates where the user must not advance or keep editing before the record contains the final Drive URLs.
+            Leave false/omitted for forms that have a single final submit and can save upload changes in the background.
         compression:
           $ref: '#/components/schemas/FileUploadCompressionConfig'
           description: Optional client-side compression settings applied before upload.
       description: |
-        Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/drop/remove.
+        Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. Uploads are persisted through the queued record save lane so Drive URLs and the form record update in one save transaction. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/remove/drop/save action.
 
     FileUploadHelperText:
       oneOf:

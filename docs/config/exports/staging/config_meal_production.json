@@ -7315,6 +7315,7 @@
       },
       "uploadConfig": {
         "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+        "blockUntilSaved": true,
         "minFiles": 1,
         "maxFiles": 10,
         "maxFileSizeMb": 10,
@@ -7364,6 +7365,11 @@
             "quality": 0.78,
             "outputType": "keep"
           }
+        },
+        "discardChangesConfirm": {
+          "en": "The photos you changed are not saved yet. Close without saving them?",
+          "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
+          "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
         }
       }
     },
@@ -7457,6 +7463,7 @@
       },
       "uploadConfig": {
         "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+        "blockUntilSaved": true,
         "minFiles": 1,
         "maxFiles": 10,
         "maxFileSizeMb": 10,
@@ -7506,6 +7513,11 @@
             "quality": 0.78,
             "outputType": "keep"
           }
+        },
+        "discardChangesConfirm": {
+          "en": "The photos you changed are not saved yet. Close without saving them?",
+          "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
+          "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
         }
       },
       "validationRules": [
@@ -11199,6 +11211,7 @@
         },
         "uploadConfig": {
           "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+          "blockUntilSaved": true,
           "minFiles": 1,
           "maxFiles": 10,
           "maxFileSizeMb": 10,
@@ -11248,6 +11261,11 @@
               "quality": 0.78,
               "outputType": "keep"
             }
+          },
+          "discardChangesConfirm": {
+            "en": "The photos you changed are not saved yet. Close without saving them?",
+            "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
+            "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
           }
         }
       },
@@ -11341,6 +11359,7 @@
         },
         "uploadConfig": {
           "destinationFolderId": "1P3IbG9a1sHI9-5tv-8rSIh2FOa_ejOHx",
+          "blockUntilSaved": true,
           "minFiles": 1,
           "maxFiles": 10,
           "maxFileSizeMb": 10,
@@ -11390,6 +11409,11 @@
               "quality": 0.78,
               "outputType": "keep"
             }
+          },
+          "discardChangesConfirm": {
+            "en": "The photos you changed are not saved yet. Close without saving them?",
+            "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
+            "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
           }
         },
         "validationRules": [

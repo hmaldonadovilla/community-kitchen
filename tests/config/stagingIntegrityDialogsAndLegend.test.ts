@@ -16,6 +16,11 @@ const findQuestion = (questions: any[], id: string): any => {
 
 describe('staging integrity dialogs and list legend config', () => {
   const hasNonEmptyEnText = (value: any): boolean => typeof value?.en === 'string' && value.en.trim().length > 0;
+  const expectedPhotoDiscardConfirm = {
+    en: 'The photos you changed are not saved yet. Close without saving them?',
+    fr: 'Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?',
+    nl: "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+  };
   const collectObjects = (value: any, predicate: (entry: any) => boolean, acc: any[] = []): any[] => {
     if (Array.isArray(value)) {
       value.forEach(entry => collectObjects(entry, predicate, acc));
@@ -41,6 +46,16 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(first).toBeGreaterThan(0);
     expect(second).toBeGreaterThan(0);
   };
+
+  test('meal production and checklist photo uploads define simple discard confirmation copy', () => {
+    const configs = [readConfig('config_meal_production.json'), readConfig('config_checklist.json')];
+    const uploadFields = configs.flatMap(cfg => collectObjects(cfg, entry => entry?.type === 'FILE_UPLOAD'));
+
+    expect(uploadFields.length).toBeGreaterThan(0);
+    uploadFields.forEach(field => {
+      expect(field.uploadConfig?.discardChangesConfirm).toEqual(expectedPhotoDiscardConfirm);
+    });
+  });
 
   test('recipes list legend keeps required action icons and valid layout config', () => {
     const cfg = readConfig('config_recipes.json');
@@ -780,6 +795,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(topTempEvidence?.required).toBe(true);
       expect(topTempEvidence?.uploadConfig?.minFiles).toBe(1);
       expect(topTempEvidence?.uploadConfig?.maxFiles).toBe(10);
+      expect(topTempEvidence?.uploadConfig?.blockUntilSaved).toBe(true);
       expect(mealFields.some((entry: any) => entry?.id === 'MP_COOK_TEMP')).toBe(false);
       expect(mealFields.some((entry: any) => entry?.id === 'TEMP_EVD')).toBe(false);
       const leftoverPortionsField = mealFields.find((entry: any) => entry?.id === 'MP_LEFTOVER_PORTIONS_CAPTURE');

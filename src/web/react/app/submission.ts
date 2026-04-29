@@ -961,6 +961,133 @@ export const buildSubmissionPayload = async (args: {
   return submission;
 };
 
+export type UploadDraftPayloadTarget =
+  | {
+      scope: 'top';
+      questionId: string;
+    }
+  | {
+      scope: 'line';
+      groupId: string;
+      rowId: string;
+      fieldId: string;
+    };
+
+const isUploadDraftTargetField = (args: {
+  target: UploadDraftPayloadTarget;
+  scope: 'top' | 'line';
+  questionId?: string;
+  groupId?: string;
+  rowId?: string;
+  fieldId?: string;
+}): boolean => {
+  if (args.scope === 'top') {
+    return args.target.scope === 'top' && args.target.questionId === args.questionId;
+  }
+  return (
+    args.target.scope === 'line' &&
+    args.target.groupId === args.groupId &&
+    args.target.rowId === args.rowId &&
+    args.target.fieldId === args.fieldId
+  );
+};
+
+/**
+ * Build a draft-save payload for one upload transaction.
+ *
+ * Regular draft saves intentionally strip File objects to URL-only values. This
+ * variant keeps File payload objects only for the target upload field so the
+ * server can upload and save that field in the same queued record mutation.
+ */
+export const buildUploadDraftPayload = async (args: {
+  definition: WebFormDefinition;
+  formKey: string;
+  language: LangCode;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  existingRecordId?: string;
+  target: UploadDraftPayloadTarget;
+}): Promise<SubmissionPayload> => {
+  const { definition, formKey, language, values, lineItems, existingRecordId, target } = args;
+  const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'change' });
+  const payloadValues: Record<string, any> = { ...recomputed.values };
+
+  for (const q of definition.questions) {
+    if (q.type !== 'FILE_UPLOAD') continue;
+    const rawAny = recomputed.values[q.id] as any;
+    payloadValues[q.id] = isUploadDraftTargetField({
+      target,
+      scope: 'top',
+      questionId: q.id
+    })
+      ? await buildMaybeFilePayload(rawAny, (q as any).uploadConfig?.maxFiles, (q as any).uploadConfig)
+      : toUrlOnlyUploadString(rawAny);
+  }
+
+  for (const q of definition.questions.filter(q => q.type === 'LINE_ITEM_GROUP')) {
+    if (!shouldPersistLineItemRows(q.lineItemConfig || q)) {
+      payloadValues[q.id] = [];
+      payloadValues[`${q.id}_json`] = '[]';
+      continue;
+    }
+    const serializeGroupRows = async (serializeArgs: {
+      groupCfg: any;
+      groupKey: string;
+      rows: LineItemRowState[];
+    }): Promise<Record<string, any>[]> => {
+      const { groupCfg, groupKey, rows } = serializeArgs;
+      const fields = (groupCfg?.fields || []) as any[];
+      const fileFields = fields.filter((f: any) => f?.type === 'FILE_UPLOAD');
+      const subGroups = ((groupCfg?.subGroups || []) as any[]).filter(sub => shouldPersistLineItemRows(sub));
+
+      return Promise.all(
+        rows.map(async row => {
+          const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+          for (const f of fileFields) {
+            base[f.id] = isUploadDraftTargetField({
+              target,
+              scope: 'line',
+              groupId: groupKey,
+              rowId: row.id,
+              fieldId: f.id
+            })
+              ? await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig)
+              : toUrlOnlyUploadString(base[f.id]);
+          }
+
+          for (const sub of subGroups) {
+            const key = resolveSubgroupKey(sub as any);
+            if (!key) continue;
+            const childKey = buildSubgroupKey(groupKey, row.id, key);
+            const childRows = recomputed.lineItems[childKey] || [];
+            base[key] = await serializeGroupRows({ groupCfg: sub, groupKey: childKey, rows: childRows });
+          }
+
+          return base;
+        })
+      );
+    };
+
+    const rows = recomputed.lineItems[q.id] || [];
+    const serialized = await serializeGroupRows({ groupCfg: q.lineItemConfig, groupKey: q.id, rows });
+    payloadValues[q.id] = serialized;
+    payloadValues[`${q.id}_json`] = JSON.stringify(serialized);
+  }
+
+  const submission: SubmissionPayload = {
+    formKey,
+    language,
+    values: payloadValues
+  };
+  (submission as any).__ckDeviceInfo = getClientDeviceInfo();
+
+  if (existingRecordId) {
+    submission.id = existingRecordId;
+  }
+
+  return submission;
+};
+
 const toUrlOnlyUploadString = (raw: any): string => {
   if (raw === undefined || raw === null) return '';
   if (typeof raw === 'string') return raw;

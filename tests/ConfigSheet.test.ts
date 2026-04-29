@@ -798,7 +798,7 @@ describe('ConfigSheet', () => {
         '',
         '',
         'Active',
-        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "helperText":{"en":"You can add {count} more photos."}, "linkLabel":{"en":"Photo {n}"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc"}',
+        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "helperText":{"en":"You can add {count} more photos."}, "linkLabel":{"en":"Photo {n}"}, "discardChangesConfirm":{"en":"Close without saving photos?"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc","blockUntilSaved":true}',
         '',
         '',
         ''
@@ -819,11 +819,14 @@ describe('ConfigSheet', () => {
     expect(((questions[0].uploadConfig as any).helperText || {}).en).toBe('You can add {count} more photos.');
     expect((questions[0].uploadConfig as any).linkLabel).toBeDefined();
     expect(((questions[0].uploadConfig as any).linkLabel || {}).en).toBe('Photo {n}');
+    expect((questions[0].uploadConfig as any).discardChangesConfirm).toBeDefined();
+    expect(((questions[0].uploadConfig as any).discardChangesConfirm || {}).en).toBe('Close without saving photos?');
     expect((questions[0].uploadConfig as any).ui).toBeDefined();
     expect(((questions[0].uploadConfig as any).ui || {}).variant).toBe('progressive');
     expect(((questions[0].uploadConfig as any).ui || {}).slotIcon).toBe('clip');
     expect((questions[0].uploadConfig as any).compression).toBeDefined();
     expect(questions[0].uploadConfig!.destinationFolderId).toBe('abc');
+    expect(questions[0].uploadConfig!.blockUntilSaved).toBe(true);
   });
 
   test('getQuestions parses BUTTON createRecordPreset config JSON', () => {

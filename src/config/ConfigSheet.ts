@@ -603,6 +603,19 @@ export class ConfigSheet {
           root.file_label;
         if (linkLabel !== undefined && linkLabel !== null) (config as any).linkLabel = linkLabel;
 
+        const discardChangesConfirm =
+          root.discardChangesConfirm ??
+          root.discard_changes_confirm ??
+          root.discardConfirmMessage ??
+          root.discard_confirm_message ??
+          root.unsavedChangesConfirm ??
+          root.unsaved_changes_confirm ??
+          root.closeConfirmMessage ??
+          root.close_confirm_message;
+        if (discardChangesConfirm !== undefined && discardChangesConfirm !== null) {
+          (config as any).discardChangesConfirm = discardChangesConfirm;
+        }
+
         const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
         if (uploadUi && typeof uploadUi === 'object') (config as any).ui = uploadUi;
         const uploadVariant =
@@ -627,6 +640,28 @@ export class ConfigSheet {
 
         const compression = root.compression ?? root.compress;
         if (compression !== undefined) config.compression = compression;
+        const blockUntilSaved =
+          root.blockUntilSaved ??
+          root.block_until_saved ??
+          root.waitUntilSaved ??
+          root.wait_until_saved ??
+          root.waitForSave ??
+          root.wait_for_save ??
+          root.blocking;
+        if (blockUntilSaved !== undefined && blockUntilSaved !== null) {
+          const normalized = blockUntilSaved.toString ? blockUntilSaved.toString().trim().toLowerCase() : blockUntilSaved;
+          config.blockUntilSaved =
+            blockUntilSaved === true ||
+            blockUntilSaved === 1 ||
+            normalized === 'true' ||
+            normalized === '1' ||
+            normalized === 'yes' ||
+            normalized === 'y' ||
+            normalized === 'on' ||
+            normalized === 'block' ||
+            normalized === 'blocking' ||
+            normalized === 'wait';
+        }
       }
     } catch (_) {
       // Fallback to key=value;key=value syntax
@@ -659,6 +694,20 @@ export class ConfigSheet {
           case 'mimetypes':
           case 'allowedmimetypes':
             config.allowedMimeTypes = value.split('|').map(v => v.trim()).filter(Boolean);
+            break;
+          case 'blockuntilsaved':
+          case 'waituntilsaved':
+          case 'waitforsave':
+          case 'blocking':
+            config.blockUntilSaved = ['1', 'true', 'yes', 'y', 'on', 'block', 'blocking', 'wait'].includes(
+              value.toLowerCase()
+            );
+            break;
+          case 'discardchangesconfirm':
+          case 'discardconfirmmessage':
+          case 'unsavedchangesconfirm':
+          case 'closeconfirmmessage':
+            (config as any).discardChangesConfirm = value;
             break;
         }
       });
@@ -739,6 +788,19 @@ export class ConfigSheet {
       root.file_label;
     if (linkLabel !== undefined && linkLabel !== null) (cfg as any).linkLabel = linkLabel;
 
+    const discardChangesConfirm =
+      root.discardChangesConfirm ??
+      root.discard_changes_confirm ??
+      root.discardConfirmMessage ??
+      root.discard_confirm_message ??
+      root.unsavedChangesConfirm ??
+      root.unsaved_changes_confirm ??
+      root.closeConfirmMessage ??
+      root.close_confirm_message;
+    if (discardChangesConfirm !== undefined && discardChangesConfirm !== null) {
+      (cfg as any).discardChangesConfirm = discardChangesConfirm;
+    }
+
     const uploadUi = root.ui ?? root.UI ?? root.uploadUi ?? root.upload_ui;
     if (uploadUi && typeof uploadUi === 'object') (cfg as any).ui = uploadUi;
     const uploadVariant =
@@ -763,6 +825,28 @@ export class ConfigSheet {
 
     const compression = root.compression ?? root.compress;
     if (compression !== undefined) cfg.compression = compression;
+    const blockUntilSaved =
+      root.blockUntilSaved ??
+      root.block_until_saved ??
+      root.waitUntilSaved ??
+      root.wait_until_saved ??
+      root.waitForSave ??
+      root.wait_for_save ??
+      root.blocking;
+    if (blockUntilSaved !== undefined && blockUntilSaved !== null) {
+      const normalized = blockUntilSaved.toString ? blockUntilSaved.toString().trim().toLowerCase() : blockUntilSaved;
+      cfg.blockUntilSaved =
+        blockUntilSaved === true ||
+        blockUntilSaved === 1 ||
+        normalized === 'true' ||
+        normalized === '1' ||
+        normalized === 'yes' ||
+        normalized === 'y' ||
+        normalized === 'on' ||
+        normalized === 'block' ||
+        normalized === 'blocking' ||
+        normalized === 'wait';
+    }
     return Object.keys(cfg).length ? cfg : undefined;
   }
 
@@ -1662,7 +1746,7 @@ export class ConfigSheet {
     try {
       const s = raw.toString();
       return s ? s.toString().trim() : undefined;
-    } catch (_) {
+    } catch {
       return undefined;
     }
   }

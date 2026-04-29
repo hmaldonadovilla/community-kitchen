@@ -1707,12 +1707,14 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `errorMessages`: optional localized override strings for upload validation errors
       - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
       - `linkLabel`: optional localized label template used for file links in Summary/PDF (e.g. `"Photo {n}"`)
+      - `discardChangesConfirm`: optional localized confirmation shown when the user closes the photo overlay with unsaved add/remove changes. Use simple wording for field-specific photo flows; when omitted, the UI falls back to `files.discardChangesConfirm`.
       - `ui.variant`: optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`
       - `ui.slotIcon`: `"camera"` | `"clip"` (optional; controls the icon used in progressive slots)
+      - `blockUntilSaved`: optional boolean. Set to `true` when the user must wait until the upload-and-save transaction has completed (for example step-based Meal Production photo gates). Leave omitted/false for single-submit forms where background saving is acceptable.
       - `compression`: optional client-side **image** compression (videos are uploaded as-is; prefer size limits)
-      The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections.
+      Uploads are persisted through the queued record mutation lane so Drive file creation and record URL updates happen in one save request. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections; overlay add/remove actions stay local until the user clicks **Save photos**, which sends one upload-and-save transaction.
       - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
-      - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop action for troubleshooting.
+      - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop/save action for troubleshooting.
     - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
       - **Header convention (recommended)**: Use `Label [KEY]` headers in the source tab (e.g., `Supplier [SUPPLIER]`, `Email [EMAIL]`) so config can reference stable keys. `projection` / `mapping` can use either raw header text or the bracket key.
       - **Record status filter (optional)**: If your source table includes a `status` column and you only want certain rows (e.g., only “Active” recipes), set `dataSource.statusAllowList`:

@@ -22,7 +22,10 @@ export type FileOverlayProps = {
   readOnly?: boolean;
   items: Array<string | File>;
   uploadConfig?: UploadConfigLike;
+  dirty?: boolean;
+  saving?: boolean;
   onAdd: () => void;
+  onSave?: () => void;
   onClearAll: () => void;
   onRemoveAt: (index: number) => void;
   onClose: () => void;
@@ -37,7 +40,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   readOnly,
   items,
   uploadConfig,
+  dirty,
+  saving,
   onAdd,
+  onSave,
   onClearAll,
   onRemoveAt,
   onClose
@@ -45,7 +51,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const files = useMemo(() => items.filter((it): it is File => isFileInstance(it)), [items]);
   const totalBytes = useMemo(() => files.reduce((sum, file) => sum + (file?.size || 0), 0), [files]);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
-  const locked = submitting || readOnly === true;
+  const locked = submitting || saving === true || readOnly === true;
+  const canSave = Boolean(onSave) && !!dirty && !locked;
 
   const driveIdFromUrl = (url: string): string | null => {
     const m1 = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(url);
@@ -112,9 +119,16 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       title={title || tSystem('files.title', language, 'Photos')}
       subtitle={selectionLabel}
       rightAction={
-        <button type="button" onClick={onClose} style={buttonStyles.primary}>
-          {tSystem('common.close', language, 'Close')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={onClose} disabled={saving === true} style={withDisabled(buttonStyles.secondary, saving === true)}>
+            {tSystem('common.close', language, 'Close')}
+          </button>
+          {onSave ? (
+            <button type="button" onClick={onSave} disabled={!canSave} style={withDisabled(buttonStyles.primary, !canSave)}>
+              {saving ? tSystem('common.loading', language, 'Loading…') : tSystem('files.save', language, 'Save photos')}
+            </button>
+          ) : null}
+        </div>
       }
     >
       <fieldset
