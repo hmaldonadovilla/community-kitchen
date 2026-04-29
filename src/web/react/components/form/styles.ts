@@ -1124,6 +1124,36 @@ export const FORM_VIEW_STYLES = `
           opacity: 1;
           text-align: left;
         }
+        .ck-upload-failure {
+          flex: 0 0 100%;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin: 0;
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          color: var(--error);
+          text-align: left;
+        }
+        .ck-upload-failure__retry {
+          appearance: none;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text);
+          font: inherit;
+          font-weight: 600;
+          min-height: 34px;
+          padding: 6px 10px;
+          cursor: pointer;
+        }
+        .ck-upload-failure__retry:disabled {
+          cursor: not-allowed;
+          opacity: 0.65;
+        }
         .ck-line-item-table__header-wrap {
           display: flex;
           flex-direction: column;

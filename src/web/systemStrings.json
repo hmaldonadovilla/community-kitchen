@@ -435,6 +435,7 @@
     "maxFilesMany": { "en": "{count} photos max", "fr": "{count} photos max", "nl": "max {count} foto's" },
     "minFilesOne": { "en": "1 photo required", "fr": "1 photo requise", "nl": "1 foto vereist" },
     "minFilesMany": { "en": "{count} photos required", "fr": "{count} photos requises", "nl": "{count} foto's vereist" },
+    "retrySave": { "en": "Try saving photos again", "fr": "Réessayer d'enregistrer les photos", "nl": "Foto's opnieuw opslaan" },
     "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
     "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
     "remainingOne": { "en": "You can add 1 more photo.", "fr": "Vous pouvez ajouter 1 photo de plus.", "nl": "Je kunt nog 1 foto toevoegen." },
@@ -444,6 +445,11 @@
         "en": "Could not add photos.",
         "fr": "Impossible d'ajouter des photos.",
         "nl": "Kan geen foto's toevoegen."
+      },
+      "saveFailed": {
+        "en": "The photos were not saved. Check the connection and try again.",
+        "fr": "Les photos n'ont pas été enregistrées. Vérifiez la connexion et réessayez.",
+        "nl": "De foto's zijn niet opgeslagen. Controleer de verbinding en probeer opnieuw."
       },
       "minFiles": {
         "en": "{field} requires at least {min} photo{plural}.",

@@ -568,6 +568,8 @@ export interface LineItemGroupQuestionCtx {
   decrementDrag: (key: string) => void;
   resetDrag: (key: string) => void;
   uploadAnnouncements: Record<string, string>;
+  uploadFailures?: Record<string, { message: string; retrying?: boolean }>;
+  onRetryUploadFailure?: (fieldPath: string) => void;
 
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   isOverlayOpenActionSuppressed?: (fieldPath: string) => boolean;
@@ -696,6 +698,8 @@ export const LineItemGroupQuestion: React.FC<{
     incrementDrag: _incrementDrag,
     decrementDrag: _decrementDrag,
     uploadAnnouncements,
+    uploadFailures,
+    onRetryUploadFailure,
     openConfirmDialog,
     handleLineFileInputChange,
     handleLineFileDrop: _handleLineFileDrop,
@@ -705,6 +709,30 @@ export const LineItemGroupQuestion: React.FC<{
     setOverlay,
     onDiagnostic
   } = ctx;
+
+  const renderUploadFailure = React.useCallback(
+    (fieldPath: string, disabled?: boolean) => {
+      const failure = uploadFailures?.[fieldPath];
+      if (!failure) return null;
+      const retryDisabled = Boolean(disabled || failure.retrying || !onRetryUploadFailure);
+      return (
+        <div className="ck-upload-failure" role="alert">
+          <span>{failure.message}</span>
+          <button
+            type="button"
+            className="ck-upload-failure__retry"
+            disabled={retryDisabled}
+            onClick={() => onRetryUploadFailure?.(fieldPath)}
+          >
+            {failure.retrying
+              ? tSystem('common.loading', language, 'Loading…')
+              : tSystem('files.retrySave', language, 'Try saving photos again')}
+          </button>
+        </div>
+      );
+    },
+    [language, onRetryUploadFailure, uploadFailures]
+  );
 
   const isFileUploadOrderedEntryBlocked = React.useCallback(
     (args: LineFileUploadOrderedEntryCheckArgs): boolean => Boolean(checkFileUploadOrderedEntry?.(args)),
@@ -5714,6 +5742,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   <div style={srOnly} aria-live="polite">
                     {uploadAnnouncements[fieldPath] || ''}
                   </div>
+                  {renderUploadFailure(fieldPath, uploadInteractionBlocked || readOnly)}
                   <input
                     ref={el => {
                       if (!el) return;
@@ -10745,6 +10774,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                           <div style={srOnly} aria-live="polite">
                             {uploadAnnouncements[fieldPath] || ''}
                           </div>
+                          {renderUploadFailure(fieldPath, submitting || readOnly || orderedUploadBlocked)}
                           <input
                             ref={el => {
                               fileInputsRef.current[fieldPath] = el;
@@ -12081,6 +12111,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               <div style={srOnly} aria-live="polite">
                                 {uploadAnnouncements[fieldPath] || ''}
                               </div>
+                              {renderUploadFailure(fieldPath, uploadInteractionBlocked || readOnly)}
                               <input
                                 ref={el => {
                                   fileInputsRef.current[fieldPath] = el;
@@ -14440,6 +14471,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           <div style={srOnly} aria-live="polite">
                                             {uploadAnnouncements[fieldPath] || ''}
                                           </div>
+                                          {renderUploadFailure(fieldPath, uploadInteractionBlocked || readOnly)}
                                           <input
                                             ref={el => {
                                               fileInputsRef.current[fieldPath] = el;

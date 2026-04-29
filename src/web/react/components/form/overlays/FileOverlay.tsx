@@ -24,8 +24,11 @@ export type FileOverlayProps = {
   uploadConfig?: UploadConfigLike;
   dirty?: boolean;
   saving?: boolean;
+  saveError?: string;
+  saveRetrying?: boolean;
   onAdd: () => void;
   onSave?: () => void;
+  onRetrySave?: () => void;
   onClearAll: () => void;
   onRemoveAt: (index: number) => void;
   onClose: () => void;
@@ -42,8 +45,11 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   uploadConfig,
   dirty,
   saving,
+  saveError,
+  saveRetrying,
   onAdd,
   onSave,
+  onRetrySave,
   onClearAll,
   onRemoveAt,
   onClose
@@ -51,7 +57,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const files = useMemo(() => items.filter((it): it is File => isFileInstance(it)), [items]);
   const totalBytes = useMemo(() => files.reduce((sum, file) => sum + (file?.size || 0), 0), [files]);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
-  const locked = submitting || saving === true || readOnly === true;
+  const locked = submitting || saving === true || saveRetrying === true || readOnly === true;
   const canSave = Boolean(onSave) && !!dirty && !locked;
 
   const driveIdFromUrl = (url: string): string | null => {
@@ -174,6 +180,24 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
             ) : null}
             {maxed ? <span className="muted">{tSystem('files.maxReached', language, 'Required photos added.')}</span> : null}
           </div>
+
+          {saveError ? (
+            <div className="ck-upload-failure" role="alert">
+              <span>{saveError}</span>
+              {onRetrySave ? (
+                <button
+                  type="button"
+                  className="ck-upload-failure__retry"
+                  disabled={locked}
+                  onClick={onRetrySave}
+                >
+                  {saveRetrying
+                    ? tSystem('common.loading', language, 'Loading…')
+                    : tSystem('files.retrySave', language, 'Try saving photos again')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           {items.length ? (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
