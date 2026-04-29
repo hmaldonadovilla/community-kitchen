@@ -320,7 +320,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+        "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
       );
       expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverInventoryRows?.presentationWhen).toEqual({
@@ -394,6 +394,25 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftoverInventoryRows?.ui?.sourceFirstRowSort).toBe('alphabetical');
       expect(leftoverInventoryRows?.reservation?.commitMode).toBe('step');
       expect(leftoverInventoryRows?.reservation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
+      expect(leftoverInventoryRows?.defaultModeValue).toBeUndefined();
+      const compactSentenceRows = Array.isArray(leftoverInventoryRows?.ui?.compactSentenceRows)
+        ? leftoverInventoryRows.ui.compactSentenceRows
+        : [];
+      const hasEqualsValue = (when: any, value: string) => {
+        const equals = when?.equals;
+        return Array.isArray(equals) ? equals.includes(value) : equals === value;
+      };
+      const singleIngredientSentence = compactSentenceRows.find((rule: any) =>
+        hasEqualsValue(rule?.when, 'Single-ingredient')
+      );
+      const multiIngredientSentence = compactSentenceRows.find((rule: any) =>
+        hasEqualsValue(rule?.when, 'Multi-ingredient')
+      );
+      expect((singleIngredientSentence?.parts || []).map((part: any) => part?.fieldId)).toEqual(['LEFTOVER_USE_QTY']);
+      expect((multiIngredientSentence?.parts || []).map((part: any) => part?.fieldId)).toEqual([
+        'LEFTOVER_USE_QTY',
+        'LEFTOVER_USAGE_MODE'
+      ]);
       expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(
         expect.objectContaining({
           LEFTOVER_MEAL_TYPE: 'LEFTOVER_MEAL_TYPE',

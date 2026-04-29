@@ -32,10 +32,10 @@ describe('meal production leftover selection config', () => {
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
     expect(target?.helperText?.en).toBe(
-      'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
     expect(formTarget?.helperText?.en).toBe(
-      'Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine'
+      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
     expect(target?.subGroups).toBeUndefined();
     expect((question.lineItemConfig.subGroups || []).map((group: any) => group.id)).not.toContain('MP_LEFTOVER_SELECTION_LI');
@@ -276,6 +276,19 @@ describe('meal production leftover selection config', () => {
       const equals = when?.equals;
       return Array.isArray(equals) ? equals.includes(value) : equals === value;
     };
+    expect(config?.defaultModeValue).toBeUndefined();
+    const compactSentenceRows = Array.isArray(config?.ui?.compactSentenceRows) ? config.ui.compactSentenceRows : [];
+    const singleIngredientSentence = compactSentenceRows.find((rule: any) =>
+      hasEqualsValue(rule?.when, 'Single-ingredient')
+    );
+    const multiIngredientSentence = compactSentenceRows.find((rule: any) =>
+      hasEqualsValue(rule?.when, 'Multi-ingredient')
+    );
+    expect((singleIngredientSentence?.parts || []).map((part: any) => part?.fieldId)).toEqual(['LEFTOVER_USE_QTY']);
+    expect((multiIngredientSentence?.parts || []).map((part: any) => part?.fieldId)).toEqual([
+      'LEFTOVER_USE_QTY',
+      'LEFTOVER_USAGE_MODE'
+    ]);
     const partHeadline = (config?.ui?.compactHeadlineRows || []).find((rule: any) =>
       hasEqualsValue(rule?.when, 'Single-ingredient')
     );

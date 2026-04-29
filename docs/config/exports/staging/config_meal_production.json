@@ -1156,7 +1156,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
+                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
               },
               "rows": {
                 "includeWhen": {
@@ -1293,7 +1293,6 @@
                   "selectedFieldId": "LEFTOVER_SELECTED",
                   "quantityFieldId": "LEFTOVER_USE_QTY",
                   "modeFieldId": "LEFTOVER_USAGE_MODE",
-                  "defaultModeValue": "Reheat",
                   "sourceFieldMapping": {
                     "LEFTOVER_ID": "LEFTOVER_ID",
                     "LEFTOVER_KIND": "LEFTOVER_KIND",
@@ -2180,14 +2179,6 @@
                         },
                         "parts": [
                           {
-                            "type": "text",
-                            "text": {
-                              "en": "Use",
-                              "fr": "Utiliser",
-                              "nl": "Gebruik"
-                            }
-                          },
-                          {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffixFieldId": "LEFTOVER_UNIT",
                             "minWidth": 44,
@@ -2206,12 +2197,6 @@
                         },
                         "parts": [
                           {
-                            "fieldId": "LEFTOVER_USAGE_MODE",
-                            "minWidth": 196,
-                            "maxWidth": 312,
-                            "paddingChars": 9
-                          },
-                          {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffix": {
                               "en": "portions",
@@ -2221,6 +2206,12 @@
                             "minWidth": 44,
                             "maxWidth": 185,
                             "paddingChars": 1.8
+                          },
+                          {
+                            "fieldId": "LEFTOVER_USAGE_MODE",
+                            "minWidth": 196,
+                            "maxWidth": 312,
+                            "paddingChars": 9
                           }
                         ]
                       }
@@ -12981,7 +12972,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMI = Multi-ingredient to reheat by default otherwise change to combine.\nSI = Single-ingredient to combine"
+                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
               },
               "rows": {
                 "includeWhen": {
@@ -13118,7 +13109,6 @@
                   "selectedFieldId": "LEFTOVER_SELECTED",
                   "quantityFieldId": "LEFTOVER_USE_QTY",
                   "modeFieldId": "LEFTOVER_USAGE_MODE",
-                  "defaultModeValue": "Reheat",
                   "sourceFieldMapping": {
                     "LEFTOVER_ID": "LEFTOVER_ID",
                     "LEFTOVER_KIND": "LEFTOVER_KIND",
@@ -13979,14 +13969,6 @@
                         },
                         "parts": [
                           {
-                            "type": "text",
-                            "text": {
-                              "en": "Use",
-                              "fr": "Utiliser",
-                              "nl": "Gebruik"
-                            }
-                          },
-                          {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffixFieldId": "LEFTOVER_UNIT",
                             "minWidth": 44,
@@ -14005,12 +13987,6 @@
                         },
                         "parts": [
                           {
-                            "fieldId": "LEFTOVER_USAGE_MODE",
-                            "minWidth": 196,
-                            "maxWidth": 312,
-                            "paddingChars": 9
-                          },
-                          {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffix": {
                               "en": "portions",
@@ -14020,6 +13996,12 @@
                             "minWidth": 44,
                             "maxWidth": 185,
                             "paddingChars": 1.8
+                          },
+                          {
+                            "fieldId": "LEFTOVER_USAGE_MODE",
+                            "minWidth": 196,
+                            "maxWidth": 312,
+                            "paddingChars": 9
                           }
                         ]
                       }

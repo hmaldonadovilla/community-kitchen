@@ -2758,21 +2758,12 @@ export const LineItemGroupQuestion: React.FC<{
       if (!args.sourceKey) return;
       const timerKey = buildDeferredStepReservationTimerKey(args.parentRow.id, args.sourceKey);
       const previousTimer = reservationDebounceTimersRef.current[timerKey];
-      if (previousTimer) clearTimeout(previousTimer);
-      const debounceMs = Number.isFinite(Number(reservationConfig?.debounceMs))
-        ? Number(reservationConfig.debounceMs)
-        : 300;
-      reservationDebounceTimersRef.current[timerKey] = setTimeout(() => {
+      if (previousTimer) {
+        clearTimeout(previousTimer);
         delete reservationDebounceTimersRef.current[timerKey];
-        syncStepDataSourceOutputRowWithReservation({
-          config: args.config,
-          parentRow: args.parentRow,
-          sourceRow: args.sourceRow,
-          patch: args.patch
-        });
-      }, Math.max(0, debounceMs));
+      }
     },
-    [buildDeferredStepReservationTimerKey, syncStepDataSourceOutputRowWithReservation]
+    [buildDeferredStepReservationTimerKey]
   );
 
   const rollbackRejectedStepReservations = React.useCallback(
