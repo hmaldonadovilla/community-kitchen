@@ -6379,9 +6379,9 @@ components:
         - `{requested}`
         - `{current}`
 
-        For guided datasource-row allocation steps that should not write reservations while the user is still
-        editing, set `reservation.commitMode: "step"` on the datasource-row config. The client keeps the edits
-        local and sends one batched reservation plan when the step milestone succeeds.
+        For guided datasource-row allocation steps that should avoid per-keystroke ledger writes, set
+        `reservation.commitMode: "step"` on the datasource-row config. The client updates availability locally
+        first, then live-syncs one batched step reservation plan on valid selection edits and quantity blur.
       properties:
         title:
           oneOf:

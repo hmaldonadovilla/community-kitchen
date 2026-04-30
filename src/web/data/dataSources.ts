@@ -310,7 +310,7 @@ function isChoiceOrCheckbox(type: string): boolean {
 export async function fetchDataSource(
   config: DataSourceConfig,
   language: LangCode,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; commit?: boolean; shouldCommit?: () => boolean }
 ): Promise<any> {
   ensureStorageSyncListener();
   const cacheKey = key(config, language);
@@ -471,8 +471,18 @@ export async function fetchDataSource(
       refreshed: Boolean(opts?.forceRefresh)
     });
 
-    cache.set(cacheKey, finalRes);
-    if (finalRes) {
+    let shouldCommit = opts?.commit !== false;
+    if (shouldCommit && typeof opts?.shouldCommit === 'function') {
+      try {
+        shouldCommit = opts.shouldCommit() !== false;
+      } catch {
+        shouldCommit = false;
+      }
+    }
+    if (shouldCommit) {
+      cache.set(cacheKey, finalRes);
+    }
+    if (finalRes && shouldCommit) {
       savePersisted(config, language, finalRes);
       const itemCount = Array.isArray((finalRes as any)?.items)
         ? (finalRes as any).items.length

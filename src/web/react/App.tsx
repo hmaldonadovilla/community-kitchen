@@ -79,6 +79,7 @@ import {
   buildUploadDraftPayload,
   buildSubmissionPayload,
   chainSerializedSubmissionRequest,
+  collectRuntimeLineItemFieldIds,
   collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
   isSubmissionStaleMessage,
@@ -90,6 +91,7 @@ import {
   settleClientDataVersionAfterDispatch,
   shouldAdoptIncomingRecordSnapshotMetaOnly,
   shouldApplyIncomingRecordSnapshot,
+  stripRuntimeLineItemStateFields,
   validateForm
 } from './app/submission';
 import { buildValidationContext } from './app/validation';
@@ -235,7 +237,8 @@ import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeader
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
   buildInventoryReservationPlanFingerprint,
-  buildStepInventoryReservationPlan
+  buildStepInventoryReservationPlan,
+  mergeGuidedReservationLineItemsFromSnapshot
 } from './features/reservations/stepReservationPlan';
 import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
@@ -252,8 +255,11 @@ import {
   normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
+  shouldArmAutoSaveForUserEditEvent,
   shouldScheduleAutoSaveAfterPendingFollowup,
   shouldSuppressAutomatedAutoSave,
+  shouldSuppressPostPersistAutoSave,
+  shouldSuppressSelectionEffectInitAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur
 } from './app/autoSaveDedup';
@@ -651,6 +657,9 @@ const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
 const HOME_RECORD_PREFETCH_DELAY_MS = 250;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
 const DRAFT_SNAPSHOT_RETRY_DELAYS_MS = [0, 1500, 3000];
+const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationDeferred';
+const SELECTION_EFFECT_INIT_AUTOSAVE_SUPPRESS_MS = 30000;
+const POST_PERSIST_AUTOSAVE_SUPPRESS_MS = 30000;
 
 type HomeListLocalCachePayload = {
   savedAtMs: number;
@@ -2228,33 +2237,45 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       nextValue?: FieldValue;
     }): { deferMutation?: boolean } | void => {
       try {
-        pendingAutomatedAutoSaveSourceRef.current = '';
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
         const fieldKey = fieldPath || fieldId;
         const autoSaveDirtyBefore = autoSaveDirtyRef.current;
         const autoSaveQueuedBefore = autoSaveQueuedRef.current;
-        if (prefetchedSummaryHtml) {
-          setPrefetchedSummaryHtml(null);
-        }
-        // Clear stale dedup notice on any new user edit.
-        if (dedupNotice) setDedupNotice(null);
+        const hasNextValue = Object.prototype.hasOwnProperty.call(args || {}, 'nextValue');
+        const shouldArmAutoSave = shouldArmAutoSaveForUserEditEvent({
+          event: args?.event || null,
+          hasNextValue
+        });
+        if (shouldArmAutoSave) {
+          pendingAutomatedAutoSaveSourceRef.current = '';
+          selectionEffectInitAutoSaveSuppressStartedAtRef.current = 0;
+          selectionEffectInitAutoSaveSuppressUntilRef.current = 0;
+          selectionEffectInitAutoSaveHadDirtyAtStartRef.current = false;
+          postPersistAutoSaveSuppressUntilRef.current = 0;
+          postPersistAutoSavePersistedLocalMutationAtRef.current = 0;
+          if (prefetchedSummaryHtml) {
+            setPrefetchedSummaryHtml(null);
+          }
+          // Clear stale dedup notice on any new user edit.
+          if (dedupNotice) setDedupNotice(null);
 
-        // Arm autosave on first user edit during create-flow (segmented controls won't emit native input events).
-        if (createFlowRef.current && !createFlowUserEditedRef.current) {
-          createFlowUserEditedRef.current = true;
-          logEvent('autosave.armed.userEdit', { fieldPath: fieldPath || fieldId || null });
-        }
-        if (!autoSaveUserEditedRef.current) {
-          autoSaveUserEditedRef.current = true;
-        }
-        const editAt = Date.now();
-        lastUserInteractionRef.current = editAt;
-        lastLocalRecordMutationAtRef.current = editAt;
+          // Arm autosave on first user edit during create-flow (segmented controls won't emit native input events).
+          if (createFlowRef.current && !createFlowUserEditedRef.current) {
+            createFlowUserEditedRef.current = true;
+            logEvent('autosave.armed.userEdit', { fieldPath: fieldPath || fieldId || null });
+          }
+          if (!autoSaveUserEditedRef.current) {
+            autoSaveUserEditedRef.current = true;
+          }
+          const editAt = Date.now();
+          lastUserInteractionRef.current = editAt;
+          lastLocalRecordMutationAtRef.current = editAt;
 
-        // Mark dirty immediately on user edits so navigation handlers can flush autosave
-        // even if the debounced autosave effect hasn't run yet.
-        autoSaveDirtyRef.current = true;
+          // Mark dirty immediately on user edits so navigation handlers can flush autosave
+          // even if the debounced autosave effect hasn't run yet.
+          autoSaveDirtyRef.current = true;
+        }
 
         // For top-level dedup trigger fields: hold autosave while dedup precheck settles.
         const isDedupTriggerKey =
@@ -2473,7 +2494,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
 
         if (args?.scope === 'top' && (isDedupTriggerKey || isDedupIdentityKey)) {
-          if (isDedupTriggerKey) {
+          if (shouldArmAutoSave && isDedupTriggerKey) {
             if (dedupConflictRef.current) {
               dedupConflictRef.current = null;
               setDedupConflict(null);
@@ -2519,7 +2540,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             dedupHold: dedupHoldRef.current
           });
 
-          if (shouldForceAutoSave) {
+          if (shouldForceAutoSave && (autoSaveDirtyRef.current || autoSaveQueuedRef.current)) {
             // Release stale dedup hold before forcing immediate save.
             dedupHoldRef.current = false;
             if (autoSaveTimerRef.current) {
@@ -2597,6 +2618,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       nextValue?: FieldValue;
     }) => {
       pendingAutomatedAutoSaveSourceRef.current = (args.source || '').toString();
+      if (args.source === 'selectionEffectInit') {
+        const now = Date.now();
+        if (!selectionEffectInitAutoSaveSuppressUntilRef.current || selectionEffectInitAutoSaveSuppressUntilRef.current <= now) {
+          selectionEffectInitAutoSaveSuppressStartedAtRef.current = now;
+          selectionEffectInitAutoSaveHadDirtyAtStartRef.current =
+            autoSaveDirtyRef.current ||
+            autoSaveQueuedRef.current ||
+            autoSaveInFlightRef.current ||
+            draftSaveRequestInFlightRef.current;
+        }
+        selectionEffectInitAutoSaveSuppressUntilRef.current = Math.max(
+          selectionEffectInitAutoSaveSuppressUntilRef.current || 0,
+          now + SELECTION_EFFECT_INIT_AUTOSAVE_SUPPRESS_MS
+        );
+      }
       logEvent('autosave.automatedMutation', {
         source: args.source,
         fieldPath: args.fieldPath || null,
@@ -2829,6 +2865,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const [autoSaveHold, setAutoSaveHold] = useState<{ hold: boolean; reason?: string }>(() => ({ hold: false }));
   const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
   const prevAutoSaveHoldRef = useRef<boolean>(false);
+  const prevAutoSaveHoldReasonRef = useRef<string>('');
   const lastUserInteractionRef = useRef<number>(0);
   const lastLocalRecordMutationAtRef = useRef<number>(0);
   const lastExternalRecordSyncAtRef = useRef<number>(0);
@@ -2845,10 +2882,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
   const pendingAutomatedAutoSaveSourceRef = useRef<string>('');
+  const selectionEffectInitAutoSaveSuppressStartedAtRef = useRef<number>(0);
+  const selectionEffectInitAutoSaveSuppressUntilRef = useRef<number>(0);
+  const selectionEffectInitAutoSaveHadDirtyAtStartRef = useRef<boolean>(false);
+  const postPersistAutoSaveSuppressUntilRef = useRef<number>(0);
+  const postPersistAutoSavePersistedLocalMutationAtRef = useRef<number>(0);
   const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
   const reservationSyncPromiseRef = useRef<
     Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
   >(null);
+  const reservationSyncEpochRef = useRef<number>(0);
   const pendingFollowupBatchPromisesRef = useRef<
     Map<
       string,
@@ -3004,18 +3047,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [logEvent]
   );
 
+  const runtimeLineItemFieldIds = useMemo(
+    () => collectRuntimeLineItemFieldIds(definition),
+    [definition]
+  );
+
+  const buildPersistedDraftStateFingerprint = useCallback(
+    (args: { language: LangCode; values: Record<string, FieldValue>; lineItems: LineItemState }) =>
+      buildDraftStateFingerprint({
+        formKey,
+        language: args.language,
+        values: args.values,
+        lineItems: stripRuntimeLineItemStateFields(args.lineItems, runtimeLineItemFieldIds)
+      }),
+    [formKey, runtimeLineItemFieldIds]
+  );
+
   const rememberAutoSaveSeenState = useCallback(
     (nextValues: Record<string, FieldValue>, nextLineItems: LineItemState) => {
       lastAutoSaveSeenRef.current = { values: nextValues, lineItems: nextLineItems };
-      lastAutoSaveStateFingerprintRef.current = buildDraftStateFingerprint({
-        formKey,
+      lastAutoSaveStateFingerprintRef.current = buildPersistedDraftStateFingerprint({
         language: languageRef.current,
         values: nextValues,
         lineItems: nextLineItems
       });
     },
-    [formKey]
+    [buildPersistedDraftStateFingerprint]
   );
+
+  const markPostPersistAutoSaveSuppress = useCallback((persistedLocalMutationAtMs?: number | null) => {
+    const now = Date.now();
+    postPersistAutoSaveSuppressUntilRef.current = now + POST_PERSIST_AUTOSAVE_SUPPRESS_MS;
+    postPersistAutoSavePersistedLocalMutationAtRef.current =
+      Number.isFinite(Number(persistedLocalMutationAtMs))
+        ? Number(persistedLocalMutationAtMs)
+        : lastLocalRecordMutationAtRef.current || 0;
+    autoSaveUserEditedRef.current = false;
+  }, []);
 
   const scheduleRetryableAutoSaveRecovery = useCallback(
     (reason: string, message: string) => {
@@ -3332,6 +3400,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         submissionInFlight: Boolean(submissionRequestPromiseRef.current) || submittingRef.current,
         uploadInFlight: uploadQueueRef.current.size > 0,
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current) || Boolean(recordLoadingIdRef.current),
+        reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
         followupBatchInFlight: currentRecordId ? pendingFollowupBatchPromisesRef.current.has(currentRecordId) : false,
@@ -3364,6 +3433,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (recordFreshnessCheckPromiseRef.current) {
         logEvent('record.freshness.check.skipped', { reason, recordId, skipReason: 'inFlight' });
         scheduleRecordFreshnessCheck(`${reason}.inFlight`);
+        return;
+      }
+      const syncBlockersAtStart = getRecordFreshnessSyncBlockers();
+      if (syncBlockersAtStart.length) {
+        logEvent('record.freshness.check.skipped', {
+          reason,
+          recordId,
+          skipReason: 'syncBlocked',
+          blockers: syncBlockersAtStart,
+          dirty: autoSaveDirtyRef.current,
+          draftSavePhase: draftSave.phase,
+          autoSaveQueued: autoSaveQueuedRef.current
+        });
+        scheduleRecordFreshnessCheck(`${reason}.syncBlocked`);
         return;
       }
       if (
@@ -3683,6 +3766,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         Boolean(submissionRequestPromiseRef.current) ||
         uploadQueueRef.current.size > 0 ||
         Boolean(recordSyncPromiseRef.current) ||
+        Boolean(reservationSyncPromiseRef.current) ||
         Boolean(guidedStepImmediateSyncPromiseRef.current) ||
         Boolean(guidedStepBackgroundSyncPromiseRef.current) ||
         submittingRef.current ||
@@ -3698,6 +3782,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           draftSaveInFlight: draftSaveRequestInFlightRef.current,
           submissionInFlight: Boolean(submissionRequestPromiseRef.current),
           recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+          reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
           guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
           guidedStepBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
         });
@@ -3740,10 +3825,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 peekCachedDataSource(config, languageRef.current),
                 { fieldIds: signatureFieldIds }
               );
-              const refreshed = await fetchDataSource(config, languageRef.current, { forceRefresh: true }).catch(() => null);
+              const reservationSyncEpochAtFetchStart = reservationSyncEpochRef.current;
+              const refreshed = await fetchDataSource(config, languageRef.current, {
+                forceRefresh: true,
+                shouldCommit: () =>
+                  reservationSyncEpochRef.current === reservationSyncEpochAtFetchStart &&
+                  !reservationSyncPromiseRef.current
+              }).catch(() => null);
               if (selectedRecordIdRef.current !== recordId) return;
               if (viewRef.current !== 'form') return;
               if (activeGuidedStepIdRef.current !== stepId) return;
+              if (
+                reservationSyncEpochRef.current !== reservationSyncEpochAtFetchStart ||
+                reservationSyncPromiseRef.current
+              ) {
+                logEvent('datasource.freshness.check.skipped', {
+                  reason,
+                  recordId,
+                  stepId,
+                  watchKey: watch.key,
+                  dataSourceId,
+                  skipReason: 'reservationSyncStarted',
+                  durationMs: Date.now() - startedAt
+                });
+                continue;
+              }
               if (!refreshed) {
                 logEvent('datasource.freshness.check.error', {
                   reason,
@@ -8697,13 +8803,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   })();
   const renderedAutoSaveStateFingerprint = useMemo(
     () =>
-      buildDraftStateFingerprint({
-        formKey,
+      buildPersistedDraftStateFingerprint({
         language,
         values,
         lineItems
       }),
-    [formKey, language, lineItems, values]
+    [buildPersistedDraftStateFingerprint, language, lineItems, values]
   );
   latestRenderedAutoSaveStateFingerprintRef.current = renderedAutoSaveStateFingerprint;
   const resolveAutoSaveStatus = useCallback(
@@ -9180,6 +9285,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       const isCreateFlow = createFlowRef.current || !existingRecordId;
       const sessionAtStart = recordSessionRef.current;
+      const localMutationAtAutoSaveStart = lastLocalRecordMutationAtRef.current || 0;
       const valuesSnapshot = valuesRef.current;
       const lineItemsSnapshot = lineItemsRef.current;
       const withUploadOverrides = applyUploadedFieldOverrides({
@@ -9284,6 +9390,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
           payload.__ckClientDataVersion = Number(baseVersion);
         }
+        const pendingDraftFingerprint = buildDraftSaveFingerprint(payload);
+        if (
+          pendingDraftFingerprint &&
+          lastCompletedDraftSaveFingerprintRef.current?.recordId === pendingDraftFingerprint.recordId &&
+          lastCompletedDraftSaveFingerprintRef.current?.fingerprint === pendingDraftFingerprint.fingerprint
+        ) {
+          autoSaveDirtyRef.current = false;
+          autoSaveQueuedRef.current = false;
+          rememberAutoSaveSeenState(withUploadOverrides.values, withUploadOverrides.lineItems);
+          markPostPersistAutoSaveSuppress(localMutationAtAutoSaveStart);
+          setDraftSave({
+            phase: 'saved',
+            updatedAt: lastSubmissionMetaRef.current?.updatedAt || selectedRecordSnapshotRef.current?.updatedAt || undefined
+          });
+          logEvent('autosave.skip.completedFingerprint', {
+            reason,
+            recordId: pendingDraftFingerprint.recordId
+          });
+          return;
+        }
         const res = await runCoalescedDraftSaveRequest('autosave', payload, (nextPayload: any) =>
           submitCurrentRecordMutation('autosave', nextPayload)
         );
@@ -9387,6 +9513,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const rn = Number((res as any)?.meta?.rowNumber);
         const nextRowNumber = Number.isFinite(rn) && rn >= 2 ? rn : undefined;
         const serverGeneratedValues = applyServerGeneratedTopValues(res, 'autosave');
+        const savedStateValues =
+          Object.keys(serverGeneratedValues).length
+            ? { ...valuesSnapshot, ...serverGeneratedValues }
+            : valuesSnapshot;
         const savedValues =
           Object.keys(serverGeneratedValues).length
             ? { ...(((payload as any).values || {}) as Record<string, any>), ...serverGeneratedValues }
@@ -9453,6 +9583,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         dedupBaselineSignatureRef.current = (currentDedupSignature || '').toString();
         dedupKeyFingerprintBaselineRef.current = currentDedupFingerprint;
         retryableAutoSaveFailureCountRef.current = 0;
+        rememberAutoSaveSeenState(savedStateValues, lineItemsSnapshot);
+        if ((lastLocalRecordMutationAtRef.current || 0) === localMutationAtAutoSaveStart) {
+          markPostPersistAutoSaveSuppress(localMutationAtAutoSaveStart);
+        }
         setDraftSave({ phase: 'saved', updatedAt: updatedAt || undefined });
         clearSaveFailureStatusAfterSuccessfulSave('record.autosave');
         uploadedFieldValueOverridesRef.current.clear();
@@ -9554,12 +9688,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       language,
       logEvent,
+      markPostPersistAutoSaveSuppress,
       markRecordFreshnessServerTouch,
       matchesClosedStatus,
       applyServerGeneratedTopValues,
       isRetryableRecordBusyMessage,
       resolveLogMessage,
       resolveUiErrorMessage,
+      rememberAutoSaveSeenState,
       runCoalescedDraftSaveRequest,
       scheduleRetryableAutoSaveRecovery,
       scheduleLatestAutoSave,
@@ -10202,9 +10338,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     const prev = prevAutoSaveHoldRef.current;
     const next = !!autoSaveHold.hold;
-    if (prev === next) return;
+    const previousReason = prevAutoSaveHoldReasonRef.current;
+    const nextReason = (autoSaveHold.reason || '').toString();
+    if (prev === next && previousReason === nextReason) return;
     prevAutoSaveHoldRef.current = next;
+    prevAutoSaveHoldReasonRef.current = nextReason;
     if (!prev || next) return; // only act on true -> false
+
+    const releasedReasons = previousReason
+      .split(',')
+      .map(reason => reason.trim())
+      .filter(Boolean);
+    if (releasedReasons.includes(GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON)) {
+      logEvent('autosave.hold.release.skipGuidedReservationDeferred', {
+        holdReason: previousReason || null,
+        dirty: autoSaveDirtyRef.current,
+        queued: autoSaveQueuedRef.current
+      });
+      return;
+    }
 
     if (!autoSaveEnabled) return;
     if (viewRef.current !== 'form') return;
@@ -10297,17 +10449,48 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (!changed) return;
     const pendingAutomatedAutoSaveSource = pendingAutomatedAutoSaveSourceRef.current;
     pendingAutomatedAutoSaveSourceRef.current = '';
+    const suppressSelectionEffectInitAutoSave = shouldSuppressSelectionEffectInitAutoSave({
+      suppressStartedAtMs: selectionEffectInitAutoSaveSuppressStartedAtRef.current,
+      suppressUntilMs: selectionEffectInitAutoSaveSuppressUntilRef.current,
+      nowMs: Date.now(),
+      lastLocalMutationAtMs: lastLocalRecordMutationAtRef.current,
+      hadDirtyAtStart: selectionEffectInitAutoSaveHadDirtyAtStartRef.current
+    });
+    const suppressPostPersistAutoSave = shouldSuppressPostPersistAutoSave({
+      suppressUntilMs: postPersistAutoSaveSuppressUntilRef.current,
+      nowMs: Date.now(),
+      lastLocalMutationAtMs: lastLocalRecordMutationAtRef.current,
+      persistedLocalMutationAtMs: postPersistAutoSavePersistedLocalMutationAtRef.current
+    });
     if (
       shouldSuppressAutomatedAutoSave({
         pendingSource: pendingAutomatedAutoSaveSource,
         dirty: autoSaveDirtyRef.current,
         queued: autoSaveQueuedRef.current,
         inFlight: autoSaveInFlightRef.current
-      })
+      }) ||
+      suppressSelectionEffectInitAutoSave ||
+      suppressPostPersistAutoSave
     ) {
+      autoSaveDirtyRef.current = false;
+      autoSaveQueuedRef.current = false;
+      autoSaveInFlightBlockerLogRef.current = null;
+      if (autoSaveTimerRef.current) {
+        globalThis.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      setDraftSave(prev => {
+        if (prev.phase === 'saved') return prev;
+        return {
+          phase: 'saved',
+          updatedAt: lastSubmissionMetaRef.current?.updatedAt || selectedRecordSnapshotRef.current?.updatedAt || undefined
+        };
+      });
       logEvent('autosave.skip.automatedMutation', {
         source: pendingAutomatedAutoSaveSource,
-        view
+        view,
+        suppressWindow: suppressSelectionEffectInitAutoSave,
+        suppressPostPersist: suppressPostPersistAutoSave
       });
       return;
     }
@@ -11226,6 +11409,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const snapshotValues = args.snapshotOverride?.values || valuesRef.current;
       const snapshotLineItems = args.snapshotOverride?.lineItems || lineItemsRef.current;
       const snapshotLanguage = args.snapshotOverride?.language || languageRef.current;
+      const localMutationAtSnapshotStart = lastLocalRecordMutationAtRef.current || 0;
       const payloadSource = applyUploadedFieldOverrides({
         values: snapshotValues,
         lineItems: snapshotLineItems
@@ -11355,13 +11539,57 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           statusFallback: nextStatus || null
         });
       }
-      autoSaveDirtyRef.current = false;
-      autoSaveQueuedRef.current = false;
+      const noLocalEditsDuringSnapshot =
+        (lastLocalRecordMutationAtRef.current || 0) === localMutationAtSnapshotStart;
+      let baselineValues = valuesRef.current;
+      let baselineLineItems = lineItemsRef.current;
+      if (noLocalEditsDuringSnapshot && args.snapshotOverride?.lineItems) {
+        const reservationLineItemMerge = mergeGuidedReservationLineItemsFromSnapshot({
+          definition,
+          stepId: activeGuidedStepIdRef.current || '',
+          sourceLineItems: args.snapshotOverride.lineItems,
+          targetLineItems: lineItemsRef.current,
+          mode: 'all'
+        });
+        if (reservationLineItemMerge.mergedRows > 0 || reservationLineItemMerge.mergedChildGroups > 0) {
+          const mappedReservationState = applyValueMapsToForm(
+            definition,
+            valuesRef.current,
+            reservationLineItemMerge.lineItems,
+            { mode: 'change' }
+          );
+          baselineValues = mappedReservationState.values;
+          baselineLineItems = mappedReservationState.lineItems;
+          valuesRef.current = baselineValues;
+          lineItemsRef.current = baselineLineItems;
+          setValues(baselineValues);
+          setLineItems(baselineLineItems);
+          logEvent('snapshot.save.reservationRowsMerged', {
+            reason: args.reason,
+            recordId: recordId || args.existingRecordId || null,
+            rows: reservationLineItemMerge.mergedRows,
+            childGroups: reservationLineItemMerge.mergedChildGroups
+          });
+        }
+      }
+      if (noLocalEditsDuringSnapshot) {
+        autoSaveDirtyRef.current = false;
+        autoSaveQueuedRef.current = false;
+        rememberAutoSaveSeenState(baselineValues, baselineLineItems);
+        markPostPersistAutoSaveSuppress(localMutationAtSnapshotStart);
+      } else {
+        autoSaveDirtyRef.current = true;
+        autoSaveQueuedRef.current = true;
+      }
       uploadedFieldValueOverridesRef.current.clear();
-      setDraftSave({
-        phase: 'saved',
-        updatedAt: ((response?.meta?.updatedAt || '') as string).toString() || undefined
-      });
+      setDraftSave(
+        noLocalEditsDuringSnapshot
+          ? {
+              phase: 'saved',
+              updatedAt: ((response?.meta?.updatedAt || '') as string).toString() || undefined
+            }
+          : { phase: 'dirty' }
+      );
       clearSaveFailureStatusAfterSuccessfulSave(`snapshot.${args.reason}`);
       logEvent('snapshot.save.success', {
         reason: args.reason,
@@ -11381,6 +11609,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ingredientsFormActive,
       isRetryableRecordBusyMessage,
       logEvent,
+      markPostPersistAutoSaveSuppress,
+      rememberAutoSaveSeenState,
       resolveLogMessage,
       resolveAutoSaveStatus,
       resolveUiErrorMessage,
@@ -11603,17 +11833,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         const availability = Array.isArray(reservationResult.availability)
           ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
           : [];
+        let availabilityCacheUpdatedRows = 0;
         if (availability.length) {
           const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
             dataSourceConfigs: guidedDataSourceConfigs,
             language,
             availability
           });
+          availabilityCacheUpdatedRows = cacheSync.updatedRows;
           logEvent(`${args.logPrefix}.reservationPlan.cacheSync`, {
             stepId: args.stepId,
             recordId: args.recordId,
             updatedRows: cacheSync.updatedRows,
             updatedDataSourceIds: cacheSync.updatedDataSourceIds
+          });
+        }
+        if (
+          Number(reservationResult.reservationsReleased || 0) > 0 ||
+          (availability.length > 0 && availabilityCacheUpdatedRows <= 0)
+        ) {
+          refreshGuidedDataSourcesInBackground({
+            reason: `${args.logPrefix}.reservationPlan.refresh`,
+            forceRefresh: true,
+            retryDelaysMs: [0, 1500]
           });
         }
         if (
@@ -11728,6 +11970,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       markDataSourceFreshnessServerTouch,
       markRecordFreshnessServerTouch,
       openConfiguredConfirmDialog,
+      refreshGuidedDataSourcesInBackground,
       resolveGuidedStepReservationPlan,
       resolveLogMessage
     ]
@@ -11807,7 +12050,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       };
 
       const prior = reservationSyncPromiseRef.current;
-      const next = (prior
+      let next: Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }>;
+      next = (prior
         ? prior.catch(() => ({
             success: false,
             recordId: args.recordId,
@@ -11820,11 +12064,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             stepId: args.stepId,
             sessionId
           })
-      ).then(run);
+      )
+        .then(run)
+        .finally(() => {
+          if (reservationSyncPromiseRef.current === next) {
+            reservationSyncPromiseRef.current = null;
+          }
+        });
+      reservationSyncEpochRef.current += 1;
+      markDataSourceFreshnessServerTouch({
+        reason: `${args.logPrefix}.reservationPlan.queued`,
+        stepId: args.stepId
+      });
       reservationSyncPromiseRef.current = next;
       return next;
     },
-    [applyGuidedStepReservationPlan]
+    [applyGuidedStepReservationPlan, markDataSourceFreshnessServerTouch]
   );
 
   const queueGuidedStepReservationDraftSync = useCallback(
@@ -11841,8 +12096,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         sessionId,
         args.stepId || '',
         persistSnapshot ? 'persist' : 'planOnly',
-        buildDraftStateFingerprint({
-          formKey,
+        buildPersistedDraftStateFingerprint({
           language: languageRef.current,
           values: valuesRef.current,
           lineItems: snapshotLineItems
@@ -12011,7 +12265,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       autoSaveDebounceMs,
-      formKey,
+      buildPersistedDraftStateFingerprint,
       logEvent,
       persistCurrentSnapshot,
       queueGuidedStepReservationPlan,
@@ -12046,8 +12300,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         args.stepId || '',
         args.nextStepId || '',
         args.trigger,
-        buildDraftStateFingerprint({
-          formKey,
+        buildPersistedDraftStateFingerprint({
           language: languageRef.current,
           values: valuesRef.current,
           lineItems: lineItemsRef.current
@@ -12168,7 +12421,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
     },
     [
-      formKey,
+      buildPersistedDraftStateFingerprint,
       logEvent,
       persistCurrentSnapshot,
       queueGuidedStepReservationPlan,
@@ -13370,6 +13623,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ...(formRecordMeta?.pdfUrl !== undefined ? { pdfUrl: formRecordMeta.pdfUrl as FieldValue } : {})
     } as Record<string, FieldValue>;
     const currentLineItems = opts?.snapshots?.lineItems || snapshots?.lineItems || lineItemsRef.current;
+    if (opts?.preferLookupSourceValue === true) {
+      const now = Date.now();
+      if (!selectionEffectInitAutoSaveSuppressUntilRef.current || selectionEffectInitAutoSaveSuppressUntilRef.current <= now) {
+        selectionEffectInitAutoSaveSuppressStartedAtRef.current = now;
+        selectionEffectInitAutoSaveHadDirtyAtStartRef.current =
+          autoSaveDirtyRef.current ||
+          autoSaveQueuedRef.current ||
+          autoSaveInFlightRef.current ||
+          draftSaveRequestInFlightRef.current;
+      }
+      selectionEffectInitAutoSaveSuppressUntilRef.current = Math.max(
+        selectionEffectInitAutoSaveSuppressUntilRef.current || 0,
+        now + SELECTION_EFFECT_INIT_AUTOSAVE_SUPPRESS_MS
+      );
+    }
     runSelectionEffectsHelper({
       definition,
       question,

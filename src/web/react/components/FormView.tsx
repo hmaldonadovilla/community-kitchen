@@ -859,6 +859,7 @@ const FormView: React.FC<FormViewProps> = ({
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
   const overlayDetailRenderSignatureRef = useRef<string>('');
   const overlayDetailRenderSeqRef = useRef(0);
+  const autoSaveHoldReasonsRef = useRef<Record<string, true>>({});
   const overlaySessionSnapshotsRef = useRef<
     Record<
       string,
@@ -1038,10 +1039,38 @@ const FormView: React.FC<FormViewProps> = ({
     [buildOverlaySessionSnapshotKey, onDiagnostic, setErrors, setLineItems, setValues]
   );
 
+  const setScopedAutoSaveHold = useCallback(
+    (hold: boolean, meta?: { reason?: string }) => {
+      if (!setAutoSaveHold) return;
+      const reason = (meta?.reason || 'formInteraction').toString().trim() || 'formInteraction';
+      const previous = autoSaveHoldReasonsRef.current;
+      const nextReasons = { ...previous };
+      if (hold) {
+        nextReasons[reason] = true;
+      } else {
+        delete nextReasons[reason];
+      }
+      const previousSignature = Object.keys(previous).sort().join(',');
+      const nextSignature = Object.keys(nextReasons).sort().join(',');
+      if (previousSignature === nextSignature) return;
+      autoSaveHoldReasonsRef.current = nextReasons;
+      const activeReasons = Object.keys(nextReasons).sort();
+      setAutoSaveHold(activeReasons.length > 0, {
+        reason: activeReasons.join(',') || undefined
+      });
+      onDiagnostic?.('autosave.hold.request', {
+        hold: activeReasons.length > 0,
+        reason,
+        activeReasons
+      });
+    },
+    [onDiagnostic, setAutoSaveHold]
+  );
+
   useEffect(() => {
     if (!setAutoSaveHold) return;
     const hold = overlay.open || lineItemGroupOverlay.open || subgroupOverlay.open;
-    setAutoSaveHold(hold, { reason: 'overlayEditing' });
+    setScopedAutoSaveHold(hold, { reason: 'overlayEditing' });
     onDiagnostic?.('autosave.hold.request', {
       hold,
       reason: 'overlayEditing',
@@ -1054,6 +1083,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     overlay.open,
     setAutoSaveHold,
+    setScopedAutoSaveHold,
     subgroupOverlay.open
   ]);
 
@@ -10628,6 +10658,7 @@ const FormView: React.FC<FormViewProps> = ({
               isOverlayOpenActionSuppressed,
               suppressOverlayOpenAction,
               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+              setAutoSaveHold: setScopedAutoSaveHold,
               ensureRecordId,
               queueGuidedStepReservationDraftSync,
               waitForGuidedStepReservationDraftSync
@@ -11920,6 +11951,7 @@ const FormView: React.FC<FormViewProps> = ({
                 isOverlayOpenActionSuppressed,
                 suppressOverlayOpenAction,
                 runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                setAutoSaveHold: setScopedAutoSaveHold,
                 ensureRecordId,
                 queueGuidedStepReservationDraftSync,
                 waitForGuidedStepReservationDraftSync,
@@ -12756,6 +12788,7 @@ const FormView: React.FC<FormViewProps> = ({
                             isOverlayOpenActionSuppressed,
                             suppressOverlayOpenAction,
                             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                            setAutoSaveHold: setScopedAutoSaveHold,
                             ensureRecordId,
                             queueGuidedStepReservationDraftSync,
                             waitForGuidedStepReservationDraftSync
@@ -14967,6 +15000,7 @@ const FormView: React.FC<FormViewProps> = ({
                     isOverlayOpenActionSuppressed,
                     suppressOverlayOpenAction,
                     runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                    setAutoSaveHold: setScopedAutoSaveHold,
                     ensureRecordId,
                     queueGuidedStepReservationDraftSync,
                     waitForGuidedStepReservationDraftSync,
@@ -15734,6 +15768,7 @@ const FormView: React.FC<FormViewProps> = ({
             isOverlayOpenActionSuppressed,
             suppressOverlayOpenAction,
             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+            setAutoSaveHold: setScopedAutoSaveHold,
             ensureRecordId,
             queueGuidedStepReservationDraftSync,
             waitForGuidedStepReservationDraftSync

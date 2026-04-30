@@ -124,19 +124,35 @@ describe('reservationSyncPolicy', () => {
     ).toBe(true);
   });
 
-  test('does not immediately sync step reservations when the edited line is still invalid', () => {
+  test('does not immediately sync step reservations when the edited line has invalid non-empty values', () => {
     expect(
       shouldImmediatelySyncStepReservationChange({
         patch: {
-          LEFTOVER_USE_QTY: null
+          LEFTOVER_USE_QTY: '5'
         },
         selectedFieldId: 'LEFTOVER_SELECTED',
         quantityFieldId: 'LEFTOVER_USE_QTY',
         selectedValue: true,
-        quantityValue: null,
+        quantityValue: '5',
         hasValidationErrors: true
       })
     ).toBe(false);
+  });
+
+  test('immediately syncs step reservations when a quantity is cleared for release', () => {
+    expect(
+      shouldImmediatelySyncStepReservationChange({
+        patch: {
+          LEFTOVER_SELECTED: false,
+          LEFTOVER_USE_QTY: null
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: false,
+        quantityValue: null,
+        hasValidationErrors: true
+      })
+    ).toBe(true);
   });
 
   test('maps transient reservation lock failures to the user-facing recovery message', () => {
