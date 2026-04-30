@@ -4548,6 +4548,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const analyticsSnapshotRef = useRef<AnalyticsSnapshot | null>(analyticsSnapshot);
   const analyticsSnapshotStaleRef = useRef(false);
   const analyticsRefreshTokenRef = useRef(analyticsRefreshToken);
+  const homeAnalyticsRefreshTokenRef = useRef(homeAnalyticsRefreshToken);
+  const homeAnalyticsRefreshSatisfiedTokenRef = useRef(0);
   const previousAnalyticsViewRef = useRef<View | null>(null);
   const hasListViewAnalyticsWidgets = useMemo(() => {
     const widgets = Array.isArray(definition.analytics?.widgets) ? definition.analytics.widgets : [];
@@ -4561,6 +4563,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!hasListViewAnalyticsWidgets) return;
       setHomeAnalyticsRefreshToken(prev => {
         const next = prev + 1;
+        homeAnalyticsRefreshTokenRef.current = next;
         logEvent('analytics.listView.refreshRequested', {
           reason: args.reason,
           previousView: args.previousView || null,
@@ -4723,6 +4726,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     analyticsRefreshTokenRef.current = analyticsRefreshToken;
   }, [analyticsRefreshToken]);
   useEffect(() => {
+    homeAnalyticsRefreshTokenRef.current = homeAnalyticsRefreshToken;
+  }, [homeAnalyticsRefreshToken]);
+  const applyHomeBootstrapAnalytics = useCallback(
+    (args: { response: any; reason: string }): boolean => {
+      if (!hasListViewAnalyticsWidgets) return false;
+      const snapshot = ((args.response as any)?.analytics || null) as AnalyticsSnapshot | null;
+      if (!snapshot || !Array.isArray(snapshot.items)) return false;
+      analyticsSnapshotRef.current = snapshot;
+      analyticsSnapshotStaleRef.current = false;
+      homeAnalyticsRefreshSatisfiedTokenRef.current = homeAnalyticsRefreshTokenRef.current;
+      setAnalyticsSnapshot(snapshot);
+      const nextRev = Number((args.response as any)?.analyticsRev ?? snapshot.revision ?? 0);
+      setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
+      logEvent('analytics.listView.bootstrap.applied', {
+        reason: args.reason,
+        itemCount: snapshot.items.length,
+        revision: Number.isFinite(nextRev) ? nextRev : null,
+        cache: (args.response as any)?.cache || null,
+        homeRefreshToken: homeAnalyticsRefreshTokenRef.current
+      });
+      return true;
+    },
+    [hasListViewAnalyticsWidgets, logEvent]
+  );
+  useEffect(() => {
     const globalAny = globalThis as any;
     const bootstrap = globalAny.__WEB_FORM_BOOTSTRAP__ || null;
     const rev = Number((bootstrap as any)?.analyticsRev ?? analyticsRev ?? (analytics as any)?.revision ?? 0);
@@ -4772,7 +4800,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (homeFirstDataReadyAtMs <= 0) return;
     const snapshotItemCount = Array.isArray(analyticsSnapshot?.items) ? analyticsSnapshot.items.length : 0;
     const stale = analyticsSnapshotStaleRef.current;
-    const refreshRequested = homeAnalyticsRefreshToken > 0;
+    const refreshRequested =
+      homeAnalyticsRefreshToken > 0 &&
+      homeAnalyticsRefreshSatisfiedTokenRef.current < homeAnalyticsRefreshToken;
     if (!shouldPrefetchDeferredAnalytics({ hasListViewAnalyticsWidgets, snapshotItemCount, refreshRequested, stale })) return;
     const refreshTokenAtStart = analyticsRefreshToken;
     const key = `${formKey}::${homeRevRef.current ?? 'novrev'}::${refreshTokenAtStart}::home${homeAnalyticsRefreshToken}::${stale ? 'stale' : refreshRequested ? 'home' : 'missing'}`;
@@ -4832,9 +4862,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             }));
           }
           const snapshot = ((res as any)?.analytics || null) as AnalyticsSnapshot | null;
-          setAnalyticsSnapshot(snapshot);
-          const nextRev = Number((res as any)?.analyticsRev ?? snapshot?.revision ?? 0);
-          setAnalyticsSnapshotRev(Number.isFinite(nextRev) && nextRev >= 0 ? nextRev : 0);
+          applyHomeBootstrapAnalytics({ response: res, reason: 'analytics.listView.prefetch' });
           logEvent('analytics.listView.prefetch.ok', {
             formKey,
             refreshRequested,
@@ -4877,7 +4905,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (window as any).cancelIdleCallback(idleHandle);
       }
     };
-  }, [analyticsRefreshToken, analyticsSnapshot, definition.listView, formKey, hasListViewAnalyticsWidgets, homeAnalyticsRefreshToken, homeFirstDataReadyAtMs, logEvent, view]);
+  }, [
+    analyticsRefreshToken,
+    analyticsSnapshot,
+    applyHomeBootstrapAnalytics,
+    definition.listView,
+    formKey,
+    hasListViewAnalyticsWidgets,
+    homeAnalyticsRefreshToken,
+    homeFirstDataReadyAtMs,
+    logEvent,
+    view
+  ]);
 
   useEffect(() => {
     if (pendingDeletedRecordApplyTick <= 0) return;
@@ -5264,6 +5303,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 };
                 return { list: notModifiedList, batch: null, token: args.token, pageIndex: args.pageIndex, notModified: true };
               }
+              applyHomeBootstrapAnalytics({ response: bootstrapRes, reason: 'list.homeBootstrap' });
               const homeList = (() => {
                 const maybeList = (bootstrapRes as any)?.listResponse;
                 return maybeList && Array.isArray((maybeList as any).items)
@@ -5653,6 +5693,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // Cancel when leaving the list view so opening a record does not keep issuing
     // background list page requests the user can no longer benefit from.
   }, [
+    applyHomeBootstrapAnalytics,
     applyPendingFollowupStatusesToRecordCache,
     definition.listView,
     disableListBackgroundPrefetch,
