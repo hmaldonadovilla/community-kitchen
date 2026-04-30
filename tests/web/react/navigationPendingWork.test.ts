@@ -31,6 +31,14 @@ describe('navigationPendingWork', () => {
     ).toBe(true);
   });
 
+  test('waits before leaving while a follow-up batch is still running', () => {
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        followupBatchInFlight: true
+      })
+    ).toBe(true);
+  });
+
   test('does not wait when there is no pending persistence work', () => {
     expect(shouldWaitBeforeLeavingRecord({})).toBe(false);
   });

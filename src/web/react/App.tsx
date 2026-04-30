@@ -2987,6 +2987,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    * after the user switches to a different record/create flow.
    */
   const recordSessionRef = useRef<number>(0);
+  const [recordSessionKey, setRecordSessionKey] = useState<number>(0);
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
   const uploadQueueBlockingRef = useRef<Map<string, boolean>>(new Map());
   const uploadBusySeqRef = useRef<number | null>(null);
@@ -4393,7 +4394,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const bumpRecordSession = useCallback(
     (args: { reason: string; nextRecordId?: string | null }) => {
-      recordSessionRef.current += 1;
+      const nextSession = recordSessionRef.current + 1;
+      recordSessionRef.current = nextSession;
+      setRecordSessionKey(nextSession);
       // Cancel any pending autosave timers/queues from the previous record session.
       autoSaveQueuedRef.current = false;
       if (autoSaveTimerRef.current) {
@@ -10358,27 +10361,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     performAutoSaveRef.current = performAutoSave;
   }, [performAutoSave]);
 
+  const clearActiveRecordContext = useCallback(() => {
+    setSelectedRecordId('');
+    selectedRecordIdRef.current = '';
+    setSelectedRecordSnapshot(null);
+    selectedRecordSnapshotRef.current = null;
+    setLastSubmissionMeta(null);
+    lastSubmissionMetaRef.current = null;
+    setPrefetchedSummaryHtml(null);
+    setRecordLoadingId(null);
+    recordLoadingIdRef.current = null;
+    setRecordLoadError(null);
+    setGuidedUiState(null);
+    activeGuidedStepIdRef.current = '';
+    setRequestedGuidedStepId(null);
+    recordDataVersionRef.current = null;
+    optimisticClientDataVersionRef.current = null;
+    recordRowNumberRef.current = null;
+    recordStaleRef.current = null;
+    setRecordStale(null);
+  }, []);
+
+  const navigateToListAfterRecordAction = useCallback(
+    (reason: string) => {
+      bumpRecordSession({ reason, nextRecordId: null });
+      clearActiveRecordContext();
+      setView('list');
+    },
+    [bumpRecordSession, clearActiveRecordContext]
+  );
+
   const requestNavigateToList = useCallback(
     async (trigger: string) => {
       if (viewRef.current === 'list') return;
       if (navigateHomeInFlightRef.current) return;
-      const clearActiveRecordContext = () => {
-        setSelectedRecordId('');
-        selectedRecordIdRef.current = '';
-        setSelectedRecordSnapshot(null);
-        selectedRecordSnapshotRef.current = null;
-        setLastSubmissionMeta(null);
-        lastSubmissionMetaRef.current = null;
-        setPrefetchedSummaryHtml(null);
-        setRecordLoadingId(null);
-        recordLoadingIdRef.current = null;
-        setRecordLoadError(null);
-        recordDataVersionRef.current = null;
-        optimisticClientDataVersionRef.current = null;
-        recordRowNumberRef.current = null;
-        recordStaleRef.current = null;
-        setRecordStale(null);
-      };
       const startedAt = Date.now();
       const startMark = `ck.nav.back.start.${startedAt}`;
       backToHomePerfRef.current = { trigger, startedAt, startMark };
@@ -10391,6 +10407,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         autoSaveQueuedRef.current = true;
         logEvent('navigate.list.markDirty.renderedDraftChanged', { trigger });
       }
+      const activeRecordId = getCurrentOpenRecordId();
+      const followupBatchInFlight = activeRecordId
+        ? pendingFollowupBatchPromisesRef.current.has(activeRecordId)
+        : false;
       const needsWait = shouldWaitBeforeLeavingRecord({
         uploadsInFlight: uploadQueueRef.current.size,
         autoSaveInFlight: autoSaveInFlightRef.current,
@@ -10399,14 +10419,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
         reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        followupBatchInFlight,
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
         renderedDraftChanged
       });
       if (!needsWait) {
-        bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
-        clearActiveRecordContext();
-        setView('list');
+        navigateToListAfterRecordAction(`navigate.list.${trigger}`);
         setStatus(null);
         setStatusLevel(null);
         return;
@@ -10415,18 +10434,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       navigateHomeInFlightRef.current = true;
       const seq = navigateHomeBusy.lock({
         title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
-        message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
+        message: followupBatchInFlight
+          ? tSystem(
+              'submit.waitPreviousAction',
+              languageRef.current,
+              'Please wait while we finish the previous action...'
+            )
+          : tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
         kind: 'navigateHome',
-        diagnosticMeta: { trigger }
+        diagnosticMeta: { trigger, recordId: activeRecordId || null, followupBatchInFlight }
       });
       logEvent('navigate.list.wait.start', {
         trigger,
+        recordId: activeRecordId || null,
         uploadsInFlight: uploadQueueRef.current.size,
         autoSaveInFlight: autoSaveInFlightRef.current,
         autoSaveQueued: autoSaveQueuedRef.current,
         draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
         reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        followupBatchInFlight,
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
         renderedDraftChanged,
@@ -10448,6 +10475,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
           return;
         }
+        if (activeRecordId && pendingFollowupBatchPromisesRef.current.has(activeRecordId)) {
+          const followupWait = await waitForPendingFollowupBatch({
+            recordId: activeRecordId,
+            reason: `navigate.list.${trigger}`
+          });
+          if (!followupWait.ok) {
+            const message = (followupWait.message || submitPreviousActionRetryMessage()).toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('navigate.list.wait.failed', {
+              trigger,
+              recordId: activeRecordId,
+              phase: 'followup',
+              message
+            });
+            return;
+          }
+        }
         const saveWait = await flushPendingDraftSaveForAction(`navigate.list.${trigger}`);
         if (!saveWait.ok) {
           const message = (saveWait.message || 'Could not save the latest changes.').toString();
@@ -10461,9 +10506,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
         logEvent('navigate.list.wait.done', { trigger, durationMs: Date.now() - startedAt });
-        bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
-        clearActiveRecordContext();
-        setView('list');
+        navigateToListAfterRecordAction(`navigate.list.${trigger}`);
         setStatus(null);
         setStatusLevel(null);
       } finally {
@@ -10472,12 +10515,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [
-      bumpRecordSession,
       flushPendingDraftSaveForAction,
+      getCurrentOpenRecordId,
       logEvent,
       navigateHomeBusy,
+      navigateToListAfterRecordAction,
       perfMark,
-      waitForBackgroundSaves
+      submitPreviousActionRetryMessage,
+      waitForBackgroundSaves,
+      waitForPendingFollowupBatch
     ]
   );
 
@@ -13146,6 +13192,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         ].filter(Boolean);
         const navigateAfterSuccess = (target: 'current' | 'form' | 'summary' | 'list' | undefined) => {
           if (!target || target === 'current') return;
+          if (target === 'list') {
+            navigateToListAfterRecordAction(`${reason}.navigateAfterSuccess`);
+            return;
+          }
           setView(target);
         };
         const maybeOpenGeneratedRecordsDialog = async (closeResult: any): Promise<boolean> => {
@@ -13396,6 +13446,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedUiState,
       guidedMilestoneBusy,
       logEvent,
+      navigateToListAfterRecordAction,
       openConfiguredConfirmDialog,
       persistCurrentSnapshot,
       refreshDetachedRecordSnapshotCache,
@@ -14415,7 +14466,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       dedupBaselineSignatureRef.current = (submitDedupSignature || '').toString();
       dedupKeyFingerprintBaselineRef.current = submitDedupFingerprint;
 
-      const runFollowupBatchForSubmit = async (args: { actions: string[]; reason: string; refresh: boolean }) => {
+      const runFollowupBatchForSubmit = async (args: {
+        actions: string[];
+        reason: string;
+        refresh: boolean;
+        sessionId?: number | null;
+      }) => {
         const followupRpcStartMark = `ck.submit.followup.rpc.start.${Date.now()}`;
         const followupRpcEndMark = `ck.submit.followup.rpc.end.${Date.now()}`;
         perfMark(followupRpcStartMark);
@@ -14434,7 +14490,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId,
           actions: args.actions,
           batch,
-          reason: args.reason
+          reason: args.reason,
+          sessionId: args.sessionId ?? null
         });
         if (args.refresh) {
           await refreshAfterFollowupBatch({ recordId, reason: args.reason });
@@ -14613,38 +14670,124 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             if (raw === 'form' || raw === 'summary' || raw === 'list') return raw as 'form' | 'summary' | 'list';
             return summaryViewEnabled ? 'summary' : 'form';
           })();
-          setView(navigateTarget);
+          if (navigateTarget === 'list') {
+            navigateToListAfterRecordAction('submit.afterSubmit.navigateList');
+          } else {
+            setView(navigateTarget);
+          }
 
           if (configuredBackgroundActions.length) {
+            const followupSessionId = recordSessionRef.current;
             logEvent('submit.afterSubmit.background.begin', {
               recordId,
               actions: configuredBackgroundActions,
-              navigateTarget
+              navigateTarget,
+              sessionId: followupSessionId
             });
-            void (async () => {
+            let backgroundPromise: Promise<{
+              success: boolean;
+              message?: string;
+              recordId: string;
+              sessionId: number;
+              reason: string;
+            }> | null = null;
+            backgroundPromise = (async () => {
               try {
                 const outcome = await runFollowupBatchForSubmit({
                   actions: configuredBackgroundActions,
                   reason: 'submit.afterSubmit.background',
-                  refresh: false
+                  refresh: false,
+                  sessionId: followupSessionId
                 });
                 if (outcome.followupErrors.length) {
-                  setStatus(`Submitted, but follow-up had issues: ${outcome.followupErrors.join(' · ')}`);
-                  setStatusLevel('error');
+                  const message = `Submitted, but follow-up had issues: ${outcome.followupErrors.join(' · ')}`;
+                  const target = resolveFollowupResultApplicationTarget({
+                    settledRecordId: recordId,
+                    selectedRecordId: selectedRecordIdRef.current,
+                    selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+                    currentSessionId: recordSessionRef.current,
+                    followupSessionId,
+                    currentView: viewRef.current
+                  });
+                  if (target.applyToActiveRecord || viewRef.current === 'list') {
+                    setStatus(message);
+                    setStatusLevel('error');
+                  }
+                  logEvent('submit.afterSubmit.background.done', {
+                    recordId,
+                    actionsCount: configuredBackgroundActions.length,
+                    errorCount: outcome.followupErrors.length,
+                    sessionChanged: target.sessionChanged
+                  });
+                  return {
+                    success: false,
+                    message,
+                    recordId,
+                    sessionId: followupSessionId,
+                    reason: 'submit.afterSubmit.background'
+                  };
                 }
                 logEvent('submit.afterSubmit.background.done', {
                   recordId,
                   actionsCount: configuredBackgroundActions.length,
-                  errorCount: outcome.followupErrors.length
+                  errorCount: 0
                 });
+                return {
+                  success: true,
+                  recordId,
+                  sessionId: followupSessionId,
+                  reason: 'submit.afterSubmit.background'
+                };
               } catch (err: any) {
                 const uiMessage = resolveUiErrorMessage(err, 'Failed');
                 const logMessage = resolveLogMessage(err, 'Failed');
-                setStatus(`Submitted, but follow-up had issues: ${uiMessage || 'Failed'}`);
-                setStatusLevel('error');
-                logEvent('submit.afterSubmit.background.exception', { recordId, message: logMessage });
+                const message = `Submitted, but follow-up had issues: ${uiMessage || 'Failed'}`;
+                const target = resolveFollowupResultApplicationTarget({
+                  settledRecordId: recordId,
+                  selectedRecordId: selectedRecordIdRef.current,
+                  selectedSnapshotId: selectedRecordSnapshotRef.current?.id || null,
+                  currentSessionId: recordSessionRef.current,
+                  followupSessionId,
+                  currentView: viewRef.current
+                });
+                if (target.applyToActiveRecord || viewRef.current === 'list') {
+                  setStatus(message);
+                  setStatusLevel('error');
+                }
+                logEvent('submit.afterSubmit.background.exception', {
+                  recordId,
+                  message: logMessage,
+                  sessionChanged: target.sessionChanged
+                });
+                return {
+                  success: false,
+                  message,
+                  recordId,
+                  sessionId: followupSessionId,
+                  reason: 'submit.afterSubmit.background'
+                };
+              } finally {
+                const pending = pendingFollowupBatchPromisesRef.current.get(recordId);
+                if (backgroundPromise && pending === backgroundPromise) {
+                  pendingFollowupBatchPromisesRef.current.delete(recordId);
+                  pendingFollowupStatusByRecordRef.current.delete(recordId);
+                  if (viewRef.current === 'list') {
+                    analyticsSnapshotStaleRef.current = true;
+                    requestHomeAnalyticsRefresh({
+                      reason: 'submit.afterSubmit.background.settled',
+                      recordId
+                    });
+                  }
+                }
               }
             })();
+            pendingFollowupBatchPromisesRef.current.set(recordId, backgroundPromise);
+            logEvent('followup.pending.tracked', {
+              stepId: null,
+              recordId,
+              reason: 'submit.afterSubmit.background'
+            });
+            void backgroundPromise;
 
             if (!generatedDialogShown && configuredAfterSubmit.feedbackDialog) {
               void openConfiguredConfirmDialog({
@@ -14877,6 +15020,63 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // If the user is resuming the SAME record they were just editing, keep the in-memory working copy.
     // (Don't overwrite with a cached snapshot that may not include the latest local edits yet.)
     const currentId = (selectedRecordIdRef.current || '').toString().trim();
+    const pendingFollowupRecordIds = Array.from(pendingFollowupBatchPromisesRef.current.keys()).filter(Boolean);
+    const pendingFollowupRecordId =
+      (currentId && pendingFollowupBatchPromisesRef.current.has(currentId) ? currentId : '') ||
+      pendingFollowupRecordIds[0] ||
+      '';
+    if (pendingFollowupRecordId) {
+      const seq = navigateHomeBusy.lock({
+        title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+        message: tSystem(
+          'submit.waitPreviousAction',
+          languageRef.current,
+          'Please wait while we finish the previous action...'
+        ),
+        kind: 'recordSelect',
+        diagnosticMeta: {
+          recordId: pendingFollowupRecordId,
+          nextRecordId: row.id,
+          requested
+        }
+      });
+      logEvent('list.recordSelect.waitPendingFollowup.start', {
+        recordId: pendingFollowupRecordId,
+        nextRecordId: row.id,
+        pendingCount: pendingFollowupRecordIds.length,
+        requested
+      });
+      void (async () => {
+        try {
+          const followupWait = await waitForPendingFollowupBatch({
+            recordId: pendingFollowupRecordId,
+            reason: 'list.recordSelect'
+          });
+          if (!followupWait.ok) {
+            const message = (followupWait.message || submitPreviousActionRetryMessage()).toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('list.recordSelect.waitPendingFollowup.failed', {
+              recordId: pendingFollowupRecordId,
+              nextRecordId: row.id,
+              message
+            });
+            return;
+          }
+          logEvent('list.recordSelect.waitPendingFollowup.done', {
+            recordId: pendingFollowupRecordId,
+            nextRecordId: row.id
+          });
+          handleRecordSelectRef.current?.(row, fullRecord, opts);
+        } finally {
+          navigateHomeBusy.unlock(seq, {
+            recordId: pendingFollowupRecordId,
+            nextRecordId: row.id
+          });
+        }
+      })();
+      return;
+    }
     const hasLocalEdits = Boolean(
       autoSaveDirtyRef.current || autoSaveInFlightRef.current || autoSaveQueuedRef.current || uploadQueueRef.current.size > 0
     );
@@ -14928,6 +15128,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     }
 
     bumpRecordSession({ reason: 'list.recordSelect', nextRecordId: row.id });
+    clearActiveRecordContext();
     const sourceRecord = fullRecord || listCache.records[row.id] || null;
     setStatus(null);
     setStatusLevel(null);
@@ -14938,8 +15139,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // Clear any previous snapshot immediately; we will re-apply a fresh snapshot below.
     setSelectedRecordSnapshot(null);
     selectedRecordSnapshotRef.current = null;
-    setLastSubmissionMeta(null);
-    lastSubmissionMetaRef.current = null;
     const resolveListTriggeredButton = (buttonRef: string) => {
       const parsed = parseButtonRef(buttonRef || '');
       const baseId = parsed.id;
@@ -16398,6 +16597,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       {view === 'form' && !showFormRecordLoadingPlaceholder ? (
         <FormView
+          key={`record-session:${recordSessionKey}`}
           formKey={formKey}
           definition={definition}
           dedupKeyFieldIdMap={dedupTriggerFieldIdMap}
