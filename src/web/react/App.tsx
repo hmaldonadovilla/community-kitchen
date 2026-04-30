@@ -187,6 +187,7 @@ import {
   shouldShowSubmitPreparationOverlay,
   type SubmitWaitQueuePolicy
 } from './app/submitPreparation';
+import { shouldWaitBeforeLeavingRecord } from './app/navigationPendingWork';
 import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
 import { shouldClearStatusAfterSuccessfulSave } from './app/saveFailureStatus';
 import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
@@ -9888,6 +9889,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         queued: autoSaveQueuedRef.current,
         autosaveInFlight: autoSaveInFlightRef.current,
         draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
         guidedBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current)
       });
 
@@ -9898,6 +9900,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           !autoSaveQueuedRef.current &&
           !autoSaveInFlightRef.current &&
           !draftSaveRequestInFlightRef.current &&
+          !reservationSyncPromiseRef.current &&
           !guidedStepBackgroundSyncPromiseRef.current
         ) {
           logEvent('action.flush.pendingAutosave.wait.done', {
@@ -9909,6 +9912,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
         if (draftSaveRequestInFlightRef.current) {
           await waitForDraftSaveRequest(`action.flush.pendingAutosave:${reason}`, 5000);
+          continue;
+        }
+
+        if (reservationSyncPromiseRef.current) {
+          const pending = reservationSyncPromiseRef.current;
+          await Promise.race([pending.catch(() => undefined), sleep(300)]);
           continue;
         }
 
@@ -9955,6 +9964,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         !autoSaveQueuedRef.current &&
         !autoSaveInFlightRef.current &&
         !draftSaveRequestInFlightRef.current &&
+        !reservationSyncPromiseRef.current &&
         !guidedStepBackgroundSyncPromiseRef.current;
       logEvent('action.flush.pendingAutosave.wait.timeout', {
         reason,
@@ -9963,6 +9973,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         queued: autoSaveQueuedRef.current,
         autosaveInFlight: autoSaveInFlightRef.current,
         draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
         guidedBackgroundSyncInFlight: Boolean(guidedStepBackgroundSyncPromiseRef.current),
         settled
       });
@@ -10025,6 +10036,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           reason,
           waitMs: Date.now() - startedAt,
           stillInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current)
+        });
+      }
+
+      if (reservationSyncPromiseRef.current) {
+        logEvent('action.flush.waitReservationSync.start', { reason });
+        const startedAt = Date.now();
+        while (reservationSyncPromiseRef.current) {
+          const pending = reservationSyncPromiseRef.current;
+          await pending.catch(() => undefined);
+          if (Date.now() - startedAt > 30_000) {
+            logEvent('action.flush.waitReservationSync.timeout', {
+              reason,
+              waitMs: Date.now() - startedAt
+            });
+            break;
+          }
+        }
+        logEvent('action.flush.waitReservationSync.done', {
+          reason,
+          waitMs: Date.now() - startedAt,
+          stillInFlight: Boolean(reservationSyncPromiseRef.current)
         });
       }
 
@@ -10310,8 +10342,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const startMark = `ck.nav.back.start.${startedAt}`;
       backToHomePerfRef.current = { trigger, startedAt, startMark };
       perfMark(startMark);
-      const needsWait =
-        uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current || autoSaveDirtyRef.current;
+      const renderedDraftChanged =
+        !!latestRenderedAutoSaveStateFingerprintRef.current &&
+        latestRenderedAutoSaveStateFingerprintRef.current !== lastAutoSaveStateFingerprintRef.current;
+      if (renderedDraftChanged && viewRef.current === 'form') {
+        autoSaveDirtyRef.current = true;
+        autoSaveQueuedRef.current = true;
+        logEvent('navigate.list.markDirty.renderedDraftChanged', { trigger });
+      }
+      const needsWait = shouldWaitBeforeLeavingRecord({
+        uploadsInFlight: uploadQueueRef.current.size,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        autoSaveDirty: autoSaveDirtyRef.current,
+        autoSaveQueued: autoSaveQueuedRef.current,
+        draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
+        recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+        reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
+        guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
+        renderedDraftChanged
+      });
       if (!needsWait) {
         bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
         clearActiveRecordContext();
@@ -10332,14 +10382,43 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         trigger,
         uploadsInFlight: uploadQueueRef.current.size,
         autoSaveInFlight: autoSaveInFlightRef.current,
+        autoSaveQueued: autoSaveQueuedRef.current,
+        draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
+        recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
+        reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
+        guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
+        renderedDraftChanged,
         dirty: autoSaveDirtyRef.current
       });
       try {
-        const sleep = (ms: number) => new Promise<void>(r => globalThis.setTimeout(r, ms));
-        while (uploadQueueRef.current.size > 0 || autoSaveInFlightRef.current) {
-          await sleep(80);
+        const uploadWait = await waitForBackgroundSaves(`navigate.list.${trigger}`, 'uploadsOnly');
+        if (!uploadWait.ok) {
+          const message = (
+            uploadWait.message ||
+            tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...')
+          ).toString();
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent('navigate.list.wait.failed', {
+            trigger,
+            phase: 'uploads',
+            message
+          });
+          return;
         }
-        await flushAutoSaveBeforeNavigate(trigger);
+        const saveWait = await flushPendingDraftSaveForAction(`navigate.list.${trigger}`);
+        if (!saveWait.ok) {
+          const message = (saveWait.message || 'Could not save the latest changes.').toString();
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent('navigate.list.wait.failed', {
+            trigger,
+            phase: 'save',
+            message
+          });
+          return;
+        }
         logEvent('navigate.list.wait.done', { trigger, durationMs: Date.now() - startedAt });
         bumpRecordSession({ reason: `navigate.list.${trigger}`, nextRecordId: null });
         clearActiveRecordContext();
@@ -10351,7 +10430,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         navigateHomeInFlightRef.current = false;
       }
     },
-    [bumpRecordSession, flushAutoSaveBeforeNavigate, logEvent, navigateHomeBusy, perfMark]
+    [
+      bumpRecordSession,
+      flushPendingDraftSaveForAction,
+      logEvent,
+      navigateHomeBusy,
+      perfMark,
+      waitForBackgroundSaves
+    ]
   );
 
   const handleGoHome = useCallback(() => {
@@ -12267,12 +12353,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           guidedStepImmediateSyncPendingFingerprintRef.current = '';
           guidedStepImmediateSyncActiveFingerprintRef.current = next.fingerprint;
 
-          const recordId =
+          let recordId =
             resolveExistingRecordId({
               selectedRecordId: selectedRecordIdRef.current,
               selectedRecordSnapshot: selectedRecordSnapshotRef.current,
               lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
             }) || '';
+          if (!recordId && next.persistSnapshot) {
+            logEvent('guidedStep.liveSync.ensureRecord.start', {
+              stepId: next.stepId,
+              reason: next.reason
+            });
+            const ensured = await ensureDraftRecordId({
+              reason: `guidedStep.liveSync:${next.stepId || 'step'}`,
+              fieldPath: next.stepId || undefined
+            });
+            if (recordSessionRef.current !== next.sessionId) continue;
+            recordId = `${ensured?.recordId || ''}`.trim();
+            if (!ensured?.success || !recordId) {
+              const message = (ensured?.message || 'Could not prepare the record.').toString();
+              setStatus(message);
+              setStatusLevel('error');
+              logEvent('guidedStep.liveSync.ensureRecord.failed', {
+                stepId: next.stepId,
+                reason: next.reason,
+                message
+              });
+              continue;
+            }
+            logEvent('guidedStep.liveSync.ensureRecord.done', {
+              stepId: next.stepId,
+              reason: next.reason,
+              recordId
+            });
+          }
           if (!recordId) {
             logEvent('guidedStep.liveSync.skipped.noRecordId', {
               stepId: next.stepId,
@@ -12396,6 +12510,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [
       autoSaveDebounceMs,
       buildPersistedDraftStateFingerprint,
+      ensureDraftRecordId,
       logEvent,
       persistCurrentSnapshot,
       queueGuidedStepReservationPlan,

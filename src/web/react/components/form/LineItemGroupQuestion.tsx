@@ -1127,13 +1127,11 @@ export const LineItemGroupQuestion: React.FC<{
       parentRowId: string;
       sourceKey: string;
       patch: Record<string, FieldValue>;
+      snapshotLineItems?: LineItemState | null;
     }) => {
       if (!queueGuidedStepReservationDraftSync) return;
       if (!currentGuidedStepId) return;
-      pendingStepReservationDraftSyncRef.current = {
-        stepId: currentGuidedStepId,
-        reason: `lineItem:${q.id}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`
-      };
+      const reason = `lineItem:${q.id}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`;
       onDiagnostic?.('guidedStep.reservationSync.queued', {
         groupId: q.id,
         stepId: currentGuidedStepId,
@@ -1141,6 +1139,20 @@ export const LineItemGroupQuestion: React.FC<{
         sourceKey: args.sourceKey,
         patchFields: Object.keys(args.patch).sort()
       });
+      const snapshotLineItems = args.snapshotLineItems || latestStepDataSourceSyncedLineItemsRef.current || null;
+      if (snapshotLineItems) {
+        latestStepDataSourceSyncedLineItemsRef.current = null;
+        queueGuidedStepReservationDraftSync({
+          stepId: currentGuidedStepId,
+          reason,
+          snapshotLineItems
+        });
+        return;
+      }
+      pendingStepReservationDraftSyncRef.current = {
+        stepId: currentGuidedStepId,
+        reason
+      };
       setPendingStepReservationDraftSyncTick(prev => prev + 1);
     },
     [currentGuidedStepId, onDiagnostic, q.id, queueGuidedStepReservationDraftSync]
@@ -2157,13 +2169,13 @@ export const LineItemGroupQuestion: React.FC<{
       parentRow: LineItemRowState;
       sourceRow: Record<string, any>;
       patch: Record<string, FieldValue>;
-    }) => {
+    }): LineItemState | null => {
       const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
-      if (!output) return;
+      if (!output) return null;
       const keyFieldId = (args.config?.rowKeyFieldId || '').toString().trim();
-      if (!keyFieldId) return;
+      if (!keyFieldId) return null;
       const sourceKey = `${(args.sourceRow as any)?.[keyFieldId] ?? ''}`.trim();
-      if (!sourceKey) return;
+      if (!sourceKey) return null;
       const selectedFieldId = (args.config?.selectedFieldId || '').toString().trim();
       const quantityFieldId = (args.config?.quantityFieldId || '').toString().trim();
       const modeFieldId = (args.config?.modeFieldId || '').toString().trim();
@@ -2181,6 +2193,7 @@ export const LineItemGroupQuestion: React.FC<{
       const outputKeyFieldId = (args.config?.outputKeyFieldId || keyFieldId).toString().trim();
       const defaultModeValue = (args.config?.defaultModeValue ?? '').toString().trim();
       const draftKey = buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey);
+      let syncedLineItems: LineItemState | null = null;
 
       setLineItems(prev => {
         const outputRows = prev[output.key] || [];
@@ -2363,8 +2376,10 @@ export const LineItemGroupQuestion: React.FC<{
           topValues: nextValues
         });
         latestStepDataSourceSyncedLineItemsRef.current = recomputed;
+        syncedLineItems = recomputed;
         return recomputed;
       });
+      return syncedLineItems;
     },
     [
       buildVirtualDataSourceRowValues,
@@ -2466,7 +2481,7 @@ export const LineItemGroupQuestion: React.FC<{
         );
       }
 
-      syncStepDataSourceOutputRow(args);
+      const syncedLineItems = syncStepDataSourceOutputRow(args);
 
       if (options?.skipReservation) return;
       if (!canManageReservation) return;
@@ -2526,7 +2541,8 @@ export const LineItemGroupQuestion: React.FC<{
             config: args.config,
             parentRowId: args.parentRow.id,
             sourceKey,
-            patch: args.patch
+            patch: args.patch,
+            snapshotLineItems: syncedLineItems
           });
         }
         return;
@@ -3111,6 +3127,7 @@ export const LineItemGroupQuestion: React.FC<{
 
     if (!staleEntries.length) return;
 
+    let syncedLineItems: LineItemState | null = null;
     staleEntries.forEach(entry => {
       const selectedFieldId = `${entry.config?.selectedFieldId || ''}`.trim();
       const quantityFieldId = `${entry.config?.quantityFieldId || ''}`.trim();
@@ -3129,17 +3146,28 @@ export const LineItemGroupQuestion: React.FC<{
         sourceKey: entry.sourceKey
       });
 
-      syncStepDataSourceOutputRow({
+      const nextSyncedLineItems = syncStepDataSourceOutputRow({
         config: entry.config,
         parentRow: entry.parentRow,
         sourceRow: { [entry.keyFieldId]: entry.sourceKey },
         patch
       });
+      if (nextSyncedLineItems) syncedLineItems = nextSyncedLineItems;
     });
 
+    const reason = `sourceRowExcluded:${staleEntries.map(entry => entry.sourceKey).join(',')}`;
+    if (syncedLineItems && queueGuidedStepReservationDraftSync) {
+      latestStepDataSourceSyncedLineItemsRef.current = null;
+      queueGuidedStepReservationDraftSync({
+        stepId: currentGuidedStepId,
+        reason,
+        snapshotLineItems: syncedLineItems
+      });
+      return;
+    }
     pendingStepReservationDraftSyncRef.current = {
       stepId: currentGuidedStepId,
-      reason: `sourceRowExcluded:${staleEntries.map(entry => entry.sourceKey).join(',')}`
+      reason
     };
     setPendingStepReservationDraftSyncTick(prev => prev + 1);
   }, [
@@ -3150,6 +3178,7 @@ export const LineItemGroupQuestion: React.FC<{
     lineItems,
     onDiagnostic,
     q.id,
+    queueGuidedStepReservationDraftSync,
     resolveDataSourceOutputGroup,
     resolveStepDataSourceRowsForParent,
     syncStepDataSourceOutputRow
