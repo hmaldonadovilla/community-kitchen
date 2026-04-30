@@ -98,6 +98,7 @@ import {
   buildReservationFailureMessage,
   buildReservationFieldPatch,
   isStepReservationCommitEnabled,
+  shouldBlockDataSourceFreshnessForInvalidStepReservation,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from './reservationSyncPolicy';
@@ -563,6 +564,15 @@ export interface LineItemGroupQuestionCtx {
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
   }) => void;
+  onGuidedStepReservationDraftStateChange?: (args: {
+    stepId: string;
+    groupId: string;
+    parentRowId: string;
+    sourceKey: string;
+    pendingInvalid: boolean;
+    reason: string;
+    patchFields?: string[];
+  }) => void;
   waitForGuidedStepReservationDraftSync?: (args: {
     recordId: string;
     stepId?: string;
@@ -711,6 +721,7 @@ export const LineItemGroupQuestion: React.FC<{
     setAutoSaveHold,
     ensureRecordId,
     queueGuidedStepReservationDraftSync,
+    onGuidedStepReservationDraftStateChange,
     waitForGuidedStepReservationDraftSync,
     handleLineFieldChange,
     collapsedGroups,
@@ -1015,6 +1026,7 @@ export const LineItemGroupQuestion: React.FC<{
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
   const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const reservationSyncCounterRef = React.useRef(0);
+  const latestStepDataSourceSyncedLineItemsRef = React.useRef<LineItemState | null>(null);
   const deferredReservationAutoSaveHoldReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceFirstPresentationLoggedRef = React.useRef<string>('');
   const pendingStepReservationDraftSyncRef = React.useRef<{
@@ -1349,10 +1361,12 @@ export const LineItemGroupQuestion: React.FC<{
     const pending = pendingStepReservationDraftSyncRef.current;
     if (!pending || !queueGuidedStepReservationDraftSync) return;
     pendingStepReservationDraftSyncRef.current = null;
+    const snapshotLineItems = latestStepDataSourceSyncedLineItemsRef.current || lineItems;
+    latestStepDataSourceSyncedLineItemsRef.current = null;
     queueGuidedStepReservationDraftSync({
       stepId: pending.stepId,
       reason: pending.reason,
-      snapshotLineItems: lineItems
+      snapshotLineItems
     });
   }, [
     lineItems,
@@ -2348,6 +2362,7 @@ export const LineItemGroupQuestion: React.FC<{
           mode: 'change',
           topValues: nextValues
         });
+        latestStepDataSourceSyncedLineItemsRef.current = recomputed;
         return recomputed;
       });
     },
@@ -2485,16 +2500,28 @@ export const LineItemGroupQuestion: React.FC<{
           ? validateVirtualFieldRules(modeField, resolvedNextVirtualValues, args.parentRow.values as Record<string, FieldValue>).length > 0
           : false);
       if (isStepReservationCommitEnabled(reservationConfig)) {
-        if (
-          shouldImmediatelySyncStepReservationChange({
-            patch: args.patch,
-            selectedFieldId,
-            quantityFieldId,
-            selectedValue: selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] : true,
-            quantityValue: resolvedNextVirtualValues[quantityFieldId],
-            hasValidationErrors
-          })
-        ) {
+        const syncArgs = {
+          patch: args.patch,
+          selectedFieldId,
+          quantityFieldId,
+          selectedValue: selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] : true,
+          quantityValue: resolvedNextVirtualValues[quantityFieldId],
+          hasValidationErrors
+        };
+        const shouldSyncImmediately = shouldImmediatelySyncStepReservationChange(syncArgs);
+        const pendingInvalid = shouldBlockDataSourceFreshnessForInvalidStepReservation(syncArgs);
+        if (pendingInvalid || shouldSyncImmediately) {
+          onGuidedStepReservationDraftStateChange?.({
+            stepId: currentGuidedStepId,
+            groupId: q.id,
+            parentRowId: args.parentRow.id,
+            sourceKey,
+            pendingInvalid,
+            reason: pendingInvalid ? 'invalidReservationDraft' : 'reservationSyncQueued',
+            patchFields: Object.keys(args.patch || {}).sort()
+          });
+        }
+        if (shouldSyncImmediately) {
           queueImmediateStepReservationDraftSync({
             config: args.config,
             parentRowId: args.parentRow.id,
@@ -2800,10 +2827,12 @@ export const LineItemGroupQuestion: React.FC<{
     [
       buildStepDataSourceDraftKey,
       buildVirtualDataSourceRowValues,
+      currentGuidedStepId,
       ensureRecordId,
       formKey,
       language,
       lineItems,
+      onGuidedStepReservationDraftStateChange,
       onDiagnostic,
       openConfirmDialog,
       q.id,

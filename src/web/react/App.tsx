@@ -2892,6 +2892,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
   >(null);
   const reservationSyncEpochRef = useRef<number>(0);
+  const invalidGuidedReservationDraftsRef = useRef<
+    Record<
+      string,
+      {
+        recordId: string;
+        sessionId: number;
+        stepId: string;
+        groupId: string;
+        parentRowId: string;
+        sourceKey: string;
+        reason: string;
+        updatedAt: number;
+      }
+    >
+  >({});
   const pendingFollowupBatchPromisesRef = useRef<
     Map<
       string,
@@ -3336,6 +3351,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     []
   );
 
+  const buildInvalidGuidedReservationDraftKey = useCallback(
+    (args: {
+      recordId?: string | null;
+      sessionId?: number | null;
+      stepId?: string | null;
+      groupId?: string | null;
+      parentRowId?: string | null;
+      sourceKey?: string | null;
+    }): string =>
+      [
+        Number.isFinite(Number(args.sessionId)) ? Number(args.sessionId) : recordSessionRef.current,
+        (args.recordId || getCurrentOpenRecordId() || '').toString().trim(),
+        (args.stepId || '').toString().trim(),
+        (args.groupId || '').toString().trim(),
+        (args.parentRowId || '').toString().trim(),
+        (args.sourceKey || '').toString().trim()
+      ].join('::'),
+    [getCurrentOpenRecordId]
+  );
+
+  const resolveInvalidGuidedReservationDraftsForStep = useCallback(
+    (stepId?: string | null) => {
+      const normalizedStepId = (stepId || '').toString().trim();
+      if (!normalizedStepId) return [];
+      const recordId = getCurrentOpenRecordId();
+      const sessionId = recordSessionRef.current;
+      return Object.values(invalidGuidedReservationDraftsRef.current).filter(
+        entry =>
+          entry.stepId === normalizedStepId &&
+          entry.recordId === recordId &&
+          entry.sessionId === sessionId
+      );
+    },
+    [getCurrentOpenRecordId]
+  );
+
   const clearRecordFreshnessTimer = useCallback(() => {
     if (recordFreshnessTimerRef.current) {
       globalThis.clearTimeout(recordFreshnessTimerRef.current);
@@ -3750,6 +3801,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         scheduleDataSourceFreshnessCheck(`${reason}.waiting`);
         return;
       }
+      const invalidReservationDrafts = resolveInvalidGuidedReservationDraftsForStep(stepId);
+      if (invalidReservationDrafts.length) {
+        const skippedAt = Date.now();
+        dueWatches.forEach(watch => {
+          lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current[watch.key] = skippedAt;
+        });
+        logEvent('datasource.freshness.check.skipped', {
+          reason,
+          recordId,
+          stepId,
+          skipReason: 'invalidGuidedReservationDraft',
+          blockers: invalidReservationDrafts.map(entry => ({
+            groupId: entry.groupId,
+            parentRowId: entry.parentRowId,
+            sourceKey: entry.sourceKey,
+            reason: entry.reason
+          }))
+        });
+        scheduleDataSourceFreshnessCheck(`${reason}.invalidGuidedReservationDraft`);
+        return;
+      }
       if (dataSourceFreshnessCheckPromiseRef.current) {
         logEvent('datasource.freshness.check.skipped', {
           reason,
@@ -3956,11 +4028,69 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       getCurrentOpenRecordId,
       logEvent,
       resolveRunnableDataSourceFreshnessWatches,
+      resolveInvalidGuidedReservationDraftsForStep,
       resolveWatchedDataSourceConfig,
       scheduleDataSourceFreshnessCheck
     ]
   );
   performDataSourceFreshnessCheckRef.current = performDataSourceFreshnessCheck;
+
+  const handleGuidedStepReservationDraftStateChange = useCallback(
+    (args: {
+      stepId: string;
+      groupId: string;
+      parentRowId: string;
+      sourceKey: string;
+      pendingInvalid: boolean;
+      reason: string;
+      patchFields?: string[];
+    }) => {
+      const stepId = (args.stepId || '').toString().trim();
+      const groupId = (args.groupId || '').toString().trim();
+      const parentRowId = (args.parentRowId || '').toString().trim();
+      const sourceKey = (args.sourceKey || '').toString().trim();
+      const recordId = getCurrentOpenRecordId();
+      if (!stepId || !groupId || !parentRowId || !sourceKey || !recordId) return;
+      const key = buildInvalidGuidedReservationDraftKey({
+        recordId,
+        sessionId: recordSessionRef.current,
+        stepId,
+        groupId,
+        parentRowId,
+        sourceKey
+      });
+      if (args.pendingInvalid) {
+        invalidGuidedReservationDraftsRef.current = {
+          ...invalidGuidedReservationDraftsRef.current,
+          [key]: {
+            recordId,
+            sessionId: recordSessionRef.current,
+            stepId,
+            groupId,
+            parentRowId,
+            sourceKey,
+            reason: (args.reason || 'invalidReservationDraft').toString(),
+            updatedAt: Date.now()
+          }
+        };
+      } else if (invalidGuidedReservationDraftsRef.current[key]) {
+        const next = { ...invalidGuidedReservationDraftsRef.current };
+        delete next[key];
+        invalidGuidedReservationDraftsRef.current = next;
+      }
+      logEvent('guidedStep.reservationDraft.state', {
+        stepId,
+        recordId,
+        groupId,
+        parentRowId,
+        sourceKey,
+        pendingInvalid: args.pendingInvalid,
+        reason: args.reason || null,
+        patchFields: Array.isArray(args.patchFields) ? args.patchFields : []
+      });
+    },
+    [buildInvalidGuidedReservationDraftKey, getCurrentOpenRecordId, logEvent]
+  );
 
   const applyUploadedFieldOverrides = useCallback(
     (args: {
@@ -16170,6 +16300,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           summarySubmitIntentRef={summarySubmitIntentRef}
           ensureRecordId={ensureDraftRecordId}
           queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
+          onGuidedStepReservationDraftStateChange={handleGuidedStepReservationDraftStateChange}
           waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
           onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
         />

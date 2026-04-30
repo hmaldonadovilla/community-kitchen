@@ -710,6 +710,15 @@ interface FormViewProps {
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
   }) => void;
+  onGuidedStepReservationDraftStateChange?: (args: {
+    stepId: string;
+    groupId: string;
+    parentRowId: string;
+    sourceKey: string;
+    pendingInvalid: boolean;
+    reason: string;
+    patchFields?: string[];
+  }) => void;
   /**
    * Optional guided-step hook used by datasource-backed steps that must wait for an in-flight
    * guided reservation sync before bootstrapping shared inventory rows.
@@ -773,6 +782,7 @@ const FormView: React.FC<FormViewProps> = ({
   setAutoSaveHold,
   ensureRecordId,
   queueGuidedStepReservationDraftSync,
+  onGuidedStepReservationDraftStateChange,
   waitForGuidedStepReservationDraftSync
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -1240,7 +1250,7 @@ const FormView: React.FC<FormViewProps> = ({
       previousLineItems: previousSnapshot.lineItems,
       nextLineItems: nextSnapshot,
       mode: 'all'
-    }).filter(impact => impact.stepId !== activeGuidedStepId);
+    });
 
     guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
     if (!impacts.length) return;
@@ -10661,6 +10671,7 @@ const FormView: React.FC<FormViewProps> = ({
               setAutoSaveHold: setScopedAutoSaveHold,
               ensureRecordId,
               queueGuidedStepReservationDraftSync,
+              onGuidedStepReservationDraftStateChange,
               waitForGuidedStepReservationDraftSync
             }}
           />
@@ -11954,6 +11965,7 @@ const FormView: React.FC<FormViewProps> = ({
                 setAutoSaveHold: setScopedAutoSaveHold,
                 ensureRecordId,
                 queueGuidedStepReservationDraftSync,
+                onGuidedStepReservationDraftStateChange,
                 waitForGuidedStepReservationDraftSync,
                 closeOverlay: closeSubgroupOverlay
               }}
@@ -12791,6 +12803,7 @@ const FormView: React.FC<FormViewProps> = ({
                             setAutoSaveHold: setScopedAutoSaveHold,
                             ensureRecordId,
                             queueGuidedStepReservationDraftSync,
+                            onGuidedStepReservationDraftStateChange,
                             waitForGuidedStepReservationDraftSync
                           }}
                         />
@@ -14924,6 +14937,7 @@ const FormView: React.FC<FormViewProps> = ({
                               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                               ensureRecordId,
                               queueGuidedStepReservationDraftSync,
+                              onGuidedStepReservationDraftStateChange,
                               closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                             }}
                           />
@@ -15003,6 +15017,7 @@ const FormView: React.FC<FormViewProps> = ({
                     setAutoSaveHold: setScopedAutoSaveHold,
                     ensureRecordId,
                     queueGuidedStepReservationDraftSync,
+                    onGuidedStepReservationDraftStateChange,
                     waitForGuidedStepReservationDraftSync,
                     closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                   }}
@@ -15771,6 +15786,7 @@ const FormView: React.FC<FormViewProps> = ({
             setAutoSaveHold: setScopedAutoSaveHold,
             ensureRecordId,
             queueGuidedStepReservationDraftSync,
+            onGuidedStepReservationDraftStateChange,
             waitForGuidedStepReservationDraftSync
           }}
         />

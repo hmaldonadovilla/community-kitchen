@@ -78,6 +78,27 @@ export const shouldImmediatelySyncStepReservationChange = (args: {
   return Number.isFinite(quantity) && quantity >= 0;
 };
 
+export const shouldBlockDataSourceFreshnessForInvalidStepReservation = (args: {
+  patch: Record<string, any>;
+  selectedFieldId?: string;
+  quantityFieldId?: string;
+  selectedValue?: unknown;
+  quantityValue?: unknown;
+  hasValidationErrors?: boolean;
+}): boolean => {
+  if (!args.hasValidationErrors) return false;
+  const patch = args.patch || {};
+  if (!Object.keys(patch).length) return false;
+
+  const selectedFieldId = (args.selectedFieldId || '').toString().trim();
+  const selected = selectedFieldId
+    ? (Object.prototype.hasOwnProperty.call(patch, selectedFieldId) ? patch[selectedFieldId] : args.selectedValue) === true
+    : true;
+  if (!selected) return false;
+
+  return !shouldImmediatelySyncStepReservationChange(args);
+};
+
 export const buildReservationFailureMessage = (
   rawMessage: string,
   fallback: string,

@@ -2,6 +2,7 @@ import {
   buildReservationFieldPatch,
   buildReservationFailureMessage,
   getReservationCommitMode,
+  shouldBlockDataSourceFreshnessForInvalidStepReservation,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from '../../../src/web/react/components/form/reservationSyncPolicy';
@@ -134,6 +135,37 @@ describe('reservationSyncPolicy', () => {
         quantityFieldId: 'LEFTOVER_USE_QTY',
         selectedValue: true,
         quantityValue: '5',
+        hasValidationErrors: true
+      })
+    ).toBe(false);
+  });
+
+  test('blocks datasource freshness while a selected step reservation is invalid and unsynced', () => {
+    expect(
+      shouldBlockDataSourceFreshnessForInvalidStepReservation({
+        patch: {
+          LEFTOVER_SELECTED: true
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: true,
+        quantityValue: '5',
+        hasValidationErrors: true
+      })
+    ).toBe(true);
+  });
+
+  test('does not block datasource freshness for invalid reservation edits that still sync a release', () => {
+    expect(
+      shouldBlockDataSourceFreshnessForInvalidStepReservation({
+        patch: {
+          LEFTOVER_SELECTED: false,
+          LEFTOVER_USE_QTY: null
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: false,
+        quantityValue: null,
         hasValidationErrors: true
       })
     ).toBe(false);
