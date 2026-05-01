@@ -2977,8 +2977,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const [recordSessionKey, setRecordSessionKey] = useState<number>(0);
-  const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string }>>>(new Map());
+  const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>>>(new Map());
   const uploadQueueBlockingRef = useRef<Map<string, boolean>>(new Map());
+  const uploadQueueBusyMessageRef = useRef<Map<string, string>>(new Map());
   const uploadBusySeqRef = useRef<number | null>(null);
   const uploadedFieldValueOverridesRef = useRef<Map<string, UploadedFieldValueOverride>>(new Map());
   const uploadFieldInvalidationVersionsRef = useRef<Map<string, number>>(new Map());
@@ -2988,7 +2989,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
     const uploadsInFlight = uploadQueueRef.current.size;
-    const blockingUploadsInFlight = Array.from(uploadQueueBlockingRef.current.values()).filter(Boolean).length;
+    const blockingEntries = Array.from(uploadQueueBlockingRef.current.entries()).filter(([, blocking]) => Boolean(blocking));
+    const blockingUploadsInFlight = blockingEntries.length;
+    const busyMessage =
+      blockingEntries
+        .map(([key]) => (uploadQueueBusyMessageRef.current.get(key) || '').toString().trim())
+        .find(Boolean) || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.');
     setUploadQueueSize(uploadsInFlight);
     const transition = resolveUploadBusyOverlayTransition({
       uploadsInFlight: blockingUploadsInFlight,
@@ -2997,11 +3003,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (transition === 'lock') {
       uploadBusySeqRef.current = uploadBusy.lock({
         title: tSystem('navigation.waitTitle', language, 'Please wait'),
-        message: tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.'),
+        message: busyMessage,
         kind: 'upload',
         diagnosticMeta: { uploadsInFlight, blockingUploadsInFlight }
       });
       return;
+    }
+    if (transition === 'none' && uploadBusySeqRef.current !== null && blockingUploadsInFlight > 0) {
+      uploadBusy.setMessage(uploadBusySeqRef.current, busyMessage);
     }
     if (transition === 'unlock') {
       const seq = uploadBusySeqRef.current;
@@ -8877,7 +8886,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ),
       message: resolveDialogTemplate(
         rawDialog?.message,
-        tSystem('navigation.waitPhotos', languageRef.current, 'Please wait while your photos finish uploading.')
+        tSystem('navigation.waitPhotos', languageRef.current, 'Please wait while your files finish uploading.')
       )
     }),
     [resolveDialogTemplate]
@@ -13492,7 +13501,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       fieldId?: string;
       items: Array<string | File>;
       uploadConfig?: any;
-    }): Promise<{ success: boolean; message?: string }> => {
+      busyMessage?: string;
+    }): Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> => {
       if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
       if (submittingRef.current) return { success: false, message: 'Submitting.' };
       if (isClosedRecord) return { success: false, message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') };
@@ -13521,7 +13531,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const sessionAtStart = recordSessionRef.current;
       const queueKey = `record:${sessionAtStart}:${args.fieldPath}`;
       const blockUntilSaved = resolveUploadBlockUntilSaved(args.uploadConfig);
-      const run = async (): Promise<{ success: boolean; message?: string }> => {
+      const run = async (): Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> => {
         // Ensure we don't have a pending debounced draft save that might race with this sequence.
         if (autoSaveTimerRef.current) {
           globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -13589,8 +13599,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return { items: [], hasValue: false };
         };
 
-        const stateSnapshot = readStateItems();
-        const targetItemsAtStart = stateSnapshot.hasValue ? stateSnapshot.items : (args.items || []);
+        const targetItemsAtStart = Array.isArray(args.items) ? args.items : readStateItems().items;
         const fileItemsAtStart = targetItemsAtStart.filter(isFile);
         const existingUrlsAtStart = targetItemsAtStart
           .filter((item): item is string => typeof item === 'string')
@@ -13621,7 +13630,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 args.fieldPath
               )
             });
-            return { success: true };
+            return { success: true, items: targetItemsAtStart.filter((item): item is string => typeof item === 'string') };
           }
 
           const existingRecordId =
@@ -13634,12 +13643,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
             '';
           const statusForSave = resolveAutoSaveStatus(statusRaw);
+          const uploadDraftState = applyUploadValueToFormState({
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current,
+            target,
+            value: '',
+            items: targetItemsAtStart
+          });
           const payload = await buildUploadDraftPayload({
             definition,
             formKey,
             language: languageRef.current,
-            values: valuesRef.current,
-            lineItems: lineItemsRef.current,
+            values: uploadDraftState.values,
+            lineItems: uploadDraftState.lineItems,
             existingRecordId,
             target
           });
@@ -13795,7 +13811,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             otherChangesDuringUpload: nonTargetFingerprintNow !== nonTargetFingerprintAtStart
           });
           clearSaveFailureStatusAfterSuccessfulSave('upload.transaction');
-          return { success: true };
+          return { success: true, items: savedUrls, value: savedUploadValue };
         } catch (err: any) {
           const uiMessage = resolveUiErrorMessage(
             err,
@@ -13816,12 +13832,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         .then(() => run());
       uploadQueueRef.current.set(queueKey, next);
       uploadQueueBlockingRef.current.set(queueKey, blockUntilSaved);
+      if (blockUntilSaved) {
+        const busyMessage = (args.busyMessage || '').toString().trim();
+        if (busyMessage) uploadQueueBusyMessageRef.current.set(queueKey, busyMessage);
+        else uploadQueueBusyMessageRef.current.delete(queueKey);
+      } else {
+        uploadQueueBusyMessageRef.current.delete(queueKey);
+      }
       syncUploadQueueSize();
       void next.finally(() => {
         try {
           if (uploadQueueRef.current.get(queueKey) === next) {
             uploadQueueRef.current.delete(queueKey);
             uploadQueueBlockingRef.current.delete(queueKey);
+            uploadQueueBusyMessageRef.current.delete(queueKey);
           }
           syncUploadQueueSize();
           // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
@@ -14064,7 +14088,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return tSystem(
           'navigation.waitPhotos',
           languageRef.current,
-          'Please wait while your photos finish uploading.'
+          'Please wait while your files finish uploading.'
         );
       }
       return tSystem(
@@ -16876,14 +16900,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       <BlockingOverlay
         open={guidedStepAdvanceBusy.state.open}
         title={guidedStepAdvanceBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
-        message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
+        message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')}
         zIndex={12047}
       />
 
       <BlockingOverlay
         open={uploadBusy.state.open}
         title={uploadBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
-        message={uploadBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your photos finish uploading.')}
+        message={uploadBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')}
         zIndex={12047}
       />
 

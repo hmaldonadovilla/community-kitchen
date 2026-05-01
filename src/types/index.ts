@@ -1440,6 +1440,11 @@ export interface FileUploadConfig {
    */
   helperText?: FileUploadHelperText;
   /**
+   * Optional localized wait messages used when blockUntilSaved is enabled.
+   * When omitted, the UI falls back to generic file-based system strings.
+   */
+  waitMessages?: FileUploadWaitMessages;
+  /**
    * Optional localized label template for links shown for uploaded items (Summary/PDF).
    *
    * Example:
@@ -1479,6 +1484,17 @@ export type FileUploadHelperText = LocalizedString | FileUploadHelperTextConfig;
 export interface FileUploadHelperTextConfig {
   remainingOne?: LocalizedString;
   remainingMany?: LocalizedString;
+}
+
+export interface FileUploadWaitMessages {
+  /**
+   * Message shown while an upload + record-save transaction is in progress.
+   */
+  save?: LocalizedString;
+  /**
+   * Message shown while a remove-one or remove-all transaction is in progress.
+   */
+  removeSelected?: LocalizedString;
 }
 
 export interface FileUploadUiConfig {

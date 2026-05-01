@@ -798,7 +798,7 @@ describe('ConfigSheet', () => {
         '',
         '',
         'Active',
-        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "helperText":{"en":"You can add {count} more photos."}, "linkLabel":{"en":"Photo {n}"}, "discardChangesConfirm":{"en":"Close without saving photos?"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc","blockUntilSaved":true}',
+        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "helperText":{"en":"You can add {count} more photos."}, "waitMessages":{"save":{"en":"Saving photos..."},"removeSelected":{"en":"Removing photos..."}}, "linkLabel":{"en":"Photo {n}"}, "discardChangesConfirm":{"en":"Close without saving photos?"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc","blockUntilSaved":true}',
         '',
         '',
         ''
@@ -817,6 +817,9 @@ describe('ConfigSheet', () => {
     expect(((questions[0].uploadConfig as any).errorMessages?.minFiles || {}).en).toBe('Need {min} photos');
     expect((questions[0].uploadConfig as any).helperText).toBeDefined();
     expect(((questions[0].uploadConfig as any).helperText || {}).en).toBe('You can add {count} more photos.');
+    expect((questions[0].uploadConfig as any).waitMessages).toBeDefined();
+    expect(((questions[0].uploadConfig as any).waitMessages?.save || {}).en).toBe('Saving photos...');
+    expect(((questions[0].uploadConfig as any).waitMessages?.removeSelected || {}).en).toBe('Removing photos...');
     expect((questions[0].uploadConfig as any).linkLabel).toBeDefined();
     expect(((questions[0].uploadConfig as any).linkLabel || {}).en).toBe('Photo {n}');
     expect((questions[0].uploadConfig as any).discardChangesConfirm).toBeDefined();

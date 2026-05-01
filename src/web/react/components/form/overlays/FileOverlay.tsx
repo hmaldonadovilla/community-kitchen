@@ -173,7 +173,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                   onClearAll();
                 }}
                 disabled={locked}
-                style={withDisabled(buttonStyles.negative, locked)}
+                style={withDisabled(buttonStyles.secondary, locked)}
               >
                 {tSystem('files.clearAll', language, 'Remove all')}
               </button>
@@ -297,7 +297,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                       type="button"
                       onClick={() => onRemoveAt(idx)}
                       disabled={locked}
-                      style={withDisabled(buttonStyles.negative, locked)}
+                      style={withDisabled(buttonStyles.secondary, locked)}
                     >
                       {tSystem('lineItems.remove', language, 'Remove')}
                     </button>

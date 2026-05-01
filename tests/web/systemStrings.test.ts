@@ -11,5 +11,10 @@ describe('systemStrings', () => {
     const rendered = tSystem('draft.saveFailed', 'FR', 'Draft save failed: {message}', { message: 'Boom' });
     expect(rendered).toContain('Boom');
   });
-});
 
+  test('blocking upload fallback copy is generic', () => {
+    expect(tSystem('files.waitSave', 'EN', '')).toContain('file');
+    expect(tSystem('files.waitRemoveSelected', 'EN', '')).toContain('file');
+    expect(tSystem('navigation.waitPhotos', 'EN', '')).toContain('files');
+  });
+});

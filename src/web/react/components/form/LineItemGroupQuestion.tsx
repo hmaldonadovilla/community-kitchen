@@ -156,6 +156,8 @@ const getByPath = (root: any, path: string): any => {
 
 const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
 const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationDeferred';
+const formatLineItemTotalValue = (total: { value: number; decimalPlaces?: number; pending?: boolean }): string =>
+  total.pending ? '' : total.value.toFixed(total.decimalPlaces || 0);
 
 const hasAvailabilityPairValue = (sourceRow: Record<string, any>, remainingFieldId: string, reservedFieldId: string): boolean => {
   const hasValue = (raw: unknown): boolean => {
@@ -5096,7 +5098,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           );
         };
 
-        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: parentRows }, language);
+        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: parentRows, groupId: q.id, invalidFieldPaths: errors }, language);
         const parentCount = parentRows.length;
         const selectorSearchKey = selectorCfg ? `${q.id}::${selectorCfg.id}` : '';
         if (selectorCfg && useSelectorSearch) {
@@ -6326,7 +6328,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   const total = col.id !== '__remove' ? tableTotalsById.get(col.id.toString()) : undefined;
                   const isLabelCell = !!totalLabelColumnId && col.id === totalLabelColumnId;
                   const labelText = isLabelCell ? tSystem('lineItems.total', language, 'Total') : '';
-                  const valueText = total ? total.value.toFixed(total.decimalPlaces || 0) : '';
+                  const valueText = total ? formatLineItemTotalValue(total) : '';
                   const cellText = [labelText, valueText].filter(Boolean).join(' ');
                   return (
                     <td key={`total-${col.id}`} className={col.className} style={col.style}>
@@ -6454,11 +6456,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     </div>
                     {toolbarTotals.length > 0 ? (
                       <div className="line-item-totals">
-                        {toolbarTotals.map(t => (
-                          <span key={t.key} className="ck-line-item-table__total">
-                            {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                          </span>
-                        ))}
+                        {toolbarTotals.map(t => {
+                          const valueText = formatLineItemTotalValue(t);
+                          return (
+                            <span key={t.key} className="ck-line-item-table__total">
+                              {valueText ? `${t.label}: ${valueText}` : t.label}
+                            </span>
+                          );
+                        })}
                       </div>
                     ) : null}
                   </div>
@@ -13514,7 +13519,10 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         hideRowsWithoutAnchor
                       });
                     });
-                    const subTotals = computeTotals({ config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows }, language);
+                    const subTotals = computeTotals(
+                      { config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows, groupId: subKey, invalidFieldPaths: errors },
+                      language
+                    );
                     const subSelectorCfg = sub.sectionSelector;
                     const subSelectorOptionSet = buildSelectorOptionSet(subSelectorCfg);
                     const subSelectorValue = subgroupSelectors[subKey] || '';
@@ -16438,11 +16446,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                 {showBottom ? renderSubAddButton() : null}
                                 {subTotals.length ? (
                                   <div className="line-item-totals">
-                                    {subTotals.map(t => (
-                                      <span key={t.key} className="pill">
-                                        {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                                      </span>
-                                    ))}
+                                    {subTotals.map(t => {
+                                      const valueText = formatLineItemTotalValue(t);
+                                      return (
+                                        <span key={t.key} className="pill">
+                                          {valueText ? `${t.label}: ${valueText}` : t.label}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 ) : null}
                               </div>
@@ -16532,11 +16543,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   {showAddBottom ? renderAddButton() : null}
                   {toolbarTotals.length ? (
                     <div className="line-item-totals">
-                      {toolbarTotals.map(t => (
-                        <span key={t.key} className="pill">
-                          {t.label}: {t.value.toFixed(t.decimalPlaces || 0)}
-                        </span>
-                      ))}
+                      {toolbarTotals.map(t => {
+                        const valueText = formatLineItemTotalValue(t);
+                        return (
+                          <span key={t.key} className="pill">
+                            {valueText ? `${t.label}: ${valueText}` : t.label}
+                          </span>
+                        );
+                      })}
                     </div>
                   ) : null}
                 </div>

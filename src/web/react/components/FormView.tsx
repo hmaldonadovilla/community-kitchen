@@ -18,6 +18,7 @@ import { tSystem } from '../../systemStrings';
 import { selectionEffectDependsOnField } from '../app/selectionEffectDependencies';
 import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
 import { resolveUploadBlockUntilSaved } from '../app/uploadTransaction';
+import { resolveUploadWaitMessage } from '../app/uploadWaitMessages';
 import {
   clearUploadFailure,
   createUploadFailureState,
@@ -633,7 +634,8 @@ interface FormViewProps {
     fieldId?: string;
     items: Array<string | File>;
     uploadConfig?: any;
-  }) => Promise<{ success: boolean; message?: string }>;
+    busyMessage?: string;
+  }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
   /**
    * Optional handler for BUTTON fields (Doc template preview / report rendering).
    */
@@ -6859,7 +6861,10 @@ const FormView: React.FC<FormViewProps> = ({
           rowId: target.scope === 'line' ? target.rowId : undefined,
           fieldId: target.scope === 'line' ? target.field?.id : undefined,
           items,
-          uploadConfig: target.uploadConfig
+          uploadConfig: target.uploadConfig,
+          busyMessage: resolveUploadBlockUntilSaved(target.uploadConfig)
+            ? resolveUploadWaitMessage(target.uploadConfig, language, 'save')
+            : undefined
         });
         if (!res?.success) {
           const message = uploadFailureMessage(res?.message);
@@ -6956,6 +6961,7 @@ const FormView: React.FC<FormViewProps> = ({
       question?: WebQuestionDefinition;
       field?: any;
       incoming: File[];
+      onCommitBlockUntilSaved?: (items: Array<string | File>) => void;
     }): boolean => {
       if (!fileOverlay.open) return false;
       const overlayFieldPath =
@@ -6969,6 +6975,7 @@ const FormView: React.FC<FormViewProps> = ({
       const existing = fileOverlay.draftItems || [];
       const { items, errorMessage } = applyUploadConstraints(uploadField, existing, args.incoming, language);
       const accepted = Math.max(0, items.length - existing.length);
+      const blockUntilSaved = resolveUploadBlockUntilSaved((uploadField as any)?.uploadConfig);
       setFileOverlay(prev => {
         if (!prev.open) return prev;
         const prevFieldPath =
@@ -6978,7 +6985,7 @@ const FormView: React.FC<FormViewProps> = ({
               ? prev.fieldPath || ''
               : '';
         if (prev.scope !== args.scope || prevFieldPath !== args.fieldPath) return prev;
-        return { ...prev, draftItems: items };
+        return { ...prev, draftItems: items, saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving };
       });
       if (errorMessage) {
         announceUpload(args.fieldPath, errorMessage);
@@ -7000,11 +7007,37 @@ const FormView: React.FC<FormViewProps> = ({
         accepted,
         total: items.length,
         error: Boolean(errorMessage),
-        scope: args.scope
+        scope: args.scope,
+        blockUntilSaved
       });
+      if (blockUntilSaved && !errorMessage && accepted > 0) {
+        args.onCommitBlockUntilSaved?.(items);
+      }
       return true;
     },
     [announceUpload, clearUploadFailureForField, fileOverlay, language, onDiagnostic]
+  );
+
+  const updateFileOverlayAfterImmediateAction = useCallback(
+    (args: { scope: 'top' | 'line'; fieldPath: string; items: Array<string | File>; saving: boolean; saved?: boolean }) => {
+      setFileOverlay(prev => {
+        if (!prev.open) return prev;
+        const prevFieldPath =
+          prev.scope === 'top' && prev.question
+            ? prev.question.id
+            : prev.scope === 'line'
+              ? prev.fieldPath || ''
+              : '';
+        if (prev.scope !== args.scope || prevFieldPath !== args.fieldPath) return prev;
+        return {
+          ...prev,
+          draftItems: args.items,
+          originalSignature: args.saved ? fileItemsSignature(args.items) : prev.originalSignature,
+          saving: args.saving
+        };
+      });
+    },
+    [fileItemsSignature]
   );
 
   // Auto-scroll when subgroup rows increase (works for inline add and overlay add)
@@ -7121,7 +7154,10 @@ const FormView: React.FC<FormViewProps> = ({
         fieldPath: uploadTarget.fieldPath,
         questionId: question.id,
         items,
-        uploadConfig: uploadTarget.uploadConfig
+        uploadConfig: uploadTarget.uploadConfig,
+        busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
+          : undefined
       })
         .then(res => {
           if (!res?.success) {
@@ -7165,7 +7201,50 @@ const FormView: React.FC<FormViewProps> = ({
         scope: 'top',
         fieldPath: question.id,
         question,
-        incoming: Array.from(list)
+        incoming: Array.from(list),
+        onCommitBlockUntilSaved: items => {
+          const uploadConfig = (question as any)?.uploadConfig || {};
+          const uploadTarget: UploadRetryTarget = {
+            scope: 'top',
+            fieldPath: question.id,
+            question,
+            uploadConfig
+          };
+          handleFileFieldChange(question, items);
+          clearUploadFailureForField(question.id);
+          const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
+          announceUpload(question.id, waitMessage);
+          onDiagnostic?.('upload.overlay.immediateSave.start', { fieldPath: question.id, scope: 'top', total: items.length });
+          const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+            ? onUploadFiles({
+                scope: 'top',
+                fieldPath: question.id,
+                questionId: question.id,
+                items,
+                uploadConfig,
+                busyMessage: waitMessage
+              })
+            : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });
+          void uploadPromise
+            .then(res => {
+              if (!res?.success) {
+                const message = recordUploadFailure(uploadTarget, res?.message);
+                announceUpload(question.id, message);
+                updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items, saving: false });
+                return;
+              }
+              const savedItems = Array.isArray(res.items) ? res.items : items.filter((item): item is string => typeof item === 'string');
+              clearUploadFailureForField(question.id);
+              announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
+              updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items: savedItems, saving: false, saved: true });
+              onDiagnostic?.('upload.overlay.immediateSave.success', { fieldPath: question.id, scope: 'top', total: savedItems.length });
+            })
+            .catch((err: any) => {
+              const message = recordUploadFailure(uploadTarget, err?.message);
+              announceUpload(question.id, message);
+              updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items, saving: false });
+            });
+        }
       })
     ) {
       resetNativeFileInput(question.id);
@@ -9088,7 +9167,10 @@ const FormView: React.FC<FormViewProps> = ({
         rowId,
         fieldId: field.id,
         items: files,
-        uploadConfig: uploadTarget.uploadConfig
+        uploadConfig: uploadTarget.uploadConfig,
+        busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
+          : undefined
       })
         .then(res => {
           if (!res?.success) {
@@ -9141,7 +9223,54 @@ const FormView: React.FC<FormViewProps> = ({
         scope: 'line',
         fieldPath,
         field,
-        incoming: Array.from(list)
+        incoming: Array.from(list),
+        onCommitBlockUntilSaved: items => {
+          const uploadConfig = field.uploadConfig || {};
+          const uploadTarget: UploadRetryTarget = {
+            scope: 'line',
+            fieldPath,
+            group,
+            rowId,
+            field,
+            uploadConfig
+          };
+          handleLineFieldChange(group, rowId, field, items as unknown as FieldValue);
+          clearUploadFailureForField(fieldPath);
+          const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
+          announceUpload(fieldPath, waitMessage);
+          onDiagnostic?.('upload.overlay.immediateSave.start', { fieldPath, scope: 'line', total: items.length });
+          const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+            ? onUploadFiles({
+                scope: 'line',
+                fieldPath,
+                groupId: group.id,
+                rowId,
+                fieldId: field.id,
+                items,
+                uploadConfig,
+                busyMessage: waitMessage
+              })
+            : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });
+          void uploadPromise
+            .then(res => {
+              if (!res?.success) {
+                const message = recordUploadFailure(uploadTarget, res?.message);
+                announceUpload(fieldPath, message);
+                updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items, saving: false });
+                return;
+              }
+              const savedItems = Array.isArray(res.items) ? res.items : items.filter((item): item is string => typeof item === 'string');
+              clearUploadFailureForField(fieldPath);
+              announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+              updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items: savedItems, saving: false, saved: true });
+              onDiagnostic?.('upload.overlay.immediateSave.success', { fieldPath, scope: 'line', total: savedItems.length });
+            })
+            .catch((err: any) => {
+              const message = recordUploadFailure(uploadTarget, err?.message);
+              announceUpload(fieldPath, message);
+              updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items, saving: false });
+            });
+        }
       })
     ) {
       resetNativeFileInput(fieldPath);
@@ -15090,11 +15219,12 @@ const FormView: React.FC<FormViewProps> = ({
     const overlayReadOnly = readOnly || orderedUploadBlocked;
     const items = fileOverlay.draftItems || resolveFileOverlayItems(fileOverlay);
     const dirty = fileItemsSignature(items) !== (fileOverlay.originalSignature || fileItemsSignature(resolveFileOverlayItems(fileOverlay)));
+    const blockUntilSaved = resolveUploadBlockUntilSaved(uploadConfig);
 
     const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
 
     const onAdd = () => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
       if (isTop) {
         if (
           checkFileUploadOrderedEntry({
@@ -15121,8 +15251,82 @@ const FormView: React.FC<FormViewProps> = ({
       fileInputsRef.current[fieldPath]?.click();
     };
 
+    const commitImmediateItems = (nextItems: Array<string | File>, action: 'removeOne' | 'removeAll') => {
+      if (submitting || readOnly || fileOverlay.saving) return;
+      const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'removeSelected');
+      const uploadTarget: UploadRetryTarget = {
+        scope: isTop ? 'top' : 'line',
+        fieldPath,
+        question: isTop ? fileOverlay.question : undefined,
+        group: isLine ? fileOverlay.group : undefined,
+        rowId: isLine ? (fileOverlay.rowId as string) : undefined,
+        field: isLine ? fileOverlay.field : undefined,
+        uploadConfig
+      };
+      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, saving: true } : prev));
+      clearUploadFailureForField(fieldPath);
+      if (isTop) {
+        handleFileFieldChange(fileOverlay.question!, nextItems);
+      } else {
+        handleLineFieldChange(
+          fileOverlay.group!,
+          fileOverlay.rowId as string,
+          fileOverlay.field,
+          nextItems as unknown as FieldValue
+        );
+      }
+      announceUpload(fieldPath, waitMessage);
+      onDiagnostic?.('upload.overlay.immediateRemove.start', {
+        fieldPath,
+        scope: isTop ? 'top' : 'line',
+        action,
+        total: nextItems.length
+      });
+      const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+        ? onUploadFiles({
+            scope: uploadTarget.scope,
+            fieldPath: uploadTarget.fieldPath,
+            questionId: uploadTarget.scope === 'top' ? uploadTarget.question?.id : undefined,
+            groupId: uploadTarget.scope === 'line' ? uploadTarget.group?.id : undefined,
+            rowId: uploadTarget.scope === 'line' ? uploadTarget.rowId : undefined,
+            fieldId: uploadTarget.scope === 'line' ? uploadTarget.field?.id : undefined,
+            items: nextItems,
+            uploadConfig,
+            busyMessage: waitMessage
+          })
+        : Promise.resolve({ success: true, items: nextItems.filter((item): item is string => typeof item === 'string') });
+      void uploadPromise
+        .then(res => {
+          if (!res?.success) {
+            const message = recordUploadFailure(uploadTarget, res?.message);
+            announceUpload(fieldPath, message);
+            updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+            return;
+          }
+          const savedItems = Array.isArray(res.items) ? res.items : nextItems.filter((item): item is string => typeof item === 'string');
+          clearUploadFailureForField(fieldPath);
+          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+          updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: savedItems, saving: false, saved: true });
+          onDiagnostic?.('upload.overlay.immediateRemove.success', {
+            fieldPath,
+            scope: isTop ? 'top' : 'line',
+            action,
+            total: savedItems.length
+          });
+        })
+        .catch((err: any) => {
+          const message = recordUploadFailure(uploadTarget, err?.message);
+          announceUpload(fieldPath, message);
+          updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+        });
+    };
+
     const onClearAll = () => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
+      if (blockUntilSaved) {
+        commitImmediateItems([], 'removeAll');
+        return;
+      }
       setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [] } : prev));
       clearUploadFailureForField(fieldPath);
       announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
@@ -15130,9 +15334,13 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const onRemoveAt = (idx: number) => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
       const removed = items[idx];
       const nextItems = items.filter((_, itemIdx) => itemIdx !== idx);
+      if (blockUntilSaved) {
+        commitImmediateItems(nextItems, 'removeOne');
+        return;
+      }
       setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems } : prev));
       clearUploadFailureForField(fieldPath);
       announceUpload(
@@ -15145,13 +15353,12 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const onSave = async () => {
-      if (submitting || readOnly || fileOverlay.saving) return;
+      if (blockUntilSaved || submitting || readOnly || fileOverlay.saving) return;
       if (!dirty) {
         dismissFileOverlay();
         return;
       }
       setFileOverlay(prev => (prev.open ? { ...prev, saving: true } : prev));
-      const shouldWaitForSave = resolveUploadBlockUntilSaved(uploadConfig);
       const uploadTarget: UploadRetryTarget = {
         scope: isTop ? 'top' : 'line',
         fieldPath,
@@ -15177,9 +15384,9 @@ const FormView: React.FC<FormViewProps> = ({
           fieldPath,
           total: items.length,
           scope: isTop ? 'top' : 'line',
-          wait: shouldWaitForSave
+          wait: false
         });
-        const uploadPromise: Promise<{ success: boolean; message?: string }> = onUploadFiles
+        const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
           ? onUploadFiles({
               scope: uploadTarget.scope,
               fieldPath: uploadTarget.fieldPath,
@@ -15191,20 +15398,6 @@ const FormView: React.FC<FormViewProps> = ({
               uploadConfig
             })
           : Promise.resolve({ success: true });
-        if (shouldWaitForSave) {
-          announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
-          const res = await uploadPromise;
-          if (!res?.success) {
-            const message = recordUploadFailure(uploadTarget, res?.message);
-            announceUpload(fieldPath, message);
-            setFileOverlay(prev => (prev.open ? { ...prev, saving: false } : prev));
-            return;
-          }
-          clearUploadFailureForField(fieldPath);
-          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
-          dismissFileOverlay();
-          return;
-        }
         void uploadPromise
           .then(res => {
             if (!res?.success) {
@@ -15241,7 +15434,7 @@ const FormView: React.FC<FormViewProps> = ({
         saveError={uploadFailures[fieldPath]?.message}
         saveRetrying={uploadFailures[fieldPath]?.retrying}
         onAdd={onAdd}
-        onSave={onSave}
+        onSave={blockUntilSaved ? undefined : onSave}
         onRetrySave={uploadFailures[fieldPath] ? () => retryUploadFailure(fieldPath) : undefined}
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}

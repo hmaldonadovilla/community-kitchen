@@ -7370,6 +7370,18 @@
           "en": "The photos you changed are not saved yet. Close without saving them?",
           "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
           "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+        },
+        "waitMessages": {
+          "save": {
+            "en": "Please wait while we save your photo(s)",
+            "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+            "nl": "Wacht even terwijl we je foto('s) opslaan"
+          },
+          "removeSelected": {
+            "en": "Please wait while we remove selected photo(s)",
+            "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+            "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+          }
         }
       }
     },
@@ -7518,6 +7530,18 @@
           "en": "The photos you changed are not saved yet. Close without saving them?",
           "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
           "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+        },
+        "waitMessages": {
+          "save": {
+            "en": "Please wait while we save your photo(s)",
+            "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+            "nl": "Wacht even terwijl we je foto('s) opslaan"
+          },
+          "removeSelected": {
+            "en": "Please wait while we remove selected photo(s)",
+            "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+            "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+          }
         }
       },
       "validationRules": [
@@ -11266,6 +11290,18 @@
             "en": "The photos you changed are not saved yet. Close without saving them?",
             "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
             "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+          },
+          "waitMessages": {
+            "save": {
+              "en": "Please wait while we save your photo(s)",
+              "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+              "nl": "Wacht even terwijl we je foto('s) opslaan"
+            },
+            "removeSelected": {
+              "en": "Please wait while we remove selected photo(s)",
+              "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+              "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+            }
           }
         }
       },
@@ -11414,6 +11450,18 @@
             "en": "The photos you changed are not saved yet. Close without saving them?",
             "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
             "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+          },
+          "waitMessages": {
+            "save": {
+              "en": "Please wait while we save your photo(s)",
+              "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+              "nl": "Wacht even terwijl we je foto('s) opslaan"
+            },
+            "removeSelected": {
+              "en": "Please wait while we remove selected photo(s)",
+              "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+              "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+            }
           }
         },
         "validationRules": [

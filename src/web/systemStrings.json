@@ -134,9 +134,9 @@
       "nl": "Even geduld"
     },
     "waitPhotos": {
-      "en": "Please wait while your photos finish uploading.",
-      "fr": "Veuillez patienter pendant le téléversement de vos photos.",
-      "nl": "Wacht even terwijl je foto's worden geüpload."
+      "en": "Please wait while your files finish uploading.",
+      "fr": "Veuillez patienter pendant le téléversement de vos fichiers.",
+      "nl": "Wacht even terwijl je bestanden worden geüpload."
     },
     "waitSaving": {
       "en": "Please wait while we save your changes...",
@@ -429,6 +429,16 @@
     "noneSelected": { "en": "No photo added.", "fr": "Aucune photo ajoutée.", "nl": "Geen foto toegevoegd." },
     "selectedOne": { "en": "1 photo added", "fr": "1 photo ajoutée", "nl": "1 foto toegevoegd" },
     "selectedMany": { "en": "{count} photos added", "fr": "{count} photos ajoutées", "nl": "{count} foto's toegevoegd" },
+    "waitSave": {
+      "en": "Please wait while we save your file(s)",
+      "fr": "Veuillez patienter pendant l’enregistrement de vos fichier(s)",
+      "nl": "Wacht even terwijl we je bestand(en) opslaan"
+    },
+    "waitRemoveSelected": {
+      "en": "Please wait while we remove selected file(s)",
+      "fr": "Veuillez patienter pendant la suppression des fichier(s) sélectionné(s)",
+      "nl": "Wacht even terwijl we de geselecteerde bestand(en) verwijderen"
+    },
     "maxSelected": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
     "maxReached": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
     "uploaded": { "en": "Added", "fr": "Ajouté", "nl": "Toegevoegd" },

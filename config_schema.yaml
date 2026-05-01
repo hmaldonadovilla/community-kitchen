@@ -905,6 +905,15 @@ components:
             Optional helper text shown under the upload control (e.g. remaining attachments).
             Supports template variables like `{count}`.
             When omitted, the UI falls back to the built-in system strings (`files.remainingOne` / `files.remainingMany`).
+        waitMessages:
+          $ref: '#/components/schemas/FileUploadWaitMessages'
+          description: |
+            Optional localized wait messages used when `blockUntilSaved` is true.
+
+            Example:
+            - `{ "save": { "en": "Please wait while we save your photo(s)" }, "removeSelected": { "en": "Please wait while we remove selected photo(s)" } }`
+
+            When omitted, the UI falls back to generic file-based system strings.
         linkLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -956,6 +965,19 @@ components:
           description: |
             Helper text when 2+ slots remain. Variables: {count}
       description: Optional per-field overrides for remaining-slot helper text.
+
+    FileUploadWaitMessages:
+      type: object
+      properties:
+        save:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown while an upload + record-save transaction is in progress.
+        removeSelected:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown while a remove-one or remove-all transaction is in progress.
+      description: Optional per-field overrides for blocking upload wait messages.
 
     FileUploadUiConfig:
       type: object
