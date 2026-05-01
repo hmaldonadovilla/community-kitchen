@@ -31,3 +31,6 @@ test-results/
 .vscode/
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# ignore issues folder - used to store bug/features images and context
+docs/issue-content
