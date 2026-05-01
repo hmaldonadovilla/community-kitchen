@@ -249,6 +249,7 @@
   },
   "common": {
     "info": { "en": "Info", "fr": "Info", "nl": "Info" },
+    "instruction": { "en": "Instruction", "fr": "Instruction", "nl": "Instructie" },
     "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
     "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
     "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },

@@ -489,7 +489,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(foodSafetyQuestionIds.has('TEMP_EVD')).toBe(true);
       expect((foodSafety?.include || []).some((entry: any) => entry?.kind === 'lineGroup')).toBe(false);
       expect(foodSafety?.helpText?.en).toBe(
-        'Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.'
+        'Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.'
       );
       expect(foodSafety?.navigation).toEqual({
         forwardGate: 'whenValid',

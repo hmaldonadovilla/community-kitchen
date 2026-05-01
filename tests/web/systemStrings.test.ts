@@ -4,6 +4,7 @@ describe('systemStrings', () => {
   test('tSystem resolves localized strings', () => {
     expect(tSystem('actions.submit', 'FR', 'Submit')).toBe('Envoyer');
     expect(tSystem('actions.submit', 'NL', 'Submit')).toBe('Verzenden');
+    expect(tSystem('common.instruction', 'NL', 'Instruction')).toBe('Instructie');
   });
 
   test('tSystem formats templates', () => {
@@ -11,5 +12,4 @@ describe('systemStrings', () => {
     expect(rendered).toContain('Boom');
   });
 });
-
 

@@ -2914,9 +2914,9 @@
             "autoAdvance": "off"
           },
           "helpText": {
-            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
-            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
-            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
+            "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",
+            "fr": "Avant le portionnement, confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo pour chaque marmite.",
+            "nl": "Bevestig vóór het portioneren dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per kookpot toe."
           }
         },
         {
@@ -14728,9 +14728,9 @@
             "autoAdvance": "off"
           },
           "helpText": {
-            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
-            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
-            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
+            "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",
+            "fr": "Avant le portionnement, confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo pour chaque marmite.",
+            "nl": "Bevestig vóór het portioneren dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per kookpot toe."
           }
         },
         {

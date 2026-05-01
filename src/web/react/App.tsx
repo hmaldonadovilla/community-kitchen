@@ -127,6 +127,8 @@ import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
 import { detectDebug, shouldAlwaysLogDiagnosticEvent } from './app/utils';
+import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
+import { filterFormOpenPrefetchDataSources } from './app/dataSourcePrefetchPolicy';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
@@ -1022,20 +1024,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (err: any, fallback: string) => (err?.message || err?.toString?.() || fallback).toString(),
     []
   );
-  const isRetryableRecordBusyMessage = useCallback((value: any): boolean => {
-    const message = (value || '').toString().trim().toLowerCase();
-    if (!message) return false;
-    return (
-      message.includes('record save lock') ||
-      message.includes('record mutation queue') ||
-      message.includes('follow-up queue') ||
-      message.includes('another follow-up batch is still running') ||
-      message.includes('another record mutation is still running') ||
-      message.includes('could not queue follow-up actions') ||
-      message.includes('could not queue record mutation') ||
-      (message.includes('please retry') && (message.includes('follow-up') || message.includes('record')))
-    );
-  }, []);
+  const isRetryableRecordBusyMessage = useCallback(isRetryableRecordBusyMessageValue, []);
   const perfEnabled = useMemo(() => {
     return isPerfInstrumentationEnv(envTag);
   }, [envTag]);
@@ -1046,7 +1035,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
           performance.mark(name);
         }
-      } catch (_) {
+      } catch {
         // ignore mark failures
       }
     },
@@ -3265,18 +3254,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           lastCompletedDraftSaveFingerprintRef.current = fingerprint;
         }
         if ((result as any)?.success === false) {
+          const message = (((result as any)?.message || 'Failed to save the current record.') as any).toString();
+          if (isRetryableRecordBusyMessage(message)) {
+            lastDraftSaveFailureRef.current = null;
+            logEvent('draftSave.retryableBusy.failureIgnored', {
+              reason,
+              recordId: fingerprint?.recordId || ((result as any)?.meta?.id || payload?.id || '').toString().trim() || null,
+              message
+            });
+            return result;
+          }
           lastDraftSaveFailureRef.current = {
             recordId: fingerprint?.recordId || ((result as any)?.meta?.id || payload?.id || '').toString().trim() || null,
-            message: (((result as any)?.message || 'Failed to save the current record.') as any).toString()
+            message
           };
         } else {
           lastDraftSaveFailureRef.current = null;
         }
         return result;
       } catch (err: any) {
+        const message = resolveUiErrorMessage(err, 'Failed to save the current record.') || 'Failed to save the current record.';
+        const logMessage = resolveLogMessage(err, message);
+        if (isRetryableRecordBusyMessage(message) || isRetryableRecordBusyMessage(logMessage)) {
+          lastDraftSaveFailureRef.current = null;
+          logEvent('draftSave.retryableBusy.exceptionIgnored', {
+            reason,
+            recordId: fingerprint?.recordId || ((payload?.id || '') as any).toString?.().trim?.() || null,
+            message: logMessage || message
+          });
+          throw err;
+        }
         lastDraftSaveFailureRef.current = {
           recordId: fingerprint?.recordId || ((payload?.id || '') as any).toString?.().trim?.() || null,
-          message: resolveUiErrorMessage(err, 'Failed to save the current record.') || 'Failed to save the current record.'
+          message
         };
         throw err;
       } finally {
@@ -3288,7 +3298,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
     },
-    [buildCurrentDraftSaveResponse, logEvent, resolveUiErrorMessage, runDraftSaveRequest]
+    [buildCurrentDraftSaveResponse, isRetryableRecordBusyMessage, logEvent, resolveLogMessage, resolveUiErrorMessage, runDraftSaveRequest]
   );
 
   const submitCurrentRecordMutation = useCallback(
@@ -4650,6 +4660,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
+  const formOpenGuidedDataSourceConfigs = useMemo(
+    () =>
+      filterFormOpenPrefetchDataSources({
+        configs: guidedDataSourceConfigs,
+        freshnessWatches: resolvedDataSourceFreshnessWatches
+      }),
+    [guidedDataSourceConfigs, resolvedDataSourceFreshnessWatches]
+  );
   const guidedDataSourceConfigMap = useMemo(() => {
     const byExact = new Map<string, any>();
     const byNormalized = new Map<string, any>();
@@ -11361,22 +11379,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const refreshGuidedDataSourcesInBackground = useCallback(
-    (args: { reason: string; forceRefresh?: boolean; retryDelaysMs?: number[] }) => {
-      if (!guidedDataSourceConfigs.length) return;
+    (args: { reason: string; forceRefresh?: boolean; retryDelaysMs?: number[]; dataSourceConfigs?: any[] }) => {
+      const dataSourceConfigs = Array.isArray(args.dataSourceConfigs) ? args.dataSourceConfigs.filter(Boolean) : guidedDataSourceConfigs;
+      if (!dataSourceConfigs.length) return;
       const retryDelays = Array.isArray(args.retryDelaysMs) && args.retryDelaysMs.length
         ? Array.from(new Set(args.retryDelaysMs.map(value => Number(value)).filter(value => Number.isFinite(value) && value >= 0)))
         : [0];
       logEvent('dataSource.prefetch.submitEffects.start', {
         formKey,
         language,
-        dataSources: guidedDataSourceConfigs.length,
+        dataSources: dataSourceConfigs.length,
         reason: args.reason,
         forceRefresh: Boolean(args.forceRefresh),
         attempts: retryDelays.length
       });
       retryDelays.forEach((delayMs, attemptIndex) => {
         const run = () => {
-          void prefetchDataSources(guidedDataSourceConfigs, language, {
+          void prefetchDataSources(dataSourceConfigs, language, {
             forceRefresh: Boolean(args.forceRefresh)
           })
             .then(res => {
@@ -11417,7 +11436,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   useEffect(() => {
     if (view !== 'form') return;
-    if (!guidedDataSourceConfigs.length) return;
+    if (!formOpenGuidedDataSourceConfigs.length) return;
     if (recordLoadingId) return;
     const refreshKey = `${formKey}::${language}::${selectedRecordId || 'create'}::${view}`;
     if (formDataSourceRefreshKeyRef.current === refreshKey) return;
@@ -11428,9 +11447,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // refetch the same shared data sources that home prefetch just loaded.
       // Flows that truly require fresh shared data already invalidate caches first.
       forceRefresh: false,
-      retryDelaysMs: [0]
+      retryDelaysMs: [0],
+      dataSourceConfigs: formOpenGuidedDataSourceConfigs
     });
-  }, [formKey, guidedDataSourceConfigs.length, language, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
+  }, [formKey, formOpenGuidedDataSourceConfigs, language, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
 
   const refreshAfterFollowupBatch = useCallback(
     async (args: { recordId: string; reason: string; mode?: 'snapshot' | 'sharedDataOnly' }) => {

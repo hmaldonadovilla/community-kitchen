@@ -106,6 +106,7 @@ import { SearchableMultiSelect } from './form/SearchableMultiSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
+import { SectionInstruction } from './form/SectionInstruction';
 import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
@@ -15451,9 +15452,11 @@ const FormView: React.FC<FormViewProps> = ({
               <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', lineHeight: 1.3 }}>{targetLabel}</div>
             ) : null}
             {wrapperHelperText ? (
-              <div className="muted" style={{ whiteSpace: 'pre-line', fontSize: 'var(--ck-font-label)', lineHeight: 1.4 }}>
-                {wrapperHelperText}
-              </div>
+              <SectionInstruction
+                id={`ck-linegroup-instruction-${activeGuidedStepId}-${id}`}
+                language={language}
+                text={wrapperHelperText}
+              />
             ) : null}
             {content}
           </div>
@@ -15896,9 +15899,11 @@ const FormView: React.FC<FormViewProps> = ({
         <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {guidedContextHeaderNode}
           {stepHelpText ? (
-            <div role="note" className="ck-step-help-text">
-              {stepHelpText}
-            </div>
+            <SectionInstruction
+              id={`ck-step-instruction-${activeGuidedStepId}`}
+              language={language}
+              text={stepHelpText}
+            />
           ) : null}
           {renderTargetsWithPairing(headerTargets, 'header')}
           {renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}

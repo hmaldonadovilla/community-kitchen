@@ -24,7 +24,7 @@ export const FORM_VIEW_STYLES = `
         .ck-guided-context-header {
           font-size: var(--ck-font-label);
           color: var(--text);
-          font-weight: 700;
+          font-weight: 600;
           white-space: nowrap;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
@@ -34,6 +34,40 @@ export const FORM_VIEW_STYLES = `
           display: none;
         }
         .ck-step-help-text {
+          white-space: pre-line;
+          margin: 0 0 4px;
+          color: var(--text);
+          opacity: 0.86;
+          font-size: var(--ck-font-helper);
+          line-height: 1.35;
+          font-weight: 400;
+          text-align: left;
+        }
+        .ck-section-instruction {
+          width: 100%;
+          margin: 8px 0 14px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--bg);
+          background: color-mix(in srgb, var(--text) 3%, var(--bg));
+          color: var(--text);
+          box-sizing: border-box;
+          text-align: left;
+        }
+        .ck-section-instruction__label {
+          margin: 0 0 4px;
+          color: var(--muted);
+          font-size: var(--ck-font-helper);
+          line-height: 1.35;
+          font-weight: 500;
+        }
+        .ck-section-instruction__text {
+          margin: 0;
+          color: var(--text);
+          font-size: var(--ck-font-label);
+          line-height: 1.35;
+          font-weight: 400;
           white-space: pre-line;
         }
 
@@ -680,7 +714,7 @@ export const FORM_VIEW_STYLES = `
         }
         .form-card .required-star,
         .webform-overlay .required-star {
-          color: var(--danger);
+          color: currentColor;
           font-weight: 600;
         }
         .form-card .field.inline-field > input,
@@ -1104,8 +1138,8 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--muted);
-          opacity: 1;
+          color: var(--text);
+          opacity: var(--ck-helper-opacity, 0.82);
           text-align: left;
         }
         .form-card .field.inline-field > .ck-field-helper,
@@ -1120,8 +1154,8 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--muted);
-          opacity: 1;
+          color: var(--text);
+          opacity: var(--ck-helper-opacity, 0.82);
           text-align: left;
         }
         .ck-upload-failure {

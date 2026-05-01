@@ -78,6 +78,7 @@ import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
+import { SectionInstruction } from './SectionInstruction';
 import { AutoWidthInput } from './AutoWidthInput';
 import { AutoWidthSelect } from './AutoWidthSelect';
 import { resolveCompactTextControlDisplayValue } from './compactControlValue';
@@ -1017,6 +1018,45 @@ export const LineItemGroupQuestion: React.FC<{
     [activeStepDataSourceRows]
   );
   const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
+  const stepDataSourceRefreshHandleRef = React.useRef<{
+    kind: 'raf' | 'timeout';
+    handle: number | ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const queueStepDataSourceRefreshTick = React.useCallback(() => {
+    if (stepDataSourceRefreshHandleRef.current) return;
+    const flush = () => {
+      stepDataSourceRefreshHandleRef.current = null;
+      setStepDataSourceRefreshTick(prev => prev + 1);
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      stepDataSourceRefreshHandleRef.current = {
+        kind: 'raf',
+        handle: window.requestAnimationFrame(flush)
+      };
+      return;
+    }
+    stepDataSourceRefreshHandleRef.current = {
+      kind: 'timeout',
+      handle: setTimeout(flush, 0)
+    };
+  }, []);
+  React.useEffect(
+    () => () => {
+      const pending = stepDataSourceRefreshHandleRef.current;
+      stepDataSourceRefreshHandleRef.current = null;
+      if (!pending) return;
+      if (
+        pending.kind === 'raf' &&
+        typeof window !== 'undefined' &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(pending.handle as number);
+        return;
+      }
+      clearTimeout(pending.handle as ReturnType<typeof setTimeout>);
+    },
+    []
+  );
   const [stepDataSourceLoadingCounts, setStepDataSourceLoadingCounts] = React.useState<Record<string, number>>({});
   const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
@@ -1172,9 +1212,9 @@ export const LineItemGroupQuestion: React.FC<{
           return applyInventoryAvailabilitySnapshotToRow(item, availability);
         })
       );
-      setStepDataSourceRefreshTick(prev => prev + 1);
+      queueStepDataSourceRefreshTick();
     },
-    [language]
+    [language, queueStepDataSourceRefreshTick]
   );
 
   const applyStepDataSourceAvailabilitySnapshots = React.useCallback(
@@ -1289,13 +1329,13 @@ export const LineItemGroupQuestion: React.FC<{
           }));
         if (!pendingFetches.length) {
           if (!cancelled) {
-            setStepDataSourceRefreshTick(prev => prev + 1);
+            queueStepDataSourceRefreshTick();
           }
           return;
         }
         await Promise.all(pendingFetches.map(entry => entry.promise));
         if (!cancelled) {
-          setStepDataSourceRefreshTick(prev => prev + 1);
+          queueStepDataSourceRefreshTick();
         }
       } finally {
         endStepDataSourceLoading(loadingEntries);
@@ -1315,6 +1355,7 @@ export const LineItemGroupQuestion: React.FC<{
     language,
     onDiagnostic,
     q.id,
+    queueStepDataSourceRefreshTick,
     recordId,
     shouldWaitForReservationSyncBeforeBootstrap,
     stepDataSourceBootstrapSignature,
@@ -1339,14 +1380,14 @@ export const LineItemGroupQuestion: React.FC<{
         .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
         .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
       if (!configs.length) {
-        setStepDataSourceRefreshTick(prev => prev + 1);
+        queueStepDataSourceRefreshTick();
         return;
       }
       beginStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
       Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null)))
         .then(() => {
           if (cancelled) return;
-          setStepDataSourceRefreshTick(prev => prev + 1);
+          queueStepDataSourceRefreshTick();
         })
         .finally(() => {
           endStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
@@ -1357,7 +1398,7 @@ export const LineItemGroupQuestion: React.FC<{
       const detail = (event as CustomEvent<{ id?: string }>).detail;
       const dataSourceId = `${detail?.id || ''}`.trim();
       if (dataSourceId && !watchedDataSourceIds.has(dataSourceId)) return;
-      setStepDataSourceRefreshTick(prev => prev + 1);
+      queueStepDataSourceRefreshTick();
     };
 
     window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
@@ -1367,7 +1408,7 @@ export const LineItemGroupQuestion: React.FC<{
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
       window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     };
-  }, [activeStepDataSourceRows, beginStepDataSourceLoading, endStepDataSourceLoading, language]);
+  }, [activeStepDataSourceRows, beginStepDataSourceLoading, endStepDataSourceLoading, language, queueStepDataSourceRefreshTick]);
 
   React.useEffect(() => {
     const pending = pendingStepReservationDraftSyncRef.current;
@@ -1797,9 +1838,11 @@ export const LineItemGroupQuestion: React.FC<{
     !submitting &&
     q.readOnly !== true &&
     q.ui?.renderAsLabel !== true ? (
-      <div className="muted" style={{ whiteSpace: 'pre-line', fontSize: 'var(--ck-font-label)', lineHeight: 1.4 }}>
-        {supplementalHelperTextTrimmed}
-      </div>
+      <SectionInstruction
+        id={`ck-linegroup-instruction-${q.id}`}
+        language={language}
+        text={supplementalHelperTextTrimmed}
+      />
     ) : null;
 
   React.useEffect(() => {
@@ -2110,9 +2153,9 @@ export const LineItemGroupQuestion: React.FC<{
           };
         })
       );
-      setStepDataSourceRefreshTick(prev => prev + 1);
+      queueStepDataSourceRefreshTick();
     },
-    [language, resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
+    [language, queueStepDataSourceRefreshTick, resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
   );
 
   const resolveVirtualMaxFieldId = React.useCallback(
