@@ -737,7 +737,7 @@ describe('meal production leftover selection config', () => {
                 type: 'openOverlay',
                 groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
                 overlayContextHeader: expect.objectContaining({
-                  en: 'Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.'
+                  en: 'Deselect any ingredient that should not be part of this leftover.'
                 }),
                 groupOverride: expect.objectContaining({
                   ui: expect.objectContaining({
@@ -747,10 +747,7 @@ describe('meal production leftover selection config', () => {
                 hideCloseButton: true,
                 overlaySession: expect.objectContaining({
                   enabled: true,
-                  fillAvailableHeight: true,
-                  bulkSelection: expect.objectContaining({
-                    fieldId: 'ING_SELECTED'
-                  })
+                  fillAvailableHeight: true
                 })
               })
             ])
@@ -758,6 +755,11 @@ describe('meal production leftover selection config', () => {
         ])
       })
     );
+    const editIngredientsAction = target?.rowFlow?.actions?.find((action: any) => action?.id === 'editIngredients');
+    const openOverlayEffect = editIngredientsAction?.effects?.find(
+      (effect: any) => effect?.type === 'openOverlay' && effect?.groupId === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
+    );
+    expect(openOverlayEffect?.overlaySession).not.toHaveProperty('bulkSelection');
   });
 
   it('falls back to flattened combined prep ingredients for created multi-ingredient leftovers', () => {
@@ -814,6 +816,8 @@ describe('meal production leftover selection config', () => {
       expect.objectContaining({
         tableColumns: ['LEFTOVER_INGREDIENT', 'LEFTOVER_QTY', 'LEFTOVER_UNIT', 'LEFTOVER_FROZEN'],
         tableColumnWidths: expect.objectContaining({
+          LEFTOVER_INGREDIENT: '40%',
+          LEFTOVER_QTY: '24%',
           LEFTOVER_FROZEN: '18%'
         })
       })

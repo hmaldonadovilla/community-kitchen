@@ -14022,7 +14022,8 @@ const FormView: React.FC<FormViewProps> = ({
         {overlaySessionEnabled ? (
           <div
             style={{
-              padding: 16,
+              padding:
+                '12px 40px calc(max(64px, calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 28px)) + var(--vv-bottom, 0px))',
               borderTop: '1px solid var(--border)',
               background: 'var(--card)',
               display: 'flex',
@@ -15159,7 +15160,8 @@ const FormView: React.FC<FormViewProps> = ({
         {overlaySessionEnabled ? (
           <div
             style={{
-              padding: 16,
+              padding:
+                '12px 40px calc(max(64px, calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 28px)) + var(--vv-bottom, 0px))',
               borderTop: '1px solid var(--border)',
               background: 'var(--card)',
               display: 'flex',

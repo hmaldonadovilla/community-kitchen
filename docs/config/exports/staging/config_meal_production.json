@@ -3377,9 +3377,9 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          "en": "Deselect any ingredient that should not be part of this leftover.",
+                          "fr": "Deselect any ingredient that should not be part of this leftover.",
+                          "nl": "Deselect any ingredient that should not be part of this leftover."
                         },
                         "groupOverride": {
                           "ui": {
@@ -3395,9 +3395,6 @@
                         "overlaySession": {
                           "enabled": true,
                           "fillAvailableHeight": true,
-                          "bulkSelection": {
-                            "fieldId": "ING_SELECTED"
-                          },
                           "saveLabel": {
                             "en": "Save",
                             "fr": "Save",
@@ -4610,8 +4607,8 @@
           ],
           "addButtonPlacement": "top",
           "tableColumnWidths": {
-            "LEFTOVER_INGREDIENT": "46%",
-            "LEFTOVER_QTY": "18%",
+            "LEFTOVER_INGREDIENT": "40%",
+            "LEFTOVER_QTY": "24%",
             "LEFTOVER_UNIT": "18%",
             "LEFTOVER_FROZEN": "18%",
             "__remove": "44px"
@@ -8462,8 +8459,8 @@
             ],
             "addButtonPlacement": "top",
             "tableColumnWidths": {
-              "LEFTOVER_INGREDIENT": "46%",
-              "LEFTOVER_QTY": "18%",
+              "LEFTOVER_INGREDIENT": "40%",
+              "LEFTOVER_QTY": "24%",
               "LEFTOVER_UNIT": "18%",
               "LEFTOVER_FROZEN": "18%",
               "__remove": "44px"
@@ -15239,9 +15236,9 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          "en": "Deselect any ingredient that should not be part of this leftover.",
+                          "fr": "Deselect any ingredient that should not be part of this leftover.",
+                          "nl": "Deselect any ingredient that should not be part of this leftover."
                         },
                         "groupOverride": {
                           "ui": {
@@ -15257,9 +15254,6 @@
                         "overlaySession": {
                           "enabled": true,
                           "fillAvailableHeight": true,
-                          "bulkSelection": {
-                            "fieldId": "ING_SELECTED"
-                          },
                           "saveLabel": {
                             "en": "Save",
                             "fr": "Save",
