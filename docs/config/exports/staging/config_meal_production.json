@@ -7615,7 +7615,10 @@
       "visibility": {
         "showWhen": {
           "fieldId": "status",
-          "equals": "Closed"
+          "equals": [
+            "Final report emailed",
+            "Closed"
+          ]
         }
       },
       "button": {
@@ -11535,7 +11538,10 @@
         "visibility": {
           "showWhen": {
             "fieldId": "status",
-            "equals": "Closed"
+            "equals": [
+              "Final report emailed",
+              "Closed"
+            ]
           }
         },
         "button": {

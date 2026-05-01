@@ -992,6 +992,28 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(hasCopyColumn).toBe(false);
   });
 
+  test('meal production final report summary button is visible after email and close statuses', () => {
+    const cfg = readConfig('config_meal_production.json');
+    const expectedStatuses = ['Final report emailed', 'Closed'];
+
+    [cfg.questions, cfg.definition?.questions].forEach(questions => {
+      const finalReportButton = findQuestion(questions || [], 'PDF_PREVIEW');
+      expect(finalReportButton?.qEn).toBe('Final report');
+      expect(finalReportButton?.visibility?.showWhen).toEqual({
+        fieldId: 'status',
+        equals: expectedStatuses
+      });
+      expect(finalReportButton?.button).toEqual(
+        expect.objectContaining({
+          action: 'openUrlField',
+          fieldId: 'pdfUrl',
+          disableWhenValueMissing: true,
+          placements: expect.arrayContaining(['summaryBar'])
+        })
+      );
+    });
+  });
+
   test('meal production delivery analytics count final emailed reports', () => {
     const cfg = readConfig('config_meal_production.json');
     const expectedStatuses = ['Final report emailed', 'Closed'];
