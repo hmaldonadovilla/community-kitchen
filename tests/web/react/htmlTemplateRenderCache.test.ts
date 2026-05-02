@@ -7,6 +7,7 @@ type RunnerStep = {
 const installGoogleScriptRunMock = (handlers: {
   renderSummaryHtmlTemplate?: (payload: any, onSuccess: (res: any) => void, onFail: (err: any) => void) => void;
   renderHtmlTemplate?: (payload: any, buttonId: string, onSuccess: (res: any) => void, onFail: (err: any) => void) => void;
+  renderInlineHtmlTemplate?: (payload: any, templateIdMap: any, onSuccess: (res: any) => void, onFail: (err: any) => void) => void;
 }) => {
   const runner: any = {};
   runner.withSuccessHandler = (onSuccess: (res: any) => void): RunnerStep => {
@@ -20,6 +21,10 @@ const installGoogleScriptRunMock = (handlers: {
         fns.renderHtmlTemplate = (payload: any, buttonId: string) => {
           if (!handlers.renderHtmlTemplate) throw new Error('renderHtmlTemplate handler not installed');
           handlers.renderHtmlTemplate(payload, buttonId, onSuccess, onFail);
+        };
+        fns.renderInlineHtmlTemplate = (payload: any, templateIdMap: any) => {
+          if (!handlers.renderInlineHtmlTemplate) throw new Error('renderInlineHtmlTemplate handler not installed');
+          handlers.renderInlineHtmlTemplate(payload, templateIdMap, onSuccess, onFail);
         };
         return fns;
       }
@@ -152,5 +157,101 @@ describe('client HTML render caching (api.ts)', () => {
     expect(r1.html).toBe('<div>BTN1:1</div>');
     expect(r2.html).toBe('<div>BTN1:1</div>');
     expect(r3.html).toBe('<div>BTN2:1</div>');
+  });
+
+  it('uses scoped inline HTML cache suffix to ignore unrelated draft value changes', async () => {
+    jest.resetModules();
+    const calls: any[] = [];
+
+    installGoogleScriptRunMock({
+      renderInlineHtmlTemplate: (payload, templateIdMap, onSuccess) => {
+        calls.push({ payload, templateIdMap });
+        const firstRow = payload?.values?.GROUP?.[0] || {};
+        const html = `<div>${firstRow?.FIELD || ''}</div>`;
+        setTimeout(() => onSuccess({ success: true, html }), 0);
+      }
+    });
+
+    const api = require('../../../src/web/react/api') as typeof import('../../../src/web/react/api');
+
+    const templateIdMap: any = { en: 'bundle:example.html' };
+    const cacheKeySuffix = JSON.stringify({
+      scope: 'overlayDetail',
+      rowId: 'row-1',
+      templateId: 'bundle:example.html',
+      payload: [{ FIELD: 'visible' }]
+    });
+    const firstPayload: any = {
+      formKey: 'F',
+      language: 'EN',
+      id: 'R-inline',
+      values: {
+        GROUP: [{ FIELD: 'visible' }],
+        UNRELATED: 'before'
+      }
+    };
+    const secondPayload: any = {
+      ...firstPayload,
+      values: {
+        ...firstPayload.values,
+        UNRELATED: 'after'
+      }
+    };
+
+    const first = await api.renderInlineHtmlTemplateApi(firstPayload, templateIdMap, cacheKeySuffix);
+    const second = await api.renderInlineHtmlTemplateApi(secondPayload, templateIdMap, cacheKeySuffix);
+    const peeked = api.peekInlineHtmlTemplateCache(secondPayload, templateIdMap, cacheKeySuffix);
+
+    expect(calls.length).toBe(1);
+    expect(first.html).toBe('<div>visible</div>');
+    expect(second.html).toBe('<div>visible</div>');
+    expect(peeked?.html).toBe('<div>visible</div>');
+  });
+
+  it('re-renders scoped inline HTML when the content suffix changes', async () => {
+    jest.resetModules();
+    const calls: any[] = [];
+
+    installGoogleScriptRunMock({
+      renderInlineHtmlTemplate: (payload, templateIdMap, onSuccess) => {
+        calls.push({ payload, templateIdMap });
+        const firstRow = payload?.values?.GROUP?.[0] || {};
+        const html = `<div>${firstRow?.FIELD || ''}</div>`;
+        setTimeout(() => onSuccess({ success: true, html }), 0);
+      }
+    });
+
+    const api = require('../../../src/web/react/api') as typeof import('../../../src/web/react/api');
+
+    const templateIdMap: any = { en: 'bundle:example.html' };
+    const firstPayload: any = {
+      formKey: 'F',
+      language: 'EN',
+      id: 'R-inline-change',
+      values: {
+        GROUP: [{ FIELD: 'before' }]
+      }
+    };
+    const secondPayload: any = {
+      ...firstPayload,
+      values: {
+        GROUP: [{ FIELD: 'after' }]
+      }
+    };
+
+    const first = await api.renderInlineHtmlTemplateApi(
+      firstPayload,
+      templateIdMap,
+      JSON.stringify({ scope: 'overlayDetail', rowId: 'row-1', payload: [{ FIELD: 'before' }] })
+    );
+    const second = await api.renderInlineHtmlTemplateApi(
+      secondPayload,
+      templateIdMap,
+      JSON.stringify({ scope: 'overlayDetail', rowId: 'row-1', payload: [{ FIELD: 'after' }] })
+    );
+
+    expect(calls.length).toBe(2);
+    expect(first.html).toBe('<div>before</div>');
+    expect(second.html).toBe('<div>after</div>');
   });
 });

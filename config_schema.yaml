@@ -6690,6 +6690,13 @@ components:
             forceRefresh:
               type: boolean
               description: Bypass the client datasource cache when this effect fetches source rows.
+            forceRefreshMaxCacheAgeMs:
+              type: number
+              minimum: 0
+              description: |
+                When `forceRefresh` is true, allow a fresh in-memory datasource response to satisfy
+                the effect instead of starting another server fetch. Use this for relatively stable
+                master data that was already prefetched just before the user changed the field.
             stopWhen:
               $ref: '#/components/schemas/WhenClause'
               description: Freeze synchronization while this condition matches.

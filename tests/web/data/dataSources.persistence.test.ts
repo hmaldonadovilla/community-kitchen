@@ -167,6 +167,47 @@ describe('web dataSources persistence', () => {
     expect(tracker.getCallCount()).toBe(1);
   });
 
+  it('reuses fresh in-memory cache for bounded force refreshes', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(() => ({ items: [{ id: 'recipe-1' }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const cfg = { id: 'Recipes Data', projection: ['QFTD5RD2EM'] } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    const result = await fetchDataSource(cfg, 'EN', {
+      forceRefresh: true,
+      forceRefreshMaxCacheAgeMs: 120000
+    });
+
+    expect(tracker.getCallCount()).toBe(1);
+    expect(result?.items?.[0]?.id).toBe('recipe-1');
+  });
+
+  it('refreshes again when bounded force refresh cache is too old', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(() => ({ items: [{ id: 'recipe-1' }] }));
+    const dateSpy = jest.spyOn(Date, 'now');
+    dateSpy.mockReturnValue(1000);
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const cfg = { id: 'Recipes Data', projection: ['QFTD5RD2EM'] } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    dateSpy.mockReturnValue(200000);
+    await fetchDataSource(cfg, 'EN', {
+      forceRefresh: true,
+      forceRefreshMaxCacheAgeMs: 120000
+    });
+
+    expect(tracker.getCallCount()).toBe(2);
+    dateSpy.mockRestore();
+  });
+
   it('expires persisted datasource entries after the configured max age', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };

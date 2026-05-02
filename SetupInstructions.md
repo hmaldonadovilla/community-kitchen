@@ -2561,6 +2561,7 @@ Use `type: "addLineItemsFromDataSource"` when you want a CHOICE/CHECKBOX fieldâ€
    - `sourceSync`: optional datasource synchronization controls:
      - `refreshOnInit: true` replays the effect when opening/hydrating an existing record, even if generated rows are already populated.
      - `forceRefresh: true` bypasses the client datasource cache for the source fetch.
+     - `forceRefreshMaxCacheAgeMs` lets a `forceRefresh` effect reuse a fresh in-memory datasource response instead of issuing another server fetch. Use it for relatively stable master data that was just prefetched before the user edit; leave it unset for sources that must always be live.
      - `stopWhen` freezes synchronization while a `WhenClause` matches, for example `{ "fieldId": "status", "equals": "Closed" }`.
    - `dataField`: column that contains a JSON array/object describing the rows to add (e.g., `Ingredients` = `[{"ING":"Carrots","QTY":"2","UNIT":"kg"}]`).
   - `lineItemMapping`: map of line-item field ids â†’ keys/paths in each JSON entry. Dot notation is supported for nested objects.

@@ -75,6 +75,7 @@ export const runSelectionEffects = (args: {
   }) => void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
   onRowAppended?: (args: { anchor: string; targetKey: string; rowId: string; source?: { groupId: string; rowId: string } }) => void;
+  onAsyncEffectStart?: (meta: Record<string, unknown>) => (() => void) | void;
   opts?: SelectionEffectOpts;
   effectOverrides?: Record<string, Record<string, FieldValue>>;
 }) => {
@@ -90,6 +91,7 @@ export const runSelectionEffects = (args: {
     onLineItemsMutated,
     logEvent,
     onRowAppended,
+    onAsyncEffectStart,
     opts,
     effectOverrides
   } = args;
@@ -787,6 +789,7 @@ export const runSelectionEffects = (args: {
           return appliedValues;
         });
       },
+      beginAsyncEffect: onAsyncEffectStart,
       clearLineItems: (
         groupId: string,
         contextId?: string,

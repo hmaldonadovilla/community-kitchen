@@ -67,7 +67,7 @@ import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/r
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
-import { renderInlineHtmlTemplateApi } from '../api';
+import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
@@ -225,6 +225,7 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
 };
 
 const DATA_SOURCE_COUNT_FIELD_PREFIX = '__ckDataSourceCount.';
+const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
 
 const normalizeDataSourceVisibilityKey = (value: string): string =>
   (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -462,17 +463,6 @@ const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
   return resolveParagraphUserText({ rawValue, config: cfg });
 };
 
-const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<string, FieldValue>): boolean => {
-  const fields = group.lineItemConfig?.fields || [];
-  return fields.every(field => {
-    if (!field.required) return true;
-    const val = resolveRequiredValue(field, rowValues[field.id]);
-    if (Array.isArray(val)) return val.length > 0;
-    if (typeof val === 'string') return val.trim() !== '';
-    return val !== undefined && val !== null;
-  });
-};
-
 const resolveOverlayHeaderFields = (groupCfg: any, overlayDetail: any): LineItemFieldConfig[] => {
   if (!groupCfg) return [];
   const headerColumnsExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
@@ -617,6 +607,7 @@ interface FormViewProps {
       snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     }
   ) => void;
+  selectionEffectAsyncPendingCount?: number;
   /**
    * Optional immediate upload hook. Used to upload FILE_UPLOAD fields as soon as the user adds files.
    * The handler should:
@@ -765,6 +756,7 @@ const FormView: React.FC<FormViewProps> = ({
   externalScrollAnchor,
   onExternalScrollConsumed,
   onSelectionEffect,
+  selectionEffectAsyncPendingCount = 0,
   onUploadFiles,
   onReportButton,
   onReportButtonPointerDown,
@@ -872,6 +864,7 @@ const FormView: React.FC<FormViewProps> = ({
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
   const overlayDetailRenderSignatureRef = useRef<string>('');
   const overlayDetailRenderSeqRef = useRef(0);
+  const overlayDetailRenderTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const autoSaveHoldReasonsRef = useRef<Record<string, true>>({});
   const overlaySessionSnapshotsRef = useRef<
     Record<
@@ -965,6 +958,15 @@ const FormView: React.FC<FormViewProps> = ({
     valuesRef.current = values;
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);
+
+  useEffect(() => {
+    return () => {
+      if (overlayDetailRenderTimerRef.current) {
+        globalThis.clearTimeout(overlayDetailRenderTimerRef.current);
+        overlayDetailRenderTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!overlayDetailSelection || overlayDetailSelection.mode !== 'edit') {
@@ -3752,14 +3754,14 @@ const FormView: React.FC<FormViewProps> = ({
         const next = Math.max(0, top);
         try {
           window.scrollTo(0, next);
-        } catch (_) {
+        } catch {
           // ignore
         }
         try {
           if (scrollEl) scrollEl.scrollTop = next;
           if (docEl) docEl.scrollTop = next;
           if (bodyEl) bodyEl.scrollTop = next;
-        } catch (_) {
+        } catch {
           // ignore
         }
       };
@@ -6079,7 +6081,13 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   useEffect(() => {
+    const clearPendingOverlayDetailRender = () => {
+      if (!overlayDetailRenderTimerRef.current) return;
+      globalThis.clearTimeout(overlayDetailRenderTimerRef.current);
+      overlayDetailRenderTimerRef.current = null;
+    };
     const resetOverlayDetailRender = () => {
+      clearPendingOverlayDetailRender();
       overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
@@ -6214,11 +6222,27 @@ const FormView: React.FC<FormViewProps> = ({
 
     const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
     if (!resolvedTemplateId) {
+      clearPendingOverlayDetailRender();
       overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
+      return;
+    }
+
+    if (selectionEffectAsyncPendingCount > 0) {
+      clearPendingOverlayDetailRender();
+      overlayDetailRenderSeqRef.current += 1;
+      overlayDetailRenderSignatureRef.current = '';
+      setOverlayDetailHtmlLoading(true);
+      setOverlayDetailHtmlError('');
+      onDiagnostic?.('lineItems.overlayDetail.view.waitSelectionEffects', {
+        pendingCount: selectionEffectAsyncPendingCount,
+        groupId: context.groupId,
+        rowId: overlayDetailSelection.rowId,
+        templateId: resolvedTemplateId
+      });
       return;
     }
 
@@ -6230,19 +6254,42 @@ const FormView: React.FC<FormViewProps> = ({
         templateId: resolvedTemplateId,
         payload: (payload.values as any)[context.groupId]
       });
-    } catch (_) {
+    } catch {
       renderSignature = `${context.groupId}::${overlayDetailSelection.rowId}::${resolvedTemplateId}`;
     }
     if (overlayDetailRenderSignatureRef.current === renderSignature) {
       return;
     }
+    clearPendingOverlayDetailRender();
     overlayDetailRenderSignatureRef.current = renderSignature;
 
-    const renderKey = `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}:${resolvedTemplateId}`;
+    const renderKey = (() => {
+      try {
+        return JSON.stringify({
+          scope: 'overlayDetail',
+          activeGroupKey,
+          groupId: context.groupId,
+          rowId: overlayDetailSelection.rowId,
+          templateId: resolvedTemplateId,
+          renderSignature
+        });
+      } catch {
+        return `overlay:${activeGroupKey}:${context.groupId}:${overlayDetailSelection.rowId}:${resolvedTemplateId}:${renderSignature}`;
+      }
+    })();
     const renderSeq = ++overlayDetailRenderSeqRef.current;
+    const cachedRender = peekInlineHtmlTemplateCache(payload, templateIdMap as any, renderKey);
+    if (cachedRender?.success && cachedRender?.html) {
+      setOverlayDetailHtml(cachedRender.html);
+      setOverlayDetailHtmlError('');
+      setOverlayDetailHtmlLoading(false);
+      return;
+    }
     setOverlayDetailHtmlLoading(true);
     setOverlayDetailHtmlError('');
-    renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
+    overlayDetailRenderTimerRef.current = globalThis.setTimeout(() => {
+      overlayDetailRenderTimerRef.current = null;
+      renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
       .then(res => {
         if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         if (res?.success && res?.html) {
@@ -6279,8 +6326,10 @@ const FormView: React.FC<FormViewProps> = ({
         if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         setOverlayDetailHtmlLoading(false);
       });
+    }, OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS);
   }, [
     definition,
+    formKey,
     language,
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
@@ -6289,10 +6338,10 @@ const FormView: React.FC<FormViewProps> = ({
     overlayDetailSelection,
     recordMeta,
     resolveSubgroupDefs,
+    selectionEffectAsyncPendingCount,
     subgroupOverlay.open,
     subgroupOverlay.groupOverride,
     subgroupOverlay.subKey,
-    tSystem,
     values
   ]);
 
@@ -6365,7 +6414,7 @@ const FormView: React.FC<FormViewProps> = ({
         const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
         try {
           focusable?.focus({ preventScroll: true } as any);
-        } catch (_) {
+        } catch {
           // ignore
         }
         return true;
@@ -6741,7 +6790,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     try {
       el.focus();
-    } catch (_) {
+    } catch {
       // ignore
     }
     // Respect sticky header by using scroll-margin-top on the element.
@@ -9051,7 +9100,6 @@ const FormView: React.FC<FormViewProps> = ({
       })();
       const effectFields = (group.lineItemConfig?.fields || []).filter(hasSelectionEffects);
       if (effectFields.length) {
-        const rowComplete = isLineRowComplete(group, updatedRowValues);
         effectFields.forEach(effectField => {
           const isSourceField = effectField.id === field.id;
           const dependsOnChangedField = !isSourceField && selectionEffectDependsOnField(effectField, field.id);

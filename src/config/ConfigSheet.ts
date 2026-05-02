@@ -1898,6 +1898,12 @@ export class ConfigSheet {
         if (sourceSyncRaw?.forceRefresh !== undefined) {
           sourceSync.forceRefresh = Boolean(sourceSyncRaw.forceRefresh);
         }
+        if (sourceSyncRaw?.forceRefreshMaxCacheAgeMs !== undefined) {
+          const maxAgeMs = Number(sourceSyncRaw.forceRefreshMaxCacheAgeMs);
+          if (Number.isFinite(maxAgeMs) && maxAgeMs >= 0) {
+            sourceSync.forceRefreshMaxCacheAgeMs = maxAgeMs;
+          }
+        }
         const sourceSyncStopWhen = this.normalizeWhenClause(sourceSyncRaw?.stopWhen);
         if (sourceSyncStopWhen) sourceSync.stopWhen = sourceSyncStopWhen;
         if (effect.refreshOnInit !== undefined) {

@@ -2867,6 +2867,12 @@ export interface SelectionEffect {
      */
     forceRefresh?: boolean;
     /**
+     * When `forceRefresh` is true, allow a fresh in-memory datasource response to satisfy
+     * the effect instead of starting another server fetch. Useful for master data that was
+     * just prefetched when a step opened.
+     */
+    forceRefreshMaxCacheAgeMs?: number;
+    /**
      * Freeze this synchronization while the condition matches.
      */
     stopWhen?: WhenClause;

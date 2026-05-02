@@ -230,7 +230,12 @@ describe('ConfigSheet', () => {
                 "RECIPE": "LEFTOVER_RECIPE",
                 "PREP_QTY": "LEFTOVER_PORTIONS"
               },
-              "clearOnNoMatch": true
+              "clearOnNoMatch": true,
+              "sourceSync": {
+                "refreshOnInit": true,
+                "forceRefresh": true,
+                "forceRefreshMaxCacheAgeMs": 120000
+              }
             }
           ]
         }`,
@@ -256,6 +261,11 @@ describe('ConfigSheet', () => {
         fieldMapping: {
           RECIPE: 'LEFTOVER_RECIPE',
           PREP_QTY: 'LEFTOVER_PORTIONS'
+        },
+        sourceSync: {
+          refreshOnInit: true,
+          forceRefresh: true,
+          forceRefreshMaxCacheAgeMs: 120000
         }
       })
     ]);

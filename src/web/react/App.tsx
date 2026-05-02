@@ -1357,6 +1357,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, []);
   const pendingDeletedRecordIdsRef = useRef<string[]>([]);
   const readyForProductionUnlockTransitionAttemptedRef = useRef<Set<string>>(new Set());
+  const selectionEffectAsyncPendingCountRef = useRef(0);
+  const [selectionEffectAsyncPendingCount, setSelectionEffectAsyncPendingCount] = useState(0);
   const [pendingDeletedRecordApplyTick, setPendingDeletedRecordApplyTick] = useState(0);
 
   const resolveOptionGroupKey = useCallback(
@@ -13965,6 +13967,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   };
 
+  const beginSelectionEffectAsync = useCallback((_meta: Record<string, unknown>) => {
+    selectionEffectAsyncPendingCountRef.current += 1;
+    setSelectionEffectAsyncPendingCount(selectionEffectAsyncPendingCountRef.current);
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      selectionEffectAsyncPendingCountRef.current = Math.max(0, selectionEffectAsyncPendingCountRef.current - 1);
+      setSelectionEffectAsyncPendingCount(selectionEffectAsyncPendingCountRef.current);
+    };
+  }, []);
+
   function runSelectionEffects(
     question: WebQuestionDefinition,
     value: FieldValue,
@@ -14051,6 +14065,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }, 0);
       },
       logEvent,
+      onAsyncEffectStart: beginSelectionEffectAsync,
       opts: {
         ...(opts || {}),
         topValues: currentTopValues
@@ -16679,6 +16694,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           externalScrollAnchor={externalScrollAnchor}
           onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
           onSelectionEffect={runSelectionEffects}
+          selectionEffectAsyncPendingCount={selectionEffectAsyncPendingCount}
           onUploadFiles={uploadFieldUrls}
           onReportButton={handleCustomButton}
           onReportButtonPointerDown={handleReportButtonPointerDown}

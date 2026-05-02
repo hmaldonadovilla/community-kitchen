@@ -2726,6 +2726,7 @@
                                   "sourceSync": {
                                     "refreshOnInit": true,
                                     "forceRefresh": true,
+                                    "forceRefreshMaxCacheAgeMs": 120000,
                                     "stopWhen": {
                                       "fieldId": "status",
                                       "equals": "Closed"
@@ -5378,6 +5379,7 @@
                     "sourceSync": {
                       "refreshOnInit": true,
                       "forceRefresh": true,
+                      "forceRefreshMaxCacheAgeMs": 120000,
                       "stopWhen": {
                         "fieldId": "status",
                         "equals": "Closed"
@@ -6482,6 +6484,7 @@
                     "sourceSync": {
                       "refreshOnInit": true,
                       "forceRefresh": true,
+                      "forceRefreshMaxCacheAgeMs": 120000,
                       "stopWhen": {
                         "fieldId": "status",
                         "equals": "Closed"
@@ -6838,6 +6841,7 @@
                         "sourceSync": {
                           "refreshOnInit": true,
                           "forceRefresh": true,
+                          "forceRefreshMaxCacheAgeMs": 120000,
                           "stopWhen": {
                             "fieldId": "status",
                             "equals": "Closed"
@@ -9233,6 +9237,7 @@
                       "sourceSync": {
                         "refreshOnInit": true,
                         "forceRefresh": true,
+                        "forceRefreshMaxCacheAgeMs": 120000,
                         "stopWhen": {
                           "fieldId": "status",
                           "equals": "Closed"
@@ -10405,6 +10410,7 @@
                       "sourceSync": {
                         "refreshOnInit": true,
                         "forceRefresh": true,
+                        "forceRefreshMaxCacheAgeMs": 120000,
                         "stopWhen": {
                           "fieldId": "status",
                           "equals": "Closed"
@@ -10761,6 +10767,7 @@
                           "sourceSync": {
                             "refreshOnInit": true,
                             "forceRefresh": true,
+                            "forceRefreshMaxCacheAgeMs": 120000,
                             "stopWhen": {
                               "fieldId": "status",
                               "equals": "Closed"
@@ -14591,6 +14598,7 @@
                                   "sourceSync": {
                                     "refreshOnInit": true,
                                     "forceRefresh": true,
+                                    "forceRefreshMaxCacheAgeMs": 120000,
                                     "stopWhen": {
                                       "fieldId": "status",
                                       "equals": "Closed"
