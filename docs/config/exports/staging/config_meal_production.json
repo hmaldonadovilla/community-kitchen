@@ -896,7 +896,7 @@
           ],
           "submit": [
             {
-              "id": "ck-70.leftoverForm.futurePrepDate.blockNext",
+              "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
               "when": {
                 "all": [
                   {
@@ -908,7 +908,47 @@
                   {
                     "fieldId": "__ckStep",
                     "equals": [
-                      "leftoverForm"
+                      "deliveryForm"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInFuture": true
+                  }
+                ]
+              },
+              "disable": true,
+              "dialogTrigger": "onEnable",
+              "dialog": {
+                "message": {
+                  "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                  "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                  "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                },
+                "confirmLabel": {
+                  "en": "OK",
+                  "fr": "OK",
+                  "nl": "OK"
+                },
+                "showCancel": false,
+                "showCloseButton": false,
+                "dismissOnBackdrop": false
+              }
+            },
+            {
+              "id": "ck-70.leftovers.futurePrepDate.blockComplete",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
                     ]
                   },
                   {
@@ -3079,6 +3119,10 @@
         },
         {
           "id": "leftovers",
+          "excludeWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          },
           "contextHeader": {
             "parts": [
               {
@@ -12857,6 +12901,46 @@
               }
             },
             {
+              "id": "ck-70.leftovers.futurePrepDate.blockComplete",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInFuture": true
+                  }
+                ]
+              },
+              "disable": true,
+              "dialogTrigger": "onEnable",
+              "dialog": {
+                "message": {
+                  "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                  "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                  "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                },
+                "confirmLabel": {
+                  "en": "OK",
+                  "fr": "OK",
+                  "nl": "OK"
+                },
+                "showCancel": false,
+                "showCloseButton": false,
+                "dismissOnBackdrop": false
+              }
+            },
+            {
               "id": "ck-70.summary.closed.hideSubmit",
               "when": {
                 "all": [
@@ -14954,6 +15038,10 @@
         },
         {
           "id": "leftovers",
+          "excludeWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          },
           "contextHeader": {
             "parts": [
               {

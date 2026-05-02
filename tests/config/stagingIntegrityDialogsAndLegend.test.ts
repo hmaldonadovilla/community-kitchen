@@ -520,7 +520,10 @@ describe('staging integrity dialogs and list legend config', () => {
         ]
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
-      expect(leftovers?.excludeWhen).toBeUndefined();
+      expect(leftovers?.excludeWhen).toEqual({
+        fieldId: 'MP_PREP_DATE',
+        isInFuture: true
+      });
       expect(leftovers?.helpText).toBeUndefined();
       expect(leftovers?.navigation?.stepBarAccessWhen).toEqual({
         fieldId: 'status',
