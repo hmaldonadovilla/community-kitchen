@@ -685,6 +685,17 @@ describe('staging integrity dialogs and list legend config', () => {
           })
         ])
       );
+      const editIngredientsAction = (leftoversMeals?.rowFlow?.actions || []).find(
+        (action: any) => action?.id === 'editIngredients'
+      );
+      const editIngredientsOverlayEffect = (editIngredientsAction?.effects || []).find(
+        (effect: any) => effect?.type === 'openOverlay' && effect?.groupId === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
+      );
+      expect(editIngredientsOverlayEffect?.groupOverride?.ui?.rowSort).toEqual(
+        expect.objectContaining({
+          fieldId: 'ING'
+        })
+      );
       expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
       expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('all');

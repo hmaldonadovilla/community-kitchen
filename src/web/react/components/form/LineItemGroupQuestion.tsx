@@ -13513,7 +13513,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     const collapsed =
                       collapsedSubgroups[subKey] ?? ((sub as any)?.ui?.defaultCollapsed !== undefined ? !!(sub as any)?.ui?.defaultCollapsed : true);
                     const subRows = lineItems[subKey] || [];
-                    const orderedSubRows = [...subRows].filter(subRow => {
+                    const filteredSubRows = subRows.filter(subRow => {
                       const hideRowsWithoutAnchor = (sub as any)?.ui?.hideRowsWithoutAnchor === true;
                       const anchorFieldId =
                         (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
@@ -13524,6 +13524,11 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         anchorFieldId,
                         hideRowsWithoutAnchor
                       });
+                    });
+                    const orderedSubRows = applyLineItemRowSort({
+                      rows: filteredSubRows,
+                      fields: sub.fields || [],
+                      config: ((sub as any)?.ui as any)?.rowSort
                     });
                     const subTotals = computeTotals(
                       { config: { ...sub, fields: sub.fields || [] }, rows: orderedSubRows, groupId: subKey, invalidFieldPaths: errors },

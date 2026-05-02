@@ -160,6 +160,7 @@ const resolveOptionSetForField = (optionState: OptionState, field: any, parentId
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
+import { applyLineItemRowSort } from '../app/lineItemRowSort';
 import {
   isIngredientNameFieldId,
   isIngredientsManagementForm,
@@ -11493,7 +11494,11 @@ const FormView: React.FC<FormViewProps> = ({
     const overlaySessionBulkSelectionLabel = overlaySessionAllRowsSelected
       ? tSystem('common.deselectAll', language, 'Deselect all')
       : tSystem('common.selectAll', language, 'Select all');
-    const orderedRows = [...rows];
+    const orderedRows = applyLineItemRowSort({
+      rows,
+      fields: subConfig?.fields || [],
+      config: subUi?.rowSort
+    });
     const { maxRows: subMaxRows } = resolveLineItemRowLimits(subConfig as any);
     const subLimitCount = overlayRowFilter ? rows.length : rowsAll.length;
     const subMaxRowsReached = isLineItemMaxRowsReached(subLimitCount, subMaxRows);

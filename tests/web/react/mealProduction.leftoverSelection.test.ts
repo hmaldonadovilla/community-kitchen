@@ -741,7 +741,10 @@ describe('meal production leftover selection config', () => {
                 }),
                 groupOverride: expect.objectContaining({
                   ui: expect.objectContaining({
-                    maxVisibleRows: 0
+                    maxVisibleRows: 0,
+                    rowSort: expect.objectContaining({
+                      fieldId: 'ING'
+                    })
                   })
                 }),
                 hideCloseButton: true,
