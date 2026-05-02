@@ -109,7 +109,8 @@ import {
   resolveRecordFreshnessMetaOnlyAdoptionRule,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
-  resolveRecordFreshnessTimerDelay
+  resolveRecordFreshnessTimerDelay,
+  shouldRealignGuidedStepAfterStaleSync
 } from './app/recordFreshness';
 import {
   buildDataSourceFreshnessSnapshotSignature,
@@ -6466,12 +6467,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return true;
           }
-          setGuidedExternalSyncToken(prev => prev + 1);
+          const guidedRealign = shouldRealignGuidedStepAfterStaleSync(args.reason);
+          if (guidedRealign) {
+            setGuidedExternalSyncToken(prev => prev + 1);
+          }
           logEvent('record.sync.success', {
             reason: args.reason,
             recordId,
             serverRow: args.serverRow ?? null,
-            applyMode
+            applyMode,
+            guidedRealign
           });
           return true;
         }

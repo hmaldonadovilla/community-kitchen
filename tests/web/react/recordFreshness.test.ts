@@ -6,6 +6,7 @@ import {
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
+  shouldRealignGuidedStepAfterStaleSync,
   shouldDeferRecordFreshnessSync
 } from '../../../src/web/react/app/recordFreshness';
 
@@ -40,6 +41,13 @@ describe('recordFreshness helpers', () => {
       compareAgainst: 'lastAppliedSnapshot'
     });
     expect(resolveRecordFreshnessMetaOnlyAdoptionRule({ config, stepId: 'production' })).toBeNull();
+  });
+
+  test('keeps passive stale sync from moving guided navigation', () => {
+    expect(shouldRealignGuidedStepAfterStaleSync('versionCheck.stale')).toBe(false);
+    expect(shouldRealignGuidedStepAfterStaleSync('recordFreshness.stale')).toBe(false);
+    expect(shouldRealignGuidedStepAfterStaleSync('autosave.rejected.stale')).toBe(true);
+    expect(shouldRealignGuidedStepAfterStaleSync('submit.rejected.stale')).toBe(true);
   });
 
   test('returns the remaining delay before the next heartbeat', () => {

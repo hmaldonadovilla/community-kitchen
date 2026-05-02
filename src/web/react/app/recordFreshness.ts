@@ -96,6 +96,13 @@ export const shouldDeferRecordFreshnessSync = (args: {
   now?: number | null;
 }): boolean => resolveRecordFreshnessSyncBlockers(args).length > 0;
 
+export const shouldRealignGuidedStepAfterStaleSync = (reason?: string | null): boolean => {
+  const normalized = (reason || '').toString().trim();
+  if (normalized === 'versionCheck.stale') return false;
+  if (normalized === 'recordFreshness.stale') return false;
+  return true;
+};
+
 export const resolveRecordFreshnessSyncBlockers = (args: {
   dirty: boolean;
   draftSavePhase?: string | null;
