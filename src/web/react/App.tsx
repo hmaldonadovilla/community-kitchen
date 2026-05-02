@@ -74,6 +74,7 @@ import { useConfirmDialog } from './features/overlays/useConfirmDialog';
 import { FieldChangeDialogOverlay } from './features/fieldChangeDialog/FieldChangeDialogOverlay';
 import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fieldChangeDialog/useFieldChangeDialog';
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
+import type { GuidedExternalSyncSignal } from './features/steps/domain/guidedExternalSyncSignal';
 import {
   buildDraftPayload,
   buildUploadDraftPayload,
@@ -2826,7 +2827,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   } | null>(null);
   const [formIsValid, setFormIsValid] = useState<boolean>(() => (orderedEntryEnabled ? false : true));
   const [requestedGuidedStepId, setRequestedGuidedStepId] = useState<string | null>(null);
-  const [guidedExternalSyncToken, setGuidedExternalSyncToken] = useState<number>(0);
+  const guidedExternalSyncTokenRef = useRef<number>(0);
+  const [guidedExternalSyncSignal, setGuidedExternalSyncSignal] = useState<GuidedExternalSyncSignal | null>(null);
   const vvBottomRef = useRef<number>(-1);
   const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
@@ -4444,6 +4446,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordFreshnessCheckPromiseRef.current = null;
       lastLocalRecordMutationAtRef.current = 0;
       lastExternalRecordSyncAtRef.current = 0;
+      setGuidedExternalSyncSignal(null);
       lastRecordServerActivityAtRef.current = args?.nextRecordId ? Date.now() : 0;
       if (dataSourceFreshnessTimerRef.current) {
         globalThis.clearTimeout(dataSourceFreshnessTimerRef.current);
@@ -6471,6 +6474,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async args => {
       const recordId = (args.recordId || selectedRecordIdRef.current || '').toString().trim();
       if (!recordId) return false;
+      const recordSessionId = recordSessionRef.current;
       if (recordSyncPromiseRef.current) {
         return recordSyncPromiseRef.current;
       }
@@ -6512,9 +6516,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             });
             return true;
           }
-          const guidedRealign = shouldRealignGuidedStepAfterStaleSync(args.reason);
+          const guidedRealignAllowed = shouldRealignGuidedStepAfterStaleSync(args.reason);
+          const guidedRealign =
+            guidedRealignAllowed && selectedRecordIdRef.current === recordId && recordSessionRef.current === recordSessionId;
           if (guidedRealign) {
-            setGuidedExternalSyncToken(prev => prev + 1);
+            const nextToken = guidedExternalSyncTokenRef.current + 1;
+            guidedExternalSyncTokenRef.current = nextToken;
+            setGuidedExternalSyncSignal({
+              token: nextToken,
+              recordId,
+              recordSessionId,
+              reason: args.reason
+            });
+          } else if (guidedRealignAllowed) {
+            logEvent('record.sync.guidedRealign.skipped', {
+              reason: args.reason,
+              recordId,
+              selectedRecordId: selectedRecordIdRef.current || null,
+              recordSessionId,
+              currentRecordSessionId: recordSessionRef.current
+            });
           }
           logEvent('record.sync.success', {
             reason: args.reason,
@@ -10477,6 +10498,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setGuidedUiState(null);
     activeGuidedStepIdRef.current = '';
     setRequestedGuidedStepId(null);
+    setGuidedExternalSyncSignal(null);
     recordDataVersionRef.current = null;
     optimisticClientDataVersionRef.current = null;
     recordRowNumberRef.current = null;
@@ -16798,7 +16820,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           onGuidedUiChange={setGuidedUiState}
           onGuidedStepMilestone={handleGuidedStepMilestone}
           requestedGuidedStepId={requestedGuidedStepId}
-          guidedExternalSyncToken={guidedExternalSyncToken}
+          guidedExternalSyncSignal={guidedExternalSyncSignal}
+          recordSessionId={recordSessionKey}
           onRequestedGuidedStepHandled={() => setRequestedGuidedStepId(null)}
           dedupNavigationBlocked={dedupNavigationBlocked}
           guidedForwardNavigationBlocked={submitDisabledByGate}

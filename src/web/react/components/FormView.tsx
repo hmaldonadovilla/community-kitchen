@@ -190,6 +190,10 @@ import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClau
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
+import {
+  shouldApplyGuidedExternalSyncSignal,
+  type GuidedExternalSyncSignal
+} from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
@@ -681,7 +685,8 @@ interface FormViewProps {
     queueBackgroundReservationSync?: boolean;
   }) => Promise<{ success: boolean; message?: string }>;
   requestedGuidedStepId?: string | null;
-  guidedExternalSyncToken?: number;
+  guidedExternalSyncSignal?: GuidedExternalSyncSignal | null;
+  recordSessionId?: number;
   onRequestedGuidedStepHandled?: () => void;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
@@ -770,7 +775,8 @@ const FormView: React.FC<FormViewProps> = ({
   onGuidedStepMilestone,
   onBeforeGuidedStepAdvance,
   requestedGuidedStepId,
-  guidedExternalSyncToken,
+  guidedExternalSyncSignal,
+  recordSessionId,
   onRequestedGuidedStepHandled,
   dedupNavigationBlocked,
   openConfirmDialog,
@@ -1640,9 +1646,18 @@ const FormView: React.FC<FormViewProps> = ({
 
   useLayoutEffect(() => {
     if (!guidedEnabled) return;
-    const nextToken = Number(guidedExternalSyncToken);
-    if (!Number.isFinite(nextToken) || nextToken <= 0) return;
-    if (nextToken === lastGuidedExternalSyncTokenRef.current) return;
+    const nextToken = Number(guidedExternalSyncSignal?.token);
+    const currentRecordId = recordMeta?.id === undefined || recordMeta?.id === null ? '' : recordMeta.id.toString().trim();
+    if (
+      !shouldApplyGuidedExternalSyncSignal({
+        signal: guidedExternalSyncSignal,
+        handledToken: lastGuidedExternalSyncTokenRef.current,
+        currentRecordId,
+        currentRecordSessionId: recordSessionId ?? null
+      })
+    ) {
+      return;
+    }
     lastGuidedExternalSyncTokenRef.current = nextToken;
     guidedAutoAdvanceAttemptRef.current = null;
     if (guidedAutoAdvanceTimerRef.current) {
@@ -1659,7 +1674,11 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('steps.step.externalSync.realign', {
       from: activeGuidedStepId || null,
       to: desiredStepId || activeGuidedStepId || null,
-      changed: Boolean(desiredStepId)
+      changed: Boolean(desiredStepId),
+      token: nextToken,
+      recordId: currentRecordId || null,
+      recordSessionId: recordSessionId ?? null,
+      reason: guidedExternalSyncSignal?.reason || null
     });
     if (!desiredStepId) return;
     setActiveGuidedStepId(desiredStepId);
@@ -1667,11 +1686,13 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     guidedEnabled,
-    guidedExternalSyncToken,
+    guidedExternalSyncSignal,
     guidedStatus.steps,
     guidedStepIds,
     maxReachableGuidedIndex,
-    onDiagnostic
+    onDiagnostic,
+    recordMeta?.id,
+    recordSessionId
   ]);
 
   const guidedVirtualState = useMemo(() => {
