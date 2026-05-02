@@ -3385,6 +3385,9 @@
                         "groupOverride": {
                           "ui": {
                             "maxVisibleRows": 0,
+                            "rowSort": {
+                              "fieldId": "ING"
+                            },
                             "tableColumnWidths": {
                               "ING_SELECTED": "44px",
                               "ING": "calc(100% - 44px)",
@@ -15257,6 +15260,9 @@
                         "groupOverride": {
                           "ui": {
                             "maxVisibleRows": 0,
+                            "rowSort": {
+                              "fieldId": "ING"
+                            },
                             "tableColumnWidths": {
                               "ING_SELECTED": "44px",
                               "ING": "calc(100% - 44px)",

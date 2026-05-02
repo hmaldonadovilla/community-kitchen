@@ -2168,6 +2168,28 @@ export interface LineItemCollapsedFieldConfig {
   showLabel?: boolean;
 }
 
+export interface LineItemRowSortConfig {
+  /**
+   * Field id used to sort rendered line-item rows.
+   */
+  fieldId: string;
+  /**
+   * Sort direction. Defaults to ascending.
+   */
+  direction?: 'asc' | 'desc';
+  /**
+   * Where empty values should appear. Defaults to last.
+   */
+  empty?: 'first' | 'last';
+  /**
+   * Sort comparison mode.
+   * - auto: NUMBER fields sort numerically, other fields sort as text
+   * - text: force text comparison
+   * - number: force numeric comparison before text fallback
+   */
+  mode?: 'auto' | 'text' | 'number';
+}
+
 export interface CompactRowPartConfig {
   type?: 'text' | 'field' | 'primary' | 'meta' | 'sourceListSummary';
   text?: LocalizedString | string;
@@ -2281,6 +2303,11 @@ export interface LineItemGroupUiConfig {
    * Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
    */
   tableColumnWidths?: Record<string, string | number>;
+  /**
+   * Optional display-only ordering for rendered line-item rows.
+   * This does not mutate persisted row order.
+   */
+  rowSort?: LineItemRowSortConfig;
   /**
    * When true, omit the trailing Remove column from table renderers.
    * This is useful for read-mostly selector tables where rows should stay stable

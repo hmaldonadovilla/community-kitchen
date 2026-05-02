@@ -142,6 +142,7 @@ import {
   buildStepDataSourceBootstrapSignature,
   shouldWaitForGuidedReservationSyncOnBootstrap
 } from '../../app/stepDataSourceBootstrap';
+import { applyLineItemRowSort } from '../../app/lineItemRowSort';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -805,9 +806,14 @@ export const LineItemGroupQuestion: React.FC<{
   );
 
   const renderRowsAll = lineItems[q.id] || [];
-  const parentRows = rowFilter
+  const parentRowsFiltered = rowFilter
     ? renderRowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any))
     : renderRowsAll;
+  const parentRows = applyLineItemRowSort({
+    rows: parentRowsFiltered,
+    fields: q.lineItemConfig?.fields || [],
+    config: (q.lineItemConfig?.ui as any)?.rowSort
+  });
   const latestValuesRef = React.useRef(values);
   latestValuesRef.current = values;
 
