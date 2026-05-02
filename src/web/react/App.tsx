@@ -238,6 +238,7 @@ import {
   resolveCopyCurrentRecordDestructiveChangeBypassFieldIds,
   shouldBypassCopyCurrentRecordDestructiveChange
 } from './app/copyProfile';
+import { shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeaderDrawerEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
@@ -7440,6 +7441,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setStatusLevel(null);
       setView('form');
 
+      if (
+        shouldDeferCopiedDraftCreation({
+          dedupRules: (definition as any)?.dedupRules,
+          values: valuesRef.current as any,
+          existingRecordId: ''
+        })
+      ) {
+        logEvent('ui.copyCurrent.ensureRecordId.deferred', {
+          reason: 'dedupKeysIncomplete'
+        });
+        openCopyCurrentRecordDialogIfConfigured();
+        return;
+      }
+
+      const duplicateHandled = await precheckCreateDedupAndMaybeNavigate({
+        values: valuesRef.current as any,
+        lineItems: lineItemsRef.current,
+        source: 'copyCurrentRecord'
+      });
+      if (recordSessionRef.current !== copySession) return;
+      if (duplicateHandled) return;
+
       const ensureRecordId = ensureDraftRecordIdActionRef.current;
       if (!ensureRecordId) {
         openCopyCurrentRecordDialogIfConfigured();
@@ -7471,6 +7494,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     language,
     logEvent,
     openCopyCurrentRecordDialogIfConfigured,
+    precheckCreateDedupAndMaybeNavigate,
     rememberAutoSaveSeenState,
     resetFieldChangeTransientState
   ]);
@@ -10470,14 +10494,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const requestNavigateToList = useCallback(
-    async (trigger: string) => {
+    async (trigger: string, options?: { discardInvalidDraft?: boolean }) => {
       if (viewRef.current === 'list') return;
       if (navigateHomeInFlightRef.current) return;
       const startedAt = Date.now();
       const startMark = `ck.nav.back.start.${startedAt}`;
       backToHomePerfRef.current = { trigger, startedAt, startMark };
       perfMark(startMark);
+      const discardInvalidDraft = options?.discardInvalidDraft === true;
       const renderedDraftChanged =
+        !discardInvalidDraft &&
         !!latestRenderedAutoSaveStateFingerprintRef.current &&
         latestRenderedAutoSaveStateFingerprintRef.current !== lastAutoSaveStateFingerprintRef.current;
       if (renderedDraftChanged && viewRef.current === 'form') {
@@ -10490,6 +10516,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         ? pendingFollowupBatchPromisesRef.current.has(activeRecordId)
         : false;
       const needsWait = shouldWaitBeforeLeavingRecord({
+        discardInvalidDraft,
         uploadsInFlight: uploadQueueRef.current.size,
         autoSaveInFlight: autoSaveInFlightRef.current,
         autoSaveDirty: autoSaveDirtyRef.current,
@@ -10520,7 +10547,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             )
           : tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
         kind: 'navigateHome',
-        diagnosticMeta: { trigger, recordId: activeRecordId || null, followupBatchInFlight }
+        diagnosticMeta: { trigger, recordId: activeRecordId || null, followupBatchInFlight, discardInvalidDraft }
       });
       logEvent('navigate.list.wait.start', {
         trigger,
@@ -10535,6 +10562,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
         renderedDraftChanged,
+        discardInvalidDraft,
         dirty: autoSaveDirtyRef.current
       });
       try {
@@ -10672,6 +10700,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             }
             setDraftSave({ phase: 'idle' });
           }
+          dedupHoldRef.current = false;
+          autoSaveDirtyRef.current = false;
+          autoSaveQueuedRef.current = false;
+          autoSaveUserEditedRef.current = false;
+          createFlowRef.current = false;
+          createFlowUserEditedRef.current = false;
+          lastDraftSaveFailureRef.current = null;
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          setDraftSave({ phase: 'idle' });
+          rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
           logEvent('navigate.home.dedupIncomplete.confirm', {
             criteria: homeLeaveCriteria,
             incompleteDedupKeys,
@@ -10679,7 +10720,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             recordId: existingRecordId || null,
             deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
           });
-          await requestNavigateToList('navigate.home.dedupIncomplete.confirm');
+          await requestNavigateToList('navigate.home.dedupIncomplete.confirm', { discardInvalidDraft: true });
         }
       });
       logEvent('navigate.home.dedupIncomplete.dialog.open', {
@@ -10694,6 +10735,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     customConfirm,
     definition,
     logEvent,
+    rememberAutoSaveSeenState,
     requestNavigateToList,
     triggerDedupDeleteOnKeyChange
   ]);

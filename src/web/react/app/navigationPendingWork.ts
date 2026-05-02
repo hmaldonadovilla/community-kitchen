@@ -1,4 +1,5 @@
 export const shouldWaitBeforeLeavingRecord = (args: {
+  discardInvalidDraft?: boolean;
   uploadsInFlight?: number;
   autoSaveInFlight?: boolean;
   autoSaveDirty?: boolean;
@@ -10,15 +11,19 @@ export const shouldWaitBeforeLeavingRecord = (args: {
   guidedStepLiveSyncInFlight?: boolean;
   guidedStepLiveSyncPending?: boolean;
   renderedDraftChanged?: boolean;
-}): boolean =>
-  Number(args.uploadsInFlight || 0) > 0 ||
-  args.autoSaveInFlight === true ||
-  args.autoSaveDirty === true ||
-  args.autoSaveQueued === true ||
-  args.draftSaveInFlight === true ||
-  args.recordSyncInFlight === true ||
-  args.reservationSyncInFlight === true ||
-  args.followupBatchInFlight === true ||
-  args.guidedStepLiveSyncInFlight === true ||
-  args.guidedStepLiveSyncPending === true ||
-  args.renderedDraftChanged === true;
+}): boolean => {
+  if (args.discardInvalidDraft === true) return false;
+  return (
+    Number(args.uploadsInFlight || 0) > 0 ||
+    args.autoSaveInFlight === true ||
+    args.autoSaveDirty === true ||
+    args.autoSaveQueued === true ||
+    args.draftSaveInFlight === true ||
+    args.recordSyncInFlight === true ||
+    args.reservationSyncInFlight === true ||
+    args.followupBatchInFlight === true ||
+    args.guidedStepLiveSyncInFlight === true ||
+    args.guidedStepLiveSyncPending === true ||
+    args.renderedDraftChanged === true
+  );
+};

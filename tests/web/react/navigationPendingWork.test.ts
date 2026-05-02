@@ -42,4 +42,15 @@ describe('navigationPendingWork', () => {
   test('does not wait when there is no pending persistence work', () => {
     expect(shouldWaitBeforeLeavingRecord({})).toBe(false);
   });
+
+  test('does not wait when the caller is discarding an invalid draft', () => {
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        discardInvalidDraft: true,
+        autoSaveDirty: true,
+        autoSaveQueued: true,
+        renderedDraftChanged: true
+      })
+    ).toBe(false);
+  });
 });
