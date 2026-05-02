@@ -110,8 +110,10 @@ import {
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
+  shouldPreserveLocalDraftAfterMetaOnlyAdoption,
   shouldRealignGuidedStepAfterStaleSync
 } from './app/recordFreshness';
+import { buildRecordSyncComparableFingerprint } from './app/recordSyncReview';
 import {
   buildDataSourceFreshnessSnapshotSignature,
   primeDataSourceFreshnessWatchBaselines,
@@ -5970,13 +5972,47 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const currentStatusRaw =
         ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() || '';
       const incomingStatusRaw = ((snapshot.status || '') as any)?.toString?.() || '';
-      const metaOnlyRule = resolveRecordFreshnessMetaOnlyAdoptionRule({
+      const configuredMetaOnlyRule = resolveRecordFreshnessMetaOnlyAdoptionRule({
         config: recordFreshnessConfigRef.current,
         stepId: activeGuidedStepIdRef.current
       });
+      const sameActiveRecord = Boolean(currentRecordId && currentRecordId === id);
+      const lastAppliedDraftState = sameActiveRecord
+        ? resolveDraftStateFromSnapshot(selectedRecordSnapshotRef.current)
+        : null;
+      const localComparableFingerprint = sameActiveRecord
+        ? buildRecordSyncComparableFingerprint({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: valuesRef.current,
+            lineItems: lineItemsRef.current
+          })
+        : '';
+      const baselineComparableFingerprint = lastAppliedDraftState
+        ? buildRecordSyncComparableFingerprint({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: lastAppliedDraftState.values,
+            lineItems: lastAppliedDraftState.lineItems
+          })
+        : '';
+      const preserveLocalDraftAfterMetaOnly = shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: sameActiveRecord,
+        currentComparableFingerprint: localComparableFingerprint,
+        baselineComparableFingerprint,
+        dirty: autoSaveDirtyRef.current,
+        queued: autoSaveQueuedRef.current
+      });
+      const metaOnlyRule =
+        configuredMetaOnlyRule ||
+        (preserveLocalDraftAfterMetaOnly
+          ? ({ compareAgainst: 'lastAppliedSnapshot' } as const)
+          : null);
       const baselineDraftState =
         metaOnlyRule?.compareAgainst === 'lastAppliedSnapshot'
-          ? resolveDraftStateFromSnapshot(selectedRecordSnapshotRef.current)
+          ? lastAppliedDraftState
           : null;
       const shouldAdoptMetaOnly = shouldAdoptIncomingRecordSnapshotMetaOnly({
         definition,
@@ -6014,13 +6050,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (snapshot && Number.isFinite(Number((snapshot as any).__rowNumber))) {
           recordRowNumberRef.current = Number((snapshot as any).__rowNumber);
         }
-        autoSaveDirtyRef.current = false;
-        if (autoSaveTimerRef.current) {
-          globalThis.clearTimeout(autoSaveTimerRef.current);
-          autoSaveTimerRef.current = null;
+        if (preserveLocalDraftAfterMetaOnly) {
+          autoSaveDirtyRef.current = true;
+          setDraftSave(prev => (prev.phase === 'saving' ? prev : { phase: 'dirty' }));
+        } else {
+          autoSaveDirtyRef.current = false;
+          autoSaveQueuedRef.current = false;
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          setDraftSave({ phase: 'idle' });
+          rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
         }
-        setDraftSave({ phase: 'idle' });
-        rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
         setRecordLoadingId(null);
         recordLoadingIdRef.current = null;
         setRecordLoadError(null);
@@ -6070,7 +6112,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           incomingDataVersion,
           currentDataVersion,
           autoAddGroupRebuilds: incomingDraftState.changedCount,
-          compareAgainst: metaOnlyRule?.compareAgainst || 'currentDraft'
+          compareAgainst: metaOnlyRule?.compareAgainst || 'currentDraft',
+          source: configuredMetaOnlyRule ? 'configured' : 'localDraftProtection',
+          localDraftPreserved: preserveLocalDraftAfterMetaOnly
         });
         return 'metaOnly';
       }

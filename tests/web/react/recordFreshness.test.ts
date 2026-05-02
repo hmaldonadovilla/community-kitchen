@@ -6,6 +6,7 @@ import {
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
+  shouldPreserveLocalDraftAfterMetaOnlyAdoption,
   shouldRealignGuidedStepAfterStaleSync,
   shouldDeferRecordFreshnessSync
 } from '../../../src/web/react/app/recordFreshness';
@@ -48,6 +49,38 @@ describe('recordFreshness helpers', () => {
     expect(shouldRealignGuidedStepAfterStaleSync('recordFreshness.stale')).toBe(false);
     expect(shouldRealignGuidedStepAfterStaleSync('autosave.rejected.stale')).toBe(true);
     expect(shouldRealignGuidedStepAfterStaleSync('submit.rejected.stale')).toBe(true);
+  });
+
+  test('preserves local draft state when meta-only adoption would otherwise clear unsaved edits', () => {
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: true,
+        currentComparableFingerprint: 'local-leftover-edit',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: true,
+        currentComparableFingerprint: 'saved-before-followup',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(false);
+
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: false,
+        currentComparableFingerprint: 'local-leftover-edit',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(false);
   });
 
   test('returns the remaining delay before the next heartbeat', () => {

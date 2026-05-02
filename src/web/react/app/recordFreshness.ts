@@ -103,6 +103,22 @@ export const shouldRealignGuidedStepAfterStaleSync = (reason?: string | null): b
   return true;
 };
 
+export const shouldPreserveLocalDraftAfterMetaOnlyAdoption = (args: {
+  sameRecord: boolean;
+  currentComparableFingerprint?: string | null;
+  baselineComparableFingerprint?: string | null;
+  dirty?: boolean;
+  queued?: boolean;
+}): boolean => {
+  if (!args.sameRecord) return false;
+  const currentComparableFingerprint = (args.currentComparableFingerprint || '').toString();
+  const baselineComparableFingerprint = (args.baselineComparableFingerprint || '').toString();
+  if (currentComparableFingerprint && baselineComparableFingerprint) {
+    return currentComparableFingerprint !== baselineComparableFingerprint;
+  }
+  return Boolean(args.dirty || args.queued);
+};
+
 export const resolveRecordFreshnessSyncBlockers = (args: {
   dirty: boolean;
   draftSavePhase?: string | null;
