@@ -496,16 +496,8 @@ describe('staging integrity dialogs and list legend config', () => {
         autoAdvance: 'off'
       });
       expect(foodSafety?.excludeWhen).toEqual({
-        any: [
-          {
-            fieldId: 'status',
-            equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
-          },
-          {
-            fieldId: 'MP_PREP_DATE',
-            isInFuture: true
-          }
-        ]
+        fieldId: 'status',
+        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
       });
       expect(portioning?.excludeWhen).toEqual({
         any: [

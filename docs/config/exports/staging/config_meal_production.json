@@ -2893,21 +2893,13 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "any": [
-              {
-                "fieldId": "status",
-                "equals": [
-                  "PDF ready",
-                  "Emailed",
-                  "Final report created",
-                  "Final report emailed",
-                  "Closed"
-                ]
-              },
-              {
-                "fieldId": "MP_PREP_DATE",
-                "isInFuture": true
-              }
+            "fieldId": "status",
+            "equals": [
+              "PDF ready",
+              "Emailed",
+              "Final report created",
+              "Final report emailed",
+              "Closed"
             ]
           },
           "contextHeader": {
@@ -14812,21 +14804,13 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "any": [
-              {
-                "fieldId": "status",
-                "equals": [
-                  "PDF ready",
-                  "Emailed",
-                  "Final report created",
-                  "Final report emailed",
-                  "Closed"
-                ]
-              },
-              {
-                "fieldId": "MP_PREP_DATE",
-                "isInFuture": true
-              }
+            "fieldId": "status",
+            "equals": [
+              "PDF ready",
+              "Emailed",
+              "Final report created",
+              "Final report emailed",
+              "Closed"
             ]
           },
           "contextHeader": {
