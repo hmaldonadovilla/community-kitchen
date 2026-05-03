@@ -493,7 +493,13 @@ describe('staging integrity dialogs and list legend config', () => {
       );
       expect(foodSafety?.navigation).toEqual({
         forwardGate: 'whenValid',
-        autoAdvance: 'off'
+        autoAdvance: 'off',
+        stepBarAccessWhen: {
+          not: {
+            fieldId: 'MP_PREP_DATE',
+            isInFuture: true
+          }
+        }
       });
       expect(foodSafety?.excludeWhen).toEqual({
         fieldId: 'status',

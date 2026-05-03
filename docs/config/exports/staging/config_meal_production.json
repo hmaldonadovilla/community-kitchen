@@ -2944,7 +2944,13 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "stepBarAccessWhen": {
+              "not": {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            }
           },
           "helpText": {
             "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",
@@ -14855,7 +14861,13 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "stepBarAccessWhen": {
+              "not": {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            }
           },
           "helpText": {
             "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",

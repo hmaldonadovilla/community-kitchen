@@ -239,7 +239,7 @@ import {
   resolveCopyCurrentRecordDestructiveChangeBypassFieldIds,
   shouldBypassCopyCurrentRecordDestructiveChange
 } from './app/copyProfile';
-import { shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
+import { hasInvalidRejectDedupKeyValues, shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeaderDrawerEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
@@ -7312,6 +7312,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       source: string;
       onDuplicate?: (conflict: DedupConflictInfo) => Promise<boolean | void> | boolean | void;
     }): Promise<boolean> => {
+      if (
+        createFlowRef.current &&
+        hasInvalidRejectDedupKeyValues({
+          dedupRules: (definition as any)?.dedupRules,
+          questions: definition.questions,
+          values: args.values as any,
+          lineItems: args.lineItems,
+          language: languageRef.current
+        })
+      ) {
+        logEvent('dedup.precreate.check.blocked.invalidKeys', { source: args.source });
+        return false;
+      }
       const signature = computeDedupSignatureFromValues(dedupPrecheckRules, args.values as any);
       if (!signature) return false;
       const startedAt = Date.now();
@@ -7552,12 +7565,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (
         shouldDeferCopiedDraftCreation({
           dedupRules: (definition as any)?.dedupRules,
+          questions: definition.questions,
           values: valuesRef.current as any,
+          lineItems: lineItemsRef.current,
+          language: languageRef.current,
           existingRecordId: ''
         })
       ) {
         logEvent('ui.copyCurrent.ensureRecordId.deferred', {
-          reason: 'dedupKeysIncomplete'
+          reason: 'dedupKeysIncompleteOrInvalid'
         });
         openCopyCurrentRecordDialogIfConfigured();
         return;
@@ -9316,9 +9332,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     hideDedupProgressDialog();
   }, [dedupChecking, dedupProgress.open, dedupProgress.phase, hideDedupProgressDialog]);
 
+  const createFlowDedupKeyValuesInvalid =
+    view === 'form' &&
+    createFlowRef.current &&
+    hasInvalidRejectDedupKeyValues({
+      dedupRules: (definition as any)?.dedupRules,
+      questions: definition.questions,
+      values: values as any,
+      lineItems,
+      language
+    });
   const dedupSignatureValue = (dedupSignature || '').toString();
   const dedupNavigationBlocked =
     view === 'form' &&
+    !createFlowDedupKeyValuesInvalid &&
     (dedupChecking ||
       !!dedupConflict ||
       Boolean(dedupSignatureValue && lastDedupCheckedSignatureRef.current !== dedupSignatureValue));
@@ -9353,6 +9380,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       dedupConflictRef.current = null;
       setDedupChecking(false);
       setDedupConflict(null);
+      return;
+    }
+
+    if (
+      createFlowRef.current &&
+      hasInvalidRejectDedupKeyValues({
+        dedupRules: (definition as any)?.dedupRules,
+        questions: definition.questions,
+        values: valuesRef.current as any,
+        lineItems: lineItemsRef.current,
+        language: languageRef.current
+      })
+    ) {
+      hideDedupProgressDialog();
+      lastDedupCheckedSignatureRef.current = '';
+      dedupCheckSeqRef.current += 1;
+      dedupCheckingRef.current = false;
+      dedupConflictRef.current = null;
+      setDedupChecking(false);
+      setDedupConflict(null);
+      logEvent('dedup.check.blocked.invalidKeys', { signatureLen: signature.length });
       return;
     }
 
@@ -9701,6 +9749,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (createFlowDedupKeysIncomplete) {
         autoSaveDirtyRef.current = true;
         logEvent('autosave.blocked.dedup.keysIncomplete', { reason, isCreateFlow: true });
+        return;
+      }
+
+      const createFlowDedupKeysInvalid =
+        isCreateFlow &&
+        !hasConfiguredAutoSaveGate &&
+        hasInvalidRejectDedupKeyValues({
+          dedupRules: (definition as any)?.dedupRules,
+          questions: definition.questions,
+          values: valuesSnapshot as any,
+          lineItems: lineItemsSnapshot,
+          language: languageSnapshot
+        });
+      if (createFlowDedupKeysInvalid) {
+        autoSaveDirtyRef.current = true;
+        logEvent('autosave.blocked.dedup.keysInvalid', { reason, isCreateFlow: true });
         return;
       }
 
@@ -10751,6 +10815,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const handleGoHome = useCallback(() => {
     const inFormView = viewRef.current === 'form';
     const incompleteDedupKeys = inFormView && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, valuesRef.current as any);
+    const invalidDedupKeys =
+      inFormView &&
+      createFlowRef.current &&
+      hasInvalidRejectDedupKeyValues({
+        dedupRules: (definition as any)?.dedupRules,
+        questions: definition.questions,
+        values: valuesRef.current as any,
+        lineItems: lineItemsRef.current,
+        language: languageRef.current
+      });
     const homeLeaveDialog = resolveDedupIncompleteHomeDialogConfig(definition.actionBars);
     const homeLeaveDialogEnabled = homeLeaveDialog && homeLeaveDialog.enabled !== false;
     const homeLeaveCriteria = homeLeaveDialog?.criteria || 'dedupKeys';
@@ -10766,10 +10840,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       inFormView &&
       homeLeaveDialogEnabled &&
       (homeLeaveCriteria === 'dedupKeys'
-        ? incompleteDedupKeys
+        ? incompleteDedupKeys || invalidDedupKeys
         : homeLeaveCriteria === 'fieldIds'
           ? incompleteConfiguredFields
-          : incompleteDedupKeys || incompleteConfiguredFields);
+          : incompleteDedupKeys || invalidDedupKeys || incompleteConfiguredFields);
     if (shouldOpenHomeLeaveDialog) {
       const activeHomeLeaveDialog = homeLeaveDialog || {};
       const copy = resolveDedupIncompleteHomeDialogCopy(activeHomeLeaveDialog, languageRef.current);
@@ -10839,6 +10913,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('navigate.home.dedupIncomplete.confirm', {
             criteria: homeLeaveCriteria,
             incompleteDedupKeys,
+            invalidDedupKeys,
             incompleteConfiguredFields,
             recordId: existingRecordId || null,
             deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
@@ -10849,6 +10924,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('navigate.home.dedupIncomplete.dialog.open', {
         criteria: homeLeaveCriteria,
         incompleteDedupKeys,
+        invalidDedupKeys,
         incompleteConfiguredFields
       });
       return;
@@ -10934,6 +11010,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (!dedupHoldRef.current) return;
 
     const signature = (dedupSignature || '').toString();
+    if (
+      createFlowRef.current &&
+      hasInvalidRejectDedupKeyValues({
+        dedupRules: (definition as any)?.dedupRules,
+        questions: definition.questions,
+        values: valuesRef.current as any,
+        lineItems: lineItemsRef.current,
+        language: languageRef.current
+      })
+    ) {
+      return;
+    }
     // If keys are incomplete, there's no dedup evaluation to wait for.
     if (!signature) {
       dedupHoldRef.current = false;
@@ -11078,6 +11166,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // In create-flow, do not autosave until the user actually changes a field value.
     if (createFlowRef.current && !createFlowUserEditedRef.current) return;
     if (createFlowRef.current && hasIncompleteRejectDedupKeys((definition as any)?.dedupRules, values as any)) {
+      autoSaveDirtyRef.current = true;
+      return;
+    }
+    if (
+      createFlowRef.current &&
+      hasInvalidRejectDedupKeyValues({
+        dedupRules: (definition as any)?.dedupRules,
+        questions: definition.questions,
+        values: values as any,
+        lineItems,
+        language
+      })
+    ) {
       autoSaveDirtyRef.current = true;
       return;
     }
