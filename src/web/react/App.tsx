@@ -1354,6 +1354,63 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     fieldChangeDateInitialEntryCompletedRef.current = {};
     copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = {};
   }, []);
+  const waitForActiveDraftSaveTransactions = useCallback(
+    async (reason: string, timeoutMs = 18_000): Promise<{ ok: boolean; message?: string }> => {
+      const sleep = (ms: number) => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms));
+      const hasActiveSave = () =>
+        Boolean(autoSaveInFlightRef.current || draftSaveRequestInFlightRef.current || draftSaveRequestPromiseRef.current);
+      if (!hasActiveSave()) return { ok: true };
+
+      const startedAt = Date.now();
+      logEvent('draftSave.activeWait.start', {
+        reason,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        draftSavePromiseInFlight: Boolean(draftSaveRequestPromiseRef.current)
+      });
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const pendingDraftSave = draftSaveRequestPromiseRef.current;
+        if (pendingDraftSave) {
+          await Promise.race([pendingDraftSave.catch(() => undefined), sleep(300)]);
+        } else {
+          await sleep(80);
+        }
+
+        if (!hasActiveSave()) {
+          const failure = lastDraftSaveFailureRef.current;
+          if (failure) {
+            const message = failure.message || 'Could not save the latest changes.';
+            logEvent('draftSave.activeWait.failed', {
+              reason,
+              durationMs: Date.now() - startedAt,
+              recordId: failure.recordId || null,
+              message
+            });
+            return { ok: false, message };
+          }
+          logEvent('draftSave.activeWait.done', {
+            reason,
+            durationMs: Date.now() - startedAt
+          });
+          return { ok: true };
+        }
+
+        await sleep(80);
+      }
+
+      const message = 'Could not save the latest changes.';
+      logEvent('draftSave.activeWait.timeout', {
+        reason,
+        durationMs: Date.now() - startedAt,
+        autoSaveInFlight: autoSaveInFlightRef.current,
+        draftSaveInFlight: draftSaveRequestInFlightRef.current,
+        draftSavePromiseInFlight: Boolean(draftSaveRequestPromiseRef.current)
+      });
+      return { ok: false, message };
+    },
+    [logEvent]
+  );
   const consumeCopyCurrentRecordDestructiveChangeBypass = useCallback((fieldIdRaw: string | undefined) => {
     const fieldId = (fieldIdRaw || '').toString().trim();
     if (!fieldId) return;
@@ -1535,6 +1592,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const requestedRecordId = ((extraMeta as any).recordId || '').toString().trim();
       if ((extraMeta as any).force !== undefined) delete (extraMeta as any).force;
       if ((extraMeta as any).recordId !== undefined) delete (extraMeta as any).recordId;
+
+      const activeSaveWait = await waitForActiveDraftSaveTransactions(`dedupDeleteOnKeyChange.${source}.beforeResolveRecord`);
+      if (!activeSaveWait.ok) {
+        logEvent('dedupDeleteOnKeyChange.delete.waitActiveSave.failed', {
+          source,
+          requestedRecordId: requestedRecordId || null,
+          forceDelete,
+          message: activeSaveWait.message || null,
+          ...extraMeta
+        });
+        return false;
+      }
 
       const existingRecordId = resolveExistingRecordId({
         selectedRecordId: selectedRecordIdRef.current,
@@ -1779,7 +1848,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [definition, formKey, logEvent, resolveLogMessage, setSelectedRecordId]
+    [definition, formKey, logEvent, resolveLogMessage, setSelectedRecordId, waitForActiveDraftSaveTransactions]
   );
 
   const handleFieldChangeDialogConfirm = useCallback(
@@ -1849,6 +1918,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           !isEmptyValue((valuesRef.current as any)?.[pending.fieldId]) &&
           !isEmptyValue(pending.nextValue) &&
           (valuesRef.current as any)?.[pending.fieldId] !== pending.nextValue;
+        const dedupDeleteEnabled =
+          (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
+        const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
+        const isTopDedupKeyChange = Boolean(
+          topFieldId &&
+            (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
+            dedupDeleteEnabled
+        );
+
+        if (shouldApplyClearOnChange || isTopDedupKeyChange) {
+          const activeSaveWait = await waitForActiveDraftSaveTransactions(
+            `fieldChangeDialog.confirm.${pending.fieldPath || pending.fieldId || 'field'}`
+          );
+          if (!activeSaveWait.ok) {
+            const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('fieldChangeDialog.confirm.waitActiveSave.failed', {
+              fieldPath: pending.fieldPath,
+              fieldId: pending.fieldId,
+              message
+            });
+            return;
+          }
+        }
 
         let nextBaseValues = valuesRef.current;
         let nextBaseLineItems = lineItemsRef.current;
@@ -1905,14 +1999,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           context: { scope: pending.scope, groupId: pending.groupId, rowId: pending.rowId }
         });
         const mapped = applyValueMapsToForm(definition, applied.values, applied.lineItems, { mode: 'change' });
-        const dedupDeleteEnabled =
-          (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
-        const topFieldId = pending.scope === 'top' ? (pending.fieldId || '').toString() : '';
-        const isTopDedupKeyChange = Boolean(
-          topFieldId &&
-            (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
-            dedupDeleteEnabled
-        );
 
         const dedupMode = (dialogCfg.dedupMode || 'auto') as 'auto' | 'always' | 'never';
         const hasDedupKeyUpdate = updates.some(update => {
@@ -2138,7 +2224,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setLineItems,
       setValues,
       triggerDedupDeleteOnKeyChange,
-      setErrors
+      setErrors,
+      waitForActiveDraftSaveTransactions
     ]
   );
 
@@ -10185,6 +10272,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return { ok: false, message: dedupConflict.message.toString() };
       }
 
+      const activeSaveWait = await waitForActiveDraftSaveTransactions(`action.flush:${reason}`);
+      if (!activeSaveWait.ok) {
+        return activeSaveWait;
+      }
+
       if (guidedStepImmediateSyncPromiseRef.current) {
         logEvent('action.flush.waitGuidedLiveSync.start', { reason });
         const startedAt = Date.now();
@@ -10274,6 +10366,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       clearSaveFailureStatusAfterSuccessfulSave,
       flushAutoSaveBeforeNavigate,
       logEvent,
+      waitForActiveDraftSaveTransactions,
       waitForDraftSaveRequest,
       waitForPendingAutoSaveAfterAction
     ]
@@ -10694,6 +10787,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('navigate.home.dedupIncomplete.cancel');
         },
         onConfirm: async () => {
+          const activeSaveWait = await waitForActiveDraftSaveTransactions('navigate.home.dedupIncomplete.confirm');
+          if (!activeSaveWait.ok) {
+            const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('navigate.home.dedupIncomplete.waitActiveSave.failed', { message });
+            return;
+          }
           const existingRecordId =
             resolveExistingRecordId({
               selectedRecordId: selectedRecordIdRef.current,
@@ -10759,7 +10860,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     logEvent,
     rememberAutoSaveSeenState,
     requestNavigateToList,
-    triggerDedupDeleteOnKeyChange
+    triggerDedupDeleteOnKeyChange,
+    waitForActiveDraftSaveTransactions
   ]);
 
   const handleGoSummary = useCallback(() => {

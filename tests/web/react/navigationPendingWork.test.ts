@@ -43,7 +43,7 @@ describe('navigationPendingWork', () => {
     expect(shouldWaitBeforeLeavingRecord({})).toBe(false);
   });
 
-  test('does not wait when the caller is discarding an invalid draft', () => {
+  test('does not wait when the caller is discarding only local invalid draft changes', () => {
     expect(
       shouldWaitBeforeLeavingRecord({
         discardInvalidDraft: true,
@@ -52,5 +52,23 @@ describe('navigationPendingWork', () => {
         renderedDraftChanged: true
       })
     ).toBe(false);
+  });
+
+  test('still waits when discarding an invalid draft while save work is already in flight', () => {
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        discardInvalidDraft: true,
+        autoSaveDirty: true,
+        autoSaveQueued: true,
+        autoSaveInFlight: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        discardInvalidDraft: true,
+        draftSaveInFlight: true
+      })
+    ).toBe(true);
   });
 });

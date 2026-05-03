@@ -12,7 +12,18 @@ export const shouldWaitBeforeLeavingRecord = (args: {
   guidedStepLiveSyncPending?: boolean;
   renderedDraftChanged?: boolean;
 }): boolean => {
-  if (args.discardInvalidDraft === true) return false;
+  if (args.discardInvalidDraft === true) {
+    return (
+      Number(args.uploadsInFlight || 0) > 0 ||
+      args.autoSaveInFlight === true ||
+      args.draftSaveInFlight === true ||
+      args.recordSyncInFlight === true ||
+      args.reservationSyncInFlight === true ||
+      args.followupBatchInFlight === true ||
+      args.guidedStepLiveSyncInFlight === true ||
+      args.guidedStepLiveSyncPending === true
+    );
+  }
   return (
     Number(args.uploadsInFlight || 0) > 0 ||
     args.autoSaveInFlight === true ||
