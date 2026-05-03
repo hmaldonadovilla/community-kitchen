@@ -1,4 +1,7 @@
-import { guidedStepRequiresPersistedRecord } from '../../../src/web/react/features/steps/domain/guidedStepRecordRequirement';
+import {
+  guidedStepRequiresPersistedRecord,
+  shouldWaitForActiveDraftSaveBeforeEnsuringRecord
+} from '../../../src/web/react/features/steps/domain/guidedStepRecordRequirement';
 
 describe('guidedStepRequiresPersistedRecord', () => {
   it('requires a persisted record before entering a non-first step', () => {
@@ -34,6 +37,33 @@ describe('guidedStepRequiresPersistedRecord', () => {
         currentStepIndex: 1,
         nextStepIndex: 1,
         currentRecordId: ''
+      })
+    ).toBe(false);
+  });
+
+  it('waits for an active draft save before creating a missing guided-step record id', () => {
+    expect(
+      shouldWaitForActiveDraftSaveBeforeEnsuringRecord({
+        currentRecordId: '',
+        autoSaveInFlight: true,
+        draftSaveInFlight: false,
+        draftSavePromiseInFlight: false
+      })
+    ).toBe(true);
+    expect(
+      shouldWaitForActiveDraftSaveBeforeEnsuringRecord({
+        currentRecordId: '',
+        autoSaveInFlight: false,
+        draftSaveInFlight: true,
+        draftSavePromiseInFlight: false
+      })
+    ).toBe(true);
+    expect(
+      shouldWaitForActiveDraftSaveBeforeEnsuringRecord({
+        currentRecordId: 'record-1',
+        autoSaveInFlight: true,
+        draftSaveInFlight: true,
+        draftSavePromiseInFlight: true
       })
     ).toBe(false);
   });

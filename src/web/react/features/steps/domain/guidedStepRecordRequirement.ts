@@ -11,3 +11,14 @@ export const guidedStepRequiresPersistedRecord = (args: {
   const recordId = (args.currentRecordId || '').toString().trim();
   return !recordId;
 };
+
+export const shouldWaitForActiveDraftSaveBeforeEnsuringRecord = (args: {
+  currentRecordId?: string | null;
+  autoSaveInFlight?: boolean | null;
+  draftSaveInFlight?: boolean | null;
+  draftSavePromiseInFlight?: boolean | null;
+}): boolean => {
+  const recordId = (args.currentRecordId || '').toString().trim();
+  if (recordId) return false;
+  return Boolean(args.autoSaveInFlight || args.draftSaveInFlight || args.draftSavePromiseInFlight);
+};

@@ -306,7 +306,10 @@ import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from './features/steps/domain/stepVisibility';
-import { guidedStepRequiresPersistedRecord } from './features/steps/domain/guidedStepRecordRequirement';
+import {
+  guidedStepRequiresPersistedRecord,
+  shouldWaitForActiveDraftSaveBeforeEnsuringRecord
+} from './features/steps/domain/guidedStepRecordRequirement';
 import {
   hasStatusTransitionValue,
   matchesStatusTransition,
@@ -13222,27 +13225,73 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         });
         try {
-          const ensured = await ensureDraftRecordId({
-            reason: `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}`
-          });
-          if (!ensured.success || !ensured.recordId) {
-            const message = (ensured.message || 'Could not save the latest changes.').toString();
-            setStatus(message);
-            setStatusLevel('error');
-            logEvent('guidedStep.advance.ensureRecordId.failed', {
+          let recordIdAfterActiveSaveWait =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+          if (
+            shouldWaitForActiveDraftSaveBeforeEnsuringRecord({
+              currentRecordId: recordIdAfterActiveSaveWait,
+              autoSaveInFlight: autoSaveInFlightRef.current,
+              draftSaveInFlight: draftSaveRequestInFlightRef.current,
+              draftSavePromiseInFlight: Boolean(draftSaveRequestPromiseRef.current)
+            })
+          ) {
+            const activeSaveWait = await waitForActiveDraftSaveTransactions(
+              `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}.activeDraftSave`
+            );
+            recordIdAfterActiveSaveWait =
+              resolveExistingRecordId({
+                selectedRecordId: selectedRecordIdRef.current,
+                selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+                lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+              }) || '';
+            if (recordIdAfterActiveSaveWait) {
+              clearSaveFailureStatusAfterSuccessfulSave('guidedStep.advance.activeDraftSave');
+              logEvent('guidedStep.advance.ensureRecordId.reusedActiveSave', {
+                stepId: args.stepId,
+                nextStepId: args.nextStepId || null,
+                trigger: args.trigger,
+                recordId: recordIdAfterActiveSaveWait
+              });
+            } else if (!activeSaveWait.ok) {
+              const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+              setStatus(message);
+              setStatusLevel('error');
+              logEvent('guidedStep.advance.ensureRecordId.activeSaveFailed', {
+                stepId: args.stepId,
+                nextStepId: args.nextStepId || null,
+                trigger: args.trigger,
+                message
+              });
+              return { success: false, message };
+            }
+          }
+          if (!recordIdAfterActiveSaveWait) {
+            const ensured = await ensureDraftRecordId({
+              reason: `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}`
+            });
+            if (!ensured.success || !ensured.recordId) {
+              const message = (ensured.message || 'Could not save the latest changes.').toString();
+              setStatus(message);
+              setStatusLevel('error');
+              logEvent('guidedStep.advance.ensureRecordId.failed', {
+                stepId: args.stepId,
+                nextStepId: args.nextStepId || null,
+                trigger: args.trigger,
+                message
+              });
+              return { success: false, message };
+            }
+            logEvent('guidedStep.advance.ensureRecordId.done', {
               stepId: args.stepId,
               nextStepId: args.nextStepId || null,
               trigger: args.trigger,
-              message
+              recordId: ensured.recordId
             });
-            return { success: false, message };
           }
-          logEvent('guidedStep.advance.ensureRecordId.done', {
-            stepId: args.stepId,
-            nextStepId: args.nextStepId || null,
-            trigger: args.trigger,
-            recordId: ensured.recordId
-          });
         } finally {
           guidedStepAdvanceBusy.unlock(seq, {
             stepId: args.stepId,
@@ -13266,9 +13315,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       ensureDraftRecordId,
+      clearSaveFailureStatusAfterSuccessfulSave,
       guidedStepAdvanceBusy,
       logEvent,
       queueGuidedStepBackgroundSync,
+      waitForActiveDraftSaveTransactions,
       waitForGuidedStepAdvance
     ]
   );

@@ -143,6 +143,7 @@ import {
   shouldWaitForGuidedReservationSyncOnBootstrap
 } from '../../app/stepDataSourceBootstrap';
 import { applyLineItemRowSort } from '../../app/lineItemRowSort';
+import { applySourceFirstAncestorSelectionEffects } from '../../app/sourceFirstAncestorSelectionSync';
 
 const getByPath = (root: any, path: string): any => {
   if (!root || !path) return undefined;
@@ -721,7 +722,6 @@ export const LineItemGroupQuestion: React.FC<{
     openLineItemGroupOverlay,
     addLineItemRowManual,
     removeLineRow,
-    runSelectionEffectsForAncestors,
     setAutoSaveHold,
     ensureRecordId,
     queueGuidedStepReservationDraftSync,
@@ -2420,15 +2420,19 @@ export const LineItemGroupQuestion: React.FC<{
         const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, nextState, {
           mode: 'change'
         });
-        latestValuesRef.current = nextValues;
-        setValues(nextValues);
-        runSelectionEffectsForAncestors?.(output.key, prev, recomputed, {
-          mode: 'change',
-          topValues: nextValues
+        const reconciled = applySourceFirstAncestorSelectionEffects({
+          definition,
+          language,
+          values: nextValues,
+          prevLineItems: prev,
+          nextLineItems: recomputed,
+          sourceGroupKey: output.key
         });
-        latestStepDataSourceSyncedLineItemsRef.current = recomputed;
-        syncedLineItems = recomputed;
-        return recomputed;
+        latestValuesRef.current = reconciled.values;
+        setValues(reconciled.values);
+        latestStepDataSourceSyncedLineItemsRef.current = reconciled.lineItems;
+        syncedLineItems = reconciled.lineItems;
+        return reconciled.lineItems;
       });
       return syncedLineItems;
     },
@@ -2442,7 +2446,7 @@ export const LineItemGroupQuestion: React.FC<{
       resolveVirtualPresetValue,
       resolveVirtualRowWhenContext,
       resolveRowFlowGroupConfig,
-      runSelectionEffectsForAncestors,
+      language,
       setLineItems,
       setValues,
       validateVirtualFieldRules
