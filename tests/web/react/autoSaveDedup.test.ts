@@ -12,7 +12,8 @@ import {
   shouldSuppressSelectionEffectInitAutoSave,
   shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
-  shouldForceAutoSaveOnConfiguredBlur
+  shouldForceAutoSaveOnConfiguredBlur,
+  isBlockingDedupConflict
 } from '../../../src/web/react/app/autoSaveDedup';
 
 describe('autoSaveDedup helpers', () => {
@@ -336,6 +337,23 @@ describe('autoSaveDedup helpers', () => {
     expect(copy.checkingMessage).toBe('Checking...');
     expect(copy.availableAutoCloseMs).toBe(1300);
     expect(copy.duplicateAutoCloseMs).toBe(900);
+  });
+
+  it('does not treat operational dedup check failures as blocking conflicts', () => {
+    expect(
+      isBlockingDedupConflict({
+        ruleId: 'dedupCheckFailed',
+        message: 'Dedup index is not built for this form yet.'
+      })
+    ).toBe(false);
+
+    expect(
+      isBlockingDedupConflict({
+        ruleId: 'meal-production-key',
+        message: 'Duplicate record.',
+        existingRecordId: 'record-1'
+      })
+    ).toBe(true);
   });
 
   it('forces autosave on configured blur when create-flow gate is complete and dedup passed', () => {

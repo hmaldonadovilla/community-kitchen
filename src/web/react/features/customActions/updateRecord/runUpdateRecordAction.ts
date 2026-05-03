@@ -85,6 +85,7 @@ export type UpdateRecordActionDeps = {
   submit: (payload: any) => Promise<any>;
   submitWithDependencies?: (payload: any, buttonRef: string) => Promise<UpdateRecordSubmitResult>;
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
+  waitForActiveDraftSave?: (reason: string) => Promise<{ ok: boolean; message?: string }>;
   flushPendingDraftSave?: (reason: string) => Promise<{ ok: boolean; message?: string }>;
   synchronizeStaleRecord?: (args: {
     reason: string;
@@ -162,6 +163,24 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
   });
 
   try {
+    if (deps.waitForActiveDraftSave) {
+      const waitReason = `button.updateRecord:${req.buttonId}.beforeRecordId`;
+      deps.logEvent('button.updateRecord.waitActiveSave.start', { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
+      const activeSaveWait = await deps.waitForActiveDraftSave(waitReason);
+      if (!activeSaveWait.ok) {
+        const msg = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+        deps.setStatus(msg);
+        deps.setStatusLevel('error');
+        deps.logEvent('button.updateRecord.waitActiveSave.failed', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          message: msg
+        });
+        return;
+      }
+      deps.logEvent('button.updateRecord.waitActiveSave.done', { buttonId: req.buttonId, qIdx: req.qIdx ?? null });
+    }
+
     let recordId =
       resolveExistingRecordId({
         selectedRecordId: deps.refs.selectedRecordIdRef.current,

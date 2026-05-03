@@ -269,7 +269,8 @@ import {
   shouldSuppressPostPersistAutoSave,
   shouldSuppressSelectionEffectInitAutoSave,
   shouldRetainPendingDebouncedAutoSave,
-  shouldForceAutoSaveOnConfiguredBlur
+  shouldForceAutoSaveOnConfiguredBlur,
+  isBlockingDedupConflict
 } from './app/autoSaveDedup';
 import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
 import {
@@ -2620,7 +2621,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             dedupSignature: (dedupSignatureRef.current || '').toString(),
             lastDedupCheckedSignature: (lastDedupCheckedSignatureRef.current || '').toString(),
             dedupChecking: dedupCheckingRef.current,
-            dedupConflict: Boolean(dedupConflictRef.current),
+            dedupConflict: isBlockingDedupConflict(dedupConflictRef.current),
             dedupHold: dedupHoldRef.current
           });
 
@@ -5920,6 +5921,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         definition,
         formKey,
         submit: (payload: any) => submitCurrentRecordMutation('readyForProduction.unlock', payload),
+        waitForActiveDraftSave: (reason: string) => waitForActiveDraftSaveTransactions(reason),
         tSystem,
         logEvent,
         refs: {
@@ -5981,6 +5983,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     updateRecordBusy,
     updateRecordBusyOpen,
     upsertListCacheRow,
+    waitForActiveDraftSaveTransactions,
     view
   ]);
 
@@ -8526,6 +8529,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 flushPendingDraftSaveActionRef.current
                   ? flushPendingDraftSaveActionRef.current(reason)
                   : Promise.resolve({ ok: true }),
+              waitForActiveDraftSave: (reason: string) => waitForActiveDraftSaveTransactions(reason),
               tSystem,
               logEvent,
               refs: {
@@ -8715,7 +8719,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       submitCurrentRecordMutation,
       synchronizeStaleRecord,
       upsertListCacheRow,
-      updateRecordBusy
+      updateRecordBusy,
+      waitForActiveDraftSaveTransactions
     ]
   );
 
@@ -9347,7 +9352,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     view === 'form' &&
     !createFlowDedupKeyValuesInvalid &&
     (dedupChecking ||
-      !!dedupConflict ||
+      isBlockingDedupConflict(dedupConflict) ||
       Boolean(dedupSignatureValue && lastDedupCheckedSignatureRef.current !== dedupSignatureValue));
 
   // Dedup precheck (server-side) so we can block duplicate creation early (before autosave/submit).
@@ -9467,20 +9472,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (!res?.success) {
             const msg = (res?.message || 'Failed to check duplicates.').toString();
             logEvent('dedup.check.failed', { recordId: candidateId || null, message: msg });
-            if (showDedupProgress) {
-              showDedupProgressDialog({
-                phase: 'duplicate',
-                title: dedupCheckDialogCopy.duplicateTitle,
-                message: dedupCheckDialogCopy.duplicateMessage,
-                autoCloseMs: dedupCheckDialogCopy.duplicateAutoCloseMs
-              });
-            }
-            // Fail closed only for new record creation (so we don't create duplicates on autosave).
-            if (!candidateId) {
-              const conflictObj = { ruleId: 'dedupCheckFailed', message: msg };
-              dedupConflictRef.current = conflictObj;
-              setDedupConflict({ ruleId: 'dedupCheckFailed', message: msg });
-            }
+            hideDedupProgressDialog();
+            dedupConflictRef.current = null;
+            setDedupConflict(null);
             return;
           }
 
@@ -9538,26 +9532,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (!shouldApplyCheckResult('error')) return;
           dedupCheckingRef.current = false;
           setDedupChecking(false);
-          const uiMessage = resolveUiErrorMessage(err, 'Failed to check duplicates.');
           const logMessage = resolveLogMessage(err, 'Failed to check duplicates.');
           logEvent('dedup.check.exception', { recordId: candidateId || null, message: logMessage });
-          if (!candidateId) {
-            if (uiMessage) {
-              const conflictObj = { ruleId: 'dedupCheckFailed', message: uiMessage };
-              dedupConflictRef.current = conflictObj;
-              setDedupConflict({ ruleId: 'dedupCheckFailed', message: uiMessage });
-            }
-          }
-          if (showDedupProgress) {
-            showDedupProgressDialog({
-              phase: 'duplicate',
-              title: dedupCheckDialogCopy.duplicateTitle,
-              message: dedupCheckDialogCopy.duplicateMessage,
-              autoCloseMs: dedupCheckDialogCopy.duplicateAutoCloseMs
-            });
-          } else {
-            hideDedupProgressDialog();
-          }
+          dedupConflictRef.current = null;
+          setDedupConflict(null);
+          hideDedupProgressDialog();
         });
     }, 350) as any;
 
@@ -9584,7 +9563,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     loadRecordSnapshot,
     logEvent,
     resolveLogMessage,
-    resolveUiErrorMessage,
     selectedRecordId,
     selectedRecordSnapshot,
     showDedupProgressDialog,
@@ -9789,7 +9767,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return;
         }
         const conflict = dedupConflictRef.current;
-        if (conflict && conflict.message) {
+        if (isBlockingDedupConflict(conflict)) {
           const msg = conflict.message.toString();
           // Hide draft banner while blocked by dedup; the sticky dedup notice is the single source of truth.
           setDraftSave({ phase: 'idle' });
@@ -10332,7 +10310,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
 
       const dedupConflict = dedupConflictRef.current;
-      if (dedupConflict?.message) {
+      if (isBlockingDedupConflict(dedupConflict)) {
         return { ok: false, message: dedupConflict.message.toString() };
       }
 
@@ -11030,7 +11008,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       // This prevents a race where autosave resumes before the precheck effect schedules the server call.
       if (lastDedupCheckedSignatureRef.current !== signature) return;
       if (dedupCheckingRef.current) return;
-      if (dedupConflictRef.current) return;
+      if (isBlockingDedupConflict(dedupConflictRef.current)) return;
       // Keys are complete, check finished, and no conflict -> release hold.
       dedupHoldRef.current = false;
     }
@@ -11363,7 +11341,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
         }
         const conflict = dedupConflictRef.current;
-        if (conflict && conflict.message) {
+        if (isBlockingDedupConflict(conflict)) {
           const message = conflict.message.toString();
           logEvent('record.ensure.blocked.dedup.conflict', {
             reason: args?.reason || null,
@@ -14640,7 +14618,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return;
       }
       const conflict = dedupConflict;
-      if (conflict && conflict.message) {
+      if (isBlockingDedupConflict(conflict)) {
         const msg = conflict.message.toString();
         setStatus(msg);
         setStatusLevel('error');
@@ -16559,7 +16537,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [dedupDialogConflict, definition.dedupDialog, logEvent]);
 
   const dedupTopNotice =
-    view === 'form' && (!!dedupConflict || !!dedupNotice) && !dedupDialogConflict ? (
+    view === 'form' && (isBlockingDedupConflict(dedupConflict) || !!dedupNotice) && !dedupDialogConflict ? (
       <div
         role="status"
         aria-live="polite"

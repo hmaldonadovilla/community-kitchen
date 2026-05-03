@@ -204,6 +204,15 @@ export const shouldForceAutoSaveOnConfiguredBlur = (args: {
   return true;
 };
 
+export const isBlockingDedupConflict = (
+  conflict?: { ruleId?: string | null; message?: string | null; existingRecordId?: string | null } | null
+): conflict is { ruleId?: string | null; message: string; existingRecordId?: string | null } => {
+  if (!conflict?.message) return false;
+  const ruleId = normalizeStringId(conflict.ruleId).toLowerCase();
+  if (ruleId === 'dedupcheckfailed') return false;
+  return true;
+};
+
 export const filterDedupRulesForPrecheck = (rulesRaw: any, triggerFieldIds: string[]): any[] => {
   const rules = Array.isArray(rulesRaw) ? rulesRaw : [];
   const triggers = normalizeFieldIdList(triggerFieldIds);
