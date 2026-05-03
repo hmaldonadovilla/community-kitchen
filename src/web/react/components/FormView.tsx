@@ -681,6 +681,8 @@ interface FormViewProps {
   onBeforeGuidedStepAdvance?: (args: {
     stepId: string;
     nextStepId?: string;
+    stepIndex?: number;
+    nextStepIndex?: number;
     trigger: 'next' | 'auto';
     waitDialog?: ConfirmDialogOpenArgs;
     queueBackgroundReservationSync?: boolean;
@@ -2385,6 +2387,8 @@ const FormView: React.FC<FormViewProps> = ({
         const outcome = await onBeforeGuidedStepAdvance({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
+          stepIndex: activeGuidedStepIndex,
+          nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'next',
           waitDialog,
           queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
@@ -2436,7 +2440,7 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const handleGuidedStepSelect = useCallback(
-    (targetStepId: string) => {
+    async (targetStepId: string) => {
       if (!guidedEnabled) return;
       const targetId = (targetStepId || '').toString().trim();
       if (!targetId) return;
@@ -2459,6 +2463,27 @@ const FormView: React.FC<FormViewProps> = ({
 
       const stepCfg = (guidedVisibleSteps[activeGuidedStepIndex] || null) as any;
       if (!stepCfg?.navigation?.milestoneAction) {
+        if (onBeforeGuidedStepAdvance) {
+          const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
+          const outcome = await onBeforeGuidedStepAdvance({
+            stepId: activeGuidedStepId || '',
+            nextStepId: targetId,
+            stepIndex: currentIdx,
+            nextStepIndex: targetIdx,
+            trigger: 'next',
+            waitDialog,
+            queueBackgroundReservationSync: false
+          });
+          if (!outcome?.success) {
+            onDiagnostic?.('steps.step.advance.blocked', {
+              from: activeGuidedStepId,
+              to: targetId,
+              reason: 'stepBar',
+              message: outcome?.message || null
+            });
+            return;
+          }
+        }
         selectGuidedStep(targetId, 'user');
         return;
       }
@@ -2474,8 +2499,10 @@ const FormView: React.FC<FormViewProps> = ({
       advanceGuidedStepFromCurrentStep,
       guidedEnabled,
       guidedStepIds,
+      guidedStepsCfg,
       guidedStepVisibilityCtx,
       guidedVisibleSteps,
+      onBeforeGuidedStepAdvance,
       onDiagnostic,
       selectGuidedStep
     ]
@@ -2639,6 +2666,8 @@ const FormView: React.FC<FormViewProps> = ({
         const outcome = await onBeforeGuidedStepAdvance({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
+          stepIndex: activeGuidedStepIndex,
+          nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'auto',
           waitDialog,
           queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)

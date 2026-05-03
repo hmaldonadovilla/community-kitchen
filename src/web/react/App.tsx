@@ -306,6 +306,7 @@ import { getSystemFieldValue } from '../rules/systemFields';
 import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
 import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from './features/steps/domain/stepVisibility';
+import { guidedStepRequiresPersistedRecord } from './features/steps/domain/guidedStepRecordRequirement';
 import {
   hasStatusTransitionValue,
   matchesStatusTransition,
@@ -13185,10 +13186,71 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async (args: {
       stepId: string;
       nextStepId?: string;
+      stepIndex?: number;
+      nextStepIndex?: number;
       trigger: 'next' | 'auto';
       waitDialog?: SystemActionGateDialogConfig | null;
       queueBackgroundReservationSync?: boolean;
     }): Promise<{ success: boolean; message?: string }> => {
+      const existingRecordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      if (
+        guidedStepRequiresPersistedRecord({
+          currentStepIndex: args.stepIndex,
+          nextStepIndex: args.nextStepIndex,
+          currentRecordId: existingRecordId
+        })
+      ) {
+        const seq = guidedStepAdvanceBusy.lock({
+          title: tSystem('draft.savingShort', languageRef.current, 'Saving...'),
+          message: tSystem(
+            'navigation.waitSaving',
+            languageRef.current,
+            'Please wait while we save your changes...'
+          ),
+          kind: 'guidedStepRecordId',
+          diagnosticMeta: {
+            stepId: args.stepId,
+            stepIndex: args.stepIndex ?? null,
+            nextStepId: args.nextStepId || null,
+            nextStepIndex: args.nextStepIndex ?? null,
+            trigger: args.trigger
+          }
+        });
+        try {
+          const ensured = await ensureDraftRecordId({
+            reason: `guidedStepAdvance:${args.stepId || 'step'}:${args.trigger}`
+          });
+          if (!ensured.success || !ensured.recordId) {
+            const message = (ensured.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('guidedStep.advance.ensureRecordId.failed', {
+              stepId: args.stepId,
+              nextStepId: args.nextStepId || null,
+              trigger: args.trigger,
+              message
+            });
+            return { success: false, message };
+          }
+          logEvent('guidedStep.advance.ensureRecordId.done', {
+            stepId: args.stepId,
+            nextStepId: args.nextStepId || null,
+            trigger: args.trigger,
+            recordId: ensured.recordId
+          });
+        } finally {
+          guidedStepAdvanceBusy.unlock(seq, {
+            stepId: args.stepId,
+            nextStepId: args.nextStepId || null,
+            trigger: args.trigger
+          });
+        }
+      }
       const waitResult = await waitForGuidedStepAdvance(args);
       if (!waitResult.success) return waitResult;
       if (args.queueBackgroundReservationSync === false) {
@@ -13203,6 +13265,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return { success: true };
     },
     [
+      ensureDraftRecordId,
+      guidedStepAdvanceBusy,
       logEvent,
       queueGuidedStepBackgroundSync,
       waitForGuidedStepAdvance
