@@ -22,9 +22,25 @@ const OPTIONS_AUTO_PAGE_MAX_PAGES = 80;
 const OPTIONS_AUTO_PAGE_MAX_ITEMS = 20000;
 const DEFAULT_PERSIST_MAX_AGE_MS = 5 * 60 * 1000;
 
+export type DataSourceFetchRequest = {
+  source: DataSourceConfig;
+  locale?: LangCode;
+  projection?: string[];
+  limit?: number;
+  pageToken?: string;
+};
+
+export type DataSourceFetcher = (request: DataSourceFetchRequest) => Promise<any>;
+
+let activeDataSourceFetcher: DataSourceFetcher | null = null;
+
+export const configureDataSourceFetcher = (fetcher?: DataSourceFetcher | null): void => {
+  activeDataSourceFetcher = typeof fetcher === 'function' ? fetcher : null;
+};
+
 // Optional lightweight persistence for stable data sources. This is intentionally
 // conservative: only used when localStorage is available and JSON parsing succeeds.
-const PERSIST_VERSION = '2';
+const PERSIST_VERSION = '3';
 
 const hashToBase36 = (input: string): string => {
   let hash = 5381;
@@ -198,7 +214,7 @@ const savePersisted = (config: DataSourceConfig, language: LangCode, value: any)
         response: value
       })
     );
-  } catch (_) {
+  } catch {
     // Ignore quota / private-mode errors; in-memory cache still works.
   }
 };
@@ -307,6 +323,56 @@ function isChoiceOrCheckbox(type: string): boolean {
   return normalized === 'CHOICE' || normalized === 'CHECKBOX';
 }
 
+const fetchDataSourcePageViaAppsScript = (
+  config: DataSourceConfig,
+  language: LangCode,
+  pageToken?: string
+): Promise<any> => {
+  return new Promise((resolve) => {
+    let attempts = 0;
+
+    const attempt = () => {
+      const scriptRun = typeof google !== 'undefined' ? google?.script?.run : null;
+      if (!scriptRun) {
+        attempts += 1;
+        if (attempts === 1) {
+          emitLog('info', '[DataSource] google.script.run not ready, retrying', { id: config.id });
+        }
+        if (attempts > RUNNER_MAX_ATTEMPTS) {
+          emitLog('error', '[DataSource] google.script.run never became ready', { id: config.id });
+          resolve(null);
+          return;
+        }
+        setTimeout(attempt, RUNNER_RETRY_DELAY);
+        return;
+      }
+
+      try {
+        scriptRun
+          .withSuccessHandler((res: any) => resolve(res))
+          .withFailureHandler((err: any) => {
+            emitLog('error', '[DataSource] fetchDataSource failed', {
+              id: config.id,
+              err,
+              pageToken: pageToken || null
+            });
+            resolve(null);
+          })
+          .fetchDataSource?.(config, language, config.projection, config.limit, pageToken);
+      } catch (err) {
+        emitLog('error', '[DataSource] fetchDataSource threw synchronously', {
+          id: config.id,
+          pageToken: pageToken || null,
+          err
+        });
+        resolve(null);
+      }
+    };
+
+    attempt();
+  });
+};
+
 export async function fetchDataSource(
   config: DataSourceConfig,
   language: LangCode,
@@ -339,51 +405,26 @@ export async function fetchDataSource(
 
   const promise = (async () => {
     const callPage = async (pageToken?: string): Promise<any> => {
-      return new Promise((resolve) => {
-        let attempts = 0;
-
-        const attempt = () => {
-          const scriptRun = google?.script?.run;
-          if (!scriptRun) {
-            attempts += 1;
-            if (attempts === 1) {
-              emitLog('info', '[DataSource] google.script.run not ready, retrying', { id: config.id });
-            }
-            if (attempts > RUNNER_MAX_ATTEMPTS) {
-              emitLog('error', '[DataSource] google.script.run never became ready', { id: config.id });
-              resolve(null);
-              return;
-            }
-            setTimeout(attempt, RUNNER_RETRY_DELAY);
-            return;
-          }
-
-          try {
-            scriptRun
-              .withSuccessHandler((res: any) => resolve(res))
-              .withFailureHandler((err: any) => {
-                emitLog('error', '[DataSource] fetchDataSource failed', {
-                  id: config.id,
-                  err,
-                  refreshed: Boolean(opts?.forceRefresh),
-                  pageToken: pageToken || null
-                });
-                resolve(null);
-              })
-              .fetchDataSource?.(config, language, config.projection, config.limit, pageToken);
-          } catch (err) {
-            emitLog('error', '[DataSource] fetchDataSource threw synchronously', {
-              id: config.id,
-              refreshed: Boolean(opts?.forceRefresh),
-              pageToken: pageToken || null,
-              err
-            });
-            resolve(null);
-          }
-        };
-
-        attempt();
-      });
+      if (activeDataSourceFetcher) {
+        try {
+          return await activeDataSourceFetcher({
+            source: config,
+            locale: language,
+            projection: config.projection,
+            limit: config.limit,
+            pageToken
+          });
+        } catch (err) {
+          emitLog('error', '[DataSource] configured fetcher failed', {
+            id: config.id,
+            refreshed: Boolean(opts?.forceRefresh),
+            pageToken: pageToken || null,
+            err
+          });
+          return null;
+        }
+      }
+      return fetchDataSourcePageViaAppsScript(config, language, pageToken);
     };
 
     const seedPersisted = !opts?.forceRefresh ? loadPersisted(config, language) : null;

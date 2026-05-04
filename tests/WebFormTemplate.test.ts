@@ -5,8 +5,10 @@ import { ServerTimingRecorder } from '../src/services/webform/serverTiming';
 describe('WebFormTemplate', () => {
   const originalScriptApp = (globalThis as any).ScriptApp;
   const originalPropertiesService = (globalThis as any).PropertiesService;
+  let scriptProperties: Record<string, string>;
 
   beforeEach(() => {
+    scriptProperties = {};
     (globalThis as any).ScriptApp = {
       getService: () => ({
         getUrl: () => 'https://script.google.com/macros/s/example-deployment/exec'
@@ -17,7 +19,7 @@ describe('WebFormTemplate', () => {
         getProperty: (key: string) => (key === 'CK_CACHE_VERSION' ? 'cache-v-test' : null)
       }),
       getScriptProperties: () => ({
-        getProperty: () => null
+        getProperty: (key: string) => scriptProperties[key] || null
       })
     };
   });
@@ -65,5 +67,24 @@ describe('WebFormTemplate', () => {
     expect(html).toContain('"renderForm.buildEmbeddedHtmlMs"');
     expect(html).toContain('"renderForm.definition.buildDefinitionFromConfigMs"');
     expect(html).toContain('"renderForm.bootstrap.fetchSortedBatchMs"');
+  });
+
+  test('embeds runtime backend config from script properties', () => {
+    scriptProperties = {
+      CK_BACKEND_MODE: 'hybrid',
+      CK_API_BASE_URL: 'https://community-kitchen-api.example.test',
+      CK_HTTP_FUNCTIONS: 'fetchDataSource',
+      CK_DATA_BACKEND: 'drive',
+      CK_FILE_BACKEND: 'drive'
+    };
+
+    const html = buildWebFormHtml({ title: 'Config: Test', questions: [] } as any, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('"backend"');
+    expect(html).toContain('"mode":"hybrid"');
+    expect(html).toContain('"apiBaseUrl":"https://community-kitchen-api.example.test"');
+    expect(html).toContain('"httpFunctions":["fetchDataSource"]');
+    expect(html).toContain('"dataBackend":"drive"');
+    expect(html).toContain('"fileBackend":"drive"');
   });
 });

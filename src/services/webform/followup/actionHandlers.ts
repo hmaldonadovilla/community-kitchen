@@ -261,13 +261,22 @@ export const handleSendEmailAction = (args: {
   let pdfArtifact: GeneratedPdfArtifact | null = null;
   const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
   if (followup.pdfTemplateId) {
-    if (args.pdfArtifact?.success && args.pdfArtifact.blob) {
-      pdfArtifact = args.pdfArtifact;
-      debugLog('followup.email.reuseBatchPdf', {
-        fileId: pdfArtifact.fileId || '',
-        hasUrl: Boolean(pdfArtifact.url)
-      });
-    } else {
+    if (args.pdfArtifact?.success) {
+      const suppliedFileId = args.pdfArtifact.fileId || extractDriveFileId(args.pdfArtifact.url || '');
+      const suppliedBlob = args.pdfArtifact.blob || (suppliedFileId ? fetchDriveFileBlob(suppliedFileId, 'followup.email.suppliedPdf') : null);
+      if (suppliedBlob) {
+        pdfArtifact = {
+          ...args.pdfArtifact,
+          fileId: args.pdfArtifact.fileId || suppliedFileId,
+          blob: suppliedBlob
+        };
+        debugLog('followup.email.reuseBatchPdf', {
+          fileId: pdfArtifact.fileId || '',
+          hasUrl: Boolean(pdfArtifact.url)
+        });
+      }
+    }
+    if (!pdfArtifact) {
       const existing = allowReuse ? resolveExistingPdfFile(form, followup, ctx) : null;
       if (existing?.fileId) {
         const blob = fetchDriveFileBlob(existing.fileId, 'followup.email.existingPdf');

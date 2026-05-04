@@ -77,7 +77,7 @@ fi
 
 echo
 echo "Enabled APIs:"
-gcloud services list --enabled --format='value(config.name)' 2>/dev/null | grep -E '^(run|cloudbuild|artifactregistry|firestore|iam)\.googleapis\.com$' || true
+gcloud services list --enabled --format='value(config.name)' 2>/dev/null | grep -E '^(run|cloudbuild|artifactregistry|firestore|sheets|drive|gmail|iam|iamcredentials)\.googleapis\.com$' || true
 
 echo
 echo "Firestore:"

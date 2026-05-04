@@ -87,6 +87,15 @@ if [[ ! -d "${SOURCE_DIR}" ]]; then
   exit 1
 fi
 
+CONFIG_EXPORT_DIR="docs/config/exports/${ENV_NAME:-default}"
+if [[ -d "${CONFIG_EXPORT_DIR}" && -d "${SOURCE_DIR}" ]]; then
+  echo "[deploy-cloud-run] Bundling Cloud Run generated assets from ${CONFIG_EXPORT_DIR}"
+  node scripts/build-cloud-run-generated-assets.js \
+    --env "${ENV_NAME:-default}" \
+    --source-dir "${SOURCE_DIR}" \
+    --config-dir "${CONFIG_EXPORT_DIR}"
+fi
+
 gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
 
 RUNTIME_SA_EMAIL="${GCP_RUNTIME_SERVICE_ACCOUNT_ID}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
@@ -95,10 +104,32 @@ if [[ "${GCP_ALLOW_UNAUTHENTICATED:-1}" == "1" ]]; then
   ACCESS_FLAG="--no-invoker-iam-check"
 fi
 
-ENV_VARS="CK_ENV=${ENV_NAME:-default},GCP_PROJECT_ID=${GCP_PROJECT_ID}"
-if [[ -n "${GCP_FIRESTORE_DATABASE:-}" ]]; then
-  ENV_VARS="${ENV_VARS},GCP_FIRESTORE_DATABASE=${GCP_FIRESTORE_DATABASE}"
-fi
+ENV_VARS="CK_ENV=${ENV_NAME:-default},GCP_PROJECT_ID=${GCP_PROJECT_ID},CK_DATA_BACKEND=${CK_DATA_BACKEND:-drive},CK_FILE_BACKEND=${CK_FILE_BACKEND:-drive}"
+append_env_var() {
+  local name="$1"
+  local value="${!name:-}"
+  if [[ -n "${value}" ]]; then
+    ENV_VARS="${ENV_VARS},${name}=${value}"
+  fi
+}
+
+append_env_var "GCP_FIRESTORE_DATABASE"
+append_env_var "GCP_RUNTIME_SERVICE_ACCOUNT_ID"
+append_env_var "CK_DEFAULT_SPREADSHEET_ID"
+append_env_var "CK_GOOGLE_SHEETS_SPREADSHEET_ID"
+append_env_var "CK_SPREADSHEET_ID"
+append_env_var "CK_UPLOAD_FOLDER_ID"
+append_env_var "CK_DEFAULT_UPLOAD_FOLDER_ID"
+append_env_var "CK_ANALYTICS_EXPORT_FOLDER_ID"
+append_env_var "CK_PREVIEW_CLEANUP_SECRET"
+append_env_var "CK_GMAIL_DELEGATED_USER"
+append_env_var "CK_GMAIL_SERVICE_ACCOUNT_EMAIL"
+append_env_var "CK_GMAIL_USER_ID"
+append_env_var "CK_SCHEDULER_SECRET"
+append_env_var "CK_ANALYTICS_QUEUE_BATCH_SIZE"
+append_env_var "CK_TIMEZONE"
+append_env_var "CK_API_RPC_MAX_BODY_MB"
+append_env_var "CK_API_CORS_ORIGIN"
 
 echo "[deploy-cloud-run] Deploying ${GCP_CLOUD_RUN_SERVICE} from ${SOURCE_DIR}"
 gcloud run deploy "${GCP_CLOUD_RUN_SERVICE}" \

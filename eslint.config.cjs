@@ -12,6 +12,7 @@ module.exports = [
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      'cloud-run/api/generated/**',
       'src/config/bundledFormConfigs.ts',
       'src/services/webform/followup/bundledHtmlTemplates.ts',
       'src/web/webformBundle.ts',
@@ -69,7 +70,7 @@ module.exports = [
     }
   },
   {
-    files: ['scripts/**/*.js', 'tests/**/*.js', '*.cjs', '*.mjs'],
+    files: ['scripts/**/*.js', 'tests/**/*.js', 'cloud-run/**/*.js', '*.cjs', '*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

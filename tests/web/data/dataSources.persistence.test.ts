@@ -106,7 +106,7 @@ describe('web dataSources persistence', () => {
 
     await fetchDataSource(nonEmpty, 'EN', { forceRefresh: true });
     localStorage.setItem(
-      'ck.ds.Leftover%20Inventory%20Data.EN.v2.empty',
+      'ck.ds.Leftover%20Inventory%20Data.EN.v3.empty',
       JSON.stringify({
         savedAtMs: Date.now() + 1000,
         response: { items: [] }
@@ -140,15 +140,15 @@ describe('web dataSources persistence', () => {
   it('clears persisted dataSource entries on clearFetchDataSourceCache()', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };
-    localStorage.setItem('ck.ds.one.EN.v2.abc', '{"items":[1]}');
-    localStorage.setItem('ck.ds.two.EN.v2.def', '{"items":[2]}');
+    localStorage.setItem('ck.ds.one.EN.v3.abc', '{"items":[1]}');
+    localStorage.setItem('ck.ds.two.EN.v3.def', '{"items":[2]}');
     localStorage.setItem('unrelated.key', 'keep');
 
     const { clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    expect(localStorage.getItem('ck.ds.one.EN.v2.abc')).toBeNull();
-    expect(localStorage.getItem('ck.ds.two.EN.v2.def')).toBeNull();
+    expect(localStorage.getItem('ck.ds.one.EN.v3.abc')).toBeNull();
+    expect(localStorage.getItem('ck.ds.two.EN.v3.def')).toBeNull();
     expect(localStorage.getItem('unrelated.key')).toBe('keep');
   });
 
@@ -167,6 +167,41 @@ describe('web dataSources persistence', () => {
     expect(tracker.getCallCount()).toBe(1);
   });
 
+  it('uses a configured fetcher instead of google.script.run when provided', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+
+    const { fetchDataSource, clearFetchDataSourceCache, configureDataSourceFetcher } = await import(
+      '../../../src/web/data/dataSources'
+    );
+    clearFetchDataSourceCache();
+    const fetcher = jest.fn(async (req: any) => ({
+      items: [{ id: req.source.id, locale: req.locale, projection: req.projection }],
+      totalCount: 1
+    }));
+    configureDataSourceFetcher(fetcher);
+
+    try {
+      const result = await fetchDataSource(
+        { id: 'Recipes Data', projection: ['Dish Name'], limit: 10 } as any,
+        'FR',
+        { forceRefresh: true }
+      );
+
+      expect(result.items).toEqual([{ id: 'Recipes Data', locale: 'FR', projection: ['Dish Name'] }]);
+      expect(fetcher).toHaveBeenCalledWith({
+        source: { id: 'Recipes Data', projection: ['Dish Name'], limit: 10 },
+        locale: 'FR',
+        projection: ['Dish Name'],
+        limit: 10,
+        pageToken: undefined
+      });
+      expect((globalThis as any).google).toBeUndefined();
+    } finally {
+      configureDataSourceFetcher(null);
+    }
+  });
+
   it('expires persisted datasource entries after the configured max age', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };
@@ -177,7 +212,7 @@ describe('web dataSources persistence', () => {
 
     const staleSavedAtMs = Date.now() - 10 * 60 * 1000;
     localStorage.setItem(
-      'ck.ds.Leftover%20Inventory%20Data.EN.v2.test',
+      'ck.ds.Leftover%20Inventory%20Data.EN.v3.test',
       JSON.stringify({
         savedAtMs: staleSavedAtMs,
         response: { items: [{ id: 'stale' }] }
@@ -198,7 +233,7 @@ describe('web dataSources persistence', () => {
     const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    localStorage.setItem('ck.ds.Recipes%20Data.EN.v2.test', JSON.stringify({ items: [{ id: 'legacy' }] }));
+    localStorage.setItem('ck.ds.Recipes%20Data.EN.v3.test', JSON.stringify({ items: [{ id: 'legacy' }] }));
 
     const result = await fetchDataSource({ id: 'Recipes Data' } as any, 'EN');
 

@@ -198,15 +198,15 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
   - Optionally add `CLASP_DEPLOYMENT_ID` to update a specific web app deployment.
   - Run the **Deploy Apps Script** workflow (manual trigger).
 
-### Optional: Cloud Run + Firestore backend bootstrap
+### Optional: Cloud Run multi-backend API bootstrap
 
-The project includes optional backend-preparation scripts for Cloud Run + Firestore, using env-specific files in the same style as the existing `clasp` flow.
+The project includes optional backend-preparation scripts for a Cloud Run API, using env-specific files in the same style as the existing `clasp` flow.
 
 Important positioning:
 
-- this is prepared infrastructure, not the default execution path for the current performance work
-- the current implementation plan starts with Apps Script-based Phase 0 and Phase 1 work
-- use this setup only if and when the post-measurement decision gate says the project should proceed to the HTTP API phase
+- `apps-script-only` remains the safe default and does not require Cloud Run
+- `hybrid-drive-api` is the first Cloud Run validation mode; it reads existing Google Sheets data and Drive file metadata through Google APIs
+- `hybrid-firestore-drive` is the later mode where Firestore stores operational data/projections while Drive remains available for templates, uploads, images, and resources
 
 1. Install Google Cloud CLI and authenticate:
    ```bash
@@ -220,22 +220,57 @@ Important positioning:
    - `GCP_FIRESTORE_LOCATION`
    - `GCP_CLOUD_RUN_SERVICE`
    - `GCP_RUNTIME_SERVICE_ACCOUNT_ID`
+   - `CK_DATA_BACKEND=drive`
+   - `CK_FILE_BACKEND=drive`
+   - optional `CK_DEFAULT_SPREADSHEET_ID` when data source ids refer to tabs in one default spreadsheet instead of `<spreadsheetId>::<tabName>`
 3. Provision the backend resources:
    ```bash
    DEPLOY_ENV=staging npm run gcp:setup
    ```
-   This enables the required APIs, creates the Firestore database if needed, creates the Cloud Run runtime service account, and grants Firestore access to that service account.
-4. Deploy the placeholder Cloud Run service:
+   This enables the required Cloud Run, Firestore, Sheets API, Drive API, Gmail API, and IAM Credentials API services; creates the Firestore database if needed; creates the Cloud Run runtime service account; and grants Firestore/signing access to that service account. For `hybrid-drive-api`, also share the required spreadsheets, template folders, upload/resource folders, and image/resource folders with the Cloud Run runtime service account. Viewer access is enough for read validation; Sheets-backed Cloud Run writes require editor access on the target spreadsheet. Drive uploads through a service account require a Shared Drive upload folder with contributor/editor access, or else uploads should remain routed to Apps Script.
+4. Deploy the optional Cloud Run API service:
    ```bash
    DEPLOY_ENV=staging npm run deploy:cloud-run
    ```
    When `GCP_ALLOW_UNAUTHENTICATED=1`, the deploy script uses `--no-invoker-iam-check` so public access still works in Google Workspace environments that block `allUsers` IAM bindings.
-5. Check the configured backend state at any time:
+5. Enable hybrid routing in the Apps Script web app by setting script properties:
+   - `CK_BACKEND_MODE=hybrid`
+   - `CK_API_BASE_URL=<cloud-run-service-url>`
+   - `CK_HTTP_FUNCTIONS=fetchBootstrapContext,fetchBootstrapContextWithOptions,fetchHomeBootstrap,fetchFormConfig,fetchFormCatalog,fetchAnalyticsDashboard,queueAnalyticsPipelineRun,fetchSubmissions,fetchSubmissionsBatch,fetchSubmissionsSortedBatch,fetchSubmissionById,fetchSubmissionByRowNumber,fetchSummaryRecord,fetchSubmissionsByRowNumbers,getRecordVersion,fetchDataSource,saveSubmissionWithId,uploadFiles,prefetchTemplates,renderHtmlTemplate,renderMarkdownTemplate,renderInlineHtmlTemplate,renderSummaryHtmlTemplate,renderDocTemplate,renderDocTemplatePdfPreview,renderDocTemplateHtml,renderSubmissionReportHtml,trashPreviewArtifact,previewUpdateRecordDependencies,applyUpdateRecordWithDependencies,upsertInventoryReservation,applyInventoryReservationPlan,reconcileInventoryReservations,triggerFollowupAction,triggerFollowupActions`
+   - `CK_DATA_BACKEND=drive`
+   - `CK_FILE_BACKEND=drive`
+   Leave these properties unset, or set `CK_BACKEND_MODE=appsScript`, to keep Apps Script-only transport.
+6. Create or update Cloud Scheduler jobs after Cloud Run is deployed:
+   ```bash
+   DEPLOY_ENV=staging npm run deploy:cloud-scheduler
+   ```
+   This requires `CK_SCHEDULER_SECRET` in the GCP env file. The default jobs process queued analytics exports every 5 minutes, run analytics recompute at 23:00, and run lifecycle recompute at 02:00 in `CK_TIMEZONE` / `Europe/Brussels`.
+7. Check the configured backend state at any time:
    ```bash
    DEPLOY_ENV=staging npm run gcp:status
    ```
 
-The placeholder service lives in `cloud-run/api/` and currently exposes `/` and `/statusz`. It is only an optional bootstrap target so we can validate project setup, IAM, and CLI deploys before moving real application data APIs into Cloud Run.
+The service lives in `cloud-run/api/` and exposes `/`, `/status`, the JSON RPC endpoint `POST /api/rpc`, and scheduler endpoints under `POST /api/jobs/<jobName>`. Implemented RPC functions include bundled form config/bootstrap reads, Sheets-backed list and record reads, staging-safe `checkDedupConflict`, guarded `saveSubmissionWithId` with `createRecord` / `updateRecord` submit effects, dependency guard previews/applies (`previewUpdateRecordDependencies`, `applyUpdateRecordWithDependencies`), inventory reservation upsert/apply/reconcile (`upsertInventoryReservation`, `applyInventoryReservationPlan`, `reconcileInventoryReservations`), supported follow-up batches (`triggerFollowupAction`, `triggerFollowupActions`) for `CLOSE_RECORD`, `RECONCILE_RESERVATIONS`, bundled-HTML/Google-Doc `CREATE_PDF`, and delegated-Gmail `SEND_EMAIL`, Drive-backed `uploadFiles`, template reads/renders (`prefetchTemplates`, `renderHtmlTemplate`, `renderMarkdownTemplate`, `renderInlineHtmlTemplate`, `renderSummaryHtmlTemplate`, `fetchSummaryRecord`), PDF render/preview functions (`renderDocTemplate`, `renderDocTemplatePdfPreview`, `renderDocTemplateHtml`, `renderSubmissionReportHtml`, `trashPreviewArtifact`), analytics dashboard/snapshot reads and recompute (`fetchAnalyticsDashboard`, bootstrap `analytics`, `runDailyAnalyticsRecompute`), queued analytics XLSX exports (`queueAnalyticsPipelineRun`, `runQueuedAnalyticsPipelineJobs`), scheduled lifecycle recompute (`runDailyLifecycleRecompute`), `fetchDataSource`, and `fetchDriveFileMetadata`; unsupported RPC functions return a clear `501` response instead of falling back silently. With `CK_DATA_BACKEND=drive`, Cloud Run reads existing Google Sheet tabs directly through Google Sheets API. Guarded Cloud Run saves also maintain the aligned hidden `__CK_INDEX__...` row and configured audit rows when the service account can edit the spreadsheet. With `CK_DATA_BACKEND=firestore`, `fetchDataSource` reads the Firestore data-source collection.
+
+`saveSubmissionWithId`, template rendering, PDF rendering, analytics dashboard reads, queued analytics exports, and `triggerFollowupAction(s)` can be routed through `CK_HTTP_FUNCTIONS` on staging once the Cloud Run service account has editor/contributor access to the affected response sheets, template files/folders, PDF output folders, analytics export folders, and data-source spreadsheets. Add `uploadFiles` only after the upload destination is a Shared Drive folder shared with the Cloud Run service account; otherwise the React client falls back upload saves to Apps Script when Drive returns the service-account storage-quota error. `SEND_EMAIL` follow-ups and queued analytics exports can run through Cloud Run when `CK_GMAIL_DELEGATED_USER` is set and the runtime service account has Workspace domain-wide delegation for `https://www.googleapis.com/auth/gmail.send`; if Gmail delegation is missing, the React client keeps Cloud Run for preceding non-email follow-up actions such as `CREATE_PDF`, then falls back only the email send to Apps Script and passes the generated PDF file id for attachment. Queued analytics export requests also fall back to Apps Script without Gmail delegation.
+
+For Cloud Run email sending, authorize the runtime service account OAuth client ID in Google Admin console for `https://www.googleapis.com/auth/gmail.send`, set `CK_GMAIL_DELEGATED_USER` to the delegated mailbox, and ensure that mailbox can send as the configured `followupConfig.emailFrom` alias.
+
+After deployment, validate the Drive-backed Cloud Run path with:
+
+```bash
+DEPLOY_ENV=staging npm run test:hybrid-drive-api -- \
+  --data-source-id "<spreadsheetId>::<tabName>" \
+  --drive-file-id "<driveFileId>"
+```
+
+To seed a Firestore data-source collection for API testing, use:
+
+```bash
+DEPLOY_ENV=staging node scripts/seed-firestore-data-source.js --file path/to/data-source.json
+```
+
+The JSON file should contain a `source` object with an `id` and an `items` array. Add `source.formKey` or pass `--form-key` when seeding a form-scoped data source.
 
 ### Performance measurement
 

@@ -85,6 +85,25 @@ grant_project_role() {
   exit 1
 }
 
+grant_service_account_role() {
+  local service_account_email="$1"
+  local member_email="$2"
+  local role="$3"
+  local attempt
+  for attempt in {1..10}; do
+    if gcloud iam service-accounts add-iam-policy-binding "${service_account_email}" \
+      --member="serviceAccount:${member_email}" \
+      --role="${role}" \
+      >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "[setup-gcp-backend] Retrying service-account IAM binding for ${member_email} (${attempt}/10)"
+    sleep 3
+  done
+  echo "[setup-gcp-backend] Failed to grant ${role} on ${service_account_email} to ${member_email}"
+  exit 1
+}
+
 get_project_number() {
   gcloud projects describe "${GCP_PROJECT_ID}" --format='value(projectNumber)'
 }
@@ -140,6 +159,12 @@ gcloud services enable \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
   firestore.googleapis.com \
+  sheets.googleapis.com \
+  drive.googleapis.com \
+  docs.googleapis.com \
+  cloudscheduler.googleapis.com \
+  gmail.googleapis.com \
+  iamcredentials.googleapis.com \
   iam.googleapis.com
 
 if gcloud firestore databases describe --database="${GCP_FIRESTORE_DATABASE}" >/dev/null 2>&1; then
@@ -166,6 +191,9 @@ wait_for_service_account "${RUNTIME_SA_EMAIL}"
 
 echo "[setup-gcp-backend] Granting Firestore access to runtime service account"
 grant_project_role "${GCP_PROJECT_ID}" "${RUNTIME_SA_EMAIL}" "roles/datastore.user"
+
+echo "[setup-gcp-backend] Granting runtime service account permission to sign delegated Gmail JWTs"
+grant_service_account_role "${RUNTIME_SA_EMAIL}" "${RUNTIME_SA_EMAIL}" "roles/iam.serviceAccountTokenCreator"
 
 echo "[setup-gcp-backend] Granting Cloud Run build access to default build service account"
 grant_project_role "${GCP_PROJECT_ID}" "${BUILD_SA_EMAIL}" "roles/run.builder"

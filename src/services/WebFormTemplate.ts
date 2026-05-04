@@ -1,5 +1,6 @@
 import { WebFormDefinition } from '../types';
 import { SYSTEM_FONT_STACK } from '../constants/typography';
+import { getBackendRuntimeConfig } from './webform/backendConfig';
 import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
 import { getReactBundleCacheKey } from './webform/bundles';
 import { isDebugEnabled } from './webform/debug';
@@ -79,6 +80,9 @@ export function buildWebFormHtml(
 ): string {
   const cacheVersion = serverTiming?.measure('template.resolveCacheVersionMs', () => resolveCacheVersion()) ?? resolveCacheVersion();
   const envTag = serverTiming?.measure('template.resolveUiEnvTagMs', () => getUiEnvTag()) ?? getUiEnvTag();
+  const backendConfig = serverTiming
+    ? serverTiming.measure('template.resolveBackendConfigMs', () => getBackendRuntimeConfig())
+    : getBackendRuntimeConfig();
   const serviceUrl = serverTiming?.measure('template.resolveServiceUrlMs', () => resolveServiceUrl()) ?? resolveServiceUrl();
   const bundleSrc =
     serverTiming?.measure('template.buildBundleSrcMs', () => buildBundleSrc(bundleTarget, requestParams, cacheVersion, serviceUrl)) ??
@@ -88,9 +92,14 @@ export function buildWebFormHtml(
       const bootstrapPayload = (() => {
         if (bootstrap && typeof bootstrap === 'object') {
           const existingEnvTag = (bootstrap as any).envTag;
-          return { ...(bootstrap as any), envTag: existingEnvTag !== undefined ? existingEnvTag : envTag || null };
+          const existingBackend = (bootstrap as any).backend;
+          return {
+            ...(bootstrap as any),
+            envTag: existingEnvTag !== undefined ? existingEnvTag : envTag || null,
+            ...(existingBackend !== undefined || !backendConfig ? {} : { backend: backendConfig })
+          };
         }
-        return { envTag: envTag || null };
+        return { envTag: envTag || null, ...(backendConfig ? { backend: backendConfig } : {}) };
       })();
       const requestParamsPayload =
         requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {};
@@ -110,8 +119,12 @@ export function buildWebFormHtml(
       debugJson: isDebugEnabled() ? 'true' : 'false',
       bootstrapJson: escapeJsonForScript(
         bootstrap && typeof bootstrap === 'object'
-          ? { ...(bootstrap as any), envTag: (bootstrap as any).envTag !== undefined ? (bootstrap as any).envTag : envTag || null }
-          : { envTag: envTag || null }
+          ? {
+              ...(bootstrap as any),
+              envTag: (bootstrap as any).envTag !== undefined ? (bootstrap as any).envTag : envTag || null,
+              ...((bootstrap as any).backend !== undefined || !backendConfig ? {} : { backend: backendConfig })
+            }
+          : { envTag: envTag || null, ...(backendConfig ? { backend: backendConfig } : {}) }
       ),
       requestParamsJson: escapeJsonForScript(
         requestParams && typeof requestParams === 'object' ? { ...(requestParams as Record<string, string>) } : {}
@@ -1479,6 +1492,31 @@ export function buildWebFormHtml(
           }
         };
 
+        var shouldRouteBootFunctionToHttp = function (fnName) {
+          try {
+            var bootstrapBackend = (window.__WEB_FORM_BOOTSTRAP__ && window.__WEB_FORM_BOOTSTRAP__.backend) || null;
+            var backend = window.__CK_BACKEND_CONFIG__ || bootstrapBackend || {};
+            var mode = ((backend && backend.mode) || '').toString().trim().toLowerCase();
+            var apiBaseUrl = ((backend && backend.apiBaseUrl) || '').toString().trim();
+            if (!apiBaseUrl) return false;
+            if (mode === 'http' || mode === 'api') return true;
+            if (mode !== 'hybrid') return false;
+            var httpFunctions = backend.httpFunctions;
+            if (Array.isArray(httpFunctions)) {
+              if (!httpFunctions.length) return fnName === 'fetchHomeBootstrap';
+              return httpFunctions.indexOf(fnName) >= 0;
+            }
+            if (typeof httpFunctions === 'string') {
+              var tokens = httpFunctions.split(',').map(function (token) { return token.trim(); }).filter(Boolean);
+              if (!tokens.length) return fnName === 'fetchHomeBootstrap';
+              return tokens.indexOf(fnName) >= 0;
+            }
+            return fnName === 'fetchHomeBootstrap';
+          } catch (e) {
+            return false;
+          }
+        };
+
         // Non-bundled forms: hydrate from a long-lived localStorage cache keyed by server cache version.
         // Version bump is controlled by createAllForms() (server-side), which invalidates __CK_CACHE_VERSION__.
         // The React bundle URL also includes a bundle hash, so code-only deploys still bust browser caches.
@@ -1558,7 +1596,7 @@ export function buildWebFormHtml(
           var homeKey = (window.__WEB_FORM_KEY__ || '').toString().trim();
           var bootstrap = window.__WEB_FORM_BOOTSTRAP__ || {};
           var hasHomeList = !!(bootstrap && bootstrap.listResponse && Array.isArray(bootstrap.listResponse.items));
-          if (homeKey && !hasHomeList && !window.__CK_HOME_BOOTSTRAP_PREFETCH__ && window.google && window.google.script && window.google.script.run) {
+          if (homeKey && !hasHomeList && !shouldRouteBootFunctionToHttp('fetchHomeBootstrap') && !window.__CK_HOME_BOOTSTRAP_PREFETCH__ && window.google && window.google.script && window.google.script.run) {
             var homeStartedAt = Date.now();
             log('home.bootstrap.prefetch.start', { formKey: homeKey || null });
             var prefetchState = {

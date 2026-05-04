@@ -23,7 +23,7 @@ import { LangCode } from '../types';
 import { normalizeLanguage } from '../core/options';
 import { tSystem } from '../systemStrings';
 import { isGlobalPerfInstrumentationEnabled } from './perfInstrumentation';
-import { clearFetchDataSourceCache } from '../data/dataSources';
+import { clearFetchDataSourceCache, configureDataSourceFetcher } from '../data/dataSources';
 
 declare const google: any;
 
@@ -439,11 +439,32 @@ export const resolveUserFacingErrorMessage = (err: any, fallback: string): strin
     normalized.includes('upload folder not accessible') ||
     normalized.includes('drive createfile failed') ||
     normalized.includes('drive api not available') ||
+    normalized.includes('service accounts do not have storage quota') ||
+    normalized.includes('cloud run drive uploads with service accounts require a shared drive') ||
+    normalized.includes('cloud run drive artifact writes with service accounts require a shared drive') ||
     normalized.includes('service error: drive')
   ) {
     return fallback || tSystem('files.error.uploadFailed', resolveErrorLanguage(), 'Could not add photos.');
   }
   return message || (fallback || null);
+};
+
+const isDriveServiceAccountQuotaError = (err: any): boolean => {
+  const message = (err?.message || err?.toString?.() || '').toString().trim().toLowerCase();
+  return (
+    message.includes('service accounts do not have storage quota') ||
+    message.includes('cloud run drive uploads with service accounts require a shared drive') ||
+    message.includes('cloud run drive artifact writes with service accounts require a shared drive')
+  );
+};
+
+const isCloudRunGmailNotConfiguredError = (err: any): boolean => {
+  const message = (err?.message || err?.toString?.() || '').toString().trim().toLowerCase();
+  return (
+    message.includes('cloud run send_email requires ck_gmail_delegated_user') ||
+    message.includes('cloud run send_email requires a runtime service account email') ||
+    message.includes('gmail client is not configured for cloud run email sending')
+  );
 };
 
 const toAppsScriptErrorMessage = (err: any): string => {
@@ -454,13 +475,160 @@ const toAppsScriptErrorMessage = (err: any): string => {
 };
 
 const getRunner = (): Runner | null => {
-  const runner = google?.script?.run;
+  const runner = typeof google !== 'undefined' ? google?.script?.run : null;
   return runner && typeof runner.withSuccessHandler === 'function' ? runner : null;
 };
 
 export interface BackendTransport {
   invoke<T>(fnName: string, ...args: any[]): Promise<T>;
+  isHttpRouted?: (fnName: string) => boolean;
 }
+
+export type BackendMode = 'appsScript' | 'http' | 'hybrid';
+
+export interface BackendRuntimeConfig {
+  mode?: BackendMode | string;
+  apiBaseUrl?: string;
+  rpcPath?: string;
+  httpFunctions?: string[] | string;
+  appsScriptFunctions?: string[] | string;
+  headers?: Record<string, string>;
+  credentials?: RequestCredentials;
+  dataBackend?: string;
+  fileBackend?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export interface HttpTransportOptions {
+  apiBaseUrl: string;
+  rpcPath?: string;
+  headers?: Record<string, string>;
+  credentials?: RequestCredentials;
+  fetchImpl?: typeof fetch;
+}
+
+export interface HybridTransportOptions {
+  httpTransport: BackendTransport;
+  appsScriptTransport?: BackendTransport;
+  mode?: 'http' | 'hybrid';
+  httpFunctions?: string[] | string;
+  appsScriptFunctions?: string[] | string;
+}
+
+export const DEFAULT_HYBRID_HTTP_FUNCTIONS = [
+  'fetchBootstrapContext',
+  'fetchBootstrapContextWithOptions',
+  'fetchHomeBootstrap',
+  'fetchFormConfig',
+  'fetchFormCatalog',
+  'fetchAnalyticsDashboard',
+  'queueAnalyticsPipelineRun',
+  'fetchSubmissions',
+  'fetchSubmissionsBatch',
+  'fetchSubmissionsSortedBatch',
+  'fetchSubmissionById',
+  'fetchSubmissionByRowNumber',
+  'fetchSummaryRecord',
+  'fetchSubmissionsByRowNumbers',
+  'getRecordVersion',
+  'fetchDataSource',
+  'prefetchTemplates',
+  'renderHtmlTemplate',
+  'renderMarkdownTemplate',
+  'renderInlineHtmlTemplate',
+  'renderSummaryHtmlTemplate'
+] as const;
+
+const CLOUD_RUN_FOLLOWUP_ACTIONS = new Set(['CLOSE_RECORD', 'RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL']);
+
+const normalizeBackendMode = (raw: any): BackendMode | null => {
+  const value = (raw || '').toString().trim().toLowerCase();
+  if (!value) return null;
+  if (value === 'appsscript' || value === 'apps-script' || value === 'apps_script') return 'appsScript';
+  if (value === 'http' || value === 'api') return 'http';
+  if (value === 'hybrid') return 'hybrid';
+  return null;
+};
+
+const normalizeStringList = (value: string[] | string | undefined | null): string[] => {
+  if (Array.isArray(value)) {
+    return value.map(item => (item ?? '').toString().trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const normalizeHeaders = (value: any): Record<string, string> | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  Object.keys(value).forEach(key => {
+    const normalizedKey = (key || '').toString().trim();
+    if (!normalizedKey) return;
+    const rawValue = value[key];
+    if (rawValue === undefined || rawValue === null) return;
+    out[normalizedKey] = rawValue.toString();
+  });
+  return Object.keys(out).length ? out : undefined;
+};
+
+const normalizeRequestCredentials = (value: any): RequestCredentials | undefined => {
+  const normalized = (value || '').toString().trim();
+  return normalized === 'include' || normalized === 'same-origin' || normalized === 'omit'
+    ? (normalized as RequestCredentials)
+    : undefined;
+};
+
+const normalizeApiBaseUrl = (value: any): string => (value || '').toString().trim().replace(/\/+$/, '');
+
+const logBackendTransportConfig = (event: string, payload: Record<string, any>): void => {
+  try {
+    if (typeof console === 'undefined' || typeof console.info !== 'function') return;
+    console.info('[ReactForm][BackendTransport]', event, payload);
+  } catch {
+    // ignore diagnostic logging failures
+  }
+};
+
+const resolveRpcUrl = (apiBaseUrl: string, rpcPath?: string): string => {
+  const path = (rpcPath || '/api/rpc').toString().trim() || '/api/rpc';
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizeApiBaseUrl(apiBaseUrl)}${normalizedPath}`;
+};
+
+const resolveRpcErrorMessage = (payload: any): string | null => {
+  if (!payload) return null;
+  const error = payload.error;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  if (error && typeof error === 'object') {
+    const message = (error.message || error.details || '').toString().trim();
+    if (message) return message;
+  }
+  const message = (payload.message || '').toString().trim();
+  return message || null;
+};
+
+const parseRpcJson = async (response: Response): Promise<any> => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, error: { message: text } };
+  }
+};
+
+const createUnavailableHttpTransport = (message: string): BackendTransport => ({
+  isHttpRouted: () => true,
+  invoke<T>(): Promise<T> {
+    return Promise.reject(new Error(message));
+  }
+});
 
 const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
   return new Promise((resolve, reject) => {
@@ -488,7 +656,7 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
           argCount: args.length,
           ...detail
         });
-      } catch (_) {
+      } catch {
         // ignore perf logging failures
       }
     };
@@ -540,10 +708,102 @@ const runAppsScript = <T,>(fnName: string, ...args: any[]): Promise<T> => {
 };
 
 export const createAppsScriptTransport = (): BackendTransport => ({
+  isHttpRouted: () => false,
   invoke<T>(fnName: string, ...args: any[]): Promise<T> {
     return runAppsScript<T>(fnName, ...args);
   }
 });
+
+export const createHttpTransport = (options: HttpTransportOptions): BackendTransport => {
+  const apiBaseUrl = normalizeApiBaseUrl(options?.apiBaseUrl);
+  const rpcUrl = resolveRpcUrl(apiBaseUrl, options?.rpcPath);
+  const fetchImpl =
+    options?.fetchImpl ||
+    (typeof fetch === 'function' ? (fetch.bind(globalThis) as typeof fetch) : null);
+  const headers = normalizeHeaders(options?.headers) || {};
+  const credentials = normalizeRequestCredentials(options?.credentials);
+
+  return {
+    isHttpRouted: () => true,
+    async invoke<T>(fnName: string, ...args: any[]): Promise<T> {
+      if (!apiBaseUrl) {
+        throw new Error('HTTP backend is configured without apiBaseUrl.');
+      }
+      if (!fetchImpl) {
+        throw new Error('HTTP backend is unavailable because fetch is not available.');
+      }
+
+      const init: RequestInit = {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...headers
+        },
+        body: JSON.stringify({ fnName, args })
+      };
+      if (credentials) init.credentials = credentials;
+
+      const response = await fetchImpl(rpcUrl, init);
+      const payload = await parseRpcJson(response);
+      if (!response.ok) {
+        throw new Error(resolveRpcErrorMessage(payload) || `HTTP backend request failed (${response.status}).`);
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'ok')) {
+        if (payload.ok === false) {
+          throw new Error(resolveRpcErrorMessage(payload) || 'HTTP backend request failed.');
+        }
+        return payload.result as T;
+      }
+      return payload as T;
+    }
+  };
+};
+
+export const createHybridTransport = (options: HybridTransportOptions): BackendTransport => {
+  const httpTransport = options.httpTransport;
+  const appsScriptTransport = options.appsScriptTransport || createAppsScriptTransport();
+  const mode = options.mode === 'http' ? 'http' : 'hybrid';
+  const httpFunctions = new Set(normalizeStringList(options.httpFunctions));
+  const appsScriptFunctions = new Set(normalizeStringList(options.appsScriptFunctions));
+  const isHttpRouted = (fnName: string): boolean => {
+    const normalizedFnName = (fnName || '').toString().trim();
+    if (!normalizedFnName) return false;
+    if (appsScriptFunctions.has(normalizedFnName)) return false;
+    if (mode === 'http') return true;
+    return httpFunctions.has(normalizedFnName);
+  };
+
+  return {
+    isHttpRouted,
+    invoke<T>(fnName: string, ...args: any[]): Promise<T> {
+      const transport = isHttpRouted(fnName) ? httpTransport : appsScriptTransport;
+      return transport.invoke<T>(fnName, ...args);
+    }
+  };
+};
+
+export const readBackendRuntimeConfigFromGlobals = (): BackendRuntimeConfig | null => {
+  const globalAny = globalThis as any;
+  const bootstrapConfig = globalAny?.__WEB_FORM_BOOTSTRAP__?.backend;
+  const directConfig = globalAny?.__CK_BACKEND_CONFIG__;
+  const source =
+    directConfig && typeof directConfig === 'object'
+      ? directConfig
+      : bootstrapConfig && typeof bootstrapConfig === 'object'
+        ? bootstrapConfig
+        : null;
+  const config: BackendRuntimeConfig = source ? { ...source } : {};
+
+  if (globalAny?.__CK_BACKEND_MODE__ !== undefined) config.mode = globalAny.__CK_BACKEND_MODE__;
+  if (globalAny?.__CK_API_BASE_URL__ !== undefined) config.apiBaseUrl = globalAny.__CK_API_BASE_URL__;
+  if (globalAny?.__CK_API_RPC_PATH__ !== undefined) config.rpcPath = globalAny.__CK_API_RPC_PATH__;
+  if (globalAny?.__CK_HTTP_FUNCTIONS__ !== undefined) config.httpFunctions = globalAny.__CK_HTTP_FUNCTIONS__;
+  if (globalAny?.__CK_APPS_SCRIPT_FUNCTIONS__ !== undefined) {
+    config.appsScriptFunctions = globalAny.__CK_APPS_SCRIPT_FUNCTIONS__;
+  }
+
+  return Object.keys(config).length ? config : null;
+};
 
 let activeTransport: BackendTransport = createAppsScriptTransport();
 
@@ -553,8 +813,281 @@ export const configureBackendTransport = (transport?: BackendTransport | null): 
 
 const invokeTransport = <T,>(fnName: string, ...args: any[]): Promise<T> => activeTransport.invoke<T>(fnName, ...args);
 
+const normalizeFollowupAction = (action: any): string => (action ?? '').toString().trim().toUpperCase();
+
+const areCloudRunFollowupActions = (actions: any[]): boolean => {
+  const normalized = (Array.isArray(actions) ? actions : [])
+    .map(normalizeFollowupAction)
+    .filter(Boolean);
+  return normalized.length > 0 && normalized.every(action => CLOUD_RUN_FOLLOWUP_ACTIONS.has(action));
+};
+
+const buildSkippedFollowupResult = (actions: string[], message: string): Array<{ action: string; result: FollowupActionResult }> =>
+  actions.map(action => ({
+    action,
+    result: {
+      success: false,
+      message
+    }
+  }));
+
+const extractPdfArtifactFromFollowupBatch = (
+  batch: FollowupBatchResponse,
+  current: { fileId?: string; url?: string } | null
+): { fileId?: string; url?: string } | null => {
+  let artifact = current;
+  (Array.isArray(batch?.results) ? batch.results : []).forEach(entry => {
+    if (normalizeFollowupAction(entry?.action) !== 'CREATE_PDF') return;
+    const result = entry?.result;
+    if (!result?.success) return;
+    const fileId = (result.fileId || '').toString().trim();
+    const url = (result.pdfUrl || '').toString().trim();
+    if (fileId || url) {
+      artifact = {
+        fileId: fileId || undefined,
+        url: url || undefined
+      };
+    }
+  });
+  return artifact;
+};
+
+const runSplitFollowupBatchWithAppsScriptEmail = async (
+  formKey: string,
+  recordId: string,
+  actions: any[]
+): Promise<FollowupBatchResponse> => {
+  const normalizedActions = (Array.isArray(actions) ? actions : [])
+    .map(action => (action ?? '').toString().trim())
+    .filter(Boolean);
+  if (!normalizedActions.length) {
+    return {
+      success: false,
+      results: buildSkippedFollowupResult([''], 'No follow-up actions provided.')
+    };
+  }
+
+  const results: Array<{ action: string; result: FollowupActionResult }> = [];
+  let pdfArtifact: { fileId?: string; url?: string } | null = null;
+  let pendingCloudRunActions: string[] = [];
+
+  const flushCloudRunActions = async (): Promise<boolean> => {
+    if (!pendingCloudRunActions.length) return true;
+    const batch = await invokeTransport<FollowupBatchResponse>(
+      'triggerFollowupActions',
+      formKey,
+      recordId,
+      pendingCloudRunActions
+    );
+    const batchResults = Array.isArray(batch?.results) ? batch.results : [];
+    results.push(...batchResults);
+    pdfArtifact = extractPdfArtifactFromFollowupBatch(batch, pdfArtifact);
+    pendingCloudRunActions = [];
+    return Boolean(batch?.success);
+  };
+
+  for (let index = 0; index < normalizedActions.length; index += 1) {
+    const action = normalizedActions[index];
+    if (normalizeFollowupAction(action) !== 'SEND_EMAIL') {
+      pendingCloudRunActions.push(action);
+      continue;
+    }
+
+    const cloudRunOk = await flushCloudRunActions();
+    if (!cloudRunOk) {
+      results.push(...buildSkippedFollowupResult(normalizedActions.slice(index), `Skipped because ${action} could not run after a failed Cloud Run action.`));
+      break;
+    }
+
+    const currentPdfArtifact = pdfArtifact as { fileId?: string; url?: string } | null;
+    const emailOptions = currentPdfArtifact
+      ? {
+          pdfArtifact: {
+            success: true,
+            fileId: currentPdfArtifact.fileId,
+            url: currentPdfArtifact.url
+          }
+        }
+      : undefined;
+    const emailResult = emailOptions
+      ? await runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action, emailOptions)
+      : await runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+    results.push({ action, result: emailResult });
+    if (!emailResult?.success) {
+      results.push(...buildSkippedFollowupResult(normalizedActions.slice(index + 1), `Skipped because ${action} failed.`));
+      break;
+    }
+  }
+
+  if (results.length < normalizedActions.length) {
+    const cloudRunOk = await flushCloudRunActions();
+    if (!cloudRunOk) {
+      const completedCount = results.length;
+      results.push(...buildSkippedFollowupResult(normalizedActions.slice(completedCount), 'Skipped because a Cloud Run follow-up action failed.'));
+    }
+  }
+
+  return {
+    success: results.length === normalizedActions.length && results.every(entry => !!entry.result?.success),
+    results
+  };
+};
+
+const invokeFollowupTransport = async <T,>(fnName: string, actions: any[], ...args: any[]): Promise<T> => {
+  if (activeTransport.isHttpRouted?.(fnName) && !areCloudRunFollowupActions(actions)) {
+    logBackendTransportConfig('followup.appsScriptFallback', {
+      fnName,
+      actions: (Array.isArray(actions) ? actions : []).map(action => (action ?? '').toString().trim()).filter(Boolean)
+    });
+    return runAppsScript<T>(fnName, ...args);
+  }
+  try {
+    return await invokeTransport<T>(fnName, ...args);
+  } catch (err) {
+    if (activeTransport.isHttpRouted?.(fnName) && fnName === 'triggerFollowupActions' && isCloudRunGmailNotConfiguredError(err)) {
+      const formKey = (args[0] || '').toString();
+      const recordId = (args[1] || '').toString();
+      logBackendTransportConfig('followup.splitAppsScriptEmailFallback', {
+        fnName,
+        actions: (Array.isArray(actions) ? actions : []).map(action => (action ?? '').toString().trim()).filter(Boolean),
+        reason: 'gmailNotConfigured'
+      });
+      return runSplitFollowupBatchWithAppsScriptEmail(formKey, recordId, actions) as Promise<T>;
+    }
+    if (
+      activeTransport.isHttpRouted?.(fnName) &&
+      (isDriveServiceAccountQuotaError(err) || isCloudRunGmailNotConfiguredError(err))
+    ) {
+      logBackendTransportConfig('followup.appsScriptFallback', {
+        fnName,
+        actions: (Array.isArray(actions) ? actions : []).map(action => (action ?? '').toString().trim()).filter(Boolean),
+        reason: isDriveServiceAccountQuotaError(err) ? 'driveServiceAccountQuota' : 'gmailNotConfigured'
+      });
+      return runAppsScript<T>(fnName, ...args);
+    }
+    throw err;
+  }
+};
+
+const invokeDriveUploadTransport = async <T,>(fnName: string, ...args: any[]): Promise<T> => {
+  try {
+    return await invokeTransport<T>(fnName, ...args);
+  } catch (err) {
+    if (activeTransport.isHttpRouted?.(fnName) && isDriveServiceAccountQuotaError(err)) {
+      logBackendTransportConfig('driveUpload.appsScriptFallback', { fnName });
+      return runAppsScript<T>(fnName, ...args);
+    }
+    throw err;
+  }
+};
+
+const invokeDriveArtifactTransport = async <T,>(fnName: string, ...args: any[]): Promise<T> => {
+  try {
+    return await invokeTransport<T>(fnName, ...args);
+  } catch (err) {
+    if (activeTransport.isHttpRouted?.(fnName) && isDriveServiceAccountQuotaError(err)) {
+      logBackendTransportConfig('driveArtifact.appsScriptFallback', { fnName });
+      return runAppsScript<T>(fnName, ...args);
+    }
+    throw err;
+  }
+};
+
+const invokeAnalyticsPipelineTransport = async <T,>(fnName: string, ...args: any[]): Promise<T> => {
+  try {
+    return await invokeTransport<T>(fnName, ...args);
+  } catch (err) {
+    if (
+      activeTransport.isHttpRouted?.(fnName) &&
+      (isCloudRunGmailNotConfiguredError(err) || isDriveServiceAccountQuotaError(err))
+    ) {
+      logBackendTransportConfig('analyticsPipeline.appsScriptFallback', {
+        fnName,
+        reason: isCloudRunGmailNotConfiguredError(err) ? 'gmailNotConfigured' : 'driveServiceAccountQuota'
+      });
+      return runAppsScript<T>(fnName, ...args);
+    }
+    throw err;
+  }
+};
+
+export const configureBackendTransportFromRuntime = (
+  runtimeConfig?: BackendRuntimeConfig | null
+): BackendTransport => {
+  const config = runtimeConfig === undefined ? readBackendRuntimeConfigFromGlobals() : runtimeConfig;
+  const mode = normalizeBackendMode(config?.mode) || 'appsScript';
+  if (!config || mode === 'appsScript') {
+    const transport = createAppsScriptTransport();
+    configureBackendTransport(transport);
+    if (config?.mode) {
+      logBackendTransportConfig('configured', {
+        mode: 'appsScript',
+        dataBackend: config.dataBackend || 'appsScript',
+        fileBackend: config.fileBackend || 'appsScript'
+      });
+    }
+    return transport;
+  }
+
+  const apiBaseUrl = normalizeApiBaseUrl(config.apiBaseUrl);
+  if (!apiBaseUrl) {
+    const transport =
+      mode === 'http'
+        ? createUnavailableHttpTransport('HTTP backend mode requires apiBaseUrl.')
+        : createAppsScriptTransport();
+    configureBackendTransport(transport);
+    logBackendTransportConfig('configured', {
+      mode,
+      apiBaseUrl: null,
+      dataBackend: config.dataBackend || null,
+      fileBackend: config.fileBackend || null,
+      unavailableReason: 'missingApiBaseUrl'
+    });
+    return transport;
+  }
+
+  const httpTransport = createHttpTransport({
+    apiBaseUrl,
+    rpcPath: config.rpcPath,
+    headers: normalizeHeaders(config.headers),
+    credentials: normalizeRequestCredentials(config.credentials),
+    fetchImpl: config.fetchImpl
+  });
+  const transport =
+    mode === 'http'
+      ? createHybridTransport({
+          mode: 'http',
+          httpTransport,
+          appsScriptFunctions: config.appsScriptFunctions
+        })
+      : createHybridTransport({
+          mode: 'hybrid',
+          httpTransport,
+          httpFunctions:
+            normalizeStringList(config.httpFunctions).length > 0
+              ? config.httpFunctions
+              : Array.from(DEFAULT_HYBRID_HTTP_FUNCTIONS),
+          appsScriptFunctions: config.appsScriptFunctions
+        });
+  configureBackendTransport(transport);
+  logBackendTransportConfig('configured', {
+    mode,
+    apiBaseUrl,
+    httpFunctions:
+      mode === 'hybrid'
+        ? normalizeStringList(config.httpFunctions).length > 0
+          ? normalizeStringList(config.httpFunctions)
+          : Array.from(DEFAULT_HYBRID_HTTP_FUNCTIONS)
+        : ['*'],
+    appsScriptFunctions: normalizeStringList(config.appsScriptFunctions),
+    dataBackend: config.dataBackend || null,
+    fileBackend: config.fileBackend || null
+  });
+  return transport;
+};
+
 export const submit = (payload: SubmissionPayload): Promise<SubmissionResult> =>
-  invokeTransport<SubmissionResult>('saveSubmissionWithId', payload);
+  invokeDriveUploadTransport<SubmissionResult>('saveSubmissionWithId', payload);
 
 export const previewUpdateRecordDependenciesApi = (
   payload: SubmissionPayload,
@@ -644,29 +1177,30 @@ export const triggerFollowup = (
   formKey: string,
   recordId: string,
   action: string
-): Promise<FollowupActionResult> => invokeTransport<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+): Promise<FollowupActionResult> =>
+  invokeFollowupTransport<FollowupActionResult>('triggerFollowupAction', [action], formKey, recordId, action);
 
 export const triggerFollowupBatch = (
   formKey: string,
   recordId: string,
   actions: string[]
 ): Promise<FollowupBatchResponse> =>
-  invokeTransport<FollowupBatchResponse>('triggerFollowupActions', formKey, recordId, actions);
+  invokeFollowupTransport<FollowupBatchResponse>('triggerFollowupActions', actions, formKey, recordId, actions);
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
-  invokeTransport<UploadFilesResult>('uploadFiles', files, uploadConfig);
+  invokeDriveUploadTransport<UploadFilesResult>('uploadFiles', files, uploadConfig);
 
 export const renderDocTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocTemplateResult> =>
-  invokeTransport<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
+  invokeDriveArtifactTransport<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);
 
 export const renderDocTemplatePdfPreviewApi = (
   payload: SubmissionPayload,
   buttonId: string
 ): Promise<RenderDocTemplatePdfPreviewResult> =>
-  invokeTransport<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
+  invokeDriveArtifactTransport<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
 
 export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
-  invokeTransport<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
+  invokeDriveArtifactTransport<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
 
 export const renderMarkdownTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderMarkdownTemplateResult> =>
   invokeTransport<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
@@ -725,7 +1259,7 @@ export const prefetchTemplatesApi = (formKey: string): Promise<PrefetchTemplates
   invokeTransport<PrefetchTemplatesResult>('prefetchTemplates', formKey);
 
 export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promise<RenderDocPreviewResult> =>
-  invokeTransport<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
+  invokeDriveArtifactTransport<RenderDocPreviewResult>('renderSubmissionReportHtml', payload);
 
 export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promise<RenderHtmlTemplateResult> => {
   const key = buildSummaryHtmlCacheKey(payload);
@@ -770,6 +1304,7 @@ export interface BootstrapContext {
   configSource?: string;
   configEnv?: string;
   envTag?: string;
+  backend?: BackendRuntimeConfig;
 }
 
 export interface HomeBootstrapResponse {
@@ -802,6 +1337,7 @@ export const fetchBootstrapContextApi = (
 
 export const consumePrefetchedHomeBootstrapApi = (formKey: string): Promise<HomeBootstrapResponse> | null => {
   try {
+    if (activeTransport.isHttpRouted?.('fetchHomeBootstrap')) return null;
     const globalAny = globalThis as any;
     const prefetch = globalAny?.__CK_HOME_BOOTSTRAP_PREFETCH__;
     if (!prefetch || prefetch.used) return null;
@@ -835,4 +1371,7 @@ export const fetchAnalyticsDashboardApi = (): Promise<AnalyticsDashboardPayload>
 export const queueAnalyticsPipelineRunApi = (
   request: QueueAnalyticsPipelineRequest
 ): Promise<QueueAnalyticsPipelineResult> =>
-  invokeTransport<QueueAnalyticsPipelineResult>('queueAnalyticsPipelineRun', request);
+  invokeAnalyticsPipelineTransport<QueueAnalyticsPipelineResult>('queueAnalyticsPipelineRun', request);
+
+configureDataSourceFetcher(req => fetchDataSourceApi(req));
+configureBackendTransportFromRuntime();

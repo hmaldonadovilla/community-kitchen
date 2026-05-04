@@ -38,6 +38,8 @@ import {
   SubmitEffectGeneratedRecord
 } from '../types';
 import { debugLog } from './webform/debug';
+import { getBackendRuntimeConfig } from './webform/backendConfig';
+import type { BackendRuntimeConfigPayload } from './webform/backendConfig';
 import { CacheEtagManager, getDocumentProperties } from './webform/cache';
 import { DefinitionBuilder } from './webform/definitionBuilder';
 import { DataSourceService } from './webform/dataSources';
@@ -111,6 +113,25 @@ const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.p
 const toPlainData = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
 const IN_MEMORY_BUNDLED_DEFINITION_CACHE = new Map<string, WebFormDefinition>();
+
+type FollowupRuntimeOptions = {
+  pdfArtifact?: (Partial<GeneratedPdfArtifact> & { pdfUrl?: string }) | null;
+};
+
+const normalizeFollowupRuntimePdfArtifact = (options?: FollowupRuntimeOptions | null): GeneratedPdfArtifact | null => {
+  const raw = options?.pdfArtifact;
+  if (!raw || typeof raw !== 'object') return null;
+  const fileId = (raw.fileId || '').toString().trim();
+  const url = ((raw as any).url || raw.pdfUrl || '').toString().trim();
+  if (!fileId && !url && !raw.blob) return null;
+  return {
+    success: raw.success !== false,
+    message: raw.message,
+    url: url || undefined,
+    fileId: fileId || undefined,
+    blob: raw.blob
+  };
+};
 
 type HomeBootstrapCachePayload = {
   rev: number;
@@ -782,12 +803,14 @@ export class WebFormService {
     configSource?: string;
     configEnv?: string;
     envTag?: string;
+    backend?: BackendRuntimeConfigPayload | null;
   } {
     const includeHomeData = options?.includeHomeData === true;
     const includeAnalytics = options?.includeAnalytics === true;
     const startedAt = Date.now();
     const configEnv = getBundledConfigEnv() || undefined;
     const envTag = getUiEnvTag() || undefined;
+    const backend = getBackendRuntimeConfig();
     const bundled = this.resolveBundledConfig(formKey);
     if (bundled) {
       const def = this.buildBundledDefinition(bundled);
@@ -825,6 +848,7 @@ export class WebFormService {
         configSource: 'bundled',
         configEnv,
         envTag,
+        backend,
         homeRev: rev,
         listResponse: (bootstrap as any)?.listResponse,
         records: (bootstrap as any)?.records,
@@ -862,6 +886,7 @@ export class WebFormService {
       configSource: 'sheet',
       configEnv,
       envTag,
+      backend,
       homeRev: rev,
       listResponse: (bootstrap as any)?.listResponse,
       records: (bootstrap as any)?.records,
@@ -1270,6 +1295,9 @@ export class WebFormService {
     const envTag =
       serverTiming?.measure('renderForm.resolveUiEnvTagMs', () => getUiEnvTag() || undefined) ??
       (getUiEnvTag() || undefined);
+    const backendConfig = serverTiming
+      ? serverTiming.measure('renderForm.resolveBackendConfigMs', () => getBackendRuntimeConfig())
+      : getBackendRuntimeConfig();
 
     const mode = bundled ? 'react-embedded' : 'react-shell';
     debugLog('renderForm.start', {
@@ -1283,7 +1311,7 @@ export class WebFormService {
       if (!bundled) {
         const normalizedBundleTarget = (bundleTarget || '').toString().trim().toLowerCase();
         const shellBootstrap = serverTiming?.measure('renderForm.buildShellBootstrapMs', () => {
-          const bootstrap = { configSource: 'shell', configEnv, envTag } as any;
+          const bootstrap = { configSource: 'shell', configEnv, envTag, ...(backendConfig ? { backend: backendConfig } : {}) } as any;
           if (normalizedBundleTarget === 'landing') {
             bootstrap.configSource = 'catalog';
             bootstrap.formCatalog = this.fetchFormCatalog();
@@ -1293,7 +1321,7 @@ export class WebFormService {
           }
           return bootstrap;
         }) ?? (() => {
-          const bootstrap = { configSource: 'shell', configEnv, envTag } as any;
+          const bootstrap = { configSource: 'shell', configEnv, envTag, ...(backendConfig ? { backend: backendConfig } : {}) } as any;
           if (normalizedBundleTarget === 'landing') {
             bootstrap.configSource = 'catalog';
             bootstrap.formCatalog = this.fetchFormCatalog();
@@ -1323,7 +1351,13 @@ export class WebFormService {
         resolvedKey;
       const homeRev = serverTiming?.measure('renderForm.readHomeRevisionMs', () => this.readHomeRevision(canonicalKey))
         ?? this.readHomeRevision(canonicalKey);
-      const bootstrapPayload = { configSource: 'bundled', configEnv, envTag, homeRev } as any;
+      const bootstrapPayload = {
+        configSource: 'bundled',
+        configEnv,
+        envTag,
+        homeRev,
+        ...(backendConfig ? { backend: backendConfig } : {})
+      } as any;
 
       if (serverListBootstrapEnabled) {
         const bootstrap =
@@ -4754,20 +4788,22 @@ export class WebFormService {
   public triggerFollowupAction(
     formKey: string,
     recordId: string,
-    action: string
+    action: string,
+    options?: FollowupRuntimeOptions
   ): FollowupActionResult {
-    const batch = this.triggerFollowupActions(formKey, recordId, [action]);
+    const batch = this.triggerFollowupActions(formKey, recordId, [action], options);
     return batch.results?.[0]?.result || { success: false, message: 'Failed to run follow-up action.' };
   }
 
   public triggerFollowupActions(
     formKey: string,
     recordId: string,
-    actions: string[]
+    actions: string[],
+    options?: FollowupRuntimeOptions
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const { form, questions } = this.getFormContext(formKey);
     const normalizedRecordId = (recordId || '').toString().trim();
-    const runBatch = () => this.runQueuedFollowupActions(formKey, form, questions, normalizedRecordId, actions);
+    const runBatch = () => this.runQueuedFollowupActions(formKey, form, questions, normalizedRecordId, actions, options);
     let result: { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> };
     try {
       result = normalizedRecordId
@@ -4823,7 +4859,8 @@ export class WebFormService {
     form: FormConfig,
     questions: QuestionConfig[],
     recordId: string,
-    actions: string[]
+    actions: string[],
+    options?: FollowupRuntimeOptions
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
     const normalizedActions = Array.isArray(actions)
       ? actions
@@ -4870,7 +4907,9 @@ export class WebFormService {
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
-    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {};
+    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {
+      pdfArtifact: normalizeFollowupRuntimePdfArtifact(options)
+    };
     try {
       for (let actionIndex = 0; actionIndex < normalizedActions.length; actionIndex += 1) {
         const action = normalizedActions[actionIndex];
@@ -7896,7 +7935,7 @@ export class WebFormService {
     if (payloadRaw.length <= HOME_BOOTSTRAP_CHUNK_SIZE) {
       try {
         cache.put(singleKey, payloadRaw, HOME_BOOTSTRAP_CACHE_TTL_SECONDS);
-      } catch (_) {
+      } catch {
         // ignore cache write failures
       }
     } else {
@@ -7924,7 +7963,7 @@ export class WebFormService {
       }
       try {
         cache.putAll(values, HOME_BOOTSTRAP_CACHE_TTL_SECONDS);
-      } catch (_) {
+      } catch {
         // ignore cache write failures
       }
     }
@@ -7946,7 +7985,7 @@ export class WebFormService {
         return typeof LockService !== 'undefined' && (LockService as any).getScriptLock
           ? (LockService as any).getScriptLock()
           : null;
-      } catch (_) {
+      } catch {
         return null;
       }
     })();

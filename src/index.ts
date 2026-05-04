@@ -473,16 +473,16 @@ export function trashPreviewArtifact(cleanupToken: string): any {
   return service.trashPreviewArtifact(cleanupToken);
 }
 
-export function triggerFollowupAction(formKey: string, recordId: string, action: string): any {
+export function triggerFollowupAction(formKey: string, recordId: string, action: string, options?: any): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  return service.triggerFollowupAction(formKey, recordId, action);
+  return service.triggerFollowupAction(formKey, recordId, action, options);
 }
 
-export function triggerFollowupActions(formKey: string, recordId: string, actions: string[]): any {
+export function triggerFollowupActions(formKey: string, recordId: string, actions: string[], options?: any): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  return service.triggerFollowupActions(formKey, recordId, actions);
+  return service.triggerFollowupActions(formKey, recordId, actions, options);
 }
 
 export function migrateFormTemplatesToIdPlaceholders(formKey: string): any {

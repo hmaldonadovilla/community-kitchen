@@ -293,6 +293,38 @@ describe('WebFormService', () => {
     }
   });
 
+  test('fetchBootstrapContext returns runtime backend config from script properties', () => {
+    const previous = (global as any).PropertiesService;
+    const props = {
+      getProperty: jest.fn((key: string) => {
+        const values: Record<string, string> = {
+          CK_BACKEND_MODE: 'hybrid',
+          CK_API_BASE_URL: 'https://community-kitchen-api.example.test',
+          CK_HTTP_FUNCTIONS: 'fetchDataSource',
+          CK_DATA_BACKEND: 'drive',
+          CK_FILE_BACKEND: 'drive'
+        };
+        return values[key] || null;
+      })
+    };
+    (global as any).PropertiesService = {
+      getScriptProperties: () => props
+    };
+
+    try {
+      const res = service.fetchBootstrapContext('Config: Delivery');
+      expect(res.backend).toEqual({
+        mode: 'hybrid',
+        apiBaseUrl: 'https://community-kitchen-api.example.test',
+        httpFunctions: ['fetchDataSource'],
+        dataBackend: 'drive',
+        fileBackend: 'drive'
+      });
+    } finally {
+      (global as any).PropertiesService = previous;
+    }
+  });
+
   test('fetchBootstrapContext stays lean by default', () => {
     const res = service.fetchBootstrapContext('Config: Delivery');
     expect(res.definition).toBeDefined();
@@ -1195,6 +1227,46 @@ describe('WebFormService', () => {
     expect(generatePdfArtifact).toHaveBeenCalledTimes(1);
     const optionsArg = (global as any).GmailApp.sendEmail.mock.calls[0]?.[3] || {};
     expect(optionsArg.attachments).toEqual([blob]);
+  });
+
+  test('triggerFollowupAction SEND_EMAIL can attach a supplied Cloud Run PDF artifact', () => {
+    const followups = (service as any).followups || (service as any);
+    const generatePdfArtifact = jest.spyOn(followups, 'generatePdfArtifact' as any);
+    const blob = { getName: () => 'cloud-run-delivery.pdf' } as any;
+    const getBlob = jest.fn(() => blob);
+    const serverCache = installServerCacheMocks();
+    serverCache.cache.get.mockReturnValue('Hello {{Q1}}');
+
+    try {
+      service.saveSubmissionWithId({
+        formKey: 'Config: Delivery',
+        language: 'EN',
+        id: 'REC-CLOUD-PDF-EMAIL',
+        Q1: 'Alice',
+        Q2_json: JSON.stringify([]),
+        Q3: [],
+        Q4: 'ACME'
+      } as any);
+      jest.spyOn((global as any).DriveApp, 'getFileById').mockReturnValue({
+        getBlob
+      });
+
+      const result = service.triggerFollowupAction('Config: Delivery', 'REC-CLOUD-PDF-EMAIL', 'SEND_EMAIL', {
+        pdfArtifact: {
+          success: true,
+          fileId: 'cloudPdfFile12345',
+          url: 'https://drive.google.com/file/d/cloudPdfFile12345/view'
+        }
+      });
+
+      expect(result.success).toBe(true);
+      expect(generatePdfArtifact).not.toHaveBeenCalled();
+      expect(getBlob).toHaveBeenCalled();
+      const optionsArg = (global as any).GmailApp.sendEmail.mock.calls[0]?.[3] || {};
+      expect(optionsArg.attachments).toEqual([blob]);
+    } finally {
+      serverCache.restore();
+    }
   });
 
   test('triggerFollowupActions only bumps home revision instead of rebuilding home caches', () => {
