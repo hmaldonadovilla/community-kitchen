@@ -58,6 +58,7 @@ import {
 import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
+import { AppHeaderStatus } from './components/app/AppHeaderStatus';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { matchesWhenClause } from '../rules/visibility';
@@ -15871,60 +15872,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     recordLoadError: Boolean(recordLoadError),
     hasCurrentRecord: Boolean(currentRecord)
   });
-  const headerSaveIndicator = useMemo(() => {
-    // Show in the Form view, and also while a background save is in-flight after navigation.
-    const showForView = view === 'form' || (autoSaveEnabled && draftSave.phase === 'saving');
-    if (!showForView) return null;
-
-    if (isClosedRecord) {
-      return (
-        <output aria-live="polite" data-tone="paused">
-          {tSystem('app.closedReadOnly', language, 'Closed (read-only)')}
-        </output>
-      );
-    }
-
-    if (!autoSaveEnabled) return null;
-    if (draftSave.phase === 'idle') return null;
-
-    const byPhase: Partial<Record<DraftSavePhase, { key: string; fallback: string; tone: string }>> = {
-      saving: { key: 'draft.savingShort', fallback: 'Saving…', tone: 'saving' },
-      saved: { key: 'draft.savedShort', fallback: 'Saved', tone: 'saved' },
-      dirty: { key: 'draft.dirtyShort', fallback: 'Unsaved changes', tone: 'muted' },
-      paused: { key: 'draft.pausedShort', fallback: 'Autosave paused', tone: 'paused' },
-      error: { key: 'draft.saveFailedShort', fallback: 'Save failed', tone: 'error' }
-    };
-    const def = byPhase[draftSave.phase];
-    if (!def) return null;
-
-    const text =
-      draftSave.phase === 'paused' ? (draftSave.message || tSystem(def.key, language, def.fallback)) : tSystem(def.key, language, def.fallback);
-    return (
-      <output aria-live="polite" data-tone={def.tone}>
-        {text}
-      </output>
-    );
-  }, [autoSaveEnabled, draftSave.message, draftSave.phase, isClosedRecord, language, view]);
-
-  const headerEnvTag = useMemo(() => {
-    const trimmed = (envTag || '').toString().trim();
-    if (!trimmed) return null;
-    return (
-      <span className="ck-env-tag" role="status" aria-label={`Environment: ${trimmed}`}>
-        {trimmed}
-      </span>
-    );
-  }, [envTag]);
-
   const headerRight = useMemo(() => {
-    if (!headerEnvTag && !headerSaveIndicator) return null;
     return (
-      <>
-        {headerEnvTag}
-        {headerSaveIndicator}
-      </>
+      <AppHeaderStatus
+        envTag={envTag}
+        language={language}
+        view={view}
+        autoSaveEnabled={autoSaveEnabled}
+        draftSavePhase={draftSave.phase}
+        draftSaveMessage={draftSave.message}
+        isClosedRecord={isClosedRecord}
+      />
     );
-  }, [headerEnvTag, headerSaveIndicator]);
+  }, [autoSaveEnabled, draftSave.message, draftSave.phase, envTag, isClosedRecord, language, view]);
   const headerServiceUrl = useMemo(() => resolveServiceUrl(), []);
   const headerAdminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const headerDrawerEnabled = useMemo(
