@@ -158,6 +158,7 @@ import {
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
+import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
@@ -5941,18 +5942,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       {showSelectorBottom ? selectorControl : null}
                       {showAddBottom ? renderAddButton() : null}
                     </div>
-                    {toolbarTotals.length > 0 ? (
-                      <div className="line-item-totals">
-                        {toolbarTotals.map(t => {
-                          const valueText = formatLineItemTotalValue(t);
-                          return (
-                            <span key={t.key} className="ck-line-item-table__total">
-                              {valueText ? `${t.label}: ${valueText}` : t.label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : null}
+                    <LineItemTotals totals={toolbarTotals} itemClassName="ck-line-item-table__total" />
                   </div>
                 </div>
               ) : null}
@@ -15923,18 +15913,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                   </div>
                                 ) : null}
                                 {showBottom ? renderSubAddButton() : null}
-                                {subTotals.length ? (
-                                  <div className="line-item-totals">
-                                    {subTotals.map(t => {
-                                      const valueText = formatLineItemTotalValue(t);
-                                      return (
-                                        <span key={t.key} className="pill">
-                                          {valueText ? `${t.label}: ${valueText}` : t.label}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                ) : null}
+                                <LineItemTotals totals={subTotals} />
                               </div>
                               {!inlineSubgroupChromeHidden ? (
                                 <div style={{ marginLeft: 'auto'}}>
@@ -16020,18 +15999,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 ) : null}
                 <div className="line-item-toolbar-actions">
                   {showAddBottom ? renderAddButton() : null}
-                  {toolbarTotals.length ? (
-                    <div className="line-item-totals">
-                      {toolbarTotals.map(t => {
-                        const valueText = formatLineItemTotalValue(t);
-                        return (
-                          <span key={t.key} className="pill">
-                            {valueText ? `${t.label}: ${valueText}` : t.label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : null}
+                  <LineItemTotals totals={toolbarTotals} />
                 </div>
               </div>
             ) : null}
