@@ -1,4 +1,4 @@
-import { QuestionConfig, TemplateIdBase, TemplateIdMap } from '../../../types';
+import { FormConfig, QuestionConfig, TemplateIdBase, TemplateIdMap } from '../../../types';
 import { escapeRegExp, resolveLocalizedValue, slugifyPlaceholder } from './utils';
 
 type KeyRewrite = { from: string; to: string; reason: string };
@@ -25,6 +25,42 @@ export const collectTemplateIdsFromMap = (map: TemplateIdMap | undefined): strin
 };
 
 const dedupe = <T>(items: T[]): T[] => Array.from(new Set(items));
+
+export type DocTemplateMigrationTarget = {
+  source: string;
+  map: TemplateIdMap;
+  templateIds: string[];
+};
+
+export const collectDocTemplateMigrationTargets = (
+  form: FormConfig,
+  questions: QuestionConfig[]
+): DocTemplateMigrationTarget[] => {
+  const targets: DocTemplateMigrationTarget[] = [];
+  const add = (source: string, map: TemplateIdMap | undefined): void => {
+    const templateIds = collectTemplateIdsFromMap(map)
+      .map(id => (id || '').toString().trim())
+      .filter(Boolean);
+    if (!templateIds.length || !map) return;
+    targets.push({ source, map, templateIds });
+  };
+
+  add('followup.pdfTemplateId', form.followupConfig?.pdfTemplateId as TemplateIdMap | undefined);
+  add('followup.emailTemplateId', form.followupConfig?.emailTemplateId as TemplateIdMap | undefined);
+  (Array.isArray(questions) ? questions : [])
+    .filter(q => q && q.type === 'BUTTON')
+    .forEach(q => {
+      const cfg: any = (q as any).button;
+      if (cfg && cfg.action === 'renderDocTemplate' && cfg.templateId) {
+        add(`button:${q.id}`, cfg.templateId);
+      }
+    });
+
+  return targets;
+};
+
+export const collectDocTemplateMigrationIds = (form: FormConfig, questions: QuestionConfig[]): string[] =>
+  dedupe(collectDocTemplateMigrationTargets(form, questions).flatMap(target => target.templateIds));
 
 const buildKeyRewrites = (questions: QuestionConfig[]): { rewrites: KeyRewrite[]; warnings: string[] } => {
   const rewrites: KeyRewrite[] = [];
@@ -241,5 +277,4 @@ export const migrateDocTemplatePlaceholdersToIds = (args: {
     };
   }
 };
-
 

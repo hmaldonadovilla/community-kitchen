@@ -2,6 +2,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { createGoogleDocsClient } = require('../googleDocsClient');
+const { collectTemplatePrefetchIds } = require('../domain/templateTargets');
 
 const GENERATED_RENDERER_PATH = path.join(__dirname, '..', 'generated', 'templateRenderers.cjs');
 const templateFileCache = new Map();
@@ -157,26 +158,6 @@ const resolveButtonQuestion = (questions, parsed) => {
     if (candidate && candidate.type === 'BUTTON' && candidate.id === id) return candidate;
   }
   return (questions || []).find(question => question && question.type === 'BUTTON' && question.id === id);
-};
-
-const collectTemplateIdsFromBase = base => {
-  if (!base) return [];
-  if (typeof base === 'string') return [base];
-  if (typeof base === 'object') return Object.values(base).filter(Boolean);
-  return [];
-};
-
-const collectTemplateIdsFromMap = map => {
-  if (!map) return [];
-  if (typeof map === 'string' || (typeof map === 'object' && !Array.isArray(map.cases))) {
-    return collectTemplateIdsFromBase(map);
-  }
-  const out = [];
-  (Array.isArray(map.cases) ? map.cases : []).forEach(entry => {
-    out.push(...collectTemplateIdsFromBase(entry && entry.templateId));
-  });
-  out.push(...collectTemplateIdsFromBase(map.default));
-  return Array.from(new Set(out.map(toText).map(item => item.trim()).filter(Boolean)));
 };
 
 const normalizeTemplateRenderRecord = (formObject, questions, formKey) => {
@@ -893,19 +874,7 @@ class TemplateRepository {
     const config = this.configRepository.fetchFormConfig(key);
     const form = config.form || {};
     const questions = Array.isArray(config.questions) ? config.questions : [];
-    const htmlIds = [];
-    const markdownIds = [];
-    const docIds = [];
-    if (form.summaryHtmlTemplateId) htmlIds.push(...collectTemplateIdsFromMap(form.summaryHtmlTemplateId));
-    if (form.followupConfig && form.followupConfig.pdfTemplateId) docIds.push(...collectTemplateIdsFromMap(form.followupConfig.pdfTemplateId));
-    if (form.followupConfig && form.followupConfig.emailTemplateId) docIds.push(...collectTemplateIdsFromMap(form.followupConfig.emailTemplateId));
-    questions
-      .filter(question => question && question.type === 'BUTTON' && question.button && question.button.templateId)
-      .forEach(question => {
-        if (question.button.action === 'renderMarkdownTemplate') markdownIds.push(...collectTemplateIdsFromMap(question.button.templateId));
-        if (question.button.action === 'renderHtmlTemplate') htmlIds.push(...collectTemplateIdsFromMap(question.button.templateId));
-        if (question.button.action === 'renderDocTemplate') docIds.push(...collectTemplateIdsFromMap(question.button.templateId));
-      });
+    const { htmlIds, markdownIds, docIds } = collectTemplatePrefetchIds(form, questions);
 
     const loadMany = async (ids, preferred) => {
       let cacheHit = 0;

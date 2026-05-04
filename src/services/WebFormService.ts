@@ -68,7 +68,11 @@ import {
 import { buildReactShellTemplate, buildReactTemplate } from './webform/template';
 import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
-import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
+import {
+  collectDocTemplateMigrationIds,
+  collectTemplateIdsFromMap,
+  migrateDocTemplatePlaceholdersToIds
+} from './webform/followup/templateMigration';
 import {
   buildFollowupBatchFailureResult,
   buildSkippedFollowupActionResults,
@@ -5344,25 +5348,7 @@ export class WebFormService {
     if (!key) return { success: false, message: 'formKey is required.' };
     const { form, questions } = this.getFormContext(key);
 
-    const templateMaps: Array<{ source: string; map: any }> = [];
-    if (form.followupConfig?.pdfTemplateId) {
-      templateMaps.push({ source: 'followup.pdfTemplateId', map: form.followupConfig.pdfTemplateId });
-    }
-    if (form.followupConfig?.emailTemplateId) {
-      templateMaps.push({ source: 'followup.emailTemplateId', map: form.followupConfig.emailTemplateId });
-    }
-    questions
-      .filter(q => q && q.type === 'BUTTON')
-      .forEach(q => {
-        const cfg: any = (q as any).button;
-        if (cfg && cfg.action === 'renderDocTemplate' && cfg.templateId) {
-          templateMaps.push({ source: `button:${q.id}`, map: cfg.templateId });
-        }
-      });
-
-    const templateIds = Array.from(
-      new Set(templateMaps.flatMap(entry => collectTemplateIdsFromMap(entry.map)).map(id => (id || '').toString().trim()).filter(Boolean))
-    );
+    const templateIds = collectDocTemplateMigrationIds(form, questions);
     if (!templateIds.length) {
       return { success: true, message: 'No templates configured for this form.' };
     }
@@ -7953,13 +7939,13 @@ export class WebFormService {
       }
       const bootstrap = this.buildBootstrap(key, def, { includeHomeData: true, includeAnalytics: true });
       this.cacheHomeBootstrap(key, expectedRev, bootstrap || null, reason || 'primeHomeBootstrapCache');
-    } catch (_) {
+    } catch {
       // ignore warm failures
     } finally {
       if (lock && hasLock) {
         try {
           lock.releaseLock();
-        } catch (_) {
+        } catch {
           // ignore
         }
       }
