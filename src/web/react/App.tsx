@@ -123,7 +123,13 @@ import {
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
 } from './app/dataSourceFreshness';
-import { DATA_SOURCE_COUNT_FIELD_PREFIX, normalizeDataSourceVisibilityKey } from './app/dataSourceVisibility';
+import {
+  DATA_SOURCE_COUNT_FIELD_PREFIX,
+  buildDataSourceConfigLookup,
+  filterDataSourceFreshnessWatchesByDataSourceIds,
+  normalizeDataSourceVisibilityKey,
+  resolveDataSourceConfigById
+} from './app/dataSourceVisibility';
 import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
@@ -133,7 +139,11 @@ import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectio
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
 import { detectDebug, shouldAlwaysLogDiagnosticEvent } from './app/utils';
 import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
-import { filterFormOpenPrefetchDataSources } from './app/dataSourcePrefetchPolicy';
+import {
+  buildFormDataSourceRefreshKey,
+  filterFormOpenPrefetchDataSources,
+  normalizeDataSourcePrefetchRetryDelays
+} from './app/dataSourcePrefetchPolicy';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { getPerfNow } from './app/perfClock';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
@@ -174,7 +184,6 @@ import { resolveNonMatchWarningFieldIds } from './app/nonMatchWarningFields';
 import {
   buildInitialLineItems,
   buildSubgroupKey,
-  cascadeRemoveLineItemRows,
   clearAutoIncrementFields,
   parseSubgroupKey,
   parseRowNonMatchOptions,
@@ -3554,13 +3563,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const resolveWatchedDataSourceConfig = useCallback(
     (dataSourceId: string) => {
-      const normalizedId = normalizeDataSourceVisibilityKey(dataSourceId);
-      return (
-        collectDataSourceConfigsForPrefetch(definition).find(cfg => {
-          const id = `${cfg?.id || ''}`.trim();
-          return id === dataSourceId || normalizeDataSourceVisibilityKey(id) === normalizedId;
-        }) || null
-      );
+      return resolveDataSourceConfigById(collectDataSourceConfigsForPrefetch(definition), dataSourceId);
     },
     [definition]
   );
@@ -3652,16 +3655,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const activeWatches = resolveRunnableDataSourceFreshnessWatches(
         (args.stepId || activeGuidedStepIdRef.current || '').toString().trim()
       );
-      const normalizedRequestedIds = new Set(
-        (Array.isArray(args.dataSourceIds) ? args.dataSourceIds : [])
-          .map(id => normalizeDataSourceVisibilityKey(`${id || ''}`))
-          .filter(Boolean)
-      );
-      const watches = activeWatches.filter(
-        watch =>
-          !normalizedRequestedIds.size ||
-          watch.dataSourceIds.some(id => normalizedRequestedIds.has(normalizeDataSourceVisibilityKey(id)))
-      );
+      const watches = filterDataSourceFreshnessWatchesByDataSourceIds(activeWatches, args.dataSourceIds);
       if (!watches.length) return;
       const touchedAt = Date.now();
       watches.forEach(watch => {
@@ -4568,16 +4562,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [guidedDataSourceConfigs, resolvedDataSourceFreshnessWatches]
   );
   const guidedDataSourceConfigMap = useMemo(() => {
-    const byExact = new Map<string, any>();
-    const byNormalized = new Map<string, any>();
-    guidedDataSourceConfigs.forEach(cfg => {
-      const id = (cfg?.id || '').toString().trim();
-      if (!id) return;
-      if (!byExact.has(id)) byExact.set(id, cfg);
-      const normalized = normalizeDataSourceVisibilityKey(id);
-      if (normalized && !byNormalized.has(normalized)) byNormalized.set(normalized, cfg);
-    });
-    return { byExact, byNormalized };
+    return buildDataSourceConfigLookup(guidedDataSourceConfigs);
   }, [guidedDataSourceConfigs]);
 
   useEffect(() => {
@@ -11480,9 +11465,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (args: { reason: string; forceRefresh?: boolean; retryDelaysMs?: number[]; dataSourceConfigs?: any[] }) => {
       const dataSourceConfigs = Array.isArray(args.dataSourceConfigs) ? args.dataSourceConfigs.filter(Boolean) : guidedDataSourceConfigs;
       if (!dataSourceConfigs.length) return;
-      const retryDelays = Array.isArray(args.retryDelaysMs) && args.retryDelaysMs.length
-        ? Array.from(new Set(args.retryDelaysMs.map(value => Number(value)).filter(value => Number.isFinite(value) && value >= 0)))
-        : [0];
+      const retryDelays = normalizeDataSourcePrefetchRetryDelays(args.retryDelaysMs);
       logEvent('dataSource.prefetch.submitEffects.start', {
         formKey,
         language,
@@ -11536,7 +11519,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (view !== 'form') return;
     if (!formOpenGuidedDataSourceConfigs.length) return;
     if (recordLoadingId) return;
-    const refreshKey = `${formKey}::${language}::${selectedRecordId || 'create'}::${view}`;
+    const refreshKey = buildFormDataSourceRefreshKey({ formKey, language, selectedRecordId, view });
     if (formDataSourceRefreshKeyRef.current === refreshKey) return;
     formDataSourceRefreshKeyRef.current = refreshKey;
     refreshGuidedDataSourcesInBackground({
