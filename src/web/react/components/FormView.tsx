@@ -206,6 +206,7 @@ import {
   resolveGuidedStepsVirtualState,
   resolveMaxReachableGuidedStepIndex
 } from '../features/steps/domain/guidedNavigation';
+import { resolveTableColumnWidthStyle } from '../features/lineItems/domain/tableColumnWidths';
 import {
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
@@ -12135,38 +12136,8 @@ const FormView: React.FC<FormViewProps> = ({
                           columns={[
                             ...((() => {
                               const subColumnWidths = overlayDetailEnabled ? overlayDetailHeaderWidths : subUi?.tableColumnWidths;
-                              const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined => {
-                                if (!subColumnWidths || typeof subColumnWidths !== 'object' || Array.isArray(subColumnWidths)) return undefined;
-                                const candidates: string[] = [];
-                                const pushCandidate = (val?: string) => {
-                                  if (!val) return;
-                                  if (candidates.includes(val)) return;
-                                  candidates.push(val);
-                                };
-                                const lower = columnId.toLowerCase();
-                                const normalized = columnId.replace(/^_+/, '');
-                                const normalizedLower = normalized.toLowerCase();
-                                pushCandidate(columnId);
-                                pushCandidate(lower);
-                                if (['view', 'edit', 'remove', 'actions'].includes(normalizedLower)) {
-                                  pushCandidate(`__${normalizedLower}`);
-                                  pushCandidate(`_${normalizedLower}`);
-                                  pushCandidate(normalizedLower);
-                                  pushCandidate('__actions');
-                                  pushCandidate('actions');
-                                } else {
-                                  pushCandidate(normalized);
-                                  pushCandidate(normalizedLower);
-                                }
-                                const rawWidth = candidates.reduce<any>(
-                                  (acc, key) => (acc !== undefined ? acc : (subColumnWidths as any)[key]),
-                                  undefined
-                                );
-                                if (rawWidth === undefined || rawWidth === null) return undefined;
-                                if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-                                const widthValue = rawWidth.toString().trim();
-                                return widthValue ? { width: widthValue } : undefined;
-                              };
+                              const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined =>
+                                resolveTableColumnWidthStyle(subColumnWidths, columnId);
 
                               const subColumnIdsRaw = overlayDetailEnabled
                                 ? overlayDetailHeaderColumns.map((field: LineItemFieldConfig) => field.id)
@@ -12975,38 +12946,8 @@ const FormView: React.FC<FormViewProps> = ({
                   ...((() => {
                     const hideRemoveColumn = (subUi as any)?.hideRemoveColumn === true;
                     const subColumnWidths = overlayDetailEnabled ? overlayDetailHeaderWidths : subUi?.tableColumnWidths;
-                    const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined => {
-                      if (!subColumnWidths || typeof subColumnWidths !== 'object' || Array.isArray(subColumnWidths)) return undefined;
-                      const candidates: string[] = [];
-                      const pushCandidate = (val?: string) => {
-                        if (!val) return;
-                        if (candidates.includes(val)) return;
-                        candidates.push(val);
-                      };
-                      const lower = columnId.toLowerCase();
-                      const normalized = columnId.replace(/^_+/, '');
-                      const normalizedLower = normalized.toLowerCase();
-                      pushCandidate(columnId);
-                      pushCandidate(lower);
-                      if (['view', 'edit', 'remove', 'actions'].includes(normalizedLower)) {
-                        pushCandidate(`__${normalizedLower}`);
-                        pushCandidate(`_${normalizedLower}`);
-                        pushCandidate(normalizedLower);
-                        pushCandidate('__actions');
-                        pushCandidate('actions');
-                      } else {
-                        pushCandidate(normalized);
-                        pushCandidate(normalizedLower);
-                      }
-                      const rawWidth = candidates.reduce<any>(
-                        (acc, key) => (acc !== undefined ? acc : (subColumnWidths as any)[key]),
-                        undefined
-                      );
-                      if (rawWidth === undefined || rawWidth === null) return undefined;
-                      if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-                      const widthValue = rawWidth.toString().trim();
-                      return widthValue ? { width: widthValue } : undefined;
-                    };
+                    const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined =>
+                      resolveTableColumnWidthStyle(subColumnWidths, columnId);
 
                     const subColumnIdsRaw = overlayDetailEnabled
                       ? overlayDetailHeaderColumns.map((field: LineItemFieldConfig) => field.id)
@@ -14282,38 +14223,8 @@ const FormView: React.FC<FormViewProps> = ({
     })();
     const overlayDetailHeaderHidden = overlayDetailHeaderExplicit && overlayDetail.header.tableColumns.length === 0;
     const overlayDetailHeaderWidths = overlayDetail?.header?.tableColumnWidths || (groupCfg as any)?.ui?.tableColumnWidths;
-    const resolveOverlayDetailHeaderStyle = (columnId: string): React.CSSProperties | undefined => {
-      if (!overlayDetailHeaderWidths || typeof overlayDetailHeaderWidths !== 'object' || Array.isArray(overlayDetailHeaderWidths)) return undefined;
-      const candidates: string[] = [];
-      const pushCandidate = (val?: string) => {
-        if (!val) return;
-        if (candidates.includes(val)) return;
-        candidates.push(val);
-      };
-      const lower = columnId.toLowerCase();
-      const normalized = columnId.replace(/^_+/, '');
-      const normalizedLower = normalized.toLowerCase();
-      pushCandidate(columnId);
-      pushCandidate(lower);
-      if (['view', 'edit', 'remove', 'actions'].includes(normalizedLower)) {
-        pushCandidate(`__${normalizedLower}`);
-        pushCandidate(`_${normalizedLower}`);
-        pushCandidate(normalizedLower);
-        pushCandidate('__actions');
-        pushCandidate('actions');
-      } else {
-        pushCandidate(normalized);
-        pushCandidate(normalizedLower);
-      }
-      const rawWidth = candidates.reduce<any>(
-        (acc, key) => (acc !== undefined ? acc : (overlayDetailHeaderWidths as any)[key]),
-        undefined
-      );
-      if (rawWidth === undefined || rawWidth === null) return undefined;
-      if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-      const widthValue = rawWidth.toString().trim();
-      return widthValue ? { width: widthValue } : undefined;
-    };
+    const resolveOverlayDetailHeaderStyle = (columnId: string): React.CSSProperties | undefined =>
+      resolveTableColumnWidthStyle(overlayDetailHeaderWidths, columnId);
 
     const renderAddButton = () => {
       if (((groupCfg?.ui as any)?.addButtonPlacement || '').toString().trim().toLowerCase() === 'hidden') {

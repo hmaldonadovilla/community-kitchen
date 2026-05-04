@@ -161,6 +161,7 @@ import {
   resolveCompactPartType,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
+import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 
 const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationDeferred';
 
@@ -6077,21 +6078,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
           };
 
           const tableColumnWidths = (q.lineItemConfig?.ui as any)?.tableColumnWidths;
-          const resolveTableColumnStyle = (columnId: string): React.CSSProperties | undefined => {
-            if (!tableColumnWidths || typeof tableColumnWidths !== 'object' || Array.isArray(tableColumnWidths)) return undefined;
-            const widthCandidates =
-              columnId === '__remove'
-                ? [columnId, 'remove', '__actions', 'actions']
-                : [columnId, columnId.toLowerCase()];
-            const rawWidth = widthCandidates.reduce<any>(
-              (acc, key) => (acc !== undefined ? acc : (tableColumnWidths as any)[key]),
-              undefined
-            );
-            if (rawWidth === undefined || rawWidth === null) return undefined;
-            if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-            const widthValue = rawWidth.toString().trim();
-            return widthValue ? { width: widthValue } : undefined;
-          };
+          const resolveTableColumnStyle = (columnId: string): React.CSSProperties | undefined =>
+            resolveTableColumnWidthStyle(tableColumnWidths, columnId);
 
           const tableColumns: LineItemTableColumn[] = [
             ...tableFields.map(field => ({
@@ -13791,21 +13779,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               columns={[
                                 ...((() => {
                                   const subColumnWidths = (subUi as any)?.tableColumnWidths;
-                                  const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined => {
-                                    if (!subColumnWidths || typeof subColumnWidths !== 'object' || Array.isArray(subColumnWidths)) return undefined;
-                                    const widthCandidates =
-                                      columnId === '__remove'
-                                        ? [columnId, 'remove', '__actions', 'actions']
-                                        : [columnId, columnId.toLowerCase()];
-                                    const rawWidth = widthCandidates.reduce<any>(
-                                      (acc, key) => (acc !== undefined ? acc : (subColumnWidths as any)[key]),
-                                      undefined
-                                    );
-                                    if (rawWidth === undefined || rawWidth === null) return undefined;
-                                    if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-                                    const widthValue = rawWidth.toString().trim();
-                                    return widthValue ? { width: widthValue } : undefined;
-                                  };
+                                  const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined =>
+                                    resolveTableColumnWidthStyle(subColumnWidths, columnId);
 
                                   const subColumnIdsRaw = Array.isArray((subUi as any)?.tableColumns)
                                     ? (subUi as any).tableColumns
