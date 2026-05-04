@@ -123,6 +123,7 @@ import {
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
 } from './app/dataSourceFreshness';
+import { DATA_SOURCE_COUNT_FIELD_PREFIX, normalizeDataSourceVisibilityKey } from './app/dataSourceVisibility';
 import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
@@ -134,6 +135,7 @@ import { detectDebug, shouldAlwaysLogDiagnosticEvent } from './app/utils';
 import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
 import { filterFormOpenPrefetchDataSources } from './app/dataSourcePrefetchPolicy';
 import { isPerfInstrumentationEnv } from './perfInstrumentation';
+import { getPerfNow } from './app/perfClock';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
 import { resolveInitialListSearchValue } from './app/listViewSearch';
@@ -144,7 +146,13 @@ import {
   resolveGlobalCacheVersion,
   writeHomeListLocalCache
 } from './app/homeListLocalCache';
+import { annotateListResponseWithInitialDateFilter } from './app/homeListResponse';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
+import {
+  computeDedupKeyFieldIdMap,
+  computeDedupKeyFingerprint,
+  computeDedupSignatureFromValues
+} from './app/dedupPrecheck';
 import {
   resolveDedupIncompleteHomeDialogConfig,
   resolveDedupIncompleteHomeDialogCopy
@@ -162,6 +170,7 @@ import {
   shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
+import { resolveNonMatchWarningFieldIds } from './app/nonMatchWarningFields';
 import {
   buildInitialLineItems,
   buildSubgroupKey,
@@ -357,117 +366,6 @@ type FieldChangePending = {
   };
 };
 
-const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, any>): string => {
-  const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
-  if (!rules.length) return '';
-  const normalizeKeyValue = (raw: any): string => {
-    if (raw === undefined || raw === null) return '';
-    if (Array.isArray(raw)) return raw.map(v => (v === undefined || v === null ? '' : v.toString())).join('|');
-    return raw.toString();
-  };
-  const parts: string[] = [];
-  rules.forEach(rule => {
-    if (!rule) return;
-    const keys: any[] = Array.isArray(rule.keys) ? rule.keys : [];
-    if (!keys.length) return;
-    const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
-    if (onConflict !== 'reject') return;
-    const vals: string[] = keys.map((k: any) => normalizeKeyValue((values as any)[(k || '').toString()]));
-    if (vals.some(v => !v || !v.trim())) return;
-    parts.push(`${(rule.id || '').toString()}:${vals.map(v => v.trim()).join('||')}`);
-  });
-  return parts.sort().join('|');
-};
-
-const collectDedupKeyFieldIds = (rulesRaw: any): string[] => {
-  const rules: any[] = Array.isArray(rulesRaw) ? rulesRaw : [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  rules.forEach(rule => {
-    if (!rule) return;
-    const keys = Array.isArray(rule.keys) ? rule.keys : [];
-    if (!keys.length) return;
-    const onConflict = (rule.onConflict || 'reject').toString().trim().toLowerCase();
-    if (onConflict !== 'reject') return;
-    keys.forEach((k: any) => {
-      const id = (k || '').toString().trim();
-      const lower = id.toLowerCase();
-      if (!id || seen.has(lower)) return;
-      seen.add(lower);
-      out.push(id);
-    });
-  });
-  return out;
-};
-
-const DATA_SOURCE_COUNT_FIELD_PREFIX = '__ckDataSourceCount.';
-
-const normalizeDataSourceVisibilityKey = (value: string): string =>
-  (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-
-const getPerfNow = (): number => {
-  try {
-    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-      return performance.now();
-    }
-  } catch (_) {
-    // ignore
-  }
-  return Date.now();
-};
-
-const computeDedupKeyFieldIdMap = (rulesRaw: any): Record<string, true> => {
-  const map: Record<string, true> = {};
-  collectDedupKeyFieldIds(rulesRaw).forEach(id => {
-    if (!id) return;
-    map[id] = true;
-    map[id.toLowerCase()] = true;
-  });
-  return map;
-};
-
-const computeDedupKeyFingerprint = (rulesRaw: any, values: Record<string, any>): string => {
-  const ids = collectDedupKeyFieldIds(rulesRaw);
-  if (!ids.length) return '';
-  const normalize = (raw: any): string => {
-    if (raw === undefined || raw === null) return '';
-    if (Array.isArray(raw)) return raw.map(v => (v === undefined || v === null ? '' : v.toString())).join('|');
-    return raw.toString();
-  };
-  return ids.map(id => `${id}=${normalize((values as any)?.[id])}`).join('|');
-};
-
-const whenContainsFieldId = (when: any, targetFieldId: string): boolean => {
-  if (!when || !targetFieldId) return false;
-  if (Array.isArray(when)) return when.some(entry => whenContainsFieldId(entry, targetFieldId));
-  if (typeof when !== 'object') return false;
-  const allList = (when as any).all ?? (when as any).and;
-  if (Array.isArray(allList)) return allList.some(entry => whenContainsFieldId(entry, targetFieldId));
-  const anyList = (when as any).any ?? (when as any).or;
-  if (Array.isArray(anyList)) return anyList.some(entry => whenContainsFieldId(entry, targetFieldId));
-  if ((when as any).not) return whenContainsFieldId((when as any).not, targetFieldId);
-  const fid = (when as any).fieldId;
-  if (fid === undefined || fid === null) return false;
-  return fid.toString().trim() === targetFieldId.toString().trim();
-};
-
-const resolveNonMatchWarningFieldIds = (fields: any[]): string[] => {
-  const ids: string[] = [];
-  (fields || []).forEach(field => {
-    const fid = (field?.id ?? '').toString();
-    if (!fid) return;
-    const rules = Array.isArray(field?.validationRules) ? field.validationRules : [];
-    const hasRule = rules.some((rule: any) => {
-      const level = (rule?.level ?? '').toString().trim().toLowerCase();
-      if (level && level !== 'warning' && level !== 'warn') return false;
-      const when = (rule as any)?.when;
-      return whenContainsFieldId(when, ROW_NON_MATCH_OPTIONS_KEY);
-    });
-    if (hasRule) ids.push(fid);
-  });
-  return ids;
-};
-
 const isWrapScanHiddenElement = (el: HTMLElement): boolean => {
   const tag = el.tagName.toLowerCase();
   if (tag === 'svg' || tag === 'path' || tag === 'img' || tag === 'script' || tag === 'style') return true;
@@ -642,21 +540,6 @@ type RecordSnapshotPrefetchRequest = {
   source: RecordSnapshotPrefetchSource;
   startedAt: number;
   rowNumbers: number[];
-};
-
-const annotateListResponseWithInitialDateFilter = (response: ListResponse | null | undefined, listView: any): ListResponse | null => {
-  if (!response || !Array.isArray((response as any).items)) return response || null;
-  if ((response.dateFilterFieldId || '').toString().trim() && (response.dateFilterEquals || '').toString().trim()) return response;
-  const search = listView?.search;
-  if ((search?.mode || '').toString().trim() !== 'date') return response;
-  const dateFieldId = ((search as any)?.dateFieldId || '').toString().trim();
-  const initialDate = resolveInitialListSearchValue(search);
-  if (!dateFieldId || !initialDate) return response;
-  return {
-    ...response,
-    dateFilterFieldId: dateFieldId,
-    dateFilterEquals: initialDate
-  };
 };
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {

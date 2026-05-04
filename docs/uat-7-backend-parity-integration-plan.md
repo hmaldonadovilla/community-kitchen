@@ -113,6 +113,7 @@ Candidate feature slices:
 
 - Home list local cache extraction from `App.tsx` into a focused browser-storage boundary.
 - Upload completed-value projection extraction from `App.tsx` into a focused upload domain boundary.
+- Remaining no-deploy pure helper extraction from `App.tsx`: dedup precheck, data-source visibility keys, non-match warning discovery, Home list response annotation, and perf clock access.
 - Record load/save lifecycle and freshness.
 - Upload queue and upload persistence.
 - Guided step navigation and completion gates.
@@ -203,7 +204,7 @@ Full gates for milestone completion:
 | --- | --- | --- |
 | Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
 | Stage 1: Merge and stabilize UAT 7 | Code merged; validation in progress | `release/uat-7` was merged without transport restructuring. Unit/build gates are green and Apps Script staging deploy `@36` is complete; manual or Playwright validation is still pending. |
-| Stage 2: Frontend/business logic separation | In progress | First slices extract Home list local cache behavior and upload completed-value projection from `App.tsx` into focused modules with targeted unit coverage. |
+| Stage 2: Frontend/business logic separation | In progress | No-deploy slices have extracted Home list cache behavior, upload completed-value projection, and remaining pure helper logic from `App.tsx` into focused modules with targeted unit coverage. |
 | Stage 3: Backend/domain separation follow-through | Pending | Align Apps Script and Cloud Run around use-case boundaries. |
 
 ## Open Questions
