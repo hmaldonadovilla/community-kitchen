@@ -4,9 +4,9 @@ module.exports = {
     preset: 'ts-jest',
     testEnvironment: 'node',
     setupFiles: ['<rootDir>/tests/setupTimezone.ts'],
-    moduleFileExtensions: ['ts', 'js'],
+    moduleFileExtensions: ['ts', 'tsx', 'js'],
     transform: {
-        '^.+\\.ts$': 'ts-jest',
+        '^.+\\.(ts|tsx)$': 'ts-jest',
     },
     testMatch: ['**/*.test.ts'],
 };

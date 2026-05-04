@@ -157,6 +157,7 @@ import {
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
+import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
@@ -5752,17 +5753,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
               const hideRemoveButton = parseRowHideRemove((row.values as any)?.[ROW_HIDE_REMOVE_KEY]);
               if (hideRemoveButton) return null;
               if ((q.lineItemConfig as any)?.ui?.allowRemoveAutoRows === false && rowSource === 'auto') return null;
-              return (
-                <button
-                  type="button"
-                  className="ck-line-item-table__remove-button"
-                  onClick={() => removeLineRow(q.id, row.id)}
-                  aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                  title={tSystem('lineItems.remove', language, 'Remove')}
-                >
-                  <TrashIcon size={40} />
-                </button>
-              );
+              return <LineItemRemoveButton language={language} onRemove={() => removeLineRow(q.id, row.id)} />;
             }
           };
 
@@ -11173,17 +11164,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                       {canRemoveRow || rowTogglePill ? (
                         <div className={`ck-row-header-actions${useEdgeToEdgeRowChrome ? ' ck-row-header-actions--edge' : ''}`}>
                           {rowTogglePill}
-                          {canRemoveRow ? (
-                            <button
-                              type="button"
-                              className="ck-line-item-table__remove-button"
-                              onClick={() => removeLineRow(q.id, row.id)}
-                              aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                              title={tSystem('lineItems.remove', language, 'Remove')}
-                            >
-                              <TrashIcon size={40} />
-                            </button>
-                          ) : null}
+                          {canRemoveRow ? <LineItemRemoveButton language={language} onRemove={() => removeLineRow(q.id, row.id)} /> : null}
                         </div>
                       ) : null}
                       {!guidedCollapsedFieldsInHeader && rowDisclaimerText ? (
@@ -12218,15 +12199,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                     }
                   >
                     {!isProgressive && canRemoveRow ? (
-                      <button
-                        type="button"
-                        className="ck-line-item-table__remove-button"
-                        onClick={() => removeLineRow(q.id, row.id)}
-                        aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                        title={tSystem('lineItems.remove', language, 'Remove')}
-                      >
-                        <TrashIcon size={40} />
-                      </button>
+                      <LineItemRemoveButton language={language} onRemove={() => removeLineRow(q.id, row.id)} />
                     ) : null}
                   </div>
                   {useEdgeToEdgeRowChrome && !isLastEdgeToEdgeRow ? (
@@ -13861,17 +13834,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                               const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
                                               const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
                                               if (!canRemoveSubRow) return null;
-                                              return (
-                                                <button
-                                                  type="button"
-                                                  className="ck-line-item-table__remove-button"
-                                                  onClick={() => removeLineRow(subKey, subRow.id)}
-                                                  aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                                  title={tSystem('lineItems.remove', language, 'Remove')}
-                                                >
-                                                  <TrashIcon size={40} />
-                                                </button>
-                                              );
+                                              return <LineItemRemoveButton language={language} onRemove={() => removeLineRow(subKey, subRow.id)} />;
                                             }
                                           }
                                         ])
@@ -15792,15 +15755,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               })()}
                               {canRemoveSubRow ? (
                                 <div className="line-actions">
-                                  <button
-                                    type="button"
-                                    className="ck-line-item-table__remove-button"
-                                    onClick={() => removeLineRow(subKey, subRow.id)}
-                                    aria-label={tSystem('lineItems.remove', language, 'Remove')}
-                                    title={tSystem('lineItems.remove', language, 'Remove')}
-                                  >
-                                    <TrashIcon size={40} />
-                                  </button>
+                                  <LineItemRemoveButton language={language} onRemove={() => removeLineRow(subKey, subRow.id)} />
                                 </div>
                               ) : null}
                             </div>
