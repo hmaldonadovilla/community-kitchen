@@ -255,7 +255,11 @@ import {
   shouldApplyDedupPrecheckResult
 } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
-import { resolveDedupDialogCopy } from './app/dedupDialog';
+import {
+  buildDedupDialogDetails as buildDedupDialogDetailsData,
+  resolveDedupDialogCopy,
+  type DedupDialogItem
+} from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
@@ -15952,68 +15956,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return conflict as DedupConflictInfo;
   }, [dedupConflict, dedupNotice]);
 
-  type DedupDialogItem = { fieldId: string; label: string; value: string; fieldType?: string };
   const buildDedupDialogDetails = useCallback(
-    (args: { ruleId?: string; values: Record<string, FieldValue> }) => {
-      const rules = Array.isArray((definition as any)?.dedupRules) ? ((definition as any).dedupRules as any[]) : [];
-      const ruleId = (args.ruleId || '').toString().trim();
-      const rule = rules.find(entry => (entry?.id || '').toString().trim() === ruleId);
-      const ruleKeys = Array.isArray(rule?.keys)
-        ? rule.keys.map((key: any) => (key ?? '').toString().trim()).filter(Boolean)
-        : [];
-      const fallbackKeys = (() => {
-        const keys = Object.keys(dedupIdentityFieldIdMap || {});
-        const list: string[] = [];
-        const seen = new Set<string>();
-        keys.forEach(key => {
-          const trimmed = (key || '').toString().trim();
-          if (!trimmed) return;
-          const lower = trimmed.toLowerCase();
-          if (seen.has(lower)) return;
-          seen.add(lower);
-          list.push(trimmed);
-        });
-        return list;
-      })();
-      const keys = ruleKeys.length ? ruleKeys : fallbackKeys;
-      const questions = Array.isArray(definition?.questions) ? definition.questions : [];
-      const rawItems: DedupDialogItem[] = keys.map((key: string) => {
-        const keyLower = key.toLowerCase();
-        const question = questions.find(entry => {
-          const id = (entry?.id || '').toString();
-          return id === key || id.toLowerCase() === keyLower;
-        });
-        const fieldId = (question?.id || key).toString();
-        const label = question ? resolveLabel(question, language) : key;
-        const optionSet = question ? optionState[optionKey(question.id)] || toOptionSet(question as any) : undefined;
-        const fieldType = question?.type;
-        const rawValue = (args.values as any)[fieldId];
-        const value = formatDisplayText(rawValue, { language, optionSet, fieldType });
-        return { fieldId, label: label.toString(), value, fieldType };
-      });
-      const seen = new Set<string>();
-      const items = rawItems.filter((item: DedupDialogItem) => {
-        const lower = item.fieldId.toLowerCase();
-        if (seen.has(lower)) return false;
-        seen.add(lower);
-        return true;
-      });
-      const priority = (item: DedupDialogItem) => {
-        if ((item.fieldType || '').toString().toUpperCase() === 'DATE') return 2;
-        const labelLower = item.label.toLowerCase();
-        if (labelLower.includes('customer')) return 0;
-        if (labelLower.includes('service')) return 1;
-        if (labelLower.includes('date')) return 2;
-        return 3;
-      };
-      const ordered = [...items].sort((a, b) => {
-        const pa = priority(a);
-        const pb = priority(b);
-        if (pa !== pb) return pa - pb;
-        return 0;
-      });
-      return { keys: ordered.map(item => item.fieldId), items: ordered };
-    },
+    (args: { ruleId?: string; values: Record<string, FieldValue> }) =>
+      buildDedupDialogDetailsData({
+        definition,
+        dedupIdentityFieldIdMap,
+        optionState,
+        language,
+        ruleId: args.ruleId,
+        values: args.values
+      }),
     [dedupIdentityFieldIdMap, definition, language, optionState]
   );
 
