@@ -69,9 +69,9 @@ import {
   normalizeGuidedLineFieldId,
   parseGuidedTargetFieldEntries
 } from '../features/steps/domain/guidedTargetFields';
+import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
-import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
 import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
@@ -195,6 +195,7 @@ import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFi
 import { validateRules } from '../../rules/validation';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
+import { GuidedContextHeader } from '../features/steps/components/GuidedContextHeader';
 import { GuidedFormContent } from '../features/steps/components/GuidedFormContent';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import {
@@ -15361,47 +15362,12 @@ const FormView: React.FC<FormViewProps> = ({
     const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
     const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
     const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
-    const stepContextHeaderCfg = stepCfg?.contextHeader && typeof stepCfg.contextHeader === 'object' ? stepCfg.contextHeader : null;
-    const stepContextHeaderKeyedParts: any[] = stepContextHeaderCfg
-      ? Object.keys(stepContextHeaderCfg as any)
-          .filter(key => /^part\d+$/i.test(key))
-          .sort((a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, '')))
-          .map(key => (stepContextHeaderCfg as any)[key])
-      : [];
-    const stepContextHeaderPartsRaw: any[] = Array.isArray(stepContextHeaderCfg?.parts)
-      ? (stepContextHeaderCfg.parts as any[])
-      : Array.isArray((stepContextHeaderCfg as any)?.fields)
-        ? ((stepContextHeaderCfg as any).fields as any[])
-        : stepContextHeaderKeyedParts.length
-          ? stepContextHeaderKeyedParts
-        : [];
-    const normalizeStepContextHeaderPart = (part: any): { id: string; displayField?: string } | null => {
-      if (part === undefined || part === null) return null;
-      if (typeof part === 'object') {
-        const id = ((part as any).id ?? (part as any).fieldId ?? '').toString().trim();
-        if (!id) return null;
-        const displayField = ((part as any).displayField ?? '').toString().trim();
-        return displayField ? { id, displayField } : { id };
-      }
-      const id = part.toString().trim();
-      return id ? { id } : null;
-    };
-    const stepContextHeaderParts = stepContextHeaderPartsRaw
-      .map(part => normalizeStepContextHeaderPart(part))
-      .filter(Boolean)
-      .filter((part, idx, arr) => {
-        const key = `${part!.id}::${part!.displayField || ''}`;
-        return arr.findIndex(entry => `${entry!.id}::${entry!.displayField || ''}` === key) === idx;
-      }) as Array<{ id: string; displayField?: string }>;
-    const stepContextHeaderPartIds = stepContextHeaderParts
-      .map(part => part.id)
-      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    const {
+      parts: stepContextHeaderParts,
+      partIds: stepContextHeaderPartIds,
+      separator: guidedContextHeaderSeparator
+    } = collectGuidedContextHeaderConfig(stepCfg?.contextHeader);
     const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
-    const guidedContextHeaderSeparator = (() => {
-      const raw = stepContextHeaderCfg?.separator;
-      const normalized = raw === undefined || raw === null ? '' : raw.toString();
-      return normalized || ' | ';
-    })();
 
     const questionById = new Map<string, WebQuestionDefinition>();
     (definition.questions || []).forEach(q => questionById.set(q.id, q));
@@ -15417,80 +15383,16 @@ const FormView: React.FC<FormViewProps> = ({
       return { ...(q as any), readOnly: true, ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition;
     };
 
-    const resolveGuidedContextValue = (part: { id: string; displayField?: string }): string => {
-      const fieldId = part.id;
-      const displayField = (part.displayField || '').toString().trim();
-      const q = questionById.get(fieldId);
-      const raw = values[fieldId];
-      if (raw === undefined || raw === null || raw === '') return '';
-      if (!q) return raw.toString();
-
-      if (q.type === 'DATE') return formatDateEeeDdMmmYyyy(raw, language);
-
-      if (q.type === 'CHOICE' || q.type === 'CHECKBOX') {
-        const optionSet = renderOptions(q);
-        const dependencyValues = (dependsOn: string | string[]) => {
-          const ids = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
-          return ids.map(id => toDependencyValue(values[id]));
-        };
-        const allowed = computeAllowedOptions(q.optionFilter, optionSet, dependencyValues(q.optionFilter?.dependsOn || []));
-        const rawList = Array.isArray(raw) ? raw : [raw];
-        const ensuredAllowed = Array.from(new Set([...allowed, ...rawList.map(v => (v ?? '').toString()).filter(Boolean)]));
-        const opts = buildLocalizedOptions(optionSet, ensuredAllowed, language, { sort: optionSortFor(q) });
-        const rawDisplayByValue = (() => {
-          if (!displayField) return new Map<string, string>();
-          const map = new Map<string, string>();
-          const rows = Array.isArray(optionSet.raw) ? optionSet.raw : [];
-          rows.forEach((row: any) => {
-            if (!row || typeof row !== 'object' || Array.isArray(row)) return;
-            const value = row.__ckOptionValue === null || row.__ckOptionValue === undefined ? '' : String(row.__ckOptionValue).trim();
-            const display =
-              row[displayField] === null || row[displayField] === undefined ? '' : String(row[displayField]).trim();
-            if (!value || !display || map.has(value)) return;
-            map.set(value, display);
-          });
-          return map;
-        })();
-        const rawLabelByValue = (() => {
-          const map = new Map<string, string>();
-          const rows = Array.isArray(optionSet.raw) ? optionSet.raw : [];
-          rows.forEach((row: any) => {
-            if (!row || typeof row !== 'object' || Array.isArray(row)) return;
-            const value = row.__ckOptionValue === null || row.__ckOptionValue === undefined ? '' : String(row.__ckOptionValue).trim();
-            const label =
-              row.__ckOptionLabel === null || row.__ckOptionLabel === undefined ? '' : String(row.__ckOptionLabel).trim();
-            if (!value || !label || map.has(value)) return;
-            map.set(value, label);
-          });
-          return map;
-        })();
-        const labels = rawList
-          .map(v => (v ?? '').toString())
-          .filter(Boolean)
-          .map(v => rawDisplayByValue.get(v) || rawLabelByValue.get(v) || opts.find(o => o.value === v)?.label || v);
-        return labels.filter(Boolean).join(', ');
-      }
-
-      return raw.toString();
-    };
-
-    const guidedContextHeaderNode = (() => {
-      if (!stepContextHeaderParts.length) return null;
-      const parts = stepContextHeaderParts.map(resolveGuidedContextValue).filter(Boolean);
-      if (!parts.length) return null;
-      return (
-        <div role="note" className="ck-guided-context-header">
-          {parts.map((part, idx) => (
-            <React.Fragment
-              key={`ctx:${stepContextHeaderParts[idx]?.id || ''}:${stepContextHeaderParts[idx]?.displayField || ''}:${idx}`}
-            >
-              {idx > 0 ? guidedContextHeaderSeparator : ''}
-              {part}
-            </React.Fragment>
-          ))}
-        </div>
-      );
-    })();
+    const guidedContextHeaderNode = stepContextHeaderParts.length ? (
+      <GuidedContextHeader
+        language={language}
+        parts={stepContextHeaderParts}
+        separator={guidedContextHeaderSeparator}
+        values={values}
+        questionById={questionById}
+        resolveOptionSet={renderOptions}
+      />
+    ) : null;
 
     const stepTargetsFiltered = guidedContextHeaderIds.size
       ? stepTargets.filter(t => {
