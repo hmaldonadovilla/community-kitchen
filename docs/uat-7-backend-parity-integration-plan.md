@@ -200,7 +200,7 @@ Full gates for milestone completion:
 | Stage | Status | Notes |
 | --- | --- | --- |
 | Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
-| Stage 1: Merge and stabilize UAT 7 | Code merged; validation in progress | `release/uat-7` was merged without transport restructuring. Unit/build gates are green; staging/manual or Playwright validation is still pending. |
+| Stage 1: Merge and stabilize UAT 7 | Code merged; validation in progress | `release/uat-7` was merged without transport restructuring. Unit/build gates are green and Apps Script staging deploy `@36` is complete; manual or Playwright validation is still pending. |
 | Stage 2: Frontend/business logic separation | Pending | Work in small feature slices with targeted tests. |
 | Stage 3: Backend/domain separation follow-through | Pending | Align Apps Script and Cloud Run around use-case boundaries. |
 
