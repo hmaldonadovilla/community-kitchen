@@ -59,6 +59,8 @@ import FormView from './components/FormView';
 import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { AppHeaderStatus } from './components/app/AppHeaderStatus';
+import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
+import { AppRecordLoadingPlaceholder } from './components/app/AppRecordLoadingPlaceholder';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { matchesWhenClause } from '../rules/visibility';
@@ -16422,23 +16424,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         onDiagnostic={logEvent}
       />
 
-      {blockLandscape ? (
-        <div
-          className="ck-orientation-blocker"
-          role="dialog"
-          aria-modal="true"
-          aria-label={tSystem('app.rotatePortraitTitle', language, 'Rotate your device')}
-        >
-          <div className="ck-orientation-blocker__card">
-            <div className="ck-orientation-blocker__title">
-              {tSystem('app.rotatePortraitTitle', language, 'Rotate your device')}
-            </div>
-            <div className="ck-orientation-blocker__body">
-              {tSystem('app.rotatePortraitBody', language, 'This form works best in portrait mode. Please rotate back.')}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {blockLandscape ? <AppOrientationBlocker language={language} /> : null}
 
       <ActionBar
         position="top"
@@ -16477,10 +16463,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       />
 
       {view === 'form' && showFormRecordLoadingPlaceholder ? (
-        <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {recordLoadError ? <div className="error">{recordLoadError}</div> : null}
-          <div className="status">{tSystem('summary.loadingRecord', language, 'Loading record…')}</div>
-        </div>
+        <AppRecordLoadingPlaceholder language={language} error={recordLoadError} />
       ) : null}
 
       {view === 'form' && !showFormRecordLoadingPlaceholder ? (
