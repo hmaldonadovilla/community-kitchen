@@ -1,5 +1,6 @@
 const http = require('http');
 const { createRpcHandlers } = require('./rpcHandlers');
+const { schedulerSecretMatches, isScheduledJobAllowed } = require('./domain/scheduledJobs');
 const { decodeFirestoreValue } = require('./firestoreClient');
 const {
   FirestoreDataSourceRepository,
@@ -138,15 +139,6 @@ const handleRpc = async (req, res, baseBody, rpcHandlers) => {
   });
 };
 
-const schedulerSecretMatches = req => {
-  const configured = (process.env.CK_SCHEDULER_SECRET || '').toString().trim();
-  if (!configured) return false;
-  const headerSecret = (req.headers['x-ck-scheduler-secret'] || '').toString().trim();
-  if (headerSecret && headerSecret === configured) return true;
-  const auth = (req.headers.authorization || '').toString().trim();
-  return auth === `Bearer ${configured}`;
-};
-
 const handleScheduledJob = async (req, res, baseBody, rpcHandlers, jobName) => {
   if (req.method === 'OPTIONS') {
     respondNoContent(res, 204);
@@ -160,7 +152,7 @@ const handleScheduledJob = async (req, res, baseBody, rpcHandlers, jobName) => {
     });
     return;
   }
-  if (!schedulerSecretMatches(req)) {
+  if (!schedulerSecretMatches(req.headers, process.env)) {
     respondJson(res, 401, {
       ...baseBody,
       ok: false,
@@ -168,8 +160,7 @@ const handleScheduledJob = async (req, res, baseBody, rpcHandlers, jobName) => {
     });
     return;
   }
-  const allowed = new Set(['runQueuedAnalyticsPipelineJobs', 'runDailyAnalyticsRecompute', 'runDailyLifecycleRecompute']);
-  if (!allowed.has(jobName) || typeof rpcHandlers[jobName] !== 'function') {
+  if (!isScheduledJobAllowed(jobName, rpcHandlers)) {
     respondJson(res, 404, {
       ...baseBody,
       ok: false,
