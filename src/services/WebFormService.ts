@@ -69,6 +69,12 @@ import { buildReactShellTemplate, buildReactTemplate } from './webform/template'
 import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import { collectTemplateIdsFromMap, migrateDocTemplatePlaceholdersToIds } from './webform/followup/templateMigration';
+import {
+  buildFollowupBatchFailureResult,
+  buildSkippedFollowupActionResults,
+  isFollowupBatchSuccess,
+  normalizeFollowupActions
+} from './webform/followup/actionPlan';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { prefetchDocTextTemplateIds } from './webform/followup/docTextTemplateCache';
@@ -4808,7 +4814,7 @@ export class WebFormService {
         recordId: normalizedRecordId || null,
         message: err?.message || err?.toString?.() || 'unknown'
       });
-      return this.buildFollowupBatchFailureResult(
+      return buildFollowupBatchFailureResult(
         Array.isArray(actions) ? actions : [],
         (err?.message || 'Could not queue follow-up actions.').toString()
       );
@@ -4855,17 +4861,13 @@ export class WebFormService {
     actions: string[],
     options?: FollowupRuntimeOptions
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
-    const normalizedActions = Array.isArray(actions)
-      ? actions
-          .map(entry => (entry || '').toString().trim())
-          .filter(Boolean)
-      : [];
+    const normalizedActions = normalizeFollowupActions(actions);
     if (!normalizedActions.length) {
-      return this.buildFollowupBatchFailureResult([], 'No follow-up actions provided.');
+      return buildFollowupBatchFailureResult([], 'No follow-up actions provided.');
     }
     const normalizedRecordId = (recordId || '').toString().trim();
     if (!normalizedRecordId) {
-      return this.buildFollowupBatchFailureResult(normalizedActions, 'Record ID is required.');
+      return buildFollowupBatchFailureResult(normalizedActions, 'Record ID is required.');
     }
 
     let ticket: FollowupLaneTicket | null = null;
@@ -4877,10 +4879,10 @@ export class WebFormService {
         recordId: normalizedRecordId,
         message: err?.message || err?.toString?.() || 'unknown'
       });
-      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+      return buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
     }
     if (!ticket) {
-      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+      return buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
     }
 
     let turn: { success: boolean; message?: string };
@@ -4893,10 +4895,10 @@ export class WebFormService {
         sequence: ticket.sequence,
         message: err?.message || err?.toString?.() || 'unknown'
       });
-      return this.buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
+      return buildFollowupBatchFailureResult(normalizedActions, 'Could not queue follow-up actions.');
     }
     if (!turn.success) {
-      return this.buildFollowupBatchFailureResult(normalizedActions, turn.message || 'Could not queue follow-up actions.');
+      return buildFollowupBatchFailureResult(normalizedActions, turn.message || 'Could not queue follow-up actions.');
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
@@ -4926,15 +4928,7 @@ export class WebFormService {
         });
         results.push({ action, result });
         if (!result.success) {
-          for (let remainingIndex = actionIndex + 1; remainingIndex < normalizedActions.length; remainingIndex += 1) {
-            results.push({
-              action: normalizedActions[remainingIndex],
-              result: {
-                success: false,
-                message: `Skipped because ${action} failed.`
-              }
-            });
-          }
+          results.push(...buildSkippedFollowupActionResults(normalizedActions, actionIndex, action));
           break;
         }
       }
@@ -4943,26 +4937,8 @@ export class WebFormService {
     }
 
     return {
-      success: results.every(entry => !!entry.result?.success),
+      success: isFollowupBatchSuccess(results),
       results
-    };
-  }
-
-  private buildFollowupBatchFailureResult(
-    actions: string[],
-    message: string
-  ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } {
-    const normalizedMessage = (message || 'Failed to run follow-up actions.').toString();
-    const effectiveActions = Array.isArray(actions) && actions.length ? actions : [''];
-    return {
-      success: false,
-      results: effectiveActions.map(action => ({
-        action,
-        result: {
-          success: false,
-          message: normalizedMessage
-        }
-      }))
     };
   }
 

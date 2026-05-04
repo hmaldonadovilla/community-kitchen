@@ -1,4 +1,11 @@
 const { createGoogleGmailClient } = require('../googleGmailClient');
+const {
+  normalizeFollowupAction: normalizeAction,
+  normalizeFollowupActions,
+  buildFollowupBatchFailureResult,
+  buildSkippedFollowupActionResults,
+  isFollowupBatchSuccess
+} = require('../domain/followupActionPlan');
 const { findItemValue } = require('./dataSourceUtils');
 
 const DEFAULT_LEDGER_FORM_KEY = 'Config: Inventory Reservation Ledger';
@@ -10,8 +17,6 @@ const cloneJson = value => {
 };
 
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
-
-const normalizeAction = value => toText(value).toUpperCase();
 
 const normalizeLanguage = value => {
   const raw = Array.isArray(value) ? value[value.length - 1] || value[0] : value;
@@ -69,18 +74,7 @@ class FollowupRepository {
   }
 
   buildBatchFailure(actions, message) {
-    const normalizedMessage = toText(message) || 'Failed to run follow-up actions.';
-    const effectiveActions = Array.isArray(actions) && actions.length ? actions : [''];
-    return {
-      success: false,
-      results: effectiveActions.map(action => ({
-        action,
-        result: {
-          success: false,
-          message: normalizedMessage
-        }
-      }))
-    };
+    return buildFollowupBatchFailureResult(actions, message);
   }
 
   isGmailConfigured() {
@@ -548,9 +542,7 @@ class FollowupRepository {
   }
 
   async triggerFollowupActions(formKey, recordId, actions) {
-    const normalizedActions = Array.isArray(actions)
-      ? actions.map(entry => toText(entry)).filter(Boolean)
-      : [];
+    const normalizedActions = normalizeFollowupActions(actions);
     if (!normalizedActions.length) return this.buildBatchFailure([], 'No follow-up actions provided.');
     const normalizedRecordId = toText(recordId);
     if (!normalizedRecordId) return this.buildBatchFailure(normalizedActions, 'Record ID is required.');
@@ -568,20 +560,12 @@ class FollowupRepository {
       const result = await this.runFollowupAction(context, normalizedRecordId, action, runtime);
       results.push({ action, result });
       if (!result || !result.success) {
-        for (let remainingIndex = index + 1; remainingIndex < normalizedActions.length; remainingIndex += 1) {
-          results.push({
-            action: normalizedActions[remainingIndex],
-            result: {
-              success: false,
-              message: `Skipped because ${action} failed.`
-            }
-          });
-        }
+        results.push(...buildSkippedFollowupActionResults(normalizedActions, index, action));
         break;
       }
     }
     return {
-      success: results.every(entry => !!entry.result && !!entry.result.success),
+      success: isFollowupBatchSuccess(results),
       results
     };
   }
