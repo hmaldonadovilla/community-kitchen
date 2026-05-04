@@ -63,6 +63,7 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { matchesWhenClause } from '../rules/visibility';
 import { type ReportOverlayState } from './components/app/ReportOverlay';
 import { AppOverlays } from './components/app/AppOverlays';
+import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { ListViewLegend } from './components/app/ListViewLegend';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -275,6 +276,7 @@ import {
 import { hasInvalidRejectDedupKeyValues, shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeaderDrawerEnabled, resolveServiceUrl } from './app/headerNavigation';
+import { buttonHasWrappedText, ensureButtonTextSpans } from './app/buttonTextWrap';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
   buildInventoryReservationPlanFingerprint,
@@ -381,161 +383,8 @@ type FieldChangePending = {
   };
 };
 
-const isWrapScanHiddenElement = (el: HTMLElement): boolean => {
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'svg' || tag === 'path' || tag === 'img' || tag === 'script' || tag === 'style') return true;
-  if ((el.getAttribute('aria-hidden') || '').toString().trim().toLowerCase() === 'true') return true;
-  const className = typeof el.className === 'string' ? el.className : '';
-  if (/\bsr-only\b|\bvisually-hidden\b/i.test(className)) return true;
-  const style = globalThis.getComputedStyle?.(el);
-  if (!style) return false;
-  if (style.display === 'none' || style.visibility === 'hidden') return true;
-  const clip = (style.clip || '').toString().toLowerCase();
-  const clipPath = (style.clipPath || '').toString().toLowerCase();
-  const width = Number.parseFloat((style.width || '').toString());
-  const height = Number.parseFloat((style.height || '').toString());
-  const tiny = Number.isFinite(width) && Number.isFinite(height) && width <= 1 && height <= 1;
-  if (tiny && style.overflow === 'hidden') return true;
-  if (style.overflow === 'hidden' && (clip.includes('rect(0') || clipPath.includes('inset(50%'))) return true;
-  return false;
-};
-
-const collectButtonTextNodes = (root: Node): Text[] => {
-  const out: Text[] = [];
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
-      if (text) out.push(node as Text);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const el = node as HTMLElement;
-    if (isWrapScanHiddenElement(el)) return;
-    for (let i = 0; i < node.childNodes.length; i += 1) {
-      walk(node.childNodes[i]);
-    }
-  };
-  walk(root);
-  return out;
-};
-
-const ensureButtonTextSpans = (button: HTMLButtonElement) => {
-  const directNodes = Array.from(button.childNodes);
-  directNodes.forEach(node => {
-    if (node.nodeType !== Node.TEXT_NODE) return;
-    const raw = (node.textContent || '').toString();
-    if (!raw.replace(/\s+/g, ' ').trim()) return;
-    const span = document.createElement('span');
-    span.className = 'ck-button-text';
-    span.textContent = raw;
-    button.replaceChild(span, node);
-  });
-};
-
-const buttonHasWrappedText = (button: HTMLButtonElement): boolean => {
-  if (!button.isConnected) return false;
-  const style = globalThis.getComputedStyle?.(button);
-  if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
-  const textNodes = collectButtonTextNodes(button);
-  if (!textNodes.length) return false;
-
-  const range = document.createRange();
-  const lines = new Set<number>();
-  try {
-    textNodes.forEach(node => {
-      range.selectNodeContents(node);
-      const rects = Array.from(range.getClientRects());
-      rects.forEach(rect => {
-        if (rect.width <= 0 || rect.height <= 0) return;
-        lines.add(Math.round(rect.top));
-      });
-    });
-  } finally {
-    range.detach?.();
-  }
-  return lines.size > 1;
-};
-
 // Build marker to verify deployed bundle version in UI
 const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
-
-// GitHub-flavored markdown styles (base from github-markdown-css, with CK sizing overrides).
-const MARKDOWN_PREVIEW_STYLES = `
-  .ck-markdown-scroll {
-    padding: 16px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .ck-markdown-body.markdown-body {
-    /* Scale up GitHub defaults to match CK typography tokens */
-    font-size: var(--ck-font-control);
-    line-height: 1.5;
-    color: var(--text);
-    background: transparent;
-  }
-  .ck-markdown-body.markdown-body h1 {
-    font-size: var(--ck-font-group-title);
-    font-weight: 600;
-  }
-  .ck-markdown-body.markdown-body h2 {
-    font-size: var(--ck-font-control);
-    font-weight: 600;
-  }
-  .ck-markdown-body.markdown-body h3 {
-    font-size: var(--ck-font-label);
-    font-weight: 600;
-  }
-  .ck-markdown-body.markdown-body table {
-    width: 100%;
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-`;
-
-const HTML_PREVIEW_STYLES = `
-  .ck-html-preview {
-    padding: 16px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .ck-html-preview__content {
-    color: var(--text);
-  }
-  .ck-file-icon {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text);
-    font-weight: 600;
-    font-size: var(--ck-font-control);
-    cursor: pointer;
-    box-shadow: none;
-  }
-  .ck-file-icon__badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 30px;
-    height: 30px;
-    padding: 0 9px;
-    border-radius: 999px;
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-weight: 600;
-    font-size: calc(var(--ck-font-label) * 0.85);
-    line-height: 1;
-  }
-`;
 
 // Remaining list pages are purely background enrichment for the home list.
 // Delay them so they do not compete with more valuable boot work such as
