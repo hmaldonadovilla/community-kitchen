@@ -19,6 +19,7 @@ import { selectionEffectDependsOnField } from '../app/selectionEffectDependencie
 import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
 import { resolveUploadBlockUntilSaved } from '../app/uploadTransaction';
 import { resolveUploadWaitMessage } from '../app/uploadWaitMessages';
+import { collectFormWhenFieldIds } from '../features/conditions/domain/conditionDependencies';
 import {
   clearUploadFailure,
   createUploadFailureState,
@@ -394,36 +395,6 @@ const normalizeDerivedTokenToFieldId = (token: string): string => {
   return (parts[parts.length - 1] || raw).toString().trim();
 };
 
-const collectWhenFieldIds = (when: any, out: Set<string>) => {
-  if (!when) return;
-  if (Array.isArray(when)) {
-    when.forEach(entry => collectWhenFieldIds(entry, out));
-    return;
-  }
-  if (typeof when !== 'object') return;
-  const allRaw = (when as any).all ?? (when as any).and;
-  if (Array.isArray(allRaw)) {
-    allRaw.forEach(entry => collectWhenFieldIds(entry, out));
-  }
-  const anyRaw = (when as any).any ?? (when as any).or;
-  if (Array.isArray(anyRaw)) {
-    anyRaw.forEach(entry => collectWhenFieldIds(entry, out));
-  }
-  if (Object.prototype.hasOwnProperty.call(when as any, 'not')) {
-    collectWhenFieldIds((when as any).not, out);
-  }
-  const lineItemsClause = (when as any).lineItems ?? (when as any).lineItem;
-  if (lineItemsClause && typeof lineItemsClause === 'object') {
-    collectWhenFieldIds((lineItemsClause as any).when, out);
-    collectWhenFieldIds((lineItemsClause as any).parentWhen, out);
-  }
-  const fieldId = (when as any).fieldId;
-  if (fieldId !== undefined && fieldId !== null) {
-    const fid = fieldId.toString().trim();
-    if (fid) out.add(fid);
-  }
-};
-
 const collectExpressionFieldIds = (expression: any, out: Set<string>) => {
   const expr = expression !== undefined && expression !== null ? expression.toString() : '';
   if (!expr) return;
@@ -455,7 +426,7 @@ const collectDerivedBlurDependencies = (derived: any, out: Set<string>) => {
         const fid = normalizeDerivedTokenToFieldId(ref.toString());
         if (fid) out.add(fid);
       }
-      collectWhenFieldIds((filter as any).when, out);
+      collectFormWhenFieldIds((filter as any).when, out);
     });
   }
 };
@@ -7396,7 +7367,6 @@ const FormView: React.FC<FormViewProps> = ({
       const subgroupInfo = parseSubgroupKey(groupId);
       const subgroupDefs = subgroupInfo ? resolveSubgroupDefs(groupId) : null;
       const groupDef = subgroupInfo ? undefined : definition.questions.find(q => q.id === groupId);
-      const parentDef = subgroupInfo ? subgroupDefs?.parent : undefined;
       const rootDef = subgroupInfo ? subgroupDefs?.root : undefined;
       const subDef = subgroupInfo ? subgroupDefs?.sub : undefined;
       const baseConfig = subgroupInfo ? subDef : groupDef?.lineItemConfig;

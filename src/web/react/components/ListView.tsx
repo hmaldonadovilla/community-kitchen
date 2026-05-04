@@ -44,55 +44,13 @@ import { ListViewLegend } from './app/ListViewLegend';
 import { resolveLabel } from '../utils/labels';
 import { buildListViewAnalyticsMetrics } from '../analytics/model';
 import { fetchFilteredSortedPages } from '../app/listViewServerFetch';
-
-const collectWhenFieldIds = (when: any, out: Set<string>) => {
-  if (!when) return;
-  if (Array.isArray(when)) {
-    when.forEach(entry => collectWhenFieldIds(entry, out));
-    return;
-  }
-  if (typeof when !== 'object') return;
-  const allRaw = (when as any).all ?? (when as any).and;
-  if (Array.isArray(allRaw)) {
-    allRaw.forEach(entry => collectWhenFieldIds(entry, out));
-    return;
-  }
-  const anyRaw = (when as any).any ?? (when as any).or;
-  if (Array.isArray(anyRaw)) {
-    anyRaw.forEach(entry => collectWhenFieldIds(entry, out));
-    return;
-  }
-  if ((when as any).not) {
-    collectWhenFieldIds((when as any).not, out);
-    return;
-  }
-  const lineItemsClause = (when as any).lineItems ?? (when as any).lineItem;
-  if (lineItemsClause && typeof lineItemsClause === 'object') {
-    const groupId = ((lineItemsClause as any).groupId ?? (lineItemsClause as any).group ?? '').toString().trim();
-    if (groupId) out.add(groupId);
-    collectWhenFieldIds((lineItemsClause as any).when, out);
-    collectWhenFieldIds((lineItemsClause as any).parentWhen, out);
-    return;
-  }
-  const fieldId = ((when as any).fieldId ?? (when as any).field ?? (when as any).id ?? '').toString().trim();
-  if (fieldId) out.add(fieldId);
-};
-
-const mergeListItemsById = (existing: ListItem[], incoming: ListItem[]): ListItem[] => {
-  const out = [...existing];
-  const seen = new Set<string>();
-  existing.forEach(item => {
-    const id = (item?.id || '').toString();
-    if (id) seen.add(id);
-  });
-  incoming.forEach(item => {
-    const id = (item?.id || '').toString();
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    out.push(item);
-  });
-  return out;
-};
+import { collectListViewWhenFieldIds } from '../features/conditions/domain/conditionDependencies';
+import {
+  encodeClientPageToken,
+  isListResponseComplete,
+  mergeListItemsById,
+  resolveListSortDefaultDirection
+} from '../features/list/domain/listDataWindow';
 
 interface ListViewProps {
   formKey: string;
@@ -358,30 +316,6 @@ const ListView: React.FC<ListViewProps> = ({
   const overlayPresetSearchSeqRef = useRef(0);
   const listPageDemandFetchSeqRef = useRef(0);
 
-  const encodePageTokenClient = (offset: number): string => {
-    const n = Math.max(0, Math.floor(Number(offset) || 0));
-    const text = n.toString();
-    try {
-      // Apps Script uses Utilities.base64Encode(offset.toString()) for page tokens.
-      // In the browser, btoa() matches that for ASCII strings.
-      if (typeof globalThis !== 'undefined' && typeof (globalThis as any).btoa === 'function') {
-        return (globalThis as any).btoa(text);
-      }
-    } catch (_) {
-      // ignore
-    }
-    // Best-effort fallback: return the raw offset string (may not decode on server if base64 is required).
-    return text;
-  };
-
-  const isResponseComplete = (res: ListResponse | null | undefined): boolean => {
-    if (!res || !Array.isArray((res as any).items)) return false;
-    if ((res as any).nextPageToken) return false;
-    const total = Number((res as any).totalCount || 0);
-    if (!Number.isFinite(total) || total <= 0) return (res.items || []).length > 0;
-    return (res.items || []).length >= total;
-  };
-
   const fetchListPage = async (args: {
     token?: string;
     pageSize: number;
@@ -431,7 +365,7 @@ const ListView: React.FC<ListViewProps> = ({
     const backgroundPageSize = Math.min(50, Math.max(pageSize, 25));
 
     const cachedHasItems = Boolean(cachedResponse?.items?.length);
-    const cachedIsComplete = isResponseComplete(cachedResponse);
+    const cachedIsComplete = isListResponseComplete(cachedResponse);
     const cachedToken = cachedResponse?.nextPageToken;
 
     // If we already have a complete cached list, do nothing.
@@ -577,7 +511,7 @@ const ListView: React.FC<ListViewProps> = ({
         const total = Number((meta?.list as any)?.totalCount || 0);
         const totalCount = Number.isFinite(total) ? total : 0;
         const lastOffset = Math.max(0, totalCount - firstPageSize);
-        const token = lastOffset > 0 ? encodePageTokenClient(lastOffset) : undefined;
+        const token = lastOffset > 0 ? encodeClientPageToken(lastOffset) : undefined;
 
         onDiagnostic?.('list.fetch.firstPage.tail', { formKey, totalCount, lastOffset, firstPageSize });
 
@@ -757,7 +691,7 @@ const ListView: React.FC<ListViewProps> = ({
         formKey,
         items: cachedResponse.items.length,
         totalCount: cachedResponse.totalCount,
-        complete: isResponseComplete(cachedResponse)
+        complete: isListResponseComplete(cachedResponse)
       });
       return;
     }
@@ -896,13 +830,6 @@ const ListView: React.FC<ListViewProps> = ({
     }));
     onDiagnostic('list.ruleColumns.enabled', { columns: deps });
   }, [onDiagnostic, ruleColumns]);
-
-  const defaultDirectionForField = (fieldId: string): 'asc' | 'desc' => {
-    if (fieldId === 'createdAt' || fieldId === 'updatedAt') return 'desc';
-    const t = (questionTypeById[fieldId] || '').toString().toUpperCase();
-    if (t === 'DATE' || t === 'DATETIME') return 'desc';
-    return 'asc';
-  };
 
   const dateSearchQueryNormalized = useMemo(() => {
     if (!dateSearchEnabled) return null;
@@ -1064,7 +991,6 @@ const ListView: React.FC<ListViewProps> = ({
       cancelled = true;
     };
   }, [
-    allItems,
     dateSearchEnabled,
     dateSearchFieldId,
     dateSearchQueryNormalized,
@@ -1074,8 +1000,8 @@ const ListView: React.FC<ListViewProps> = ({
     formKey,
     onDiagnostic,
     projection,
-    totalCount
-    ,
+    totalCount,
+    allItems,
     guaranteedPrefetchedItemCount,
     oldestPrefetchedDate
   ]);
@@ -1084,9 +1010,11 @@ const ListView: React.FC<ListViewProps> = ({
     dateSearchEnabled && dateSearchUsesServer && dateSearchQueryNormalized && serverDateSearch.query === dateSearchQueryNormalized
       ? serverDateSearch.response
       : null;
-  const activeItems = activeDateSearchResponse?.items || [];
   const activeTotalCount = activeDateSearchResponse?.totalCount || 0;
-  const effectiveItems = dateSearchEnabled && dateSearchUsesServer ? activeItems : allItems || [];
+  const effectiveItems = useMemo(
+    () => (dateSearchEnabled && dateSearchUsesServer ? activeDateSearchResponse?.items || [] : allItems || []),
+    [activeDateSearchResponse?.items, allItems, dateSearchEnabled, dateSearchUsesServer]
+  );
   const effectiveTotalCount = dateSearchEnabled && dateSearchUsesServer ? activeTotalCount : totalCount;
   const effectiveUiLoading = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.loading : uiLoading || pageDemandLoading;
   const effectiveUiError = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.error : uiError;
@@ -1264,7 +1192,6 @@ const ListView: React.FC<ListViewProps> = ({
     advancedHasSearched,
     advancedKeyword,
     advancedSearchEnabled,
-    allItems,
     dateSearchEnabled,
     dateSearchFieldId,
     dateSearchQueryNormalized,
@@ -1963,7 +1890,7 @@ const ListView: React.FC<ListViewProps> = ({
     Object.keys((cfg?.fieldFilters || {}) as Record<string, any>).forEach(add);
     searchableFieldIds.forEach(add);
     keywordSearchFieldIds.forEach(add);
-    collectWhenFieldIds(cfg?.when, ids);
+    collectListViewWhenFieldIds(cfg?.when, ids);
     return ids.size ? Array.from(ids) : undefined;
   }, [keywordSearchFieldIds, overlayPresetButton, overlayPresetDateFilter?.fieldId, projection, searchableFieldIds]);
 
@@ -2539,7 +2466,7 @@ const ListView: React.FC<ListViewProps> = ({
                               setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
                             } else {
                               setSortField(nextField);
-                              setSortDirection(defaultDirectionForField(nextField));
+                              setSortDirection(resolveListSortDefaultDirection(nextField, questionTypeById));
                             }
                             setPageIndex(0);
                           }}
