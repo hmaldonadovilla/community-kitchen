@@ -115,6 +115,7 @@ import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { PairedRowGrid } from './form/PairedRowGrid';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { GroupedFormSections } from './form/GroupedFormSections';
+import { FormStatusNotices } from './form/FormStatusNotices';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
@@ -16009,87 +16010,19 @@ const FormView: React.FC<FormViewProps> = ({
   return (
     <>
       <div className="ck-form-sections">
-        {recordStatusText && !ingredientNameTransformEnabled ? (
-          <div className="ck-record-status-row">
-            <span className="ck-record-status-label">{tSystem('list.meta.status', language, 'Status')}</span>
-            <span
-              className="ck-status-pill"
-              title={recordStatusText}
-              aria-label={`Status: ${recordStatusText}`}
-              data-status-key={recordStatusKey || undefined}
-            >
-              {recordStatusText}
-            </span>
-          </div>
-        ) : null}
-        {showWarningsBanner && warningTop && warningTop.length ? (
-          <div
-            role="status"
-            style={{
-              scrollMarginTop: 'calc(var(--safe-top) + 140px)',
-              padding: '14px 16px',
-              borderRadius: 14,
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text)',
-              fontWeight: 600,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8
-            }}
-          >
-            <div>{tSystem('validation.warningsTitle', language, 'Warnings')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 500 }}>
-              {warningTop.map((w, idx) => (
-                <button
-                  key={`${idx}-${w.fieldPath}-${w.message}`}
-                  type="button"
-                  onClick={() => navigateToFieldKey(w.fieldPath)}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    padding: 0,
-                    textAlign: 'left',
-                    font: 'inherit',
-                    color: 'inherit',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {w.message}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {status ? (
-          <div
-            ref={statusRef}
-            role={statusTone === 'error' ? 'alert' : 'status'}
-            tabIndex={-1}
-            onClick={() => {
-              if (statusTone !== 'error') return;
-              const keys = Object.keys(errors || {});
-              if (!keys.length) return;
-              navigateToFieldKey(keys[0]);
-            }}
-            style={{
-              scrollMarginTop: 'calc(var(--safe-top) + 140px)',
-              padding: '14px 16px',
-              borderRadius: 14,
-              border:
-                statusTone === 'error'
-                  ? '1px solid var(--danger)'
-                  : '1px solid var(--border)',
-              background: 'transparent',
-              color: statusTone === 'error' ? 'var(--danger)' : 'var(--text)',
-              fontWeight: 600,
-              cursor: statusTone === 'error' && Object.keys(errors || {}).length ? 'pointer' : undefined
-            }}
-          >
-            {status}
-          </div>
-        ) : null}
+        <FormStatusNotices
+          language={language}
+          recordStatusText={recordStatusText}
+          recordStatusKey={recordStatusKey}
+          hideRecordStatus={ingredientNameTransformEnabled}
+          showWarningsBanner={showWarningsBanner}
+          warningTop={warningTop}
+          status={status}
+          statusTone={statusTone}
+          statusRef={statusRef}
+          errors={errors}
+          onNavigateToField={navigateToFieldKey}
+        />
 
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
           <div className="ck-group-stack">
