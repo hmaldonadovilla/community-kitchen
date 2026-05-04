@@ -531,27 +531,21 @@ export class SubmissionService {
         const lastRow = idx.sheet.getLastRow();
         const dataRows = Math.max(0, lastRow - 1);
 
-        // Safety: if the index has not been rebuilt for an existing dataset, signature lookups can miss duplicates.
-        // In that case, block writes and instruct the operator to run the rebuild menu action.
+        // Safety: if the index appears incomplete, use the slower sheet scan instead of
+        // showing an operator-only rebuild message to frontline users.
         const destLastRow = sheet.getLastRow();
         if (destLastRow >= 2) {
+          let indexAppearsIncomplete = false;
           try {
             const destTopId = (sheet.getRange(2, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxTopId = (idx.sheet.getRange(2, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
             const destLastId = (sheet.getRange(destLastRow, columns.recordId || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
-            const looksUnbuilt = (destTopId && !idxTopId) || (destLastId && !idxLastId);
-            if (looksUnbuilt && destLastRow > 2) {
-              return {
-                success: false,
-                message:
-                  'Dedup index is not built for this form yet. Run "Community Kitchen → Rebuild Indexes (Data Version + Dedup)" and try again.',
-                meta: { id: recordId, createdAt: createdAtVal, updatedAt: undefined }
-              };
-            }
+            indexAppearsIncomplete = Boolean(((destTopId && !idxTopId) || (destLastId && !idxLastId)) && destLastRow > 2);
           } catch {
-            // ignore; proceed
+            // ignore; proceed with indexed lookup
           }
+          if (indexAppearsIncomplete) throw new Error('Record index appears incomplete; falling back to sheet scan.');
         }
         for (const rule of effectiveDedupRules) {
           const sig = computeDedupSignature(rule, candidateValues);
@@ -1203,9 +1197,11 @@ export class SubmissionService {
         const dataRows = Math.max(0, lastRow - 1);
         if (dataRows <= 0) return { success: true };
 
-        // Safety: block indexed dedup checks when indexes have not been rebuilt for an existing dataset.
+        // Safety: if the index appears incomplete, use the slower sheet scan instead of
+        // showing an operator-only rebuild message to frontline users.
         const destLastRow = sheet.getLastRow();
         if (destLastRow >= 2) {
+          let indexAppearsIncomplete = false;
           try {
             // Find the Record ID column without walking all questions/headers.
             const recordIdCol = (() => {
@@ -1227,17 +1223,11 @@ export class SubmissionService {
             const idxTopId = (idx.sheet.getRange(2, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
             const destLastId = (sheet.getRange(destLastRow, recordIdCol || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
-            const looksUnbuilt = (destTopId && !idxTopId) || (destLastId && !idxLastId);
-            if (looksUnbuilt && destLastRow > 2) {
-              return {
-                success: false,
-                message:
-                  'Dedup index is not built for this form yet. Run "Community Kitchen → Rebuild Indexes (Data Version + Dedup)" and try again.'
-              };
-            }
+            indexAppearsIncomplete = Boolean(((destTopId && !idxTopId) || (destLastId && !idxLastId)) && destLastRow > 2);
           } catch (_) {
             // ignore
           }
+          if (indexAppearsIncomplete) throw new Error('Record index appears incomplete; falling back to sheet scan.');
         }
 
         for (const rule of effectiveDedupRules) {

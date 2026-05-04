@@ -88,12 +88,36 @@ export const shouldDeferRecordFreshnessSync = (args: {
   submissionInFlight: boolean;
   uploadInFlight: boolean;
   recordSyncInFlight: boolean;
+  reservationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
   followupBatchInFlight?: boolean;
   lastUserInteractionAt?: number | null;
   now?: number | null;
 }): boolean => resolveRecordFreshnessSyncBlockers(args).length > 0;
+
+export const shouldRealignGuidedStepAfterStaleSync = (reason?: string | null): boolean => {
+  const normalized = (reason || '').toString().trim();
+  if (normalized === 'versionCheck.stale') return false;
+  if (normalized === 'recordFreshness.stale') return false;
+  return true;
+};
+
+export const shouldPreserveLocalDraftAfterMetaOnlyAdoption = (args: {
+  sameRecord: boolean;
+  currentComparableFingerprint?: string | null;
+  baselineComparableFingerprint?: string | null;
+  dirty?: boolean;
+  queued?: boolean;
+}): boolean => {
+  if (!args.sameRecord) return false;
+  const currentComparableFingerprint = (args.currentComparableFingerprint || '').toString();
+  const baselineComparableFingerprint = (args.baselineComparableFingerprint || '').toString();
+  if (currentComparableFingerprint && baselineComparableFingerprint) {
+    return currentComparableFingerprint !== baselineComparableFingerprint;
+  }
+  return Boolean(args.dirty || args.queued);
+};
 
 export const resolveRecordFreshnessSyncBlockers = (args: {
   dirty: boolean;
@@ -104,6 +128,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   submissionInFlight: boolean;
   uploadInFlight: boolean;
   recordSyncInFlight: boolean;
+  reservationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
   followupBatchInFlight?: boolean;
@@ -133,6 +158,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   if (args.submissionInFlight) blockers.push('submission.inFlight');
   if (args.uploadInFlight) blockers.push('upload.inFlight');
   if (args.recordSyncInFlight) blockers.push('recordSync.inFlight');
+  if (args.reservationSyncInFlight) blockers.push('reservationSync.inFlight');
   if (args.guidedStepLiveSyncInFlight) blockers.push('guidedStep.liveSync');
   if (args.guidedStepBackgroundSyncInFlight) blockers.push('guidedStep.backgroundSync');
   if (args.followupBatchInFlight) blockers.push('followupBatch.inFlight');

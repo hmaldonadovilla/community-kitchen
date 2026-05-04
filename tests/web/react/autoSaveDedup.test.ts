@@ -7,9 +7,13 @@ import {
   resolveDebouncedAutoSaveDelay,
   resolveDedupCheckDialogCopy,
   shouldScheduleAutoSaveAfterPendingFollowup,
+  shouldArmAutoSaveForUserEditEvent,
+  shouldSuppressPostPersistAutoSave,
+  shouldSuppressSelectionEffectInitAutoSave,
   shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
-  shouldForceAutoSaveOnConfiguredBlur
+  shouldForceAutoSaveOnConfiguredBlur,
+  isBlockingDedupConflict
 } from '../../../src/web/react/app/autoSaveDedup';
 
 describe('autoSaveDedup helpers', () => {
@@ -113,6 +117,97 @@ describe('autoSaveDedup helpers', () => {
         dirty: false,
         queued: false,
         inFlight: false
+      })
+    ).toBe(false);
+  });
+
+  it('suppresses selection-effect init autosave only while clean and before the next user edit', () => {
+    expect(
+      shouldSuppressSelectionEffectInitAutoSave({
+        suppressStartedAtMs: 1_000,
+        suppressUntilMs: 31_000,
+        nowMs: 5_000,
+        lastLocalMutationAtMs: 0,
+        hadDirtyAtStart: false
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSuppressSelectionEffectInitAutoSave({
+        suppressStartedAtMs: 1_000,
+        suppressUntilMs: 31_000,
+        nowMs: 5_000,
+        lastLocalMutationAtMs: 1_500,
+        hadDirtyAtStart: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressSelectionEffectInitAutoSave({
+        suppressStartedAtMs: 1_000,
+        suppressUntilMs: 31_000,
+        nowMs: 5_000,
+        lastLocalMutationAtMs: 0,
+        hadDirtyAtStart: true
+      })
+    ).toBe(false);
+  });
+
+  it('suppresses post-persist autosave only until the next user edit', () => {
+    expect(
+      shouldSuppressPostPersistAutoSave({
+        suppressUntilMs: 31_000,
+        nowMs: 5_000,
+        lastLocalMutationAtMs: 10_000,
+        persistedLocalMutationAtMs: 10_000
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSuppressPostPersistAutoSave({
+        suppressUntilMs: 31_000,
+        nowMs: 5_000,
+        lastLocalMutationAtMs: 10_500,
+        persistedLocalMutationAtMs: 10_000
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressPostPersistAutoSave({
+        suppressUntilMs: 31_000,
+        nowMs: 32_000,
+        lastLocalMutationAtMs: 10_000,
+        persistedLocalMutationAtMs: 10_000
+      })
+    ).toBe(false);
+  });
+
+  it('arms autosave only for value-changing user edit events', () => {
+    expect(
+      shouldArmAutoSaveForUserEditEvent({
+        event: 'change',
+        hasNextValue: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldArmAutoSaveForUserEditEvent({
+        event: undefined,
+        hasNextValue: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldArmAutoSaveForUserEditEvent({
+        event: 'blur',
+        hasNextValue: false
+      })
+    ).toBe(false);
+
+    expect(
+      shouldArmAutoSaveForUserEditEvent({
+        event: 'blur',
+        hasNextValue: true
       })
     ).toBe(false);
   });
@@ -242,6 +337,23 @@ describe('autoSaveDedup helpers', () => {
     expect(copy.checkingMessage).toBe('Checking...');
     expect(copy.availableAutoCloseMs).toBe(1300);
     expect(copy.duplicateAutoCloseMs).toBe(900);
+  });
+
+  it('does not treat operational dedup check failures as blocking conflicts', () => {
+    expect(
+      isBlockingDedupConflict({
+        ruleId: 'dedupCheckFailed',
+        message: 'Dedup index is not built for this form yet.'
+      })
+    ).toBe(false);
+
+    expect(
+      isBlockingDedupConflict({
+        ruleId: 'meal-production-key',
+        message: 'Duplicate record.',
+        existingRecordId: 'record-1'
+      })
+    ).toBe(true);
   });
 
   it('forces autosave on configured blur when create-flow gate is complete and dedup passed', () => {

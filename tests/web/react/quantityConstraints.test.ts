@@ -91,6 +91,26 @@ describe('quantityConstraints', () => {
     ).toBe(1);
   });
 
+  it('lets an existing reservation increase up to free stock plus its current row quantity', () => {
+    expect(
+      computeOptimisticRowMaxQuantity({
+        remainingQuantity: 15,
+        reservedQuantity: 10,
+        serverCurrentRecordReservedQuantity: 6,
+        localCurrentRecordReservedQuantity: 6,
+        currentRowQuantity: 6
+      })
+    ).toBe(11);
+    expect(
+      computeOptimisticFreeQuantity({
+        remainingQuantity: 15,
+        reservedQuantity: 10,
+        serverCurrentRecordReservedQuantity: 6,
+        localCurrentRecordReservedQuantity: 10
+      })
+    ).toBe(1);
+  });
+
   it('keeps free stock at zero while preserving per-row editable max for fully allocated quantities', () => {
     expect(
       computeOptimisticFreeQuantity({

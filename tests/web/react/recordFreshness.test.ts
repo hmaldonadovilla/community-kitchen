@@ -6,6 +6,8 @@ import {
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
+  shouldPreserveLocalDraftAfterMetaOnlyAdoption,
+  shouldRealignGuidedStepAfterStaleSync,
   shouldDeferRecordFreshnessSync
 } from '../../../src/web/react/app/recordFreshness';
 
@@ -40,6 +42,45 @@ describe('recordFreshness helpers', () => {
       compareAgainst: 'lastAppliedSnapshot'
     });
     expect(resolveRecordFreshnessMetaOnlyAdoptionRule({ config, stepId: 'production' })).toBeNull();
+  });
+
+  test('keeps passive stale sync from moving guided navigation', () => {
+    expect(shouldRealignGuidedStepAfterStaleSync('versionCheck.stale')).toBe(false);
+    expect(shouldRealignGuidedStepAfterStaleSync('recordFreshness.stale')).toBe(false);
+    expect(shouldRealignGuidedStepAfterStaleSync('autosave.rejected.stale')).toBe(true);
+    expect(shouldRealignGuidedStepAfterStaleSync('submit.rejected.stale')).toBe(true);
+  });
+
+  test('preserves local draft state when meta-only adoption would otherwise clear unsaved edits', () => {
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: true,
+        currentComparableFingerprint: 'local-leftover-edit',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: true,
+        currentComparableFingerprint: 'saved-before-followup',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(false);
+
+    expect(
+      shouldPreserveLocalDraftAfterMetaOnlyAdoption({
+        sameRecord: false,
+        currentComparableFingerprint: 'local-leftover-edit',
+        baselineComparableFingerprint: 'saved-before-followup',
+        dirty: true,
+        queued: true
+      })
+    ).toBe(false);
   });
 
   test('returns the remaining delay before the next heartbeat', () => {
@@ -174,6 +215,26 @@ describe('recordFreshness helpers', () => {
         now: 90_000
       })
     ).toEqual(['followupBatch.inFlight']);
+  });
+
+  test('blocks auto-sync while a reservation sync is still running', () => {
+    expect(
+      resolveRecordFreshnessSyncBlockers({
+        dirty: false,
+        draftSavePhase: 'saved',
+        autoSaveQueued: false,
+        autoSaveInFlight: false,
+        draftSaveInFlight: false,
+        submissionInFlight: false,
+        uploadInFlight: false,
+        recordSyncInFlight: false,
+        reservationSyncInFlight: true,
+        guidedStepLiveSyncInFlight: false,
+        guidedStepBackgroundSyncInFlight: false,
+        lastUserInteractionAt: 0,
+        now: 90_000
+      })
+    ).toEqual(['reservationSync.inFlight']);
   });
 
   test('clears deferred sync when the user has moved to another record', () => {

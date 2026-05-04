@@ -1,8 +1,14 @@
 jest.mock('../../src/web/data/dataSources', () => ({
-  fetchDataSource: jest.fn()
+  fetchDataSource: jest.fn(),
+  peekCachedDataSource: jest.fn(),
+  peekCachedDataSourcesById: jest.fn()
 }));
 
-import { fetchDataSource } from '../../src/web/data/dataSources';
+import {
+  fetchDataSource,
+  peekCachedDataSource,
+  peekCachedDataSourcesById
+} from '../../src/web/data/dataSources';
 import { runSelectionEffects } from '../../src/web/react/app/selectionEffects';
 import {
   buildSubgroupKey,
@@ -16,6 +22,10 @@ import { WebFormDefinition } from '../../src/types';
 describe('selectionEffects setValue', () => {
   beforeEach(() => {
     (fetchDataSource as unknown as jest.Mock).mockReset();
+    (peekCachedDataSource as unknown as jest.Mock).mockReset();
+    (peekCachedDataSourcesById as unknown as jest.Mock).mockReset();
+    (peekCachedDataSource as unknown as jest.Mock).mockReturnValue(null);
+    (peekCachedDataSourcesById as unknown as jest.Mock).mockReturnValue([]);
   });
 
   it('sets top-level values when the effect runs', () => {
@@ -415,7 +425,12 @@ describe('selectionEffects setValue', () => {
       aggregateBy: ['ING', 'UNIT'],
       aggregateNumericFields: ['QTY'],
       preserveManualRows: false,
-      sourceSync: { forceRefresh: true, refreshOnInit: true, stopWhen: { fieldId: 'status', equals: 'Closed' } }
+      sourceSync: {
+        forceRefresh: true,
+        refreshOnInit: true,
+        forceRefreshMaxCacheAgeMs: 120000,
+        stopWhen: { fieldId: 'status', equals: 'Closed' }
+      }
     } as any;
 
     const definition: WebFormDefinition = {
@@ -487,7 +502,8 @@ describe('selectionEffects setValue', () => {
           rowId: parentRowId,
           rowValues: { RECIPE: 'Old soup', RECIPE_SOURCE_ID: 'recipe-1' }
         },
-        forceContextReset: true
+        forceContextReset: true,
+        preferLookupSourceValue: true
       }
     });
 
@@ -497,7 +513,7 @@ describe('selectionEffects setValue', () => {
     expect(fetchDataSource).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'Recipes Data', formKey: 'Config: Recipes' }),
       'EN',
-      { forceRefresh: true }
+      { forceRefresh: true, forceRefreshMaxCacheAgeMs: 120000 }
     );
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
     expect(lineItems.MEALS[0].values).toEqual(
@@ -638,6 +654,11 @@ describe('selectionEffects setValue', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     await new Promise(resolve => setTimeout(resolve, 0));
 
+    expect(fetchDataSource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'Recipes Data', formKey: 'Config: Recipes' }),
+      'EN'
+    );
+    expect((fetchDataSource as unknown as jest.Mock).mock.calls[0]?.[2]).toBeUndefined();
     expect(lineItems.MEALS[0].values).toEqual(
       expect.objectContaining({
         RECIPE: 'New soup',
@@ -1270,6 +1291,228 @@ describe('selectionEffects setValue', () => {
 
     expect(values.RECIPE).toBe('Soup');
     expect(values.STATUS).toBe('available');
+  });
+
+  it('tracks async setValuesFromDataSource effects until the fetch settles', async () => {
+    let resolveFetch: (value: any) => void = () => undefined;
+    (fetchDataSource as unknown as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        { id: 'LEFTOVER_ID', type: 'CHOICE', label: { en: 'Leftover', fr: 'Leftover', nl: 'Leftover' }, required: false } as any,
+        { id: 'RECIPE', type: 'TEXT', label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' }, required: false } as any
+      ]
+    };
+
+    let values: Record<string, any> = { LEFTOVER_ID: 'LE-1' };
+    let lineItems: Record<string, any> = {};
+    const finish = jest.fn();
+    const begin = jest.fn(() => finish);
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'LEFTOVER_ID',
+        dataSource: { id: 'Config: Leftover Inventory' },
+        selectionEffects: [
+          {
+            type: 'setValuesFromDataSource',
+            lookupField: 'LEFTOVER_ID',
+            fieldMapping: {
+              RECIPE: 'LEFTOVER_RECIPE'
+            }
+          }
+        ]
+      } as any,
+      value: 'LE-1',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues: (next: any) => {
+        values = typeof next === 'function' ? next(values) : next;
+      },
+      setLineItems: (next: any) => {
+        lineItems = typeof next === 'function' ? next(lineItems) : next;
+      },
+      onAsyncEffectStart: begin
+    });
+
+    expect(begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effectType: 'setValuesFromDataSource',
+        sourceId: 'Config: Leftover Inventory'
+      })
+    );
+    expect(finish).not.toHaveBeenCalled();
+
+    resolveFetch({ items: [{ LEFTOVER_ID: 'LE-1', LEFTOVER_RECIPE: 'Soup' }] });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(values.RECIPE).toBe('Soup');
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks async addLineItemsFromDataSource effects until the fetch settles', async () => {
+    let resolveFetch: (value: any) => void = () => undefined;
+    (fetchDataSource as unknown as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'SOURCE',
+          type: 'CHOICE',
+          label: { en: 'Source', fr: 'Source', nl: 'Source' },
+          required: false,
+          dataSource: { id: 'Recipes Data' },
+          selectionEffects: [
+            {
+              type: 'addLineItemsFromDataSource',
+              groupId: 'LINES',
+              lineItemMapping: { ING: 'ING' }
+            }
+          ]
+        } as any,
+        {
+          id: 'LINES',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Lines', fr: 'Lines', nl: 'Lines' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' }, required: false }]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = { SOURCE: 'Recipe' };
+    let lineItems: Record<string, any> = { LINES: [] };
+    const finish = jest.fn();
+    const begin = jest.fn(() => finish);
+
+    runSelectionEffects({
+      definition,
+      question: definition.questions[0],
+      value: 'Recipe',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues: (next: any) => {
+        values = typeof next === 'function' ? next(values) : next;
+      },
+      setLineItems: (next: any) => {
+        lineItems = typeof next === 'function' ? next(lineItems) : next;
+      },
+      onAsyncEffectStart: begin
+    });
+
+    expect(begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effectType: 'addLineItemsFromDataSource',
+        sourceId: 'Recipes Data',
+        targetGroupId: 'LINES'
+      })
+    );
+    expect(finish).not.toHaveBeenCalled();
+
+    resolveFetch({ items: [{ ING: 'Carrot' }] });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(lineItems.LINES).toEqual([
+      expect.objectContaining({
+        values: expect.objectContaining({ ING: 'Carrot' })
+      })
+    ]);
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses compatible cached datasource rows for addLineItemsFromDataSource user edits', () => {
+    (peekCachedDataSourcesById as unknown as jest.Mock).mockReturnValue([
+      {
+        items: [
+          {
+            id: 'recipe-1',
+            NAME: 'Soup',
+            INGREDIENTS: [{ ING: 'Carrot' }]
+          }
+        ]
+      }
+    ]);
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'SOURCE',
+          type: 'CHOICE',
+          label: { en: 'Source', fr: 'Source', nl: 'Source' },
+          required: false,
+          dataSource: { id: 'Recipes Data' },
+          selectionEffects: [
+            {
+              type: 'addLineItemsFromDataSource',
+              groupId: 'LINES',
+              lookupField: 'id',
+              dataField: 'INGREDIENTS',
+              dataSource: { id: 'Recipes Data', projection: ['id', 'NAME', 'INGREDIENTS'] },
+              lineItemMapping: { ING: 'ING' }
+            }
+          ]
+        } as any,
+        {
+          id: 'LINES',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Lines', fr: 'Lines', nl: 'Lines' },
+          required: false,
+          lineItemConfig: {
+            fields: [{ id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' }, required: false }]
+          }
+        } as any
+      ]
+    };
+
+    let values: Record<string, any> = { SOURCE: 'recipe-1' };
+    let lineItems: Record<string, any> = { LINES: [] };
+    const begin = jest.fn();
+
+    runSelectionEffects({
+      definition,
+      question: definition.questions[0],
+      value: 'recipe-1',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues: (next: any) => {
+        values = typeof next === 'function' ? next(values) : next;
+      },
+      setLineItems: (next: any) => {
+        lineItems = typeof next === 'function' ? next(lineItems) : next;
+      },
+      onAsyncEffectStart: begin
+    });
+
+    expect(fetchDataSource).not.toHaveBeenCalled();
+    expect(begin).not.toHaveBeenCalled();
+    expect(lineItems.LINES).toEqual([
+      expect.objectContaining({
+        values: expect.objectContaining({ ING: 'Carrot' })
+      })
+    ]);
   });
 
   it('hydrates line-item values from a matched data-source row', async () => {

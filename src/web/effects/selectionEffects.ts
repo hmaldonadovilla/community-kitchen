@@ -1,6 +1,6 @@
 import { DataSourceConfig, PresetValue, SelectionEffect, WebFormDefinition, WebQuestionDefinition } from '../../types';
 import { LangCode, VisibilityContext } from '../types';
-import { fetchDataSource } from '../data/dataSources';
+import { fetchDataSource, peekCachedDataSource, peekCachedDataSourcesById } from '../data/dataSources';
 import { computeAllowedOptions } from '../rules/filter';
 import { matchesWhenClause } from '../rules/visibility';
 
@@ -50,6 +50,7 @@ interface EffectContext {
     lineItem?: SelectionEffectOptions['lineItem'];
     skipSelectionEffects?: boolean;
   }) => void;
+  beginAsyncEffect?: (meta: Record<string, unknown>) => (() => void) | void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -122,14 +123,26 @@ function sourceSyncStopped(effect: SelectionEffect, whenCtx: VisibilityContext):
   return stopWhen ? matchesWhenClause(stopWhen as any, whenCtx) : false;
 }
 
-function shouldForceDataSourceRefresh(effect: SelectionEffect): boolean {
-  return resolveSourceSyncConfig(effect).forceRefresh === true;
+function buildDataSourceFetchOptions(
+  effect: SelectionEffect,
+  options?: { preferLookupSourceValue?: boolean }
+): { forceRefresh: true; forceRefreshMaxCacheAgeMs?: number } | undefined {
+  const sourceSync = resolveSourceSyncConfig(effect);
+  if (sourceSync.forceRefresh !== true) return undefined;
+  if (sourceSync.refreshOnInit === true && options?.preferLookupSourceValue !== true) {
+    return undefined;
+  }
+  const maxCacheAgeMs = Number((sourceSync as any).forceRefreshMaxCacheAgeMs);
+  if (Number.isFinite(maxCacheAgeMs) && maxCacheAgeMs >= 0) {
+    return { forceRefresh: true, forceRefreshMaxCacheAgeMs: maxCacheAgeMs };
+  }
+  return { forceRefresh: true };
 }
 
 function isDebug(): boolean {
   try {
     return typeof window !== 'undefined' && Boolean((window as any).__WEB_FORM_DEBUG__);
-  } catch (_) {
+  } catch {
     return false;
   }
 }
@@ -671,7 +684,7 @@ function asPresetValue(raw: any): PresetValue | undefined {
   }
   try {
     return raw.toString();
-  } catch (_) {
+  } catch {
     return undefined;
   }
 }
@@ -839,6 +852,90 @@ function resolveEffectDataSourceConfig(
   const definitionConfig = explicitId ? findDataSourceConfigById(definition, explicitId) : undefined;
   const mergedFromQuestion = questionConfig ? mergeDataSourceConfig(questionConfig, explicit) : explicit;
   return definitionConfig ? mergeDataSourceConfig(definitionConfig, mergedFromQuestion) : mergedFromQuestion;
+}
+
+function extractRowsFromDataSourceResponse(response: any): any[] {
+  if (Array.isArray((response as any)?.items)) return (response as any).items;
+  if (Array.isArray(response)) return response;
+  return [];
+}
+
+function rowsContainPath(rows: any[], path: string | undefined): boolean {
+  const normalizedPath = normalizeString(path);
+  if (!normalizedPath) return true;
+  return rows.some(row => getValueFromSourceRow(row, normalizedPath) !== undefined);
+}
+
+function cachedDataSourceResponseMatchesEffect(args: {
+  response: any;
+  effect: SelectionEffect;
+  question: WebQuestionDefinition;
+  usage: 'lineItems' | 'values';
+}): boolean {
+  const rows = extractRowsFromDataSourceResponse(args.response);
+  if (!rows.length) return false;
+  const sampleRow = rows.find(row => row && typeof row === 'object' && !Array.isArray(row)) || rows[0];
+
+  if (args.usage === 'values') {
+    const lookupFields = resolveLookupFields(args.effect, args.question, sampleRow);
+    if (!lookupFields.length || !lookupFields.some(field => rowsContainPath(rows, field))) return false;
+    const fieldMapping =
+      args.effect.fieldMapping && typeof args.effect.fieldMapping === 'object' ? args.effect.fieldMapping : {};
+    return Object.values(fieldMapping).every(sourcePath => rowsContainPath(rows, sourcePath));
+  }
+
+  const explicitLookupField =
+    args.effect.lookupField ||
+    args.question.dataSource?.mapping?.value ||
+    args.question.dataSource?.mapping?.id ||
+    '';
+  const matchField = normalizeString(args.effect.matchField);
+  const configuredLookupFields = Array.isArray((args.effect as any)?.lookupFields)
+    ? (args.effect as any).lookupFields.map((entry: any) => normalizeString(entry)).filter(Boolean)
+    : [];
+  const lookupFields =
+    explicitLookupField || configuredLookupFields.length
+      ? resolveLookupFields({ ...args.effect, lookupField: explicitLookupField } as SelectionEffect, args.question, sampleRow)
+      : [];
+  const hasLookupData =
+    matchField
+      ? rowsContainPath(rows, matchField)
+      : !lookupFields.length || lookupFields.some(field => rowsContainPath(rows, field));
+  if (!hasLookupData) return false;
+  if (args.effect.dataField && !rowsContainPath(rows, args.effect.dataField)) return false;
+  return true;
+}
+
+function findCachedDataSourceResponseForEffect(args: {
+  sourceConfig: DataSourceConfig;
+  language: LangCode;
+  effect: SelectionEffect;
+  question: WebQuestionDefinition;
+  usage: 'lineItems' | 'values';
+}): any | null {
+  const candidates: any[] = [];
+  const seen = new Set<any>();
+  const push = (candidate: any) => {
+    if (!candidate || seen.has(candidate)) return;
+    seen.add(candidate);
+    candidates.push(candidate);
+  };
+  if (typeof peekCachedDataSource === 'function') {
+    push(peekCachedDataSource(args.sourceConfig, args.language));
+  }
+  if (args.sourceConfig.id && typeof peekCachedDataSourcesById === 'function') {
+    peekCachedDataSourcesById(args.sourceConfig.id, args.language).forEach(push);
+  }
+  return (
+    candidates.find(candidate =>
+      cachedDataSourceResponseMatchesEffect({
+        response: candidate,
+        effect: args.effect,
+        question: args.question,
+        usage: args.usage
+      })
+    ) || null
+  );
 }
 
 function rowMatchesSelection(args: {
@@ -1149,15 +1246,9 @@ function applyValuesFromDataSource({
     return;
   }
 
-  (shouldForceDataSourceRefresh(effect)
-    ? fetchDataSource(sourceConfig, language, { forceRefresh: true })
-    : fetchDataSource(sourceConfig, language))
-    .then(res => {
-      const rows = Array.isArray((res as any)?.items)
-        ? (res as any).items
-        : Array.isArray(res)
-          ? res
-          : [];
+  const fetchOptions = buildDataSourceFetchOptions(effect, { preferLookupSourceValue });
+  const applyResponse = (res: any) => {
+      const rows = extractRowsFromDataSourceResponse(res);
       if (!rows.length) {
         if (effect.clearOnNoMatch) {
           Object.keys(fieldMapping).forEach(fieldId => {
@@ -1235,11 +1326,41 @@ function applyValuesFromDataSource({
           targetScope: lineItem?.groupId ? 'lineItem' : 'top'
         });
       }
-    })
+  };
+
+  const cachedResponse = fetchOptions
+    ? null
+    : findCachedDataSourceResponseForEffect({
+        sourceConfig,
+        language,
+        effect,
+        question,
+        usage: 'values'
+      });
+  if (cachedResponse) {
+    applyResponse(cachedResponse);
+    return;
+  }
+
+  const finishAsyncEffect = ctx.beginAsyncEffect?.({
+    questionId: question.id,
+    effectType: 'setValuesFromDataSource',
+    sourceId: sourceConfig.id || null,
+    targetGroupId: lineItem?.groupId || null,
+    rowId: lineItem?.rowId || null
+  });
+
+  (fetchOptions
+    ? fetchDataSource(sourceConfig, language, fetchOptions)
+    : fetchDataSource(sourceConfig, language))
+    .then(applyResponse)
     .catch(err => {
       if (debug && typeof console !== 'undefined') {
         console.error('[SelectionEffects] setValuesFromDataSource failed', err);
       }
+    })
+    .finally(() => {
+      finishAsyncEffect?.();
     });
 }
 
@@ -1337,18 +1458,12 @@ function populateLineItemsFromDataSource({
     });
   }
 
-  (shouldForceDataSourceRefresh(effect)
-    ? fetchDataSource(sourceConfig, language, { forceRefresh: true })
-    : fetchDataSource(sourceConfig, language))
-    .then(res => {
+  const fetchOptions = buildDataSourceFetchOptions(effect, { preferLookupSourceValue });
+  const applyResponse = (res: any) => {
       if (stateToken !== readContextToken(cache, contextId)) {
         return;
       }
-      const rows = Array.isArray((res as any)?.items)
-        ? (res as any).items
-        : Array.isArray(res)
-          ? res
-          : [];
+      const rows = extractRowsFromDataSourceResponse(res);
       if (!rows.length) {
         if (effect.clearOnNoMatch) {
           clearParentFieldMapping({
@@ -1583,11 +1698,42 @@ function populateLineItemsFromDataSource({
         lineItem,
         effectOverrides
       });
-    })
+  };
+
+  const cachedResponse = fetchOptions
+    ? null
+    : findCachedDataSourceResponseForEffect({
+        sourceConfig,
+        language,
+        effect,
+        question,
+        usage: 'lineItems'
+      });
+  if (cachedResponse) {
+    applyResponse(cachedResponse);
+    return;
+  }
+
+  const finishAsyncEffect = ctx.beginAsyncEffect?.({
+    questionId: question.id,
+    effectType: 'addLineItemsFromDataSource',
+    sourceId: sourceConfig.id || null,
+    targetGroupId,
+    rowId: lineItem?.rowId || null,
+    parentGroupId: lineItem?.groupId || null
+  });
+
+  (fetchOptions
+    ? fetchDataSource(sourceConfig, language, fetchOptions)
+    : fetchDataSource(sourceConfig, language))
+    .then(applyResponse)
     .catch(err => {
       if (debug && typeof console !== 'undefined') {
         console.error('[SelectionEffects] data-driven effect failed', err);
       }
+    })
+    .finally(() => {
+      finishAsyncEffect?.();
     });
 }
 

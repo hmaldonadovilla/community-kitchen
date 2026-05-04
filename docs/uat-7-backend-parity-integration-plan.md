@@ -199,13 +199,12 @@ Full gates for milestone completion:
 
 | Stage | Status | Notes |
 | --- | --- | --- |
-| Stage 0: Protect backend work | Pending | Needed before merging because current backend parity work is in a dirty worktree. |
-| Stage 1: Merge and stabilize UAT 7 | Pending | No transport restructuring; adapt incoming calls to current transport only. |
+| Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
+| Stage 1: Merge and stabilize UAT 7 | Code merged; validation in progress | `release/uat-7` was merged without transport restructuring. Unit/build gates are green; staging/manual or Playwright validation is still pending. |
 | Stage 2: Frontend/business logic separation | Pending | Work in small feature slices with targeted tests. |
 | Stage 3: Backend/domain separation follow-through | Pending | Align Apps Script and Cloud Run around use-case boundaries. |
 
 ## Open Questions
 
-- Whether to commit the current backend parity work as several local commits before the merge or create one safety branch plus staged commits as each slice is reviewed.
 - Which staging validation flow should be mandatory after Stage 1: full Meal Production Playwright flow, manual record create/edit, or both.
 - Whether Firestore support should wait until after Stage 3 or proceed in parallel once Drive/Sheets Cloud Run parity remains stable after the UAT 7 merge.

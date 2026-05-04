@@ -2,6 +2,7 @@ import {
   buildReservationFieldPatch,
   buildReservationFailureMessage,
   getReservationCommitMode,
+  shouldBlockDataSourceFreshnessForInvalidStepReservation,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
 } from '../../../src/web/react/components/form/reservationSyncPolicy';
@@ -124,19 +125,66 @@ describe('reservationSyncPolicy', () => {
     ).toBe(true);
   });
 
-  test('does not immediately sync step reservations when the edited line is still invalid', () => {
+  test('does not immediately sync step reservations when the edited line has invalid non-empty values', () => {
     expect(
       shouldImmediatelySyncStepReservationChange({
         patch: {
-          LEFTOVER_USE_QTY: null
+          LEFTOVER_USE_QTY: '5'
         },
         selectedFieldId: 'LEFTOVER_SELECTED',
         quantityFieldId: 'LEFTOVER_USE_QTY',
         selectedValue: true,
+        quantityValue: '5',
+        hasValidationErrors: true
+      })
+    ).toBe(false);
+  });
+
+  test('blocks datasource freshness while a selected step reservation is invalid and unsynced', () => {
+    expect(
+      shouldBlockDataSourceFreshnessForInvalidStepReservation({
+        patch: {
+          LEFTOVER_SELECTED: true
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: true,
+        quantityValue: '5',
+        hasValidationErrors: true
+      })
+    ).toBe(true);
+  });
+
+  test('does not block datasource freshness for invalid reservation edits that still sync a release', () => {
+    expect(
+      shouldBlockDataSourceFreshnessForInvalidStepReservation({
+        patch: {
+          LEFTOVER_SELECTED: false,
+          LEFTOVER_USE_QTY: null
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: false,
         quantityValue: null,
         hasValidationErrors: true
       })
     ).toBe(false);
+  });
+
+  test('immediately syncs step reservations when a quantity is cleared for release', () => {
+    expect(
+      shouldImmediatelySyncStepReservationChange({
+        patch: {
+          LEFTOVER_SELECTED: false,
+          LEFTOVER_USE_QTY: null
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: false,
+        quantityValue: null,
+        hasValidationErrors: true
+      })
+    ).toBe(true);
   });
 
   test('maps transient reservation lock failures to the user-facing recovery message', () => {

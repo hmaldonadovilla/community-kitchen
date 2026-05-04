@@ -24,4 +24,9 @@ describe('serverGeneratedValues', () => {
       MP_ID: 'MP-AA000123'
     });
   });
+
+  it('keeps the same values object when generated values are already applied', () => {
+    const current = { MP_SERVICE: 'Lunch', MP_ID: 'MP-AA000123' } as any;
+    expect(mergeServerGeneratedTopValues(current, { MP_ID: 'MP-AA000123' })).toBe(current);
+  });
 });

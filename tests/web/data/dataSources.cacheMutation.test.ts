@@ -102,6 +102,17 @@ describe('dataSources cache mutation', () => {
     expect((peekCachedDataSource(config, 'EN') as any)?.items?.[0]?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
   });
 
+  test('can skip committing a forced refresh result when a caller guard fails', async () => {
+    const res = await fetchDataSource(config, 'EN', {
+      forceRefresh: true,
+      shouldCommit: () => false
+    });
+
+    expect((res as any)?.items?.[0]?.LEFTOVER_ID).toBe('LE-1');
+    expect(peekCachedDataSource(config, 'EN')).toBeNull();
+    expect(windowStub.localStorage.length).toBe(0);
+  });
+
   test('adopts persisted datasource updates from another tab', async () => {
     await fetchDataSource(config, 'EN');
     const initial = peekCachedDataSource(config, 'EN') as any;

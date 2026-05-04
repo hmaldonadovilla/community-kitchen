@@ -896,7 +896,7 @@
           ],
           "submit": [
             {
-              "id": "ck-70.leftoverForm.futurePrepDate.blockNext",
+              "id": "ck-70.deliveryForm.futurePrepDate.blockNext",
               "when": {
                 "all": [
                   {
@@ -908,7 +908,47 @@
                   {
                     "fieldId": "__ckStep",
                     "equals": [
-                      "leftoverForm"
+                      "deliveryForm"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInFuture": true
+                  }
+                ]
+              },
+              "disable": true,
+              "dialogTrigger": "onEnable",
+              "dialog": {
+                "message": {
+                  "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                  "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                  "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                },
+                "confirmLabel": {
+                  "en": "OK",
+                  "fr": "OK",
+                  "nl": "OK"
+                },
+                "showCancel": false,
+                "showCloseButton": false,
+                "dismissOnBackdrop": false
+              }
+            },
+            {
+              "id": "ck-70.leftovers.futurePrepDate.blockComplete",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
                     ]
                   },
                   {
@@ -2726,6 +2766,7 @@
                                   "sourceSync": {
                                     "refreshOnInit": true,
                                     "forceRefresh": true,
+                                    "forceRefreshMaxCacheAgeMs": 120000,
                                     "stopWhen": {
                                       "fieldId": "status",
                                       "equals": "Closed"
@@ -2852,21 +2893,13 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "any": [
-              {
-                "fieldId": "status",
-                "equals": [
-                  "PDF ready",
-                  "Emailed",
-                  "Final report created",
-                  "Final report emailed",
-                  "Closed"
-                ]
-              },
-              {
-                "fieldId": "MP_PREP_DATE",
-                "isInFuture": true
-              }
+            "fieldId": "status",
+            "equals": [
+              "PDF ready",
+              "Emailed",
+              "Final report created",
+              "Final report emailed",
+              "Closed"
             ]
           },
           "contextHeader": {
@@ -2911,12 +2944,18 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "stepBarAccessWhen": {
+              "not": {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            }
           },
           "helpText": {
-            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
-            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
-            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
+            "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",
+            "fr": "Avant le portionnement, confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo pour chaque marmite.",
+            "nl": "Bevestig vóór het portioneren dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per kookpot toe."
           }
         },
         {
@@ -3078,6 +3117,10 @@
         },
         {
           "id": "leftovers",
+          "excludeWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          },
           "contextHeader": {
             "parts": [
               {
@@ -3377,13 +3420,16 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          "en": "Deselect any ingredient that should not be part of this leftover.",
+                          "fr": "Deselect any ingredient that should not be part of this leftover.",
+                          "nl": "Deselect any ingredient that should not be part of this leftover."
                         },
                         "groupOverride": {
                           "ui": {
                             "maxVisibleRows": 0,
+                            "rowSort": {
+                              "fieldId": "ING"
+                            },
                             "tableColumnWidths": {
                               "ING_SELECTED": "44px",
                               "ING": "calc(100% - 44px)",
@@ -3395,9 +3441,6 @@
                         "overlaySession": {
                           "enabled": true,
                           "fillAvailableHeight": true,
-                          "bulkSelection": {
-                            "fieldId": "ING_SELECTED"
-                          },
                           "saveLabel": {
                             "en": "Save",
                             "fr": "Save",
@@ -4610,8 +4653,8 @@
           ],
           "addButtonPlacement": "top",
           "tableColumnWidths": {
-            "LEFTOVER_INGREDIENT": "46%",
-            "LEFTOVER_QTY": "18%",
+            "LEFTOVER_INGREDIENT": "40%",
+            "LEFTOVER_QTY": "24%",
             "LEFTOVER_UNIT": "18%",
             "LEFTOVER_FROZEN": "18%",
             "__remove": "44px"
@@ -5381,6 +5424,7 @@
                     "sourceSync": {
                       "refreshOnInit": true,
                       "forceRefresh": true,
+                      "forceRefreshMaxCacheAgeMs": 120000,
                       "stopWhen": {
                         "fieldId": "status",
                         "equals": "Closed"
@@ -5866,8 +5910,38 @@
             ],
             "changeDialog": {
               "when": {
-                "fieldId": "ORD_QTY",
-                "equals": 0
+                "all": [
+                  {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  {
+                    "lineItems": {
+                      "groupId": "MP_MEALS_REQUEST",
+                      "subGroupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "when": {
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Multi-ingredient",
+                              "Single-ingredient"
+                            ]
+                          },
+                          {
+                            "fieldId": "RECIPE",
+                            "notEmpty": true
+                          },
+                          {
+                            "fieldId": "LEFTOVER_ID",
+                            "notEmpty": true
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
               },
               "title": {
                 "en": "Update ordered portions",
@@ -6485,6 +6559,7 @@
                     "sourceSync": {
                       "refreshOnInit": true,
                       "forceRefresh": true,
+                      "forceRefreshMaxCacheAgeMs": 120000,
                       "stopWhen": {
                         "fieldId": "status",
                         "equals": "Closed"
@@ -6841,6 +6916,7 @@
                         "sourceSync": {
                           "refreshOnInit": true,
                           "forceRefresh": true,
+                          "forceRefreshMaxCacheAgeMs": 120000,
                           "stopWhen": {
                             "fieldId": "status",
                             "equals": "Closed"
@@ -7370,6 +7446,18 @@
           "en": "The photos you changed are not saved yet. Close without saving them?",
           "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
           "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+        },
+        "waitMessages": {
+          "save": {
+            "en": "Please wait while we save your photo(s)",
+            "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+            "nl": "Wacht even terwijl we je foto('s) opslaan"
+          },
+          "removeSelected": {
+            "en": "Please wait while we remove selected photo(s)",
+            "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+            "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+          }
         }
       }
     },
@@ -7518,6 +7606,18 @@
           "en": "The photos you changed are not saved yet. Close without saving them?",
           "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
           "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+        },
+        "waitMessages": {
+          "save": {
+            "en": "Please wait while we save your photo(s)",
+            "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+            "nl": "Wacht even terwijl we je foto('s) opslaan"
+          },
+          "removeSelected": {
+            "en": "Please wait while we remove selected photo(s)",
+            "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+            "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+          }
         }
       },
       "validationRules": [
@@ -7594,7 +7694,10 @@
       "visibility": {
         "showWhen": {
           "fieldId": "status",
-          "equals": "Closed"
+          "equals": [
+            "Final report emailed",
+            "Closed"
+          ]
         }
       },
       "button": {
@@ -8438,8 +8541,8 @@
             ],
             "addButtonPlacement": "top",
             "tableColumnWidths": {
-              "LEFTOVER_INGREDIENT": "46%",
-              "LEFTOVER_QTY": "18%",
+              "LEFTOVER_INGREDIENT": "40%",
+              "LEFTOVER_QTY": "24%",
               "LEFTOVER_UNIT": "18%",
               "LEFTOVER_FROZEN": "18%",
               "__remove": "44px"
@@ -9209,6 +9312,7 @@
                       "sourceSync": {
                         "refreshOnInit": true,
                         "forceRefresh": true,
+                        "forceRefreshMaxCacheAgeMs": 120000,
                         "stopWhen": {
                           "fieldId": "status",
                           "equals": "Closed"
@@ -9800,8 +9904,38 @@
               ],
               "changeDialog": {
                 "when": {
-                  "fieldId": "ORD_QTY",
-                  "equals": 0
+                  "all": [
+                    {
+                      "fieldId": "ORD_QTY",
+                      "equals": 0
+                    },
+                    {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "subGroupId": "MP_TYPE_LI",
+                        "match": "any",
+                        "when": {
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Multi-ingredient",
+                                "Single-ingredient"
+                              ]
+                            },
+                            {
+                              "fieldId": "RECIPE",
+                              "notEmpty": true
+                            },
+                            {
+                              "fieldId": "LEFTOVER_ID",
+                              "notEmpty": true
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 },
                 "title": {
                   "en": "Update ordered portions",
@@ -10381,6 +10515,7 @@
                       "sourceSync": {
                         "refreshOnInit": true,
                         "forceRefresh": true,
+                        "forceRefreshMaxCacheAgeMs": 120000,
                         "stopWhen": {
                           "fieldId": "status",
                           "equals": "Closed"
@@ -10737,6 +10872,7 @@
                           "sourceSync": {
                             "refreshOnInit": true,
                             "forceRefresh": true,
+                            "forceRefreshMaxCacheAgeMs": 120000,
                             "stopWhen": {
                               "fieldId": "status",
                               "equals": "Closed"
@@ -11266,6 +11402,18 @@
             "en": "The photos you changed are not saved yet. Close without saving them?",
             "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
             "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+          },
+          "waitMessages": {
+            "save": {
+              "en": "Please wait while we save your photo(s)",
+              "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+              "nl": "Wacht even terwijl we je foto('s) opslaan"
+            },
+            "removeSelected": {
+              "en": "Please wait while we remove selected photo(s)",
+              "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+              "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+            }
           }
         }
       },
@@ -11414,6 +11562,18 @@
             "en": "The photos you changed are not saved yet. Close without saving them?",
             "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
             "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+          },
+          "waitMessages": {
+            "save": {
+              "en": "Please wait while we save your photo(s)",
+              "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
+              "nl": "Wacht even terwijl we je foto('s) opslaan"
+            },
+            "removeSelected": {
+              "en": "Please wait while we remove selected photo(s)",
+              "fr": "Veuillez patienter pendant la suppression des photo(s) sélectionnée(s)",
+              "nl": "Wacht even terwijl we de geselecteerde foto('s) verwijderen"
+            }
           }
         },
         "validationRules": [
@@ -11490,7 +11650,10 @@
         "visibility": {
           "showWhen": {
             "fieldId": "status",
-            "equals": "Closed"
+            "equals": [
+              "Final report emailed",
+              "Closed"
+            ]
           }
         },
         "button": {
@@ -12769,6 +12932,46 @@
                     "fieldId": "__ckStep",
                     "equals": [
                       "deliveryForm"
+                    ]
+                  },
+                  {
+                    "fieldId": "MP_PREP_DATE",
+                    "isInFuture": true
+                  }
+                ]
+              },
+              "disable": true,
+              "dialogTrigger": "onEnable",
+              "dialog": {
+                "message": {
+                  "en": "Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.",
+                  "fr": "La photo de réception des ingrédients, la sécurité alimentaire et le portionnement ne peuvent être enregistrés que le jour de la production.",
+                  "nl": "Foto van ingrediëntenontvangst, voedselveiligheid en portionering kunnen alleen worden vastgelegd op de dag van productie."
+                },
+                "confirmLabel": {
+                  "en": "OK",
+                  "fr": "OK",
+                  "nl": "OK"
+                },
+                "showCancel": false,
+                "showCloseButton": false,
+                "dismissOnBackdrop": false
+              }
+            },
+            {
+              "id": "ck-70.leftovers.futurePrepDate.blockComplete",
+              "when": {
+                "all": [
+                  {
+                    "fieldId": "__ckView",
+                    "equals": [
+                      "form"
+                    ]
+                  },
+                  {
+                    "fieldId": "__ckStep",
+                    "equals": [
+                      "leftovers"
                     ]
                   },
                   {
@@ -14540,6 +14743,7 @@
                                   "sourceSync": {
                                     "refreshOnInit": true,
                                     "forceRefresh": true,
+                                    "forceRefreshMaxCacheAgeMs": 120000,
                                     "stopWhen": {
                                       "fieldId": "status",
                                       "equals": "Closed"
@@ -14666,21 +14870,13 @@
         {
           "id": "foodSafety",
           "excludeWhen": {
-            "any": [
-              {
-                "fieldId": "status",
-                "equals": [
-                  "PDF ready",
-                  "Emailed",
-                  "Final report created",
-                  "Final report emailed",
-                  "Closed"
-                ]
-              },
-              {
-                "fieldId": "MP_PREP_DATE",
-                "isInFuture": true
-              }
+            "fieldId": "status",
+            "equals": [
+              "PDF ready",
+              "Emailed",
+              "Final report created",
+              "Final report emailed",
+              "Closed"
             ]
           },
           "contextHeader": {
@@ -14725,12 +14921,18 @@
           },
           "navigation": {
             "forwardGate": "whenValid",
-            "autoAdvance": "off"
+            "autoAdvance": "off",
+            "stepBarAccessWhen": {
+              "not": {
+                "fieldId": "MP_PREP_DATE",
+                "isInFuture": true
+              }
+            }
           },
           "helpText": {
-            "en": "Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.",
-            "fr": "Confirmez une fois que toutes les marmites ont atteint au moins 63°C et ajoutez une preuve photo avant le portionnement.",
-            "nl": "Bevestig één keer dat alle kookpotten minstens 63°C hebben bereikt en voeg fotobewijs toe vóór het portioneren."
+            "en": "Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.",
+            "fr": "Avant le portionnement, confirmez que toutes les marmites ont atteint au moins 63°C et ajoutez une photo pour chaque marmite.",
+            "nl": "Bevestig vóór het portioneren dat alle kookpotten minstens 63°C hebben bereikt en voeg één foto per kookpot toe."
           }
         },
         {
@@ -14892,6 +15094,10 @@
         },
         {
           "id": "leftovers",
+          "excludeWhen": {
+            "fieldId": "MP_PREP_DATE",
+            "isInFuture": true
+          },
           "contextHeader": {
             "parts": [
               {
@@ -15191,13 +15397,16 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "fr": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly.",
-                          "nl": "Deselect any ingredient that should not be part of this leftover.\nUse Select all or Deselect all to update the full list quickly."
+                          "en": "Deselect any ingredient that should not be part of this leftover.",
+                          "fr": "Deselect any ingredient that should not be part of this leftover.",
+                          "nl": "Deselect any ingredient that should not be part of this leftover."
                         },
                         "groupOverride": {
                           "ui": {
                             "maxVisibleRows": 0,
+                            "rowSort": {
+                              "fieldId": "ING"
+                            },
                             "tableColumnWidths": {
                               "ING_SELECTED": "44px",
                               "ING": "calc(100% - 44px)",
@@ -15209,9 +15418,6 @@
                         "overlaySession": {
                           "enabled": true,
                           "fillAvailableHeight": true,
-                          "bulkSelection": {
-                            "fieldId": "ING_SELECTED"
-                          },
                           "saveLabel": {
                             "en": "Save",
                             "fr": "Save",

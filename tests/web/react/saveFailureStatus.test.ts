@@ -16,6 +16,18 @@ describe('save failure status helpers', () => {
     ).toBe(true);
     expect(
       shouldClearStatusAfterSuccessfulSave({
+        status: 'Could not acquire the record save lock. Please retry.',
+        statusTone: 'error'
+      })
+    ).toBe(true);
+    expect(
+      shouldClearStatusAfterSuccessfulSave({
+        status: 'Could not queue record mutation. Please retry.',
+        statusTone: 'error'
+      })
+    ).toBe(true);
+    expect(
+      shouldClearStatusAfterSuccessfulSave({
         status: 'Could not add photos.',
         statusTone: 'error'
       })

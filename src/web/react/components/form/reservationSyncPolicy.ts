@@ -57,24 +57,46 @@ export const shouldImmediatelySyncStepReservationChange = (args: {
 }): boolean => {
   const patch = args.patch || {};
   if (!Object.keys(patch).length) return false;
-  if (args.hasValidationErrors) return false;
 
   const selectedFieldId = (args.selectedFieldId || '').toString().trim();
   const quantityFieldId = (args.quantityFieldId || '').toString().trim();
+  const touchesQuantity = !!quantityFieldId && Object.prototype.hasOwnProperty.call(patch, quantityFieldId);
   const selected = selectedFieldId
     ? (Object.prototype.hasOwnProperty.call(patch, selectedFieldId) ? patch[selectedFieldId] : args.selectedValue) === true
     : true;
 
   if (!selected) return true;
-  if (!quantityFieldId) return true;
+  if (!quantityFieldId) return !args.hasValidationErrors;
 
   const quantityText = normalizeReservationValue(
-    Object.prototype.hasOwnProperty.call(patch, quantityFieldId) ? patch[quantityFieldId] : args.quantityValue
+    touchesQuantity ? patch[quantityFieldId] : args.quantityValue
   );
-  if (quantityText === null) return false;
+  if (quantityText === null) return touchesQuantity;
+  if (args.hasValidationErrors) return false;
 
   const quantity = Number(quantityText);
   return Number.isFinite(quantity) && quantity >= 0;
+};
+
+export const shouldBlockDataSourceFreshnessForInvalidStepReservation = (args: {
+  patch: Record<string, any>;
+  selectedFieldId?: string;
+  quantityFieldId?: string;
+  selectedValue?: unknown;
+  quantityValue?: unknown;
+  hasValidationErrors?: boolean;
+}): boolean => {
+  if (!args.hasValidationErrors) return false;
+  const patch = args.patch || {};
+  if (!Object.keys(patch).length) return false;
+
+  const selectedFieldId = (args.selectedFieldId || '').toString().trim();
+  const selected = selectedFieldId
+    ? (Object.prototype.hasOwnProperty.call(patch, selectedFieldId) ? patch[selectedFieldId] : args.selectedValue) === true
+    : true;
+  if (!selected) return false;
+
+  return !shouldImmediatelySyncStepReservationChange(args);
 };
 
 export const buildReservationFailureMessage = (

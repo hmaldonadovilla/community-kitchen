@@ -16,6 +16,7 @@ type RunSelectionEffectsForAncestorsArgs = {
       lineItem?: { groupId: string; rowId: string; rowValues: any };
       contextId?: string;
       forceContextReset?: boolean;
+      snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     }
   ) => void;
   sourceGroupKey: string;
@@ -176,7 +177,11 @@ export const runSelectionEffectsForAncestors = (args: RunSelectionEffectsForAnce
       onSelectionEffect(effectQuestion, nextValue ?? null, {
         contextId,
         lineItem: { groupId: groupKey, rowId: targetRowId, rowValues },
-        forceContextReset: dependencyChanged || undefined
+        forceContextReset: dependencyChanged || undefined,
+        snapshots: {
+          values: topValuesForMode,
+          lineItems: nextLineItems
+        }
       });
     });
   };

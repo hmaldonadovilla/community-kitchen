@@ -905,6 +905,15 @@ components:
             Optional helper text shown under the upload control (e.g. remaining attachments).
             Supports template variables like `{count}`.
             When omitted, the UI falls back to the built-in system strings (`files.remainingOne` / `files.remainingMany`).
+        waitMessages:
+          $ref: '#/components/schemas/FileUploadWaitMessages'
+          description: |
+            Optional localized wait messages used when `blockUntilSaved` is true.
+
+            Example:
+            - `{ "save": { "en": "Please wait while we save your photo(s)" }, "removeSelected": { "en": "Please wait while we remove selected photo(s)" } }`
+
+            When omitted, the UI falls back to generic file-based system strings.
         linkLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -933,7 +942,7 @@ components:
           $ref: '#/components/schemas/FileUploadCompressionConfig'
           description: Optional client-side compression settings applied before upload.
       description: |
-        Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. Uploads are persisted through the queued record save lane so Drive URLs and the form record update in one save transaction. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/remove/drop/save action.
+        Upload settings consumed by FILE_UPLOAD questions. The React UI renders drag-and-drop dropzones that enforce these caps, show remaining slots + total size, and announce state changes for assistive tech. Uploads are persisted through the queued record save lane so Drive URLs and the form record update in one save transaction. Failed upload-and-save transactions keep the local photo changes in the field and show a retry action that sends the same transaction again. When `CK_DEBUG` (and thus `__WEB_FORM_DEBUG__`) is enabled the form also emits `[ReactForm] upload.*` diagnostics in DevTools for every add/remove/drop/save/retry action.
 
     FileUploadHelperText:
       oneOf:
@@ -956,6 +965,19 @@ components:
           description: |
             Helper text when 2+ slots remain. Variables: {count}
       description: Optional per-field overrides for remaining-slot helper text.
+
+    FileUploadWaitMessages:
+      type: object
+      properties:
+        save:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown while an upload + record-save transaction is in progress.
+        removeSelected:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown while a remove-one or remove-all transaction is in progress.
+      description: Optional per-field overrides for blocking upload wait messages.
 
     FileUploadUiConfig:
       type: object
@@ -1553,6 +1575,30 @@ components:
             - belowTitle: render as text under the title (no pill)
             - hidden: do not render `infoText`
 
+    LineItemRowSortConfig:
+      type: object
+      required: [fieldId]
+      properties:
+        fieldId:
+          type: string
+          description: Field id used to sort rendered line-item rows.
+        direction:
+          type: string
+          enum: [asc, desc]
+          description: Sort direction. Defaults to `asc`.
+        empty:
+          type: string
+          enum: [first, last]
+          description: Where empty values should render. Defaults to `last`.
+        mode:
+          type: string
+          enum: [auto, text, number]
+          description: |
+            Sort comparison mode.
+            - `auto`: NUMBER fields sort numerically; other fields sort as text.
+            - `text`: force text comparison.
+            - `number`: force numeric comparison before text fallback.
+
     ClearOnChangeConfig:
       type: object
       properties:
@@ -1599,6 +1645,11 @@ components:
             Optional per-column widths for table mode. Keys should match field ids, plus action keys:
             `__remove`, `__view`, `__edit` (action columns) and `_remove`, `_view`, `_edit` (overlay header aliases).
             Values can be CSS widths (e.g., "50%", "120px") or numbers (treated as percent).
+        rowSort:
+          $ref: '#/components/schemas/LineItemRowSortConfig'
+          description: |
+            Optional display-only row ordering for line-item groups and subgroups.
+            This changes rendered order only; it does not mutate saved line-item row order.
         nonMatchWarningMode:
           type: string
           enum: [descriptive, validation, both]
@@ -6379,9 +6430,9 @@ components:
         - `{requested}`
         - `{current}`
 
-        For guided datasource-row allocation steps that should not write reservations while the user is still
-        editing, set `reservation.commitMode: "step"` on the datasource-row config. The client keeps the edits
-        local and sends one batched reservation plan when the step milestone succeeds.
+        For guided datasource-row allocation steps that should avoid per-keystroke ledger writes, set
+        `reservation.commitMode: "step"` on the datasource-row config. The client updates availability locally
+        first, then live-syncs one batched step reservation plan on valid selection edits and quantity blur.
       properties:
         title:
           oneOf:
@@ -6668,6 +6719,13 @@ components:
             forceRefresh:
               type: boolean
               description: Bypass the client datasource cache when this effect fetches source rows.
+            forceRefreshMaxCacheAgeMs:
+              type: number
+              minimum: 0
+              description: |
+                When `forceRefresh` is true, allow a fresh in-memory datasource response to satisfy
+                the effect instead of starting another server fetch. Use this for relatively stable
+                master data that was already prefetched just before the user changed the field.
             stopWhen:
               $ref: '#/components/schemas/WhenClause'
               description: Freeze synchronization while this condition matches.

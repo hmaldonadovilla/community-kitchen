@@ -35,6 +35,7 @@ describe('inventory availability snapshots', () => {
         LEFTOVER_STATUS: 'available',
         LEFTOVER_UNIT: 'gr',
         __ckCurrentRecordReservedQuantity: 0,
+        __ckServerCurrentRecordReservedQuantity: 0,
         __ckCurrentReservationQuantity: 0,
         __ckFreeQuantity: 500
       })
@@ -49,6 +50,7 @@ describe('inventory availability snapshots', () => {
       LEFTOVER_STATUS: 'available',
       LEFTOVER_UNIT: 'gr',
       __ckCurrentRecordReservedQuantity: 0,
+      __ckServerCurrentRecordReservedQuantity: 0,
       __ckCurrentReservationQuantity: 0,
       __ckFreeQuantity: 500
     };

@@ -30,6 +30,46 @@ describe('line item totals', () => {
     expect(totals.find(t => t.key === 'count' || t.label === 'Rows')?.value).toBe(2);
     expect(totals.find(t => t.key === 'amount' || t.label === 'amount')?.value).toBe(4);
   });
+
+  it('defers sum totals while a contributing field value is invalid', () => {
+    const totals = computeTotals(
+      {
+        config: config as any,
+        groupId: 'MEALS',
+        invalidFieldPaths: {
+          MEALS__amount__2: 'Amount must be positive'
+        },
+        rows: [
+          { id: '1', values: { amount: '10' } },
+          { id: '2', values: { amount: '-4' } }
+        ]
+      },
+      'EN'
+    );
+    const amountTotal = totals.find(t => t.key === 'amount' || t.label === 'amount');
+    expect(amountTotal?.pending).toBe(true);
+    expect(amountTotal?.value).toBe(0);
+  });
+
+  it('does not defer sum totals for unrelated invalid fields', () => {
+    const totals = computeTotals(
+      {
+        config: config as any,
+        groupId: 'MEALS',
+        invalidFieldPaths: {
+          MEALS__note__2: 'Note is invalid'
+        },
+        rows: [
+          { id: '1', values: { amount: '10' } },
+          { id: '2', values: { amount: '4', note: '' } }
+        ]
+      },
+      'EN'
+    );
+    const amountTotal = totals.find(t => t.key === 'amount' || t.label === 'amount');
+    expect(amountTotal?.pending).toBe(false);
+    expect(amountTotal?.value).toBe(14);
+  });
 });
 
 describe('line item row limits', () => {

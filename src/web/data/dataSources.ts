@@ -12,7 +12,14 @@ declare const google: {
 } | undefined;
 
 type CacheKey = string;
+type FetchDataSourceOptions = {
+  forceRefresh?: boolean;
+  commit?: boolean;
+  shouldCommit?: () => boolean;
+  forceRefreshMaxCacheAgeMs?: number;
+};
 const cache: Map<CacheKey, any> = new Map();
+const cacheSavedAtMs: Map<CacheKey, number> = new Map();
 const inflight: Map<CacheKey, Promise<any>> = new Map();
 export const DATA_SOURCE_CACHE_CLEARED_EVENT = 'ck:datasourcecachecleared';
 export const DATA_SOURCE_CACHE_UPDATED_EVENT = 'ck:datasourcecacheupdated';
@@ -125,6 +132,30 @@ const parsePersistEnvelope = (
   }
 };
 
+const setInMemoryCache = (cacheKey: CacheKey, value: any, savedAtMs?: number | null): void => {
+  cache.set(cacheKey, value);
+  const resolvedSavedAtMs = Number(savedAtMs);
+  cacheSavedAtMs.set(cacheKey, Number.isFinite(resolvedSavedAtMs) && resolvedSavedAtMs > 0 ? resolvedSavedAtMs : Date.now());
+};
+
+const deleteInMemoryCache = (cacheKey: CacheKey): void => {
+  cache.delete(cacheKey);
+  cacheSavedAtMs.delete(cacheKey);
+};
+
+const resolveForceRefreshMaxCacheAgeMs = (opts?: FetchDataSourceOptions): number | null => {
+  const raw = Number(opts?.forceRefreshMaxCacheAgeMs);
+  return Number.isFinite(raw) && raw >= 0 ? raw : null;
+};
+
+const peekFreshInMemoryCache = (cacheKey: CacheKey, maxAgeMs: number | null): any | null => {
+  if (maxAgeMs === null || !cache.has(cacheKey)) return null;
+  const savedAtMs = cacheSavedAtMs.get(cacheKey);
+  if (!Number.isFinite(savedAtMs)) return null;
+  if (Date.now() - Number(savedAtMs) > maxAgeMs) return null;
+  return cache.get(cacheKey) ?? null;
+};
+
 const emitCacheUpdated = (config: DataSourceConfig, language: LangCode, itemCount: number): void => {
   try {
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
@@ -138,7 +169,7 @@ const emitCacheUpdated = (config: DataSourceConfig, language: LangCode, itemCoun
         })
       );
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
 };
@@ -165,7 +196,10 @@ const prunePersistedSiblingKeys = (
   });
 };
 
-const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null => {
+const loadPersistedEnvelope = (
+  config: DataSourceConfig,
+  language: LangCode
+): { response: any; savedAtMs: number | null } | null => {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
     const targetKey = getPersistKey(config, language);
@@ -190,16 +224,21 @@ const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null
     if (parsed.legacy) {
       try {
         window.localStorage.removeItem(targetKey);
-      } catch (_) {
+      } catch {
         // ignore
       }
       return null;
     }
-    return parsed.response && typeof parsed.response === 'object' ? parsed.response : null;
+    return parsed.response && typeof parsed.response === 'object'
+      ? { response: parsed.response, savedAtMs: parsed.savedAtMs }
+      : null;
   } catch {
     return null;
   }
 };
+
+const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null =>
+  loadPersistedEnvelope(config, language)?.response ?? null;
 
 const savePersisted = (config: DataSourceConfig, language: LangCode, value: any): void => {
   if (typeof window === 'undefined' || !window.localStorage) return;
@@ -252,7 +291,7 @@ const clearSiblingInMemoryCacheEntries = (args: {
   Array.from(cache.keys()).forEach(candidateKey => {
     if (!candidateKey.startsWith(cacheKeyPrefix)) return;
     if (args.keepCacheKey && candidateKey === args.keepCacheKey) return;
-    cache.delete(candidateKey);
+    deleteInMemoryCache(candidateKey);
   });
 };
 
@@ -278,7 +317,7 @@ const ensureStorageSyncListener = (): void => {
 
       const persisted = event.newValue ? parsePersistEnvelope(event.newValue) : null;
       if (persisted?.response !== null && persisted?.response !== undefined) {
-        cache.set(exactCacheKey, persisted.response);
+        setInMemoryCache(exactCacheKey, persisted.response, persisted.savedAtMs);
         emitCacheUpdated(
           { id: parsedKey.id } as DataSourceConfig,
           parsedKey.language,
@@ -287,7 +326,7 @@ const ensureStorageSyncListener = (): void => {
         return;
       }
 
-      cache.delete(exactCacheKey);
+      deleteInMemoryCache(exactCacheKey);
       emitCacheUpdated({ id: parsedKey.id } as DataSourceConfig, parsedKey.language, 0);
     } catch {
       // ignore cross-tab cache sync failures
@@ -307,7 +346,7 @@ function emitLog(
       const parentConsole = (window.parent as any).console as Console | undefined;
       parentConsole?.[level]?.(message, payload);
     }
-  } catch (_) {
+  } catch {
     // ignore cross-origin errors
   }
 }
@@ -376,12 +415,25 @@ const fetchDataSourcePageViaAppsScript = (
 export async function fetchDataSource(
   config: DataSourceConfig,
   language: LangCode,
-  opts?: { forceRefresh?: boolean }
+  opts?: FetchDataSourceOptions
 ): Promise<any> {
   ensureStorageSyncListener();
   const cacheKey = key(config, language);
   const mode = ((config as any)?.mode || '').toString().trim().toLowerCase();
   const autoPage = mode === 'options';
+  const forceRefreshMaxCacheAgeMs = resolveForceRefreshMaxCacheAgeMs(opts);
+
+  if (opts?.forceRefresh && forceRefreshMaxCacheAgeMs !== null) {
+    const freshCached = peekFreshInMemoryCache(cacheKey, forceRefreshMaxCacheAgeMs);
+    if (freshCached) {
+      emitLog('info', '[DataSource] force refresh reused fresh cache', {
+        id: config.id,
+        maxCacheAgeMs: forceRefreshMaxCacheAgeMs,
+        itemCount: resolveCachedItemCount(freshCached) ?? 0
+      });
+      return freshCached;
+    }
+  }
 
   if (!opts?.forceRefresh) {
     if (cache.has(cacheKey)) return cache.get(cacheKey);
@@ -389,11 +441,12 @@ export async function fetchDataSource(
     if (inflightExisting) return inflightExisting;
 
     // Best-effort persisted cache for stable/master data sources.
-    const persisted = loadPersisted(config, language);
+    const persistedEnvelope = loadPersistedEnvelope(config, language);
+    const persisted = persistedEnvelope?.response;
     if (persisted) {
       const hasMore = autoPage && typeof (persisted as any)?.nextPageToken === 'string' && !!(persisted as any)?.nextPageToken;
       if (!hasMore) {
-        cache.set(cacheKey, persisted);
+        setInMemoryCache(cacheKey, persisted, persistedEnvelope.savedAtMs);
         return persisted;
       }
       // Fall through: complete pagination so we don't get stuck returning only the first page.
@@ -512,8 +565,18 @@ export async function fetchDataSource(
       refreshed: Boolean(opts?.forceRefresh)
     });
 
-    cache.set(cacheKey, finalRes);
-    if (finalRes) {
+    let shouldCommit = opts?.commit !== false;
+    if (shouldCommit && typeof opts?.shouldCommit === 'function') {
+      try {
+        shouldCommit = opts.shouldCommit() !== false;
+      } catch {
+        shouldCommit = false;
+      }
+    }
+    if (shouldCommit) {
+      setInMemoryCache(cacheKey, finalRes);
+    }
+    if (finalRes && shouldCommit) {
       savePersisted(config, language, finalRes);
       const itemCount = Array.isArray((finalRes as any)?.items)
         ? (finalRes as any).items.length
@@ -694,7 +757,7 @@ export function mutateCachedDataSource(
     };
   }
 
-  cache.set(cacheKey, next);
+  setInMemoryCache(cacheKey, next);
   savePersisted(config, language, next);
   const itemCount = Array.isArray((next as any)?.items)
     ? (next as any).items.length
@@ -715,6 +778,7 @@ export function mutateCachedDataSource(
  */
 export function clearFetchDataSourceCache(opts?: { includePersisted?: boolean }): void {
   cache.clear();
+  cacheSavedAtMs.clear();
   inflight.clear();
   if (opts?.includePersisted !== false) {
     try {

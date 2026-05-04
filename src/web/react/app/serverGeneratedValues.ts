@@ -20,12 +20,13 @@ export const mergeServerGeneratedTopValues = (
 ): Record<string, FieldValue> => {
   const entries = Object.entries(generatedValues || {});
   if (!entries.length) return values;
-  return entries.reduce<Record<string, FieldValue>>(
-    (acc, [fieldId, value]) => {
-      if (!fieldId) return acc;
-      acc[fieldId] = value;
-      return acc;
-    },
-    { ...(values || {}) }
-  );
+  const base = values || {};
+  let next: Record<string, FieldValue> | null = null;
+  entries.forEach(([fieldId, value]) => {
+    if (!fieldId) return;
+    if ((base as any)[fieldId] === value) return;
+    if (!next) next = { ...base };
+    next[fieldId] = value;
+  });
+  return next || values;
 };

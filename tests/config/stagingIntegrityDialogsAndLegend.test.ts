@@ -163,6 +163,26 @@ describe('staging integrity dialogs and list legend config', () => {
       });
 
       const meals = findQuestion(questions, 'MP_MEALS_REQUEST');
+      const ordQty = (meals?.lineItemConfig?.fields || []).find((field: any) => field?.id === 'ORD_QTY');
+      expect(ordQty?.changeDialog?.when).toEqual({
+        all: [
+          { fieldId: 'ORD_QTY', equals: 0 },
+          {
+            lineItems: {
+              groupId: 'MP_MEALS_REQUEST',
+              subGroupId: 'MP_TYPE_LI',
+              match: 'any',
+              when: {
+                any: [
+                  { fieldId: 'PREP_TYPE', equals: ['Multi-ingredient', 'Single-ingredient'] },
+                  { fieldId: 'RECIPE', notEmpty: true },
+                  { fieldId: 'LEFTOVER_ID', notEmpty: true }
+                ]
+              }
+            }
+          }
+        ]
+      });
       const recipe = (meals?.lineItemConfig?.subGroups || [])
         .find((entry: any) => entry?.id === 'MP_TYPE_LI')
         ?.fields?.find((field: any) => field?.id === 'RECIPE');
@@ -489,23 +509,21 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(foodSafetyQuestionIds.has('TEMP_EVD')).toBe(true);
       expect((foodSafety?.include || []).some((entry: any) => entry?.kind === 'lineGroup')).toBe(false);
       expect(foodSafety?.helpText?.en).toBe(
-        'Confirm once that all cooking pots reached at least 63°C and add photo evidence before portioning.'
+        'Before portioning, confirm all pots reached at least 63°C and add one photo for each pot.'
       );
       expect(foodSafety?.navigation).toEqual({
         forwardGate: 'whenValid',
-        autoAdvance: 'off'
-      });
-      expect(foodSafety?.excludeWhen).toEqual({
-        any: [
-          {
-            fieldId: 'status',
-            equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
-          },
-          {
+        autoAdvance: 'off',
+        stepBarAccessWhen: {
+          not: {
             fieldId: 'MP_PREP_DATE',
             isInFuture: true
           }
-        ]
+        }
+      });
+      expect(foodSafety?.excludeWhen).toEqual({
+        fieldId: 'status',
+        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
       });
       expect(portioning?.excludeWhen).toEqual({
         any: [
@@ -520,7 +538,10 @@ describe('staging integrity dialogs and list legend config', () => {
         ]
       });
       expect(leftovers?.label?.en).toBe('Leftovers');
-      expect(leftovers?.excludeWhen).toBeUndefined();
+      expect(leftovers?.excludeWhen).toEqual({
+        fieldId: 'MP_PREP_DATE',
+        isInFuture: true
+      });
       expect(leftovers?.helpText).toBeUndefined();
       expect(leftovers?.navigation?.stepBarAccessWhen).toEqual({
         fieldId: 'status',
@@ -681,6 +702,17 @@ describe('staging integrity dialogs and list legend config', () => {
             fields: ['ING_SELECTED', 'ING']
           })
         ])
+      );
+      const editIngredientsAction = (leftoversMeals?.rowFlow?.actions || []).find(
+        (action: any) => action?.id === 'editIngredients'
+      );
+      const editIngredientsOverlayEffect = (editIngredientsAction?.effects || []).find(
+        (effect: any) => effect?.type === 'openOverlay' && effect?.groupId === 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI'
+      );
+      expect(editIngredientsOverlayEffect?.groupOverride?.ui?.rowSort).toEqual(
+        expect.objectContaining({
+          fieldId: 'ING'
+        })
       );
       expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
@@ -990,6 +1022,28 @@ describe('staging integrity dialogs and list legend config', () => {
       ? cfg.form.listViewColumns.some((col: any) => col?.fieldId === 'action_copy')
       : false;
     expect(hasCopyColumn).toBe(false);
+  });
+
+  test('meal production final report summary button is visible after email and close statuses', () => {
+    const cfg = readConfig('config_meal_production.json');
+    const expectedStatuses = ['Final report emailed', 'Closed'];
+
+    [cfg.questions, cfg.definition?.questions].forEach(questions => {
+      const finalReportButton = findQuestion(questions || [], 'PDF_PREVIEW');
+      expect(finalReportButton?.qEn).toBe('Final report');
+      expect(finalReportButton?.visibility?.showWhen).toEqual({
+        fieldId: 'status',
+        equals: expectedStatuses
+      });
+      expect(finalReportButton?.button).toEqual(
+        expect.objectContaining({
+          action: 'openUrlField',
+          fieldId: 'pdfUrl',
+          disableWhenValueMissing: true,
+          placements: expect.arrayContaining(['summaryBar'])
+        })
+      );
+    });
   });
 
   test('meal production delivery analytics count final emailed reports', () => {

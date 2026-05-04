@@ -14,6 +14,15 @@ type SourceFirstAllocationParentRow = { values?: Record<string, FieldValue> };
 
 const normalizeIdValue = (raw: any): string => (raw === undefined || raw === null ? '' : String(raw).trim());
 
+const toExplicitFiniteNumberValue = (raw: unknown): number | null => {
+  if (typeof raw === 'string' && !raw.trim()) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+};
+
+const numericValuesMatch = (left: unknown, right: unknown): boolean =>
+  Math.abs(toFiniteNumberValue(left) - toFiniteNumberValue(right)) < 1e-9;
+
 const hasStructuredValue = (value: unknown): boolean => {
   if (value === undefined || value === null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -138,6 +147,30 @@ export const resolveSourceFirstAllocationAvailabilityFieldPair = (
   );
 };
 
+export const resolveSourceFirstAllocationDisplayFreeQuantity = (args: {
+  remainingQuantity: unknown;
+  reservedQuantity: unknown;
+  serverCurrentRecordReservedQuantity?: unknown;
+  localCurrentRecordReservedQuantity?: unknown;
+  explicitFreeQuantity?: unknown;
+  allowExplicitFreeQuantity?: boolean;
+}): number => {
+  const explicitFreeQuantity = toExplicitFiniteNumberValue(args.explicitFreeQuantity);
+  if (
+    args.allowExplicitFreeQuantity !== false &&
+    explicitFreeQuantity !== null &&
+    numericValuesMatch(args.localCurrentRecordReservedQuantity, args.serverCurrentRecordReservedQuantity)
+  ) {
+    return explicitFreeQuantity;
+  }
+  return computeOptimisticFreeQuantity({
+    remainingQuantity: args.remainingQuantity,
+    reservedQuantity: args.reservedQuantity,
+    serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
+    localCurrentRecordReservedQuantity: args.localCurrentRecordReservedQuantity
+  });
+};
+
 export const decorateSourceFirstAllocationRowForVisibility = (args: {
   row: SourceFirstAllocationRow;
   availabilityConfig?: any;
@@ -153,14 +186,19 @@ export const decorateSourceFirstAllocationRowForVisibility = (args: {
   const hasServerOverride =
     args.serverCurrentRecordReservedQuantityOverride !== undefined &&
     args.serverCurrentRecordReservedQuantityOverride !== null;
+  const hasServerCurrentRecordReservedQuantity = Object.prototype.hasOwnProperty.call(
+    row,
+    '__ckServerCurrentRecordReservedQuantity'
+  );
   const serverCurrentRecordReservedQuantity = hasServerOverride
     ? Math.max(0, toFiniteNumberValue(args.serverCurrentRecordReservedQuantityOverride))
     : resolveServerCurrentRecordReservedQuantity({
-        hasExplicitServerCurrentRecordReservedQuantity: Object.prototype.hasOwnProperty.call(
-          row,
-          '__ckCurrentRecordReservedQuantity'
-        ),
-        serverCurrentRecordReservedQuantity: row.__ckCurrentRecordReservedQuantity,
+        hasExplicitServerCurrentRecordReservedQuantity:
+          hasServerCurrentRecordReservedQuantity ||
+          Object.prototype.hasOwnProperty.call(row, '__ckCurrentRecordReservedQuantity'),
+        serverCurrentRecordReservedQuantity: hasServerCurrentRecordReservedQuantity
+          ? row.__ckServerCurrentRecordReservedQuantity
+          : row.__ckCurrentRecordReservedQuantity,
         fallbackCurrentRecordReservedQuantity: committedCurrentRecordReservedQuantity
       });
 
@@ -169,27 +207,42 @@ export const decorateSourceFirstAllocationRowForVisibility = (args: {
   const { remainingFieldId, reservedFieldId } = resolveSourceFirstAllocationAvailabilityFieldPair(availabilityConfig, row);
   const nextFreeQuantity =
     remainingFieldId && reservedFieldId
-      ? computeOptimisticFreeQuantity({
+      ? resolveSourceFirstAllocationDisplayFreeQuantity({
           remainingQuantity: row[remainingFieldId],
           reservedQuantity: row[reservedFieldId],
           serverCurrentRecordReservedQuantity,
-          localCurrentRecordReservedQuantity
+          localCurrentRecordReservedQuantity,
+          explicitFreeQuantity: row.__ckFreeQuantity
         })
       : row.__ckFreeQuantity;
 
   const currentReservedUnchanged = toFiniteNumberValue(row.__ckCurrentRecordReservedQuantity) === localCurrentRecordReservedQuantity;
+  const serverReservedUnchanged =
+    toFiniteNumberValue(row.__ckServerCurrentRecordReservedQuantity) === serverCurrentRecordReservedQuantity;
   const nextFreeUnchanged =
     nextFreeQuantity === undefined
       ? row.__ckFreeQuantity === undefined
       : toFiniteNumberValue(row.__ckFreeQuantity) === toFiniteNumberValue(nextFreeQuantity);
-  if (currentReservedUnchanged && nextFreeUnchanged) return row;
+  if (currentReservedUnchanged && serverReservedUnchanged && nextFreeUnchanged) return row;
 
   return {
     ...row,
+    __ckServerCurrentRecordReservedQuantity: serverCurrentRecordReservedQuantity,
     __ckCurrentRecordReservedQuantity: localCurrentRecordReservedQuantity,
     ...(nextFreeQuantity === undefined ? {} : { __ckFreeQuantity: nextFreeQuantity })
   };
 };
+
+export const resolveSourceFirstAllocationReservationVisibilityScope = (args: {
+  localTotalReservedQuantity?: unknown;
+  committedTotalReservedQuantity?: unknown;
+}): {
+  localCurrentRecordReservedQuantity: number;
+  committedCurrentRecordReservedQuantity: number;
+} => ({
+  localCurrentRecordReservedQuantity: Math.max(0, toFiniteNumberValue(args.localTotalReservedQuantity)),
+  committedCurrentRecordReservedQuantity: Math.max(0, toFiniteNumberValue(args.committedTotalReservedQuantity))
+});
 
 export const shouldRemoveSourceFirstAllocationOutputWhenExcluded = (config: any): boolean =>
   Boolean(config?.sourceRows && typeof config.sourceRows === 'object' && (config.sourceRows as any).removeOutputWhenExcluded === true);

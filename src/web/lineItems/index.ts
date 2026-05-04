@@ -7,6 +7,7 @@ export interface LineItemTotal {
   label: string;
   value: number;
   decimalPlaces?: number;
+  pending?: boolean;
 }
 
 export function isEmptyRow(rowValues: Record<string, unknown>): boolean {
@@ -19,22 +20,41 @@ export function isEmptyRow(rowValues: Record<string, unknown>): boolean {
   });
 }
 
+const hasInvalidFieldPath = (
+  invalidFieldPaths: LineItemTotalsInput['invalidFieldPaths'],
+  groupId: string | undefined,
+  rowId: string | undefined,
+  fieldId: string | undefined
+): boolean => {
+  if (!invalidFieldPaths || !groupId || !rowId || !fieldId) return false;
+  const path = `${groupId}__${fieldId}__${rowId}`;
+  if (invalidFieldPaths instanceof Set) return invalidFieldPaths.has(path);
+  if (Array.isArray(invalidFieldPaths)) return invalidFieldPaths.includes(path);
+  return Object.prototype.hasOwnProperty.call(invalidFieldPaths, path) && Boolean((invalidFieldPaths as Record<string, unknown>)[path]);
+};
+
 export function computeTotals(input: LineItemTotalsInput, language: LangCode): LineItemTotal[] {
   const { config, rows } = input;
   if (!config.totals || !config.totals.length) return [];
 
   return config.totals.map(totalCfg => {
     let total = 0;
+    let pending = false;
     if (totalCfg.type === 'count') {
       total = rows.filter(r => !isEmptyRow(r.values)).length;
     } else if (totalCfg.type === 'sum') {
       const fieldKey = totalCfg.fieldId;
       if (fieldKey) {
-        rows.forEach(row => {
-          const val = row.values[fieldKey];
-          const parsed = Array.isArray(val) ? Number(val[0]) : Number(val);
-          if (!isNaN(parsed)) total += parsed;
-        });
+        pending = rows.some(row => hasInvalidFieldPath(input.invalidFieldPaths, input.groupId, row.id, fieldKey));
+        if (pending) {
+          total = 0;
+        } else {
+          rows.forEach(row => {
+            const val = row.values[fieldKey];
+            const parsed = Array.isArray(val) ? Number(val[0]) : Number(val);
+            if (!isNaN(parsed)) total += parsed;
+          });
+        }
       } else {
         total = 0;
       }
@@ -48,7 +68,8 @@ export function computeTotals(input: LineItemTotalsInput, language: LangCode): L
       key: totalCfg.fieldId || totalCfg.type,
       label,
       value: Number.isFinite(total) ? total : 0,
-      decimalPlaces: totalCfg.decimalPlaces
+      decimalPlaces: totalCfg.decimalPlaces,
+      pending
     };
   });
 }

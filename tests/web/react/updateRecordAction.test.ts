@@ -16,6 +16,7 @@ describe('runUpdateRecordAction', () => {
       refs.selectedRecordIdRef.current = 'rec-1';
       return { success: true, recordId: 'rec-1' };
     });
+    const waitForActiveDraftSave = jest.fn().mockResolvedValue({ ok: true });
     const flushPendingDraftSave = jest.fn().mockResolvedValue({ ok: true });
     const refs = {
       languageRef: { current: 'EN' },
@@ -36,6 +37,7 @@ describe('runUpdateRecordAction', () => {
       formKey: 'Config: Meal Production',
       submit,
       ensureRecordId,
+      waitForActiveDraftSave,
       flushPendingDraftSave,
       tSystem: (_key: string, _language: string, fallback?: string) => fallback || '',
       logEvent,
@@ -54,7 +56,7 @@ describe('runUpdateRecordAction', () => {
         unlock: jest.fn()
       }
     } as any;
-    return { deps, refs, submit, ensureRecordId, flushPendingDraftSave, logEvent };
+    return { deps, refs, submit, ensureRecordId, waitForActiveDraftSave, flushPendingDraftSave, logEvent };
   };
 
   test('ensures a draft record id before applying updateRecord when requested', async () => {
@@ -82,6 +84,55 @@ describe('runUpdateRecordAction', () => {
       expect.objectContaining({ buttonId: 'MP_READY_FOR_PRODUCTION', recordId: 'rec-1' })
     );
     expect(logEvent).not.toHaveBeenCalledWith('button.updateRecord.blocked.noRecord', expect.anything());
+  });
+
+  test('waits for an active draft save before resolving the record id', async () => {
+    const { deps, submit, ensureRecordId, waitForActiveDraftSave, flushPendingDraftSave, logEvent, refs } = buildDeps();
+    waitForActiveDraftSave.mockImplementationOnce(async () => {
+      refs.selectedRecordIdRef.current = 'rec-1';
+      return { ok: true };
+    });
+
+    await runUpdateRecordAction(deps, {
+      buttonId: 'MP_READY_FOR_PRODUCTION',
+      buttonRef: 'MP_READY_FOR_PRODUCTION',
+      navigateTo: 'form',
+      set: { status: 'In production' },
+      ensureRecordId: true
+    });
+
+    expect(waitForActiveDraftSave).toHaveBeenCalledWith('button.updateRecord:MP_READY_FOR_PRODUCTION.beforeRecordId');
+    expect(ensureRecordId).not.toHaveBeenCalled();
+    expect(flushPendingDraftSave).toHaveBeenCalledWith('button.updateRecord:MP_READY_FOR_PRODUCTION');
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(logEvent).toHaveBeenCalledWith(
+      'button.updateRecord.waitActiveSave.done',
+      expect.objectContaining({ buttonId: 'MP_READY_FOR_PRODUCTION' })
+    );
+  });
+
+  test('stops before resolving the record id when active draft save wait fails', async () => {
+    const { deps, submit, ensureRecordId, waitForActiveDraftSave, logEvent } = buildDeps();
+    waitForActiveDraftSave.mockResolvedValueOnce({ ok: false, message: 'Could not save the latest changes.' });
+
+    await runUpdateRecordAction(deps, {
+      buttonId: 'MP_READY_FOR_PRODUCTION',
+      buttonRef: 'MP_READY_FOR_PRODUCTION',
+      navigateTo: 'form',
+      set: { status: 'In production' },
+      ensureRecordId: true
+    });
+
+    expect(ensureRecordId).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(deps.setStatus).toHaveBeenCalledWith('Could not save the latest changes.');
+    expect(logEvent).toHaveBeenCalledWith(
+      'button.updateRecord.waitActiveSave.failed',
+      expect.objectContaining({
+        buttonId: 'MP_READY_FOR_PRODUCTION',
+        message: 'Could not save the latest changes.'
+      })
+    );
   });
 
   test('stops before submit when ensureRecordId fails', async () => {

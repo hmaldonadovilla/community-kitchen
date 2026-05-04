@@ -2,7 +2,8 @@ import {
   buildInventoryReservationPlanFingerprint,
   buildStepInventoryReservationPlan,
   cloneLineItemStateSnapshot,
-  detectGuidedReservationManagedRowRemovals
+  detectGuidedReservationManagedRowRemovals,
+  mergeGuidedReservationLineItemsFromSnapshot
 } from '../../../src/web/react/features/reservations/stepReservationPlan';
 
 describe('buildStepInventoryReservationPlan', () => {
@@ -439,5 +440,104 @@ describe('buildStepInventoryReservationPlan', () => {
         removedRowIds: ['OUT-1']
       }
     ]);
+  });
+
+  test('merges saved guided reservation rows back into the current line item state', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    id: 'leftoverInventoryRows',
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Inventory' },
+                    reservation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const sourceLineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegetarian' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+        {
+          id: 'OUT-1',
+          values: {
+            LEFTOVER_ID: 'MI-20',
+            LEFTOVER_RECORD_ID: 'INV-20',
+            LEFTOVER_USE_QTY: 5
+          }
+        }
+      ],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI::OUT-1::INGREDIENTS': [
+        {
+          id: 'ING-1',
+          values: { ING: 'Courgette' }
+        }
+      ]
+    };
+    const targetLineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegetarian' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+        {
+          id: 'OUT-OLD',
+          values: {
+            LEFTOVER_ID: 'MI-20',
+            LEFTOVER_RECORD_ID: 'INV-20',
+            LEFTOVER_USE_QTY: 4
+          }
+        }
+      ],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI::OUT-OLD::INGREDIENTS': [
+        {
+          id: 'ING-OLD',
+          values: { ING: 'Old ingredient' }
+        }
+      ]
+    };
+
+    const merged = mergeGuidedReservationLineItemsFromSnapshot({
+      definition,
+      stepId: 'leftoverForm',
+      sourceLineItems,
+      targetLineItems
+    });
+
+    expect(merged.mergedRows).toBe(1);
+    expect(merged.mergedChildGroups).toBe(1);
+    expect(merged.lineItems['MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI']).toEqual([
+      {
+        id: 'OUT-1',
+        values: {
+          LEFTOVER_ID: 'MI-20',
+          LEFTOVER_RECORD_ID: 'INV-20',
+          LEFTOVER_USE_QTY: 5
+        }
+      }
+    ]);
+    expect(merged.lineItems['MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI::OUT-1::INGREDIENTS']).toEqual([
+      {
+        id: 'ING-1',
+        values: { ING: 'Courgette' }
+      }
+    ]);
+    expect(merged.lineItems['MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI::OUT-OLD::INGREDIENTS']).toBeUndefined();
   });
 });

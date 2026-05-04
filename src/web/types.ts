@@ -151,6 +151,8 @@ export type ThenConfig = ValidationRule['then'];
 export interface LineItemTotalsInput {
   config: LineItemGroupConfig;
   rows: LineItemRowState[];
+  groupId?: string;
+  invalidFieldPaths?: Set<string> | string[] | Record<string, unknown>;
 }
 
 export {

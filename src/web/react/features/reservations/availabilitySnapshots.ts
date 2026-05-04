@@ -60,6 +60,7 @@ export const applyInventoryAvailabilitySnapshotToRow = (
   }
 
   setWhenChanged(next, '__ckCurrentRecordReservedQuantity', availability.currentRecordReservedQuantity, changedRef);
+  setWhenChanged(next, '__ckServerCurrentRecordReservedQuantity', availability.currentRecordReservedQuantity, changedRef);
   setWhenChanged(next, '__ckCurrentReservationQuantity', availability.currentReservationQuantity, changedRef);
   setWhenChanged(next, '__ckFreeQuantity', availability.freeQuantity, changedRef);
 

@@ -61,6 +61,88 @@ type StepRowFilterOverrides = {
   subGroups: Record<string, Record<string, StepRowFilterConfig[]>>;
 };
 
+const RUNTIME_RESERVATION_LINE_ITEM_FIELD_IDS = [
+  '__ckCurrentRecordReservedQuantity',
+  '__ckServerCurrentRecordReservedQuantity',
+  '__ckCurrentReservationQuantity',
+  '__ckFreeQuantity'
+];
+
+const AVAILABILITY_TARGET_FIELD_KEYS = [
+  'targetQuantityFieldId',
+  'targetMaxQuantityFieldId',
+  'targetPortionsFieldId',
+  'targetMaxPortionsFieldId'
+];
+
+const normalizeRuntimeFieldId = (raw: unknown): string =>
+  raw === undefined || raw === null ? '' : `${raw}`.trim();
+
+export const collectRuntimeLineItemFieldIds = (definition: WebFormDefinition): Set<string> => {
+  const fieldIds = new Set(RUNTIME_RESERVATION_LINE_ITEM_FIELD_IDS);
+  const steps = (definition as any)?.steps;
+  const stepItems = Array.isArray(steps?.items) ? steps.items : [];
+  stepItems.forEach((step: any) => {
+    const include = Array.isArray(step?.include) ? step.include : [];
+    include.forEach((target: any) => {
+      const dataSourceRows = Array.isArray(target?.dataSourceRows) ? target.dataSourceRows : [];
+      dataSourceRows.forEach((rowConfig: any) => {
+        const availability = rowConfig?.availability && typeof rowConfig.availability === 'object'
+          ? rowConfig.availability
+          : null;
+        if (!availability) return;
+        AVAILABILITY_TARGET_FIELD_KEYS.forEach(key => {
+          const fieldId = normalizeRuntimeFieldId(availability[key]);
+          if (fieldId) fieldIds.add(fieldId);
+        });
+      });
+    });
+  });
+  return fieldIds;
+};
+
+const stripRuntimeLineItemFields = (
+  values: Record<string, any>,
+  runtimeFieldIds: Set<string>
+): Record<string, any> => {
+  if (!runtimeFieldIds.size) return values;
+  let next = values;
+  runtimeFieldIds.forEach(fieldId => {
+    if (!Object.prototype.hasOwnProperty.call(next, fieldId)) return;
+    if (next === values) next = { ...values };
+    delete next[fieldId];
+  });
+  return next;
+};
+
+export const stripRuntimeLineItemStateFields = (
+  lineItems: LineItemState,
+  runtimeFieldIds: Set<string>
+): LineItemState => {
+  if (!runtimeFieldIds.size) return lineItems;
+  let nextState = lineItems;
+  Object.keys(lineItems || {}).forEach(groupId => {
+    const rows = lineItems[groupId];
+    if (!Array.isArray(rows) || !rows.length) return;
+    let nextRows = rows;
+    rows.forEach((row, index) => {
+      const rowValues = (row?.values || {}) as Record<string, any>;
+      const nextValues = stripRuntimeLineItemFields(rowValues, runtimeFieldIds);
+      if (nextValues === rowValues) return;
+      if (nextState === lineItems) nextState = { ...(lineItems || {}) };
+      if (nextRows === rows) nextRows = rows.slice();
+      nextRows[index] = {
+        ...row,
+        values: nextValues
+      };
+    });
+    if (nextRows !== rows) {
+      nextState[groupId] = nextRows;
+    }
+  });
+  return nextState;
+};
+
 const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
   if (!field || field?.type !== 'PARAGRAPH') return rawValue;
   const cfg = (field?.ui as any)?.paragraphDisclaimer;
@@ -860,6 +942,7 @@ export const buildSubmissionPayload = async (args: {
   const { definition, formKey, language, values, lineItems, existingRecordId, collapsedRows } = args;
   const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'submit' });
   const payloadValues: Record<string, any> = { ...recomputed.values };
+  const runtimeLineItemFieldIds = collectRuntimeLineItemFieldIds(definition);
 
   for (const q of definition.questions) {
     if (q.type === 'FILE_UPLOAD') {
@@ -909,7 +992,10 @@ export const buildSubmissionPayload = async (args: {
 
       return Promise.all(
         rowsToSave.map(async row => {
-          const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+          const base = stripRuntimeLineItemFields(
+            { ...(row.values || {}), [ROW_ID_KEY]: row.id },
+            runtimeLineItemFieldIds
+          );
 
           for (const f of fileFields) {
             base[f.id] = await buildMaybeFilePayload(base[f.id], (f as any).uploadConfig?.maxFiles, (f as any).uploadConfig);
@@ -1011,6 +1097,7 @@ export const buildUploadDraftPayload = async (args: {
   const { definition, formKey, language, values, lineItems, existingRecordId, target } = args;
   const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'change' });
   const payloadValues: Record<string, any> = { ...recomputed.values };
+  const runtimeLineItemFieldIds = collectRuntimeLineItemFieldIds(definition);
 
   for (const q of definition.questions) {
     if (q.type !== 'FILE_UPLOAD') continue;
@@ -1042,7 +1129,10 @@ export const buildUploadDraftPayload = async (args: {
 
       return Promise.all(
         rows.map(async row => {
-          const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+          const base = stripRuntimeLineItemFields(
+            { ...(row.values || {}), [ROW_ID_KEY]: row.id },
+            runtimeLineItemFieldIds
+          );
           for (const f of fileFields) {
             base[f.id] = isUploadDraftTargetField({
               target,
@@ -1140,6 +1230,7 @@ export const buildDraftPayload = (args: {
   const { definition, formKey, language, values, lineItems, existingRecordId } = args;
   const recomputed = applyValueMapsToForm(definition, values, lineItems, { mode: 'change' });
   const payloadValues: Record<string, any> = { ...recomputed.values };
+  const runtimeLineItemFieldIds = collectRuntimeLineItemFieldIds(definition);
 
   // Sanitize top-level uploads
   for (const q of definition.questions) {
@@ -1162,7 +1253,10 @@ export const buildDraftPayload = (args: {
       const subGroups = ((groupCfg?.subGroups || []) as any[]).filter(sub => shouldPersistLineItemRows(sub));
 
       return rows.map(row => {
-        const base: Record<string, any> = { ...(row.values || {}), [ROW_ID_KEY]: row.id };
+        const base = stripRuntimeLineItemFields(
+          { ...(row.values || {}), [ROW_ID_KEY]: row.id },
+          runtimeLineItemFieldIds
+        );
         fileFields.forEach((f: any) => {
           base[f.id] = toUrlOnlyUploadString(base[f.id]);
         });

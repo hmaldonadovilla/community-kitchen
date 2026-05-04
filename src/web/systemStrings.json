@@ -134,9 +134,9 @@
       "nl": "Even geduld"
     },
     "waitPhotos": {
-      "en": "Please wait while your photos finish uploading.",
-      "fr": "Veuillez patienter pendant le téléversement de vos photos.",
-      "nl": "Wacht even terwijl je foto's worden geüpload."
+      "en": "Please wait while your files finish uploading.",
+      "fr": "Veuillez patienter pendant le téléversement de vos fichiers.",
+      "nl": "Wacht even terwijl je bestanden worden geüpload."
     },
     "waitSaving": {
       "en": "Please wait while we save your changes...",
@@ -249,6 +249,7 @@
   },
   "common": {
     "info": { "en": "Info", "fr": "Info", "nl": "Info" },
+    "instruction": { "en": "Instruction", "fr": "Instruction", "nl": "Instructie" },
     "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
     "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
     "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
@@ -428,6 +429,16 @@
     "noneSelected": { "en": "No photo added.", "fr": "Aucune photo ajoutée.", "nl": "Geen foto toegevoegd." },
     "selectedOne": { "en": "1 photo added", "fr": "1 photo ajoutée", "nl": "1 foto toegevoegd" },
     "selectedMany": { "en": "{count} photos added", "fr": "{count} photos ajoutées", "nl": "{count} foto's toegevoegd" },
+    "waitSave": {
+      "en": "Please wait while we save your file(s)",
+      "fr": "Veuillez patienter pendant l’enregistrement de vos fichier(s)",
+      "nl": "Wacht even terwijl we je bestand(en) opslaan"
+    },
+    "waitRemoveSelected": {
+      "en": "Please wait while we remove selected file(s)",
+      "fr": "Veuillez patienter pendant la suppression des fichier(s) sélectionné(s)",
+      "nl": "Wacht even terwijl we de geselecteerde bestand(en) verwijderen"
+    },
     "maxSelected": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
     "maxReached": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
     "uploaded": { "en": "Added", "fr": "Ajouté", "nl": "Toegevoegd" },
@@ -435,6 +446,7 @@
     "maxFilesMany": { "en": "{count} photos max", "fr": "{count} photos max", "nl": "max {count} foto's" },
     "minFilesOne": { "en": "1 photo required", "fr": "1 photo requise", "nl": "1 foto vereist" },
     "minFilesMany": { "en": "{count} photos required", "fr": "{count} photos requises", "nl": "{count} foto's vereist" },
+    "retrySave": { "en": "Try saving photos again", "fr": "Réessayer d'enregistrer les photos", "nl": "Foto's opnieuw opslaan" },
     "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
     "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
     "remainingOne": { "en": "You can add 1 more photo.", "fr": "Vous pouvez ajouter 1 photo de plus.", "nl": "Je kunt nog 1 foto toevoegen." },
@@ -444,6 +456,11 @@
         "en": "Could not add photos.",
         "fr": "Impossible d'ajouter des photos.",
         "nl": "Kan geen foto's toevoegen."
+      },
+      "saveFailed": {
+        "en": "The photos were not saved. Check the connection and try again.",
+        "fr": "Les photos n'ont pas été enregistrées. Vérifiez la connexion et réessayez.",
+        "nl": "De foto's zijn niet opgeslagen. Controleer de verbinding en probeer opnieuw."
       },
       "minFiles": {
         "en": "{field} requires at least {min} photo{plural}.",

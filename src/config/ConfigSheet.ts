@@ -330,7 +330,7 @@ export class ConfigSheet {
       if (editColIdx >= 0) {
         targetColumn = editColIdx + 1; // convert to 1-based index
       }
-    } catch (_) {
+    } catch {
       // If header lookup fails (e.g., during tests/mocks), fall back to legacy column
       targetColumn = 14;
     }
@@ -526,6 +526,47 @@ export class ConfigSheet {
     return sheet;
   }
 
+  private static setUploadWaitMessage(config: FileUploadConfig, key: 'save' | 'removeSelected', value: any): void {
+    if (value === undefined || value === null) return;
+    (config as any).waitMessages = (config as any).waitMessages || {};
+    (config as any).waitMessages[key] = value;
+  }
+
+  private static applyUploadWaitMessages(config: FileUploadConfig, root: any): void {
+    if (!root || typeof root !== 'object') return;
+    const waitMessages =
+      root.waitMessages ??
+      root.wait_messages ??
+      root.busyMessages ??
+      root.busy_messages ??
+      root.blockingMessages ??
+      root.blocking_messages;
+    if (waitMessages && typeof waitMessages === 'object') {
+      (config as any).waitMessages = { ...((config as any).waitMessages || {}), ...waitMessages };
+    }
+
+    this.setUploadWaitMessage(
+      config,
+      'save',
+      root.waitSave ??
+        root.wait_save ??
+        root.saveWaitMessage ??
+        root.save_wait_message ??
+        root.uploadWaitMessage ??
+        root.upload_wait_message
+    );
+    this.setUploadWaitMessage(
+      config,
+      'removeSelected',
+      root.waitRemoveSelected ??
+        root.wait_remove_selected ??
+        root.removeSelectedWaitMessage ??
+        root.remove_selected_wait_message ??
+        root.removeWaitMessage ??
+        root.remove_wait_message
+    );
+  }
+
   private static parseUploadConfig(rawConfig: string): FileUploadConfig | undefined {
     if (!rawConfig) return undefined;
     const config: FileUploadConfig = {};
@@ -593,6 +634,8 @@ export class ConfigSheet {
           root.remainingText ??
           root.remaining_text;
         if (helperText !== undefined && helperText !== null) config.helperText = helperText;
+
+        this.applyUploadWaitMessages(config, root);
 
         const linkLabel =
           root.linkLabel ??
@@ -663,7 +706,7 @@ export class ConfigSheet {
             normalized === 'wait';
         }
       }
-    } catch (_) {
+    } catch {
       // Fallback to key=value;key=value syntax
       const parts = rawConfig.split(/[,;\n]/).map(p => p.trim()).filter(Boolean);
       parts.forEach(part => {
@@ -702,6 +745,16 @@ export class ConfigSheet {
             config.blockUntilSaved = ['1', 'true', 'yes', 'y', 'on', 'block', 'blocking', 'wait'].includes(
               value.toLowerCase()
             );
+            break;
+          case 'waitsave':
+          case 'savewaitmessage':
+          case 'uploadwaitmessage':
+            this.setUploadWaitMessage(config, 'save', value);
+            break;
+          case 'waitremoveselected':
+          case 'removeselectedwaitmessage':
+          case 'removewaitmessage':
+            this.setUploadWaitMessage(config, 'removeSelected', value);
             break;
           case 'discardchangesconfirm':
           case 'discardconfirmmessage':
@@ -778,6 +831,8 @@ export class ConfigSheet {
       root.remainingText ??
       root.remaining_text;
     if (helperText !== undefined && helperText !== null) cfg.helperText = helperText;
+
+    this.applyUploadWaitMessages(cfg, root);
 
     const linkLabel =
       root.linkLabel ??
@@ -1842,6 +1897,12 @@ export class ConfigSheet {
         }
         if (sourceSyncRaw?.forceRefresh !== undefined) {
           sourceSync.forceRefresh = Boolean(sourceSyncRaw.forceRefresh);
+        }
+        if (sourceSyncRaw?.forceRefreshMaxCacheAgeMs !== undefined) {
+          const maxAgeMs = Number(sourceSyncRaw.forceRefreshMaxCacheAgeMs);
+          if (Number.isFinite(maxAgeMs) && maxAgeMs >= 0) {
+            sourceSync.forceRefreshMaxCacheAgeMs = maxAgeMs;
+          }
         }
         const sourceSyncStopWhen = this.normalizeWhenClause(sourceSyncRaw?.stopWhen);
         if (sourceSyncStopWhen) sourceSync.stopWhen = sourceSyncStopWhen;

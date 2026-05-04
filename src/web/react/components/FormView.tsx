@@ -18,6 +18,14 @@ import { tSystem } from '../../systemStrings';
 import { selectionEffectDependsOnField } from '../app/selectionEffectDependencies';
 import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
 import { resolveUploadBlockUntilSaved } from '../app/uploadTransaction';
+import { resolveUploadWaitMessage } from '../app/uploadWaitMessages';
+import {
+  clearUploadFailure,
+  createUploadFailureState,
+  resolveUploadFailureUserMessage,
+  setUploadFailureRetrying,
+  type UploadFailureMap
+} from '../app/uploadFailure';
 import {
   FieldValue,
   LangCode,
@@ -59,7 +67,7 @@ import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/r
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
-import { renderInlineHtmlTemplateApi } from '../api';
+import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
 import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
 import { isEmptyValue } from '../utils/values';
 import {
@@ -99,6 +107,7 @@ import { SearchableMultiSelect } from './form/SearchableMultiSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
+import { SectionInstruction } from './form/SectionInstruction';
 import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
@@ -139,7 +148,6 @@ import {
   recomputeLineItemNonMatchOptions,
   resolveLineItemRowLimits,
   isLineItemMaxRowsReached,
-  ROW_ID_KEY,
   ROW_HIDE_REMOVE_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_KEY,
@@ -151,6 +159,7 @@ const resolveOptionSetForField = (optionState: OptionState, field: any, parentId
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
+import { applyLineItemRowSort } from '../app/lineItemRowSort';
 import {
   isIngredientNameFieldId,
   isIngredientsManagementForm,
@@ -181,6 +190,10 @@ import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClau
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { StepsBar } from '../features/steps/components/StepsBar';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
+import {
+  shouldApplyGuidedExternalSyncSignal,
+  type GuidedExternalSyncSignal
+} from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
@@ -216,6 +229,7 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
 };
 
 const DATA_SOURCE_COUNT_FIELD_PREFIX = '__ckDataSourceCount.';
+const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
 
 const normalizeDataSourceVisibilityKey = (value: string): string =>
   (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -291,6 +305,18 @@ interface FileOverlayState {
   originalSignature?: string;
   saving?: boolean;
 }
+
+type UploadRetryTarget = {
+  scope: 'top' | 'line';
+  fieldPath: string;
+  question?: WebQuestionDefinition;
+  group?: WebQuestionDefinition;
+  rowId?: string;
+  field?: any;
+  uploadConfig?: any;
+};
+
+type UserEditResult = { deferMutation?: boolean; skipSelectionEffects?: boolean };
 
 type FileUploadOrderedEntryCheckArgs =
   | {
@@ -443,17 +469,6 @@ const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
   return resolveParagraphUserText({ rawValue, config: cfg });
 };
 
-const isLineRowComplete = (group: WebQuestionDefinition, rowValues: Record<string, FieldValue>): boolean => {
-  const fields = group.lineItemConfig?.fields || [];
-  return fields.every(field => {
-    if (!field.required) return true;
-    const val = resolveRequiredValue(field, rowValues[field.id]);
-    if (Array.isArray(val)) return val.length > 0;
-    if (typeof val === 'string') return val.trim() !== '';
-    return val !== undefined && val !== null;
-  });
-};
-
 const resolveOverlayHeaderFields = (groupCfg: any, overlayDetail: any): LineItemFieldConfig[] => {
   if (!groupCfg) return [];
   const headerColumnsExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
@@ -598,6 +613,7 @@ interface FormViewProps {
       snapshots?: { values: Record<string, FieldValue>; lineItems: LineItemState };
     }
   ) => void;
+  selectionEffectAsyncPendingCount?: number;
   /**
    * Optional immediate upload hook. Used to upload FILE_UPLOAD fields as soon as the user adds files.
    * The handler should:
@@ -615,7 +631,8 @@ interface FormViewProps {
     fieldId?: string;
     items: Array<string | File>;
     uploadConfig?: any;
-  }) => Promise<{ success: boolean; message?: string }>;
+    busyMessage?: string;
+  }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
   /**
    * Optional handler for BUTTON fields (Doc template preview / report rendering).
    */
@@ -633,7 +650,7 @@ interface FormViewProps {
     tag?: string;
     inputType?: string;
     nextValue?: FieldValue;
-  }) => { deferMutation?: boolean } | void;
+  }) => UserEditResult | void;
   onAutomatedMutation?: (args: {
     scope: 'line';
     fieldPath: string;
@@ -665,12 +682,15 @@ interface FormViewProps {
   onBeforeGuidedStepAdvance?: (args: {
     stepId: string;
     nextStepId?: string;
+    stepIndex?: number;
+    nextStepIndex?: number;
     trigger: 'next' | 'auto';
     waitDialog?: ConfirmDialogOpenArgs;
     queueBackgroundReservationSync?: boolean;
   }) => Promise<{ success: boolean; message?: string }>;
   requestedGuidedStepId?: string | null;
-  guidedExternalSyncToken?: number;
+  guidedExternalSyncSignal?: GuidedExternalSyncSignal | null;
+  recordSessionId?: number;
   onRequestedGuidedStepHandled?: () => void;
   dedupNavigationBlocked?: boolean;
   openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
@@ -692,6 +712,15 @@ interface FormViewProps {
     reason: string;
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
+  }) => void;
+  onGuidedStepReservationDraftStateChange?: (args: {
+    stepId: string;
+    groupId: string;
+    parentRowId: string;
+    sourceKey: string;
+    pendingInvalid: boolean;
+    reason: string;
+    patchFields?: string[];
   }) => void;
   /**
    * Optional guided-step hook used by datasource-backed steps that must wait for an in-flight
@@ -736,6 +765,7 @@ const FormView: React.FC<FormViewProps> = ({
   externalScrollAnchor,
   onExternalScrollConsumed,
   onSelectionEffect,
+  selectionEffectAsyncPendingCount = 0,
   onUploadFiles,
   onReportButton,
   onReportButtonPointerDown,
@@ -749,13 +779,15 @@ const FormView: React.FC<FormViewProps> = ({
   onGuidedStepMilestone,
   onBeforeGuidedStepAdvance,
   requestedGuidedStepId,
-  guidedExternalSyncToken,
+  guidedExternalSyncSignal,
+  recordSessionId,
   onRequestedGuidedStepHandled,
   dedupNavigationBlocked,
   openConfirmDialog,
   setAutoSaveHold,
   ensureRecordId,
   queueGuidedStepReservationDraftSync,
+  onGuidedStepReservationDraftStateChange,
   waitForGuidedStepReservationDraftSync
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -842,6 +874,8 @@ const FormView: React.FC<FormViewProps> = ({
   const overlayDetailHeaderCompleteRef = useRef<Map<string, boolean>>(new Map());
   const overlayDetailRenderSignatureRef = useRef<string>('');
   const overlayDetailRenderSeqRef = useRef(0);
+  const overlayDetailRenderTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const autoSaveHoldReasonsRef = useRef<Record<string, true>>({});
   const overlaySessionSnapshotsRef = useRef<
     Record<
       string,
@@ -874,6 +908,7 @@ const FormView: React.FC<FormViewProps> = ({
   const [dragState, setDragState] = useState<Record<string, boolean>>({});
   const dragCounterRef = useRef<Record<string, number>>({});
   const [uploadAnnouncements, setUploadAnnouncements] = useState<Record<string, string>>({});
+  const [uploadFailures, setUploadFailures] = useState<UploadFailureMap<UploadRetryTarget>>({});
   const firstErrorRef = useRef<string | null>(null);
   const errorNavRequestRef = useRef(0);
   const errorNavConsumedRef = useRef(0);
@@ -933,6 +968,15 @@ const FormView: React.FC<FormViewProps> = ({
     valuesRef.current = values;
     lineItemsRef.current = lineItems;
   }, [values, lineItems]);
+
+  useEffect(() => {
+    return () => {
+      if (overlayDetailRenderTimerRef.current) {
+        globalThis.clearTimeout(overlayDetailRenderTimerRef.current);
+        overlayDetailRenderTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!overlayDetailSelection || overlayDetailSelection.mode !== 'edit') {
@@ -1020,10 +1064,38 @@ const FormView: React.FC<FormViewProps> = ({
     [buildOverlaySessionSnapshotKey, onDiagnostic, setErrors, setLineItems, setValues]
   );
 
+  const setScopedAutoSaveHold = useCallback(
+    (hold: boolean, meta?: { reason?: string }) => {
+      if (!setAutoSaveHold) return;
+      const reason = (meta?.reason || 'formInteraction').toString().trim() || 'formInteraction';
+      const previous = autoSaveHoldReasonsRef.current;
+      const nextReasons = { ...previous };
+      if (hold) {
+        nextReasons[reason] = true;
+      } else {
+        delete nextReasons[reason];
+      }
+      const previousSignature = Object.keys(previous).sort().join(',');
+      const nextSignature = Object.keys(nextReasons).sort().join(',');
+      if (previousSignature === nextSignature) return;
+      autoSaveHoldReasonsRef.current = nextReasons;
+      const activeReasons = Object.keys(nextReasons).sort();
+      setAutoSaveHold(activeReasons.length > 0, {
+        reason: activeReasons.join(',') || undefined
+      });
+      onDiagnostic?.('autosave.hold.request', {
+        hold: activeReasons.length > 0,
+        reason,
+        activeReasons
+      });
+    },
+    [onDiagnostic, setAutoSaveHold]
+  );
+
   useEffect(() => {
     if (!setAutoSaveHold) return;
     const hold = overlay.open || lineItemGroupOverlay.open || subgroupOverlay.open;
-    setAutoSaveHold(hold, { reason: 'overlayEditing' });
+    setScopedAutoSaveHold(hold, { reason: 'overlayEditing' });
     onDiagnostic?.('autosave.hold.request', {
       hold,
       reason: 'overlayEditing',
@@ -1036,6 +1108,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     overlay.open,
     setAutoSaveHold,
+    setScopedAutoSaveHold,
     subgroupOverlay.open
   ]);
 
@@ -1088,7 +1161,7 @@ const FormView: React.FC<FormViewProps> = ({
         window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
         window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
       };
-    } catch (_) {
+    } catch {
       return;
     }
   }, []);
@@ -1192,7 +1265,7 @@ const FormView: React.FC<FormViewProps> = ({
       previousLineItems: previousSnapshot.lineItems,
       nextLineItems: nextSnapshot,
       mode: 'all'
-    }).filter(impact => impact.stepId !== activeGuidedStepId);
+    });
 
     guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
     if (!impacts.length) return;
@@ -1577,9 +1650,18 @@ const FormView: React.FC<FormViewProps> = ({
 
   useLayoutEffect(() => {
     if (!guidedEnabled) return;
-    const nextToken = Number(guidedExternalSyncToken);
-    if (!Number.isFinite(nextToken) || nextToken <= 0) return;
-    if (nextToken === lastGuidedExternalSyncTokenRef.current) return;
+    const nextToken = Number(guidedExternalSyncSignal?.token);
+    const currentRecordId = recordMeta?.id === undefined || recordMeta?.id === null ? '' : recordMeta.id.toString().trim();
+    if (
+      !shouldApplyGuidedExternalSyncSignal({
+        signal: guidedExternalSyncSignal,
+        handledToken: lastGuidedExternalSyncTokenRef.current,
+        currentRecordId,
+        currentRecordSessionId: recordSessionId ?? null
+      })
+    ) {
+      return;
+    }
     lastGuidedExternalSyncTokenRef.current = nextToken;
     guidedAutoAdvanceAttemptRef.current = null;
     if (guidedAutoAdvanceTimerRef.current) {
@@ -1596,7 +1678,11 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('steps.step.externalSync.realign', {
       from: activeGuidedStepId || null,
       to: desiredStepId || activeGuidedStepId || null,
-      changed: Boolean(desiredStepId)
+      changed: Boolean(desiredStepId),
+      token: nextToken,
+      recordId: currentRecordId || null,
+      recordSessionId: recordSessionId ?? null,
+      reason: guidedExternalSyncSignal?.reason || null
     });
     if (!desiredStepId) return;
     setActiveGuidedStepId(desiredStepId);
@@ -1604,11 +1690,13 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     guidedEnabled,
-    guidedExternalSyncToken,
+    guidedExternalSyncSignal,
     guidedStatus.steps,
     guidedStepIds,
     maxReachableGuidedIndex,
-    onDiagnostic
+    onDiagnostic,
+    recordMeta?.id,
+    recordSessionId
   ]);
 
   const guidedVirtualState = useMemo(() => {
@@ -2004,9 +2092,10 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     buildGuidedStepDefinition,
-    definition.questions,
+    definition,
     guidedEnabled,
     guidedStepIds,
+    guidedVisibleSteps,
     guidedStepsCfg,
     orderedEntryEnabled
   ]);
@@ -2299,6 +2388,8 @@ const FormView: React.FC<FormViewProps> = ({
         const outcome = await onBeforeGuidedStepAdvance({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
+          stepIndex: activeGuidedStepIndex,
+          nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'next',
           waitDialog,
           queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
@@ -2350,7 +2441,7 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const handleGuidedStepSelect = useCallback(
-    (targetStepId: string) => {
+    async (targetStepId: string) => {
       if (!guidedEnabled) return;
       const targetId = (targetStepId || '').toString().trim();
       if (!targetId) return;
@@ -2373,6 +2464,27 @@ const FormView: React.FC<FormViewProps> = ({
 
       const stepCfg = (guidedVisibleSteps[activeGuidedStepIndex] || null) as any;
       if (!stepCfg?.navigation?.milestoneAction) {
+        if (onBeforeGuidedStepAdvance) {
+          const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
+          const outcome = await onBeforeGuidedStepAdvance({
+            stepId: activeGuidedStepId || '',
+            nextStepId: targetId,
+            stepIndex: currentIdx,
+            nextStepIndex: targetIdx,
+            trigger: 'next',
+            waitDialog,
+            queueBackgroundReservationSync: false
+          });
+          if (!outcome?.success) {
+            onDiagnostic?.('steps.step.advance.blocked', {
+              from: activeGuidedStepId,
+              to: targetId,
+              reason: 'stepBar',
+              message: outcome?.message || null
+            });
+            return;
+          }
+        }
         selectGuidedStep(targetId, 'user');
         return;
       }
@@ -2388,8 +2500,10 @@ const FormView: React.FC<FormViewProps> = ({
       advanceGuidedStepFromCurrentStep,
       guidedEnabled,
       guidedStepIds,
+      guidedStepsCfg,
       guidedStepVisibilityCtx,
       guidedVisibleSteps,
+      onBeforeGuidedStepAdvance,
       onDiagnostic,
       selectGuidedStep
     ]
@@ -2553,6 +2667,8 @@ const FormView: React.FC<FormViewProps> = ({
         const outcome = await onBeforeGuidedStepAdvance({
           stepId: activeGuidedStepId || '',
           nextStepId: nextId || undefined,
+          stepIndex: activeGuidedStepIndex,
+          nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'auto',
           waitDialog,
           queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
@@ -3690,14 +3806,14 @@ const FormView: React.FC<FormViewProps> = ({
         const next = Math.max(0, top);
         try {
           window.scrollTo(0, next);
-        } catch (_) {
+        } catch {
           // ignore
         }
         try {
           if (scrollEl) scrollEl.scrollTop = next;
           if (docEl) docEl.scrollTop = next;
           if (bodyEl) bodyEl.scrollTop = next;
-        } catch (_) {
+        } catch {
           // ignore
         }
       };
@@ -6017,7 +6133,13 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   useEffect(() => {
+    const clearPendingOverlayDetailRender = () => {
+      if (!overlayDetailRenderTimerRef.current) return;
+      globalThis.clearTimeout(overlayDetailRenderTimerRef.current);
+      overlayDetailRenderTimerRef.current = null;
+    };
     const resetOverlayDetailRender = () => {
+      clearPendingOverlayDetailRender();
       overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
@@ -6152,11 +6274,27 @@ const FormView: React.FC<FormViewProps> = ({
 
     const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, payload.values as any, language);
     if (!resolvedTemplateId) {
+      clearPendingOverlayDetailRender();
       overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
       setOverlayDetailHtml('');
       setOverlayDetailHtmlLoading(false);
       setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
+      return;
+    }
+
+    if (selectionEffectAsyncPendingCount > 0) {
+      clearPendingOverlayDetailRender();
+      overlayDetailRenderSeqRef.current += 1;
+      overlayDetailRenderSignatureRef.current = '';
+      setOverlayDetailHtmlLoading(true);
+      setOverlayDetailHtmlError('');
+      onDiagnostic?.('lineItems.overlayDetail.view.waitSelectionEffects', {
+        pendingCount: selectionEffectAsyncPendingCount,
+        groupId: context.groupId,
+        rowId: overlayDetailSelection.rowId,
+        templateId: resolvedTemplateId
+      });
       return;
     }
 
@@ -6168,19 +6306,42 @@ const FormView: React.FC<FormViewProps> = ({
         templateId: resolvedTemplateId,
         payload: (payload.values as any)[context.groupId]
       });
-    } catch (_) {
+    } catch {
       renderSignature = `${context.groupId}::${overlayDetailSelection.rowId}::${resolvedTemplateId}`;
     }
     if (overlayDetailRenderSignatureRef.current === renderSignature) {
       return;
     }
+    clearPendingOverlayDetailRender();
     overlayDetailRenderSignatureRef.current = renderSignature;
 
-    const renderKey = `overlay:${activeGroupKey}:${overlayDetailSelection.rowId}:${resolvedTemplateId}`;
+    const renderKey = (() => {
+      try {
+        return JSON.stringify({
+          scope: 'overlayDetail',
+          activeGroupKey,
+          groupId: context.groupId,
+          rowId: overlayDetailSelection.rowId,
+          templateId: resolvedTemplateId,
+          renderSignature
+        });
+      } catch {
+        return `overlay:${activeGroupKey}:${context.groupId}:${overlayDetailSelection.rowId}:${resolvedTemplateId}:${renderSignature}`;
+      }
+    })();
     const renderSeq = ++overlayDetailRenderSeqRef.current;
+    const cachedRender = peekInlineHtmlTemplateCache(payload, templateIdMap as any, renderKey);
+    if (cachedRender?.success && cachedRender?.html) {
+      setOverlayDetailHtml(cachedRender.html);
+      setOverlayDetailHtmlError('');
+      setOverlayDetailHtmlLoading(false);
+      return;
+    }
     setOverlayDetailHtmlLoading(true);
     setOverlayDetailHtmlError('');
-    renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
+    overlayDetailRenderTimerRef.current = globalThis.setTimeout(() => {
+      overlayDetailRenderTimerRef.current = null;
+      renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
       .then(res => {
         if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         if (res?.success && res?.html) {
@@ -6217,8 +6378,10 @@ const FormView: React.FC<FormViewProps> = ({
         if (renderSeq !== overlayDetailRenderSeqRef.current) return;
         setOverlayDetailHtmlLoading(false);
       });
+    }, OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS);
   }, [
     definition,
+    formKey,
     language,
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
@@ -6227,10 +6390,10 @@ const FormView: React.FC<FormViewProps> = ({
     overlayDetailSelection,
     recordMeta,
     resolveSubgroupDefs,
+    selectionEffectAsyncPendingCount,
     subgroupOverlay.open,
     subgroupOverlay.groupOverride,
     subgroupOverlay.subKey,
-    tSystem,
     values
   ]);
 
@@ -6303,7 +6466,7 @@ const FormView: React.FC<FormViewProps> = ({
         const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
         try {
           focusable?.focus({ preventScroll: true } as any);
-        } catch (_) {
+        } catch {
           // ignore
         }
         return true;
@@ -6620,6 +6783,7 @@ const FormView: React.FC<FormViewProps> = ({
     openLineItemGroupOverlay,
     openSubgroupOverlay,
     pendingScrollAnchor,
+    questionIdToGroupKey,
     subgroupOverlay.open,
     subgroupOverlay.subKey
   ]);
@@ -6679,7 +6843,7 @@ const FormView: React.FC<FormViewProps> = ({
 
     try {
       el.focus();
-    } catch (_) {
+    } catch {
       // ignore
     }
     // Respect sticky header by using scroll-margin-top on the element.
@@ -6725,6 +6889,166 @@ const FormView: React.FC<FormViewProps> = ({
     setUploadAnnouncements(prev => ({ ...prev, [questionId]: message }));
   }, []);
 
+  const uploadFailureMessage = useCallback(
+    (rawMessage?: string | null) =>
+      resolveUploadFailureUserMessage({
+        rawMessage,
+        fallback: tSystem(
+          'files.error.saveFailed',
+          language,
+          'The photos were not saved. Check the connection and try again.'
+        )
+      }),
+    [language]
+  );
+
+  const clearUploadFailureForField = useCallback((fieldPath: string) => {
+    setUploadFailures(prev => clearUploadFailure(prev, fieldPath));
+  }, []);
+
+  const recordUploadFailure = useCallback(
+    (target: UploadRetryTarget, rawMessage?: string | null) => {
+      const message = uploadFailureMessage(rawMessage);
+      setUploadFailures(prev => ({
+        ...prev,
+        [target.fieldPath]: createUploadFailureState({
+          target,
+          message,
+          rawMessage
+        })
+      }));
+      onDiagnostic?.('upload.failure.visible', {
+        fieldPath: target.fieldPath,
+        scope: target.scope,
+        rawMessage: rawMessage || ''
+      });
+      return message;
+    },
+    [onDiagnostic, uploadFailureMessage]
+  );
+
+  const resolveUploadRetryItems = useCallback((target: UploadRetryTarget): Array<string | File> => {
+    if (target.scope === 'top' && target.question) {
+      return toUploadItems(valuesRef.current[target.question.id]);
+    }
+    if (target.scope === 'line' && target.group && target.rowId && target.field) {
+      const rows = lineItemsRef.current[target.group.id] || [];
+      const row = rows.find(candidate => candidate.id === target.rowId);
+      return toUploadItems((row?.values || {})[target.field.id] as any);
+    }
+    return [];
+  }, []);
+
+  const retryUploadFailure = useCallback(
+    async (fieldPath: string) => {
+      const failure = uploadFailures[fieldPath];
+      if (!failure || failure.retrying || !onUploadFiles) return;
+      const target = failure.target;
+      const items = resolveUploadRetryItems(target);
+      const openOverlayFieldPath =
+        fileOverlay.open && fileOverlay.scope === 'top' && fileOverlay.question
+          ? fileOverlay.question.id
+          : fileOverlay.open && fileOverlay.scope === 'line'
+            ? fileOverlay.fieldPath || ''
+            : '';
+      setUploadFailures(prev => setUploadFailureRetrying(prev, fieldPath, true));
+      announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
+      onDiagnostic?.('upload.retry', { fieldPath, scope: target.scope, total: items.length });
+      try {
+        const res = await onUploadFiles({
+          scope: target.scope,
+          fieldPath: target.fieldPath,
+          questionId: target.scope === 'top' ? target.question?.id : undefined,
+          groupId: target.scope === 'line' ? target.group?.id : undefined,
+          rowId: target.scope === 'line' ? target.rowId : undefined,
+          fieldId: target.scope === 'line' ? target.field?.id : undefined,
+          items,
+          uploadConfig: target.uploadConfig,
+          busyMessage: resolveUploadBlockUntilSaved(target.uploadConfig)
+            ? resolveUploadWaitMessage(target.uploadConfig, language, 'save')
+            : undefined
+        });
+        if (!res?.success) {
+          const message = uploadFailureMessage(res?.message);
+          setUploadFailures(prev => {
+            const existing = prev[fieldPath];
+            if (!existing) return prev;
+            return {
+              ...prev,
+              [fieldPath]: {
+                ...existing,
+                message,
+                rawMessage: res?.message,
+                retrying: false
+              }
+            };
+          });
+          announceUpload(fieldPath, message);
+          onDiagnostic?.('upload.retry.failed', { fieldPath, scope: target.scope, rawMessage: res?.message || '' });
+          return;
+        }
+        setUploadFailures(prev => clearUploadFailure(prev, fieldPath));
+        announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+        if (openOverlayFieldPath === fieldPath) {
+          dismissFileOverlay();
+        }
+        onDiagnostic?.('upload.retry.success', { fieldPath, scope: target.scope });
+      } catch (err: any) {
+        const message = uploadFailureMessage(err?.message);
+        setUploadFailures(prev => {
+          const existing = prev[fieldPath];
+          if (!existing) return prev;
+          return {
+            ...prev,
+            [fieldPath]: {
+              ...existing,
+              message,
+              rawMessage: err?.message,
+              retrying: false
+            }
+          };
+        });
+        announceUpload(fieldPath, message);
+        onDiagnostic?.('upload.retry.failed', { fieldPath, scope: target.scope, rawMessage: err?.message || '' });
+      }
+    },
+    [
+      announceUpload,
+      dismissFileOverlay,
+      fileOverlay,
+      language,
+      onDiagnostic,
+      onUploadFiles,
+      resolveUploadRetryItems,
+      uploadFailureMessage,
+      uploadFailures
+    ]
+  );
+
+  const renderUploadFailure = useCallback(
+    (fieldPath: string, disabled?: boolean) => {
+      const failure = uploadFailures[fieldPath];
+      if (!failure) return null;
+      const retryDisabled = Boolean(disabled || failure.retrying || !onUploadFiles);
+      return (
+        <div className="ck-upload-failure" role="alert">
+          <span>{failure.message}</span>
+          <button
+            type="button"
+            className="ck-upload-failure__retry"
+            disabled={retryDisabled}
+            onClick={() => retryUploadFailure(fieldPath)}
+          >
+            {failure.retrying
+              ? tSystem('common.loading', language, 'Loading…')
+              : tSystem('files.retrySave', language, 'Try saving photos again')}
+          </button>
+        </div>
+      );
+    },
+    [language, onUploadFiles, retryUploadFailure, uploadFailures]
+  );
+
   const resetNativeFileInput = (questionId: string) => {
     const input = fileInputsRef.current[questionId];
     if (input) {
@@ -6739,6 +7063,7 @@ const FormView: React.FC<FormViewProps> = ({
       question?: WebQuestionDefinition;
       field?: any;
       incoming: File[];
+      onCommitBlockUntilSaved?: (items: Array<string | File>) => void;
     }): boolean => {
       if (!fileOverlay.open) return false;
       const overlayFieldPath =
@@ -6752,6 +7077,7 @@ const FormView: React.FC<FormViewProps> = ({
       const existing = fileOverlay.draftItems || [];
       const { items, errorMessage } = applyUploadConstraints(uploadField, existing, args.incoming, language);
       const accepted = Math.max(0, items.length - existing.length);
+      const blockUntilSaved = resolveUploadBlockUntilSaved((uploadField as any)?.uploadConfig);
       setFileOverlay(prev => {
         if (!prev.open) return prev;
         const prevFieldPath =
@@ -6761,12 +7087,13 @@ const FormView: React.FC<FormViewProps> = ({
               ? prev.fieldPath || ''
               : '';
         if (prev.scope !== args.scope || prevFieldPath !== args.fieldPath) return prev;
-        return { ...prev, draftItems: items };
+        return { ...prev, draftItems: items, saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving };
       });
       if (errorMessage) {
         announceUpload(args.fieldPath, errorMessage);
         onDiagnostic?.('upload.overlay.error', { fieldPath: args.fieldPath, error: errorMessage, scope: args.scope });
       } else if (accepted > 0) {
+        clearUploadFailureForField(args.fieldPath);
         announceUpload(
           args.fieldPath,
           accepted === 1
@@ -6782,11 +7109,37 @@ const FormView: React.FC<FormViewProps> = ({
         accepted,
         total: items.length,
         error: Boolean(errorMessage),
-        scope: args.scope
+        scope: args.scope,
+        blockUntilSaved
       });
+      if (blockUntilSaved && !errorMessage && accepted > 0) {
+        args.onCommitBlockUntilSaved?.(items);
+      }
       return true;
     },
-    [announceUpload, fileOverlay, language, onDiagnostic]
+    [announceUpload, clearUploadFailureForField, fileOverlay, language, onDiagnostic]
+  );
+
+  const updateFileOverlayAfterImmediateAction = useCallback(
+    (args: { scope: 'top' | 'line'; fieldPath: string; items: Array<string | File>; saving: boolean; saved?: boolean }) => {
+      setFileOverlay(prev => {
+        if (!prev.open) return prev;
+        const prevFieldPath =
+          prev.scope === 'top' && prev.question
+            ? prev.question.id
+            : prev.scope === 'line'
+              ? prev.fieldPath || ''
+              : '';
+        if (prev.scope !== args.scope || prevFieldPath !== args.fieldPath) return prev;
+        return {
+          ...prev,
+          draftItems: args.items,
+          originalSignature: args.saved ? fileItemsSignature(args.items) : prev.originalSignature,
+          saving: args.saving
+        };
+      });
+    },
+    [fileItemsSignature]
   );
 
   // Auto-scroll when subgroup rows increase (works for inline add and overlay add)
@@ -6890,20 +7243,37 @@ const FormView: React.FC<FormViewProps> = ({
 
     // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
     if (onUploadFiles && accepted > 0) {
-      announceUpload(question.id, tSystem('common.loading', language, 'Loading…'));
-      void onUploadFiles({
+      const uploadTarget: UploadRetryTarget = {
         scope: 'top',
         fieldPath: question.id,
+        question,
+        uploadConfig: (question as any)?.uploadConfig
+      };
+      clearUploadFailureForField(question.id);
+      announceUpload(question.id, tSystem('common.loading', language, 'Loading…'));
+      void onUploadFiles({
+        scope: uploadTarget.scope,
+        fieldPath: uploadTarget.fieldPath,
         questionId: question.id,
         items,
-        uploadConfig: (question as any)?.uploadConfig
-      }).then(res => {
-        if (!res?.success) {
-          announceUpload(question.id, (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString());
-          return;
-        }
-        announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
-      });
+        uploadConfig: uploadTarget.uploadConfig,
+        busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
+          : undefined
+      })
+        .then(res => {
+          if (!res?.success) {
+            const message = recordUploadFailure(uploadTarget, res?.message);
+            announceUpload(question.id, message);
+            return;
+          }
+          clearUploadFailureForField(question.id);
+          announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
+        })
+        .catch((err: any) => {
+          const message = recordUploadFailure(uploadTarget, err?.message);
+          announceUpload(question.id, message);
+        });
     }
   };
 
@@ -6933,7 +7303,50 @@ const FormView: React.FC<FormViewProps> = ({
         scope: 'top',
         fieldPath: question.id,
         question,
-        incoming: Array.from(list)
+        incoming: Array.from(list),
+        onCommitBlockUntilSaved: items => {
+          const uploadConfig = (question as any)?.uploadConfig || {};
+          const uploadTarget: UploadRetryTarget = {
+            scope: 'top',
+            fieldPath: question.id,
+            question,
+            uploadConfig
+          };
+          handleFileFieldChange(question, items);
+          clearUploadFailureForField(question.id);
+          const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
+          announceUpload(question.id, waitMessage);
+          onDiagnostic?.('upload.overlay.immediateSave.start', { fieldPath: question.id, scope: 'top', total: items.length });
+          const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+            ? onUploadFiles({
+                scope: 'top',
+                fieldPath: question.id,
+                questionId: question.id,
+                items,
+                uploadConfig,
+                busyMessage: waitMessage
+              })
+            : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });
+          void uploadPromise
+            .then(res => {
+              if (!res?.success) {
+                const message = recordUploadFailure(uploadTarget, res?.message);
+                announceUpload(question.id, message);
+                updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items, saving: false });
+                return;
+              }
+              const savedItems = Array.isArray(res.items) ? res.items : items.filter((item): item is string => typeof item === 'string');
+              clearUploadFailureForField(question.id);
+              announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
+              updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items: savedItems, saving: false, saved: true });
+              onDiagnostic?.('upload.overlay.immediateSave.success', { fieldPath: question.id, scope: 'top', total: savedItems.length });
+            })
+            .catch((err: any) => {
+              const message = recordUploadFailure(uploadTarget, err?.message);
+              announceUpload(question.id, message);
+              updateFileOverlayAfterImmediateAction({ scope: 'top', fieldPath: question.id, items, saving: false });
+            });
+        }
       })
     ) {
       resetNativeFileInput(question.id);
@@ -6951,6 +7364,7 @@ const FormView: React.FC<FormViewProps> = ({
     const removed = existing[index];
     const next = existing.filter((_, idx) => idx !== index);
     handleFileFieldChange(question, next);
+    clearUploadFailureForField(question.id);
     onDiagnostic?.('upload.remove', { questionId: question.id, removed: describeUploadItem(removed as any), remaining: next.length });
     announceUpload(
       question.id,
@@ -6964,6 +7378,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (submitting) return;
     if (question.readOnly === true) return;
     handleFileFieldChange(question, []);
+    clearUploadFailureForField(question.id);
     resetDrag(question.id);
     resetNativeFileInput(question.id);
     announceUpload(question.id, tSystem('files.clearAll', language, 'Remove all'));
@@ -7521,11 +7936,14 @@ const FormView: React.FC<FormViewProps> = ({
     submitting,
     overlayAutoGroupConfigs,
     overlayAutoAddSignature,
+    definition,
+    values,
     optionState,
     language,
     ensureLineOptions,
     lineItemGroupOverlay.open,
     lineItemGroupOverlay.groupId,
+    onDiagnostic,
     setLineItems,
     setValues
   ]);
@@ -7555,7 +7973,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
   }, [
     submitting,
-    definition.questions,
+    definition,
     values,
     language,
     optionState,
@@ -7564,6 +7982,7 @@ const FormView: React.FC<FormViewProps> = ({
     ensureLineOptions,
     lineItemGroupOverlay.open,
     lineItemGroupOverlay.groupId,
+    onDiagnostic,
     setLineItems,
     setValues
   ]);
@@ -8554,7 +8973,7 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
-    let userEditResult: { deferMutation?: boolean } | void = undefined;
+    let userEditResult: UserEditResult | void = undefined;
     if (changeSource === 'selectionEffectInit') {
       onAutomatedMutation?.({
         scope: 'line',
@@ -8580,6 +8999,7 @@ const FormView: React.FC<FormViewProps> = ({
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
     if (userEditResult?.deferMutation) return;
+    const skipSelectionEffects = userEditResult?.skipSelectionEffects === true;
     const currentLineItems = lineItemsRef.current;
     const currentValues = valuesRef.current;
     const existingRows = currentLineItems[group.id] || [];
@@ -8710,7 +9130,7 @@ const FormView: React.FC<FormViewProps> = ({
       });
       return next;
     });
-    if (onSelectionEffect) {
+    if (onSelectionEffect && !skipSelectionEffects) {
       const selectionEffectRowValues = (() => {
         const merged: Record<string, FieldValue> = { ...updatedRowValues };
         const mergeMissing = (source?: Record<string, FieldValue>) => {
@@ -8734,7 +9154,6 @@ const FormView: React.FC<FormViewProps> = ({
       })();
       const effectFields = (group.lineItemConfig?.fields || []).filter(hasSelectionEffects);
       if (effectFields.length) {
-        const rowComplete = isLineRowComplete(group, updatedRowValues);
         effectFields.forEach(effectField => {
           const isSourceField = effectField.id === field.id;
           const dependsOnChangedField = !isSourceField && selectionEffectDependsOnField(effectField, field.id);
@@ -8779,6 +9198,14 @@ const FormView: React.FC<FormViewProps> = ({
       }
 
       runSelectionEffectsForAncestorRows(group.id, currentLineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
+    } else if (skipSelectionEffects) {
+      onDiagnostic?.('field.change.selectionEffects.held', {
+        scope: 'line',
+        groupId: group.id,
+        rowId,
+        fieldId: (field?.id || '').toString(),
+        reason: 'fieldChangeDialog.number.pending'
+      });
     }
   };
 
@@ -8833,22 +9260,41 @@ const FormView: React.FC<FormViewProps> = ({
 
     // Immediate upload: upload accepted files now, then persist URLs via draft save (handled by App).
     if (onUploadFiles && accepted > 0) {
-      announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
-      void onUploadFiles({
+      const uploadTarget: UploadRetryTarget = {
         scope: 'line',
         fieldPath,
+        group,
+        rowId,
+        field,
+        uploadConfig: field.uploadConfig
+      };
+      clearUploadFailureForField(fieldPath);
+      announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
+      void onUploadFiles({
+        scope: uploadTarget.scope,
+        fieldPath: uploadTarget.fieldPath,
         groupId: group.id,
         rowId,
         fieldId: field.id,
         items: files,
-        uploadConfig: field.uploadConfig
-      }).then(res => {
-        if (!res?.success) {
-          announceUpload(fieldPath, (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString());
-          return;
-        }
-        announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
-      });
+        uploadConfig: uploadTarget.uploadConfig,
+        busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
+          : undefined
+      })
+        .then(res => {
+          if (!res?.success) {
+            const message = recordUploadFailure(uploadTarget, res?.message);
+            announceUpload(fieldPath, message);
+            return;
+          }
+          clearUploadFailureForField(fieldPath);
+          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+        })
+        .catch((err: any) => {
+          const message = recordUploadFailure(uploadTarget, err?.message);
+          announceUpload(fieldPath, message);
+        });
     }
   };
 
@@ -8887,7 +9333,54 @@ const FormView: React.FC<FormViewProps> = ({
         scope: 'line',
         fieldPath,
         field,
-        incoming: Array.from(list)
+        incoming: Array.from(list),
+        onCommitBlockUntilSaved: items => {
+          const uploadConfig = field.uploadConfig || {};
+          const uploadTarget: UploadRetryTarget = {
+            scope: 'line',
+            fieldPath,
+            group,
+            rowId,
+            field,
+            uploadConfig
+          };
+          handleLineFieldChange(group, rowId, field, items as unknown as FieldValue);
+          clearUploadFailureForField(fieldPath);
+          const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
+          announceUpload(fieldPath, waitMessage);
+          onDiagnostic?.('upload.overlay.immediateSave.start', { fieldPath, scope: 'line', total: items.length });
+          const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+            ? onUploadFiles({
+                scope: 'line',
+                fieldPath,
+                groupId: group.id,
+                rowId,
+                fieldId: field.id,
+                items,
+                uploadConfig,
+                busyMessage: waitMessage
+              })
+            : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });
+          void uploadPromise
+            .then(res => {
+              if (!res?.success) {
+                const message = recordUploadFailure(uploadTarget, res?.message);
+                announceUpload(fieldPath, message);
+                updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items, saving: false });
+                return;
+              }
+              const savedItems = Array.isArray(res.items) ? res.items : items.filter((item): item is string => typeof item === 'string');
+              clearUploadFailureForField(fieldPath);
+              announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+              updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items: savedItems, saving: false, saved: true });
+              onDiagnostic?.('upload.overlay.immediateSave.success', { fieldPath, scope: 'line', total: savedItems.length });
+            })
+            .catch((err: any) => {
+              const message = recordUploadFailure(uploadTarget, err?.message);
+              announceUpload(fieldPath, message);
+              updateFileOverlayAfterImmediateAction({ scope: 'line', fieldPath, items, saving: false });
+            });
+        }
       })
     ) {
       resetNativeFileInput(fieldPath);
@@ -8944,6 +9437,7 @@ const FormView: React.FC<FormViewProps> = ({
     const removed = existingFiles[index];
     const next = existingFiles.filter((_, idx) => idx !== index);
     handleLineFieldChange(group, rowId, field, next as unknown as FieldValue);
+    clearUploadFailureForField(fieldPath);
     setErrors(prev => {
       const copy = { ...prev };
       delete copy[fieldPath];
@@ -8963,6 +9457,7 @@ const FormView: React.FC<FormViewProps> = ({
     if (submitting) return;
     if (field?.readOnly === true) return;
     handleLineFieldChange(group, rowId, field, [] as unknown as FieldValue);
+    clearUploadFailureForField(fieldPath);
     setErrors(prev => {
       const copy = { ...prev };
       delete copy[fieldPath];
@@ -10049,6 +10544,7 @@ const FormView: React.FC<FormViewProps> = ({
             <div style={srOnly} aria-live="polite">
               {uploadAnnouncements[q.id] || ''}
             </div>
+            {renderUploadFailure(q.id, submitting || readOnly || locked)}
             <input
               ref={el => {
                 fileInputsRef.current[q.id] = el;
@@ -10399,6 +10895,8 @@ const FormView: React.FC<FormViewProps> = ({
               decrementDrag,
               resetDrag,
               uploadAnnouncements,
+              uploadFailures,
+              onRetryUploadFailure: retryUploadFailure,
               handleLineFileInputChange,
               handleLineFileDrop,
               removeLineFile,
@@ -10410,8 +10908,10 @@ const FormView: React.FC<FormViewProps> = ({
               isOverlayOpenActionSuppressed,
               suppressOverlayOpenAction,
               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+              setAutoSaveHold: setScopedAutoSaveHold,
               ensureRecordId,
               queueGuidedStepReservationDraftSync,
+              onGuidedStepReservationDraftStateChange,
               waitForGuidedStepReservationDraftSync
             }}
           />
@@ -10592,7 +11092,6 @@ const FormView: React.FC<FormViewProps> = ({
       const steps = guidedVisibleSteps;
       const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
       const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-      const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
       const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
 
       const normalizeLineFieldId = (groupId: string, rawId: any): string => {
@@ -11035,7 +11534,11 @@ const FormView: React.FC<FormViewProps> = ({
     const overlaySessionBulkSelectionLabel = overlaySessionAllRowsSelected
       ? tSystem('common.deselectAll', language, 'Deselect all')
       : tSystem('common.selectAll', language, 'Select all');
-    const orderedRows = [...rows];
+    const orderedRows = applyLineItemRowSort({
+      rows,
+      fields: subConfig?.fields || [],
+      config: subUi?.rowSort
+    });
     const { maxRows: subMaxRows } = resolveLineItemRowLimits(subConfig as any);
     const subLimitCount = overlayRowFilter ? rows.length : rowsAll.length;
     const subMaxRowsReached = isLineItemMaxRowsReached(subLimitCount, subMaxRows);
@@ -11060,9 +11563,6 @@ const FormView: React.FC<FormViewProps> = ({
     const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
     const overlayDetailSelectionForGroup =
       overlayDetailSelection && overlayDetailSelection.groupId === subKey ? overlayDetailSelection : null;
-    const overlayDetailSelectedRowIndex = overlayDetailSelectionForGroup
-      ? rows.findIndex(r => r.id === overlayDetailSelectionForGroup.rowId)
-      : -1;
     const overlayDetailViewLabel = resolveLocalizedString(overlayDetail?.rowActions?.viewLabel, language, 'View');
     const overlayDetailEditLabel = resolveLocalizedString(overlayDetail?.rowActions?.editLabel, language, 'Edit');
     const overlayDetailViewPlacement = (overlayDetail?.rowActions?.viewPlacement || 'header').toString().trim().toLowerCase();
@@ -11693,6 +12193,8 @@ const FormView: React.FC<FormViewProps> = ({
                 decrementDrag,
                 resetDrag,
                 uploadAnnouncements,
+                uploadFailures,
+                onRetryUploadFailure: retryUploadFailure,
                 handleLineFileInputChange,
                 handleLineFileDrop,
                 removeLineFile,
@@ -11704,8 +12206,10 @@ const FormView: React.FC<FormViewProps> = ({
                 isOverlayOpenActionSuppressed,
                 suppressOverlayOpenAction,
                 runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                setAutoSaveHold: setScopedAutoSaveHold,
                 ensureRecordId,
                 queueGuidedStepReservationDraftSync,
+                onGuidedStepReservationDraftStateChange,
                 waitForGuidedStepReservationDraftSync,
                 closeOverlay: closeSubgroupOverlay
               }}
@@ -12527,6 +13031,8 @@ const FormView: React.FC<FormViewProps> = ({
                             decrementDrag,
                             resetDrag,
                             uploadAnnouncements,
+                            uploadFailures,
+                            onRetryUploadFailure: retryUploadFailure,
                             handleLineFileInputChange,
                             handleLineFileDrop,
                             removeLineFile,
@@ -12538,8 +13044,10 @@ const FormView: React.FC<FormViewProps> = ({
                             isOverlayOpenActionSuppressed,
                             suppressOverlayOpenAction,
                             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                            setAutoSaveHold: setScopedAutoSaveHold,
                             ensureRecordId,
                             queueGuidedStepReservationDraftSync,
+                            onGuidedStepReservationDraftStateChange,
                             waitForGuidedStepReservationDraftSync
                           }}
                         />
@@ -13483,7 +13991,8 @@ const FormView: React.FC<FormViewProps> = ({
                               </div>
                               <div style={srOnly} aria-live="polite">
                                 {uploadAnnouncements[fieldPath] || ''}
-                            </div>
+                              </div>
+                              {renderUploadFailure(fieldPath, uploadInteractionBlocked || readOnly)}
                               <input
                                 ref={el => {
                                   fileInputsRef.current[fieldPath] = el;
@@ -13627,7 +14136,8 @@ const FormView: React.FC<FormViewProps> = ({
         {overlaySessionEnabled ? (
           <div
             style={{
-              padding: 16,
+              padding:
+                '12px 40px calc(max(64px, calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 28px)) + var(--vv-bottom, 0px))',
               borderTop: '1px solid var(--border)',
               background: 'var(--card)',
               display: 'flex',
@@ -13843,9 +14353,6 @@ const FormView: React.FC<FormViewProps> = ({
     const overlayDetailCanView = overlayDetailViewMode === 'html' && overlayDetailHasViewTemplate;
     const overlayDetailSelectionForGroup =
       overlayDetailSelection && overlayDetailSelection.groupId === groupId ? overlayDetailSelection : null;
-    const overlayDetailSelectedRowIndex = overlayDetailSelectionForGroup
-      ? rows.findIndex(r => r.id === overlayDetailSelectionForGroup.rowId)
-      : -1;
     const overlayDetailViewLabel = resolveLocalizedString(overlayDetail?.rowActions?.viewLabel, language, 'View');
     const overlayDetailEditLabel = resolveLocalizedString(overlayDetail?.rowActions?.editLabel, language, 'Edit');
     const overlayDetailViewPlacement = (overlayDetail?.rowActions?.viewPlacement || 'header').toString().trim().toLowerCase();
@@ -14660,6 +15167,8 @@ const FormView: React.FC<FormViewProps> = ({
                               decrementDrag,
                               resetDrag,
                               uploadAnnouncements,
+                              uploadFailures,
+                              onRetryUploadFailure: retryUploadFailure,
                               handleLineFileInputChange,
                               handleLineFileDrop,
                               removeLineFile,
@@ -14673,6 +15182,7 @@ const FormView: React.FC<FormViewProps> = ({
                               runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
                               ensureRecordId,
                               queueGuidedStepReservationDraftSync,
+                              onGuidedStepReservationDraftStateChange,
                               closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                             }}
                           />
@@ -14736,6 +15246,8 @@ const FormView: React.FC<FormViewProps> = ({
                     decrementDrag,
                     resetDrag,
                     uploadAnnouncements,
+                    uploadFailures,
+                    onRetryUploadFailure: retryUploadFailure,
                     handleLineFileInputChange,
                     handleLineFileDrop,
                     removeLineFile,
@@ -14747,8 +15259,10 @@ const FormView: React.FC<FormViewProps> = ({
                     isOverlayOpenActionSuppressed,
                     suppressOverlayOpenAction,
                     runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+                    setAutoSaveHold: setScopedAutoSaveHold,
                     ensureRecordId,
                     queueGuidedStepReservationDraftSync,
+                    onGuidedStepReservationDraftStateChange,
                     waitForGuidedStepReservationDraftSync,
                     closeOverlay: () => attemptCloseLineItemGroupOverlay('button')
                   }}
@@ -14760,7 +15274,8 @@ const FormView: React.FC<FormViewProps> = ({
         {overlaySessionEnabled ? (
           <div
             style={{
-              padding: 16,
+              padding:
+                '12px 40px calc(max(64px, calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 28px)) + var(--vv-bottom, 0px))',
               borderTop: '1px solid var(--border)',
               background: 'var(--card)',
               display: 'flex',
@@ -14820,11 +15335,12 @@ const FormView: React.FC<FormViewProps> = ({
     const overlayReadOnly = readOnly || orderedUploadBlocked;
     const items = fileOverlay.draftItems || resolveFileOverlayItems(fileOverlay);
     const dirty = fileItemsSignature(items) !== (fileOverlay.originalSignature || fileItemsSignature(resolveFileOverlayItems(fileOverlay)));
+    const blockUntilSaved = resolveUploadBlockUntilSaved(uploadConfig);
 
     const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
 
     const onAdd = () => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
       if (isTop) {
         if (
           checkFileUploadOrderedEntry({
@@ -14851,18 +15367,98 @@ const FormView: React.FC<FormViewProps> = ({
       fileInputsRef.current[fieldPath]?.click();
     };
 
+    const commitImmediateItems = (nextItems: Array<string | File>, action: 'removeOne' | 'removeAll') => {
+      if (submitting || readOnly || fileOverlay.saving) return;
+      const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'removeSelected');
+      const uploadTarget: UploadRetryTarget = {
+        scope: isTop ? 'top' : 'line',
+        fieldPath,
+        question: isTop ? fileOverlay.question : undefined,
+        group: isLine ? fileOverlay.group : undefined,
+        rowId: isLine ? (fileOverlay.rowId as string) : undefined,
+        field: isLine ? fileOverlay.field : undefined,
+        uploadConfig
+      };
+      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, saving: true } : prev));
+      clearUploadFailureForField(fieldPath);
+      if (isTop) {
+        handleFileFieldChange(fileOverlay.question!, nextItems);
+      } else {
+        handleLineFieldChange(
+          fileOverlay.group!,
+          fileOverlay.rowId as string,
+          fileOverlay.field,
+          nextItems as unknown as FieldValue
+        );
+      }
+      announceUpload(fieldPath, waitMessage);
+      onDiagnostic?.('upload.overlay.immediateRemove.start', {
+        fieldPath,
+        scope: isTop ? 'top' : 'line',
+        action,
+        total: nextItems.length
+      });
+      const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
+        ? onUploadFiles({
+            scope: uploadTarget.scope,
+            fieldPath: uploadTarget.fieldPath,
+            questionId: uploadTarget.scope === 'top' ? uploadTarget.question?.id : undefined,
+            groupId: uploadTarget.scope === 'line' ? uploadTarget.group?.id : undefined,
+            rowId: uploadTarget.scope === 'line' ? uploadTarget.rowId : undefined,
+            fieldId: uploadTarget.scope === 'line' ? uploadTarget.field?.id : undefined,
+            items: nextItems,
+            uploadConfig,
+            busyMessage: waitMessage
+          })
+        : Promise.resolve({ success: true, items: nextItems.filter((item): item is string => typeof item === 'string') });
+      void uploadPromise
+        .then(res => {
+          if (!res?.success) {
+            const message = recordUploadFailure(uploadTarget, res?.message);
+            announceUpload(fieldPath, message);
+            updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+            return;
+          }
+          const savedItems = Array.isArray(res.items) ? res.items : nextItems.filter((item): item is string => typeof item === 'string');
+          clearUploadFailureForField(fieldPath);
+          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+          updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: savedItems, saving: false, saved: true });
+          onDiagnostic?.('upload.overlay.immediateRemove.success', {
+            fieldPath,
+            scope: isTop ? 'top' : 'line',
+            action,
+            total: savedItems.length
+          });
+        })
+        .catch((err: any) => {
+          const message = recordUploadFailure(uploadTarget, err?.message);
+          announceUpload(fieldPath, message);
+          updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+        });
+    };
+
     const onClearAll = () => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
+      if (blockUntilSaved) {
+        commitImmediateItems([], 'removeAll');
+        return;
+      }
       setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [] } : prev));
+      clearUploadFailureForField(fieldPath);
       announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
       onDiagnostic?.('upload.overlay.clear', { fieldPath });
     };
 
     const onRemoveAt = (idx: number) => {
-      if (submitting || readOnly) return;
+      if (submitting || readOnly || fileOverlay.saving) return;
       const removed = items[idx];
       const nextItems = items.filter((_, itemIdx) => itemIdx !== idx);
+      if (blockUntilSaved) {
+        commitImmediateItems(nextItems, 'removeOne');
+        return;
+      }
       setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems } : prev));
+      clearUploadFailureForField(fieldPath);
       announceUpload(
         fieldPath,
         removed
@@ -14873,13 +15469,22 @@ const FormView: React.FC<FormViewProps> = ({
     };
 
     const onSave = async () => {
-      if (submitting || readOnly || fileOverlay.saving) return;
+      if (blockUntilSaved || submitting || readOnly || fileOverlay.saving) return;
       if (!dirty) {
         dismissFileOverlay();
         return;
       }
       setFileOverlay(prev => (prev.open ? { ...prev, saving: true } : prev));
-      const shouldWaitForSave = resolveUploadBlockUntilSaved(uploadConfig);
+      const uploadTarget: UploadRetryTarget = {
+        scope: isTop ? 'top' : 'line',
+        fieldPath,
+        question: isTop ? fileOverlay.question : undefined,
+        group: isLine ? fileOverlay.group : undefined,
+        rowId: isLine ? (fileOverlay.rowId as string) : undefined,
+        field: isLine ? fileOverlay.field : undefined,
+        uploadConfig
+      };
+      clearUploadFailureForField(fieldPath);
       try {
         if (isTop) {
           handleFileFieldChange(fileOverlay.question!, items);
@@ -14895,51 +15500,38 @@ const FormView: React.FC<FormViewProps> = ({
           fieldPath,
           total: items.length,
           scope: isTop ? 'top' : 'line',
-          wait: shouldWaitForSave
+          wait: false
         });
-        const uploadPromise: Promise<{ success: boolean; message?: string }> = onUploadFiles
+        const uploadPromise: Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> = onUploadFiles
           ? onUploadFiles({
-              scope: isTop ? 'top' : 'line',
-              fieldPath,
-              questionId: isTop ? (fileOverlay.question as any).id : undefined,
-              groupId: isLine ? (fileOverlay.group as any).id : undefined,
-              rowId: isLine ? (fileOverlay.rowId as string) : undefined,
-              fieldId: isLine ? (fileOverlay.field as any).id : undefined,
+              scope: uploadTarget.scope,
+              fieldPath: uploadTarget.fieldPath,
+              questionId: uploadTarget.scope === 'top' ? uploadTarget.question?.id : undefined,
+              groupId: uploadTarget.scope === 'line' ? uploadTarget.group?.id : undefined,
+              rowId: uploadTarget.scope === 'line' ? uploadTarget.rowId : undefined,
+              fieldId: uploadTarget.scope === 'line' ? uploadTarget.field?.id : undefined,
               items,
               uploadConfig
             })
           : Promise.resolve({ success: true });
-        if (shouldWaitForSave) {
-          announceUpload(fieldPath, tSystem('common.loading', language, 'Loading…'));
-          const res = await uploadPromise;
-          if (!res?.success) {
-            announceUpload(
-              fieldPath,
-              (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
-            );
-            setFileOverlay(prev => (prev.open ? { ...prev, saving: false } : prev));
-            return;
-          }
-          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
-          dismissFileOverlay();
-          return;
-        }
-        void uploadPromise.then(res => {
-          if (!res?.success) {
-            announceUpload(
-              fieldPath,
-              (res?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
-            );
-            return;
-          }
-          announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
-        });
+        void uploadPromise
+          .then(res => {
+            if (!res?.success) {
+              const message = recordUploadFailure(uploadTarget, res?.message);
+              announceUpload(fieldPath, message);
+              return;
+            }
+            clearUploadFailureForField(fieldPath);
+            announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+          })
+          .catch((err: any) => {
+            const message = recordUploadFailure(uploadTarget, err?.message);
+            announceUpload(fieldPath, message);
+          });
         dismissFileOverlay();
       } catch (err: any) {
-        announceUpload(
-          fieldPath,
-          (err?.message || tSystem('files.error.uploadFailed', language, 'Could not add photos.')).toString()
-        );
+        const message = recordUploadFailure(uploadTarget, err?.message);
+        announceUpload(fieldPath, message);
         setFileOverlay(prev => (prev.open ? { ...prev, saving: false } : prev));
       }
     };
@@ -14955,8 +15547,11 @@ const FormView: React.FC<FormViewProps> = ({
         uploadConfig={uploadConfig}
         dirty={dirty}
         saving={fileOverlay.saving === true}
+        saveError={uploadFailures[fieldPath]?.message}
+        saveRetrying={uploadFailures[fieldPath]?.retrying}
         onAdd={onAdd}
-        onSave={onSave}
+        onSave={blockUntilSaved ? undefined : onSave}
+        onRetrySave={uploadFailures[fieldPath] ? () => retryUploadFailure(fieldPath) : undefined}
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}
         onClose={closeFileOverlay}
@@ -15166,9 +15761,11 @@ const FormView: React.FC<FormViewProps> = ({
               <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', lineHeight: 1.3 }}>{targetLabel}</div>
             ) : null}
             {wrapperHelperText ? (
-              <div className="muted" style={{ whiteSpace: 'pre-line', fontSize: 'var(--ck-font-label)', lineHeight: 1.4 }}>
-                {wrapperHelperText}
-              </div>
+              <SectionInstruction
+                id={`ck-linegroup-instruction-${activeGuidedStepId}-${id}`}
+                language={language}
+                text={wrapperHelperText}
+              />
             ) : null}
             {content}
           </div>
@@ -15485,6 +16082,8 @@ const FormView: React.FC<FormViewProps> = ({
             decrementDrag,
             resetDrag,
             uploadAnnouncements,
+            uploadFailures,
+            onRetryUploadFailure: retryUploadFailure,
             handleLineFileInputChange,
             handleLineFileDrop,
             removeLineFile,
@@ -15496,8 +16095,10 @@ const FormView: React.FC<FormViewProps> = ({
             isOverlayOpenActionSuppressed,
             suppressOverlayOpenAction,
             runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
+            setAutoSaveHold: setScopedAutoSaveHold,
             ensureRecordId,
             queueGuidedStepReservationDraftSync,
+            onGuidedStepReservationDraftStateChange,
             waitForGuidedStepReservationDraftSync
           }}
         />
@@ -15607,9 +16208,11 @@ const FormView: React.FC<FormViewProps> = ({
         <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {guidedContextHeaderNode}
           {stepHelpText ? (
-            <div role="note" className="ck-step-help-text">
-              {stepHelpText}
-            </div>
+            <SectionInstruction
+              id={`ck-step-instruction-${activeGuidedStepId}`}
+              language={language}
+              text={stepHelpText}
+            />
           ) : null}
           {renderTargetsWithPairing(headerTargets, 'header')}
           {renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}

@@ -89,6 +89,47 @@ export const shouldSuppressAutomatedAutoSave = (args: {
   return !args.dirty && !args.queued && !args.inFlight;
 };
 
+export const shouldSuppressSelectionEffectInitAutoSave = (args: {
+  suppressUntilMs?: number | null;
+  suppressStartedAtMs?: number | null;
+  nowMs?: number | null;
+  lastLocalMutationAtMs?: number | null;
+  hadDirtyAtStart?: boolean;
+}): boolean => {
+  if (args.hadDirtyAtStart) return false;
+  const suppressUntilMs = Number(args.suppressUntilMs);
+  const suppressStartedAtMs = Number(args.suppressStartedAtMs);
+  const nowMs = Number.isFinite(Number(args.nowMs)) ? Number(args.nowMs) : Date.now();
+  if (!Number.isFinite(suppressUntilMs) || !Number.isFinite(suppressStartedAtMs)) return false;
+  if (suppressUntilMs <= nowMs || suppressStartedAtMs <= 0) return false;
+  const lastLocalMutationAtMs = Number(args.lastLocalMutationAtMs || 0);
+  return !Number.isFinite(lastLocalMutationAtMs) || lastLocalMutationAtMs <= suppressStartedAtMs;
+};
+
+export const shouldSuppressPostPersistAutoSave = (args: {
+  suppressUntilMs?: number | null;
+  nowMs?: number | null;
+  lastLocalMutationAtMs?: number | null;
+  persistedLocalMutationAtMs?: number | null;
+}): boolean => {
+  const suppressUntilMs = Number(args.suppressUntilMs);
+  const nowMs = Number.isFinite(Number(args.nowMs)) ? Number(args.nowMs) : Date.now();
+  if (!Number.isFinite(suppressUntilMs) || suppressUntilMs <= nowMs) return false;
+  const persistedLocalMutationAtMs = Number(args.persistedLocalMutationAtMs || 0);
+  if (!Number.isFinite(persistedLocalMutationAtMs)) return false;
+  const lastLocalMutationAtMs = Number(args.lastLocalMutationAtMs || 0);
+  return !Number.isFinite(lastLocalMutationAtMs) || lastLocalMutationAtMs <= persistedLocalMutationAtMs;
+};
+
+export const shouldArmAutoSaveForUserEditEvent = (args: {
+  event?: string | null;
+  hasNextValue: boolean;
+}): boolean => {
+  if (!args.hasNextValue) return false;
+  const event = normalizeStringId(args.event).toLowerCase();
+  return event !== 'blur';
+};
+
 export const shouldScheduleAutoSaveAfterPendingFollowup = (args: {
   autoSaveEnabled: boolean;
   currentView?: string | null;
@@ -160,6 +201,15 @@ export const shouldForceAutoSaveOnConfiguredBlur = (args: {
   if (!dedupSettled) return false;
   // `dedupHold` can be stale after blur-only transitions with no new signature check.
   // If signature is settled and no check/conflict is active, allow immediate autosave.
+  return true;
+};
+
+export const isBlockingDedupConflict = (
+  conflict?: { ruleId?: string | null; message?: string | null; existingRecordId?: string | null } | null
+): conflict is { ruleId?: string | null; message: string; existingRecordId?: string | null } => {
+  if (!conflict?.message) return false;
+  const ruleId = normalizeStringId(conflict.ruleId).toLowerCase();
+  if (ruleId === 'dedupcheckfailed') return false;
   return true;
 };
 

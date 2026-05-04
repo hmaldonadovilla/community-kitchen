@@ -384,6 +384,44 @@ describe('WebFormService', () => {
     expect(res.analytics?.items).toHaveLength(1);
   });
 
+  test('fetchHomeBootstrap returns a JSON-safe cache miss payload', () => {
+    const date = new Date('2026-04-30T09:01:00.280Z');
+    jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(4);
+    jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);
+    jest.spyOn(service as any, 'resolveBundledConfig').mockReturnValue(null);
+    jest.spyOn(service as any, 'getOrBuildDefinition').mockReturnValue({
+      listView: { columns: [{ fieldId: 'MP_PREP_DATE' }] },
+      analytics: { widgets: [{ id: 'portions_delivered', placements: ['listView'] }] }
+    });
+    jest.spyOn(service as any, 'buildBootstrap').mockReturnValue({
+      listResponse: {
+        items: [{ id: 'rec-1', MP_PREP_DATE: date }],
+        totalCount: 1
+      },
+      records: {
+        'rec-1': {
+          id: 'rec-1',
+          values: { MP_PREP_DATE: date }
+        }
+      },
+      analytics: {
+        revision: 12,
+        updatedAt: date,
+        items: [{ id: 'portions_delivered', value: 42590, updatedAt: date }]
+      },
+      analyticsRev: 12
+    });
+    jest.spyOn(service as any, 'cacheHomeBootstrap').mockImplementation(() => {});
+
+    const res = service.fetchHomeBootstrap('Config: Delivery', null as any);
+
+    expect(res.cache).toBe('miss');
+    expect(res.listResponse?.items[0].MP_PREP_DATE).toBe(date.toISOString());
+    expect((res.records as any)?.['rec-1']?.values?.MP_PREP_DATE).toBe(date.toISOString());
+    expect((res.analytics as any)?.updatedAt).toBe(date.toISOString());
+    expect((res.analytics as any)?.items?.[0]?.updatedAt).toBe(date.toISOString());
+  });
+
   test('fetchHomeBootstrap applies the initial date search value to the bootstrap query', () => {
     jest.spyOn(service as any, 'readHomeRevision').mockReturnValue(0);
     jest.spyOn(service as any, 'readCachedHomeBootstrap').mockReturnValue(null);

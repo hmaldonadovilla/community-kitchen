@@ -936,7 +936,7 @@ export class WebFormService {
 
     const bootstrap = this.buildBootstrap(canonicalKey || formKey, def, { includeHomeData: true, includeAnalytics: true });
     this.cacheHomeBootstrap(canonicalKey || formKey, rev, bootstrap || null, 'fetchHomeBootstrap.cacheMiss');
-    return {
+    return toPlainData({
       notModified: false,
       rev,
       listResponse: (bootstrap as any)?.listResponse,
@@ -944,7 +944,7 @@ export class WebFormService {
       analytics: (bootstrap as any)?.analytics,
       analyticsRev: Number((bootstrap as any)?.analyticsRev || (bootstrap as any)?.analytics?.revision || 0) || 0,
       cache: 'miss'
-    };
+    });
   }
 
   public fetchFormConfig(formKey?: string): FormConfigExport {

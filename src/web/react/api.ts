@@ -270,6 +270,22 @@ const buildButtonHtmlCacheKey = (payload: SubmissionPayload, buttonId: string): 
   return `button|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}|${metaSig}`;
 };
 
+const buildInlineHtmlCacheKey = (
+  payload: SubmissionPayload,
+  templateIdMap: TemplateIdMap,
+  cacheKeySuffix?: string
+): string => {
+  const recordId = (payload.id || '').toString();
+  if (cacheKeySuffix) {
+    // Scoped inline renders, such as overlay detail previews, pass a semantic
+    // content signature. Do not include the full draft payload here: unrelated
+    // autosave/source-sync churn can otherwise trigger a second server render
+    // for the same visible overlay content.
+    return `inline|scoped|${payload.formKey}|${payload.language}|${recordId}|${cacheKeySuffix}`;
+  }
+  return `inline|${buildSummaryHtmlCacheKey(payload)}|${stableStringifyForCacheKey(templateIdMap || null)}`;
+};
+
 export const peekSummaryHtmlTemplateCache = (payload: SubmissionPayload): RenderHtmlTemplateResult | null => {
   const key = buildSummaryHtmlCacheKey(payload);
   const hit = htmlRenderCache.get(key);
@@ -290,6 +306,17 @@ export const seedSummaryHtmlTemplateCache = (
 
 export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: string): RenderHtmlTemplateResult | null => {
   const key = buildButtonHtmlCacheKey(payload, buttonId);
+  const hit = htmlRenderCache.get(key);
+  if (!hit?.result?.success || !hit?.result?.html) return null;
+  return hit.result;
+};
+
+export const peekInlineHtmlTemplateCache = (
+  payload: SubmissionPayload,
+  templateIdMap: TemplateIdMap,
+  cacheKeySuffix?: string
+): RenderHtmlTemplateResult | null => {
+  const key = buildInlineHtmlCacheKey(payload, templateIdMap, cacheKeySuffix);
   const hit = htmlRenderCache.get(key);
   if (!hit?.result?.success || !hit?.result?.html) return null;
   return hit.result;
@@ -419,14 +446,14 @@ const emitAppsScriptDiagnostic = (payload: Record<string, unknown>): void => {
       const parentConsole = (window.parent as any).console as Console | undefined;
       parentConsole?.error?.('[AppsScript] connection failure', entry);
     }
-  } catch (_) {
+  } catch {
     // ignore cross-origin errors
   }
   try {
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('ck:appsScriptError', { detail: entry }));
     }
-  } catch (_) {
+  } catch {
     // ignore event errors
   }
 };
@@ -1233,7 +1260,7 @@ export const renderInlineHtmlTemplateApi = (
   templateIdMap: TemplateIdMap,
   cacheKeySuffix?: string
 ): Promise<RenderHtmlTemplateResult> => {
-  const key = `inline:${buildSummaryHtmlCacheKey(payload)}:${cacheKeySuffix || JSON.stringify(templateIdMap || null)}`;
+  const key = buildInlineHtmlCacheKey(payload, templateIdMap, cacheKeySuffix);
   const cached = htmlRenderCache.get(key);
   if (cached?.result?.success && cached?.result?.html) {
     return Promise.resolve(cached.result);

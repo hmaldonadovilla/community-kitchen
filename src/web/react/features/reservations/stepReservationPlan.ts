@@ -19,6 +19,14 @@ const normalizeStepId = (raw: any): string => (raw === undefined || raw === null
 
 const stableStringify = (value: any): string => JSON.stringify(value);
 
+const cloneLineItemRow = (row: any): any => ({
+  ...(row || {}),
+  values: { ...(((row || {}).values || {}) as Record<string, any>) }
+});
+
+const cloneLineItemRows = (rows: any[] | undefined | null): any[] =>
+  (Array.isArray(rows) ? rows : []).map(cloneLineItemRow);
+
 const buildManagedScopeKey = (scope: InventoryReservationPlanScope): string =>
   [
     normalizeStepId(scope?.sourceParentGroupId),
@@ -91,7 +99,8 @@ const collectStepManagedReservationConfigs = (args: {
 }): StepManagedReservationConfig[] => {
   const stepsCfg = (args.definition as any)?.steps;
   const stepId = normalizeStepId(args.stepId);
-  if (stepsCfg?.mode !== 'guided' || !stepId) return [];
+  if (stepsCfg?.mode !== 'guided') return [];
+  if (!stepId && args.mode !== 'all') return [];
   const stepItems = Array.isArray(stepsCfg.items) ? stepsCfg.items : [];
   const steps =
     args.mode === 'all'
@@ -214,6 +223,129 @@ export const detectGuidedReservationManagedRowRemovals = (args: {
   });
 
   return impacts;
+};
+
+export const mergeGuidedReservationLineItemsFromSnapshot = (args: {
+  definition: WebFormDefinition;
+  stepId: string;
+  sourceLineItems: LineItemState;
+  targetLineItems: LineItemState;
+  mode?: 'step' | 'all';
+}): { lineItems: LineItemState; mergedRows: number; mergedChildGroups: number } => {
+  const configs = collectStepManagedReservationConfigs({
+    definition: args.definition,
+    stepId: args.stepId,
+    mode: args.mode
+  });
+  if (!configs.length) {
+    return {
+      lineItems: args.targetLineItems || {},
+      mergedRows: 0,
+      mergedChildGroups: 0
+    };
+  }
+
+  const sourceLineItems = args.sourceLineItems || {};
+  const targetLineItems = args.targetLineItems || {};
+  let nextLineItems: LineItemState = targetLineItems;
+  let mergedRows = 0;
+  let mergedChildGroups = 0;
+
+  const setGroupRows = (groupKey: string, rows: any[]): void => {
+    if (nextLineItems === targetLineItems) nextLineItems = { ...targetLineItems };
+    nextLineItems[groupKey] = rows as any;
+  };
+
+  configs.forEach(config => {
+    const sourceParentRows = Array.isArray(sourceLineItems[config.parentGroupId])
+      ? sourceLineItems[config.parentGroupId]
+      : [];
+    if (!sourceParentRows.length) return;
+
+    const targetParentRowIds = new Set(
+      (Array.isArray(nextLineItems[config.parentGroupId]) ? nextLineItems[config.parentGroupId] : [])
+        .map((row: any) => normalizeStepId(row?.id))
+        .filter(Boolean)
+    );
+    if (!targetParentRowIds.size) return;
+
+    sourceParentRows.forEach((sourceParentRow: any) => {
+      const parentRowId = normalizeStepId(sourceParentRow?.id);
+      if (!parentRowId || !targetParentRowIds.has(parentRowId)) return;
+
+      const outputGroupKey = resolveOutputGroupKey(config.parentGroupId, parentRowId, config.outputGroupId);
+      const selectedSourceRows = (Array.isArray(sourceLineItems[outputGroupKey])
+        ? sourceLineItems[outputGroupKey]
+        : []
+      ).filter((row: any) => rowHasManagedReservationSelection(row, config));
+      if (!selectedSourceRows.length) return;
+
+      const currentTargetRows = Array.isArray(nextLineItems[outputGroupKey]) ? nextLineItems[outputGroupKey] : [];
+      let nextOutputRows = currentTargetRows;
+      let outputRowsChanged = false;
+
+      selectedSourceRows.forEach((sourceRow: any) => {
+        const sourceRowId = normalizeStepId(sourceRow?.id);
+        const sourceOutputKey = normalizeStepId(sourceRow?.values?.[config.outputKeyFieldId]);
+        if (!sourceRowId && !sourceOutputKey) return;
+
+        const existingIndex = nextOutputRows.findIndex((targetRow: any) => {
+          const targetRowId = normalizeStepId(targetRow?.id);
+          if (sourceRowId && targetRowId === sourceRowId) return true;
+          return sourceOutputKey && normalizeStepId(targetRow?.values?.[config.outputKeyFieldId]) === sourceOutputKey;
+        });
+        const clonedSourceRow = cloneLineItemRow(sourceRow);
+
+        if (existingIndex >= 0) {
+          const existingRow = nextOutputRows[existingIndex];
+          const existingRowId = normalizeStepId(existingRow?.id);
+          if (stableStringify(existingRow) !== stableStringify(sourceRow)) {
+            if (!outputRowsChanged) {
+              nextOutputRows = nextOutputRows.slice();
+              outputRowsChanged = true;
+            }
+            nextOutputRows[existingIndex] = clonedSourceRow;
+            mergedRows += 1;
+          }
+          if (existingRowId && sourceRowId && existingRowId !== sourceRowId) {
+            if (nextLineItems === targetLineItems) nextLineItems = { ...targetLineItems };
+            Object.keys(nextLineItems).forEach(groupKey => {
+              if (groupKey.startsWith(`${outputGroupKey}::${existingRowId}::`)) {
+                delete (nextLineItems as any)[groupKey];
+              }
+            });
+          }
+        } else {
+          if (!outputRowsChanged) {
+            nextOutputRows = nextOutputRows.slice();
+            outputRowsChanged = true;
+          }
+          nextOutputRows.push(clonedSourceRow);
+          mergedRows += 1;
+        }
+
+        if (!sourceRowId) return;
+        const childGroupPrefix = `${outputGroupKey}::${sourceRowId}::`;
+        Object.entries(sourceLineItems).forEach(([sourceGroupKey, sourceRows]) => {
+          if (!sourceGroupKey.startsWith(childGroupPrefix)) return;
+          const clonedChildRows = cloneLineItemRows(sourceRows as any[]);
+          if (stableStringify(nextLineItems[sourceGroupKey] || []) === stableStringify(clonedChildRows)) return;
+          setGroupRows(sourceGroupKey, clonedChildRows);
+          mergedChildGroups += 1;
+        });
+      });
+
+      if (outputRowsChanged) {
+        setGroupRows(outputGroupKey, nextOutputRows);
+      }
+    });
+  });
+
+  return {
+    lineItems: nextLineItems,
+    mergedRows,
+    mergedChildGroups
+  };
 };
 
 export const buildStepInventoryReservationPlan = (args: {
