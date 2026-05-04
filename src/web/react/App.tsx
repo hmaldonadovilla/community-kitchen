@@ -64,10 +64,10 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { matchesWhenClause } from '../rules/visibility';
 import { type ReportOverlayState } from './components/app/ReportOverlay';
 import { AppOverlays } from './components/app/AppOverlays';
-import { AppNoticeStack, DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
+import { DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
+import { useAppActionNotices } from './components/app/useAppActionNotices';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
-import { ListViewLegend } from './components/app/ListViewLegend';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import { useBlockingOverlay } from './features/overlays/useBlockingOverlay';
@@ -222,7 +222,6 @@ import {
   resolveUploadTransactionTarget,
   splitUploadValue
 } from './app/uploadTransactionState';
-import { buildListViewLegendItems } from './app/listViewLegend';
 import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
 import {
   resolveSubmitPreparationMessageKey,
@@ -16245,66 +16244,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const guidedStepsTopSlot =
     view === 'form' && (definition as any)?.steps?.mode === 'guided' ? <div id="ck-guided-stepsbar-slot" /> : null;
 
-  const topBarNotice =
-    guidedStepsTopSlot || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
-      <AppNoticeStack>
-        {guidedStepsTopSlot}
-        {dedupCheckingNotice}
-        {dedupTopNotice}
-        {validationTopNotice}
-      </AppNoticeStack>
-    ) : null;
-
-  const listLegendItems = useMemo(() => {
-    const cols = ((definition.listView?.columns as any) || []) as any[];
-    const configuredLegend =
-      (Array.isArray(definition.listView?.legend) && definition.listView?.legend.length
-        ? definition.listView?.legend
-        : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
-    return buildListViewLegendItems(cols as any, configuredLegend as any, language);
-  }, [definition, language]);
-  const listLegendColumns = useMemo(() => {
-    const raw = Number((definition.listView as any)?.legendColumns ?? (definition as any)?.listViewLegendColumns);
-    if (!Number.isFinite(raw) || raw <= 1) return 1;
-    return Math.max(1, Math.min(2, Math.round(raw)));
-  }, [definition]);
-  const listLegendColumnWidths = useMemo(() => {
-    const raw = (definition.listView as any)?.legendColumnWidths ?? (definition as any)?.listViewLegendColumnWidths;
-    if (!Array.isArray(raw) || raw.length < 2) return null;
-    const first = Number(raw[0]);
-    const second = Number(raw[1]);
-    if (!Number.isFinite(first) || !Number.isFinite(second) || first <= 0 || second <= 0) return null;
-    const total = first + second;
-    if (!(total > 0)) return null;
-    const normalizedFirst = Number(((first / total) * 100).toFixed(2));
-    const normalizedSecond = Number((100 - normalizedFirst).toFixed(2));
-    return [normalizedFirst, normalizedSecond] as [number, number];
-  }, [definition]);
-
-  useEffect(() => {
-    if (view !== 'list') return;
-    if (!listLegendItems.length) return;
-    logEvent('list.legend.enabled', {
-      count: listLegendItems.length,
-      icons: listLegendItems.map(i => i.icon).filter(Boolean)
-    });
-  }, [logEvent, listLegendItems, view]);
-
-  const bottomBarNotice =
-    view === 'list' && (listLegendItems.length || precreateDedupChecking) ? (
-      <AppNoticeStack>
-        {precreateDedupChecking ? dedupCheckingNotice : null}
-        {listLegendItems.length ? (
-          <ListViewLegend
-            items={listLegendItems}
-            language={language}
-            columns={listLegendColumns}
-            columnWidths={listLegendColumnWidths}
-            className="ck-list-legend--bottomBar"
-          />
-        ) : null}
-      </AppNoticeStack>
-    ) : null;
+  const {
+    topBarNotice,
+    bottomBarNotice,
+    listLegendItems,
+    listLegendColumns,
+    listLegendColumnWidths
+  } = useAppActionNotices({
+    definition,
+    language,
+    view,
+    guidedStepsTopSlot,
+    dedupCheckingNotice,
+    dedupTopNotice,
+    validationTopNotice,
+    precreateDedupChecking,
+    onDiagnostic: logEvent
+  });
 
   const guidedSubmitLabel =
     view === 'form' && guidedUiState && !guidedUiState.isFinal
