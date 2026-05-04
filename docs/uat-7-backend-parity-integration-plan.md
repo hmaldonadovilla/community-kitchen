@@ -182,6 +182,12 @@ First-pass results:
 - `FormView.tsx`: extracted non-guided grouped section rendering and top-of-form status/warning notices into presentational components. Current size: 16,076 lines, down from 16,280.
 - `App.tsx`: extracted App-level overlay shell, button-wrap DOM helper, and report preview style constants. Current size: 16,868 lines, down from 17,202.
 
+Second-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted row-flow action controls, totals rendering, remove buttons, and overlay reset controls into `src/web/react/features/lineItems/components`. Current size: 15,939 lines.
+- `FormView.tsx`: extracted guided step shell rendering, guided target-field parsing, and guided context-header parsing/rendering into `src/web/react/features/steps`. Current size: 15,910 lines.
+- `App.tsx`: extracted app notice rendering, dedup dialog detail construction, and app header status rendering into focused app modules. Current size: 16,739 lines.
+
 Remaining decomposition opportunities:
 
 - `LineItemGroupQuestion.tsx`: split guided compact row rendering, subgroup table rendering, overlay-open field rendering, and source-first allocation panels.
@@ -258,7 +264,7 @@ Full gates for milestone completion:
 | Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
-| Stage 2B: Component/hook decomposition | Complete for first pass | Extracted component/type/style/helper boundaries from `LineItemGroupQuestion.tsx`, `FormView.tsx`, and `App.tsx`; all three target files now have measured line-count reductions and focused validation coverage. |
+| Stage 2B: Component/hook decomposition | Complete for second pass | Added guided-step, line-item control, app notice/header, and dedup dialog boundaries; all three target files now have additional measured line-count reductions and focused validation coverage. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
