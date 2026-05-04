@@ -158,6 +158,7 @@ import {
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
+import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -3667,54 +3668,15 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
     (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
       const action = rowFlowActionById.get(args.actionId);
       if (!action) return null;
-      const label = resolveLocalizedString(action.label, language, action.id);
-      const iconKey = (action.icon || '').toString().trim().toLowerCase();
-      const variant = (action.variant || (iconKey ? 'icon' : 'button')).toString().trim().toLowerCase();
-      const tone = ((action.tone || 'primary').toString().trim().toLowerCase() === 'secondary') ? 'secondary' : 'primary';
-      const toneStyle = tone === 'secondary' ? buttonStyles.secondary : buttonStyles.primary;
       const disabled = submitting;
-      const onClick = () => {
-        if (disabled) return;
-        runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState });
-      };
-
-      if (variant === 'icon' || iconKey) {
-        const iconNode =
-          iconKey === 'remove' ? (
-            <TrashIcon size={40} />
-          ) : iconKey === 'add' ? (
-            <PlusIcon size={40} />
-          ) : iconKey === 'back' ? (
-            <XIcon size={40} />
-          ) : (
-            <PencilIcon size={40} />
-          );
-        return (
-          <button
-            key={action.id}
-            type="button"
-            aria-label={label || action.id}
-            title={label || action.id}
-            onClick={onClick}
-            disabled={disabled}
-            style={withDisabled(toneStyle, disabled)}
-          >
-            {iconNode}
-          </button>
-        );
-      }
-
       return (
-        <button
+        <RowFlowActionControl
           key={action.id}
-          type="button"
-          className="ck-list-row-action-btn"
-          onClick={onClick}
+          action={action}
+          language={language}
           disabled={disabled}
-          style={withListRowActionButtonStyle(disabled, undefined, toneStyle)}
-        >
-          {label || action.id}
-        </button>
+          onRun={() => runRowFlowActionWithContext({ actionId: action.id, row: args.row, rowFlowState: args.rowFlowState })}
+        />
       );
     },
     [language, rowFlowActionById, runRowFlowActionWithContext, submitting]

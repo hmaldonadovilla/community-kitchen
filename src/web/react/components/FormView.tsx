@@ -116,6 +116,7 @@ import { PairedRowGrid } from './form/PairedRowGrid';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
+import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
@@ -6951,26 +6952,15 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const renderUploadFailure = useCallback(
-    (fieldPath: string, disabled?: boolean) => {
-      const failure = uploadFailures[fieldPath];
-      if (!failure) return null;
-      const retryDisabled = Boolean(disabled || failure.retrying || !onUploadFiles);
-      return (
-        <div className="ck-upload-failure" role="alert">
-          <span>{failure.message}</span>
-          <button
-            type="button"
-            className="ck-upload-failure__retry"
-            disabled={retryDisabled}
-            onClick={() => retryUploadFailure(fieldPath)}
-          >
-            {failure.retrying
-              ? tSystem('common.loading', language, 'Loading…')
-              : tSystem('files.retrySave', language, 'Try saving photos again')}
-          </button>
-        </div>
-      );
-    },
+    (fieldPath: string, disabled?: boolean) => (
+      <LineItemUploadFailureNotice
+        language={language}
+        fieldPath={fieldPath}
+        failure={uploadFailures[fieldPath]}
+        disabled={disabled}
+        onRetry={onUploadFiles ? retryUploadFailure : undefined}
+      />
+    ),
     [language, onUploadFiles, retryUploadFailure, uploadFailures]
   );
 

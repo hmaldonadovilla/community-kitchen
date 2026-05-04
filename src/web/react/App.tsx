@@ -63,6 +63,7 @@ import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice'
 import { matchesWhenClause } from '../rules/visibility';
 import { type ReportOverlayState } from './components/app/ReportOverlay';
 import { AppOverlays } from './components/app/AppOverlays';
+import { AppNoticeStack, DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { ListViewLegend } from './components/app/ListViewLegend';
@@ -16244,103 +16245,61 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }, [dedupDialogConflict, definition.dedupDialog, logEvent]);
 
+  const handleDedupTopNoticeOpenExisting = useCallback(() => {
+    const conflictAny = (dedupConflict || dedupNotice) as any;
+    const id = (conflictAny?.existingRecordId || '').toString().trim();
+    const rowNumberRaw = conflictAny?.existingRowNumber;
+    const rowNumber =
+      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
+        ? undefined
+        : Number(rowNumberRaw);
+    if (!id) return;
+    // Clear transient dedup state before navigating.
+    if (dedupCheckTimerRef.current) {
+      globalThis.clearTimeout(dedupCheckTimerRef.current);
+      dedupCheckTimerRef.current = null;
+    }
+    dedupCheckSeqRef.current += 1;
+    lastDedupCheckedSignatureRef.current = '';
+    dedupHoldRef.current = false;
+    dedupCheckingRef.current = false;
+    dedupConflictRef.current = null;
+    setDedupChecking(false);
+    setDedupConflict(null);
+    setDedupNotice(null);
+    // Cancel any pending autosave from the now-invalid draft values.
+    autoSaveDirtyRef.current = false;
+    if (autoSaveTimerRef.current) {
+      globalThis.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDraftSave({ phase: 'idle' });
+    logEvent('dedup.openExisting.click', { existingRecordId: id });
+    // Prefer row-number fetch when available to avoid fragile ID lookups.
+    const loadPromise = rowNumber && rowNumber >= 2
+      ? loadRecordSnapshot('', rowNumber)
+      : loadRecordSnapshot(id);
+    void loadPromise.then(ok => {
+      if (!ok) return;
+      // Prefer summary when enabled (closed records are read-only).
+      setView(summaryViewEnabled ? 'summary' : 'form');
+    });
+  }, [dedupConflict, dedupNotice, loadRecordSnapshot, logEvent, summaryViewEnabled]);
+
   const dedupTopNotice =
     view === 'form' && (isBlockingDedupConflict(dedupConflict) || !!dedupNotice) && !dedupDialogConflict ? (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          padding: '12px 14px',
-          borderRadius: 14,
-          border: '1px solid var(--border)',
-          background: 'transparent',
-          color: 'var(--text)',
-          fontWeight: 600,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10
-        }}
-      >
-        <div>
-          {(dedupConflict || dedupNotice)?.message || tSystem('dedup.duplicate', language, 'Duplicate record.')}
-        </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {(dedupConflict || dedupNotice)?.existingRecordId ? (
-            <button
-              type="button"
-              onClick={() => {
-                const conflictAny = (dedupConflict || dedupNotice) as any;
-                const id = (conflictAny?.existingRecordId || '').toString().trim();
-                const rowNumberRaw = conflictAny?.existingRowNumber;
-                const rowNumber =
-                  rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
-                    ? undefined
-                    : Number(rowNumberRaw);
-                if (!id) return;
-                // Clear transient dedup state before navigating.
-                if (dedupCheckTimerRef.current) {
-                  globalThis.clearTimeout(dedupCheckTimerRef.current);
-                  dedupCheckTimerRef.current = null;
-                }
-                dedupCheckSeqRef.current += 1;
-                lastDedupCheckedSignatureRef.current = '';
-                dedupHoldRef.current = false;
-                dedupCheckingRef.current = false;
-                dedupConflictRef.current = null;
-                setDedupChecking(false);
-                setDedupConflict(null);
-                setDedupNotice(null);
-                // Cancel any pending autosave from the now-invalid draft values.
-                autoSaveDirtyRef.current = false;
-                if (autoSaveTimerRef.current) {
-                  globalThis.clearTimeout(autoSaveTimerRef.current);
-                  autoSaveTimerRef.current = null;
-                }
-                setDraftSave({ phase: 'idle' });
-                logEvent('dedup.openExisting.click', { existingRecordId: id });
-                // Prefer row-number fetch when available to avoid fragile ID lookups.
-                const loadPromise = rowNumber && rowNumber >= 2
-                  ? loadRecordSnapshot('', rowNumber)
-                  : loadRecordSnapshot(id);
-                void loadPromise.then(ok => {
-                  if (!ok) return;
-                  // Prefer summary when enabled (closed records are read-only).
-                  setView(summaryViewEnabled ? 'summary' : 'form');
-                });
-              }}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                color: 'var(--text)',
-                fontWeight: 600
-              }}
-            >
-              {tSystem('dedup.openExisting', language, 'Open existing')}
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <DedupDuplicateNotice
+        language={language}
+        message={(dedupConflict || dedupNotice)?.message}
+        canOpenExisting={!!(dedupConflict || dedupNotice)?.existingRecordId}
+        onOpenExisting={handleDedupTopNoticeOpenExisting}
+      />
     ) : null;
 
   const showInlineDedupCheckingNotice = precreateDedupChecking || (dedupChecking && !(view === 'form' && dedupCheckDialogEnabled));
   const dedupCheckingNotice =
     showInlineDedupCheckingNotice ? (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          padding: '12px 14px',
-          borderRadius: 14,
-          border: '1px solid var(--border)',
-          background: 'transparent',
-          color: 'var(--text)',
-          fontWeight: 600
-        }}
-      >
-        {tSystem('dedup.checking', language, 'Checking duplicates…')}
-      </div>
+      <DedupCheckingNotice language={language} />
     ) : null;
 
   const submitTopErrorMessage = resolveLocalizedString(
@@ -16376,12 +16335,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const topBarNotice =
     guidedStepsTopSlot || dedupCheckingNotice || dedupTopNotice || validationTopNotice ? (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <AppNoticeStack>
         {guidedStepsTopSlot}
         {dedupCheckingNotice}
         {dedupTopNotice}
         {validationTopNotice}
-      </div>
+      </AppNoticeStack>
     ) : null;
 
   const listLegendItems = useMemo(() => {
@@ -16421,7 +16380,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const bottomBarNotice =
     view === 'list' && (listLegendItems.length || precreateDedupChecking) ? (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <AppNoticeStack>
         {precreateDedupChecking ? dedupCheckingNotice : null}
         {listLegendItems.length ? (
           <ListViewLegend
@@ -16432,7 +16391,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             className="ck-list-legend--bottomBar"
           />
         ) : null}
-      </div>
+      </AppNoticeStack>
     ) : null;
 
   const guidedSubmitLabel =
