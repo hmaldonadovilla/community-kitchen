@@ -58,7 +58,6 @@ import {
   CheckIcon,
   EyeIcon,
   PencilIcon,
-  TrashIcon,
   PaperclipIcon,
   PlusIcon,
   RequiredStar,
@@ -158,6 +157,7 @@ import {
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
+import { LineItemOverlayResetButton } from '../../features/lineItems/components/LineItemOverlayResetButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
@@ -10137,24 +10137,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         {overlayOpenButtonText(displayValue)}
                       </button>
                       {showResetButton ? (
-                        <button
-                          type="button"
-                          onClick={handleOverlayOpenActionReset}
+                        <LineItemOverlayResetButton
+                          language={language}
+                          onReset={handleOverlayOpenActionReset}
                           disabled={overlayOpenActionResetDisabled}
-	                          aria-label={tSystem('lineItems.remove', language, 'Remove')}
-	                          style={withDisabled(
-	                            {
-	                              ...overlayActionButtonBaseStyle,
-	                              borderTopLeftRadius: 0,
-	                              borderBottomLeftRadius: 0,
-	                              padding: '0 14px',
-	                              minWidth: 44
-	                            },
-                            overlayOpenActionResetDisabled
-                          )}
-                        >
-                          <TrashIcon size={18} />
-                        </button>
+                          baseStyle={overlayActionButtonBaseStyle}
+                        />
                       ) : null}
                     </div>
                   );
@@ -11427,24 +11415,12 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                               {overlayOpenButtonText(displayValue)}
                             </button>
                             {showResetButton ? (
-                              <button
-                                type="button"
-                                onClick={handleOverlayOpenActionReset}
+                              <LineItemOverlayResetButton
+                                language={language}
+                                onReset={handleOverlayOpenActionReset}
                                 disabled={overlayOpenActionResetDisabled}
-	                                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-	                                style={withDisabled(
-	                                  {
-	                                    ...overlayActionButtonBaseStyle,
-	                                    borderTopLeftRadius: 0,
-	                                    borderBottomLeftRadius: 0,
-	                                    padding: '0 14px',
-	                                    minWidth: 44
-	                                  },
-                                  overlayOpenActionResetDisabled
-                                )}
-                              >
-                                <TrashIcon size={18} />
-                              </button>
+                                baseStyle={overlayActionButtonBaseStyle}
+                              />
                             ) : null}
                           </div>
                         );
