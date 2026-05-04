@@ -1,19 +1,8 @@
+const { shouldApplyLifecycleStatusDateRule } = require('../domain/lifecycleRules');
+
 const DEFAULT_LEDGER_FORM_KEY = 'Config: Inventory Reservation Ledger';
 
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
-
-const normalizeToIsoDate = value => {
-  if (value === undefined || value === null || value === '') return '';
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
-  const raw = value.toString().trim();
-  if (!raw) return '';
-  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
-  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(raw);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
-  const parsed = Date.parse(raw);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : '';
-};
 
 const todayIso = env => {
   const timeZone = toText(env.CK_TIMEZONE || env.TZ) || 'Europe/Brussels';
@@ -30,14 +19,6 @@ const todayIso = env => {
     // Fall through to UTC.
   }
   return new Date().toISOString().slice(0, 10);
-};
-
-const shiftIsoDate = (iso, dayOffset) => {
-  const match = toText(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return iso;
-  const next = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  next.setDate(next.getDate() + dayOffset);
-  return normalizeToIsoDate(next) || iso;
 };
 
 const cloneJson = value => {
@@ -90,17 +71,12 @@ class LifecycleRepository {
   }
 
   shouldApplyRule(form, rule, record, currentTodayIso) {
-    const fromStatuses = Array.isArray(rule && rule.fromStatuses)
-      ? rule.fromStatuses.map(value => toText(value).toLowerCase()).filter(Boolean)
-      : [];
-    const status = this.resolveCurrentStatus(form, rule, record).toLowerCase();
-    if (fromStatuses.length && !fromStatuses.includes(status)) return false;
-    const dateIso = normalizeToIsoDate(this.readRecordField(record, rule && rule.dateFieldId));
-    if (!dateIso) return false;
-    const offsetDays = Number.isFinite(Number(rule && rule.dayOffset || 0)) ? Math.trunc(Number(rule && rule.dayOffset || 0)) : 0;
-    const compareIso = offsetDays ? shiftIsoDate(currentTodayIso, offsetDays) : currentTodayIso;
-    if ((rule && rule.compare) === 'onOrBeforeToday') return dateIso <= compareIso;
-    return dateIso < compareIso;
+    return shouldApplyLifecycleStatusDateRule({
+      rule,
+      currentStatus: this.resolveCurrentStatus(form, rule, record),
+      rawDateValue: this.readRecordField(record, rule && rule.dateFieldId),
+      todayIso: currentTodayIso
+    });
   }
 
   async records(formKey) {

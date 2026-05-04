@@ -104,6 +104,10 @@ import {
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
 import { HeaderColumns } from './webform/types';
+import {
+  shiftIsoDate as shiftLifecycleIsoDate,
+  shouldApplyLifecycleStatusDateRule
+} from './webform/lifecycleRules';
 import { isSingleIngredientLeftoverKind } from '../domain/leftoverKinds';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
@@ -1483,15 +1487,7 @@ export class WebFormService {
   }
 
   private shiftIsoDate(iso: string, dayOffset: number): string {
-    const match = (iso || '').toString().trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return iso;
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return iso;
-    const next = new Date(year, month - 1, day);
-    next.setDate(next.getDate() + dayOffset);
-    return normalizeToIsoDate(next) || iso;
+    return shiftLifecycleIsoDate(iso, dayOffset);
   }
 
   private resolveLifecycleStatusColumn(form: FormConfig, rule: LifecycleRule, columns: HeaderColumns): number | undefined {
@@ -1512,22 +1508,7 @@ export class WebFormService {
     rawDateValue: any,
     todayIso: string
   ): boolean {
-    const fromStatusesRaw = 'fromStatuses' in rule ? rule.fromStatuses : undefined;
-    const status = (currentStatus === undefined || currentStatus === null ? '' : currentStatus.toString().trim()).toLowerCase();
-    const fromStatuses = Array.isArray(fromStatusesRaw)
-      ? fromStatusesRaw.map((value: any) => (value || '').toString().trim().toLowerCase()).filter(Boolean)
-      : [];
-    if (fromStatuses.length && !fromStatuses.includes(status)) return false;
-    const dateIso = normalizeToIsoDate(rawDateValue);
-    if (!dateIso) return false;
-    const dayOffsetRaw = 'dayOffset' in rule ? rule.dayOffset : 0;
-    const offsetDays = Number.isFinite(Number(dayOffsetRaw || 0)) ? Math.trunc(Number(dayOffsetRaw || 0)) : 0;
-    const compareIso = offsetDays ? this.shiftIsoDate(todayIso, offsetDays) : todayIso;
-    if (!compareIso) return false;
-    if (('compare' in rule ? rule.compare : 'beforeToday') === 'onOrBeforeToday') {
-      return dateIso <= compareIso;
-    }
-    return dateIso < compareIso;
+    return shouldApplyLifecycleStatusDateRule({ rule, currentStatus, rawDateValue, todayIso });
   }
 
   private getActiveLifecycleReservationsForForm(
