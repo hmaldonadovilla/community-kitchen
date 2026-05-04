@@ -318,6 +318,10 @@ import {
   shouldWaitForActiveDraftSaveBeforeEnsuringRecord
 } from './features/steps/domain/guidedStepRecordRequirement';
 import {
+  applyUploadedFieldOverridesToState,
+  type UploadedFieldValueOverride
+} from './features/uploads/domain/uploadedFieldOverrides';
+import {
   hasStatusTransitionValue,
   matchesStatusTransition,
   resolveStatusTransitionValue
@@ -351,53 +355,6 @@ type FieldChangePending = {
     queued: boolean;
     lastSeen: { values: Record<string, FieldValue>; lineItems: LineItemState } | null;
   };
-};
-
-type UploadedFieldValueOverride = {
-  scope: 'top' | 'line';
-  questionId?: string;
-  groupId?: string;
-  rowId?: string;
-  fieldId?: string;
-  items: Array<string | File>;
-};
-
-const applyUploadedFieldOverridesToState = (args: {
-  values: Record<string, FieldValue>;
-  lineItems: LineItemState;
-  overrides: Map<string, UploadedFieldValueOverride>;
-}): { values: Record<string, FieldValue>; lineItems: LineItemState } => {
-  const overrides = args.overrides;
-  if (!overrides.size) return { values: args.values, lineItems: args.lineItems };
-  let nextValues = args.values;
-  let nextLineItems = args.lineItems;
-  overrides.forEach(entry => {
-    if (entry.scope === 'top' && entry.questionId) {
-      nextValues = {
-        ...nextValues,
-        [entry.questionId]: entry.items as unknown as FieldValue
-      };
-      return;
-    }
-    if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
-      const rows = nextLineItems[entry.groupId] || [];
-      const nextRows = rows.map(row => {
-        if (row.id !== entry.rowId) return row;
-        return {
-          ...row,
-          values: {
-            ...(row.values || {}),
-            [entry.fieldId as string]: entry.items
-          }
-        };
-      });
-      nextLineItems = {
-        ...nextLineItems,
-        [entry.groupId]: nextRows
-      };
-    }
-  });
-  return { values: nextValues, lineItems: nextLineItems };
 };
 
 const computeDedupSignatureFromValues = (rulesRaw: any, values: Record<string, any>): string => {
