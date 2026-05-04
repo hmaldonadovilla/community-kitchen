@@ -65,11 +65,8 @@ import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps
 import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../features/steps/domain/errorNavigation';
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
-import {
-  normalizeGuidedLineFieldId,
-  parseGuidedTargetFieldEntries
-} from '../features/steps/domain/guidedTargetFields';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
+import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
@@ -15420,9 +15417,6 @@ const FormView: React.FC<FormViewProps> = ({
       const groupQ = definition.questions.find(q2 => q2.id === id && q2.type === 'LINE_ITEM_GROUP');
       if (!groupQ) return null;
 
-      const presentationRaw = (target.presentation || 'groupEditor').toString().trim().toLowerCase();
-      const presentation: 'groupEditor' | 'liftedRowFields' =
-        presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
       const targetLabel =
         (target as any).label !== undefined && (target as any).label !== null
           ? resolveLocalizedString((target as any).label, language, '').trim()
@@ -15431,7 +15425,21 @@ const FormView: React.FC<FormViewProps> = ({
         (target as any).helperText !== undefined && (target as any).helperText !== null
           ? resolveLocalizedString((target as any).helperText, language, '').trim()
           : '';
-      let delegateTargetHelperText = false;
+      const {
+        presentation,
+        groupOverride,
+        rowFilter,
+        effectiveLineMode,
+        hideInlineSubgroups,
+        delegateTargetHelperText,
+        stepLineCfg
+      } = buildGuidedLineGroupConfig({
+        target,
+        groupQ,
+        targetHelperText,
+        stepLineGroupsDefaultMode,
+        stepSubGroupsDefaultMode
+      });
       const wrapLineGroupContent = (content: React.ReactNode): React.ReactNode => {
         const wrapperHelperText = delegateTargetHelperText ? '' : targetHelperText;
         if (!targetLabel && !wrapperHelperText) return content;
@@ -15455,9 +15463,6 @@ const FormView: React.FC<FormViewProps> = ({
         );
       };
 
-      const groupOverride = (target as any).groupOverride as LineItemGroupConfigOverride | undefined;
-      const baseLineCfg = (groupQ as any).lineItemConfig || {};
-      const lineCfg = groupOverride ? applyLineItemGroupOverride(baseLineCfg, groupOverride) : baseLineCfg;
       if (groupOverride && onDiagnostic) {
         const logKey = `${activeGuidedStepId}::${id}::groupOverride`;
         if (!guidedLineGroupOverrideLoggedRef.current.has(logKey)) {
@@ -15468,159 +15473,6 @@ const FormView: React.FC<FormViewProps> = ({
             keys: Object.keys(groupOverride || {})
           });
         }
-      }
-
-      const targetModeRaw = (target.displayMode || 'inherit').toString().trim().toLowerCase();
-      const stepModeRaw = stepLineGroupsDefaultMode ? stepLineGroupsDefaultMode.toString().trim().toLowerCase() : '';
-      const inheritedOverlay = !!(lineCfg as any)?.ui?.openInOverlay;
-      const resolvedLineMode =
-        targetModeRaw === 'inline' || targetModeRaw === 'overlay'
-          ? (targetModeRaw as 'inline' | 'overlay')
-          : stepModeRaw === 'inline' || stepModeRaw === 'overlay'
-            ? (stepModeRaw as 'inline' | 'overlay')
-            : inheritedOverlay
-              ? 'overlay'
-              : 'inline';
-      const effectiveLineMode: 'inline' | 'overlay' = presentation === 'liftedRowFields' ? 'inline' : resolvedLineMode;
-
-      const subTargetModeRaw = ((target.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
-      const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
-      const resolvedSubMode =
-        subTargetModeRaw === 'inline' || subTargetModeRaw === 'overlay'
-          ? (subTargetModeRaw as 'inline' | 'overlay')
-          : subStepModeRaw === 'inline' || subStepModeRaw === 'overlay'
-            ? (subStepModeRaw as 'inline' | 'overlay')
-            : 'inline';
-      const hideInlineSubgroups = resolvedSubMode === 'overlay';
-
-      // Filter parent fields and (optionally) subgroup definitions/fields based on the step target allowlists.
-      const rowFilter = target.rows || null;
-      const {
-        allowed: allowedFieldIds,
-        renderAsLabel: renderAsLabelFieldIdsFromFields,
-        order: fieldOrder,
-        explicit: hasExplicitFieldScope
-      } = parseGuidedTargetFieldEntries(
-        groupQ.id,
-        target.fields
-      );
-      const readOnlyFieldIds = (() => {
-        const raw = (target as any).readOnlyFields;
-        const parsed = parseGuidedTargetFieldEntries(groupQ.id, raw);
-        const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-        const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
-        return merged.size ? merged : null;
-      })();
-
-      const filteredFieldsBase = hasExplicitFieldScope
-        ? (lineCfg.fields || []).filter((f: any) => {
-            const fid = normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id);
-            return fid && !!allowedFieldIds?.has(fid);
-          })
-        : lineCfg.fields || [];
-      const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
-        const fid = normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id);
-        if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
-          return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-        }
-        return f;
-      });
-      const orderedFields = fieldOrder.length
-        ? fieldOrder
-            .map(fid => filteredFields.find(f => normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id) === fid))
-            .filter(Boolean)
-            .concat(
-              filteredFields.filter(f => !fieldOrder.includes(normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id)))
-            )
-        : filteredFields;
-
-      const subGroupsCfgPresent = !!target.subGroups && typeof target.subGroups === 'object';
-      const hasStepDataSourceRows = Array.isArray((target as any).dataSourceRows) && ((target as any).dataSourceRows as any[]).length > 0;
-      delegateTargetHelperText = effectiveLineMode === 'inline' && hasStepDataSourceRows && !!targetHelperText;
-      const subIncludeRaw = subGroupsCfgPresent ? (target.subGroups as any)?.include : undefined;
-      const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
-      const allowedSubIds = subIncludeList
-        .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
-        .filter(Boolean);
-      const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
-
-      const filteredSubGroups = (() => {
-        const subs = (lineCfg.subGroups || []) as any[];
-        if (!subs.length) return subs;
-        if (hasStepDataSourceRows && !subGroupsCfgPresent) return [];
-        // In guided steps, `liftedRowFields` should not show subgroups unless explicitly configured.
-        if (!subGroupsCfgPresent && presentation === 'liftedRowFields') return [];
-        const kept = allowedSubSet
-          ? subs.filter(sub => {
-              const subId = resolveSubgroupKey(sub as any);
-              return subId && allowedSubSet.has(subId);
-            })
-          : subs;
-        return kept.map(sub => {
-          const subId = resolveSubgroupKey(sub as any);
-          const subTarget = subIncludeList.find(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId);
-          const allowedSubFieldsRaw = subTarget?.fields;
-          const {
-            allowed: allowedSubFields,
-            renderAsLabel: renderAsLabelSubFieldIdsFromFields,
-            order: subFieldOrder,
-            explicit: hasExplicitSubFieldScope
-          } = parseGuidedTargetFieldEntries(subId, allowedSubFieldsRaw);
-          const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
-          const readOnlySubFields = (() => {
-            const parsed = parseGuidedTargetFieldEntries(subId, readOnlySubFieldsRaw);
-            const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-            const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
-            return merged.size ? merged : null;
-          })();
-
-          const baseFields: any[] = (sub as any).fields || [];
-          const nextFields = hasExplicitSubFieldScope
-            ? baseFields.filter((f: any) => {
-                const fid = normalizeGuidedLineFieldId(subId, (f as any)?.id);
-                return fid && !!allowedSubFields?.has(fid);
-              })
-            : baseFields;
-          const finalFields =
-            readOnlySubFields && readOnlySubFields.size
-              ? nextFields.map((f: any) => {
-                  const fid = normalizeGuidedLineFieldId(subId, (f as any)?.id);
-                  if (fid && readOnlySubFields.has(fid)) {
-                    return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-                  }
-                  return f;
-                })
-              : nextFields;
-          const orderedSubFields = subFieldOrder.length
-            ? subFieldOrder
-                .map(fid => finalFields.find(f => normalizeGuidedLineFieldId(subId, (f as any)?.id) === fid))
-                .filter(Boolean)
-                .concat(finalFields.filter(f => !subFieldOrder.includes(normalizeGuidedLineFieldId(subId, (f as any)?.id))))
-            : finalFields;
-          return { ...(sub as any), fields: orderedSubFields };
-        });
-      })();
-
-      const stepHasSourceFirstAllocations = hasStepDataSourceRows
-        && (((target as any).dataSourceRows as any[]) || []).some(
-          (cfg: any) => ((cfg?.presentation || '').toString().trim().toLowerCase() === 'sourcefirstallocations')
-        );
-      const stepLineCfg: any = {
-        ...(lineCfg as any),
-        ...(stepHasSourceFirstAllocations ? { totals: [] } : {}),
-        fields: orderedFields,
-        subGroups: filteredSubGroups
-      };
-      // Safety: when a row filter is applied for this step, hide "Add line" controls to avoid creating invisible rows.
-      if (rowFilter) {
-        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), addButtonPlacement: 'hidden' };
-      }
-      if (presentation === 'liftedRowFields') {
-        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), showItemPill: false };
-      }
-      if (target?.collapsedFieldsInHeader === true) {
-        // Guided steps UX: render progressive collapsed fields in the row header and hide the toggle/pill UI.
-        stepLineCfg.ui = { ...(stepLineCfg.ui || {}), guidedCollapsedFieldsInHeader: true };
       }
 
       const stepGroup: WebQuestionDefinition = {
