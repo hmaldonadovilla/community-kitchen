@@ -136,6 +136,46 @@ Exit criteria:
 - Extracted logic is testable without DOM or Apps Script globals.
 - No transport behavior changes are introduced by frontend refactors.
 
+### Stage 2B: Component and Hook Decomposition
+
+Purpose: physically reduce the largest React files after the first domain-helper extraction pass by moving cohesive rendering and UI-state boundaries out of monolithic components.
+
+Primary targets:
+
+- `src/web/react/components/form/LineItemGroupQuestion.tsx`
+- `src/web/react/components/FormView.tsx`
+- `src/web/react/App.tsx`
+
+Target boundaries:
+
+- Line item group rendering:
+  - Extract row and subgroup table primitives into `src/web/react/features/lineItems/components`.
+  - Extract compact/guided row summary rendering into focused components that receive already-resolved callbacks and values from the parent.
+  - Extract repeated read-only field, warning, upload-failure, and action-button primitives where they can be reused without changing behavior.
+  - Keep the complex reservation/source-first state machine in the parent until it can be moved behind a dedicated hook with focused tests.
+- Form view orchestration:
+  - Extract guided-step rendering shell and target rendering helpers where they only depend on resolved props.
+  - Extract overlay/session controller helpers into hooks when they own a clear state machine and do not require transport or persistence access.
+  - Extract upload overlay rendering and retry UI into components while keeping upload mutation callbacks injected from the parent.
+- App shell orchestration:
+  - Extract report preview overlay state/rendering helpers and custom-button action wiring into a hook/component boundary.
+  - Extract dedup dialog rendering and detail building into a focused app component.
+  - Extract home/list shell wiring where it can receive resolved handlers and cache state from the parent without moving transport calls.
+
+Implementation rules:
+
+- Preserve behavior first; avoid changing transport, persistence, or backend API routing in this stage.
+- Prefer prop-injected presentational components before moving stateful hooks.
+- Add focused unit tests for extracted pure helpers and focused React tests only when a user-visible rendering boundary changes.
+- Commit each meaningful extraction independently.
+- Run `npm run lint:changed`, focused tests, and `npm run build` before finalizing the stage. Use staging deploy and Playwright smoke only after user-visible component wiring changes are stable.
+
+Exit criteria:
+
+- Each primary target has at least one meaningful component or hook boundary extracted.
+- Line counts decrease materially in all three target files.
+- Existing Meal Production create/edit and guided line-item flows remain functionally unchanged in targeted validation.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
@@ -205,7 +245,8 @@ Full gates for milestone completion:
 | --- | --- | --- |
 | Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
-| Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. Remaining component-size reduction can continue opportunistically without blocking backend parity. |
+| Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
+| Stage 2B: Component/hook decomposition | In progress | Physical decomposition of `LineItemGroupQuestion.tsx`, `FormView.tsx`, and `App.tsx` is now tracked separately from pure-helper extraction. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
