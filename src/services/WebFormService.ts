@@ -51,6 +51,16 @@ import { UploadService } from './webform/uploads';
 import { AnalyticsService } from './webform/analytics/service';
 import { AnalyticsPipelineService } from './webform/analytics/pipelineService';
 import {
+  buildAnalyticsPipelineJob,
+  formatAnalyticsPipelineJobError,
+  normalizeAnalyticsPipelineRunRequest,
+  parseAnalyticsPipelineQueue,
+  resolveAnalyticsPipelineQueuedNotice,
+  serializeAnalyticsPipelineQueue,
+  validateAnalyticsPipelineRunRequest,
+  type AnalyticsPipelineJob
+} from './webform/analytics/pipelineQueue';
+import {
   DataSourceIdBackfillOptions,
   DataSourceIdBackfillResult,
   DataSourceIdBackfillService
@@ -103,7 +113,6 @@ const RECORD_MUTATION_LANE_POLL_MS = 250;
 const ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_QUEUE';
 const ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_TRIGGER_ID';
 const ANALYTICS_PIPELINE_TRIGGER_HANDLER = 'runQueuedAnalyticsPipelineJobs';
-const DEFAULT_ANALYTICS_PIPELINE_NOTICE = 'The report has been queued. The spreadsheet will be sent by email.';
 const USER_RECORD_SAVE_RETRY_DELAYS_MS = [0, 900];
 const INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS = [0, 500, 1500];
 const RESERVATION_FOLLOWUP_RETRY_DELAYS_MS = [0, 750, 2000];
@@ -151,14 +160,6 @@ type HomeBootstrapChunkMeta = {
 type BootstrapContextOptions = {
   includeHomeData?: boolean;
   includeAnalytics?: boolean;
-};
-
-type AnalyticsPipelineJob = {
-  id: string;
-  ownerFormKey: string;
-  pipelineId: string;
-  startDate: string;
-  queuedAt: string;
 };
 
 type FollowupLaneTicket = {
@@ -683,7 +684,7 @@ export class WebFormService {
         questions: definition.questions?.length || 0,
         elapsedMs: Date.now() - startedAt
       });
-    } catch (_) {
+    } catch {
       // Ignore cache write failures; definition is still valid for this request.
     }
     return definition;
@@ -1122,34 +1123,17 @@ export class WebFormService {
   }
 
   public queueAnalyticsPipelineRun(request: QueueAnalyticsPipelineRequest): QueueAnalyticsPipelineResult {
-    const ownerFormKey = (request?.ownerFormKey || '').toString().trim();
-    const pipelineId = (request?.pipelineId || '').toString().trim();
-    const startDate = normalizeToIsoDate(request?.startDate);
-    if (!ownerFormKey || !pipelineId || !startDate) {
-      return { success: false, message: 'Invalid analytics pipeline request.' };
-    }
+    const normalized = normalizeAnalyticsPipelineRunRequest(request);
     const todayIso = this.scriptTodayIso();
-    if (startDate > todayIso) {
-      return { success: false, message: 'The selected date must be today or earlier.' };
-    }
+    const validationMessage = validateAnalyticsPipelineRunRequest(normalized, todayIso);
+    if (validationMessage) return { success: false, message: validationMessage };
 
-    const context = this.getAnalyticsPipelineContext(ownerFormKey, pipelineId);
+    const context = this.getAnalyticsPipelineContext(normalized.ownerFormKey, normalized.pipelineId);
     if (!context) {
-      return { success: false, message: `Unknown analytics pipeline: ${ownerFormKey} / ${pipelineId}` };
+      return { success: false, message: `Unknown analytics pipeline: ${normalized.ownerFormKey} / ${normalized.pipelineId}` };
     }
 
-    const notice = (() => {
-      const raw = context.pipeline.ui?.queuedNotice;
-      if (typeof raw === 'string') return raw.trim() || DEFAULT_ANALYTICS_PIPELINE_NOTICE;
-      if (raw && typeof raw === 'object') {
-        return (
-          (raw as any).en?.toString?.().trim?.() ||
-          (raw as any).EN?.toString?.().trim?.() ||
-          DEFAULT_ANALYTICS_PIPELINE_NOTICE
-        );
-      }
-      return DEFAULT_ANALYTICS_PIPELINE_NOTICE;
-    })();
+    const notice = resolveAnalyticsPipelineQueuedNotice(context.pipeline);
 
     try {
       this.withScriptLock('analyticsPipelineQueue', 30_000, () => {
@@ -1158,23 +1142,32 @@ export class WebFormService {
           throw new Error('PropertiesService is not available.');
         }
         const queue = this.readAnalyticsPipelineQueue(props);
-        queue.push({
-          id: Utilities.getUuid(),
-          ownerFormKey,
-          pipelineId,
-          startDate,
-          queuedAt: new Date().toISOString()
-        });
-        props.setProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY, JSON.stringify(queue));
+        queue.push(
+          buildAnalyticsPipelineJob({
+            id: Utilities.getUuid(),
+            request: normalized,
+            queuedAt: new Date().toISOString()
+          })
+        );
+        props.setProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY, serializeAnalyticsPipelineQueue(queue));
         this.ensureAnalyticsPipelineTriggerScheduled(props);
       });
     } catch (err: any) {
       const message = (err?.message || err?.toString?.() || 'Failed to queue analytics pipeline.').toString();
-      debugLog('analytics.pipeline.queue.failed', { ownerFormKey, pipelineId, startDate, message });
+      debugLog('analytics.pipeline.queue.failed', {
+        ownerFormKey: normalized.ownerFormKey,
+        pipelineId: normalized.pipelineId,
+        startDate: normalized.startDate,
+        message
+      });
       return { success: false, message };
     }
 
-    debugLog('analytics.pipeline.queued', { ownerFormKey, pipelineId, startDate });
+    debugLog('analytics.pipeline.queued', {
+      ownerFormKey: normalized.ownerFormKey,
+      pipelineId: normalized.pipelineId,
+      startDate: normalized.startDate
+    });
     return { success: true, message: notice };
   }
 
@@ -1221,7 +1214,7 @@ export class WebFormService {
         processed += 1;
       } catch (err: any) {
         const message = (err?.message || err?.toString?.() || 'Unknown analytics pipeline error').toString();
-        errors.push(`${job.ownerFormKey}/${job.pipelineId}: ${message}`);
+        errors.push(formatAnalyticsPipelineJobError(job, message));
         debugLog('analytics.pipeline.run.failed', {
           ownerFormKey: job.ownerFormKey,
           pipelineId: job.pipelineId,
@@ -7018,30 +7011,7 @@ export class WebFormService {
 
   private readAnalyticsPipelineQueue(props: GoogleAppsScript.Properties.Properties): AnalyticsPipelineJob[] {
     const raw = (props.getProperty(ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY) || '').toString().trim();
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map(entry => {
-          const item = entry && typeof entry === 'object' ? (entry as Record<string, any>) : {};
-          const id = (item.id || '').toString().trim();
-          const ownerFormKey = (item.ownerFormKey || '').toString().trim();
-          const pipelineId = (item.pipelineId || '').toString().trim();
-          const startDate = normalizeToIsoDate(item.startDate);
-          if (!id || !ownerFormKey || !pipelineId || !startDate) return null;
-          return {
-            id,
-            ownerFormKey,
-            pipelineId,
-            startDate,
-            queuedAt: (item.queuedAt || '').toString().trim() || new Date().toISOString()
-          } satisfies AnalyticsPipelineJob;
-        })
-        .filter(Boolean) as AnalyticsPipelineJob[];
-    } catch {
-      return [];
-    }
+    return parseAnalyticsPipelineQueue(raw);
   }
 
   private ensureAnalyticsPipelineTriggerScheduled(props: GoogleAppsScript.Properties.Properties): void {
@@ -8027,7 +7997,7 @@ export class WebFormService {
       this._cache = (typeof CacheService !== 'undefined' && (CacheService as any).getScriptCache)
         ? (CacheService as any).getScriptCache()
         : null;
-    } catch (_) {
+    } catch {
       this._cache = null;
     }
     return this._cache ?? null;
