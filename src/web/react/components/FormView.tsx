@@ -317,6 +317,8 @@ type UploadRetryTarget = {
   uploadConfig?: any;
 };
 
+type UserEditResult = { deferMutation?: boolean; skipSelectionEffects?: boolean };
+
 type FileUploadOrderedEntryCheckArgs =
   | {
       scope: 'top';
@@ -649,7 +651,7 @@ interface FormViewProps {
     tag?: string;
     inputType?: string;
     nextValue?: FieldValue;
-  }) => { deferMutation?: boolean } | void;
+  }) => UserEditResult | void;
   onAutomatedMutation?: (args: {
     scope: 'line';
     fieldPath: string;
@@ -8971,7 +8973,7 @@ const FormView: React.FC<FormViewProps> = ({
       );
       return;
     }
-    let userEditResult: { deferMutation?: boolean } | void = undefined;
+    let userEditResult: UserEditResult | void = undefined;
     if (changeSource === 'selectionEffectInit') {
       onAutomatedMutation?.({
         scope: 'line',
@@ -8997,6 +8999,7 @@ const FormView: React.FC<FormViewProps> = ({
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
     if (onStatusClear) onStatusClear();
     if (userEditResult?.deferMutation) return;
+    const skipSelectionEffects = userEditResult?.skipSelectionEffects === true;
     const currentLineItems = lineItemsRef.current;
     const currentValues = valuesRef.current;
     const existingRows = currentLineItems[group.id] || [];
@@ -9127,7 +9130,7 @@ const FormView: React.FC<FormViewProps> = ({
       });
       return next;
     });
-    if (onSelectionEffect) {
+    if (onSelectionEffect && !skipSelectionEffects) {
       const selectionEffectRowValues = (() => {
         const merged: Record<string, FieldValue> = { ...updatedRowValues };
         const mergeMissing = (source?: Record<string, FieldValue>) => {
@@ -9195,6 +9198,14 @@ const FormView: React.FC<FormViewProps> = ({
       }
 
       runSelectionEffectsForAncestorRows(group.id, currentLineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
+    } else if (skipSelectionEffects) {
+      onDiagnostic?.('field.change.selectionEffects.held', {
+        scope: 'line',
+        groupId: group.id,
+        rowId,
+        fieldId: (field?.id || '').toString(),
+        reason: 'fieldChangeDialog.number.pending'
+      });
     }
   };
 

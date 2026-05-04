@@ -81,6 +81,24 @@ export const shouldDeferFieldChangeMutation = (args: {
   return fieldType === 'CHOICE' || fieldType === 'CHECKBOX' || fieldType === 'FILE_UPLOAD' || fieldType === 'DATE';
 };
 
+export const shouldHoldFieldChangeSelectionEffects = (args: {
+  dialog?: FieldChangeDialogConfig;
+  scope: FieldChangeDialogScope;
+  fieldType?: string;
+  shouldTrigger: boolean;
+  hasExistingValueChange: boolean;
+  nextValue: FieldValue;
+  suppressInitialDateDialog?: boolean;
+}): boolean => {
+  if (args.scope !== 'line') return false;
+  if (!args.dialog?.when) return false;
+  if (args.suppressInitialDateDialog) return false;
+  if (!args.hasExistingValueChange) return false;
+  const fieldType = normalizeId(args.fieldType).toUpperCase();
+  if (fieldType !== 'NUMBER') return false;
+  return args.shouldTrigger || isDialogEmptyValue(args.nextValue);
+};
+
 export const shouldSuppressInitialDateChangeDialog = (args: {
   scope: FieldChangeDialogScope;
   fieldType?: string;

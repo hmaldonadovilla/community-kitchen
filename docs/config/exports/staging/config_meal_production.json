@@ -5910,8 +5910,38 @@
             ],
             "changeDialog": {
               "when": {
-                "fieldId": "ORD_QTY",
-                "equals": 0
+                "all": [
+                  {
+                    "fieldId": "ORD_QTY",
+                    "equals": 0
+                  },
+                  {
+                    "lineItems": {
+                      "groupId": "MP_MEALS_REQUEST",
+                      "subGroupId": "MP_TYPE_LI",
+                      "match": "any",
+                      "when": {
+                        "any": [
+                          {
+                            "fieldId": "PREP_TYPE",
+                            "equals": [
+                              "Multi-ingredient",
+                              "Single-ingredient"
+                            ]
+                          },
+                          {
+                            "fieldId": "RECIPE",
+                            "notEmpty": true
+                          },
+                          {
+                            "fieldId": "LEFTOVER_ID",
+                            "notEmpty": true
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
               },
               "title": {
                 "en": "Update ordered portions",
@@ -9874,8 +9904,38 @@
               ],
               "changeDialog": {
                 "when": {
-                  "fieldId": "ORD_QTY",
-                  "equals": 0
+                  "all": [
+                    {
+                      "fieldId": "ORD_QTY",
+                      "equals": 0
+                    },
+                    {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "subGroupId": "MP_TYPE_LI",
+                        "match": "any",
+                        "when": {
+                          "any": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": [
+                                "Multi-ingredient",
+                                "Single-ingredient"
+                              ]
+                            },
+                            {
+                              "fieldId": "RECIPE",
+                              "notEmpty": true
+                            },
+                            {
+                              "fieldId": "LEFTOVER_ID",
+                              "notEmpty": true
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 },
                 "title": {
                   "en": "Update ordered portions",

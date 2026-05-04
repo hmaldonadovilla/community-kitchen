@@ -145,13 +145,13 @@ import {
 import {
   applyFieldChangeDialogTargets,
   resolveFieldChangeDialogConfirmUpdates,
-  evaluateFieldChangeDialogWhen,
   evaluateFieldChangeDialogWhenWithFallback,
   finalizeInitialDateChangeDialogEntry,
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
   resolveTargetFieldConfig,
   shouldDeferFieldChangeMutation,
+  shouldHoldFieldChangeSelectionEffects,
   shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
@@ -336,6 +336,7 @@ type FieldChangePending = {
   effectQuestion?: WebQuestionDefinition;
   selectionEffects?: SelectionEffect[];
   prevSnapshot: { values: Record<string, FieldValue>; lineItems: LineItemState };
+  prevValue?: FieldValue;
   nextValue: FieldValue;
   allowEmptyNextValue?: boolean;
   autoSaveSnapshot: {
@@ -2324,7 +2325,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       tag?: string;
       inputType?: string;
       nextValue?: FieldValue;
-    }): { deferMutation?: boolean } | void => {
+    }): { deferMutation?: boolean; skipSelectionEffects?: boolean } | void => {
       try {
         const fieldPath = (args?.fieldPath || '').toString();
         const fieldId = (args?.fieldId || '').toString();
@@ -2391,20 +2392,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             args.scope === 'line' && args.groupId && args.rowId
               ? (lineItemsRef.current[args.groupId] || []).find(row => row.id === args.rowId)?.values?.[fieldId]
               : valuesRef.current[fieldId];
+          const existingPending = fieldChangePendingRef.current[fieldKey];
+          const effectivePrevValue =
+            !isEmptyValue(prevValue as FieldValue)
+              ? (prevValue as FieldValue)
+              : !isEmptyValue(existingPending?.prevValue as FieldValue)
+                ? (existingPending?.prevValue as FieldValue)
+                : (prevValue as FieldValue);
           const suppressInitialDateDialog = shouldSuppressInitialDateChangeDialog({
             scope: args.scope,
             fieldType: changeType,
             fieldPath: fieldKey,
             fieldId,
-            prevValue: prevValue as FieldValue,
+            prevValue: effectivePrevValue,
             nextValue: args.nextValue as FieldValue,
             baselineValues: lastAutoSaveSeenRef.current?.values || null,
             initialEntryInProgressByFieldPath: fieldChangeDateInitialEntryInProgressRef.current,
             initialEntryCompletedByFieldPath: fieldChangeDateInitialEntryCompletedRef.current
           });
           const hasExistingValueChange =
-            !isEmptyValue(prevValue as FieldValue) &&
-            prevValue !== args.nextValue;
+            !isEmptyValue(effectivePrevValue) &&
+            effectivePrevValue !== args.nextValue;
           const allowEmptyNextValue = hasExistingValueChange && isEmptyValue(args.nextValue as FieldValue);
           const dialogCfg = source?.dialog;
           const topQuestionClearOnChangeEnabled =
@@ -2429,7 +2437,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               lineItems: lineItemsRef.current,
               overrides: uploadedFieldValueOverridesRef.current
             });
-            const shouldTrigger = evaluateFieldChangeDialogWhen({
+            const existing = fieldChangePendingRef.current[fieldKey];
+            const prevSnapshot = existing?.prevSnapshot || {
+              values: dialogEvaluationState.values,
+              lineItems: dialogEvaluationState.lineItems
+            };
+            const validity = evaluateFieldChangeDialogWhenWithFallback({
               when: dialogCfg.when,
               scope: args.scope,
               fieldId,
@@ -2438,14 +2451,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               nextValue: args.nextValue,
               values: dialogEvaluationState.values,
               lineItems: dialogEvaluationState.lineItems,
+              fallbackValues: prevSnapshot.values,
+              fallbackLineItems: prevSnapshot.lineItems,
               allowEmptyNextValue
             });
+            const shouldTrigger = validity.matches;
+            const shouldHoldSelectionEffects = shouldHoldFieldChangeSelectionEffects({
+              dialog: dialogCfg,
+              scope: args.scope,
+              fieldType: changeType,
+              shouldTrigger,
+              hasExistingValueChange,
+              nextValue: args.nextValue as FieldValue,
+              suppressInitialDateDialog
+            });
             if (shouldTrigger) {
-              const existing = fieldChangePendingRef.current[fieldKey];
-              const prevSnapshot = existing?.prevSnapshot || {
-                values: dialogEvaluationState.values,
-                lineItems: dialogEvaluationState.lineItems
-              };
               const pending: FieldChangePending = {
                 fieldPath: fieldKey,
                 scope: args.scope,
@@ -2456,6 +2476,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 effectQuestion: source?.question || (source?.field as any) || undefined,
                 selectionEffects: (source?.question || source?.field)?.selectionEffects || [],
                 prevSnapshot,
+                prevValue: effectivePrevValue,
                 nextValue: args.nextValue,
                 allowEmptyNextValue,
                 autoSaveSnapshot: {
@@ -2471,12 +2492,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 groupId: args.groupId || null,
                 rowId: args.rowId || null
               });
+              if (validity.matchedOn === 'fallback') {
+                logEvent('fieldChangeDialog.pending.revalidatedFromSnapshot', {
+                  fieldPath: fieldKey,
+                  fieldId,
+                  groupId: args.groupId || null,
+                  rowId: args.rowId || null,
+                  phase: 'change'
+                });
+              }
               if (
                 shouldDeferFieldChangeMutation({
                   dialog: dialogCfg,
                   fieldType: changeType,
                   shouldTrigger,
-                  prevValue: prevValue as FieldValue,
+                  prevValue: effectivePrevValue,
                   nextValue: args.nextValue as FieldValue,
                   suppressInitialDateDialog
                 })
@@ -2490,6 +2520,53 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 });
                 openFieldChangeDialog(pending);
                 return { deferMutation: true };
+              }
+              if (shouldHoldSelectionEffects) {
+                return { skipSelectionEffects: true };
+              }
+            } else if (existing && changeType === 'NUMBER' && allowEmptyNextValue) {
+              fieldChangePendingRef.current[fieldKey] = {
+                ...existing,
+                nextValue: args.nextValue,
+                allowEmptyNextValue
+              };
+              logEvent('fieldChangeDialog.pending.baselineRetained', {
+                fieldPath: fieldKey,
+                fieldId,
+                groupId: args.groupId || null,
+                rowId: args.rowId || null
+              });
+              if (shouldHoldSelectionEffects) {
+                return { skipSelectionEffects: true };
+              }
+            } else if (changeType === 'NUMBER' && allowEmptyNextValue) {
+              fieldChangePendingRef.current[fieldKey] = {
+                fieldPath: fieldKey,
+                scope: args.scope,
+                fieldId,
+                groupId: args.groupId,
+                rowId: args.rowId,
+                dialog: dialogCfg,
+                effectQuestion: source?.question || (source?.field as any) || undefined,
+                selectionEffects: (source?.question || source?.field)?.selectionEffects || [],
+                prevSnapshot,
+                prevValue: effectivePrevValue,
+                nextValue: args.nextValue,
+                allowEmptyNextValue,
+                autoSaveSnapshot: {
+                  dirty: autoSaveDirtyBefore,
+                  queued: autoSaveQueuedBefore,
+                  lastSeen: lastAutoSaveSeenRef.current
+                }
+              };
+              logEvent('fieldChangeDialog.pending.baseline', {
+                fieldPath: fieldKey,
+                fieldId,
+                groupId: args.groupId || null,
+                rowId: args.rowId || null
+              });
+              if (shouldHoldSelectionEffects) {
+                return { skipSelectionEffects: true };
               }
             } else if (fieldChangePendingRef.current[fieldKey]) {
               delete fieldChangePendingRef.current[fieldKey];

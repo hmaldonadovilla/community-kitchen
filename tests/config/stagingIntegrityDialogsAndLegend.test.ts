@@ -163,6 +163,26 @@ describe('staging integrity dialogs and list legend config', () => {
       });
 
       const meals = findQuestion(questions, 'MP_MEALS_REQUEST');
+      const ordQty = (meals?.lineItemConfig?.fields || []).find((field: any) => field?.id === 'ORD_QTY');
+      expect(ordQty?.changeDialog?.when).toEqual({
+        all: [
+          { fieldId: 'ORD_QTY', equals: 0 },
+          {
+            lineItems: {
+              groupId: 'MP_MEALS_REQUEST',
+              subGroupId: 'MP_TYPE_LI',
+              match: 'any',
+              when: {
+                any: [
+                  { fieldId: 'PREP_TYPE', equals: ['Multi-ingredient', 'Single-ingredient'] },
+                  { fieldId: 'RECIPE', notEmpty: true },
+                  { fieldId: 'LEFTOVER_ID', notEmpty: true }
+                ]
+              }
+            }
+          }
+        ]
+      });
       const recipe = (meals?.lineItemConfig?.subGroups || [])
         .find((entry: any) => entry?.id === 'MP_TYPE_LI')
         ?.fields?.find((field: any) => field?.id === 'RECIPE');
