@@ -28,22 +28,18 @@ import {
   LangCode,
   LineItemGroupConfigOverride,
   LineItemRowState,
-  LineItemOverlaySessionConfig,
   OptionSet,
   RowFlowActionRef,
   RowFlowConfig,
   RowFlowOverlayContextHeaderConfig,
-  StepDataSourceBootstrapConfig,
   ValidationRule,
   VisibilityContext,
-  WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
 import type { InventoryAvailabilitySnapshot, OverlayCloseConfirmLike } from '../../../../types';
-import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import { resolveFieldLabel, resolveLabel } from '../../utils/labels';
 import { formatDateEeeDdMmmYyyy } from '../../utils/valueDisplay';
-import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
+import { LineItemState, OptionState } from '../../types';
 import { isEmptyValue } from '../../utils/values';
 import {
   describeUploadItem,
@@ -74,7 +70,6 @@ import { DateInput } from './DateInput';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
 import { LineItemTable, type LineItemTableColumn } from './LineItemTable';
-import { LineOverlayState } from './overlays/LineSelectOverlay';
 import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
@@ -162,6 +157,12 @@ import {
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
+import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
+import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
+import type {
+  LineFileUploadOrderedEntryCheckArgs,
+  LineItemGroupQuestionProps
+} from './lineItemGroupQuestionTypes';
 
 const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationDeferred';
 
@@ -216,274 +217,10 @@ import {
 } from '../../features/steps/domain/rowFlow';
 import { shouldRenderRowFlowOutputField } from '../../features/steps/domain/rowFlowOutputVisibility';
 
-const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
-const listRowActionButtonWidthStyle: React.CSSProperties = {
-  width: 'fit-content',
-  minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
-  maxWidth: '100%'
-};
-const listRowActionButtonBaseStyle: React.CSSProperties = {
-  ...buttonStyles.primary,
-  ...listRowActionButtonWidthStyle
-};
-const withListRowActionButtonStyle = (
-  disabled?: boolean,
-  overrides?: React.CSSProperties,
-  baseStyle: React.CSSProperties = listRowActionButtonBaseStyle
-): React.CSSProperties => withDisabled({ ...baseStyle, ...listRowActionButtonWidthStyle, ...(overrides || {}) }, disabled);
-
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
 
-export interface ErrorIndex {
-  rowErrors: Set<string>;
-  subgroupErrors: Set<string>;
-}
-
-export interface OpenFileOverlayArgs {
-  open?: boolean;
-  title?: string;
-  scope?: 'top' | 'line';
-  question?: WebQuestionDefinition;
-  group?: WebQuestionDefinition;
-  rowId?: string;
-  field?: any;
-  fieldPath?: string;
-}
-
-export interface LineFileUploadOrderedEntryCheckArgs {
-  group: WebQuestionDefinition;
-  rowId: string;
-  field: any;
-  fieldPath: string;
-  source?: string;
-  validate?: boolean;
-}
-
-export interface ChoiceControlArgs {
-  fieldPath: string;
-  value: string;
-  options: Array<{ value: string; label: string; tooltip?: string; searchText?: string }>;
-  required: boolean;
-  placeholder?: string;
-  searchEnabled?: boolean;
-  override?: string | null;
-  disabled?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-  inputStyle?: React.CSSProperties;
-  onChange: (next: string) => void;
-}
-
-export interface LineItemGroupQuestionCtx {
-  formKey?: string;
-  recordId?: string | null;
-  recordMeta?: { id?: any; createdAt?: any; updatedAt?: any; status?: any; pdfUrl?: any };
-  definition: WebFormDefinition;
-  language: LangCode;
-  values: Record<string, FieldValue>;
-  /**
-   * Optional shared visibility resolver from the parent FormView.
-   * When provided, `visibility.showWhen/hideWhen` can reference system/meta fields (e.g. STATUS) reliably.
-   */
-  resolveVisibilityValue?: (fieldId: string) => FieldValue | undefined;
-  /**
-   * Optional top-level resolver that avoids scanning line items (row-scoped visibility).
-   */
-  getTopValue?: (fieldId: string) => FieldValue | undefined;
-  setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
-  lineItems: LineItemState;
-  setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
-
-  /**
-   * True only while a save/submit operation is in flight.
-   * Keep separate from lock-state so bypass fields remain editable under a field disable rule.
-   */
-  isSubmitting?: boolean;
-  submitting: boolean;
-  isFieldLockedByDedup?: (fieldId: string) => boolean;
-
-  errors: FormErrors;
-  setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
-  warningByField?: Record<string, string[]>;
-
-  optionState: OptionState;
-  setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
-
-  ensureLineOptions: (groupId: string, field: any) => void;
-
-  renderChoiceControl: (args: ChoiceControlArgs) => React.ReactNode;
-
-  openInfoOverlay: (title: string, text: string) => void;
-  openFileOverlay: (args: OpenFileOverlayArgs) => void;
-  checkFileUploadOrderedEntry?: (args: LineFileUploadOrderedEntryCheckArgs) => boolean;
-  openSubgroupOverlay: (
-    subKey: string,
-    options?: {
-      source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
-      rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
-      groupOverride?: LineItemGroupConfigOverride;
-      hideInlineSubgroups?: boolean;
-      hideCloseButton?: boolean;
-      closeButtonLabel?: string;
-      closeConfirm?: OverlayCloseConfirmLike;
-      overlaySession?: LineItemOverlaySessionConfig;
-      label?: string;
-      contextHeader?: string;
-      helperText?: string;
-      rowFlow?: RowFlowConfig;
-    }
-  ) => void;
-  openLineItemGroupOverlay: (
-    groupOrId: string | WebQuestionDefinition,
-    options?: {
-      rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
-      hideInlineSubgroups?: boolean;
-      source?: 'user' | 'system' | 'autoscroll' | 'navigate' | 'overlayOpenAction';
-      hideCloseButton?: boolean;
-      closeButtonLabel?: string;
-      closeConfirm?: OverlayCloseConfirmLike;
-      overlaySession?: LineItemOverlaySessionConfig;
-      label?: string;
-      contextHeader?: string;
-      helperText?: string;
-      rowFlow?: RowFlowConfig;
-    }
-  ) => void;
-
-  addLineItemRowManual: (
-    groupId: string,
-    preset?: Record<string, any>,
-    options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
-  ) => LineItemAddResult | undefined;
-  removeLineRow: (groupId: string, rowId: string) => void;
-  runSelectionEffectsForAncestors?: (
-    groupKey: string,
-    prevLineItems: LineItemState,
-    nextLineItems: LineItemState,
-    options?: { mode?: 'init' | 'change' | 'blur'; topValues?: Record<string, FieldValue> }
-  ) => void;
-  setAutoSaveHold?: (hold: boolean, meta?: { reason?: string }) => void;
-  ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
-  queueGuidedStepReservationDraftSync?: (args: {
-    stepId: string;
-    reason: string;
-    persistSnapshot?: boolean;
-    snapshotLineItems?: LineItemState;
-  }) => void;
-  onGuidedStepReservationDraftStateChange?: (args: {
-    stepId: string;
-    groupId: string;
-    parentRowId: string;
-    sourceKey: string;
-    pendingInvalid: boolean;
-    reason: string;
-    patchFields?: string[];
-  }) => void;
-  waitForGuidedStepReservationDraftSync?: (args: {
-    recordId: string;
-    stepId?: string;
-    reason: string;
-  }) => Promise<{ ok: boolean; message?: string }>;
-  handleLineFieldChange: (
-    group: WebQuestionDefinition,
-    rowId: string,
-    field: any,
-    value: FieldValue,
-    options?: { source?: 'user' | 'selectionEffectInit' }
-  ) => void;
-
-  collapsedGroups: Record<string, boolean>;
-  toggleGroupCollapsed: (groupKey: string) => void;
-
-  collapsedRows: Record<string, boolean>;
-  setCollapsedRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-
-  collapsedSubgroups: Record<string, boolean>;
-  setCollapsedSubgroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-
-  subgroupSelectors: Record<string, string>;
-  setSubgroupSelectors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-
-  subgroupBottomRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
-
-  fileInputsRef: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
-  dragState: Record<string, boolean>;
-  incrementDrag: (key: string) => void;
-  decrementDrag: (key: string) => void;
-  resetDrag: (key: string) => void;
-  uploadAnnouncements: Record<string, string>;
-  uploadFailures?: Record<string, { message: string; retrying?: boolean }>;
-  onRetryUploadFailure?: (fieldPath: string) => void;
-
-  openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
-  isOverlayOpenActionSuppressed?: (fieldPath: string) => boolean;
-  suppressOverlayOpenAction?: (fieldPath: string) => void;
-  closeOverlay?: () => void;
-
-  handleLineFileInputChange: (args: {
-    group: WebQuestionDefinition;
-    rowId: string;
-    field: any;
-    fieldPath: string;
-    list: FileList | null;
-  }) => void;
-  handleLineFileDrop: (args: {
-    group: WebQuestionDefinition;
-    rowId: string;
-    field: any;
-    fieldPath: string;
-    event: React.DragEvent<HTMLDivElement>;
-  }) => void;
-  removeLineFile: (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string; index: number }) => void;
-  clearLineFiles: (args: { group: WebQuestionDefinition; rowId: string; field: any; fieldPath: string }) => void;
-
-  errorIndex: ErrorIndex;
-
-  setOverlay: React.Dispatch<React.SetStateAction<LineOverlayState>>;
-
-  onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
-}
-
-export const LineItemGroupQuestion: React.FC<{
-  q: WebQuestionDefinition;
-  ctx: LineItemGroupQuestionCtx;
-  /**
-   * Optional step-scoped row flow configuration for progressive input/output.
-   */
-  rowFlow?: RowFlowConfig;
-  /**
-   * Optional rendering-only row filter for the parent group. Does not delete stored rows.
-   */
-  rowFilter?: { includeWhen?: any; excludeWhen?: any } | null;
-  /**
-   * Optional step-scoped datasource-backed row renderers.
-   * These rows are virtual UI rows: they render from datasource entries and synchronize into a
-   * real output subgroup (for example MP_TYPE_LI), but they are not themselves persisted as form data.
-   */
-  dataSourceRows?: any[];
-  /**
-   * Optional guided-step datasource bootstrap controls.
-   */
-  dataSourceBootstrap?: StepDataSourceBootstrapConfig;
-  /**
-   * When true, hide the inline subgroup editor sections and rely on subgroup "open" pills/overlays instead.
-   */
-  hideInlineSubgroups?: boolean;
-  /**
-   * When true, suppress the top/bottom add/selector toolbars (used by overlay headers).
-   */
-  hideToolbars?: boolean;
-  /**
-   * Optional step-scoped helper text rendered above the group body.
-   * Useful for guided steps that need contextual instructions without mutating the base question config.
-   */
-  supplementalHelperText?: string;
-  /**
-   * When true, hide the supplemental helper when every active datasource-backed source-first config has zero source rows.
-   */
-  hideSupplementalHelperWhenNoSourceRows?: boolean;
-}> = ({
+export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
   q,
   ctx,
   rowFlow,
@@ -557,26 +294,15 @@ export const LineItemGroupQuestion: React.FC<{
   } = ctx;
 
   const renderUploadFailure = React.useCallback(
-    (fieldPath: string, disabled?: boolean) => {
-      const failure = uploadFailures?.[fieldPath];
-      if (!failure) return null;
-      const retryDisabled = Boolean(disabled || failure.retrying || !onRetryUploadFailure);
-      return (
-        <div className="ck-upload-failure" role="alert">
-          <span>{failure.message}</span>
-          <button
-            type="button"
-            className="ck-upload-failure__retry"
-            disabled={retryDisabled}
-            onClick={() => onRetryUploadFailure?.(fieldPath)}
-          >
-            {failure.retrying
-              ? tSystem('common.loading', language, 'Loading…')
-              : tSystem('files.retrySave', language, 'Try saving photos again')}
-          </button>
-        </div>
-      );
-    },
+    (fieldPath: string, disabled?: boolean) => (
+      <LineItemUploadFailureNotice
+        language={language}
+        fieldPath={fieldPath}
+        failure={uploadFailures?.[fieldPath]}
+        disabled={disabled}
+        onRetry={onRetryUploadFailure}
+      />
+    ),
     [language, onRetryUploadFailure, uploadFailures]
   );
 
