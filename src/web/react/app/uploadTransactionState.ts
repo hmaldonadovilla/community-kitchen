@@ -19,6 +19,22 @@ const normalizeString = (raw: unknown): string => {
   }
 };
 
+export const resolveUploadTransactionTarget = (args: {
+  scope?: 'top' | 'line' | string | null;
+  questionId?: string | null;
+  groupId?: string | null;
+  rowId?: string | null;
+  fieldId?: string | null;
+}): UploadTransactionTarget | null => {
+  if (args.scope === 'top' && args.questionId) {
+    return { scope: 'top', questionId: args.questionId };
+  }
+  if (args.scope === 'line' && args.groupId && args.rowId && args.fieldId) {
+    return { scope: 'line', groupId: args.groupId, rowId: args.rowId, fieldId: args.fieldId };
+  }
+  return null;
+};
+
 export const splitUploadValue = (raw: unknown): string[] => {
   const trimmed = normalizeString(raw);
   if (!trimmed) return [];

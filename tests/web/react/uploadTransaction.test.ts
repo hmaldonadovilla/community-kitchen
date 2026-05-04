@@ -4,6 +4,7 @@ import {
   applyUploadValueToPayloadValues,
   buildUploadNonTargetFingerprint,
   extractUploadValueFromMeta,
+  resolveUploadTransactionTarget,
   splitUploadValue
 } from '../../../src/web/react/app/uploadTransactionState';
 import { resolveUploadBlockUntilSaved } from '../../../src/web/react/app/uploadTransaction';
@@ -42,6 +43,27 @@ describe('upload transaction helpers', () => {
     expect(resolveUploadBlockUntilSaved({ wait_for_save: 'yes' })).toBe(true);
     expect(resolveUploadBlockUntilSaved({ blockUntilSaved: false })).toBe(false);
     expect(resolveUploadBlockUntilSaved({})).toBe(false);
+  });
+
+  it('resolves valid top-level and line-item upload targets', () => {
+    expect(resolveUploadTransactionTarget({ scope: 'top', questionId: 'PHOTO' })).toEqual({
+      scope: 'top',
+      questionId: 'PHOTO'
+    });
+    expect(
+      resolveUploadTransactionTarget({
+        scope: 'line',
+        groupId: 'GROUP',
+        rowId: 'row-1',
+        fieldId: 'LINE_PHOTO'
+      })
+    ).toEqual({
+      scope: 'line',
+      groupId: 'GROUP',
+      rowId: 'row-1',
+      fieldId: 'LINE_PHOTO'
+    });
+    expect(resolveUploadTransactionTarget({ scope: 'line', groupId: 'GROUP', rowId: 'row-1' })).toBeNull();
   });
 
   it('builds a draft upload payload with file payloads only for the target field', async () => {

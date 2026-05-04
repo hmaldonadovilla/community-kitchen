@@ -210,10 +210,16 @@ import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
 import { resolveUploadBusyOverlayTransition } from './app/uploadBusyOverlay';
 import { resolveUploadBlockUntilSaved } from './app/uploadTransaction';
 import {
+  buildUploadQueueKey,
+  resolveUploadQueueBusyState,
+  shouldAutosaveAfterUploadQueueDrained
+} from './app/uploadQueue';
+import {
   applyUploadValueToFormState,
   applyUploadValueToPayloadValues,
   buildUploadNonTargetFingerprint,
   extractUploadValueFromMeta,
+  resolveUploadTransactionTarget,
   splitUploadValue
 } from './app/uploadTransactionState';
 import { buildListViewLegendItems } from './app/listViewLegend';
@@ -2891,13 +2897,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
-    const uploadsInFlight = uploadQueueRef.current.size;
-    const blockingEntries = Array.from(uploadQueueBlockingRef.current.entries()).filter(([, blocking]) => Boolean(blocking));
-    const blockingUploadsInFlight = blockingEntries.length;
-    const busyMessage =
-      blockingEntries
-        .map(([key]) => (uploadQueueBusyMessageRef.current.get(key) || '').toString().trim())
-        .find(Boolean) || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.');
+    const { uploadsInFlight, blockingUploadsInFlight, busyMessage } = resolveUploadQueueBusyState({
+      uploadQueueSize: uploadQueueRef.current.size,
+      blockingByKey: uploadQueueBlockingRef.current,
+      busyMessageByKey: uploadQueueBusyMessageRef.current,
+      defaultBusyMessage: tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')
+    });
     setUploadQueueSize(uploadsInFlight);
     const transition = resolveUploadBusyOverlayTransition({
       uploadsInFlight: blockingUploadsInFlight,
@@ -13700,16 +13705,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
       }
 
-      const target =
-        args.scope === 'top' && args.questionId
-          ? ({ scope: 'top', questionId: args.questionId } as const)
-          : args.scope === 'line' && args.groupId && args.rowId && args.fieldId
-            ? ({ scope: 'line', groupId: args.groupId, rowId: args.rowId, fieldId: args.fieldId } as const)
-            : null;
+      const target = resolveUploadTransactionTarget(args);
       if (!target) return { success: false, message: 'Invalid upload field.' };
 
       const sessionAtStart = recordSessionRef.current;
-      const queueKey = `record:${sessionAtStart}:${args.fieldPath}`;
+      const queueKey = buildUploadQueueKey({ sessionId: sessionAtStart, fieldPath: args.fieldPath });
       const blockUntilSaved = resolveUploadBlockUntilSaved(args.uploadConfig);
       const run = async (): Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> => {
         // Ensure we don't have a pending debounced draft save that might race with this sequence.
@@ -14030,10 +14030,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           syncUploadQueueSize();
           // If uploads drained and autosave was queued during the upload, schedule a background autosave now.
           if (
-            uploadQueueRef.current.size === 0 &&
-            autoSaveQueuedRef.current &&
-            autoSaveDirtyRef.current &&
-            !submittingRef.current
+            shouldAutosaveAfterUploadQueueDrained({
+              uploadQueueSize: uploadQueueRef.current.size,
+              autoSaveQueued: autoSaveQueuedRef.current,
+              autoSaveDirty: autoSaveDirtyRef.current,
+              submitting: submittingRef.current
+            })
           ) {
             logEvent('autosave.queued.uploadDrained', {
               debounceMs: autoSaveDebounceMs,
