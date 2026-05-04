@@ -198,6 +198,15 @@ import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/r
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
 import {
+  isGuidedStepForwardGateSatisfied,
+  normalizeGuidedAutoAdvance,
+  normalizeGuidedForwardGate,
+  resolveGuidedStepAutoAdvance,
+  resolveGuidedStepForwardGate,
+  resolveGuidedStepsVirtualState,
+  resolveMaxReachableGuidedStepIndex
+} from '../features/steps/domain/guidedNavigation';
+import {
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
   type GuidedReservationManagedRowRemovalImpact
@@ -1329,68 +1338,16 @@ const FormView: React.FC<FormViewProps> = ({
     [definition, onSelectionEffect]
   );
 
-  const normalizeForwardGate = useCallback(
-    (raw: any, fallback: 'free' | 'whenComplete' | 'whenValid'): 'free' | 'whenComplete' | 'whenValid' => {
-      const v = (raw ?? '').toString().trim().toLowerCase();
-      if (v === 'free') return 'free';
-      if (v === 'whencomplete') return 'whenComplete';
-      if (v === 'whenvalid') return 'whenValid';
-      // Accept common mis-typed aliases to reduce config footguns.
-      if (v === 'oncomplete') return 'whenComplete';
-      if (v === 'onvalid') return 'whenValid';
-      return fallback;
-    },
-    []
-  );
-  const normalizeAutoAdvance = useCallback(
-    (raw: any, fallback: 'off' | 'onComplete' | 'onValid'): 'off' | 'onComplete' | 'onValid' => {
-      const v = (raw ?? '').toString().trim().toLowerCase();
-      if (v === 'off') return 'off';
-      if (v === 'oncomplete') return 'onComplete';
-      if (v === 'onvalid') return 'onValid';
-      // Accept common mis-typed aliases to reduce config footguns.
-      if (v === 'whencomplete') return 'onComplete';
-      if (v === 'whenvalid') return 'onValid';
-      return fallback;
-    },
-    []
-  );
-  const guidedDefaultForwardGate = normalizeForwardGate((guidedStepsCfg as any)?.defaultForwardGate, 'whenValid');
-  const guidedDefaultAutoAdvance = normalizeAutoAdvance((guidedStepsCfg as any)?.defaultAutoAdvance, 'onValid');
-  const maxReachableGuidedIndexBase = (() => {
-    if (!guidedEnabled) return -1;
-    if (!guidedStepIds.length) return -1;
-    if (!guidedStepsCfg) return -1;
-
-    const stepCfgById = new Map<string, any>();
-    guidedVisibleSteps.forEach((s: any) => {
-      const id = (s?.id ?? '').toString().trim();
-      if (!id) return;
-      if (!stepCfgById.has(id)) stepCfgById.set(id, s);
-    });
-    const statusById = new Map<string, any>();
-    (guidedStatus.steps || []).forEach((s: any) => {
-      const id = (s?.id ?? '').toString().trim();
-      if (!id) return;
-      statusById.set(id, s);
-    });
-
-    let reachable = 0;
-    for (let idx = 0; idx < guidedStepIds.length - 1; idx++) {
-      const stepId = guidedStepIds[idx];
-      const cfg = stepCfgById.get(stepId);
-      const gate = normalizeForwardGate(cfg?.navigation?.forwardGate ?? cfg?.forwardGate, guidedDefaultForwardGate);
-      if (gate === 'free') {
-        reachable = idx + 1;
-        continue;
-      }
-      const st = statusById.get(stepId);
-      const ok = gate === 'whenComplete' ? !!st?.complete : !!st?.valid;
-      if (!ok) break;
-      reachable = idx + 1;
-    }
-    return reachable;
-  })();
+  const guidedDefaultForwardGate = normalizeGuidedForwardGate((guidedStepsCfg as any)?.defaultForwardGate, 'whenValid');
+  const guidedDefaultAutoAdvance = normalizeGuidedAutoAdvance((guidedStepsCfg as any)?.defaultAutoAdvance, 'onValid');
+  const maxReachableGuidedIndexBase = resolveMaxReachableGuidedStepIndex({
+    enabled: guidedEnabled,
+    hasStepsConfig: Boolean(guidedStepsCfg),
+    stepIds: guidedStepIds,
+    visibleSteps: guidedVisibleSteps as any[],
+    statuses: guidedStatus.steps,
+    defaultForwardGate: guidedDefaultForwardGate
+  });
   const maxReachableGuidedIndex =
     dedupNavigationBlocked && activeGuidedStepIndex >= 0
       ? Math.min(activeGuidedStepIndex, maxReachableGuidedIndexBase)
@@ -1700,17 +1657,14 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   const guidedVirtualState = useMemo(() => {
-    if (!guidedEnabled) return null;
-    const idx = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
-    return {
+    return resolveGuidedStepsVirtualState({
+      enabled: guidedEnabled,
       prefix: guidedPrefix,
       activeStepId: activeGuidedStepId,
-      activeStepIndex: idx,
-      maxValidIndex: guidedStatus.maxValidIndex,
-      maxCompleteIndex: guidedStatus.maxCompleteIndex,
-      steps: guidedStatus.steps
-    };
-  }, [activeGuidedStepId, guidedEnabled, guidedPrefix, guidedStatus.maxCompleteIndex, guidedStatus.maxValidIndex, guidedStatus.steps, guidedStepIds]);
+      stepIds: guidedStepIds,
+      status: guidedStatus
+    });
+  }, [activeGuidedStepId, guidedEnabled, guidedPrefix, guidedStatus, guidedStepIds]);
 
   const guidedInlineLineGroupIds = useMemo(() => {
     const out = new Set<string>();
@@ -2018,10 +1972,7 @@ const FormView: React.FC<FormViewProps> = ({
         const stepDefinition = buildGuidedStepDefinition(stepId) || definition;
         const stepCfg = guidedVisibleSteps.find(step => (step?.id || '').toString().trim() === stepId) as any;
         const stepStatus = guidedStatus.steps.find(step => step.id === stepId);
-        const forwardGate = normalizeForwardGate(
-          stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate,
-          guidedDefaultForwardGate
-        );
+        const forwardGate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
         const requiredMode =
           forwardGate === 'whenComplete' && !stepStatus?.complete ? ('stepComplete' as const) : ('configured' as const);
         const nextErrors = validateForm({
@@ -2053,7 +2004,6 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState,
       guidedVisibleSteps,
       language,
-      normalizeForwardGate,
       valuesRef,
       lineItemsRef
     ]
@@ -2224,7 +2174,7 @@ const FormView: React.FC<FormViewProps> = ({
 
       const steps = guidedVisibleSteps;
       const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-      const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+      const forwardGate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
       const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
       const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
       const nextId = guidedStepIds[activeGuidedStepIndex + 1];
@@ -2429,7 +2379,6 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState,
       guidedVisibleSteps,
       language,
-      normalizeForwardGate,
       onBeforeGuidedStepAdvance,
       onDiagnostic,
       onGuidedStepMilestone,
@@ -2517,10 +2466,11 @@ const FormView: React.FC<FormViewProps> = ({
     if (activeGuidedStepIndex >= guidedStepIds.length - 1) return;
 
     const stepCfg = guidedVisibleSteps.find(s => (s?.id || '').toString() === activeGuidedStepId) as any;
-    const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const forwardGate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
     const waitDialog = (stepCfg?.navigation?.waitForUploadsDialog || guidedStepsCfg?.waitForUploadsDialog || null) as any;
-    const autoAdvance = normalizeAutoAdvance(
-      stepCfg?.navigation?.autoAdvance ?? stepCfg?.autoAdvance ?? (guidedStepsCfg as any)?.defaultAutoAdvance,
+    const autoAdvance = resolveGuidedStepAutoAdvance(
+      stepCfg,
+      (guidedStepsCfg as any)?.defaultAutoAdvance,
       guidedDefaultAutoAdvance
     );
     const autoAdvanceWhen = (stepCfg?.navigation?.autoAdvanceWhen || null) as any;
@@ -2731,8 +2681,6 @@ const FormView: React.FC<FormViewProps> = ({
     guidedStepsCfg,
     lineItems,
     maxReachableGuidedIndex,
-    normalizeAutoAdvance,
-    normalizeForwardGate,
     onDiagnostic,
     onBeforeGuidedStepAdvance,
     recordMeta,
@@ -2831,6 +2779,7 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     activeGuidedStepId,
     activeGuidedStepIndex,
+    advanceGuidedStepFromCurrentStep,
     buildGuidedStepDefinition,
     collapsedRows,
     collapsedSubgroups,
@@ -2838,6 +2787,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedDefaultForwardGate,
     guidedEnabled,
     guidedStepIds,
+    guidedVirtualState,
     guidedVisibleSteps,
     guidedStepsCfg,
     language,
@@ -2894,11 +2844,13 @@ const FormView: React.FC<FormViewProps> = ({
     }
     const stepCfg = guidedVisibleSteps[activeGuidedStepIndex] as any;
     const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
-    const forwardGate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+    const forwardGate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
     const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-    const forwardGateSatisfiedBase =
-      forwardGate === 'free' ? true : forwardGate === 'whenComplete' ? !!stepStatus?.complete : !!stepStatus?.valid;
-    const forwardGateSatisfied = forwardGateSatisfiedBase && !dedupNavigationBlocked;
+    const forwardGateSatisfied = isGuidedStepForwardGateSatisfied({
+      gate: forwardGate,
+      status: stepStatus,
+      navigationBlocked: dedupNavigationBlocked
+    });
     const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
     const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
     const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
@@ -3174,7 +3126,7 @@ const FormView: React.FC<FormViewProps> = ({
           if (overlayDefinition || !guidedEnabled || !guidedStepsCfg || !stepDefinition) return 'configured';
           const steps = guidedVisibleSteps;
           const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-          const gate = normalizeForwardGate(stepCfg?.navigation?.forwardGate ?? stepCfg?.forwardGate, guidedDefaultForwardGate);
+          const gate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
           return gate === 'whenComplete' ? 'stepComplete' : 'configured';
         })();
         const nextErrors = validateForm({
@@ -7356,36 +7308,7 @@ const FormView: React.FC<FormViewProps> = ({
     resetNativeFileInput(question.id);
   };
 
-  const removeFile = (question: WebQuestionDefinition, index: number) => {
-    if (submitting) return;
-    if (question.readOnly === true) return;
-    const existing = toUploadItems(valuesRef.current[question.id]);
-    if (!existing.length) return;
-    const removed = existing[index];
-    const next = existing.filter((_, idx) => idx !== index);
-    handleFileFieldChange(question, next);
-    clearUploadFailureForField(question.id);
-    onDiagnostic?.('upload.remove', { questionId: question.id, removed: describeUploadItem(removed as any), remaining: next.length });
-    announceUpload(
-      question.id,
-      removed
-        ? `${tSystem('lineItems.remove', language, 'Remove')} ${describeUploadItem(removed as any)}.`
-        : tSystem('lineItems.remove', language, 'Remove')
-    );
-  };
-
-  const clearFiles = (question: WebQuestionDefinition) => {
-    if (submitting) return;
-    if (question.readOnly === true) return;
-    handleFileFieldChange(question, []);
-    clearUploadFailureForField(question.id);
-    resetDrag(question.id);
-    resetNativeFileInput(question.id);
-    announceUpload(question.id, tSystem('files.clearAll', language, 'Remove all'));
-    onDiagnostic?.('upload.clear', { questionId: question.id });
-  };
-
-  const sanitizePreset = (input?: Record<string, any>): Record<string, any> => {
+  const sanitizePreset = useCallback((input?: Record<string, any>): Record<string, any> => {
     if (!input) return {};
     const next: Record<string, any> = { ...input };
     Object.keys(next).forEach(key => {
@@ -7395,7 +7318,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
     });
     return next;
-  };
+  }, []);
 
   const computeRowNonMatchKeys = useCallback(
     (args: {
@@ -7440,12 +7363,13 @@ const FormView: React.FC<FormViewProps> = ({
     [lineItems, subgroupSelectors, values]
   );
 
-  const addLineItemRow = (
-    groupId: string,
-    preset?: Record<string, any>,
-    rowIdOverride?: string,
-    options?: { configOverride?: any }
-  ) => {
+  const addLineItemRow = useCallback(
+    (
+      groupId: string,
+      preset?: Record<string, any>,
+      rowIdOverride?: string,
+      options?: { configOverride?: any }
+    ) => {
     const applyLineDefaults = (fields: any[], rowValues: Record<string, FieldValue>): Record<string, FieldValue> => {
       if (!Array.isArray(fields) || !fields.length) return rowValues;
       const nextValues = { ...rowValues };
@@ -7567,7 +7491,19 @@ const FormView: React.FC<FormViewProps> = ({
       setValues(nextValues);
       return recomputed;
     });
-  };
+    },
+    [
+      computeRowNonMatchKeys,
+      definition,
+      onDiagnostic,
+      resolveSubgroupDefs,
+      sanitizePreset,
+      setLineItems,
+      setValues,
+      subgroupSelectors,
+      values
+    ]
+  );
 
   const addLineItemRowManual = (
     groupId: string,
@@ -11588,38 +11524,6 @@ const FormView: React.FC<FormViewProps> = ({
     })();
     const overlayDetailHeaderHidden = overlayDetailHeaderExplicit && overlayDetail.header.tableColumns.length === 0;
     const overlayDetailHeaderWidths = overlayDetail?.header?.tableColumnWidths || (subUi as any)?.tableColumnWidths;
-    const resolveOverlayDetailHeaderStyle = (columnId: string): React.CSSProperties | undefined => {
-      if (!overlayDetailHeaderWidths || typeof overlayDetailHeaderWidths !== 'object' || Array.isArray(overlayDetailHeaderWidths)) return undefined;
-      const candidates: string[] = [];
-      const pushCandidate = (val?: string) => {
-        if (!val) return;
-        if (candidates.includes(val)) return;
-        candidates.push(val);
-      };
-      const lower = columnId.toLowerCase();
-      const normalized = columnId.replace(/^_+/, '');
-      const normalizedLower = normalized.toLowerCase();
-      pushCandidate(columnId);
-      pushCandidate(lower);
-      if (['view', 'edit', 'remove', 'actions'].includes(normalizedLower)) {
-        pushCandidate(`__${normalizedLower}`);
-        pushCandidate(`_${normalizedLower}`);
-        pushCandidate(normalizedLower);
-        pushCandidate('__actions');
-        pushCandidate('actions');
-      } else {
-        pushCandidate(normalized);
-        pushCandidate(normalizedLower);
-      }
-      const rawWidth = candidates.reduce<any>(
-        (acc, key) => (acc !== undefined ? acc : (overlayDetailHeaderWidths as any)[key]),
-        undefined
-      );
-      if (rawWidth === undefined || rawWidth === null) return undefined;
-      if (typeof rawWidth === 'number') return { width: `${rawWidth}%` };
-      const widthValue = rawWidth.toString().trim();
-      return widthValue ? { width: widthValue } : undefined;
-    };
 
     const subSelectorCfg = subConfig?.sectionSelector;
                     const subSelectorValue = subgroupSelectors[subKey] || '';

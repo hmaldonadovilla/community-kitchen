@@ -258,7 +258,7 @@ import {
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
 import { resolveDedupDialogCopy } from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
-import { type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
+import { resolveVirtualStepField, type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
@@ -339,9 +339,7 @@ import {
 import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
 import { shouldHideField } from '../rules/visibility';
 import { getSystemFieldValue } from '../rules/systemFields';
-import { computeGuidedStepsStatus } from './features/steps/domain/computeStepStatus';
-import { resolveVirtualStepField } from './features/steps/domain/resolveVirtualStepField';
-import { filterVisibleGuidedSteps } from './features/steps/domain/stepVisibility';
+import { resolveGuidedListProjection } from './features/steps/domain/guidedListProjection';
 import {
   guidedStepRequiresPersistedRecord,
   shouldWaitForActiveDraftSaveBeforeEnsuringRecord
@@ -7510,8 +7508,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const customButtons = useMemo(() => {
     const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
     const applyVisibility = view !== 'list';
-    const guidedStepsCfg = applyVisibility && (definition as any)?.steps?.mode === 'guided' ? ((definition as any).steps as any) : null;
-    const guidedPrefix = (guidedStepsCfg?.stateFields?.prefix || '__ckStep').toString();
     const resolveBaseVisibilityValue = (fieldId: string): FieldValue | undefined => {
       if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
         const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
@@ -7543,37 +7539,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       return undefined;
     };
-    const guidedVisibleSteps = guidedStepsCfg
-      ? filterVisibleGuidedSteps(guidedStepsCfg.items as any[], {
-          getValue: (fieldId: string) => resolveBaseVisibilityValue(fieldId)
-        })
-      : [];
-    const guidedStepIds: string[] = guidedVisibleSteps
-      .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
-      .filter(Boolean);
-    const guidedStatus = guidedStepsCfg ? computeGuidedStepsStatus({ definition: definition as any, language: language as any, values: values as any, lineItems: lineItems as any }) : null;
-    const guidedDefaultForwardGate = ((guidedStepsCfg as any)?.defaultForwardGate || 'whenValid') as 'free' | 'whenComplete' | 'whenValid';
-    const guidedMaxReachableIndex = (() => {
-      if (!guidedStepsCfg) return -1;
-      if (!guidedStepIds.length) return -1;
-      if (guidedDefaultForwardGate === 'free') return guidedStepIds.length - 1;
-      if (guidedDefaultForwardGate === 'whenComplete') {
-        return Math.min(guidedStepIds.length - 1, Math.max(0, (guidedStatus?.maxCompleteIndex ?? -1) + 1));
-      }
-      return Math.min(guidedStepIds.length - 1, Math.max(0, (guidedStatus?.maxValidIndex ?? -1) + 1));
-    })();
-    const guidedActiveStepIndex = guidedMaxReachableIndex >= 0 ? guidedMaxReachableIndex : 0;
-    const guidedActiveStepId = guidedStepIds[guidedActiveStepIndex] || guidedStepIds[0] || '';
-    const guidedVirtualState = guidedStepsCfg
-      ? ({
-          prefix: guidedPrefix,
-          activeStepId: guidedActiveStepId,
-          activeStepIndex: guidedActiveStepIndex,
-          maxValidIndex: guidedStatus?.maxValidIndex ?? -1,
-          maxCompleteIndex: guidedStatus?.maxCompleteIndex ?? -1,
-          steps: guidedStatus?.steps || []
-        } as any)
-      : null;
+    const guidedProjection = resolveGuidedListProjection({
+      definition: definition as any,
+      language: language as any,
+      values: values as any,
+      lineItems: lineItems as any,
+      applyVisibility,
+      getVisibilityValue: resolveBaseVisibilityValue
+    });
+    const guidedVirtualState = guidedProjection.virtualState;
     const resolveButtonVisibilityValue = (fieldId: string): FieldValue | undefined => {
       if (guidedVirtualState) {
         const virtual = resolveVirtualStepField(fieldId, guidedVirtualState);
