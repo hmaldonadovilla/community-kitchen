@@ -65,6 +65,10 @@ import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps
 import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../features/steps/domain/errorNavigation';
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
+import {
+  normalizeGuidedLineFieldId,
+  parseGuidedTargetFieldEntries
+} from '../features/steps/domain/guidedTargetFields';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { formatDateEeeDdMmmYyyy } from '../utils/valueDisplay';
@@ -191,7 +195,7 @@ import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFi
 import { validateRules } from '../../rules/validation';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
-import { StepsBar } from '../features/steps/components/StepsBar';
+import { GuidedFormContent } from '../features/steps/components/GuidedFormContent';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import {
   shouldApplyGuidedExternalSyncSignal,
@@ -15588,62 +15592,18 @@ const FormView: React.FC<FormViewProps> = ({
 
       // Filter parent fields and (optionally) subgroup definitions/fields based on the step target allowlists.
       const rowFilter = target.rows || null;
-      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
-        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
-        if (!s) return '';
-        const underscorePrefix = `${groupId}__`;
-        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
-        const dotPrefix = `${groupId}.`;
-        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
-        if (s.includes('.')) return s.split('.').pop() || s;
-        return s;
-      };
-      const parseStepFieldEntries = (
-        groupId: string,
-        raw: any
-      ): { allowed: Set<string> | null; renderAsLabel: Set<string>; order: string[]; explicit: boolean } => {
-        if (raw === undefined || raw === null) return { allowed: null, renderAsLabel: new Set(), order: [], explicit: false };
-        const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
-        const pushEntry = (v: any) => {
-          if (v === undefined || v === null) return;
-          if (typeof v === 'object') {
-            const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
-            if (!id) return;
-            entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
-            return;
-          }
-          const id = normalizeLineFieldId(groupId, v);
-          if (!id) return;
-          entries.push({ id, renderAsLabel: false });
-        };
-        if (Array.isArray(raw)) {
-          raw.forEach(pushEntry);
-        } else {
-          raw
-              .toString()
-              .split(',')
-              .map((s: string) => s.trim())
-            .filter(Boolean)
-            .forEach(pushEntry);
-        }
-        const ids = entries.map(e => e.id).filter(Boolean);
-        const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
-        const order = Array.from(new Set(ids));
-        return { allowed: new Set(ids), renderAsLabel: new Set(roIds), order, explicit: true };
-      };
-
       const {
         allowed: allowedFieldIds,
         renderAsLabel: renderAsLabelFieldIdsFromFields,
         order: fieldOrder,
         explicit: hasExplicitFieldScope
-      } = parseStepFieldEntries(
+      } = parseGuidedTargetFieldEntries(
         groupQ.id,
         target.fields
       );
       const readOnlyFieldIds = (() => {
         const raw = (target as any).readOnlyFields;
-        const parsed = parseStepFieldEntries(groupQ.id, raw);
+        const parsed = parseGuidedTargetFieldEntries(groupQ.id, raw);
         const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
         const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
         return merged.size ? merged : null;
@@ -15651,12 +15611,12 @@ const FormView: React.FC<FormViewProps> = ({
 
       const filteredFieldsBase = hasExplicitFieldScope
         ? (lineCfg.fields || []).filter((f: any) => {
-            const fid = normalizeLineFieldId(groupQ.id, (f as any)?.id);
+            const fid = normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id);
             return fid && !!allowedFieldIds?.has(fid);
           })
         : lineCfg.fields || [];
       const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
-        const fid = normalizeLineFieldId(groupQ.id, (f as any)?.id);
+        const fid = normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id);
         if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
           return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
         }
@@ -15664,10 +15624,10 @@ const FormView: React.FC<FormViewProps> = ({
       });
       const orderedFields = fieldOrder.length
         ? fieldOrder
-            .map(fid => filteredFields.find(f => normalizeLineFieldId(groupQ.id, (f as any)?.id) === fid))
+            .map(fid => filteredFields.find(f => normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id) === fid))
             .filter(Boolean)
             .concat(
-              filteredFields.filter(f => !fieldOrder.includes(normalizeLineFieldId(groupQ.id, (f as any)?.id)))
+              filteredFields.filter(f => !fieldOrder.includes(normalizeGuidedLineFieldId(groupQ.id, (f as any)?.id)))
             )
         : filteredFields;
 
@@ -15702,10 +15662,10 @@ const FormView: React.FC<FormViewProps> = ({
             renderAsLabel: renderAsLabelSubFieldIdsFromFields,
             order: subFieldOrder,
             explicit: hasExplicitSubFieldScope
-          } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
+          } = parseGuidedTargetFieldEntries(subId, allowedSubFieldsRaw);
           const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
           const readOnlySubFields = (() => {
-            const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
+            const parsed = parseGuidedTargetFieldEntries(subId, readOnlySubFieldsRaw);
             const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
             const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
             return merged.size ? merged : null;
@@ -15714,14 +15674,14 @@ const FormView: React.FC<FormViewProps> = ({
           const baseFields: any[] = (sub as any).fields || [];
           const nextFields = hasExplicitSubFieldScope
             ? baseFields.filter((f: any) => {
-                const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                const fid = normalizeGuidedLineFieldId(subId, (f as any)?.id);
                 return fid && !!allowedSubFields?.has(fid);
               })
             : baseFields;
           const finalFields =
             readOnlySubFields && readOnlySubFields.size
               ? nextFields.map((f: any) => {
-                  const fid = normalizeLineFieldId(subId, (f as any)?.id);
+                  const fid = normalizeGuidedLineFieldId(subId, (f as any)?.id);
                   if (fid && readOnlySubFields.has(fid)) {
                     return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
                   }
@@ -15730,9 +15690,9 @@ const FormView: React.FC<FormViewProps> = ({
               : nextFields;
           const orderedSubFields = subFieldOrder.length
             ? subFieldOrder
-                .map(fid => finalFields.find(f => normalizeLineFieldId(subId, (f as any)?.id) === fid))
+                .map(fid => finalFields.find(f => normalizeGuidedLineFieldId(subId, (f as any)?.id) === fid))
                 .filter(Boolean)
-                .concat(finalFields.filter(f => !subFieldOrder.includes(normalizeLineFieldId(subId, (f as any)?.id))))
+                .concat(finalFields.filter(f => !subFieldOrder.includes(normalizeGuidedLineFieldId(subId, (f as any)?.id))))
             : finalFields;
           return { ...(sub as any), fields: orderedSubFields };
         });
@@ -15959,41 +15919,23 @@ const FormView: React.FC<FormViewProps> = ({
       return rows;
     };
 
-    const stepsBarNode = (
-      <StepsBar
+    return (
+      <GuidedFormContent
         language={language}
-        steps={steps.map(s => ({ id: (s?.id || '').toString(), label: (s as any).label }))}
+        steps={steps}
         status={guidedStatus.steps}
         activeStepId={activeGuidedStepId}
         disabledStepIds={guidedStepBarBlockedIds}
         maxReachableIndex={
           guidedForwardNavigationBlocked ? Math.min(maxReachableGuidedIndex, activeGuidedStepIndex) : maxReachableGuidedIndex
         }
+        bodyRef={guidedStepBodyRef}
+        contextHeader={guidedContextHeaderNode}
+        stepHelpText={stepHelpText}
+        headerContent={renderTargetsWithPairing(headerTargets, 'header')}
+        stepContent={renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}
         onSelectStep={handleGuidedStepSelect}
       />
-    );
-    const stepsBarPortalEl =
-      typeof document !== 'undefined' ? (document.getElementById('ck-guided-stepsbar-slot') as HTMLElement | null) : null;
-    const stepsBarPortal = stepsBarPortalEl ? createPortal(stepsBarNode, stepsBarPortalEl) : null;
-    const stepsBarInline = stepsBarPortalEl ? null : stepsBarNode;
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {stepsBarPortal}
-        {stepsBarInline}
-        <div ref={guidedStepBodyRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {guidedContextHeaderNode}
-          {stepHelpText ? (
-            <SectionInstruction
-              id={`ck-step-instruction-${activeGuidedStepId}`}
-              language={language}
-              text={stepHelpText}
-            />
-          ) : null}
-          {renderTargetsWithPairing(headerTargets, 'header')}
-          {renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}
-        </div>
-      </div>
     );
   };
 
