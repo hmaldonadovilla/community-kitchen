@@ -106,6 +106,11 @@ import {
   type RecordSnapshotPrefetchSource
 } from './app/recordLoadGuard';
 import {
+  resolveCurrentOpenRecordId,
+  resolveKnownClientDataVersion,
+  resolveRecordVersionCheckComparison
+} from './app/recordLifecycle';
+import {
   resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessMetaOnlyAdoptionRule,
   resolveRecordFreshnessConfig,
@@ -3097,12 +3102,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const getCurrentKnownClientDataVersion = useCallback(
     () =>
-      resolveCurrentClientDataVersion(
-        recordDataVersionRef.current,
-        optimisticClientDataVersionRef.current,
-        lastSubmissionMetaRef.current?.dataVersion,
-        (selectedRecordSnapshotRef.current as any)?.dataVersion
-      ),
+      resolveKnownClientDataVersion({
+        recordDataVersion: recordDataVersionRef.current,
+        optimisticClientDataVersion: optimisticClientDataVersionRef.current,
+        lastSubmissionMetaDataVersion: lastSubmissionMetaRef.current?.dataVersion,
+        selectedRecordSnapshotDataVersion: (selectedRecordSnapshotRef.current as any)?.dataVersion
+      }),
     []
   );
 
@@ -3262,11 +3267,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const getCurrentOpenRecordId = useCallback(
     () =>
-      resolveExistingRecordId({
+      resolveCurrentOpenRecordId({
         selectedRecordId: selectedRecordIdRef.current,
         selectedRecordSnapshot: selectedRecordSnapshotRef.current,
         lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-      }) || '',
+      }),
     []
   );
 
@@ -5795,19 +5800,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         lastRecordSnapshotApplyModeRef.current = { mode: 'ignored', recordId: null, dataVersion: null };
         return 'ignored';
       }
-      const currentRecordId =
-        resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        }) || '';
+      const currentRecordId = getCurrentOpenRecordId();
       const incomingDataVersion = resolveCurrentClientDataVersion((snapshot as any)?.dataVersion);
-      const currentDataVersion = resolveCurrentClientDataVersion(
-        recordDataVersionRef.current,
-        optimisticClientDataVersionRef.current,
-        lastSubmissionMetaRef.current?.dataVersion,
-        (selectedRecordSnapshotRef.current as any)?.dataVersion
-      );
+      const currentDataVersion = getCurrentKnownClientDataVersion();
       if (
         !shouldApplyIncomingRecordSnapshot({
           incomingRecordId: id,
@@ -6126,6 +6121,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       dedupPrecheckRules,
       definition,
       formKey,
+      getCurrentKnownClientDataVersion,
+      getCurrentOpenRecordId,
       logEvent,
       applyLiveAnalyticsRecordDelta,
       rememberAutoSaveSeenState,
@@ -15629,24 +15626,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 logEvent('record.versionCheck.error', { recordId, message: v?.message || 'failed' });
                 return;
               }
-              const serverVersion = Number(v.dataVersion);
-              const serverRow = Number.isFinite(Number(v.rowNumber)) ? Number(v.rowNumber) : undefined;
+              const versionComparison = resolveRecordVersionCheckComparison({
+                currentDataVersion: recordDataVersionRef.current,
+                cachedVersion,
+                serverDataVersion: v.dataVersion,
+                serverRowNumber: v.rowNumber
+              });
+              const { baselineVersion, serverVersion, serverRow } = versionComparison;
               if (serverRow && serverRow >= 2) recordRowNumberRef.current = serverRow;
               markRecordFreshnessServerTouch({ reason: 'record.versionCheck', recordId });
-              const localVersionNow = Number(recordDataVersionRef.current);
-              const baselineVersion =
-                Number.isFinite(localVersionNow) && localVersionNow > 0 ? localVersionNow : cachedVersion;
-              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion === baselineVersion) {
+              if (versionComparison.state === 'match') {
                 logEvent('record.versionCheck.match', { recordId, serverVersion, baselineVersion });
                 return;
               }
               logEvent('record.versionCheck.stale', {
                 recordId,
                 cachedVersion: baselineVersion,
-                serverVersion: Number.isFinite(serverVersion) ? serverVersion : null,
+                serverVersion,
                 serverRow: serverRow || null
               });
-              if (Number.isFinite(serverVersion) && serverVersion > 0 && serverVersion !== baselineVersion) {
+              if (versionComparison.state === 'stale') {
                 const syncBlockers = getRecordFreshnessSyncBlockers();
                 const shouldDeferSync = syncBlockers.length > 0;
                 if (shouldDeferSync) {

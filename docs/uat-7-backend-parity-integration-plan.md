@@ -205,7 +205,7 @@ Full gates for milestone completion:
 | --- | --- | --- |
 | Stage 0: Protect backend work | Complete | Backend parity work was checkpointed on `integration/uat7-backend-parity` before merging. |
 | Stage 1: Merge and stabilize UAT 7 | Code merged; validation in progress | `release/uat-7` was merged without transport restructuring. Unit/build gates are green and Apps Script staging deploy `@36` is complete; manual or Playwright validation is still pending. |
-| Stage 2: Frontend/business logic separation | In progress | Slices have extracted Home list cache behavior, upload completed-value projection, pure helper logic, and data-source prefetch/cache coordination helpers from `App.tsx` into focused modules with targeted unit coverage. |
+| Stage 2: Frontend/business logic separation | In progress | Slices have extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, and record lifecycle/version-check helpers from `App.tsx` into focused modules with targeted unit coverage. |
 | Stage 3: Backend/domain separation follow-through | Pending | Align Apps Script and Cloud Run around use-case boundaries. |
 
 ## Open Questions
