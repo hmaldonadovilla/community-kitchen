@@ -1,4 +1,5 @@
 import { collectFormWhenFieldIds } from '../../conditions/domain/conditionDependencies';
+import type { WebFormDefinition } from '../../../../types';
 
 export const isBlurDerivedValue = (derived?: any): boolean => {
   if (!derived) return false;
@@ -49,4 +50,59 @@ export const collectDerivedBlurDependencies = (derived: any, out: Set<string>) =
       collectFormWhenFieldIds((filter as any).when, out);
     });
   }
+};
+
+const hasBlurDerivedInFields = (fields: any[]): boolean =>
+  Array.isArray(fields) && fields.some(field => Boolean(field?.derivedValue && isBlurDerivedValue(field.derivedValue)));
+
+const hasBlurDerivedInSubGroups = (subGroups: any[]): boolean => {
+  for (const subGroup of subGroups || []) {
+    if (hasBlurDerivedInFields((subGroup as any)?.fields || [])) return true;
+    if (hasBlurDerivedInSubGroups((subGroup as any)?.subGroups || [])) return true;
+  }
+  return false;
+};
+
+export const hasDefinitionBlurDerivedValues = (definition: Pick<WebFormDefinition, 'questions'>): boolean =>
+  (definition.questions || []).some(question => {
+    if ((question as any).derivedValue && isBlurDerivedValue((question as any).derivedValue)) return true;
+    if (question.type !== 'LINE_ITEM_GROUP') return false;
+    if (hasBlurDerivedInFields((question as any).lineItemConfig?.fields || [])) return true;
+    return hasBlurDerivedInSubGroups((question as any).lineItemConfig?.subGroups || []);
+  });
+
+export const collectDefinitionBlurDerivedDependencyIds = (
+  definition: Pick<WebFormDefinition, 'questions'>
+): Set<string> => {
+  const deps = new Set<string>();
+
+  const collectFromFields = (fields: any[]) => {
+    (fields || []).forEach(field => {
+      if (field?.id && isBlurDerivedValue(field?.derivedValue)) {
+        deps.add(field.id.toString().trim());
+      }
+      collectDerivedBlurDependencies(field?.derivedValue, deps);
+    });
+  };
+
+  const walkSubGroups = (subGroups: any[]) => {
+    (subGroups || []).forEach(subGroup => {
+      collectFromFields((subGroup as any)?.fields || []);
+      if (Array.isArray((subGroup as any)?.subGroups) && (subGroup as any).subGroups.length) {
+        walkSubGroups((subGroup as any).subGroups);
+      }
+    });
+  };
+
+  (definition.questions || []).forEach(question => {
+    if (question.id && isBlurDerivedValue((question as any).derivedValue)) {
+      deps.add(question.id.toString().trim());
+    }
+    collectDerivedBlurDependencies((question as any).derivedValue, deps);
+    if (question.type !== 'LINE_ITEM_GROUP') return;
+    collectFromFields((question as any).lineItemConfig?.fields || []);
+    walkSubGroups((question as any).lineItemConfig?.subGroups || []);
+  });
+
+  return deps;
 };

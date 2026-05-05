@@ -3,6 +3,7 @@ import { LineItemState } from '../types';
 import { buildSubgroupKey, parseSubgroupKey, resolveSubgroupKey } from './lineItems';
 import { isEmptyValue } from '../utils/values';
 import { matchesWhenClause } from '../../rules/visibility';
+import { hasDefinitionBlurDerivedValues } from '../features/derivedValues/domain/blurDependencies';
 
 export type ApplyValueMapsMode = 'change' | 'blur' | 'init' | 'submit';
 
@@ -174,24 +175,8 @@ const resolveLineItemFieldsForKey = (definition: WebFormDefinition, groupKey: st
   return (current?.fields || current?.lineItemConfig?.fields || []) as any[];
 };
 
-export const hasBlurDerivedValues = (definition: WebFormDefinition): boolean => {
-  const hasInFields = (fields: any[]): boolean =>
-    Array.isArray(fields) && fields.some(f => f && f.derivedValue && isBlurDerivedValue(f.derivedValue));
-  const hasInSubGroups = (subs: any[]): boolean => {
-    for (const sub of subs || []) {
-      if (hasInFields((sub as any)?.fields || [])) return true;
-      if (hasInSubGroups((sub as any)?.subGroups || [])) return true;
-    }
-    return false;
-  };
-
-  return (definition.questions || []).some(q => {
-    if ((q as any).derivedValue && isBlurDerivedValue((q as any).derivedValue)) return true;
-    if (q.type !== 'LINE_ITEM_GROUP') return false;
-    if (hasInFields((q as any).lineItemConfig?.fields || [])) return true;
-    return hasInSubGroups((q as any).lineItemConfig?.subGroups || []);
-  });
-};
+export const hasBlurDerivedValues = (definition: WebFormDefinition): boolean =>
+  hasDefinitionBlurDerivedValues(definition);
 
 export const mergeBlurDerivedValues = (
   definition: WebFormDefinition,

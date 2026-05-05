@@ -68,8 +68,8 @@ import {
   resolveGuidedOrderedQuestionsAction
 } from '../features/steps/domain/guidedStepQuestionOrder';
 import {
-  collectDerivedBlurDependencies,
-  isBlurDerivedValue
+  collectDefinitionBlurDerivedDependencyIds,
+  hasDefinitionBlurDerivedValues
 } from '../features/derivedValues/domain/blurDependencies';
 import { areLineItemsShallowEqual, diffFormValues } from './form/formValueComparison';
 import {
@@ -2120,47 +2120,12 @@ const FormView: React.FC<FormViewProps> = ({
     onGuidedUiChange
   ]);
 
-  const hasBlurDerived = useMemo(() => {
-    const hasInFields = (fields: any[]): boolean =>
-      Array.isArray(fields) && fields.some(f => f && f.derivedValue && isBlurDerivedValue(f.derivedValue));
-    return (definition.questions || []).some(q => {
-      if ((q as any).derivedValue && isBlurDerivedValue((q as any).derivedValue)) return true;
-      if (q.type !== 'LINE_ITEM_GROUP') return false;
-      if (hasInFields(q.lineItemConfig?.fields || [])) return true;
-      const subs = q.lineItemConfig?.subGroups || [];
-      return subs.some(sub => hasInFields(((sub as any).fields || []) as any[]));
-    });
-  }, [definition.questions]);
+  const hasBlurDerived = useMemo(() => hasDefinitionBlurDerivedValues(definition), [definition]);
 
-  const blurDerivedDependencyIds = useMemo(() => {
-    const deps = new Set<string>();
-    const collectFromFields = (fields: any[]) => {
-      (fields || []).forEach(field => {
-        if (field?.id && isBlurDerivedValue(field?.derivedValue)) {
-          deps.add(field.id.toString().trim());
-        }
-        collectDerivedBlurDependencies(field?.derivedValue, deps);
-      });
-    };
-    const walkSubGroups = (subGroups: any[]) => {
-      (subGroups || []).forEach(sub => {
-        collectFromFields((sub as any)?.fields || []);
-        if (Array.isArray((sub as any)?.subGroups) && (sub as any).subGroups.length) {
-          walkSubGroups((sub as any).subGroups);
-        }
-      });
-    };
-    (definition.questions || []).forEach(q => {
-      if (q.id && isBlurDerivedValue((q as any).derivedValue)) {
-        deps.add(q.id.toString().trim());
-      }
-      collectDerivedBlurDependencies((q as any).derivedValue, deps);
-      if (q.type !== 'LINE_ITEM_GROUP') return;
-      collectFromFields(q.lineItemConfig?.fields || []);
-      walkSubGroups(q.lineItemConfig?.subGroups || []);
-    });
-    return deps;
-  }, [definition.questions]);
+  const blurDerivedDependencyIds = useMemo(
+    () => collectDefinitionBlurDerivedDependencyIds(definition),
+    [definition]
+  );
 
   const hideLabelQuestionIds = useMemo(() => {
     return (definition.questions || []).filter(q => q.ui?.hideLabel === true).map(q => q.id);

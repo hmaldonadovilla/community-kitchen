@@ -1,5 +1,7 @@
 import {
+  collectDefinitionBlurDerivedDependencyIds,
   collectDerivedBlurDependencies,
+  hasDefinitionBlurDerivedValues,
   isBlurDerivedValue,
   normalizeDerivedTokenToFieldId
 } from '../../../src/web/react/features/derivedValues/domain/blurDependencies';
@@ -34,5 +36,50 @@ describe('derived blur dependencies domain', () => {
     );
 
     expect(Array.from(out).sort()).toEqual(['count', 'customer', 'item', 'quantity', 'remaining', 'status']);
+  });
+
+  test('detects and collects blur-derived metadata from form definitions', () => {
+    const definition: any = {
+      questions: [
+        { id: 'customer', type: 'TEXT' },
+        {
+          id: 'deliveryLabel',
+          type: 'TEXT',
+          derivedValue: { applyOn: 'blur', dependsOn: 'customer' }
+        },
+        {
+          id: 'lines',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              { id: 'meal', type: 'TEXT' },
+              { id: 'lineLabel', type: 'TEXT', derivedValue: { op: 'copy', dependsOn: 'meal' } }
+            ],
+            subGroups: [
+              {
+                id: 'packages',
+                fields: [
+                  {
+                    id: 'packageLabel',
+                    type: 'TEXT',
+                    derivedValue: { applyOn: 'blur', expression: '{ package.count }' }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    expect(hasDefinitionBlurDerivedValues(definition)).toBe(true);
+    expect(Array.from(collectDefinitionBlurDerivedDependencyIds(definition)).sort()).toEqual([
+      'count',
+      'customer',
+      'deliveryLabel',
+      'lineLabel',
+      'meal',
+      'packageLabel'
+    ]);
   });
 });
