@@ -81,6 +81,7 @@ import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObs
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
+import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
@@ -6741,6 +6742,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setListDedupPrompt
   });
 
+  const openUrlFieldAction = useOpenUrlFieldAction({
+    languageRef,
+    selectedRecordIdRef,
+    selectedRecordSnapshotRef,
+    lastSubmissionMetaRef,
+    resolveOpenUrlFieldHref,
+    setStatus,
+    setStatusLevel,
+    logEvent
+  });
+
   const runUpdateRecordButtonAction = useUpdateRecordButtonAction({
     definition,
     formKey,
@@ -6810,40 +6822,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       if (action === 'openUrlField') {
         const fieldId = (cfg?.fieldId || '').toString().trim();
-        if (!fieldId) return;
-
-        const recordId =
-          resolveExistingRecordId({
-            selectedRecordId: selectedRecordIdRef.current,
-            selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-            lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-          }) || '';
-        const href = resolveOpenUrlFieldHref(fieldId);
-        if (!href) {
-          setStatus(tSystem('actions.missingLink', languageRef.current, 'No link found.'));
-          setStatusLevel('error');
-          logEvent('button.openUrl.missing', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, recordId: recordId || null });
-          return;
-        }
-
-        // Prefer opening in a new tab (user gesture: should be allowed).
-        let opened = false;
-        try {
-          const w = globalThis.window?.open?.(href, '_blank');
-          opened = Boolean(w);
-        } catch {
-          opened = false;
-        }
-        if (!opened) {
-          // Fallback: navigate this tab.
-          try {
-            globalThis.location?.assign?.(href);
-            opened = true;
-          } catch {
-            opened = false;
-          }
-        }
-        logEvent('button.openUrl.open', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, opened });
+        openUrlFieldAction({ baseId, qIdx, fieldId });
         return;
       }
       if (action === 'renderMarkdownTemplate') {
@@ -6878,10 +6857,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       openHtml,
       openMarkdown,
+      openUrlFieldAction,
       openPdfPreviewWindow,
       openReport,
       parseButtonRef,
-      resolveOpenUrlFieldHref,
       runUpdateRecordButtonAction
     ]
   );
