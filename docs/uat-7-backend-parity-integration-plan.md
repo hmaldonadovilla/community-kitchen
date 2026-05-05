@@ -423,10 +423,15 @@ Thirty-eighth-pass results:
 - `App.tsx`: extracted dedup key-change delete/recreate orchestration into `triggerDedupDeleteOnKeyChangeAction`, leaving the shell as the state-ref wiring point. Current size: 14,246 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-ninth-pass results:
+
+- `FormView.tsx`: extracted sticky-header-aware group scrolling and iOS correction behavior into `scrollFormGroupToTop`, leaving the component responsible for scheduling scrolls and collapsed group state. Current size: 12,907 lines.
+- Validation for the pass used focused form-rendering tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,246 lines.
-- `FormView.tsx`: 13,200 lines.
+- `FormView.tsx`: 12,907 lines.
 - `LineItemGroupQuestion.tsx`: 13,582 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
