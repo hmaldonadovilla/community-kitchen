@@ -11728,28 +11728,21 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                   const renderAsLabel =
                                     (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
 
-                                  const renderReadOnlyLine = (display: React.ReactNode) => {
-                                    const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                                      (field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
-                                    } ck-readonly-field`;
-                                    return (
-                                      <div
-                                        key={field.id}
-                                        className={cls}
-                                        data-field-path={fieldPath}
-                                        data-has-error={errors[fieldPath] ? 'true' : undefined}
-                                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                                      >
-                                        <label style={labelStyle}>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                        <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
-                                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                                        {renderWarnings(fieldPath)}
-                                      </div>
-                                    );
-                                  };
+                                  const renderReadOnlyLine = (display: React.ReactNode) => (
+                                    <LineItemReadOnlyField
+                                      key={field.id}
+                                      field={field}
+                                      fieldPath={fieldPath}
+                                      language={language}
+                                      forceStackedLabel={(field as any)?.ui?.labelLayout === 'stacked'}
+                                      fieldIsStacked={false}
+                                      labelStyle={labelStyle}
+                                      error={errors[fieldPath]}
+                                      hasWarning={hasWarning(fieldPath)}
+                                      renderWarnings={() => renderWarnings(fieldPath)}
+                                      display={display}
+                                    />
+                                  );
 
                                   if (renderAsLabel) {
                                     switch (field.type) {
