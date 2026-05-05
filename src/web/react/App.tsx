@@ -85,6 +85,7 @@ import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverla
 import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
+import { useAppCustomButtons } from './components/app/useAppCustomButtons';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -148,10 +149,8 @@ import {
   resolveDataSourceFreshnessWatches
 } from './app/dataSourceFreshness';
 import {
-  DATA_SOURCE_COUNT_FIELD_PREFIX,
   buildDataSourceConfigLookup,
   filterDataSourceFreshnessWatchesByDataSourceIds,
-  normalizeDataSourceVisibilityKey,
   resolveDataSourceConfigById
 } from './app/dataSourceVisibility';
 import {
@@ -272,7 +271,7 @@ import {
   shouldApplyDedupPrecheckResult
 } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
-import { resolveVirtualStepField, type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
+import type { GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
@@ -339,14 +338,10 @@ import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
   DATA_SOURCE_CACHE_UPDATED_EVENT,
   fetchDataSource,
-  getCachedDataSourceItemCount,
   peekCachedDataSource,
   prefetchDataSources
 } from '../data/dataSources';
 import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
-import { shouldHideField } from '../rules/visibility';
-import { getSystemFieldValue } from '../rules/systemFields';
-import { resolveGuidedListProjection } from './features/steps/domain/guidedListProjection';
 import {
   guidedStepRequiresPersistedRecord,
   shouldWaitForActiveDraftSaveBeforeEnsuringRecord
@@ -6896,100 +6891,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     return urls[0] || '';
   }, []);
 
-  const customButtons = useMemo(() => {
-    const createPresetEnabled = definition.createRecordPresetButtonsEnabled !== false;
-    const applyVisibility = view !== 'list';
-    const resolveBaseVisibilityValue = (fieldId: string): FieldValue | undefined => {
-      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
-        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
-        const config =
-          guidedDataSourceConfigMap.byExact.get(key) ||
-          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
-        if (config) {
-          const count = getCachedDataSourceItemCount(config, language);
-          if (count !== null) return count as FieldValue;
-        }
-      }
-      const direct = values[fieldId];
-      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-      const meta: any = {
-        id: selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMeta?.id,
-        createdAt: selectedRecordSnapshot?.createdAt || lastSubmissionMeta?.createdAt,
-        updatedAt: selectedRecordSnapshot?.updatedAt || lastSubmissionMeta?.updatedAt,
-        status: selectedRecordSnapshot?.status || lastSubmissionMeta?.status || null,
-        pdfUrl: selectedRecordSnapshot?.pdfUrl || undefined
-      };
-      const sys = getSystemFieldValue(fieldId, meta);
-      if (sys !== undefined) return sys as FieldValue;
-      for (const rows of Object.values(lineItems)) {
-        if (!Array.isArray(rows)) continue;
-        for (const row of rows as any[]) {
-          const v = (row as any)?.values?.[fieldId];
-          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
-        }
-      }
-      return undefined;
-    };
-    const guidedProjection = resolveGuidedListProjection({
-      definition: definition as any,
-      language: language as any,
-      values: values as any,
-      lineItems: lineItems as any,
-      applyVisibility,
-      getVisibilityValue: resolveBaseVisibilityValue
-    });
-    const guidedVirtualState = guidedProjection.virtualState;
-    const resolveButtonVisibilityValue = (fieldId: string): FieldValue | undefined => {
-      if (guidedVirtualState) {
-        const virtual = resolveVirtualStepField(fieldId, guidedVirtualState);
-        if (virtual !== undefined) return virtual as FieldValue;
-      }
-      return resolveBaseVisibilityValue(fieldId);
-    };
-    const visibilityCtx = {
-      getValue: (fieldId: string) => resolveButtonVisibilityValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || [],
-      getLineItemKeys: () => Object.keys(lineItems)
-    } as any;
-    return definition.questions
-      .map((q, idx) => ({ q, idx }))
-      .filter(({ q }) => q.type === 'BUTTON')
-      .map(({ q, idx }) => {
-        if (applyVisibility && shouldHideField((q as any)?.visibility, visibilityCtx)) {
-          return null;
-        }
-        const cfg: any = (q as any)?.button;
-        if (!cfg || typeof cfg !== 'object') return null;
-        const action = (cfg.action || '').toString().trim();
-        if (action === 'renderDocTemplate' || action === 'renderMarkdownTemplate' || action === 'renderHtmlTemplate') {
-          if (!cfg.templateId) return null;
-        } else if (action === 'createRecordPreset') {
-          if (!createPresetEnabled) return null;
-          if (!cfg.presetValues || typeof cfg.presetValues !== 'object') return null;
-        } else if (action === 'updateRecord') {
-          const setObj = cfg.set || cfg.patch || cfg.update || null;
-          if (!setObj || typeof setObj !== 'object') return null;
-          const hasStatus = (setObj as any).status !== undefined;
-          const valuesObj = (setObj as any).values;
-          const hasValues = valuesObj && typeof valuesObj === 'object';
-          if (!hasStatus && !hasValues) return null;
-        } else if (action === 'openUrlField') {
-          if (!cfg.fieldId) return null;
-        } else {
-          return null;
-        }
-
-        const placementsRaw = cfg.placements;
-        const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : (['form'] as const);
-        // Use a stable "button reference" that includes the question index.
-        // This avoids ambiguity if multiple BUTTON fields accidentally share the same id.
-        const id = encodeButtonRef(q.id, idx);
-        const disabled =
-          action === 'openUrlField' && cfg.disableWhenValueMissing === true ? !resolveOpenUrlFieldHref((cfg.fieldId || '').toString()) : false;
-        return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any, disabled };
-      })
-      .filter((b): b is { id: string; label: string; placements: any[]; action: any; disabled: boolean } => !!b);
-  }, [definition, encodeButtonRef, guidedDataSourceConfigMap, language, lastSubmissionMeta, lineItems, resolveOpenUrlFieldHref, selectedRecordId, selectedRecordSnapshot, values, view]);
+  const customButtons = useAppCustomButtons({
+    definition,
+    language,
+    values,
+    lineItems,
+    view,
+    selectedRecordId,
+    selectedRecordSnapshot,
+    lastSubmissionMeta,
+    guidedDataSourceConfigMap,
+    encodeButtonRef,
+    resolveOpenUrlFieldHref
+  });
 
   const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
     const raw = (pdfBase64 || '').toString();
