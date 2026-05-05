@@ -86,6 +86,7 @@ import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { usePendingFollowupBatchWait } from './components/app/usePendingFollowupBatchWait';
+import { useServerGeneratedTopValues } from './components/app/useServerGeneratedTopValues';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
 import { useDuplicateCurrentRecordAction } from './components/app/useDuplicateCurrentRecordAction';
@@ -249,7 +250,6 @@ import {
 import { shouldWaitBeforeLeavingRecord } from './app/navigationPendingWork';
 import { shouldSkipCleanDraftSnapshotSave } from './app/snapshotSave';
 import { shouldClearStatusAfterSuccessfulSave } from './app/saveFailureStatus';
-import { extractServerGeneratedTopValues, mergeServerGeneratedTopValues } from './app/serverGeneratedValues';
 import { shouldSkipGuidedStepBackgroundSync } from './app/guidedStepBackgroundSync';
 import {
   aggregateContiguousPrefetchedPageItems,
@@ -7305,39 +7305,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     view
   ]);
 
-  const applyServerGeneratedTopValues = useCallback(
-    (response: any, source: string): Record<string, FieldValue> => {
-      const generatedValues = extractServerGeneratedTopValues(response);
-      const generatedFieldIds = Object.keys(generatedValues);
-      if (!generatedFieldIds.length) return {};
-      const nextValues = mergeServerGeneratedTopValues(valuesRef.current, generatedValues);
-      valuesRef.current = nextValues;
-      setValues(prev => mergeServerGeneratedTopValues(prev, generatedValues));
-      setSelectedRecordSnapshot(prev =>
-        prev
-          ? {
-              ...prev,
-              values: mergeServerGeneratedTopValues((prev.values || {}) as Record<string, FieldValue>, generatedValues)
-            }
-          : prev
-      );
-      selectedRecordSnapshotRef.current = selectedRecordSnapshotRef.current
-        ? ({
-            ...selectedRecordSnapshotRef.current,
-            values: mergeServerGeneratedTopValues(
-              (selectedRecordSnapshotRef.current.values || {}) as Record<string, FieldValue>,
-              generatedValues
-            )
-          } as WebFormSubmission)
-        : selectedRecordSnapshotRef.current;
-      logEvent('serverGeneratedValues.applied', {
-        source,
-        fieldIds: generatedFieldIds
-      });
-      return generatedValues;
-    },
-    [logEvent]
-  );
+  const applyServerGeneratedTopValues = useServerGeneratedTopValues({
+    valuesRef,
+    selectedRecordSnapshotRef,
+    setValues,
+    setSelectedRecordSnapshot,
+    logEvent
+  });
 
   const performAutoSave: (reason: string) => Promise<void> = useCallback(
     async (reason: string): Promise<void> => {
