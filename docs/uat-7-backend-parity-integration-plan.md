@@ -483,10 +483,15 @@ Fiftieth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided step data-source draft-state transitions into `stepDataSourceDrafts`, keeping the component responsible for ref synchronization only when a draft map changes. Current size: 13,168 lines.
 - Validation for the pass used focused step data-source draft, availability, and virtual data-source row value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fifty-first-pass results:
+
+- `FormView.tsx`: extracted guided-step scoped definition construction into `guidedStepDefinition`, keeping `FormView` responsible for active-step state and deduped diagnostics only. Current size: 12,642 lines.
+- Validation for the pass used focused guided-step definition, line-group config, and target-field tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,843 lines.
+- `FormView.tsx`: 12,642 lines.
 - `LineItemGroupQuestion.tsx`: 13,168 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
