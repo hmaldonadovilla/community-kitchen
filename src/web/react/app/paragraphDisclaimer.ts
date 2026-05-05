@@ -222,3 +222,62 @@ export const resolveParagraphUserText = (args: {
   if (hasDisclaimer) return userText;
   return raw;
 };
+
+export type ParagraphDisclaimerFieldUpdate = {
+  fieldId: string;
+  keyCount: number;
+  itemCount: number;
+};
+
+export type ParagraphDisclaimerUpdates = {
+  updates: Record<string, FieldValue>;
+  updatedCount: number;
+  fieldUpdates: ParagraphDisclaimerFieldUpdate[];
+};
+
+export const computeParagraphDisclaimerUpdates = (args: {
+  definition: WebFormDefinition;
+  language: LangCode;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  optionState: OptionState;
+}): ParagraphDisclaimerUpdates => {
+  const updates: Record<string, FieldValue> = {};
+  const fieldUpdates: ParagraphDisclaimerFieldUpdate[] = [];
+
+  (args.definition.questions || []).forEach(question => {
+    if (question.type !== 'PARAGRAPH') return;
+    const disclaimerCfg = (question.ui as any)?.paragraphDisclaimer;
+    if (!disclaimerCfg) return;
+    const { sectionText, separator, keyCount, itemCount } = buildParagraphDisclaimerSection({
+      config: disclaimerCfg,
+      definition: args.definition,
+      lineItems: args.lineItems,
+      optionState: args.optionState,
+      language: args.language
+    });
+    const current =
+      args.values[question.id] === undefined || args.values[question.id] === null
+        ? ''
+        : args.values[question.id]?.toString?.() || '';
+    const { userText, hasDisclaimer, marker } = splitParagraphDisclaimerValue({
+      rawValue: current,
+      separator
+    });
+    const editable = !!disclaimerCfg?.editable;
+    if (editable && !sectionText) return;
+
+    const combined = buildParagraphDisclaimerValue({
+      userText,
+      sectionText,
+      separator,
+      markerOverride: hasDisclaimer ? marker : undefined
+    });
+    if (combined !== current) {
+      updates[question.id] = combined;
+      fieldUpdates.push({ fieldId: question.id, keyCount, itemCount });
+    }
+  });
+
+  return { updates, updatedCount: fieldUpdates.length, fieldUpdates };
+};

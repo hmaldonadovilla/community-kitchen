@@ -208,8 +208,8 @@ import { removeUnlockParamFromHref, resolveUnlockRecordId, shouldBypassReadyForP
 import {
   buildParagraphDisclaimerSection,
   buildParagraphDisclaimerValue,
-  resolveParagraphUserText,
-  splitParagraphDisclaimerValue
+  computeParagraphDisclaimerUpdates as computeParagraphDisclaimerUpdatesAction,
+  resolveParagraphUserText
 } from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
@@ -6438,57 +6438,14 @@ const FormView: React.FC<FormViewProps> = ({
       currentValues: Record<string, FieldValue>,
       currentLineItems: LineItemState,
       currentOptionState: OptionState
-    ): {
-      updates: Record<string, FieldValue>;
-      updatedCount: number;
-      fieldUpdates: Array<{ fieldId: string; keyCount: number; itemCount: number }>;
-    } => {
-      const updates: Record<string, FieldValue> = {};
-      const fieldUpdates: Array<{ fieldId: string; keyCount: number; itemCount: number }> = [];
-      (definition.questions || []).forEach(q => {
-        if (q.type !== 'PARAGRAPH') return;
-        const disclaimerCfg = (q.ui as any)?.paragraphDisclaimer;
-        if (!disclaimerCfg) return;
-        const { sectionText, separator, keyCount, itemCount } = buildParagraphDisclaimerSection({
-          config: disclaimerCfg,
-          definition,
-          lineItems: currentLineItems,
-          optionState: currentOptionState,
-          language
-        });
-        const current = currentValues[q.id] === undefined || currentValues[q.id] === null ? '' : currentValues[q.id]?.toString?.() || '';
-        const { userText, sectionText: _storedSection, hasDisclaimer, marker } = splitParagraphDisclaimerValue({
-          rawValue: current,
-          separator
-        });
-        const editable = !!disclaimerCfg?.editable;
-        if (editable) {
-          if (!sectionText) return;
-          const combined = buildParagraphDisclaimerValue({
-            userText,
-            sectionText,
-            separator,
-            markerOverride: hasDisclaimer ? marker : undefined
-          });
-          if (combined !== current) {
-            updates[q.id] = combined;
-            fieldUpdates.push({ fieldId: q.id, keyCount, itemCount });
-          }
-          return;
-        }
-        const combined = buildParagraphDisclaimerValue({
-          userText,
-          sectionText,
-          separator,
-          markerOverride: hasDisclaimer ? marker : undefined
-        });
-        if (combined !== current) {
-          updates[q.id] = combined;
-          fieldUpdates.push({ fieldId: q.id, keyCount, itemCount });
-        }
-      });
-      return { updates, updatedCount: fieldUpdates.length, fieldUpdates };
-    },
+    ) =>
+      computeParagraphDisclaimerUpdatesAction({
+        definition,
+        language,
+        values: currentValues,
+        lineItems: currentLineItems,
+        optionState: currentOptionState
+      }),
     [definition, language]
   );
 
