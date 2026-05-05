@@ -84,6 +84,7 @@ import { useAppAutoSaveDedupConfig } from './components/app/useAppAutoSaveDedupC
 import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
 import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
+import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -355,7 +356,6 @@ import {
   type UploadedFieldValueOverride
 } from './features/uploads/domain/uploadedFieldOverrides';
 import {
-  hasStatusTransitionValue,
   matchesStatusTransition,
   resolveStatusTransitionValue
 } from '../../domain/statusTransitions';
@@ -604,42 +604,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const isRetryableRecordBusyMessage = useCallback(isRetryableRecordBusyMessageValue, []);
   const { perfEnabled, perfMark, perfMeasure } = useAppPerfTools(envTag);
 
-  const statusTransitions = definition.followup?.statusTransitions;
-  const closedStatusLabel = useMemo(
-    () => resolveStatusTransitionValue(statusTransitions, 'onClose', language, { includeDefaultOnClose: true }) || 'Closed',
-    [language, statusTransitions]
-  );
-  const hasProgressStatus = useMemo(
-    () =>
-      hasStatusTransitionValue(statusTransitions, 'inProgress') ||
-      hasStatusTransitionValue(statusTransitions, 'reOpened'),
-    [statusTransitions]
-  );
-  const matchesClosedStatus = useCallback(
-    (rawStatus: any) => matchesStatusTransition(rawStatus, statusTransitions, 'onClose', { includeDefaultOnClose: true }),
-    [statusTransitions]
-  );
-  const resolveStatusAutoView = useCallback(
-    (
-      rawStatus: any,
-      summaryEnabled: boolean
-    ): { view: 'form' | 'summary'; statusKey: 'onClose' | 'inProgress' | 'reOpened' | 'other' | 'fallback' } => {
-      if (matchesClosedStatus(rawStatus)) {
-        return { view: summaryEnabled ? 'summary' : 'form', statusKey: 'onClose' };
-      }
-      if (matchesStatusTransition(rawStatus, statusTransitions, 'inProgress')) {
-        return { view: 'form', statusKey: 'inProgress' };
-      }
-      if (matchesStatusTransition(rawStatus, statusTransitions, 'reOpened')) {
-        return { view: 'form', statusKey: 'reOpened' };
-      }
-      if (!hasProgressStatus) {
-        return { view: 'form', statusKey: 'fallback' };
-      }
-      return { view: summaryEnabled ? 'summary' : 'form', statusKey: 'other' };
-    },
-    [hasProgressStatus, matchesClosedStatus, statusTransitions]
-  );
+  const {
+    statusTransitions,
+    closedStatusLabel,
+    matchesClosedStatus,
+    resolveStatusAutoView
+  } = useAppStatusTransitions({ definition, language });
   const { readyForProductionUnlockResolution, readyForProductionUnlockStatus } =
     useReadyForProductionUnlockConfig(definition);
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
