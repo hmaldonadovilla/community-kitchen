@@ -388,9 +388,14 @@ Thirty-first-pass results:
 - `App.tsx`: extracted pending follow-up batch wait/timeout normalization into `usePendingFollowupBatchWait`, keeping submit/navigation callers wired to a focused hook. Current size: 14,675 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-second-pass results:
+
+- `App.tsx`: extracted duplicate-check progress dialog state, timer cleanup, and visibility policy into `useDedupProgressDialog`. Current size: 14,621 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,675 lines.
+- `App.tsx`: 14,621 lines.
 - `FormView.tsx`: 13,409 lines.
 - `LineItemGroupQuestion.tsx`: 13,611 lines.
 
