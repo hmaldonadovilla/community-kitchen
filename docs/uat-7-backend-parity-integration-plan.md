@@ -373,9 +373,14 @@ Twenty-eighth-pass results:
 - `FormView.tsx`: extracted top-level read-only field chrome and overlay-open button chrome into `TopFieldChrome`, keeping value mutation and overlay reset orchestration in `FormView`. Current size: 13,409 lines.
 - Validation for the pass used focused form/upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-ninth-pass results:
+
+- `App.tsx`: extracted `openUrlField` custom button execution into `useOpenUrlFieldAction`, leaving the custom button handler responsible for routing only. Current size: 14,727 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,748 lines.
+- `App.tsx`: 14,727 lines.
 - `FormView.tsx`: 13,409 lines.
 - `LineItemGroupQuestion.tsx`: 13,618 lines.
 
