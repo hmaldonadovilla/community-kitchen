@@ -74,6 +74,7 @@ import { useAppActionNotices } from './components/app/useAppActionNotices';
 import { useDedupDialogPresentation } from './components/app/useDedupDialogPresentation';
 import { useSubmitGateEnableDialog } from './components/app/useSubmitGateEnableDialog';
 import { useSystemActionGateState } from './components/app/useSystemActionGateState';
+import { useAppPerfOpenRecordBridge, type AppRecordSelectHandler } from './components/app/useAppPerfOpenRecordBridge';
 import { useAppPerfTools } from './components/app/useAppPerfTools';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
@@ -14752,9 +14753,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     void handleSubmitRef.current();
   }, [finalSubmitButtonLabelConfig, logEvent, recordLoadingId, submitting, updateRecordBusyOpen]);
 
-  const handleRecordSelectRef = useRef<
-    ((row: ListItem, fullRecord?: WebFormSubmission, opts?: { openView?: 'auto' | 'form' | 'summary' | 'button' | 'copy' | 'submit'; openButtonId?: string }) => void) | null
-  >(null);
+  const handleRecordSelectRef = useRef<AppRecordSelectHandler | null>(null);
 
   const handleRecordSelect = (
     row: ListItem,
@@ -15526,40 +15525,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   handleRecordSelectRef.current = handleRecordSelect;
 
-  const openRecordByIdForPerf = useCallback(
-    (recordId: string, openViewRaw?: string): boolean => {
-      if (!perfEnabled) return false;
-      const id = (recordId || '').toString().trim();
-      if (!id) return false;
-      const items = (listCache.response?.items || []) as ListItem[];
-      if (!items.length) return false;
-      const row = items.find(r => ((r as any)?.id || '').toString() === id);
-      if (!row) return false;
-      const lowered = (openViewRaw || 'auto').toString().trim().toLowerCase();
-      const openView: 'auto' | 'form' | 'summary' | 'submit' =
-        lowered === 'form' ? 'form' : lowered === 'summary' ? 'summary' : lowered === 'submit' ? 'submit' : 'auto';
-      logEvent('perf.openRecordById.attempt', { recordId: id, openView });
-      handleRecordSelectRef.current?.(row, listCache.records[id], { openView });
-      return true;
-    },
-    [listCache.records, listCache.response?.items, logEvent, perfEnabled]
-  );
-
-  useEffect(() => {
-    if (!perfEnabled) return;
-    const globalAny = globalThis as any;
-    const hook = (recordId: any, openView?: any) => openRecordByIdForPerf((recordId || '').toString(), (openView || '').toString());
-    globalAny.__CK_PERF_OPEN_RECORD_BY_ID__ = hook;
-    return () => {
-      try {
-        if (globalAny.__CK_PERF_OPEN_RECORD_BY_ID__ === hook) {
-          delete globalAny.__CK_PERF_OPEN_RECORD_BY_ID__;
-        }
-      } catch {
-        // ignore cleanup failures
-      }
-    };
-  }, [openRecordByIdForPerf, perfEnabled]);
+  useAppPerfOpenRecordBridge({
+    enabled: perfEnabled,
+    listItems: listCache.response?.items,
+    records: listCache.records,
+    onDiagnostic: logEvent,
+    recordSelectRef: handleRecordSelectRef
+  });
 
   useEffect(() => {
     const envLower = (envTag || '').toString().trim().toLowerCase();
