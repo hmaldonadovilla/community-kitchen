@@ -193,9 +193,7 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
-import { RowFlowFieldRenderer } from '../../features/lineItems/components/RowFlowFieldRenderer';
-import { RowFlowOutputSegmentsRenderer } from '../../features/lineItems/components/RowFlowOutputSegmentsRenderer';
-import { RowFlowPromptRenderer } from '../../features/lineItems/components/RowFlowPromptRenderer';
+import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import {
@@ -235,12 +233,9 @@ import {
   resolveRowFlowSegmentActionIds,
   resolveRowFlowState,
   type RowFlowResolvedEffect,
-  type RowFlowResolvedPrompt,
-  type RowFlowResolvedRow,
   type RowFlowResolvedSegment,
   type RowFlowResolvedState
 } from '../../features/steps/domain/rowFlow';
-import { resolveVisibleRowFlowOutputSegments } from '../../features/steps/domain/rowFlowOutputVisibility';
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
@@ -4852,7 +4847,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             {renderSourceFirstDataSourceConfigs()}
             {!(sourceFirstDataSourceRows.length && hideParentRowsForSourceFirst) ? parentRows.map((row, rowIdx) => {
               const useEdgeToEdgeRowChrome = q.id === 'MP_TYPE_LI' || (q as any)?.ui?.edgeToEdgeRows === true;
-              const isLastEdgeToEdgeRow = useEdgeToEdgeRowChrome && rowIdx === parentRows.length - 1;
               const groupCtx: VisibilityContext = {
                 getValue: fid => resolveTopValue(fid),
                 getLineValue: (_rowId, fid) => row.values[fid],
@@ -4862,175 +4856,54 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
               const rowFlowState = rowFlowEnabled ? rowFlowStateByRowId.get(row.id) || null : null;
 
               if (rowFlowEnabled && rowFlowState) {
-                const flowLogKey = `${q.id}::rowFlow`;
-                if (!rowFlowLoggedRef.current.has(flowLogKey)) {
-                  rowFlowLoggedRef.current.add(flowLogKey);
-                  onDiagnostic?.('lineItems.rowFlow.enabled', {
-                    groupId: q.id,
-                    promptCount: rowFlowState.prompts.length,
-                    segmentCount: rowFlowState.segments.length
-                  });
-                }
-                const activePromptId = rowFlowState.activePromptId || '';
-                if (activePromptId && rowFlowPromptRef.current[row.id] !== activePromptId) {
-                  rowFlowPromptRef.current[row.id] = activePromptId;
-                  onDiagnostic?.('lineItems.rowFlow.prompt.active', {
-                    groupId: q.id,
-                    rowId: row.id,
-                    promptId: activePromptId
-                  });
-                }
-
-                const renderRowFlowActionControl = (actionId: string) =>
-                  renderRowFlowActionControlWithContext({ actionId, row, rowFlowState });
-
-
-                const resolvePromptTargets = (prompt: RowFlowResolvedPrompt) => {
-                  const target = prompt.target;
-                  if (!target || !target.primaryRow || !target.fieldId) return null;
-                  const rowEntry = target.primaryRow;
-                  const groupInfo = resolveRowFlowGroupConfig(rowEntry.groupKey);
-                  if (!groupInfo?.config) return null;
-                  const field = resolveRowFlowFieldConfig(rowEntry.groupKey, target.fieldId);
-                  if (!field) return null;
-                  const groupDef = buildRowFlowGroupDefinition(rowEntry.groupKey, groupInfo.config);
-                  return { field, groupDef, rowEntry, parentValues: target.parentValues };
-                };
-
-                const renderRowFlowField = (args: {
-                  field: any;
-                  groupDef: WebQuestionDefinition;
-                  rowEntry: RowFlowResolvedRow | null | undefined;
-                  parentValues?: Record<string, FieldValue>;
-                  showLabel?: boolean;
-                  labelOverride?: string;
-                }): React.ReactNode => (
-                  <RowFlowFieldRenderer
-                    field={args.field}
-                    groupDef={args.groupDef}
-                    rowEntry={args.rowEntry}
-                    parentValues={args.parentValues}
-                    showLabel={args.showLabel}
-                    labelOverride={args.labelOverride}
+                return (
+                  <RowFlowRowRenderer
+                    key={row.id}
+                    groupId={q.id}
+                    row={row}
+                    rowIdx={rowIdx}
+                    rowCount={parentRows.length}
+                    useEdgeToEdgeRowChrome={useEdgeToEdgeRowChrome}
+                    rowFlowState={rowFlowState}
+                    rowFlowSubGroupIds={rowFlowSubGroupIds}
+                    definition={definition}
                     language={language}
                     values={values}
                     errors={errors}
                     submitting={submitting}
                     groupChoiceSearchDefault={groupChoiceSearchDefault}
-                    buildVisibilityContext={buildRowFlowFieldCtx}
-                    resolveFieldLabel={resolveFieldLabel}
+                    activeFieldPath={activeFieldMeta.path}
+                    outputSeparator={rowFlow?.output?.separator ?? ' | '}
+                    outputActionsLayout={outputActionsLayout}
+                    rowFlowLoggedRef={rowFlowLoggedRef}
+                    rowFlowPromptRef={rowFlowPromptRef}
+                    onDiagnostic={onDiagnostic}
+                    renderRowFlowActionControlWithContext={renderRowFlowActionControlWithContext}
+                    resolveOutputActionScope={resolveOutputActionScope}
+                    resolveRowFlowGroupConfig={resolveRowFlowGroupConfig}
+                    resolveRowFlowFieldConfig={resolveRowFlowFieldConfig}
+                    buildRowFlowGroupDefinition={buildRowFlowGroupDefinition}
+                    buildRowFlowFieldContext={buildRowFlowFieldCtx}
+                    resolveRowFlowDisplayValue={resolveRowFlowDisplayValue}
                     resolveOptionSetForField={(field, groupKey) => resolveOptionSetForField(optionState, field, groupKey)}
                     ensureLineOptions={ensureLineOptions}
                     renderWarnings={renderWarnings}
                     renderChoiceControl={renderChoiceControl}
                     handleLineFieldChange={handleLineFieldChange}
                     setErrors={setErrors}
-                    onDiagnostic={onDiagnostic}
                     isLineFieldInputDisabled={isLineFieldInputDisabled}
                     isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
                     openFileOverlay={openFileOverlay}
                     handleLineFileInputChange={handleLineFileInputChange}
                     fileInputsRef={fileInputsRef}
-                  />
-                );
-
-                const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => (
-                  <RowFlowPromptRenderer
-                    prompt={prompt}
-                    groupId={q.id}
-                    row={row}
-                    rowFlowState={rowFlowState}
-                    rowFlowSubGroupIds={rowFlowSubGroupIds}
-                    definition={definition}
-                    language={language}
-                    values={values}
-                    submitting={submitting}
-                    resolvePromptTargets={resolvePromptTargets}
-                    renderRowFlowField={renderRowFlowField}
-                    renderRowFlowActionControl={renderRowFlowActionControl}
-                    resolveRowFlowGroupConfig={resolveRowFlowGroupConfig}
-                    ensureLineOptions={ensureLineOptions}
-                    resolveOptionSetForPromptField={(field, groupKey) =>
-                      resolveOptionSetForField(optionState, field, groupKey)
-                    }
                     addLineItemRowManual={addLineItemRowManual}
                     buildOverlayGroupOverride={buildOverlayGroupOverride}
                     openSubgroupOverlay={openSubgroupOverlay}
                     openLineItemGroupOverlay={openLineItemGroupOverlay}
-                    onDiagnostic={onDiagnostic}
                   />
                 );
-
-                const outputSegments = resolveVisibleRowFlowOutputSegments({
-                  segments: rowFlowState.segments,
-                  currentRowId: row.id,
-                  resolveFieldConfig: resolveRowFlowFieldConfig,
-                  buildFieldContext: buildRowFlowFieldCtx
-                });
-
-                const separator = rowFlow?.output?.separator ?? ' | ';
-                const rowOutputActions = rowFlowState.outputActions.filter(action => resolveOutputActionScope(action) === 'row');
-
-                const promptsToRender = rowFlowState.prompts.filter(
-                  prompt =>
-                    prompt.visible &&
-                    (prompt.id === activePromptId || (prompt.complete && prompt.config.keepVisibleWhenFilled === true))
-                );
-
-                return (
-                  <div
-                    key={row.id}
-                    className={`line-item-row ck-row-flow${useEdgeToEdgeRowChrome ? ' ck-row-flow--edge' : ''}`}
-                    data-row-anchor={`${q.id}__${row.id}`}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      width: '100%',
-                      padding: useEdgeToEdgeRowChrome ? '12px 0' : 0,
-                      marginBottom: useEdgeToEdgeRowChrome ? 0 : 14
-                    }}
-                  >
-                    <RowFlowOutputSegmentsRenderer
-                      segments={outputSegments}
-                      separator={separator}
-                      rowOutputActions={rowOutputActions}
-                      outputActionsLayout={outputActionsLayout}
-                      language={language}
-                      activeFieldPath={activeFieldMeta.path}
-                      errors={errors}
-                      renderRowFlowActionControl={renderRowFlowActionControl}
-                      resolveRowFlowFieldConfig={resolveRowFlowFieldConfig}
-                      resolveRowFlowGroupConfig={resolveRowFlowGroupConfig}
-                      buildRowFlowGroupDefinition={buildRowFlowGroupDefinition}
-                      renderRowFlowField={renderRowFlowField}
-                      resolveRowFlowDisplayValue={resolveRowFlowDisplayValue}
-                      handleLineFieldChange={handleLineFieldChange}
-                      isLineFieldInputDisabled={isLineFieldInputDisabled}
-                      isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
-                    />
-                    {promptsToRender.length ? (
-                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {promptsToRender.map(prompt => (
-                          <div key={prompt.id}>{renderRowFlowPrompt(prompt)}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {useEdgeToEdgeRowChrome && !isLastEdgeToEdgeRow ? (
-                      <div
-                        className="ck-line-item-row-separator"
-                        aria-hidden="true"
-                        style={{
-                          width: '100%',
-                          marginTop: 12,
-                          height: 1,
-                          background: 'var(--border)',
-                          borderBottom: '1px solid var(--border)'
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                );
               }
+              const isLastEdgeToEdgeRow = useEdgeToEdgeRowChrome && rowIdx === parentRows.length - 1;
               const ui = q.lineItemConfig?.ui;
               const guidedCollapsedFieldsInHeader = Boolean((ui as any)?.guidedCollapsedFieldsInHeader);
               const isProgressive =
