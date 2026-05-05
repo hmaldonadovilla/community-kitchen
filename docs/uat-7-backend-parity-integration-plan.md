@@ -568,11 +568,16 @@ Sixty-seventh-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first nested preset normalization collection, signature generation, and line-item application into `stepDataSourceRows`, leaving the component effect responsible only for lifecycle gating and state dispatch. Current size: 12,931 lines.
 - Validation for the pass used focused step data-source row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-eighth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted auto-add desired-row calculation and generated-row reconciliation into the line-items domain, preserving the component's auto-add effects while moving row mutation rules out of the renderer. Current size: 12,771 lines.
+- Validation for the pass used focused auto-add row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,931 lines.
+- `LineItemGroupQuestion.tsx`: 12,771 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
