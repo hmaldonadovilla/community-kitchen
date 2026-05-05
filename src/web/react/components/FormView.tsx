@@ -67,12 +67,11 @@ import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/dom
 import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
 import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
-import { shouldSuppressGuidedErrorStepNavigationAfterBack } from '../features/steps/domain/errorNavigation';
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
-import { resolveGuidedErrorNavigationTarget } from '../features/validation/domain/guidedErrorNavigation';
+import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
 import { useValidationNavigationRequest } from '../features/validation/useValidationNavigationRequest';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
@@ -10854,141 +10853,7 @@ const FormView: React.FC<FormViewProps> = ({
     return { rowErrors, subgroupErrors };
   }, [errors]);
 
-  useEffect(() => {
-    const keys = Object.keys(errors || {});
-    if (!keys.length) {
-      firstErrorRef.current = null;
-      return;
-    }
-    // Only auto-navigate to the next errored field on submit attempt.
-    // While the user is typing, errors will change (as fields are fixed) and we should not steal focus.
-    if (errorNavConsumedRef.current === errorNavRequestRef.current) return;
-    let firstKey = keys[0];
-    if (typeof document === 'undefined') return;
-    const guidedPick = resolveGuidedErrorNavigationTarget({
-      errorKeys: keys,
-      guidedEnabled,
-      guidedStepsCfg,
-      guidedStepIds,
-      guidedVisibleSteps,
-      activeGuidedStepId,
-      maxReachableGuidedIndex,
-      lineItems
-    });
-    firstKey = guidedPick.key;
-    const desiredStepId = guidedPick.stepId;
-    if (desiredStepId && guidedEnabled && desiredStepId !== activeGuidedStepId) {
-      const suppressState = guidedBackErrorNavSuppressionRef.current;
-      const shouldSuppressGuidedStepRedirect = shouldSuppressGuidedErrorStepNavigationAfterBack({
-        guidedStepIds,
-        activeStepId: activeGuidedStepId,
-        desiredStepId,
-        suppressedStepId: suppressState?.stepId || null,
-        suppressUntil: suppressState?.suppressUntil || null
-      });
-      if (shouldSuppressGuidedStepRedirect) {
-        onDiagnostic?.('validation.navigate.step.suppressed', {
-          from: activeGuidedStepId,
-          to: desiredStepId,
-          key: firstKey,
-          reason: 'manualBack'
-        });
-        consumeValidationNavigation();
-        return;
-      }
-      // Switch steps first, then re-run this navigation effect to scroll once the field is mounted.
-      selectGuidedStep(desiredStepId, 'auto');
-      onDiagnostic?.('validation.navigate.step', { from: activeGuidedStepId, to: desiredStepId, key: firstKey });
-      return;
-    }
-
-    const wasSame = firstErrorRef.current === firstKey;
-    firstErrorRef.current = firstKey;
-    const allowOverlayOpen = errorNavAllowOverlayOpenRef.current !== false;
-
-    const expandGroupForQuestionId = (questionId: string): boolean => {
-      const groupKey = questionIdToGroupKey[questionId];
-      if (!groupKey) return false;
-      setCollapsedGroups(prev => (prev[groupKey] === false ? prev : { ...prev, [groupKey]: false }));
-      return true;
-    };
-
-    const ensureMountedForError = (): boolean => {
-      const parts = firstKey.split('__');
-      if (parts.length !== 3) {
-        // Top-level question error: ensure its group card is expanded.
-        return expandGroupForQuestionId(firstKey);
-      }
-      const prefix = parts[0];
-      const fieldId = parts[1];
-      const rowId = parts[2];
-      const subgroupInfo = parseSubgroupKey(prefix);
-      if (subgroupInfo) {
-        expandGroupForQuestionId(subgroupInfo.rootGroupId);
-        const collapseKey = `${subgroupInfo.parentGroupKey}::${subgroupInfo.parentRowId}`;
-        setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
-        const nestedKey =
-          nestedGroupMeta.subgroupFieldToGroupKey[`${subgroupInfo.rootGroupId}::${subgroupInfo.path.join('.') || subgroupInfo.subGroupId}__${fieldId}`];
-        if (nestedKey) {
-          setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
-        }
-        if (allowOverlayOpen && (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix)) {
-          openSubgroupOverlay(prefix, { source: 'navigate' });
-          onDiagnostic?.('validation.navigate.openSubgroup', { key: firstKey, subKey: prefix });
-        }
-        return true;
-      }
-
-      // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
-      const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
-      const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
-      const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
-        if (allowOverlayOpen && groupOverlayEnabled && !suppressOverlayForGuidedInline) {
-          if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
-            openLineItemGroupOverlay(prefix, { source: 'navigate' });
-          onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key: firstKey, groupId: prefix, source: 'submit' });
-        }
-      }
-
-      expandGroupForQuestionId(prefix);
-      const collapseKey = `${prefix}::${rowId}`;
-      setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
-      const nestedKey = nestedGroupMeta.lineFieldToGroupKey[`${prefix}__${fieldId}`];
-      if (nestedKey) {
-        setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
-      }
-      return true;
-    };
-
-    const scrollToError = (): boolean => {
-      const target = document.querySelector<HTMLElement>(`[data-field-path="${firstKey}"]`);
-      if (!target) return false;
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (errorNavModeRef.current !== 'scroll') {
-        const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
-        try {
-          focusable?.focus({ preventScroll: true } as any);
-        } catch {
-          // ignore focus issues
-        }
-      }
-      return true;
-    };
-
-    const requestedMount = ensureMountedForError();
-    const attempt = () => scrollToError();
-
-    requestAnimationFrame(() => {
-      const found = attempt();
-      if (found && wasSame) return;
-      if (!found && requestedMount) {
-        // wait for state-driven DOM mount (expanded row / subgroup overlay)
-        requestAnimationFrame(() => attempt());
-        setTimeout(() => attempt(), 80);
-      }
-    });
-    consumeValidationNavigation();
-  }, [
+  useValidationErrorNavigation({
     errors,
     consumeValidationNavigation,
     errorNavAllowOverlayOpenRef,
@@ -10996,9 +10861,9 @@ const FormView: React.FC<FormViewProps> = ({
     errorNavModeRef,
     errorNavRequestRef,
     firstErrorRef,
-    nestedGroupMeta.lineFieldToGroupKey,
-    nestedGroupMeta.subgroupFieldToGroupKey,
-    definition.questions,
+    guidedBackErrorNavSuppressionRef,
+    nestedGroupMeta,
+    questions: definition.questions,
     activeGuidedStepId,
     guidedEnabled,
     guidedInlineLineGroupIds,
@@ -11012,11 +10877,11 @@ const FormView: React.FC<FormViewProps> = ({
     openSubgroupOverlay,
     questionIdToGroupKey,
     selectGuidedStep,
-    lineItemGroupOverlay.groupId,
-    lineItemGroupOverlay.open,
-    subgroupOverlay.open,
-    subgroupOverlay.subKey
-  ]);
+    lineItemGroupOverlay,
+    subgroupOverlay,
+    setCollapsedGroups,
+    setCollapsedRows
+  });
 
   const subgroupOverlayPortal = (() => {
     if (!subgroupOverlay.open || !subgroupOverlay.subKey) return null;
