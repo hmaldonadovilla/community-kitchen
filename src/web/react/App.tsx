@@ -30,8 +30,6 @@ import {
   BootstrapContext,
   applyInventoryReservationPlanApi,
   submit,
-  previewUpdateRecordDependenciesApi,
-  applyUpdateRecordWithDependenciesApi,
   checkDedupConflictApi,
   triggerFollowupBatch,
   prefetchTemplatesApi,
@@ -87,6 +85,7 @@ import { useAppReportPreviewActions } from './components/app/useAppReportPreview
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
+import { useUpdateRecordButtonAction } from './components/app/useUpdateRecordButtonAction';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -6904,6 +6903,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setListDedupPrompt
   });
 
+  const runUpdateRecordButtonAction = useUpdateRecordButtonAction({
+    definition,
+    formKey,
+    customConfirm,
+    updateRecordBusy,
+    updateRecordActionInFlightRef,
+    languageRef,
+    valuesRef,
+    lineItemsRef,
+    selectedRecordIdRef,
+    selectedRecordSnapshotRef,
+    lastSubmissionMetaRef,
+    recordDataVersionRef,
+    recordRowNumberRef,
+    recordSessionRef,
+    uploadQueueRef,
+    autoSaveInFlightRef,
+    recordStaleRef,
+    ensureDraftRecordIdActionRef,
+    flushPendingDraftSaveActionRef,
+    submitCurrentRecordMutation,
+    waitForActiveDraftSaveTransactions,
+    logEvent,
+    perfMark,
+    perfMeasure,
+    setDraftSave,
+    setStatus,
+    setStatusLevel,
+    setLastSubmissionMeta,
+    setSelectedRecordSnapshot,
+    setValues,
+    setView,
+    upsertListCacheRow,
+    synchronizeStaleRecord
+  });
+
   const handleCustomButton = useCallback(
     (buttonId: string, opts?: { skipConfirm?: boolean }) => {
       const parsedRef = parseButtonRef(buttonId || '');
@@ -6986,220 +7021,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return;
       }
       if (action === 'updateRecord') {
-        const setObj = (cfg?.set || cfg?.patch || cfg?.update || {}) as any;
-        const dependencyGuardCfg = (cfg?.dependencyGuard || null) as any;
-        const navigateToRaw = (cfg?.navigateTo || cfg?.targetView || cfg?.openView || 'auto').toString().trim().toLowerCase();
-        const navigateTo =
-          navigateToRaw === 'form' || navigateToRaw === 'summary' || navigateToRaw === 'list' || navigateToRaw === 'auto'
-            ? (navigateToRaw as 'auto' | 'form' | 'summary' | 'list')
-            : 'auto';
-        const confirmCfg = (cfg?.confirm || cfg?.confirmation || null) as any;
-        const confirmMessage = confirmCfg ? resolveLocalizedString(confirmCfg?.message, languageRef.current, '').toString().trim() : '';
-        const confirmTitle = confirmCfg ? resolveLocalizedString(confirmCfg?.title, languageRef.current, '').toString().trim() : '';
-        const confirmLabel = confirmCfg
-          ? resolveLocalizedString(confirmCfg?.confirmLabel, languageRef.current, '').toString().trim()
-          : '';
-        const cancelLabel = confirmCfg
-          ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim()
-          : '';
-
-        const run = (submitMode: 'default' | 'dependencyGuard' = 'default') => {
-          if (updateRecordActionInFlightRef.current) {
-            logEvent('button.updateRecord.blocked.inFlightGuard', { buttonId: baseId, qIdx: qIdx ?? null });
-            return;
-          }
-          const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
-          updateRecordActionInFlightRef.current = true;
-          const pipelineStartMark = `ck.updateRecord.pipeline.start.${Date.now()}`;
-          perfMark(pipelineStartMark);
-          void runUpdateRecordAction(
-            {
-              definition,
-              formKey,
-              submit: (payload: any) => submitCurrentRecordMutation('button.updateRecord', payload),
-              submitWithDependencies: (payload: any) =>
-                submitCurrentRecordMutation('button.updateRecord.dependencyGuard', payload, (nextPayload: any) =>
-                  applyUpdateRecordWithDependenciesApi(nextPayload as any, buttonId)
-                ),
-              ensureRecordId: (args?: { reason?: string; fieldPath?: string }) =>
-                ensureDraftRecordIdActionRef.current
-                  ? ensureDraftRecordIdActionRef.current(args)
-                  : Promise.resolve({
-                      success: false,
-                      message: tSystem('actions.noRecordSelected', languageRef.current, 'No record selected.')
-                    }),
-              flushPendingDraftSave: (reason: string) =>
-                flushPendingDraftSaveActionRef.current
-                  ? flushPendingDraftSaveActionRef.current(reason)
-                  : Promise.resolve({ ok: true }),
-              waitForActiveDraftSave: (reason: string) => waitForActiveDraftSaveTransactions(reason),
-              tSystem,
-              logEvent,
-              refs: {
-                languageRef,
-                valuesRef,
-                lineItemsRef,
-                selectedRecordIdRef,
-                selectedRecordSnapshotRef,
-                lastSubmissionMetaRef,
-                recordDataVersionRef,
-                recordRowNumberRef,
-                recordSessionRef,
-                uploadQueueRef,
-                autoSaveInFlightRef,
-                recordStaleRef
-              },
-              setDraftSave,
-              setStatus,
-              setStatusLevel,
-              setLastSubmissionMeta,
-              setSelectedRecordSnapshot,
-              setValues,
-              setView,
-              upsertListCacheRow,
-              synchronizeStaleRecord,
-              busy: updateRecordBusy
-            } as any,
-            {
-              buttonId: baseId,
-              buttonRef: buttonId,
-              qIdx: qIdx,
-              navigateTo,
-              set: setObj as any,
-              ensureRecordId: cfg?.ensureRecordId === true,
-              busyTitle,
-              submitMode
-            }
-          )
-            .catch(() => {
-              // runUpdateRecordAction reports failures through UI/logs; guard reset happens in finally below.
-            })
-            .finally(() => {
-              updateRecordActionInFlightRef.current = false;
-              const pipelineEndMark = `ck.updateRecord.pipeline.end.${Date.now()}`;
-              perfMark(pipelineEndMark);
-              perfMeasure('ck.updateRecord.pipeline', pipelineStartMark, pipelineEndMark, {
-                buttonId: baseId,
-                qIdx: qIdx ?? null
-              });
-            });
-        };
-
-        const runDefaultFlow = () => {
-          if (confirmMessage && !opts?.skipConfirm) {
-            const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
-            const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
-            const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
-            customConfirm.openConfirm({
-              title,
-              message: confirmMessage,
-              confirmLabel: okLabel,
-              cancelLabel: cancel,
-              kind: 'updateRecord',
-              refId: buttonId,
-              onConfirm: () => run('default')
-            });
-            logEvent('button.updateRecord.confirm.open', { buttonId: baseId, qIdx: qIdx ?? null, navigateTo });
-            return;
-          }
-
-          run('default');
-        };
-
-        if (!dependencyGuardCfg) {
-          runDefaultFlow();
-          return;
-        }
-
-        const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
-        const previewSeq = updateRecordBusy.lock({
-          title: busyTitle || tSystem('common.loading', languageRef.current, 'Loading…'),
-          message: tSystem('common.loading', languageRef.current, 'Loading…'),
-          kind: 'updateRecord.dependencyPreview',
-          diagnosticMeta: { buttonId: baseId, qIdx: qIdx ?? null }
+        runUpdateRecordButtonAction({
+          buttonId,
+          baseId,
+          qIdx,
+          btn,
+          cfg,
+          skipConfirm: opts?.skipConfirm === true
         });
-        logEvent('button.updateRecord.dependencyPreview.start', {
-          buttonId: baseId,
-          qIdx: qIdx ?? null,
-          targetFormKey: dependencyGuardCfg?.targetFormKey || null
-        });
-
-        void (async () => {
-          try {
-            const existingRecordId = resolveExistingRecordId({
-              selectedRecordId: selectedRecordIdRef.current,
-              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-            });
-            const draft = buildDraftPayload({
-              definition,
-              formKey,
-              language: languageRef.current,
-              values: valuesRef.current,
-              lineItems: lineItemsRef.current,
-              existingRecordId
-            }) as any;
-            const metaSource: any = selectedRecordSnapshotRef.current || lastSubmissionMetaRef.current || null;
-            if (metaSource?.status !== undefined && metaSource?.status !== null) draft.status = metaSource.status;
-            if (metaSource?.createdAt !== undefined && metaSource?.createdAt !== null) draft.createdAt = metaSource.createdAt;
-            if (metaSource?.updatedAt !== undefined && metaSource?.updatedAt !== null) draft.updatedAt = metaSource.updatedAt;
-            if (metaSource?.pdfUrl !== undefined && metaSource?.pdfUrl !== null) draft.pdfUrl = metaSource.pdfUrl;
-
-            const preview = await previewUpdateRecordDependenciesApi(draft, buttonId);
-            if (!preview?.success) {
-              const msg = (preview?.message || 'Failed to check dependent records.').toString();
-              setStatus(msg);
-              setStatusLevel('error');
-              logEvent('button.updateRecord.dependencyPreview.error', {
-                buttonId: baseId,
-                qIdx: qIdx ?? null,
-                message: msg
-              });
-              return;
-            }
-
-            const impactedCount = Number(preview.impactedCount || 0);
-            logEvent('button.updateRecord.dependencyPreview.ok', {
-              buttonId: baseId,
-              qIdx: qIdx ?? null,
-              impactedCount,
-              targetFormKey: preview.targetFormKey || null
-            });
-
-            if (impactedCount > 0) {
-              const dialog = preview.dialog || { title: '', message: '', confirmLabel: '', cancelLabel: '' };
-              customConfirm.openConfirm({
-                title: dialog.title || tSystem('common.confirm', languageRef.current, 'Confirm'),
-                message: dialog.message || '',
-                confirmLabel: dialog.confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
-                cancelLabel: dialog.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
-                kind: 'updateRecord.dependencyGuard',
-                refId: buttonId,
-                onConfirm: () => run('dependencyGuard')
-              });
-              logEvent('button.updateRecord.dependencyConfirm.open', {
-                buttonId: baseId,
-                qIdx: qIdx ?? null,
-                impactedCount,
-                targetFormKey: preview.targetFormKey || null
-              });
-              return;
-            }
-
-            runDefaultFlow();
-          } catch (err: any) {
-            const msg = resolveUserFacingErrorMessage(err, 'Failed to check dependent records.') || 'Failed to check dependent records.';
-            setStatus(msg);
-            setStatusLevel('error');
-            logEvent('button.updateRecord.dependencyPreview.exception', {
-              buttonId: baseId,
-              qIdx: qIdx ?? null,
-              message: (err?.message || err?.toString?.() || msg).toString()
-            });
-          } finally {
-            updateRecordBusy.unlock(previewSeq, { buttonId: baseId, qIdx: qIdx ?? null });
-          }
-        })();
         return;
       }
 
@@ -7207,23 +7036,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       createRecordFromPreset,
-      customConfirm,
       definition,
-      formKey,
       logEvent,
       openHtml,
       openMarkdown,
       openPdfPreviewWindow,
       openReport,
       parseButtonRef,
-      perfMark,
-      perfMeasure,
       resolveOpenUrlFieldHref,
-      submitCurrentRecordMutation,
-      synchronizeStaleRecord,
-      upsertListCacheRow,
-      updateRecordBusy,
-      waitForActiveDraftSaveTransactions
+      runUpdateRecordButtonAction
     ]
   );
 
