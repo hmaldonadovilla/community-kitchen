@@ -131,6 +131,7 @@ import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
 import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemGroupOverlayPill } from '../features/lineItems/components/LineItemGroupOverlayPill';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
+import { TopFileUploadQuestion } from '../features/uploads/components/TopFileUploadQuestion';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
@@ -9607,178 +9608,33 @@ const FormView: React.FC<FormViewProps> = ({
           </div>
         );
       }
-      case 'FILE_UPLOAD': {
-        const items = toUploadItems(values[q.id]);
-        const uploadConfig = q.uploadConfig || {};
-        const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-        const helperText = helperCfg.belowLabelText;
-        const readOnly = q.readOnly === true;
-        const locked = isFieldLockedByDedup(q.id);
-        const isEditableField = !submitting && !readOnly && !locked;
-        const helperId = helperText && isEditableField ? `ck-field-helper-${q.id}` : undefined;
-        const helperNode = helperText && isEditableField ? (
-          <div id={helperId} className="ck-field-helper">
-            {helperText}
-          </div>
-        ) : null;
-        const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
-        const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
-          size?: number;
-          style?: React.CSSProperties;
-          className?: string;
-        }>;
-        const minRequired = getUploadMinRequired({ uploadConfig, required: !!q.required });
-        const maxFiles = uploadConfig.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
-        const denom = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
-        const displayCount = denom ? Math.min(items.length, denom) : items.length;
-        const maxed = maxFiles ? items.length >= maxFiles : false;
-        const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
-        const isEmpty = items.length === 0;
-        const missing = minRequired > 0 ? Math.max(0, minRequired - items.length) : 0;
-        const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
-        const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
-        const showMissingHelper = items.length > 0 && missing > 0 && !maxed;
-        const allowedDisplay = (uploadConfig.allowedExtensions || []).map(ext =>
-          ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-        );
-        const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
-          .map(v => (v !== undefined && v !== null ? v.toString().trim() : ''))
-          .filter(Boolean);
-        const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-        const hasFiles = items.length > 0;
-        const viewMode = readOnly || locked || maxed || hasFiles;
-        const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-        const leftLabel = viewMode
-          ? tSystem('files.view', language, 'View photos')
-          : tSystem('files.add', language, 'Add photo');
-        const cameraStyleBase = buttonStyles.primary;
-        const orderedUploadBlocked = checkFileUploadOrderedEntry({
-          scope: 'top',
-          question: q,
-          fieldPath: q.id,
-          source: 'render',
-          validate: false
-        });
-        const uploadInteractionBlocked = submitting || orderedUploadBlocked;
-        if (renderAsLabel) {
-          const displayContent =
-            items.length === 0
-              ? null
-              : items.map((item: any, idx: number) => (
-                  <div key={`${q.id}-file-${idx}`} className="ck-readonly-file">
-                    {describeUploadItem(item as any)}
-                  </div>
-                ));
-          const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
-          return renderReadOnly(displayNode, { stacked: forceStackedLabel, inline: forceInlineLabel });
-        }
+      case 'FILE_UPLOAD':
         return (
-          <div
+          <TopFileUploadQuestion
             key={q.id}
-            className={`field inline-field${labelLayoutClass}`}
-            data-field-path={q.id}
-            data-has-error={errors[q.id] ? 'true' : undefined}
-            data-has-warning={hasWarning(q.id) ? 'true' : undefined}
-          >
-            <label style={labelStyle}>
-              {resolveLabel(q, language)}
-              {q.required && <RequiredStar />}
-            </label>
-            <div className="ck-upload-row">
-              <button
-                type="button"
-                className="ck-upload-camera-btn"
-                disabled={uploadInteractionBlocked}
-                style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
-                aria-label={leftLabel}
-                title={leftLabel}
-                onClick={() => {
-                  if (uploadInteractionBlocked) return;
-                  if (viewMode) {
-                    onDiagnostic?.('upload.view.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
-                    openFileOverlay({
-                      scope: 'top',
-                      title: resolveLabel(q, language),
-                      question: q,
-                      fieldPath: q.id
-                    });
-                    return;
-                  }
-                  if (readOnly) return;
-                  if (
-                    checkFileUploadOrderedEntry({
-                      scope: 'top',
-                      question: q,
-                      fieldPath: q.id,
-                      source: 'add'
-                    })
-                  ) {
-                    return;
-                  }
-                  onDiagnostic?.('upload.add.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
-                  fileInputsRef.current[q.id]?.click();
-                }}
-              >
-                <LeftIcon style={{ width: '62%', height: '62%' }} />
-              </button>
-              <button
-                type="button"
-                className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
-                disabled={uploadInteractionBlocked}
-                style={withDisabled({}, uploadInteractionBlocked)}
-                aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
-                aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
-                  'files.title',
-                  language,
-                  'Photos'
-                )} ${pillText}`}
-                onClick={() => {
-                  if (uploadInteractionBlocked) return;
-                  openFileOverlay({
-                    scope: 'top',
-                    title: resolveLabel(q, language),
-                    question: q,
-                    fieldPath: q.id
-                  });
-                }}
-              >
-                {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
-                <span>{pillText}</span>
-                <span className="ck-progress-label">{tSystem('files.open', language, tSystem('common.open', language, 'Open'))}</span>
-                <span className="ck-progress-caret">▸</span>
-              </button>
-              {maxed ? (
-                <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
-              ) : showMissingHelper ? (
-                <div className="ck-upload-helper muted" aria-live="polite">
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <SlotIcon style={{ width: '1.05em', height: '1.05em' }} />
-                    {tSystem('common.more', language, '+{count} more', { count: missing })}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            {helperNode}
-            <div style={srOnly} aria-live="polite">
-              {uploadAnnouncements[q.id] || ''}
-            </div>
-            {renderUploadFailure(q.id, submitting || readOnly || locked)}
-            <input
-              ref={el => {
-                fileInputsRef.current[q.id] = el;
-              }}
-              type="file"
-              multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
-              accept={acceptAttr}
-              disabled={submitting || locked || readOnly || orderedUploadBlocked}
-              style={{ display: 'none' }}
-              onChange={e => handleFileInputChange(q, e.target.files)}
-            />
-            {errors[q.id] && <div className="error">{errors[q.id]}</div>}
-            {renderWarnings(q.id)}
-          </div>
+            q={q}
+            language={language}
+            value={values[q.id]}
+            submitting={submitting}
+            renderAsLabel={renderAsLabel}
+            forceStackedLabel={forceStackedLabel}
+            forceInlineLabel={forceInlineLabel}
+            labelLayoutClass={labelLayoutClass}
+            labelStyle={labelStyle}
+            errors={errors}
+            hasWarning={hasWarning}
+            renderWarnings={renderWarnings}
+            isFieldLockedByDedup={isFieldLockedByDedup}
+            checkFileUploadOrderedEntry={checkFileUploadOrderedEntry}
+            openFileOverlay={openFileOverlay}
+            handleFileInputChange={handleFileInputChange}
+            fileInputsRef={fileInputsRef}
+            uploadAnnouncements={uploadAnnouncements}
+            renderUploadFailure={renderUploadFailure}
+            renderReadOnly={renderReadOnly}
+            onDiagnostic={onDiagnostic}
+          />
         );
-      }
       case 'LINE_ITEM_GROUP': {
         const groupOverlayEnabled = !!q.lineItemConfig?.ui?.openInOverlay;
         const locked = submitting || isFieldLockedByDedup(q.id);
