@@ -74,6 +74,7 @@ import { useAppActionNotices } from './components/app/useAppActionNotices';
 import { useDedupDialogPresentation } from './components/app/useDedupDialogPresentation';
 import { useSubmitGateEnableDialog } from './components/app/useSubmitGateEnableDialog';
 import { useSystemActionGateState } from './components/app/useSystemActionGateState';
+import { useAppPerfTools } from './components/app/useAppPerfTools';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -157,7 +158,6 @@ import {
   filterFormOpenPrefetchDataSources,
   normalizeDataSourcePrefetchRetryDelays
 } from './app/dataSourcePrefetchPolicy';
-import { isPerfInstrumentationEnv } from './perfInstrumentation';
 import { getPerfNow } from './app/perfClock';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
@@ -621,53 +621,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     []
   );
   const isRetryableRecordBusyMessage = useCallback(isRetryableRecordBusyMessageValue, []);
-  const perfEnabled = useMemo(() => {
-    return isPerfInstrumentationEnv(envTag);
-  }, [envTag]);
-  const perfMark = useCallback(
-    (name: string) => {
-      if (!perfEnabled) return;
-      try {
-        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-          performance.mark(name);
-        }
-      } catch {
-        // ignore mark failures
-      }
-    },
-    [perfEnabled]
-  );
-  const perfMeasure = useCallback(
-    (name: string, startMark: string, endMark: string, payload?: Record<string, unknown>) => {
-      if (!perfEnabled) return;
-      let durationMs: number | null = null;
-      try {
-        if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
-          performance.measure(name, startMark, endMark);
-          const entries = performance.getEntriesByName(name, 'measure');
-          const duration = entries.length ? entries[entries.length - 1].duration : null;
-          durationMs = typeof duration === 'number' ? Math.round(duration) : null;
-          if (typeof performance.clearMarks === 'function') {
-            performance.clearMarks(startMark);
-            performance.clearMarks(endMark);
-          }
-          if (typeof performance.clearMeasures === 'function') {
-            performance.clearMeasures(name);
-          }
-        }
-      } catch {
-        // ignore measure failures
-      }
-      if (typeof console !== 'undefined' && typeof console.info === 'function') {
-        try {
-          console.info('[ReactForm][perf]', name, { durationMs, ...(payload || {}) });
-        } catch {
-          // ignore perf log failures
-        }
-      }
-    },
-    [perfEnabled]
-  );
+  const { perfEnabled, perfMark, perfMeasure } = useAppPerfTools(envTag);
 
   const statusTransitions = definition.followup?.statusTransitions;
   const closedStatusLabel = useMemo(
