@@ -1,7 +1,10 @@
 import {
+  applyUploadedFieldOverridesToPayload,
   applyUploadedFieldOverridesToState,
+  toUploadedFieldOverrideUrlString,
   type UploadedFieldValueOverride
 } from '../../../src/web/react/features/uploads/domain/uploadedFieldOverrides';
+import { ROW_ID_KEY } from '../../../src/web/react/app/lineItems';
 import type { LineItemState } from '../../../src/web/react/types';
 import type { FieldValue } from '../../../src/web/types';
 
@@ -123,5 +126,58 @@ describe('uploadedFieldOverrides', () => {
 
     expect(result.values).toBe(values);
     expect(result.lineItems).toBe(lineItems);
+  });
+
+  it('normalizes uploaded items to deduplicated URL strings for payloads', () => {
+    expect(
+      toUploadedFieldOverrideUrlString([
+        'https://drive.example/a.jpg, https://drive.example/b.jpg',
+        { url: 'https://drive.example/a.jpg' } as any,
+        { url: ' https://drive.example/c.jpg ' } as any
+      ])
+    ).toBe('https://drive.example/a.jpg, https://drive.example/b.jpg, https://drive.example/c.jpg');
+  });
+
+  it('applies top-level and line uploaded values to submission payloads', () => {
+    const payload = {
+      values: {
+        production: [
+          { [ROW_ID_KEY]: 'row-1', recipe: 'Chili', photo: '' },
+          { [ROW_ID_KEY]: 'row-2', recipe: 'Soup', photo: '' }
+        ]
+      }
+    };
+
+    const result = applyUploadedFieldOverridesToPayload({
+      payload,
+      overrides: buildOverrideMap([
+        [
+          'top-photo',
+          {
+            scope: 'top',
+            questionId: 'receipt',
+            items: ['https://drive.example/receipt.jpg']
+          }
+        ],
+        [
+          'line-photo',
+          {
+            scope: 'line',
+            groupId: 'production',
+            rowId: 'row-1',
+            fieldId: 'photo',
+            items: ['https://drive.example/line.jpg']
+          }
+        ]
+      ])
+    });
+
+    expect(result).not.toBe(payload);
+    expect(result.receipt).toBe('https://drive.example/receipt.jpg');
+    expect(result.values.receipt).toBe('https://drive.example/receipt.jpg');
+    expect(result.values.production[0].photo).toBe('https://drive.example/line.jpg');
+    expect(result.production[0].photo).toBe('https://drive.example/line.jpg');
+    expect(result.values.production_json).toBe(JSON.stringify(result.values.production));
+    expect(payload.values.production[0].photo).toBe('');
   });
 });

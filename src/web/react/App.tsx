@@ -209,7 +209,6 @@ import {
   parseSubgroupKey,
   parseRowNonMatchOptions,
   resolveSubgroupKey,
-  ROW_ID_KEY,
   ROW_NON_MATCH_OPTIONS_KEY
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
@@ -338,6 +337,7 @@ import {
 } from './features/steps/domain/guidedStepRecordRequirement';
 import {
   applyUploadedFieldOverridesToState,
+  applyUploadedFieldOverridesToPayload,
   type UploadedFieldValueOverride
 } from './features/uploads/domain/uploadedFieldOverrides';
 import {
@@ -3202,68 +3202,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const applyUploadedFieldPayloadOverrides = useCallback((payload: any): any => {
-    const overrides = uploadedFieldValueOverridesRef.current;
-    if (!payload || !overrides.size) return payload;
-
-    const toUrlOnlyString = (items: Array<string | File>): string => {
-      const urls: string[] = [];
-      const seen = new Set<string>();
-      (items || []).forEach(item => {
-        if (!item) return;
-        if (typeof item === 'string') {
-          item
-            .split(',')
-            .map(part => part.trim())
-            .filter(Boolean)
-            .forEach(url => {
-              if (seen.has(url)) return;
-              seen.add(url);
-              urls.push(url);
-            });
-          return;
-        }
-        if (typeof item === 'object' && typeof (item as any).url === 'string') {
-          const url = ((item as any).url as string).trim();
-          if (!url || seen.has(url)) return;
-          seen.add(url);
-          urls.push(url);
-        }
-      });
-      return urls.join(', ');
-    };
-
-    const nextPayload = {
-      ...payload,
-      values: {
-        ...(((payload as any)?.values || {}) as Record<string, any>)
-      }
-    } as any;
-
-    overrides.forEach(entry => {
-      const nextValue = toUrlOnlyString(entry.items);
-      if (entry.scope === 'top' && entry.questionId) {
-        nextPayload.values[entry.questionId] = nextValue;
-        nextPayload[entry.questionId] = nextValue;
-        return;
-      }
-      if (entry.scope === 'line' && entry.groupId && entry.rowId && entry.fieldId) {
-        const rawRows = Array.isArray(nextPayload.values[entry.groupId]) ? nextPayload.values[entry.groupId] : [];
-        const nextRows = rawRows.map((row: any) => {
-          const rowId = ((row?.[ROW_ID_KEY] || row?.id || '') as any).toString();
-          if (rowId !== entry.rowId) return row;
-          return {
-            ...(row || {}),
-            [entry.fieldId as string]: nextValue
-          };
-        });
-        nextPayload.values[entry.groupId] = nextRows;
-        nextPayload.values[`${entry.groupId}_json`] = JSON.stringify(nextRows);
-        nextPayload[entry.groupId] = nextRows;
-        nextPayload[`${entry.groupId}_json`] = JSON.stringify(nextRows);
-      }
+    return applyUploadedFieldOverridesToPayload({
+      payload,
+      overrides: uploadedFieldValueOverridesRef.current
     });
-
-    return nextPayload;
   }, []);
 
   useEffect(() => {
