@@ -19,7 +19,6 @@ import { selectionEffectDependsOnField } from '../app/selectionEffectDependencie
 import { clearSelectionEffectSourceMetadata } from '../app/selectionEffectSourceMetadata';
 import { resolveUploadBlockUntilSaved } from '../app/uploadTransaction';
 import { resolveUploadWaitMessage } from '../app/uploadWaitMessages';
-import { collectFormWhenFieldIds } from '../features/conditions/domain/conditionDependencies';
 import {
   clearUploadFailure,
   createUploadFailureState,
@@ -30,7 +29,6 @@ import {
 import {
   FieldValue,
   LangCode,
-  LineItemDedupRule,
   LineItemRowState,
   LocalizedString,
   OptionSet,
@@ -71,6 +69,10 @@ import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAcces
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
+import {
+  collectDerivedBlurDependencies,
+  isBlurDerivedValue
+} from '../features/derivedValues/domain/blurDependencies';
 import { buildValidationErrorIndex } from '../features/validation/domain/errorIndex';
 import { useImperativeFieldNavigation } from '../features/validation/useImperativeFieldNavigation';
 import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
@@ -121,7 +123,6 @@ import { SectionInstruction } from './form/SectionInstruction';
 import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
-import { PairedRowGrid } from './form/PairedRowGrid';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
@@ -153,7 +154,6 @@ import {
   cascadeRemoveLineItemRows,
   computeRowNonMatchOptions,
   findLineItemDedupConflict,
-  formatLineItemDedupValue,
   normalizeLineItemDedupRules,
   parseRowHideRemove,
   parseRowNonMatchOptions,
@@ -224,6 +224,17 @@ import {
 } from '../features/steps/domain/guidedNavigation';
 import { resolveTableColumnWidthStyle } from '../features/lineItems/domain/tableColumnWidths';
 import {
+  areFieldValuesEqual,
+  areOverlayHeaderFieldsComplete,
+  collectLineItemConfigEntries,
+  hasSelectionEffects,
+  parseLineFieldPath,
+  resolveLineItemDedupMessage,
+  resolveLineItemDedupValueToken,
+  resolveOverlayHeaderFields,
+  resolveRequiredValue
+} from '../features/lineItems/domain/formViewHelpers';
+import {
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
   type GuidedReservationManagedRowRemovalImpact
@@ -239,21 +250,7 @@ import {
   normalizeDataSourceVisibilityKey
 } from '../app/dataSourceVisibility';
 
-const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
-  if (!vars) return value;
-  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
-    const raw = (vars as any)[key];
-    return raw === undefined || raw === null ? '' : String(raw);
-  });
-};
-
 const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
-
-const lineItemDedupDefaultMessage: LocalizedString = {
-  en: 'This entry already exists in this list.',
-  fr: 'Cette entrée existe déjà dans cette liste.',
-  nl: 'Deze invoer bestaat al in deze lijst.'
-};
 
 interface SubgroupOverlayState {
   open: boolean;
@@ -359,153 +356,6 @@ type OverlayStackEntry =
 // can be reconciled when loading existing records
 
 type StatusTone = 'info' | 'success' | 'error';
-
-const hasSelectionEffects = (field: any): boolean =>
-  Array.isArray(field?.selectionEffects) && field.selectionEffects.length > 0;
-
-const areFieldValuesEqual = (a: FieldValue, b: FieldValue): boolean => {
-  if (a === b) return true;
-  const arrayA = Array.isArray(a) ? a : null;
-  const arrayB = Array.isArray(b) ? b : null;
-  if (arrayA || arrayB) {
-    const arrA = arrayA || [];
-    const arrB = arrayB || [];
-    if (arrA.length !== arrB.length) return false;
-    return arrA.every((val, idx) => val === arrB[idx]);
-  }
-  if (typeof a === 'object' || typeof b === 'object') {
-    if (!a || !b) return false;
-    try {
-      return JSON.stringify(a) === JSON.stringify(b);
-    } catch (_) {
-      return false;
-    }
-  }
-  return false;
-};
-
-const isBlurDerivedValue = (derived?: any): boolean => {
-  if (!derived) return false;
-  const raw = (derived.applyOn || '').toString().trim().toLowerCase();
-  if (raw === 'blur') return true;
-  if (raw === 'change') return false;
-  return (derived.op || '').toString() === 'copy';
-};
-
-const normalizeDerivedTokenToFieldId = (token: string): string => {
-  const raw = (token || '').toString().trim();
-  if (!raw) return '';
-  const parts = raw.replace(/\s+/g, '').split('.').filter(Boolean);
-  return (parts[parts.length - 1] || raw).toString().trim();
-};
-
-const collectExpressionFieldIds = (expression: any, out: Set<string>) => {
-  const expr = expression !== undefined && expression !== null ? expression.toString() : '';
-  if (!expr) return;
-  expr.replace(/\{([^}]+)\}/g, (_match: string, raw: string) => {
-    const fid = normalizeDerivedTokenToFieldId(raw);
-    if (fid) out.add(fid);
-    return '';
-  });
-  expr.replace(/SUM\s*\(([^)]+)\)/gi, (_match: string, raw: string) => {
-    const fid = normalizeDerivedTokenToFieldId(raw);
-    if (fid) out.add(fid);
-    return '';
-  });
-};
-
-const collectDerivedBlurDependencies = (derived: any, out: Set<string>) => {
-  if (!derived || !isBlurDerivedValue(derived)) return;
-  const dependsOn = derived.dependsOn !== undefined && derived.dependsOn !== null ? derived.dependsOn.toString().trim() : '';
-  if (dependsOn) {
-    out.add(normalizeDerivedTokenToFieldId(dependsOn));
-  }
-  collectExpressionFieldIds(derived.expression ?? derived.formula ?? derived.expr, out);
-  const filters = derived.lineItemFilters ?? derived.aggregateFilters ?? derived.filters;
-  if (Array.isArray(filters)) {
-    filters.forEach(filter => {
-      if (!filter || typeof filter !== 'object') return;
-      const ref = filter.ref ?? filter.path ?? filter.target;
-      if (ref !== undefined && ref !== null) {
-        const fid = normalizeDerivedTokenToFieldId(ref.toString());
-        if (fid) out.add(fid);
-      }
-      collectFormWhenFieldIds((filter as any).when, out);
-    });
-  }
-};
-
-const parseLineFieldPath = (
-  fieldPath: string
-): { groupId: string; fieldId: string; rowId: string } | null => {
-  const raw = (fieldPath || '').toString().trim();
-  if (!raw || !raw.includes('__')) return null;
-  const parts = raw.split('__');
-  if (parts.length < 3) return null;
-  const [groupId, fieldId, rowId] = parts;
-  if (!groupId || !fieldId || !rowId) return null;
-  return { groupId, fieldId, rowId };
-};
-
-const resolveRequiredValue = (field: any, rawValue: FieldValue): FieldValue => {
-  if (!field || field?.type !== 'PARAGRAPH') return rawValue;
-  const cfg = (field?.ui as any)?.paragraphDisclaimer;
-  if (!cfg) return rawValue;
-  return resolveParagraphUserText({ rawValue, config: cfg });
-};
-
-const resolveOverlayHeaderFields = (groupCfg: any, overlayDetail: any): LineItemFieldConfig[] => {
-  if (!groupCfg) return [];
-  const headerColumnsExplicit = Array.isArray(overlayDetail?.header?.tableColumns);
-  const raw = headerColumnsExplicit ? overlayDetail.header.tableColumns : [];
-  const fallback = Array.isArray(groupCfg?.ui?.tableColumns) ? groupCfg.ui.tableColumns : [];
-  const ids = raw
-    .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
-    .filter(Boolean);
-  if (headerColumnsExplicit && !ids.length) return [];
-  const fallbackIds = fallback
-    .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
-    .filter(Boolean);
-  const fields = (groupCfg.fields || []) as LineItemFieldConfig[];
-  const finalIds = ids.length ? ids : fallbackIds.length ? fallbackIds : fields.map(f => f.id);
-  return finalIds.map((id: string) => fields.find((f: LineItemFieldConfig) => f.id === id)).filter(Boolean);
-};
-
-const areOverlayHeaderFieldsComplete = (args: {
-  fields: LineItemFieldConfig[];
-  rowValues: Record<string, FieldValue>;
-  ctx: VisibilityContext;
-  rowId: string;
-  linePrefix: string;
-}): boolean => {
-  const { fields, rowValues, ctx, rowId, linePrefix } = args;
-  if (!fields.length) return false;
-  return fields.every(field => {
-    if (shouldHideField(field.visibility, ctx, { rowId, linePrefix })) return true;
-    const val = resolveRequiredValue(field, rowValues[field.id]);
-    return !isEmptyValue(val as any);
-  });
-};
-
-const collectLineItemConfigEntries = (questions: WebQuestionDefinition[]) => {
-  const entries: Array<{ id: string; config: any }> = [];
-  const visit = (id: string, config: any, parentPath?: string) => {
-    if (!id || !config) return;
-    const key = parentPath ? `${parentPath}.${id}` : id;
-    entries.push({ id: key, config });
-    const subs = Array.isArray(config.subGroups) ? config.subGroups : [];
-    subs.forEach((sub: any) => {
-      const subId = resolveSubgroupKey(sub as any);
-      if (!subId) return;
-      visit(subId, sub, key);
-    });
-  };
-  (questions || []).forEach(q => {
-    if (q.type !== 'LINE_ITEM_GROUP') return;
-    visit(q.id, (q as any).lineItemConfig);
-  });
-  return entries;
-};
 
 interface FormViewProps {
   formKey?: string;
@@ -782,17 +632,6 @@ const FormView: React.FC<FormViewProps> = ({
         {m}
       </div>
     ));
-  };
-  const resolveLineItemDedupMessage = (
-    rule: LineItemDedupRule,
-    vars?: Record<string, string | number | boolean | null | undefined>
-  ): string => {
-    const base = resolveLocalizedString(rule.message || lineItemDedupDefaultMessage, language, 'This entry already exists in this list.');
-    return formatTemplate(base, vars);
-  };
-  const resolveLineItemDedupValueToken = (rowValues: Record<string, FieldValue>, fieldId: string): string => {
-    const raw = (rowValues || {})[fieldId];
-    return formatLineItemDedupValue(raw);
   };
   const recordStatusText = (recordMeta?.status || '').toString().trim();
   const recordStatusKey = useMemo(
@@ -7342,7 +7181,7 @@ const FormView: React.FC<FormViewProps> = ({
       if (dedupConflict) {
         const conflictFieldId = dedupConflict.fields[0];
         const valueToken = resolveLineItemDedupValueToken(candidateValues, conflictFieldId);
-        const message = resolveLineItemDedupMessage(dedupConflict.rule, valueToken ? { value: valueToken } : undefined);
+        const message = resolveLineItemDedupMessage(dedupConflict.rule, language, valueToken ? { value: valueToken } : undefined);
         onDiagnostic?.('lineItems.dedup.add.blocked', {
           groupId,
           fields: dedupConflict.fields,
@@ -8682,7 +8521,7 @@ const FormView: React.FC<FormViewProps> = ({
         const valueToken = resolveLineItemDedupValueToken(nextRowValues, fieldId);
         return {
           fieldId,
-          message: resolveLineItemDedupMessage(rule, valueToken ? { value: valueToken } : undefined),
+          message: resolveLineItemDedupMessage(rule, language, valueToken ? { value: valueToken } : undefined),
           fields: rule.fields
         };
       })
@@ -8698,6 +8537,7 @@ const FormView: React.FC<FormViewProps> = ({
       const valueToken = resolveLineItemDedupValueToken(nextRowValues, conflictFieldId);
       const conflictMessage = resolveLineItemDedupMessage(
         dedupConflict.rule,
+        language,
         valueToken ? { value: valueToken } : undefined
       );
       const conflictPath = `${group.id}__${conflictFieldId}__${rowId}`;
@@ -9188,7 +9028,7 @@ const FormView: React.FC<FormViewProps> = ({
         return { key: section.key, complete, totalRequired, requiredComplete };
       })
       .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
-  }, [collapsedRows, groupSections, language, lineItems, recordMeta, topVisibilityCtx, values]);
+  }, [collapsedRows, getTopValueNoScan, groupSections, language, lineItems, topVisibilityCtx, values]);
 
   const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
   const pendingAutoCollapseRef = useRef<string[]>([]);
