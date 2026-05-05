@@ -172,6 +172,11 @@ import {
   resolveRowFlowOutputSegmentPresentationAction
 } from '../../features/lineItems/domain/rowFlowDisplayValue';
 import {
+  partitionRowFlowPromptActionsAction,
+  resolveRowFlowPromptLayoutAction,
+  splitRowFlowPromptLabelAction
+} from '../../features/lineItems/domain/rowFlowPromptPresentation';
+import {
   applyAutoAddSubgroupSingleOptionAnchorFillAction,
   collectAutoAddSubgroupAnchorTargetsAction,
   reconcileAutoAddRowsAction,
@@ -5193,14 +5198,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
 
                 const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => {
                   if (!prompt.visible) return null;
-                  const splitPromptLabel = (rawLabel: string) => {
-                    const value = rawLabel || '';
-                    const parts = value.split(/\r?\n/);
-                    if (parts.length < 2) return { labelText: value, helperText: '' };
-                    const labelText = parts[0].trim() || value.trim();
-                    const helperText = parts.slice(1).join('\n').trim();
-                    return { labelText, helperText };
-                  };
                   const inputKind = (prompt.config.input?.kind || 'field').toString().trim().toLowerCase();
                   if (inputKind === 'selectoroverlay') {
                     const targetRef = prompt.config.input?.targetRef || '';
@@ -5261,7 +5258,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       language,
                       resolveLocalizedString(anchorField.label, language, anchorField.id)
                     );
-                    const { labelText, helperText: labelHelperText } = splitPromptLabel(resolvedLabel);
+                    const { labelText, helperText: labelHelperText } = splitRowFlowPromptLabelAction(resolvedLabel);
                     const helperOverride = resolveLocalizedString(prompt.config.input?.helperText, language, '').trim();
                     const helperText = helperOverride || labelHelperText;
                     const placeholder =
@@ -5351,11 +5348,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                     language,
                     resolveFieldLabel(promptTarget.field, language, promptTarget.field.id)
                   );
-                  const { labelText: promptLabel, helperText: promptHelperText } = splitPromptLabel(promptLabelRaw);
-                  const labelLayout = (prompt.config.input?.labelLayout || 'stacked').toString().trim().toLowerCase();
-                  const actionsLayout = (prompt.config.actionsLayout || 'below').toString().trim().toLowerCase();
-                  const useInlineLabel = labelLayout === 'inline';
-                  const hideLabel = labelLayout === 'hidden';
+                  const { labelText: promptLabel, helperText: promptHelperText } =
+                    splitRowFlowPromptLabelAction(promptLabelRaw);
+                  const { useInlineLabel, hideLabel, actionsInline } = resolveRowFlowPromptLayoutAction(prompt.config);
                   const fieldNode = renderRowFlowField({
                     field: promptTarget.field,
                     groupDef: promptTarget.groupDef,
@@ -5389,9 +5384,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       </div>
                     );
                   }
-                  const startActions = prompt.config.actions.filter(a => (a.position || 'start') !== 'end');
-                  const endActions = prompt.config.actions.filter(a => (a.position || 'start') === 'end');
-                  const actionsInline = actionsLayout === 'inline';
+                  const { startActions, endActions } = partitionRowFlowPromptActionsAction(prompt.config.actions);
                   if (actionsInline) {
                     return (
                       <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
