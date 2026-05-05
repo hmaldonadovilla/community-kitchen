@@ -4,6 +4,7 @@ import {
   normalizeGuidedForwardGate,
   resolveGuidedAutoAdvanceFocusDeferralAction,
   resolveGuidedAutoAdvanceTransitionAction,
+  resolveGuidedBackAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
   resolveGuidedStepSelectionAction,
@@ -328,5 +329,48 @@ describe('guidedNavigation domain', () => {
       tag: 'input',
       inputType: 'checkbox'
     });
+  });
+
+  test('resolves guided back action selection and blocked states', () => {
+    expect(
+      resolveGuidedBackAction({
+        enabled: true,
+        stepsConfig: { showBackButton: true },
+        stepIds: ['step1', 'step2'],
+        visibleSteps: [{ id: 'step1' }, { id: 'step2' }],
+        activeStepId: 'step2',
+        activeStepIndex: 1
+      })
+    ).toEqual({ action: 'select', previousStepId: 'step1' });
+
+    expect(
+      resolveGuidedBackAction({
+        enabled: true,
+        stepsConfig: { showBackButton: false },
+        stepIds: ['step1', 'step2'],
+        visibleSteps: [{ id: 'step1' }, { id: 'step2' }],
+        activeStepId: 'step2',
+        activeStepIndex: 1
+      })
+    ).toEqual({
+      action: 'blocked',
+      diagnostic: {
+        from: 'step2',
+        to: 0,
+        gate: 'allowBack',
+        reason: 'backAction'
+      }
+    });
+
+    expect(
+      resolveGuidedBackAction({
+        enabled: true,
+        stepsConfig: {},
+        stepIds: ['step1', 'step2'],
+        visibleSteps: [{ id: 'step1' }, { id: 'step2' }],
+        activeStepId: 'step1',
+        activeStepIndex: 0
+      })
+    ).toEqual({ action: 'none' });
   });
 });

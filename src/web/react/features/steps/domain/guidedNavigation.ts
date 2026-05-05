@@ -399,3 +399,37 @@ export const resolveGuidedAutoAdvanceFocusDeferralAction = (args: {
     inputType
   };
 };
+
+export type GuidedBackActionResolution =
+  | { action: 'none' }
+  | { action: 'blocked'; diagnostic: Record<string, unknown> }
+  | { action: 'select'; previousStepId: string };
+
+export const resolveGuidedBackAction = (args: {
+  enabled: boolean;
+  stepsConfig: any;
+  stepIds: string[];
+  visibleSteps: any[];
+  activeStepId: string;
+  activeStepIndex: number;
+}): GuidedBackActionResolution => {
+  if (!args.enabled || !args.stepsConfig || !args.stepIds.length) return { action: 'none' };
+  if (args.activeStepIndex <= 0) return { action: 'none' };
+  const stepConfig = args.visibleSteps[args.activeStepIndex] as any;
+  const allowBack = (stepConfig?.navigation?.allowBack ?? stepConfig?.allowBack) !== false;
+  const showBackGlobal = args.stepsConfig?.showBackButton !== false;
+  const showBackStep = (stepConfig?.navigation?.showBackButton ?? stepConfig?.showBackButton) !== false;
+  if (!allowBack || !showBackGlobal || !showBackStep) {
+    return {
+      action: 'blocked',
+      diagnostic: {
+        from: args.activeStepId,
+        to: args.activeStepIndex - 1,
+        gate: 'allowBack',
+        reason: 'backAction'
+      }
+    };
+  }
+  const previousStepId = args.stepIds[args.activeStepIndex - 1];
+  return previousStepId ? { action: 'select', previousStepId } : { action: 'none' };
+};

@@ -231,6 +231,7 @@ import {
   normalizeGuidedForwardGate,
   resolveGuidedAutoAdvanceFocusDeferralAction,
   resolveGuidedAutoAdvanceTransitionAction,
+  resolveGuidedBackAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
   resolveGuidedStepSelectionAction,
@@ -2059,20 +2060,20 @@ const FormView: React.FC<FormViewProps> = ({
   useEffect(() => {
     if (!guidedBackActionRef) return;
     guidedBackActionRef.current = () => {
-      if (!guidedEnabled) return;
-      if (!guidedStepsCfg || !guidedStepIds.length) return;
-      if (activeGuidedStepIndex <= 0) return;
-      const stepCfg = guidedVisibleSteps[activeGuidedStepIndex] as any;
-      const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
-      const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
-      const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
-      if (!allowBack || !showBackGlobal || !showBackStep) {
-        onDiagnostic?.('steps.step.blocked', { from: activeGuidedStepId, to: activeGuidedStepIndex - 1, gate: 'allowBack', reason: 'backAction' });
+      const backAction = resolveGuidedBackAction({
+        enabled: guidedEnabled,
+        stepsConfig: guidedStepsCfg,
+        stepIds: guidedStepIds,
+        visibleSteps: guidedVisibleSteps,
+        activeStepId: activeGuidedStepId,
+        activeStepIndex: activeGuidedStepIndex
+      });
+      if (backAction.action === 'none') return;
+      if (backAction.action === 'blocked') {
+        onDiagnostic?.('steps.step.blocked', backAction.diagnostic);
         return;
       }
-      const prevId = guidedStepIds[activeGuidedStepIndex - 1];
-      if (!prevId) return;
-      selectGuidedStep(prevId, 'user');
+      selectGuidedStep(backAction.previousStepId, 'user');
     };
     return () => {
       guidedBackActionRef.current = null;
