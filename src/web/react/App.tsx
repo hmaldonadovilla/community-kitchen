@@ -84,6 +84,7 @@ import { useReadyForProductionUnlockConfig } from './components/app/useReadyForP
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
+import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -273,7 +274,6 @@ import {
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
   renderGeneratedRecordLine,
-  selectConditionalDialog,
   selectMilestoneConfirmationDialog,
   selectMilestoneProgressDialog
 } from './features/steps/domain/milestoneDialogs';
@@ -323,7 +323,6 @@ import {
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
-import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
@@ -7478,207 +7477,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [logEvent, submitPreviousActionRetryMessage]
   );
-  const submitConfirmationDialogConfig = useMemo(() => {
-    const afterSubmitConfig = definition.submissionAfterSubmit;
-    if (
-      afterSubmitConfig?.confirmationDialog ||
-      (Array.isArray(afterSubmitConfig?.confirmationDialogCases) && afterSubmitConfig.confirmationDialogCases.length > 0)
-    ) {
-      const guidedStepPrefix = ((definition.steps?.stateFields?.prefix || '__ckStep') as string).toString();
-      const submitVirtualState: GuidedStepsVirtualState | null =
-        guidedUiState?.activeStepId
-          ? {
-              prefix: guidedStepPrefix,
-              activeStepId: guidedUiState.activeStepId,
-              activeStepIndex: guidedUiState.activeStepIndex || 0,
-              maxValidIndex: -1,
-              maxCompleteIndex: -1,
-              steps: []
-            }
-          : null;
-      return (
-        selectConditionalDialog({
-          cases: afterSubmitConfig.confirmationDialogCases,
-          fallback: afterSubmitConfig.confirmationDialog,
-          ctx: buildValidationContext(values as any, lineItems as any, submitVirtualState),
-          now: new Date()
-        }) || null
-      );
-    }
-    return {
-      title: definition.submissionConfirmationTitle,
-      message: definition.submissionConfirmationMessage,
-      confirmLabel: definition.submissionConfirmationConfirmLabel,
-      cancelLabel: definition.submissionConfirmationCancelLabel
-    };
-  }, [
-    definition.steps?.stateFields?.prefix,
-    definition.submissionAfterSubmit,
-    definition.submissionConfirmationCancelLabel,
-    definition.submissionConfirmationConfirmLabel,
-    definition.submissionConfirmationMessage,
-    definition.submissionConfirmationTitle,
-    guidedUiState?.activeStepId,
-    guidedUiState?.activeStepIndex,
+  const {
+    submitConfirmationDialogConfig,
+    submitProgressDialogConfig,
+    submitConfirmConfirmLabelResolved,
+    submitConfirmCancelLabelResolved,
+    submitConfirmTitle,
+    submitBlockingTitle,
+    resolveDialogTemplate,
+    resolveGuidedUploadWaitDialog,
+    submitConfirmMessage
+  } = useAppSubmitDialogConfig({
+    definition,
+    language,
+    languageRef,
+    values,
     lineItems,
-    values
-  ]);
-  const submitProgressDialogConfig = useMemo(() => {
-    const afterSubmitConfig = definition.submissionAfterSubmit;
-    if (
-      afterSubmitConfig?.progressDialog ||
-      (Array.isArray(afterSubmitConfig?.progressDialogCases) && afterSubmitConfig.progressDialogCases.length > 0)
-    ) {
-      const guidedStepPrefix = ((definition.steps?.stateFields?.prefix || '__ckStep') as string).toString();
-      const submitVirtualState: GuidedStepsVirtualState | null =
-        guidedUiState?.activeStepId
-          ? {
-              prefix: guidedStepPrefix,
-              activeStepId: guidedUiState.activeStepId,
-              activeStepIndex: guidedUiState.activeStepIndex || 0,
-              maxValidIndex: -1,
-              maxCompleteIndex: -1,
-              steps: []
-            }
-          : null;
-      return (
-        selectConditionalDialog({
-          cases: afterSubmitConfig.progressDialogCases,
-          fallback: afterSubmitConfig.progressDialog,
-          ctx: buildValidationContext(values as any, lineItems as any, submitVirtualState),
-          now: new Date()
-        }) || null
-      );
-    }
-    return null;
-  }, [
-    definition.steps?.stateFields?.prefix,
-    definition.submissionAfterSubmit,
-    guidedUiState?.activeStepId,
-    guidedUiState?.activeStepIndex,
-    lineItems,
-    values
-  ]);
-  const submitConfirmConfirmLabelResolved = useMemo(
-    () => resolveLocalizedString(submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved),
-    [submitConfirmationDialogConfig?.confirmLabel, language, submitButtonLabelResolved]
-  );
-  const submitConfirmCancelLabelResolved = useMemo(
-    () =>
-      resolveLocalizedString(
-        submitConfirmationDialogConfig?.cancelLabel,
-        language,
-        tSystem('submit.cancel', language, tSystem('common.cancel', language, 'Cancel'))
-      ),
-    [submitConfirmationDialogConfig?.cancelLabel, language]
-  );
-  const submitConfirmTitle = useMemo(
-    () =>
-      resolveLocalizedString(
-        submitConfirmationDialogConfig?.title,
-        language,
-        tSystem('submit.confirmTitle', language, 'Confirm submission')
-      ),
-    [submitConfirmationDialogConfig?.title, language]
-  );
-  const submitBlockingTitle = useMemo(
-    () =>
-      resolveLocalizedString(
-        submitProgressDialogConfig?.title,
-        language,
-        tSystem('actions.submitting', language, 'Submitting…')
-      ) || tSystem('actions.submitting', language, 'Submitting…'),
-    [submitProgressDialogConfig?.title, language]
-  );
-  const resolveDialogTemplate = useCallback(
-    (rawValue: LocalizedString | string | undefined, fallback: string): string => {
-      const base = resolveLocalizedString(rawValue, language, fallback);
-      if (!base) return base;
-      if (base.indexOf('{') < 0) return base;
-      const vars: Record<string, string> = {};
-
-      // Include meta fields (best-effort) in case you want to reference them in the dialog.
-      if (selectedRecordId) vars.id = selectedRecordId;
-      if (lastSubmissionMeta?.createdAt) vars.createdAt = lastSubmissionMeta.createdAt;
-      if (lastSubmissionMeta?.updatedAt) vars.updatedAt = lastSubmissionMeta.updatedAt;
-      if (lastSubmissionMeta?.status) vars.status = lastSubmissionMeta.status;
-      const locale = language.toLowerCase() === 'fr' ? 'fr-CA' : language.toLowerCase() === 'nl' ? 'nl-NL' : 'en-CA';
-      const todayDate = (() => {
-        try {
-          return new Intl.DateTimeFormat(locale, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          }).format(new Date());
-        } catch {
-          return new Date().toISOString().slice(0, 10);
-        }
-      })();
-      vars.today = todayDate;
-      vars.todayDate = todayDate;
-      vars.TODAY = todayDate;
-      vars.TODAY_DATE = todayDate;
-
-      (definition.questions || []).forEach(q => {
-        if (!q || !q.id) return;
-        const fieldId = q.id.toString();
-        if (!fieldId) return;
-        const raw = values[fieldId];
-        if (raw === undefined || raw === null || raw === '') return;
-
-        // Prefer dataSource-hydrated options (if loaded) for localized display.
-        const dsKey = q.dataSource ? optionKey(fieldId) : '';
-        const optionSet =
-          (dsKey && optionState[dsKey]) ? (optionState[dsKey] as any) : ((q as any).options as any | undefined);
-
-        const display = formatDisplayText(raw as any, { language, optionSet, fieldType: q.type });
-        const resolved = display === EMPTY_DISPLAY ? '' : display;
-        if (!resolved) return;
-        vars[fieldId] = resolved;
-        vars[fieldId.toUpperCase()] = resolved;
-      });
-
-      // Supports {FIELD_ID} and {{FIELD_ID}} (spaces tolerated).
-      return base.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}|\{\s*([a-zA-Z0-9_.]+)\s*\}/g, (match, a, b) => {
-        const key = ((a || b || '') as string).toString().trim();
-        if (!key) return match;
-        const value = vars[key] ?? vars[key.toUpperCase()];
-        return value === undefined || value === null ? match : value;
-      });
-    },
-    [
-      language,
-      definition.questions,
-      lastSubmissionMeta?.createdAt,
-      lastSubmissionMeta?.status,
-      lastSubmissionMeta?.updatedAt,
-      optionState,
-      selectedRecordId,
-      values
-    ]
-  );
-  const resolveGuidedUploadWaitDialog = useCallback(
-    (rawDialog?: SystemActionGateDialogConfig | null) => ({
-      title: resolveLocalizedString(
-        rawDialog?.title,
-        languageRef.current,
-        tSystem('navigation.waitTitle', languageRef.current, 'Please wait')
-      ),
-      message: resolveDialogTemplate(
-        rawDialog?.message,
-        tSystem('navigation.waitPhotos', languageRef.current, 'Please wait while your files finish uploading.')
-      )
-    }),
-    [resolveDialogTemplate]
-  );
-  const submitConfirmMessage = useMemo(
-    () =>
-      resolveDialogTemplate(
-        submitConfirmationDialogConfig?.message,
-        tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
-      ),
-    [submitConfirmationDialogConfig?.message, language, resolveDialogTemplate]
-  );
+    guidedUiState,
+    submitButtonLabelResolved,
+    selectedRecordId,
+    lastSubmissionMeta,
+    optionState
+  });
 
   const requestSubmit = useCallback(() => {
     if (submitting) return;
