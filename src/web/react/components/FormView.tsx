@@ -54,6 +54,11 @@ import { ConfirmDialogOverlay } from '../features/overlays/ConfirmDialogOverlay'
 import { useConfirmDialog } from '../features/overlays/useConfirmDialog';
 import type { ConfirmDialogOpenArgs } from '../features/overlays/useConfirmDialog';
 import {
+  useOverlayEditingAutoSaveHold,
+  useOverlaySessionSnapshots,
+  useScopedAutoSaveHold
+} from '../features/overlays/useOverlaySessionController';
+import {
   getOverlayCloseAllowCloseFromEdit,
   resolveOverlayCloseConfirm,
   resolveOverlayCloseVisibilityScope
@@ -861,16 +866,6 @@ const FormView: React.FC<FormViewProps> = ({
   const overlayDetailRenderSignatureRef = useRef<string>('');
   const overlayDetailRenderSeqRef = useRef(0);
   const overlayDetailRenderTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const autoSaveHoldReasonsRef = useRef<Record<string, true>>({});
-  const overlaySessionSnapshotsRef = useRef<
-    Record<
-      string,
-      {
-        values: Record<string, FieldValue>;
-        lineItems: LineItemState;
-      }
-    >
-  >({});
   const [overlayDetailHtml, setOverlayDetailHtml] = useState('');
   const [overlayDetailHtmlError, setOverlayDetailHtmlError] = useState('');
   const [overlayDetailHtmlLoading, setOverlayDetailHtmlLoading] = useState(false);
@@ -987,116 +982,26 @@ const FormView: React.FC<FormViewProps> = ({
     optionStateRef.current = optionState;
   }, [optionState]);
 
-  const buildOverlaySessionSnapshotKey = useCallback((kind: 'subgroup' | 'lineItem', targetKey: string): string => {
-    const normalized = (targetKey || '').toString().trim();
-    return normalized ? `${kind}::${normalized}` : '';
-  }, []);
-
-  const ensureOverlaySessionSnapshot = useCallback(
-    (kind: 'subgroup' | 'lineItem', targetKey: string, session?: LineItemOverlaySessionConfig) => {
-      if (!session?.enabled) return;
-      const snapshotKey = buildOverlaySessionSnapshotKey(kind, targetKey);
-      if (!snapshotKey) return;
-      if (overlaySessionSnapshotsRef.current[snapshotKey]) return;
-      overlaySessionSnapshotsRef.current[snapshotKey] = {
-        values: valuesRef.current,
-        lineItems: lineItemsRef.current
-      };
-      onDiagnostic?.('overlay.session.snapshot.capture', {
-        kind,
-        targetKey,
-        snapshotKey
-      });
-    },
-    [buildOverlaySessionSnapshotKey, onDiagnostic]
-  );
-
-  const clearOverlaySessionSnapshot = useCallback(
-    (kind: 'subgroup' | 'lineItem', targetKey: string) => {
-      const snapshotKey = buildOverlaySessionSnapshotKey(kind, targetKey);
-      if (!snapshotKey) return;
-      if (!overlaySessionSnapshotsRef.current[snapshotKey]) return;
-      delete overlaySessionSnapshotsRef.current[snapshotKey];
-      onDiagnostic?.('overlay.session.snapshot.clear', {
-        kind,
-        targetKey,
-        snapshotKey
-      });
-    },
-    [buildOverlaySessionSnapshotKey, onDiagnostic]
-  );
-
-  const restoreOverlaySessionSnapshot = useCallback(
-    (args: { kind: 'subgroup' | 'lineItem'; targetKey: string; errorGroupKey?: string }) => {
-      const snapshotKey = buildOverlaySessionSnapshotKey(args.kind, args.targetKey);
-      if (!snapshotKey) return false;
-      const snapshot = overlaySessionSnapshotsRef.current[snapshotKey];
-      if (!snapshot) return false;
-      setValues(snapshot.values);
-      setLineItems(snapshot.lineItems);
-      valuesRef.current = snapshot.values;
-      lineItemsRef.current = snapshot.lineItems;
-      if (args.errorGroupKey) {
-        setErrors(prev => clearLineItemGroupErrors(prev, args.errorGroupKey || ''));
-      }
-      delete overlaySessionSnapshotsRef.current[snapshotKey];
-      onDiagnostic?.('overlay.session.snapshot.restore', {
-        kind: args.kind,
-        targetKey: args.targetKey,
-        snapshotKey
-      });
-      return true;
-    },
-    [buildOverlaySessionSnapshotKey, onDiagnostic, setErrors, setLineItems, setValues]
-  );
-
-  const setScopedAutoSaveHold = useCallback(
-    (hold: boolean, meta?: { reason?: string }) => {
-      if (!setAutoSaveHold) return;
-      const reason = (meta?.reason || 'formInteraction').toString().trim() || 'formInteraction';
-      const previous = autoSaveHoldReasonsRef.current;
-      const nextReasons = { ...previous };
-      if (hold) {
-        nextReasons[reason] = true;
-      } else {
-        delete nextReasons[reason];
-      }
-      const previousSignature = Object.keys(previous).sort().join(',');
-      const nextSignature = Object.keys(nextReasons).sort().join(',');
-      if (previousSignature === nextSignature) return;
-      autoSaveHoldReasonsRef.current = nextReasons;
-      const activeReasons = Object.keys(nextReasons).sort();
-      setAutoSaveHold(activeReasons.length > 0, {
-        reason: activeReasons.join(',') || undefined
-      });
-      onDiagnostic?.('autosave.hold.request', {
-        hold: activeReasons.length > 0,
-        reason,
-        activeReasons
-      });
-    },
-    [onDiagnostic, setAutoSaveHold]
-  );
-
-  useEffect(() => {
-    if (!setAutoSaveHold) return;
-    const hold = overlay.open || lineItemGroupOverlay.open || subgroupOverlay.open;
-    setScopedAutoSaveHold(hold, { reason: 'overlayEditing' });
-    onDiagnostic?.('autosave.hold.request', {
-      hold,
-      reason: 'overlayEditing',
-      lineSelectOpen: overlay.open,
-      lineItemOverlayOpen: lineItemGroupOverlay.open,
-      subgroupOverlayOpen: subgroupOverlay.open
-    });
-  }, [
-    lineItemGroupOverlay.open,
-    onDiagnostic,
-    overlay.open,
-    setAutoSaveHold,
+  const {
+    ensureOverlaySessionSnapshot,
+    clearOverlaySessionSnapshot,
+    restoreOverlaySessionSnapshot
+  } = useOverlaySessionSnapshots({
+    valuesRef,
+    lineItemsRef,
+    setValues,
+    setLineItems,
+    setErrors,
+    onDiagnostic
+  });
+  const setScopedAutoSaveHold = useScopedAutoSaveHold({ setAutoSaveHold, onDiagnostic });
+  useOverlayEditingAutoSaveHold({
+    lineSelectOpen: overlay.open,
+    lineItemOverlayOpen: lineItemGroupOverlay.open,
+    subgroupOverlayOpen: subgroupOverlay.open,
     setScopedAutoSaveHold,
-    subgroupOverlay.open
-  ]);
+    onDiagnostic
+  });
 
   const isOverlayOpenActionSuppressed = useCallback(
     (key: string) => Boolean(key && overlayOpenActionSuppressed[key]),
