@@ -78,6 +78,7 @@ import { useAppPerfOpenRecordBridge, type AppRecordSelectHandler } from './compo
 import { useAppPerfTools } from './components/app/useAppPerfTools';
 import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
 import { useAppDiagnostics } from './components/app/useAppDiagnostics';
+import { useAppDialogState } from './components/app/useAppDialogState';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -759,114 +760,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     };
   }, [view, language]);
 
-  const [systemActionGateDialog, setSystemActionGateDialog] = useState<{
-    open: boolean;
-    title: string;
-    message: string;
-    confirmLabel: string;
-    cancelLabel: string;
-    showCancel: boolean;
-    dismissOnBackdrop: boolean;
-    showCloseButton: boolean;
-    actionId: string | null;
-    ruleId: string | null;
-    trigger: string | null;
-  }>({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: '',
-    cancelLabel: '',
-    showCancel: false,
-    dismissOnBackdrop: false,
-    showCloseButton: false,
-    actionId: null,
-    ruleId: null,
-    trigger: null
-  });
-
-  const [copyCurrentRecordDialog, setCopyCurrentRecordDialog] = useState<{
-    open: boolean;
-    title: string;
-    message: string;
-    confirmLabel: string;
-    cancelLabel: string;
-    showCancel: boolean;
-    dismissOnBackdrop: boolean;
-    showCloseButton: boolean;
-  }>({
-    open: false,
-    title: '',
-    message: '',
-    confirmLabel: '',
-    cancelLabel: '',
-    showCancel: false,
-    dismissOnBackdrop: false,
-    showCloseButton: false
-  });
-
-  const closeSystemActionGateDialog = useCallback(() => {
-    setSystemActionGateDialog(prev => (prev.open ? { ...prev, open: false } : prev));
-  }, []);
-
-  const closeCopyCurrentRecordDialog = useCallback(() => {
-    setCopyCurrentRecordDialog(prev => (prev.open ? { ...prev, open: false } : prev));
-  }, []);
-
-  const openSystemActionGateDialog = useCallback(
-    (args: {
-      actionId: string;
-      ruleId?: string;
-      trigger: 'onAttempt' | 'onEnable';
-      title?: LocalizedString | string;
-      message: LocalizedString | string;
-      confirmLabel?: LocalizedString | string;
-      cancelLabel?: LocalizedString | string;
-      showCancel?: boolean;
-      showCloseButton?: boolean;
-      dismissOnBackdrop?: boolean;
-    }) => {
-      const title = resolveLocalizedString(
-        args.title,
-        language,
-        tSystem('common.notice', language, 'Notice')
-      ).toString();
-      const message = resolveLocalizedString(args.message, language, '').toString();
-      const confirmLabel = resolveLocalizedString(
-        args.confirmLabel,
-        language,
-        tSystem('common.ok', language, 'OK')
-      ).toString();
-      const cancelLabel = resolveLocalizedString(
-        args.cancelLabel,
-        language,
-        tSystem('common.cancel', language, 'Cancel')
-      ).toString();
-      const showCancel = args.showCancel !== false;
-      const showCloseButton = args.showCloseButton === true;
-      const dismissOnBackdrop = args.dismissOnBackdrop === true;
-
-      setSystemActionGateDialog({
-        open: true,
-        title,
-        message,
-        confirmLabel,
-        cancelLabel,
-        showCancel,
-        dismissOnBackdrop,
-        showCloseButton,
-        actionId: args.actionId,
-        ruleId: args.ruleId || null,
-        trigger: args.trigger
-      });
-      logEvent('ui.systemActionGate.dialog.open', {
-        actionId: args.actionId,
-        ruleId: args.ruleId || null,
-        trigger: args.trigger
-      });
-    },
-    [language, logEvent]
-  );
+  const {
+    systemActionGateDialog,
+    openSystemActionGateDialog,
+    closeSystemActionGateDialog,
+    copyCurrentRecordDialog,
+    setCopyCurrentRecordDialog,
+    closeCopyCurrentRecordDialog
+  } = useAppDialogState({ language, logEvent });
   const autoSaveNoticeStorageKey = useMemo(() => {
     const key = (formKey || '').toString().trim() || 'default';
     return `ck.autosaveNotice.${key}`;
@@ -6295,7 +6196,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       dismissOnBackdrop: resolved.dismissOnBackdrop,
       showCloseButton: resolved.showCloseButton
     });
-  }, [definition, logEvent]);
+  }, [definition, logEvent, setCopyCurrentRecordDialog]);
 
   useEffect(() => {
     optionStateRef.current = optionState;
