@@ -398,10 +398,15 @@ Thirty-third-pass results:
 - `App.tsx`: extracted server-generated top value adoption into `useServerGeneratedTopValues`, keeping save/submit response value merging outside the main shell. Current size: 14,595 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-fourth-pass results:
+
+- `FormView.tsx`: extracted top-level choice-control variant rendering and one-time diagnostics into `useChoiceControlRenderer`, keeping field wiring in `FormView`. Current size: 13,200 lines.
+- Validation for the pass used focused choice/form-rendering tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,595 lines.
-- `FormView.tsx`: 13,409 lines.
+- `FormView.tsx`: 13,200 lines.
 - `LineItemGroupQuestion.tsx`: 13,611 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
