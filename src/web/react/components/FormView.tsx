@@ -126,6 +126,7 @@ import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
+import { useFormViewStateRefs } from './form/useFormViewStateRefs';
 import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import {
@@ -737,41 +738,25 @@ const FormView: React.FC<FormViewProps> = ({
   const showFallbackConfirmOverlay = !openConfirmDialog;
   const groupScrollAnimRafRef = useRef(0);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const valuesRef = useRef(values);
-  const lineItemsRef = useRef(lineItems);
-  const collapsedRowsRef = useRef(collapsedRows);
-  const collapsedSubgroupsRef = useRef(collapsedSubgroups);
+  const {
+    valuesRef,
+    lineItemsRef,
+    collapsedRowsRef,
+    collapsedSubgroupsRef,
+    setValuesSynced,
+    setLineItemsSynced
+  } = useFormViewStateRefs({
+    values,
+    lineItems,
+    collapsedRows,
+    collapsedSubgroups,
+    setValues,
+    setLineItems
+  });
   const optionStateRef = useRef(optionState);
   const paragraphDisclaimerPendingRef = useRef(false);
   const paragraphDisclaimerSyncRef = useRef<((source?: string) => void) | null>(null);
   const paragraphDisclaimerTimerRef = useRef<number | null>(null);
-
-  const setValuesSynced = useCallback(
-    (
-      next:
-        | Record<string, FieldValue>
-        | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)
-    ) => {
-      const resolved = typeof next === 'function' ? next(valuesRef.current) : next;
-      valuesRef.current = resolved;
-      setValues(resolved);
-    },
-    [setValues]
-  );
-
-  const setLineItemsSynced = useCallback(
-    (next: LineItemState | ((prev: LineItemState) => LineItemState)) => {
-      const resolved = typeof next === 'function' ? next(lineItemsRef.current) : next;
-      lineItemsRef.current = resolved;
-      setLineItems(resolved);
-    },
-    [setLineItems]
-  );
-
-  useLayoutEffect(() => {
-    valuesRef.current = values;
-    lineItemsRef.current = lineItems;
-  }, [values, lineItems]);
 
   useEffect(() => {
     return () => {
@@ -794,12 +779,7 @@ const FormView: React.FC<FormViewProps> = ({
       values: valuesRef.current,
       lineItems: lineItemsRef.current
     };
-  }, [overlayDetailSelection]);
-
-  useEffect(() => {
-    collapsedRowsRef.current = collapsedRows;
-    collapsedSubgroupsRef.current = collapsedSubgroups;
-  }, [collapsedRows, collapsedSubgroups]);
+  }, [lineItemsRef, overlayDetailSelection, valuesRef]);
 
   useEffect(() => {
     optionStateRef.current = optionState;
@@ -1040,7 +1020,7 @@ const FormView: React.FC<FormViewProps> = ({
         options
       });
     },
-    [definition, onSelectionEffect]
+    [definition, onSelectionEffect, valuesRef]
   );
 
   const guidedDefaultForwardGate = normalizeGuidedForwardGate((guidedStepsCfg as any)?.defaultForwardGate, 'whenValid');
@@ -2063,6 +2043,7 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState,
       guidedVisibleSteps,
       language,
+      lineItemsRef,
       onBeforeGuidedStepAdvance,
       onDiagnostic,
       onGuidedStepMilestone,
@@ -2070,7 +2051,8 @@ const FormView: React.FC<FormViewProps> = ({
       setPendingScrollAnchor,
       setErrors,
       selectGuidedStep,
-      validateGuidedStepScope
+      validateGuidedStepScope,
+      valuesRef
     ]
   );
 
@@ -4310,6 +4292,7 @@ const FormView: React.FC<FormViewProps> = ({
 	      guidedVirtualState,
 	      language,
 	      lineItems,
+	      lineItemsRef,
 	      onDiagnostic,
 	      onSelectionEffect,
 	      openConfirmDialogResolved,
@@ -4325,7 +4308,8 @@ const FormView: React.FC<FormViewProps> = ({
 	      setValues,
 	      subgroupOverlay,
 	      restoreOverlaySessionSnapshot,
-	      values
+	      values,
+	      valuesRef
 	    ]
 	  );
 
@@ -4537,6 +4521,7 @@ const FormView: React.FC<FormViewProps> = ({
     [
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
+      lineItemsRef,
       onDiagnostic,
       setErrors,
       setOverlayDetailSelection,
@@ -4544,7 +4529,8 @@ const FormView: React.FC<FormViewProps> = ({
       subgroupOverlay.subKey,
       validateLineItemGroupOverlay,
       validateSubgroupOverlay,
-      validateOverlayDetailGroup
+      validateOverlayDetailGroup,
+      valuesRef
     ]
   );
 
@@ -4787,6 +4773,7 @@ const FormView: React.FC<FormViewProps> = ({
     [
       clearSelectionEffectsForRow,
       definition,
+      lineItemsRef,
       onDiagnostic,
       onSelectionEffect,
       resolveLineItemGroupForKey,
@@ -4794,7 +4781,8 @@ const FormView: React.FC<FormViewProps> = ({
       setErrors,
       setLineItems,
       setSubgroupSelectors,
-      setValues
+      setValues,
+      valuesRef
     ]
   );
 
@@ -5179,6 +5167,7 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemGroupOverlay.open,
       lineItemGroupOverlay.closeConfirm,
       lineItemGroupOverlay.overlaySession?.enabled,
+      lineItemsRef,
       openConfirmDialogResolved,
       onDiagnostic,
       onSelectionEffect,
@@ -5191,7 +5180,8 @@ const FormView: React.FC<FormViewProps> = ({
       setSubgroupSelectors,
       setOverlayDetailSelection,
       setValues,
-      validateLineItemGroupOverlay
+      validateLineItemGroupOverlay,
+      valuesRef
     ]
   );
 
@@ -6071,7 +6061,7 @@ const FormView: React.FC<FormViewProps> = ({
       return toUploadItems((row?.values || {})[fieldId] as any);
     }
     return [];
-  }, []);
+  }, [lineItemsRef, valuesRef]);
 
   const dismissFileOverlay = useCallback(() => {
     setFileOverlay({ open: false });
@@ -6474,7 +6464,7 @@ const FormView: React.FC<FormViewProps> = ({
       return toUploadItems((row?.values || {})[target.field.id] as any);
     }
     return [];
-  }, []);
+  }, [lineItemsRef, valuesRef]);
 
   const retryUploadFailure = useCallback(
     async (fieldPath: string) => {
