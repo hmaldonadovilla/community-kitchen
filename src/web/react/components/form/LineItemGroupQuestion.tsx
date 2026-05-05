@@ -152,6 +152,8 @@ import {
   normalizeIdValue,
   optionSortFor,
   resolveCompactPartType,
+  resolveSourceFirstAllocationDisplayValue,
+  resolveSourceFirstCompactTextParts,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
@@ -6042,92 +6044,8 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             field: any,
             virtualValues: Record<string, FieldValue>,
             parentValues: Record<string, FieldValue>
-          ): string => {
-            if (!field) return '';
-            const raw = Object.prototype.hasOwnProperty.call(virtualValues, field.id)
-              ? virtualValues[field.id]
-              : parentValues[field.id];
-            if (raw === undefined || raw === null || raw === '') return '';
-            if (field.type === 'DATE') return toDateInputValue(raw);
-            if (field.type === 'CHOICE' || field.type === 'CHECKBOX') {
-              const optionSet = toOptionSet(field);
-              const options = buildLocalizedOptions(optionSet, optionSet.en || [], language, {
-                sort: optionSortFor(field)
-              });
-              const rawList = Array.isArray(raw) ? raw : [raw];
-              return rawList
-                .map(value => `${value ?? ''}`)
-                .filter(Boolean)
-                .map(value => options.find(option => option.value === value)?.label || value)
-                .join(', ');
-            }
-            return `${raw}`.trim();
-          };
-
-          const resolveCompactFieldDisplayValue = (
-            fieldId: string,
-            virtualValues: Record<string, FieldValue>,
-            sourceRow: Record<string, any>,
-            fieldById: Map<string, any>,
-            parentValues: Record<string, FieldValue>
-          ): string => {
-            const field = fieldById.get(fieldId);
-            const display = field
-              ? resolveDisplayValue(field, virtualValues, parentValues)
-              : `${virtualValues[fieldId] ?? parentValues[fieldId] ?? ''}`.trim();
-            if (display) return display;
-            const sourceValue = getByPath(sourceRow, fieldId);
-            return sourceValue === undefined || sourceValue === null ? '' : `${sourceValue}`.trim();
-          };
-
-          const resolveCompactSourceValue = (
-            part: any,
-            virtualValues: Record<string, FieldValue>,
-            sourceRow: Record<string, any>,
-            fieldById: Map<string, any>,
-            parentValues: Record<string, FieldValue>
-          ): string => {
-            const sourcePathCandidates = [
-              `${part?.sourcePath || ''}`.trim(),
-              ...(Array.isArray(part?.sourcePathAlternatives)
-                ? part.sourcePathAlternatives.map((value: any) => `${value || ''}`.trim()).filter(Boolean)
-                : [])
-            ].filter(Boolean);
-            for (const candidate of sourcePathCandidates) {
-              const sourceValue = getByPath(sourceRow, candidate);
-              if (sourceValue !== undefined && sourceValue !== null && `${sourceValue}`.trim() !== '') {
-                return `${sourceValue}`.trim();
-              }
-              if (!candidate.includes('.')) {
-                const fallbackDisplay = resolveCompactFieldDisplayValue(
-                  candidate,
-                  virtualValues,
-                  sourceRow,
-                  fieldById,
-                  parentValues
-                );
-                if (fallbackDisplay) return fallbackDisplay;
-              }
-            }
-
-            const fieldIdCandidates = [
-              `${part?.fieldId || ''}`.trim(),
-              ...(Array.isArray(part?.fieldIdAlternatives)
-                ? part.fieldIdAlternatives.map((value: any) => `${value || ''}`.trim()).filter(Boolean)
-                : [])
-            ].filter(Boolean);
-            for (const candidate of fieldIdCandidates) {
-              const display = resolveCompactFieldDisplayValue(
-                candidate,
-                virtualValues,
-                sourceRow,
-                fieldById,
-                parentValues
-              );
-              if (display) return display;
-            }
-            return '';
-          };
+          ): string =>
+            resolveSourceFirstAllocationDisplayValue({ field, virtualValues, parentValues, language });
 
           const resolveCompactTextParts = (
             parts: any[],
@@ -6136,44 +6054,14 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
             fieldById: Map<string, any>,
             parentValues: Record<string, FieldValue>
           ): string =>
-            parts
-              .map((part: any) => {
-                if (!part || typeof part !== 'object') return '';
-                const partType = resolveCompactPartType(part);
-                if (partType === 'text') {
-                  return resolveLocalizedString(part.text, language, '');
-                }
-                if (partType === 'sourcelistsummary') {
-                  const entries = coerceStructuredItems(getByPath(sourceRow, `${part.sourcePath || ''}`.trim()));
-                  if (!entries.length) return '';
-                  const summaryFieldId = `${part.summaryFieldId || part.fieldId || ''}`.trim();
-                  const separator = resolveLocalizedString(part.separator, language, ', ') || ', ';
-                  const sortMode = listSortFor(part.sort);
-                  const values = entries
-                    .map(entry => (summaryFieldId ? getByPath(entry, summaryFieldId) : entry))
-                    .map(value => `${value ?? ''}`.trim())
-                    .filter(Boolean);
-                  const normalized = part.unique === false ? values : Array.from(new Set(values));
-                  return sortVisibleTextValues(normalized, sortMode).join(separator);
-                }
-                const display = resolveCompactSourceValue(part, virtualValues, sourceRow, fieldById, parentValues);
-                const fieldId = `${part.fieldId || ''}`.trim();
-                if (!display && !fieldId) return '';
-                const suffix = part.suffix
-                  ? resolveLocalizedString(part.suffix, language, '')
-                  : part.suffixFieldId
-                    ? (() => {
-                        const suffixFieldId = `${part.suffixFieldId || ''}`.trim();
-                        const suffixField = suffixFieldId ? fieldById.get(suffixFieldId) : null;
-                        return suffixField
-                          ? resolveDisplayValue(suffixField, virtualValues, parentValues)
-                          : `${virtualValues[suffixFieldId] ?? parentValues[suffixFieldId] ?? ''}`.trim();
-                      })()
-                    : '';
-                return [display, suffix].filter(Boolean).join(' ').trim();
-              })
-              .filter(Boolean)
-              .join('');
+            resolveSourceFirstCompactTextParts({
+              parts,
+              virtualValues,
+              sourceRow,
+              fieldById,
+              parentValues,
+              language
+            });
 
           const renderAllocationSentenceParts = (args: {
             config: any;

@@ -7,6 +7,8 @@ import {
   normalizeIdValue,
   optionSortFor,
   resolveCompactPartType,
+  resolveSourceFirstAllocationDisplayValue,
+  resolveSourceFirstCompactTextParts,
   sortVisibleTextValues
 } from '../../../src/web/react/features/lineItems/domain/lineItemPresentation';
 
@@ -43,5 +45,66 @@ describe('lineItem presentation domain', () => {
     expect(resolveCompactPartType({ sourcePath: 'recipe.name' })).toBe('field');
     expect(resolveCompactPartType({ fieldIdAlternatives: ['', 'mealType'] })).toBe('field');
     expect(resolveCompactPartType({ text: 'literal' })).toBe('text');
+  });
+
+  test('resolves source-first allocation display values', () => {
+    const mealTypeField = {
+      id: 'mealType',
+      type: 'CHOICE',
+      options: {
+        en: ['veg', 'meat']
+      },
+      optionsRaw: [
+        { __ckOptionValue: 'veg', __ckOptionLabel: 'Vegetarian' },
+        { __ckOptionValue: 'meat', __ckOptionLabel: 'Meat' }
+      ]
+    };
+    expect(
+      resolveSourceFirstAllocationDisplayValue({
+        field: mealTypeField,
+        virtualValues: { mealType: 'veg' },
+        parentValues: {},
+        language: 'EN'
+      })
+    ).toBe('Vegetarian');
+    expect(
+      resolveSourceFirstAllocationDisplayValue({
+        field: { id: 'date', type: 'DATE' },
+        virtualValues: {},
+        parentValues: { date: '02/01/2026' },
+        language: 'EN'
+      })
+    ).toBe('2026-01-02');
+  });
+
+  test('resolves source-first compact text parts from source rows and virtual values', () => {
+    const fieldById = new Map<string, any>([
+      ['portionCount', { id: 'portionCount', type: 'NUMBER' }],
+      ['unit', { id: 'unit', type: 'TEXT' }]
+    ]);
+    const text = resolveSourceFirstCompactTextParts({
+      parts: [
+        { sourcePath: 'recipe.name' },
+        { text: ' - ' },
+        { fieldId: 'portionCount', suffixFieldId: 'unit' },
+        {
+          type: 'sourceListSummary',
+          sourcePath: 'allergens',
+          summaryFieldId: 'name',
+          separator: ', ',
+          sort: 'alphabetical'
+        }
+      ],
+      virtualValues: { portionCount: 3 },
+      parentValues: { unit: 'portions' },
+      sourceRow: {
+        recipe: { name: 'Soup' },
+        allergens: [{ name: 'Soy' }, { name: 'Milk' }, { name: 'Soy' }]
+      },
+      fieldById,
+      language: 'EN'
+    });
+
+    expect(text).toBe('Soup - 3 portionsMilk, Soy');
   });
 });
