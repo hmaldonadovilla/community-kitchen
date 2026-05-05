@@ -553,11 +553,16 @@ Sixty-fourth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted active row-flow field-path parsing and field-type resolution into the row-flow group config helper. Current size: 13,093 lines.
 - Validation for the pass used focused row-flow group config tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-fifth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted source-first data-source output group and reservation-state calculations into `stepDataSourceRows`, keeping the component responsible for callback wiring and refs. Current size: 13,066 lines.
+- Validation for the pass used focused step data-source row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 13,093 lines.
+- `LineItemGroupQuestion.tsx`: 13,066 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
