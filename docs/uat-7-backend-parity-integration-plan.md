@@ -239,6 +239,10 @@ Third-pass results:
 
 - `FormView.tsx`: extracted guided error-navigation target selection into `src/web/react/features/validation/domain/guidedErrorNavigation.ts`, covering active-step preference, reachable-step fallback, row filters, field scopes, and subgroup inclusion with focused unit tests. Current size: 15,388 lines.
 
+Fourth-pass results:
+
+- `FormView.tsx`: extracted validation error navigation orchestration into `useValidationErrorNavigation`, keeping guided step redirection, overlay opening, group/row expansion, and scroll/focus behavior behind a named hook boundary. Current size: 15,253 lines.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
