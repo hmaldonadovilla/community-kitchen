@@ -165,6 +165,12 @@ import {
   normalizeIdValue,
   optionSortFor,
 } from '../../features/lineItems/domain/lineItemPresentation';
+import {
+  coerceCompactItemsCollectionAction,
+  getCompactSourceValueAction,
+  mapCompactActionEntriesAction,
+  normalizeCompactLookupValueAction
+} from '../../features/lineItems/domain/compactLineItemRows';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import {
   normalizeOverlayFieldListAction,
@@ -11027,37 +11033,8 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                   return values[fieldId];
                                 };
                                 const compactMappedValueCache = new Map<string, any>();
-                                const normalizeCompactLookupValue = (value: any): string => {
-                                  if (value === undefined || value === null) return '';
-                                  if (Array.isArray(value)) {
-                                    const firstNonEmpty = value.find(entry => entry !== undefined && entry !== null && `${entry}`.trim() !== '');
-                                    return firstNonEmpty === undefined || firstNonEmpty === null ? '' : `${firstNonEmpty}`.trim().toLowerCase();
-                                  }
-                                  return `${value}`.trim().toLowerCase();
-                                };
-                                const getCompactSourceValue = (sourceRow: any, sourceField: any): any => {
-                                  if (!sourceRow || sourceField === undefined || sourceField === null) return undefined;
-                                  const path = `${sourceField}`.trim();
-                                  if (!path) return undefined;
-                                  const resolveSegment = (acc: any, segment: string) => {
-                                    if (acc === undefined || acc === null || typeof acc !== 'object') return undefined;
-                                    if (acc?.[segment] !== undefined) return acc[segment];
-                                    const normalized = segment.toLowerCase();
-                                    const fallbackKey = Object.keys(acc).find(key => key.toLowerCase() === normalized);
-                                    return fallbackKey ? acc[fallbackKey] : undefined;
-                                  };
-                                  const resolveFromCandidate = (candidate: any): any => {
-                                    if (!candidate) return undefined;
-                                    if (!path.includes('.')) return resolveSegment(candidate, path);
-                                    return path.split('.').reduce((acc: any, segment: string) => resolveSegment(acc, segment), candidate);
-                                  };
-                                  const directValue = resolveFromCandidate(sourceRow);
-                                  if (directValue !== undefined) return directValue;
-                                  if (sourceRow && typeof sourceRow === 'object' && sourceRow.values && typeof sourceRow.values === 'object') {
-                                    return resolveFromCandidate(sourceRow.values);
-                                  }
-                                  return undefined;
-                                };
+                                const normalizeCompactLookupValue = normalizeCompactLookupValueAction;
+                                const getCompactSourceValue = getCompactSourceValueAction;
                                 const resolveCompactMappedValue = (fieldId: string): any => {
                                   if (compactMappedValueCache.has(fieldId)) return compactMappedValueCache.get(fieldId);
                                   const localValue = resolveCompactFieldValue(fieldId);
@@ -11493,95 +11470,8 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                       if (!(rule as any).when) return true;
                                       return matchesWhenClause((rule as any).when, compactRowCtx);
                                     }) || null;
-                                  const resolveCompactControlWidth = (
-                                    controlType: 'number' | 'choice',
-                                    valueText: string,
-                                    opts?: { minWidth?: number; maxWidth?: number; paddingChars?: number }
-                                  ): number => {
-                                    const normalizedText = (valueText || '').trim();
-                                    const textLength = Math.max(normalizedText.length, 1);
-                                    const paddingChars = Number.isFinite(Number(opts?.paddingChars))
-                                      ? Number(opts?.paddingChars)
-                                      : controlType === 'choice'
-                                        ? 3.5
-                                        : 1.6;
-                                    const minWidth = Number.isFinite(Number(opts?.minWidth))
-                                      ? Number(opts?.minWidth)
-                                      : controlType === 'choice'
-                                        ? 96
-                                        : 36;
-                                    const maxWidth = Number.isFinite(Number(opts?.maxWidth))
-                                      ? Number(opts?.maxWidth)
-                                      : controlType === 'choice'
-                                        ? 144
-                                        : 88;
-                                    const widthPx =
-                                      controlType === 'choice'
-                                        ? 28 + (textLength + paddingChars) * 10
-                                        : 18 + (textLength + paddingChars) * 12;
-                                    return Math.max(minWidth, Math.min(maxWidth, widthPx));
-                                  };
-                                  const coerceCompactItemsCollection = (payload: any): any[] => {
-                                    if (!payload) return [];
-                                    if (Array.isArray(payload)) return payload;
-                                    if (typeof payload === 'string') {
-                                      const trimmed = payload.trim();
-                                      if (!trimmed) return [];
-                                      try {
-                                        const parsed = JSON.parse(trimmed);
-                                        if (Array.isArray(parsed)) return parsed;
-                                        if (parsed && typeof parsed === 'object') return [parsed];
-                                      } catch (_) {
-                                        return [];
-                                      }
-                                      return [];
-                                    }
-                                    if (typeof payload === 'object') return [payload];
-                                    return [];
-                                  };
-                                  const mapCompactActionEntries = (entries: any[], action: any): Record<string, any>[] => {
-                                    const rawMapping =
-                                      action && typeof action.lineItemMapping === 'object' && action.lineItemMapping
-                                        ? (action.lineItemMapping as Record<string, string>)
-                                        : {};
-                                    const mapped = entries
-                                      .map(entry => {
-                                        if (!entry || typeof entry !== 'object') return null;
-                                        if (!Object.keys(rawMapping).length) return { ...entry };
-                                        const next: Record<string, any> = {};
-                                        Object.entries(rawMapping).forEach(([targetId, sourceId]) => {
-                                          if (!targetId || !sourceId) return;
-                                          const rawValue = getCompactSourceValue(entry, sourceId);
-                                          if (rawValue === undefined) return;
-                                          next[targetId] = rawValue;
-                                        });
-                                        return next;
-                                      })
-                                      .filter(Boolean) as Record<string, any>[];
-                                    const aggregateBy = Array.isArray(action?.aggregateBy)
-                                      ? action.aggregateBy.map((key: any) => `${key || ''}`.trim()).filter(Boolean) as string[]
-                                      : [];
-                                    const aggregateNumericFields = Array.isArray(action?.aggregateNumericFields)
-                                      ? action.aggregateNumericFields.map((key: any) => `${key || ''}`.trim()).filter(Boolean) as string[]
-                                      : [];
-                                    if (!aggregateBy.length || !mapped.length) return mapped;
-                                    const buckets = new Map<string, Record<string, any>>();
-                                    mapped.forEach(entry => {
-                                      const bucketKey = aggregateBy.map(key => `${entry[key] ?? ''}`).join('||');
-                                      if (!buckets.has(bucketKey)) {
-                                        buckets.set(bucketKey, { ...entry });
-                                        return;
-                                      }
-                                      const existing = buckets.get(bucketKey)!;
-                                      aggregateNumericFields.forEach(fieldId => {
-                                        const current = Number(existing[fieldId]);
-                                        const next = Number(entry[fieldId]);
-                                        if (!Number.isFinite(next)) return;
-                                        existing[fieldId] = Number.isFinite(current) ? current + next : next;
-                                      });
-                                    });
-                                    return Array.from(buckets.values());
-                                  };
+                                  const coerceCompactItemsCollection = coerceCompactItemsCollectionAction;
+                                  const mapCompactActionEntries = mapCompactActionEntriesAction;
                                   const renderCompactNumberControl = (
                                     field: any,
                                     opts?: {
