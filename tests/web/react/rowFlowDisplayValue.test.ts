@@ -1,6 +1,7 @@
 import {
   buildRowFlowContextHeaderAction,
-  resolveRowFlowDisplayValueAction
+  resolveRowFlowDisplayValueAction,
+  resolveRowFlowOutputSegmentPresentationAction
 } from '../../../src/web/react/features/lineItems/domain/rowFlowDisplayValue';
 
 describe('row flow display value domain', () => {
@@ -70,5 +71,46 @@ describe('row flow display value domain', () => {
     });
 
     expect(header).toBe('Status Ready Date: Tue, 05-May-2026');
+  });
+
+  test('resolves row-flow output segment presentation defaults and block spacers', () => {
+    expect(resolveRowFlowOutputSegmentPresentationAction(null)).toMatchObject({
+      segmentType: 'field',
+      segmentLayout: 'inline',
+      isBlockLayout: false,
+      tone: 'default',
+      segmentTextStyle: {},
+      segmentContainerStyle: {
+        display: 'inline-flex',
+        flex: '0 1 auto'
+      },
+      spacerStyle: {
+        flex: '1 1 auto',
+        minWidth: 0,
+        width: undefined
+      }
+    });
+
+    expect(
+      resolveRowFlowOutputSegmentPresentationAction({
+        type: 'SPACER',
+        layout: 'BLOCK',
+        tone: 'STRONG'
+      })
+    ).toMatchObject({
+      segmentType: 'spacer',
+      segmentLayout: 'block',
+      isBlockLayout: true,
+      tone: 'strong',
+      segmentTextStyle: { fontWeight: 600 },
+      segmentContainerStyle: {
+        flex: '1 0 100%',
+        width: '100%'
+      },
+      spacerStyle: {
+        minWidth: '100%',
+        width: '100%'
+      }
+    });
   });
 });

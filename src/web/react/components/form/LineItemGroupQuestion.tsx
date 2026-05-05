@@ -168,7 +168,8 @@ import {
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import {
   buildRowFlowContextHeaderAction,
-  resolveRowFlowDisplayValueAction
+  resolveRowFlowDisplayValueAction,
+  resolveRowFlowOutputSegmentPresentationAction
 } from '../../features/lineItems/domain/rowFlowDisplayValue';
 import {
   applyAutoAddSubgroupSingleOptionAnchorFillAction,
@@ -5429,34 +5430,19 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                 });
 
                 const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
-                  const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
-                  const segmentLayout = ((segment.config?.layout || 'inline').toString() || 'inline').trim().toLowerCase();
-                  const isBlockLayout = segmentLayout === 'block';
-                  const tone = ((segment.config?.tone || 'default').toString() || 'default').trim().toLowerCase();
-                  const segmentTextStyle: React.CSSProperties =
-                    tone === 'muted'
-                      ? { color: 'var(--muted)' }
-                      : tone === 'strong'
-                        ? { fontWeight: 600 }
-                        : {};
-                  const segmentContainerStyle: React.CSSProperties = {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    minWidth: 0,
-                    maxWidth: '100%',
-                    ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 1 auto' })
-                  };
+                  const {
+                    segmentType,
+                    isBlockLayout,
+                    segmentTextStyle,
+                    segmentContainerStyle,
+                    spacerStyle
+                  } = resolveRowFlowOutputSegmentPresentationAction(segment.config);
                   if (segmentType === 'spacer') {
                     return (
                       <span
                         key={`${segment.id}-${idx}`}
                         aria-hidden="true"
-                        style={{
-                          flex: '1 1 auto',
-                          minWidth: isBlockLayout ? '100%' : 0,
-                          width: isBlockLayout ? '100%' : undefined
-                        }}
+                        style={spacerStyle}
                       />
                     );
                   }

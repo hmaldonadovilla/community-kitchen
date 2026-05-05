@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { buildLocalizedOptions, toOptionSet } from '../../../../core';
 import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
@@ -19,6 +20,54 @@ import {
   optionSortFor,
   sortVisibleTextValues
 } from './lineItemPresentation';
+
+export type RowFlowOutputSegmentPresentation = {
+  segmentType: string;
+  segmentLayout: string;
+  isBlockLayout: boolean;
+  tone: string;
+  segmentTextStyle: CSSProperties;
+  segmentContainerStyle: CSSProperties;
+  spacerStyle: CSSProperties;
+};
+
+export const resolveRowFlowOutputSegmentPresentationAction = (
+  config?: { type?: unknown; layout?: unknown; tone?: unknown } | null
+): RowFlowOutputSegmentPresentation => {
+  const segmentType = ((config?.type || 'field').toString() || 'field').trim().toLowerCase();
+  const segmentLayout = ((config?.layout || 'inline').toString() || 'inline').trim().toLowerCase();
+  const isBlockLayout = segmentLayout === 'block';
+  const tone = ((config?.tone || 'default').toString() || 'default').trim().toLowerCase();
+  const segmentTextStyle: CSSProperties =
+    tone === 'muted'
+      ? { color: 'var(--muted)' }
+      : tone === 'strong'
+        ? { fontWeight: 600 }
+        : {};
+  const segmentContainerStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+    maxWidth: '100%',
+    ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 1 auto' })
+  };
+  const spacerStyle: CSSProperties = {
+    flex: '1 1 auto',
+    minWidth: isBlockLayout ? '100%' : 0,
+    width: isBlockLayout ? '100%' : undefined
+  };
+
+  return {
+    segmentType,
+    segmentLayout,
+    isBlockLayout,
+    tone,
+    segmentTextStyle,
+    segmentContainerStyle,
+    spacerStyle
+  };
+};
 
 export const resolveRowFlowDisplayValueAction = (args: {
   segment: RowFlowResolvedSegment;
