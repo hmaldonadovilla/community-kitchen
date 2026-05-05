@@ -598,11 +598,36 @@ Seventy-third-pass results:
 - `LineItemGroupQuestion.tsx`: extracted visible row-flow output segment selection into the row-flow output visibility helper. Current size: 12,554 lines.
 - Validation for the pass used focused row-flow output visibility tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Seventy-fourth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted row-flow output segment type, layout, tone, text style, and spacer style resolution into the row-flow display helper. Current size: 12,540 lines.
+- Validation for the pass used focused row-flow display value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
+Seventy-fifth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted row-flow prompt label splitting, layout flags, and action partitioning into a focused row-flow prompt presentation helper. Current size: 12,533 lines.
+- Validation for the pass used focused row-flow prompt presentation and row-flow display value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
+Seventy-sixth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted flattened overlay field-list normalization, placement normalization, and single target-row/field resolution into a line-item overlay helper shared by the duplicated overlay render paths. Current size: 12,521 lines.
+- Validation for the pass used focused overlay flattened field tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
+Seventy-seventh-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted compact row source lookup, item collection coercion, and compact action-entry mapping into a compact row helper, and removed an unused local compact width resolver. Current size: 12,411 lines.
+- Validation for the pass used focused compact line-item row and compact layout tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
+Seventy-eighth-pass results:
+
+- `FormView.tsx`: extracted guided question lookup, render-as-label target resolution, and context-header target filtering into guided target helpers. Current size: 12,309 lines.
+- Validation for the pass used focused guided target and guided step question-order tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,554 lines.
+- `FormView.tsx`: 12,309 lines.
+- `LineItemGroupQuestion.tsx`: 12,411 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
@@ -675,7 +700,7 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
-| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, and source-first allocation display/sorting/selection/list/upload renderers with focused tests where practical. |
+| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, guided target resolution, source-first allocation display/sorting/selection/list/upload renderers, row-flow prompt/output helpers, flattened overlay target helpers, and compact row source mapping with focused tests where practical. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
