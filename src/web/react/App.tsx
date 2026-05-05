@@ -80,6 +80,7 @@ import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
 import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { useAppDialogState } from './components/app/useAppDialogState';
 import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
+import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -332,7 +333,6 @@ import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
 import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
-import { toUploadItems } from './components/form/utils';
 import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
 import { isEmptyValue } from './utils/values';
 import { resolveReservationDisplayLabelFromCachedDataSources } from './features/reservations/displayLabel';
@@ -446,13 +446,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     title: '',
     pdfPhase: 'idle'
   });
-  const [readOnlyFilesOverlay, setReadOnlyFilesOverlay] = useState<{
-    open: boolean;
-    fieldId?: string;
-    title?: string;
-    items: Array<string | File>;
-    uploadConfig?: any;
-  }>({ open: false, items: [] });
   const reportPdfSeqRef = useRef<number>(0);
   const templatePrefetchDoneFormKeyRef = useRef<string | null>(null);
   const templatePrefetchInFlightFormKeyRef = useRef<string | null>(null);
@@ -3787,6 +3780,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const valuesRef = useRef<Record<string, FieldValue>>(values);
   const lineItemsRef = useRef<LineItemState>(lineItems);
   const languageRef = useRef<LangCode>(language);
+  const {
+    readOnlyFilesOverlay,
+    openReadOnlyFilesOverlay,
+    closeReadOnlyFilesOverlay
+  } = useReadOnlyFilesOverlay({
+    definition,
+    valuesRef,
+    languageRef,
+    logEvent
+  });
   const selectedRecordIdRef = useRef<string>(selectedRecordId);
   const selectedRecordSnapshotRef = useRef<WebFormSubmission | null>(selectedRecordSnapshot);
   const lastSubmissionMetaRef = useRef<SubmissionMeta | null>(lastSubmissionMeta);
@@ -8013,61 +8016,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       setAutoSaveHoldFromUi(false, { reason: 'reportPreview' });
     }
   }, [reportOverlay, setAutoSaveHoldFromUi]);
-
-  const closeReadOnlyFilesOverlay = useCallback(() => {
-    setReadOnlyFilesOverlay(prev => ({ ...prev, open: false }));
-    logEvent('filesOverlay.readOnly.close');
-  }, [logEvent]);
-
-  const openReadOnlyFilesOverlay = useCallback(
-    (fieldIdRaw: string) => {
-      const fieldId = (fieldIdRaw || '').toString().trim();
-      if (!fieldId) return;
-
-      if (fieldId.startsWith('urls:')) {
-        const payload = fieldId.slice(5);
-        const items = (() => {
-          if (!payload) return [];
-          try {
-            const decoded = decodeURIComponent(payload);
-            const parsed = JSON.parse(decoded);
-            if (Array.isArray(parsed)) {
-              return parsed.map(item => (item == null ? '' : item.toString())).filter(Boolean);
-            }
-          } catch {
-            // fall back to pipe-separated payloads
-            try {
-              const decoded = decodeURIComponent(payload);
-              return decoded
-                .split('|')
-                .map(part => (part || '').toString().trim())
-                .filter(Boolean);
-            } catch {
-              return [];
-            }
-          }
-          return [];
-        })();
-        if (!items.length) return;
-        const title = tSystem('files.title', languageRef.current, 'Photos');
-        setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig: undefined });
-        logEvent('filesOverlay.readOnly.open.inline', { fieldId: 'urls', count: items.length });
-        return;
-      }
-
-      const q = definition.questions.find(qq => qq && qq.type === 'FILE_UPLOAD' && qq.id === fieldId) as any;
-      if (!q) {
-        logEvent('filesOverlay.readOnly.unknownField', { fieldId });
-        return;
-      }
-      const items = toUploadItems(valuesRef.current[fieldId] as any);
-      const title = resolveLabel(q, languageRef.current) || tSystem('files.title', languageRef.current, 'Photos');
-      const uploadConfig = (q as any)?.uploadConfig || undefined;
-      setReadOnlyFilesOverlay({ open: true, fieldId, title, items, uploadConfig });
-      logEvent('filesOverlay.readOnly.open', { fieldId, count: items.length });
-    },
-    [definition.questions, logEvent]
-  );
 
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
   const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
