@@ -533,10 +533,15 @@ Sixtieth-pass results:
 - `FormView.tsx`: extracted paragraph-disclaimer synchronization calculations into the paragraph-disclaimer app domain, keeping the component responsible for scheduling syncs and applying React state updates. Current size: 12,405 lines.
 - Validation for the pass used focused paragraph disclaimer tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-first-pass results:
+
+- `FormView.tsx`: extracted top-level group progress calculation into a focused form helper, keeping auto-collapse effects in the component while moving required-field completeness rules out of the renderer. Current size: 12,369 lines.
+- Validation for the pass used focused group progress tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,405 lines.
+- `FormView.tsx`: 12,369 lines.
 - `LineItemGroupQuestion.tsx`: 13,149 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
