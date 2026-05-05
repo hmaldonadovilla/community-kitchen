@@ -168,7 +168,7 @@ import { LineItemTableTotalsFooter } from '../../features/lineItems/components/L
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { SourceFirstAllocationRow } from '../../features/lineItems/components/SourceFirstAllocationRow';
-import { SourceFirstSelectionCheckbox } from '../../features/lineItems/components/SourceFirstSelectionCheckbox';
+import { SourceFirstDataSourceRowShell } from '../../features/lineItems/components/SourceFirstDataSourceRowShell';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -12187,76 +12187,26 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                 });
                               const actionNodes = renderActionNodes(virtualValues, sourceRow, sourceKey);
                               return (
-                                <div
+                                <SourceFirstDataSourceRowShell
                                   key={`ds-row:${sourceKey}`}
-                                  style={{
-                                    padding: '12px 0',
-                                    borderBottom:
-                                      sourceIndex < sourceRows.length - 1 ? '1px solid var(--border)' : undefined
-                                  }}
+                                  rowKey={`ds-row:${sourceKey}`}
+                                  last={sourceIndex >= sourceRows.length - 1}
+                                  showSelectionCheckbox={!!selectedFieldId}
+                                  selected={isSelected}
+                                  headline={headlineNodes}
+                                  actions={actionNodes}
+                                  showSentence={!!sentenceParts.length && isSelected}
+                                  errors={sentenceFieldErrors}
+                                  onSelectionChange={checked =>
+                                    syncStepDataSourceOutputRowWithReservation({
+                                      config,
+                                      parentRow: row,
+                                      sourceRow,
+                                      patch: buildSelectionTogglePatch(checked)
+                                    })
+                                  }
                                 >
-                                  <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, flex: 1 }}>
-                                      <div
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'flex-start',
-                                          justifyContent: 'space-between',
-                                          flexWrap: 'wrap',
-                                          gap: 8
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'flex-start',
-                                            gap: 10,
-                                            flex: '1 1 280px',
-                                            minWidth: 0
-                                          }}
-                                        >
-                                          {selectedFieldId ? (
-                                            <SourceFirstSelectionCheckbox
-                                              checked={isSelected}
-                                              onChange={checked =>
-                                                syncStepDataSourceOutputRowWithReservation({
-                                                  config,
-                                                  parentRow: row,
-                                                  sourceRow,
-                                                  patch: buildSelectionTogglePatch(checked)
-                                                })
-                                              }
-                                            />
-                                          ) : null}
-                                          <div
-                                            style={{
-                                              fontSize: 'calc(var(--ck-font-control) * 1.16)',
-                                              lineHeight: 1.35,
-                                              overflowWrap: 'anywhere',
-                                              flex: '1 1 280px',
-                                              minWidth: 0
-                                            }}
-                                          >
-                                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{headlineNodes}</span>
-                                          </div>
-                                        </div>
-                                        {actionNodes}
-                                      </div>
-                                      {sentenceParts.length && isSelected ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: sentenceFieldErrors.length ? 6 : 0, minWidth: 0 }}>
-                                          <div
-                                            style={{
-                                              display: 'flex',
-                                              flexWrap: 'nowrap',
-                                              alignItems: 'center',
-                                              columnGap: 6,
-                                              rowGap: 6,
-                                              minWidth: 0,
-                                              lineHeight: 1.35,
-                                              overflowX: 'auto'
-                                            }}
-                                          >
-                                            {sentenceParts.map((part: any, partIndex: number) => {
+                                  {sentenceParts.map((part: any, partIndex: number) => {
                                             if (!part || typeof part !== 'object') return null;
                                             const partType = resolveCompactPartType(part);
                                             if (partType === 'text') {
@@ -12565,17 +12515,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                             }
                                             return null;
                                           })}
-                                          </div>
-                                          {sentenceFieldErrors.length ? (
-                                            <div className="error" style={{ marginTop: 2 }}>
-                                              {sentenceFieldErrors[0]}
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
+                                </SourceFirstDataSourceRowShell>
                               );
                             })}
                           </div>
