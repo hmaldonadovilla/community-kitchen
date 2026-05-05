@@ -83,6 +83,7 @@ import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
 import { useAppAutoSaveDedupConfig } from './components/app/useAppAutoSaveDedupConfig';
 import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
 import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
+import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -315,7 +316,6 @@ import {
   shouldForceAutoSaveOnConfiguredBlur,
   isBlockingDedupConflict
 } from './app/autoSaveDedup';
-import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from './app/readyForProductionLock';
 import {
   applyIngredientActivationSystemFields,
   getIngredientNameValidationMessage,
@@ -640,41 +640,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [hasProgressStatus, matchesClosedStatus, statusTransitions]
   );
-  const readyForProductionUnlockResolution = useMemo(() => {
-    const globalAny = globalThis as any;
-    const locationSearch = (() => {
-      try {
-        return globalAny?.location?.search || '';
-      } catch {
-        return '';
-      }
-    })();
-    const locationHash = (() => {
-      try {
-        return globalAny?.location?.hash || '';
-      } catch {
-        return '';
-      }
-    })();
-    const locationHref = (() => {
-      try {
-        return globalAny?.location?.href || '';
-      } catch {
-        return '';
-      }
-    })();
-    return resolveUnlockRecordId({
-      requestParams: globalAny?.__WEB_FORM_REQUEST_PARAMS__,
-      bootstrap: globalAny?.__WEB_FORM_BOOTSTRAP__,
-      search: locationSearch,
-      hash: locationHash,
-      href: locationHref
-    });
-  }, []);
-  const readyForProductionUnlockStatus = useMemo(
-    () => resolveReadyForProductionUnlockStatus(definition.fieldDisableRules),
-    [definition.fieldDisableRules]
-  );
+  const { readyForProductionUnlockResolution, readyForProductionUnlockStatus } =
+    useReadyForProductionUnlockConfig(definition);
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const {
     autoSaveNoticeOpen,
