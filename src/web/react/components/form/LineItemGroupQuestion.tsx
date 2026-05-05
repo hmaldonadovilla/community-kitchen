@@ -193,6 +193,7 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
+import { RowFlowGroupOutputActions } from '../../features/lineItems/components/RowFlowGroupOutputActions';
 import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
@@ -4751,44 +4752,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             }
           }
         }
-        const renderGroupOutputActions = () => {
-          if (!groupActionRow || !groupActionState) return null;
-          const groupOutputActions = groupActionState.outputActions.filter(action => resolveOutputActionScope(action) === 'group');
-          const outputActionsStart = groupOutputActions.filter(a => (a.position || 'start') !== 'end');
-          const outputActionsEnd = groupOutputActions.filter(a => (a.position || 'start') === 'end');
-          if (!outputActionsStart.length && !outputActionsEnd.length) return null;
-          if (outputActionsLayout === 'inline') {
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {outputActionsStart.map(action =>
-                    renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {outputActionsEnd.map(action =>
-                    renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
-                  )}
-                </div>
-              </div>
-            );
-          }
-          return (
-            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {outputActionsStart.map(action =>
-                  renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {outputActionsEnd.map(action =>
-                  renderRowFlowActionControlWithContext({ actionId: action.id, row: groupActionRow, rowFlowState: groupActionState })
-                )}
-              </div>
-            </div>
-          );
-        };
-
         const hideParentRowsForSourceFirst = sourceFirstPresentationEntries.some(
           entry =>
             (entry.visibleSourceRows.length > 0 || !!entry.emptyStateMessage) &&
@@ -11344,7 +11307,15 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                 </div>
               );
             }) : null}
-            {rowFlowEnabled && defaultActionScope === 'group' ? renderGroupOutputActions() : null}
+            {rowFlowEnabled && defaultActionScope === 'group' ? (
+              <RowFlowGroupOutputActions
+                groupActionRow={groupActionRow}
+                groupActionState={groupActionState}
+                outputActionsLayout={outputActionsLayout}
+                resolveOutputActionScope={resolveOutputActionScope}
+                renderRowFlowActionControlWithContext={renderRowFlowActionControlWithContext}
+              />
+            ) : null}
             {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">
                 {showSelectorBottom && selectorCfg ? (
