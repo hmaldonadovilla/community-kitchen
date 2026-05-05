@@ -4,9 +4,7 @@ import {
   loadOptionsFromDataSource,
   mergeOptionStateValue,
   optionKey,
-  normalizeLanguage,
-  toOptionSet,
-  buildLocalizedOptions
+  normalizeLanguage
 } from '../core';
 import {
   AnalyticsSnapshot,
@@ -199,12 +197,12 @@ import {
   finalizeInitialDateChangeDialogEntry,
   resolveFieldChangeDialogCancelAction,
   resolveFieldChangeDialogSource,
-  resolveTargetFieldConfig,
   shouldDeferFieldChangeMutation,
   shouldHoldFieldChangeSelectionEffects,
   shouldSuppressInitialDateChangeDialog,
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
+import { buildFieldChangeDialogInputsAction } from './app/fieldChangeDialogInputs';
 import { resolveNonMatchWarningFieldIds } from './app/nonMatchWarningFields';
 import {
   buildInitialLineItems,
@@ -322,7 +320,7 @@ import {
 } from './app/ingredientsCreateRules';
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
-import { resolveFieldLabel, resolveLabel } from './utils/labels';
+import { resolveLabel } from './utils/labels';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
@@ -718,109 +716,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const buildFieldChangeDialogInputs = useCallback(
     (pending: FieldChangePending): { inputs: FieldChangeDialogInputState[]; values: Record<string, FieldValue> } => {
-      const inputs: FieldChangeDialogInputState[] = [];
-      const values: Record<string, FieldValue> = {};
-      const dialogInputs = pending.dialog?.inputs || [];
-      const selectionEffects = (pending.selectionEffects || []).filter(
-        (effect): effect is SelectionEffect & { groupId: string } => !!effect?.groupId
-      );
-      const context = { scope: pending.scope, groupId: pending.groupId };
-
-      const resolveTargetValue = (target: any): FieldValue | undefined => {
-        if (!target) return undefined;
-        if (target.scope === 'top') return valuesRef.current[target.fieldId];
-        if (target.scope === 'row') {
-          const rows = pending.groupId ? lineItemsRef.current[pending.groupId] || [] : [];
-          const row = rows.find(r => r.id === pending.rowId);
-          return row?.values?.[target.fieldId] as FieldValue;
-        }
-        if (target.scope === 'parent') {
-          const parsed = pending.groupId ? parseSubgroupKey(pending.groupId) : null;
-          if (parsed) {
-            const parentRows = lineItemsRef.current[parsed.parentGroupId] || [];
-            const parentRow = parentRows.find(r => r.id === parsed.parentRowId);
-            return parentRow?.values?.[target.fieldId] as FieldValue;
-          }
-          return valuesRef.current[target.fieldId];
-        }
-        return undefined;
-      };
-
-      dialogInputs.forEach(inputCfg => {
-        const inputId = (inputCfg?.id || '').toString().trim();
-        if (!inputId || !inputCfg?.target) return;
-        const target = inputCfg.target as any;
-        const effect =
-          target.scope === 'effect'
-            ? selectionEffects.find(effectEntry => (effectEntry?.id || '').toString().trim() === (target.effectId || '').toString().trim())
-            : undefined;
-        const { question, field } = resolveTargetFieldConfig({
-          definition,
-          target,
-          context,
-          selectionEffects
-        });
-        const typeRaw = (
-          (inputCfg as any).type ||
-          (question as any)?.type ||
-          (field as any)?.type ||
-          'TEXT'
-        )
-          .toString()
-          .trim()
-          .toUpperCase();
-        const type =
-          typeRaw === 'PARAGRAPH'
-            ? 'paragraph'
-            : typeRaw === 'NUMBER'
-              ? 'number'
-              : typeRaw === 'CHOICE'
-                ? 'choice'
-                : typeRaw === 'CHECKBOX'
-                  ? 'checkbox'
-                  : typeRaw === 'DATE'
-                    ? 'date'
-                    : 'text';
-        const fallbackLabel = question
-          ? resolveLabel(question, languageRef.current)
-          : resolveFieldLabel(field, languageRef.current, inputId);
-        const label = resolveLocalizedString((inputCfg as any).label, languageRef.current, fallbackLabel || inputId).toString();
-        const placeholder = resolveLocalizedString((inputCfg as any).placeholder, languageRef.current, '').toString().trim() || undefined;
-
-        let options: FieldChangeDialogInputState['options'] = undefined;
-        if (type === 'choice' || type === 'checkbox') {
-          const optionGroupKey = resolveOptionGroupKey({
-            targetScope: target.scope,
-            contextGroupId: pending.groupId,
-            effectGroupId: effect?.groupId
-          });
-          const optionSet =
-            question
-              ? optionState[optionKey(question.id)] || toOptionSet(question as any)
-              : field
-                ? optionState[optionKey(field.id, optionGroupKey)] || toOptionSet(field as any)
-                : undefined;
-          if (optionSet && optionSet.en) {
-            const items = buildLocalizedOptions(optionSet as any, optionSet.en as any, languageRef.current);
-            options = items.map(item => ({ value: item.value, label: item.label }));
-          }
-        }
-
-        inputs.push({
-          id: inputId,
-          label,
-          placeholder,
-          type,
-          required: (inputCfg as any).required === true,
-          options
-        });
-        const initial = resolveTargetValue(target);
-        if (initial !== undefined) {
-          values[inputId] = initial;
-        }
+      return buildFieldChangeDialogInputsAction({
+        pending,
+        definition,
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current,
+        optionState,
+        language: languageRef.current,
+        resolveOptionGroupKey
       });
-
-      return { inputs, values };
     },
     [definition, optionState, resolveOptionGroupKey]
   );
