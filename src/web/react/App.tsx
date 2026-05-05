@@ -35,9 +35,6 @@ import {
   checkDedupConflictApi,
   triggerFollowupBatch,
   prefetchTemplatesApi,
-  renderDocTemplatePdfPreviewApi,
-  renderMarkdownTemplateApi,
-  renderHtmlTemplateApi,
   clearHtmlRenderClientCache,
   invalidateClientSharedDataCaches,
   consumePrefetchedHomeBootstrapApi,
@@ -86,6 +83,7 @@ import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObs
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
+import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -116,7 +114,7 @@ import {
   validateForm
 } from './app/submission';
 import { buildValidationContext } from './app/validation';
-import { clearBundledHtmlClientCaches, isBundledHtmlTemplateId } from './app/bundledHtmlClientRenderer';
+import { clearBundledHtmlClientCaches } from './app/bundledHtmlClientRenderer';
 import { shouldShowRecordLoadingPlaceholder } from './app/recordOpenState';
 import { resolveUiRecordStatus } from './app/recordMeta';
 import {
@@ -157,7 +155,6 @@ import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
 } from './app/reportPreviewAutosave';
-import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
 import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
@@ -327,7 +324,6 @@ import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveFieldLabel, resolveLabel } from './utils/labels';
 import { EMPTY_DISPLAY, formatDisplayText } from './utils/valueDisplay';
-import { SYSTEM_FONT_STACK } from '../../constants/typography';
 import { tSystem } from '../systemStrings';
 import { resolveLocalizedString } from '../i18n';
 import { buildReservationFailureMessage } from './components/form/reservationSyncPolicy';
@@ -6828,26 +6824,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     []
   );
 
-  const resolveTemplateIdForClient = useCallback((template: any, language: string): string | undefined => {
-    if (!template) return undefined;
-    const pick = (v: any) => (v !== undefined && v !== null ? v.toString().trim() : '');
-    if (typeof template === 'string') {
-      const trimmed = template.trim();
-      return trimmed || undefined;
-    }
-    const langKey = (language || 'EN').toUpperCase();
-    const direct = pick((template as any)[langKey]);
-    if (direct) return direct;
-    const lower = (language || 'en').toLowerCase();
-    const lowerPick = pick((template as any)[lower]);
-    if (lowerPick) return lowerPick;
-    const enPick = pick((template as any).EN);
-    if (enPick) return enPick;
-    const firstKey = Object.keys(template || {})[0];
-    const firstPick = firstKey ? pick((template as any)[firstKey]) : '';
-    return firstPick || undefined;
-  }, []);
-
   const resolveOpenUrlFieldHref = useCallback((fieldIdRaw: string): string => {
     const fieldId = (fieldIdRaw || '').toString().trim();
     if (!fieldId) return '';
@@ -6905,423 +6881,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     resolveOpenUrlFieldHref
   });
 
-  const base64ToPdfObjectUrl = useCallback((pdfBase64: string, mimeType: string) => {
-    const raw = (pdfBase64 || '').toString();
-    const binary = globalThis.atob ? globalThis.atob(raw) : atob(raw);
-    const len = binary.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: mimeType || 'application/pdf' });
-    return URL.createObjectURL(blob);
-  }, []);
-
-  const openPdfPreviewWindow = useCallback(
-    (args: { title: string; subtitle?: string; language: LangCode; loadingLabel?: string }) => {
-      try {
-        const w = globalThis.window?.open('', '_blank');
-        if (!w) return null;
-        try {
-          const title = (args.title || '').toString();
-          const subtitle = (args.subtitle || '').toString();
-          const loading = (args.loadingLabel || tSystem('report.generatingPdf', args.language, 'Generating PDF…')).toString();
-          const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
-    <style>
-      :root { --ck-font-label: 16px; --ck-font-group-title: 20px; --ck-font-helper: 14px; }
-      body { margin: 0; padding: 24px; font-family: ${SYSTEM_FONT_STACK}; color: CanvasText; background: Canvas; font-size: var(--ck-font-label); }
-      .sub { margin-top: 8px; font-weight: 400; color: GrayText; font-size: var(--ck-font-helper); }
-      .box { margin-top: 22px; padding: 18px 18px; border: 1px solid GrayText; border-radius: 16px; background: transparent; font-weight: 600; font-size: var(--ck-font-label); }
-    </style>
-  </head>
-  <body>
-    <div style="font-weight: 600; font-size: var(--ck-font-group-title);">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-    ${subtitle ? `<div class="sub">${subtitle.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ``}
-    <div class="box">${loading.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-  </body>
-</html>`;
-          w.document.open();
-          w.document.write(html);
-          w.document.close();
-        } catch {
-          // best effort
-        }
-        return w;
-      } catch {
-        return null;
-      }
-    },
-    []
-  );
-
-  const generateReportPdfPreview = useCallback(
-    async (args: { buttonId: string; popup?: Window | null }) => {
-      const buttonId = args.buttonId;
-      const popup = args.popup || null;
-      const seq = ++reportPdfSeqRef.current;
-      const parsedRef = parseButtonRef(buttonId || '');
-      const baseId = parsedRef.id;
-      const qIdx = parsedRef.qIdx;
-      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
-      const btn =
-        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
-          ? indexed
-          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
-      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
-
-      setReportOverlay(prev => ({
-        ...(prev || { title: '' }),
-        // Track busy state for inline buttons, but do not open an in-app overlay for PDFs.
-        open: false,
-        kind: 'pdf',
-        buttonId,
-        title,
-        subtitle: definition.title,
-        pdfPhase: 'rendering',
-        pdfObjectUrl: undefined,
-        pdfFileName: undefined,
-        pdfMessage: undefined,
-        markdown: undefined,
-        html: undefined
-      }));
-      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
-      const templateIdShort =
-        templateIdResolved && templateIdResolved.length > 12
-          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
-          : templateIdResolved;
-      logEvent('report.pdfPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
-
-      try {
-        const existingRecordId = resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        });
-        const draft = buildDraftPayload({
-          definition,
-          formKey,
-          language: languageRef.current,
-          values: valuesRef.current,
-          lineItems: lineItemsRef.current,
-          existingRecordId
-        });
-        const res = await renderDocTemplatePdfPreviewApi(draft, buttonId);
-        // Ignore stale responses (e.g., user clicked another report or closed the overlay).
-        if (seq !== reportPdfSeqRef.current) return;
-        if (!res?.success || !res?.pdfBase64) {
-          const msg = (res?.message || 'Failed to generate PDF preview.').toString();
-          setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: msg }));
-          try {
-            if (popup && !popup.closed) {
-              popup.document.open();
-              popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${msg}</pre>`);
-              popup.document.close();
-            }
-          } catch {
-            // ignore
-          }
-          logEvent('report.pdfPreview.error', { buttonId, message: msg });
-          return;
-        }
-        const mimeType = (res.mimeType || 'application/pdf').toString();
-        const objectUrl = base64ToPdfObjectUrl(res.pdfBase64, mimeType);
-
-        // Open the blob URL (prefer the pre-opened popup window to avoid async popup blocking).
-        let opened = false;
-        try {
-          if (popup && !popup.closed) {
-            popup.location.href = objectUrl;
-            opened = true;
-          }
-        } catch {
-          opened = false;
-        }
-        if (!opened) {
-          // Fallback: navigate this tab (guaranteed allowed). User can use Back to return.
-          try {
-            globalThis.location?.assign?.(objectUrl);
-            opened = true;
-            } catch {
-              // ignore
-            }
-          }
-
-        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }));
-        logEvent('report.pdfPreview.ok', { buttonId, opened });
-      } catch (err: any) {
-        if (seq !== reportPdfSeqRef.current) return;
-        const uiMessage = resolveUiErrorMessage(err, 'Failed to generate PDF preview.');
-        const logMessage = resolveLogMessage(err, 'Failed to generate PDF preview.');
-        if (uiMessage) {
-          // Always surface errors in-app as well.
-          setReportOverlay(prev =>
-            prev?.buttonId !== buttonId
-              ? prev
-              : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'error', pdfMessage: uiMessage }
-          );
-          try {
-            if (popup && !popup.closed) {
-              popup.document.open();
-              popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${uiMessage}</pre>`);
-              popup.document.close();
-            }
-          } catch {
-            // ignore
-          }
-        } else {
-          setReportOverlay(prev =>
-            prev?.buttonId !== buttonId
-              ? prev
-              : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }
-          );
-        }
-        logEvent('report.pdfPreview.exception', { buttonId, message: logMessage });
-      }
-    },
-    [base64ToPdfObjectUrl, definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
-  );
-
-  const openReport = useCallback(
-    (args: { buttonId: string; popup?: Window | null }) => {
-      void generateReportPdfPreview({ buttonId: args.buttonId, popup: args.popup });
-    },
-    [generateReportPdfPreview]
-  );
-
-  const generateReportMarkdownPreview = useCallback(
-    async (buttonId: string) => {
-      const seq = ++reportPdfSeqRef.current;
-      const parsedRef = parseButtonRef(buttonId || '');
-      const baseId = parsedRef.id;
-      const qIdx = parsedRef.qIdx;
-      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
-      const btn =
-        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
-          ? indexed
-          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
-      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
-
-      setReportOverlay(prev => ({
-        ...(prev || { title: '' }),
-        open: true,
-        kind: 'markdown',
-        buttonId,
-        title,
-        subtitle: definition.title,
-        pdfPhase: 'rendering',
-        pdfObjectUrl: undefined,
-        pdfFileName: undefined,
-        pdfMessage: undefined,
-        markdown: undefined,
-        html: undefined
-      }));
-
-      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
-      const templateIdShort =
-        templateIdResolved && templateIdResolved.length > 12
-          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
-          : templateIdResolved;
-      logEvent('report.markdownPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
-
-      try {
-        const existingRecordId = resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        });
-        const draft = buildDraftPayload({
-          definition,
-          formKey,
-          language: languageRef.current,
-          values: valuesRef.current,
-          lineItems: lineItemsRef.current,
-          existingRecordId
-        });
-
-        const res = await renderMarkdownTemplateApi(draft, buttonId);
-        if (seq !== reportPdfSeqRef.current) return;
-        if (!res?.success || !res?.markdown) {
-          const msg = (res?.message || 'Failed to render preview.').toString();
-          setReportOverlay(prev => {
-            if (!prev?.open || prev.buttonId !== buttonId) return prev;
-            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
-          });
-          logEvent('report.markdownPreview.error', { buttonId, message: msg });
-          return;
-        }
-
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return {
-            ...prev,
-            open: true,
-            kind: 'markdown',
-            pdfPhase: 'ready',
-            markdown: res.markdown,
-            html: undefined,
-            pdfMessage: undefined
-          };
-        });
-        logEvent('report.markdownPreview.ok', { buttonId, markdownLength: (res.markdown || '').toString().length });
-      } catch (err: any) {
-        if (seq !== reportPdfSeqRef.current) return;
-        const uiMessage = resolveUiErrorMessage(err, 'Failed to render preview.');
-        const logMessage = resolveLogMessage(err, 'Failed to render preview.');
-        if (uiMessage) {
-          setReportOverlay(prev => {
-            if (prev?.buttonId !== buttonId) return prev;
-            return { ...prev, open: true, pdfPhase: 'error', pdfMessage: uiMessage };
-          });
-        } else {
-          setReportOverlay(prev => {
-            if (prev?.buttonId !== buttonId) return prev;
-            return { ...prev, open: false, pdfPhase: 'idle', pdfMessage: undefined };
-          });
-        }
-        logEvent('report.markdownPreview.exception', { buttonId, message: logMessage });
-      }
-    },
-    [definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
-  );
-
-  const openMarkdown = useCallback(
-    (buttonId: string) => {
-      void generateReportMarkdownPreview(buttonId);
-    },
-    [generateReportMarkdownPreview]
-  );
-
-  const generateReportHtmlPreview = useCallback(
-    async (buttonId: string) => {
-      const seq = ++reportPdfSeqRef.current;
-      const parsedRef = parseButtonRef(buttonId || '');
-      const baseId = parsedRef.id;
-      const qIdx = parsedRef.qIdx;
-      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
-      const btn =
-        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
-          ? indexed
-          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
-      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
-
-      setReportOverlay(prev => ({
-        ...(prev || { title: '' }),
-        open: true,
-        kind: 'html',
-        buttonId,
-        title,
-        subtitle: definition.title,
-        pdfPhase: 'rendering',
-        pdfObjectUrl: undefined,
-        pdfFileName: undefined,
-        pdfMessage: undefined,
-        markdown: undefined,
-        html: undefined,
-        htmlAllowScripts: false
-      }));
-
-      const templateIdResolved = btn ? resolveTemplateIdForClient((btn as any)?.button?.templateId, languageRef.current) : undefined;
-      const templateIdShort =
-        templateIdResolved && templateIdResolved.length > 12
-          ? `${templateIdResolved.slice(0, 5)}…${templateIdResolved.slice(-5)}`
-          : templateIdResolved;
-      logEvent('report.htmlPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, templateId: templateIdShort || null });
-
-      try {
-        const existingRecordId = resolveExistingRecordId({
-          selectedRecordId: selectedRecordIdRef.current,
-          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
-          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-        });
-        const draft = buildDraftPayload({
-          definition,
-          formKey,
-          language: languageRef.current,
-          values: valuesRef.current,
-          lineItems: lineItemsRef.current,
-          existingRecordId
-        });
-        const metaSource: any = selectedRecordSnapshotRef.current || lastSubmissionMetaRef.current || null;
-        if (metaSource?.status !== undefined && metaSource?.status !== null) {
-          (draft as any).status = metaSource.status;
-        }
-        if (metaSource?.createdAt !== undefined && metaSource?.createdAt !== null) {
-          (draft as any).createdAt = metaSource.createdAt;
-        }
-        if (metaSource?.updatedAt !== undefined && metaSource?.updatedAt !== null) {
-          (draft as any).updatedAt = metaSource.updatedAt;
-        }
-        if (metaSource?.pdfUrl !== undefined && metaSource?.pdfUrl !== null) {
-          (draft as any).pdfUrl = metaSource.pdfUrl;
-        }
-
-        const templateIdMap = btn ? (btn as any)?.button?.templateId : undefined;
-        const resolved = resolveTemplateIdForRecord(templateIdMap, draft.values || {}, draft.language);
-        const useBundled = isBundledHtmlTemplateId(resolved || '');
-        if (useBundled) {
-          logEvent('report.htmlPreview.bundle.start', { buttonId: baseId, qIdx: qIdx ?? null });
-        }
-        const res = await renderHtmlTemplateApi(draft, buttonId);
-        if (seq !== reportPdfSeqRef.current) return;
-        if (!res?.success || !res?.html) {
-          const msg = (res?.message || 'Failed to render preview.').toString();
-          setReportOverlay(prev => {
-            if (!prev?.open || prev.buttonId !== buttonId) return prev;
-            return { ...prev, pdfPhase: 'error', pdfMessage: msg };
-          });
-          logEvent(useBundled ? 'report.htmlPreview.bundle.error' : 'report.htmlPreview.error', { buttonId, message: msg });
-          return;
-        }
-
-        setReportOverlay(prev => {
-          if (prev?.buttonId !== buttonId) return prev;
-          return {
-            ...prev,
-            open: true,
-            kind: 'html',
-            pdfPhase: 'ready',
-            html: res.html,
-            markdown: undefined,
-            pdfMessage: undefined,
-            htmlAllowScripts: useBundled
-          };
-        });
-        logEvent(useBundled ? 'report.htmlPreview.bundle.ok' : 'report.htmlPreview.ok', {
-          buttonId,
-          htmlLength: (res.html || '').toString().length
-        });
-      } catch (err: any) {
-        if (seq !== reportPdfSeqRef.current) return;
-        const uiMessage = resolveUiErrorMessage(err, 'Failed to render preview.');
-        const logMessage = resolveLogMessage(err, 'Failed to render preview.');
-        if (uiMessage) {
-          setReportOverlay(prev => {
-            if (prev?.buttonId !== buttonId) return prev;
-            return { ...prev, open: true, pdfPhase: 'error', pdfMessage: uiMessage };
-          });
-        } else {
-          setReportOverlay(prev => {
-            if (prev?.buttonId !== buttonId) return prev;
-            return { ...prev, open: false, pdfPhase: 'idle', pdfMessage: undefined };
-          });
-        }
-        logEvent('report.htmlPreview.exception', { buttonId, message: logMessage });
-      }
-    },
-    [definition, formKey, logEvent, parseButtonRef, resolveLogMessage, resolveTemplateIdForClient, resolveUiErrorMessage]
-  );
-
-  const openHtml = useCallback(
-    (buttonId: string) => {
-      void generateReportHtmlPreview(buttonId);
-    },
-    [generateReportHtmlPreview]
-  );
+  const {
+    openPdfPreviewWindow,
+    openReport,
+    openMarkdown,
+    openHtml
+  } = useAppReportPreviewActions({
+    definition,
+    formKey,
+    languageRef,
+    valuesRef,
+    lineItemsRef,
+    selectedRecordIdRef,
+    selectedRecordSnapshotRef,
+    lastSubmissionMetaRef,
+    reportPdfSeqRef,
+    setReportOverlay,
+    parseButtonRef,
+    logEvent,
+    resolveUiErrorMessage,
+    resolveLogMessage
+  });
 
   const createRecordFromPreset = useCallback(
     async (args: { buttonId: string; presetValues: Record<string, any> }) => {
