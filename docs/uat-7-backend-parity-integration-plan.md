@@ -358,9 +358,14 @@ Twenty-fifth-pass results:
 - `App.tsx`: extracted the blank create/submit-another flow into `useCreateNewRecordAction` and consolidated shared create-flow reset wiring between blank and preset create actions. Current size: 15,089 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-sixth-pass results:
+
+- `App.tsx`: extracted the update-record custom button pipeline into `useUpdateRecordButtonAction`, including confirmation, dependency preview, busy-state handling, and mutation execution. Current size: 14,910 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 15,089 lines.
+- `App.tsx`: 14,910 lines.
 - `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,618 lines.
 
