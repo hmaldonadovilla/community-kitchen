@@ -197,6 +197,7 @@ import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowR
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { LineItemTableModeRenderer } from '../../features/lineItems/components/LineItemTableModeRenderer';
+import { SubgroupOpenStackRenderer } from '../../features/lineItems/components/SubgroupOpenStackRenderer';
 import {
   LineItemOverlayOpenInlineButton,
   LineItemOverlayOpenReplaceField,
@@ -4866,170 +4867,28 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       : subIds.filter(id => !fieldTriggeredSubgroupIdSet.has(id)))
                   : [];
 
-              const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
               const renderSubgroupOpenStack = (
                 subIdsToRender: string[],
                 opts?: { sourceFieldId?: string; variant?: 'stack' | 'inline' }
-              ) => {
-                const variant = (opts?.variant || 'stack').toString().toLowerCase() === 'inline' ? 'inline' : 'stack';
-                const list = Array.isArray(subIdsToRender) ? Array.from(new Set(subIdsToRender.filter(Boolean))) : [];
-                if (!list.length) return null;
-                const containerClass = variant === 'inline' ? 'ck-label-actions' : 'ck-subgroup-open-stack';
-                return (
-                  <div className={containerClass}>
-                    {list.map(subId => {
-                      const fullSubKey = buildSubgroupKey(q.id, row.id, subId);
-                      const subHasError = errorIndex.subgroupErrors.has(fullSubKey);
-                      const subRows = (lineItems[fullSubKey] || []) as any[];
-                      const subCfg = (subGroups || []).find(s => resolveSubgroupKey(s) === subId) as any;
-                      const subFields = ((subCfg as any)?.fields || []) as any[];
-                      const label = subIdToLabel[subId] || subId;
-                      const subUi = (subCfg as any)?.ui as any;
-                      const isSubProgressive =
-                        subUi?.mode === 'progressive' &&
-                        Array.isArray(subUi?.collapsedFields) &&
-                        (subUi?.collapsedFields || []).length > 0;
-                      const subDefaultCollapsed = subUi?.defaultCollapsed !== undefined ? !!subUi.defaultCollapsed : true;
-                      const subCollapsedFieldConfigs = isSubProgressive ? (subUi?.collapsedFields || []) : [];
-                      const subExpandGate = (subUi?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
-
-                      const isSubRowDisabledByExpandGate = (subRow: any): boolean => {
-                        if (!isSubProgressive) return false;
-                        if (subExpandGate === 'always') return false;
-                        if (!subCollapsedFieldConfigs.length) return false;
-                        const subCollapseKey = `${fullSubKey}::${subRow.id}`;
-                        const subRowCollapsed = collapsedRows[subCollapseKey] ?? subDefaultCollapsed;
-                        if (!subRowCollapsed) return false;
-
-                        const groupCtx2: VisibilityContext = {
-                          getValue: fid => resolveTopValue(fid),
-                          getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
-                          getLineItems: groupId => lineItems?.[groupId] || [],
-                          getLineItemKeys: () => Object.keys(lineItems || {})
-                        };
-                        const isHidden2 = (fieldId: string) => {
-                          const target = (subFields || []).find((f: any) => f?.id === fieldId) as any;
-                          if (!target) return false;
-                          return shouldHideField(target.visibility, groupCtx2, { rowId: subRow?.id, linePrefix: fullSubKey });
-                        };
-                        const blocked: string[] = [];
-                        (subCollapsedFieldConfigs || []).forEach((cfg: any) => {
-                          const fid = cfg?.fieldId ? cfg.fieldId.toString() : '';
-                          if (!fid) return;
-                          const field = (subFields || []).find((f: any) => f?.id === fid) as any;
-                          if (!field) return;
-                          const hideField = shouldHideField(field.visibility, groupCtx2, { rowId: subRow?.id, linePrefix: fullSubKey });
-                          if (hideField) return;
-                          const val = (subRow?.values || {})[field.id];
-                          if (field.required && isEmptyValue(val as any)) {
-                            blocked.push(field.id);
-                            return;
-                          }
-                          const rules = Array.isArray(field.validationRules)
-                            ? field.validationRules.filter((r: any) => r?.then?.fieldId === field.id)
-                            : [];
-                          if (!rules.length) return;
-                          const rulesCtx: any = {
-                            ...groupCtx2,
-                            getValue: (fieldId: string) =>
-                              Object.prototype.hasOwnProperty.call(subRow?.values || {}, fieldId)
-                                ? (subRow?.values || {})[fieldId]
-                                : (Object.prototype.hasOwnProperty.call(row.values || {}, fieldId) ? (row.values || {})[fieldId] : values[fieldId]),
-                            language,
-                            phase: 'submit',
-                            isHidden: isHidden2
-                          };
-                          const errs = validateRules(rules, rulesCtx);
-                          if (errs.length) blocked.push(field.id);
-                        });
-                        return Array.from(new Set(blocked)).length > 0;
-                      };
-
-                      const subgroupIsComplete = (() => {
-                        if (!subRows.length) return false;
-                        if (!subFields.length) return true;
-                        let hasAnyEnabledRow = false;
-                        for (const subRow of subRows) {
-                          if (isSubRowDisabledByExpandGate(subRow)) continue;
-                          hasAnyEnabledRow = true;
-                          const subCtx: VisibilityContext = {
-                            getValue: fid => resolveTopValue(fid),
-                            getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
-                            getLineItems: groupId => lineItems?.[groupId] || [],
-                            getLineItemKeys: () => Object.keys(lineItems || {})
-                          };
-                          for (const field of subFields) {
-                            if (!field?.required) continue;
-                            const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: fullSubKey });
-                            if (hide) continue;
-                            const mapped = field.valueMap
-                              ? resolveValueMapValue(
-                                  field.valueMap,
-                                  (fid: string) => {
-                                    if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
-                                    if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                                    return resolveTopValue(fid);
-                                  },
-                                  { language, targetOptions: toOptionSet(field) }
-                                )
-                              : undefined;
-                            const raw = field.valueMap ? mapped : (subRow?.values || {})[field.id];
-                            const filled =
-                              field.type === 'FILE_UPLOAD'
-                                ? isUploadValueComplete({
-                                    value: raw as any,
-                                    uploadConfig: (field as any).uploadConfig,
-                                    required: true
-                                  })
-                                : !isEmptyValue(raw as any);
-                            if (!filled) return false;
-                          }
-                        }
-                        if (!hasAnyEnabledRow) return false;
-                        return true;
-                      })();
-
-                      const pillClass = subHasError
-                        ? 'ck-progress-bad'
-                        : subgroupIsComplete
-                          ? 'ck-progress-good'
-                          : subRows.length
-                            ? 'ck-progress-info'
-                            : 'ck-progress-neutral';
-
-                      const pillBaseClass =
-                        variant === 'inline'
-                          ? 'ck-progress-pill ck-subgroup-open-pill-inline'
-                          : 'ck-progress-pill ck-upload-pill-btn ck-subgroup-open-pill';
-
-                      return (
-                        <button
-                          key={`${fullSubKey}-open`}
-                          type="button"
-                          className={`${pillBaseClass} ck-list-row-action-btn ${pillClass}`}
-                          aria-label={`${tapToOpenLabel} ${label}`}
-                          onClick={() => {
-                            onDiagnostic?.('subgroup.open.tap', {
-                              groupId: q.id,
-                              rowId: row.id,
-                              subId,
-                              sourceFieldId: opts?.sourceFieldId || null
-                            });
-                            openSubgroupOverlay(fullSubKey);
-                          }}
-                        >
-                          {pillClass === 'ck-progress-good' ? (
-                            <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
-                          ) : null}
-                          <span>{label}</span>
-                          <span className="ck-progress-label">{tapToOpenLabel}</span>
-                          <span className="ck-progress-caret">▸</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              };
+              ) => (
+                <SubgroupOpenStackRenderer
+                  parentGroupId={q.id}
+                  parentRow={row}
+                  subIdsToRender={subIdsToRender}
+                  subIdToLabel={subIdToLabel}
+                  subGroups={subGroups || []}
+                  lineItems={lineItems}
+                  values={values}
+                  collapsedRows={collapsedRows}
+                  errorIndex={errorIndex}
+                  language={language}
+                  sourceFieldId={opts?.sourceFieldId}
+                  variant={opts?.variant}
+                  resolveTopValue={resolveTopValue}
+                  openSubgroupOverlay={openSubgroupOverlay}
+                  onDiagnostic={onDiagnostic}
+                />
+              );
               const collapsedFieldsOrdered = collapsedFieldOrder
                 .map(fid => allFields.find(f => f.id === fid))
                 .filter(Boolean) as any[];
