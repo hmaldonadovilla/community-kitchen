@@ -63,6 +63,7 @@ import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
 import { AppRecordLoadingPlaceholder } from './components/app/AppRecordLoadingPlaceholder';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
+import { useAppHeaderNavigation } from './components/app/useAppHeaderNavigation';
 import { useAppViewportState } from './components/app/useAppViewportState';
 import { matchesWhenClause } from '../rules/visibility';
 import { type ReportOverlayState } from './components/app/ReportOverlay';
@@ -279,7 +280,6 @@ import {
 } from './app/copyProfile';
 import { hasInvalidRejectDedupKeyValues, shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
-import { buildLandingUrl, navigateToTopLevel, resolveAdminEnabled, resolveHeaderDrawerEnabled, resolveServiceUrl } from './app/headerNavigation';
 import { buttonHasWrappedText, ensureButtonTextSpans } from './app/buttonTextWrap';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
@@ -15676,30 +15676,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       />
     );
   }, [autoSaveEnabled, draftSave.message, draftSave.phase, envTag, isClosedRecord, language, view]);
-  const headerServiceUrl = useMemo(() => resolveServiceUrl(), []);
-  const headerAdminEnabled = useMemo(() => resolveAdminEnabled(), []);
-  const headerDrawerEnabled = useMemo(
-    () => resolveHeaderDrawerEnabled(definition.appHeader?.sidebarEnabled),
-    [definition.appHeader?.sidebarEnabled]
-  );
-  const headerLayout = view === 'list' ? 'home' : 'detail';
-  const headerBackLabel = useMemo(() => `← ${tSystem('app.apps', language, 'Apps')}`, [language]);
-  const handleHeaderBack = useCallback(() => {
-    const targetUrl = buildLandingUrl(headerServiceUrl, headerAdminEnabled);
-    logEvent('ui.header.back.navigate', { targetUrl });
-    const seq = navigateHomeBusy.lock({
-      title: tSystem('navigation.waitTitle', language, 'Please wait'),
-      message: tSystem('navigation.waitForms', language, 'Please wait while we open the forms page...')
-    });
-    globalThis.requestAnimationFrame?.(() => {
-      globalThis.requestAnimationFrame?.(() => {
-        navigateToTopLevel(targetUrl);
-        globalThis.setTimeout?.(() => {
-          navigateHomeBusy.unlock(seq, { targetUrl });
-        }, 1500);
-      });
-    });
-  }, [headerAdminEnabled, headerServiceUrl, language, logEvent, navigateHomeBusy]);
+  const {
+    drawerEnabled: headerDrawerEnabled,
+    layout: headerLayout,
+    backLabel: headerBackLabel,
+    handleBack: handleHeaderBack
+  } = useAppHeaderNavigation({
+    sidebarEnabled: definition.appHeader?.sidebarEnabled,
+    language,
+    view,
+    navigateHomeBusy,
+    onDiagnostic: logEvent
+  });
 
   const {
     dedupDialogConflict,
