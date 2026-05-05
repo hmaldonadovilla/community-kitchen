@@ -133,6 +133,7 @@ import { LineItemGroupOverlayPill } from '../features/lineItems/components/LineI
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import { TopFileUploadQuestion } from '../features/uploads/components/TopFileUploadQuestion';
 import { LineFileUploadQuestion } from '../features/uploads/components/LineFileUploadQuestion';
+import { LineFileUploadTableOpenControl } from '../features/uploads/components/LineFileUploadTableOpenControl';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
@@ -10878,42 +10879,22 @@ const FormView: React.FC<FormViewProps> = ({
                                 }
 
                                 if (field.type === 'FILE_UPLOAD') {
-                                  const items = toUploadItems(subRow.values[field.id]);
-                                  const count = items.length;
-                                  if (renderAsLabel) {
-                                    return (
-                                      <div className="ck-line-item-table__value">
-                                        {resolveLineItemTableReadOnlyDisplay({
-                                          baseValue: count ? `${count}` : '',
-                                          field,
-                                          rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                          language
-                                        })}
-                                      </div>
-                                    );
-                                  }
                                   return (
-                                    <div className="ck-line-item-table__control" {...controlAttrs}>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (submitting) return;
-                                          openFileOverlay({
-                                            scope: 'line',
-                                            title: resolveFieldLabel(field, language, field.id),
-                                            group: subGroupDef,
-                                            rowId: subRow.id,
-                                            field,
-                                            fieldPath
-                                          });
-                                        }}
-                                        style={buttonStyles.secondary}
-                                        disabled={submitting}
-                                      >
-                                        {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
-                                      </button>
-                                      {renderErrors()}
-                                    </div>
+                                    <LineFileUploadTableOpenControl
+                                      group={subGroupDef}
+                                      rowId={subRow.id}
+                                      field={field}
+                                      fieldPath={fieldPath}
+                                      value={subRow.values[field.id] as FieldValue | undefined}
+                                      rowValues={(subRow.values || {}) as Record<string, FieldValue>}
+                                      language={language}
+                                      submitting={submitting}
+                                      renderAsLabel={renderAsLabel}
+                                      hasError={!!errors[fieldPath]}
+                                      hasWarning={hasWarning(fieldPath)}
+                                      errorNode={renderErrors()}
+                                      openFileOverlay={openFileOverlay}
+                                    />
                                   );
                                 }
 
@@ -11688,42 +11669,22 @@ const FormView: React.FC<FormViewProps> = ({
                       }
 
                       if (field.type === 'FILE_UPLOAD') {
-                        const items = toUploadItems(subRow.values[field.id]);
-                        const count = items.length;
-                        if (renderAsLabel) {
-                          return (
-                            <div className="ck-line-item-table__value">
-                              {resolveLineItemTableReadOnlyDisplay({
-                                baseValue: count ? `${count}` : '',
-                                field,
-                                rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                language
-                              })}
-                            </div>
-                          );
-                        }
                         return (
-                          <div className="ck-line-item-table__control" {...controlAttrs}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (submitting) return;
-                                openFileOverlay({
-                                  scope: 'line',
-                                  title: resolveFieldLabel(field, language, field.id),
-                                  group: subGroupDef,
-                                  rowId: subRow.id,
-                                  field,
-                                  fieldPath
-                                });
-                              }}
-                              style={buttonStyles.secondary}
-                              disabled={submitting}
-                            >
-                              {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
-                            </button>
-                            {renderErrors()}
-                          </div>
+                          <LineFileUploadTableOpenControl
+                            group={subGroupDef}
+                            rowId={subRow.id}
+                            field={field}
+                            fieldPath={fieldPath}
+                            value={subRow.values[field.id] as FieldValue | undefined}
+                            rowValues={(subRow.values || {}) as Record<string, FieldValue>}
+                            language={language}
+                            submitting={submitting}
+                            renderAsLabel={renderAsLabel}
+                            hasError={!!errors[fieldPath]}
+                            hasWarning={hasWarning(fieldPath)}
+                            errorNode={renderErrors()}
+                            openFileOverlay={openFileOverlay}
+                          />
                         );
                       }
 
