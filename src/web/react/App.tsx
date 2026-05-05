@@ -79,6 +79,7 @@ import { useAppPerfTools } from './components/app/useAppPerfTools';
 import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
 import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { useAppDialogState } from './components/app/useAppDialogState';
+import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -564,9 +565,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       : null
   );
   const { debugEnabled, logEvent } = useAppDiagnostics();
-  const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
-  const [ingredientNameBlurredForAutoSave, setIngredientNameBlurredForAutoSave] = useState<boolean>(false);
-  const autoSaveNoticeSeenRef = useRef<boolean>(false);
+  /**
+   * Tracks whether the current form session represents a "create new record" flow (blank/new preset/copy),
+   * even after autosave generates a record id. Used to enforce dedup rules on drafts without breaking edits
+   * of existing records loaded from the list.
+   */
+  const createFlowRef = useRef<boolean>(false);
   const homeLoadStartedAtRef = useRef<number>(getPerfNow());
   const homeTimeToDataMeasuredRef = useRef(false);
   const homePerfInitialisedRef = useRef(false);
@@ -682,6 +686,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition.fieldDisableRules]
   );
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
+  const {
+    autoSaveNoticeOpen,
+    autoSaveNoticeTitle,
+    autoSaveNoticeMessage,
+    autoSaveNoticeConfirmLabel,
+    autoSaveNoticeCancelLabel,
+    dismissAutoSaveNotice,
+    setIngredientNameBlurredForAutoSave
+  } = useAutoSaveNotice({
+    autoSaveEnabled,
+    formKey,
+    language,
+    view,
+    ingredientsFormActive,
+    ingredientCreateAutoSaveReady,
+    createFlowRef,
+    logEvent
+  });
   const autoSaveEnableFieldIds = useMemo(
     () => normalizeFieldIdList((definition.autoSave as any)?.enableWhenFields ?? (definition.autoSave as any)?.enableFields),
     [definition.autoSave]
@@ -768,10 +790,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     setCopyCurrentRecordDialog,
     closeCopyCurrentRecordDialog
   } = useAppDialogState({ language, logEvent });
-  const autoSaveNoticeStorageKey = useMemo(() => {
-    const key = (formKey || '').toString().trim() || 'default';
-    return `ck.autosaveNotice.${key}`;
-  }, [formKey]);
 
   const fieldChangePendingRef = useRef<Record<string, FieldChangePending>>({});
   const fieldChangeActiveRef = useRef<FieldChangePending | null>(null);
@@ -2195,6 +2213,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       openFieldChangeDialog,
       prefetchedSummaryHtml,
       setErrors,
+      setIngredientNameBlurredForAutoSave,
       triggerDedupDeleteOnKeyChange
     ]
   );
@@ -3779,12 +3798,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const recordRowNumberRef = useRef<number | null>(
     record && Number.isFinite(Number((record as any).__rowNumber)) ? Number((record as any).__rowNumber) : null
   );
-  /**
-   * Tracks whether the current form session represents a "create new record" flow (blank/new preset/copy),
-   * even after autosave generates a record id. Used to enforce dedup rules on drafts without breaking edits
-   * of existing records loaded from the list.
-   */
-  const createFlowRef = useRef<boolean>(false);
   /**
    * In create-flow, autosave must NOT create drafts until the user actually changes a field value.
    * Defaults/derived values/preset values alone should not trigger autosave.
@@ -8058,14 +8071,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const summaryViewEnabled = definition.summaryViewEnabled !== false;
   const copyCurrentRecordEnabled = definition.copyCurrentRecordEnabled !== false;
-  const autoSaveNoticeTitle = tSystem('autosaveNotice.title', language, 'Autosave is on');
-  const autoSaveNoticeMessage = tSystem(
-    'autosaveNotice.message',
-    language,
-    'This form saves your changes automatically in the background. Look for the status indicators in the top right corner of the form.'
-  );
-  const autoSaveNoticeConfirmLabel = tSystem('autosaveNotice.confirm', language, 'Got it');
-  const autoSaveNoticeCancelLabel = tSystem('autosaveNotice.cancel', language, tSystem('common.close', language, 'Close'));
   const finalSubmitButtonLabelConfig = definition.submitButtonLabel || definition.steps?.stepSubmitLabel;
   const submitButtonLabelResolved = useMemo(
     () =>
@@ -8349,64 +8354,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         tSystem('submit.confirmMessage', language, 'Are you ready to submit this record?')
       ),
     [submitConfirmationDialogConfig?.message, language, resolveDialogTemplate]
-  );
-
-  useEffect(() => {
-    autoSaveNoticeSeenRef.current = false;
-    setAutoSaveNoticeOpen(false);
-    setIngredientNameBlurredForAutoSave(false);
-  }, [autoSaveNoticeStorageKey]);
-
-  useEffect(() => {
-    if (!autoSaveEnabled || view !== 'form') return;
-    if (ingredientsFormActive && createFlowRef.current) {
-      if (!ingredientCreateAutoSaveReady) return;
-      if (!ingredientNameBlurredForAutoSave) return;
-    }
-    if (autoSaveNoticeSeenRef.current) return;
-    let seen = false;
-    try {
-      seen = globalThis.localStorage?.getItem(autoSaveNoticeStorageKey) === '1';
-    } catch (err: any) {
-      logEvent('autosave.notice.readFailed', { message: err?.message || err || 'unknown' });
-    }
-    if (seen) {
-      autoSaveNoticeSeenRef.current = true;
-      return;
-    }
-    autoSaveNoticeSeenRef.current = true;
-    setAutoSaveNoticeOpen(true);
-    logEvent('autosave.notice.open', {
-      formKey: formKey || null,
-      mode: createFlowRef.current ? 'create' : 'edit'
-    });
-  }, [
-    autoSaveEnabled,
-    autoSaveNoticeStorageKey,
-    formKey,
-    ingredientCreateAutoSaveReady,
-    ingredientNameBlurredForAutoSave,
-    ingredientsFormActive,
-    logEvent,
-    view
-  ]);
-
-  const dismissAutoSaveNotice = useCallback(
-    (reason: 'confirm' | 'cancel') => {
-      setAutoSaveNoticeOpen(false);
-      autoSaveNoticeSeenRef.current = true;
-      try {
-        globalThis.localStorage?.setItem(autoSaveNoticeStorageKey, '1');
-      } catch (err: any) {
-        logEvent('autosave.notice.persistFailed', { message: err?.message || err || 'unknown' });
-      }
-      logEvent('autosave.notice.dismiss', {
-        formKey: formKey || null,
-        mode: createFlowRef.current ? 'create' : 'edit',
-        reason
-      });
-    },
-    [autoSaveNoticeStorageKey, formKey, logEvent]
   );
 
   const requestSubmit = useCallback(() => {
