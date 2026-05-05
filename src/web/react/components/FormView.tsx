@@ -109,6 +109,11 @@ import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
 import { SearchableMultiSelect } from './form/SearchableMultiSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
+import {
+  TopOverlayOpenInlineButton,
+  TopOverlayOpenReplaceButton,
+  TopReadOnlyField
+} from './form/TopFieldChrome';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
 import { SectionInstruction } from './form/SectionInstruction';
@@ -202,7 +207,6 @@ import {
   splitParagraphDisclaimerValue
 } from '../app/paragraphDisclaimer';
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
-import { validateRules } from '../../rules/validation';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { GuidedContextHeader } from '../features/steps/components/GuidedContextHeader';
@@ -2937,6 +2941,16 @@ const FormView: React.FC<FormViewProps> = ({
     [definition.questions, resolveSubgroupDefs]
   );
 
+  const matchesOverlayRowFilter = useCallback((rowValues: Record<string, FieldValue>, filter?: any): boolean => {
+    if (!filter) return true;
+    const includeWhen = (filter as any)?.includeWhen;
+    const excludeWhen = (filter as any)?.excludeWhen;
+    const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
+    const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
+    const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
+    return includeOk && !excludeMatch;
+  }, []);
+
   const attemptOverlayDetailAutoOpen = useCallback(
     (args: {
       group: WebQuestionDefinition;
@@ -3019,7 +3033,7 @@ const FormView: React.FC<FormViewProps> = ({
         source: source === 'blur' ? 'headerComplete.blur' : 'headerComplete'
       });
     },
-    [lineItemGroupOverlay, onDiagnostic, subgroupOverlay]
+    [lineItemGroupOverlay, matchesOverlayRowFilter, onDiagnostic, subgroupOverlay]
   );
 
   useFormBlurCoordinator({
@@ -5355,16 +5369,6 @@ const FormView: React.FC<FormViewProps> = ({
     });
     return targets;
   }, [definition.questions, subgroupPathIndex]);
-
-  const matchesOverlayRowFilter = useCallback((rowValues: Record<string, FieldValue>, filter?: any): boolean => {
-    if (!filter) return true;
-    const includeWhen = (filter as any)?.includeWhen;
-    const excludeWhen = (filter as any)?.excludeWhen;
-    const rowCtx: VisibilityContext = { getValue: fid => (rowValues as any)[fid] };
-    const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
-    const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
-    return includeOk && !excludeMatch;
-  }, []);
 
   useEffect(() => {
     const activeGroupKey =
@@ -8552,29 +8556,19 @@ const FormView: React.FC<FormViewProps> = ({
     // In paired grids, keep the label in layout so control rows align even when a label is hidden/missing.
     const labelStyle = hideFieldLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
     const renderAsLabel = q.ui?.renderAsLabel === true || q.readOnly === true;
-    const renderReadOnly = (display: React.ReactNode, opts?: { stacked?: boolean; inline?: boolean }) => {
-      const cls = `${q.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-        opts?.stacked ? ' ck-label-stacked' : opts?.inline ? ' ck-label-inline' : ''
-      } ck-readonly-field`;
-      const label = resolveFieldLabel(q, language, q.id);
-      return (
-        <div
-          key={q.id}
-          className={cls}
-          data-field-path={q.id}
-          data-has-error={errors[q.id] ? 'true' : undefined}
-          data-has-warning={hasWarning(q.id) ? 'true' : undefined}
-        >
-          <label style={labelStyle}>
-            {label}
-            {q.required && <RequiredStar />}
-          </label>
-          <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
-          {errors[q.id] && <div className="error">{errors[q.id]}</div>}
-          {renderWarnings(q.id)}
-        </div>
-      );
-    };
+    const renderReadOnly = (display: React.ReactNode, opts?: { stacked?: boolean; inline?: boolean }) => (
+      <TopReadOnlyField
+        q={q}
+        language={language}
+        labelStyle={labelStyle}
+        errors={errors}
+        hasWarning={hasWarning}
+        renderWarnings={renderWarnings}
+        display={display}
+        stacked={opts?.stacked}
+        inline={opts?.inline}
+      />
+    );
 
     const overlayOpenAction = resolveOverlayOpenActionForQuestion(q);
     const overlayOpenRenderMode = overlayOpenAction?.renderMode === 'inline' ? 'inline' : 'replace';
@@ -8688,76 +8682,37 @@ const FormView: React.FC<FormViewProps> = ({
         onConfirm: runReset
       });
 	    };
-	    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => {
-	      const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-	      const tone = overlayOpenAction?.tone === 'secondary' ? 'secondary' : 'primary';
-	      const baseStyle = tone === 'secondary' ? buttonStyles.secondary : buttonStyles.primary;
-	      const actionButtonStyle = showResetButton
-	        ? { ...baseStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' }
-	        : baseStyle;
-	      return (
-	        <div
-	          key={q.id}
-	          className={`field inline-field ck-full-width${labelLayoutClass}`}
-	          data-field-path={q.id}
-          data-has-error={errors[q.id] ? 'true' : undefined}
-          data-has-warning={hasWarning(q.id) ? 'true' : undefined}
-        >
-          <label style={labelStyle}>
-            {resolveLabel(q, language)}
-            {q.required && <RequiredStar />}
-          </label>
-          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-            <button
-              type="button"
-              onClick={handleOverlayOpenAction}
-              disabled={overlayOpenDisabled}
-              style={withDisabled(actionButtonStyle, overlayOpenDisabled)}
-            >
-              {overlayOpenButtonText(displayValue)}
-            </button>
-	            {showResetButton ? (
-	              <button
-	                type="button"
-	                onClick={handleOverlayOpenActionReset}
-	                disabled={overlayOpenActionResetDisabled}
-	                aria-label={tSystem('lineItems.remove', language, 'Remove')}
-	                style={withDisabled(
-	                  {
-	                    ...baseStyle,
-	                    borderTopLeftRadius: 0,
-	                    borderBottomLeftRadius: 0,
-	                    padding: '0 14px',
-	                    minWidth: 44
-	                  },
-	                  overlayOpenActionResetDisabled
-                )}
-              >
-                <TrashIcon size={40} />
-              </button>
-            ) : null}
-          </div>
-          {errors[q.id] && <div className="error">{errors[q.id]}</div>}
-          {renderWarnings(q.id)}
-        </div>
+    const renderOverlayOpenReplaceButton = (displayValue?: string | null) => (
+      <TopOverlayOpenReplaceButton
+        q={q}
+        language={language}
+        labelStyle={labelStyle}
+        errors={errors}
+        hasWarning={hasWarning}
+        renderWarnings={renderWarnings}
+        labelLayoutClass={labelLayoutClass}
+        showResetButton={overlayOpenAction?.hideTrashIcon !== true}
+        tone={overlayOpenAction?.tone === 'secondary' ? 'secondary' : 'primary'}
+        displayValue={displayValue}
+        disabled={overlayOpenDisabled}
+        resetDisabled={overlayOpenActionResetDisabled}
+        buttonText={overlayOpenButtonText}
+        onOpen={handleOverlayOpenAction}
+        onReset={handleOverlayOpenActionReset}
+      />
+    );
+    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
+      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
+      return (
+        <TopOverlayOpenInlineButton
+          tone={overlayOpenAction.tone === 'secondary' ? 'secondary' : 'primary'}
+          displayValue={displayValue}
+          disabled={overlayOpenDisabled}
+          buttonText={overlayOpenButtonText}
+          onOpen={handleOverlayOpenAction}
+        />
       );
     };
-	    const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
-	      if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
-	      const tone = overlayOpenAction.tone === 'secondary' ? 'secondary' : 'primary';
-	      return (
-	        <div style={{ marginTop: 8 }}>
-	          <button
-	            type="button"
-	            onClick={handleOverlayOpenAction}
-	            disabled={overlayOpenDisabled}
-	            style={withDisabled(tone === 'primary' ? buttonStyles.primary : buttonStyles.secondary, overlayOpenDisabled)}
-	          >
-	            {overlayOpenButtonText(displayValue)}
-	          </button>
-	        </div>
-	      );
-	    };
 
     switch (q.type) {
       case 'BUTTON': {
