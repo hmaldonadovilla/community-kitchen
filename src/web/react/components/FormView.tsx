@@ -61,7 +61,6 @@ import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
-import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
 import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
 import {
   resolveGuidedClearOnChangeOrderedFieldIdsAction,
@@ -132,7 +131,6 @@ import {
 import { useChoiceControlRenderer } from './form/useChoiceControlRenderer';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
-import { SectionInstruction } from './form/SectionInstruction';
 import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
@@ -226,6 +224,7 @@ import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClau
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { GuidedContextHeader } from '../features/steps/components/GuidedContextHeader';
 import { GuidedFormContent } from '../features/steps/components/GuidedFormContent';
+import { GuidedLineGroupTargetRenderer } from '../features/steps/components/GuidedLineGroupTargetRenderer';
 import { renderGuidedTargetsWithPairing } from '../features/steps/components/renderGuidedTargetsWithPairing';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import {
@@ -11798,118 +11797,37 @@ const FormView: React.FC<FormViewProps> = ({
       const groupQ = definition.questions.find(q2 => q2.id === id && q2.type === 'LINE_ITEM_GROUP');
       if (!groupQ) return null;
 
-      const targetLabel =
-        (target as any).label !== undefined && (target as any).label !== null
-          ? resolveLocalizedString((target as any).label, language, '').trim()
-          : '';
-      const targetHelperText =
-        (target as any).helperText !== undefined && (target as any).helperText !== null
-          ? resolveLocalizedString((target as any).helperText, language, '').trim()
-          : '';
-      const {
-        presentation,
-        groupOverride,
-        rowFilter,
-        effectiveLineMode,
-        hideInlineSubgroups,
-        delegateTargetHelperText,
-        stepLineCfg
-      } = buildGuidedLineGroupConfig({
-        target,
-        groupQ,
-        targetHelperText,
-        stepLineGroupsDefaultMode,
-        stepSubGroupsDefaultMode
-      });
-      const wrapLineGroupContent = (content: React.ReactNode): React.ReactNode => {
-        const wrapperHelperText = delegateTargetHelperText ? '' : targetHelperText;
-        if (!targetLabel && !wrapperHelperText) return content;
-        return (
-          <div
-            key={`${keyPrefix}:lg:${id}:section`}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}
-          >
-            {targetLabel ? (
-              <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', lineHeight: 1.3 }}>{targetLabel}</div>
-            ) : null}
-            {wrapperHelperText ? (
-              <SectionInstruction
-                id={`ck-linegroup-instruction-${activeGuidedStepId}-${id}`}
-                language={language}
-                text={wrapperHelperText}
-              />
-            ) : null}
-            {content}
-          </div>
-        );
-      };
+      const onGroupOverrideApplied = onDiagnostic
+        ? (groupId: string, keys: string[]) => {
+            const logKey = `${activeGuidedStepId}::${groupId}::groupOverride`;
+            if (guidedLineGroupOverrideLoggedRef.current.has(logKey)) return;
+            guidedLineGroupOverrideLoggedRef.current.add(logKey);
+            onDiagnostic('steps.lineGroup.groupOverride.applied', {
+              stepId: activeGuidedStepId,
+              groupId,
+              keys
+            });
+          }
+        : undefined;
 
-      if (groupOverride && onDiagnostic) {
-        const logKey = `${activeGuidedStepId}::${id}::groupOverride`;
-        if (!guidedLineGroupOverrideLoggedRef.current.has(logKey)) {
-          guidedLineGroupOverrideLoggedRef.current.add(logKey);
-          onDiagnostic('steps.lineGroup.groupOverride.applied', {
-            stepId: activeGuidedStepId,
-            groupId: id,
-            keys: Object.keys(groupOverride || {})
-          });
-        }
-      }
-
-      const stepGroup: WebQuestionDefinition = {
-        ...(groupQ as any),
-        ...(presentation === 'liftedRowFields' ? { ui: { ...((groupQ as any).ui || {}), hideLabel: true } } : {}),
-        lineItemConfig: stepLineCfg
-      };
-
-      if (effectiveLineMode === 'overlay') {
-        const label = resolveLabel(stepGroup, language);
-        const openLabel = tSystem('common.open', language, 'Open');
-        const pillText = label;
-        return wrapLineGroupContent(
-          <div
-            key={`${keyPrefix}:lg:${stepGroup.id}`}
-            className="field inline-field ck-full-width"
-            data-field-path={stepGroup.id}
-            data-has-error={errors[stepGroup.id] ? 'true' : undefined}
-            data-has-warning={hasWarning(stepGroup.id) ? 'true' : undefined}
-          >
-            <label style={stepGroup.ui?.hideLabel === true ? srOnly : undefined}>
-              {label}
-              {(stepGroup as any).required && <RequiredStar />}
-            </label>
-            <button
-              type="button"
-              className="ck-progress-pill ck-upload-pill-btn ck-open-overlay-pill"
-              aria-disabled={submitting ? 'true' : undefined}
-              onClick={() => {
-                if (submitting) return;
-                openLineItemGroupOverlay(stepGroup, { rowFilter, hideInlineSubgroups });
-              }}
-            >
-              <span>{pillText}</span>
-              <span className="ck-progress-label">{openLabel}</span>
-              <span className="ck-progress-caret">▸</span>
-            </button>
-            {renderWarnings(stepGroup.id)}
-            {errors[stepGroup.id] ? <div className="error">{errors[stepGroup.id]}</div> : null}
-          </div>
-        );
-      }
-
-      const locked = submitting || isFieldLockedByDedup(stepGroup.id);
-      return wrapLineGroupContent(
-        <LineItemGroupQuestion
-          key={`${keyPrefix}:lg:${stepGroup.id}:${activeGuidedStepId}`}
-          q={stepGroup as any}
-          rowFlow={target.rowFlow}
-          rowFilter={rowFilter}
-          dataSourceRows={Array.isArray((target as any).dataSourceRows) ? ((target as any).dataSourceRows as any[]) : undefined}
-          dataSourceBootstrap={(target as any).dataSourceBootstrap || undefined}
-          hideInlineSubgroups={hideInlineSubgroups}
-          supplementalHelperText={delegateTargetHelperText ? targetHelperText : undefined}
-          hideSupplementalHelperWhenNoSourceRows={delegateTargetHelperText}
-          ctx={buildLineItemGroupQuestionContext({ submitting: locked })}
+      return (
+        <GuidedLineGroupTargetRenderer
+          key={`${keyPrefix}:lg:${id}`}
+          target={target}
+          keyPrefix={keyPrefix}
+          groupQ={groupQ}
+          activeGuidedStepId={activeGuidedStepId}
+          language={language}
+          stepLineGroupsDefaultMode={stepLineGroupsDefaultMode}
+          stepSubGroupsDefaultMode={stepSubGroupsDefaultMode}
+          submitting={submitting}
+          errors={errors}
+          hasWarning={hasWarning}
+          renderWarnings={renderWarnings}
+          isFieldLockedByDedup={isFieldLockedByDedup}
+          openLineItemGroupOverlay={openLineItemGroupOverlay}
+          buildLineItemGroupQuestionContext={buildLineItemGroupQuestionContext}
+          onGroupOverrideApplied={onGroupOverrideApplied}
         />
       );
     };
