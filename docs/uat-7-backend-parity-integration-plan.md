@@ -305,10 +305,16 @@ Fifteenth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted list-style, pill-style, and table-cell line upload renderers into the uploads feature layer, preserving read-only rendering, table value display, overlay opening, and mutation callbacks. Current size: 13,852 lines.
 - Validation for the pass used targeted upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixteenth-pass results:
+
+- `FormView.tsx`: extracted the table-cell upload open-overlay control into the uploads feature layer, so subgroup table renderers pass field/row context instead of owning upload button/read-only display logic. Current size: 14,093 lines.
+- `App.tsx`: extracted autosave dedup configuration into `useAppAutoSaveDedupConfig`, including autosave trigger field normalization, dedup precheck rules, field-id maps, and dedup progress dialog copy. Current size: 15,973 lines.
+- Validation for the pass used targeted upload/line-item and autosave/dedup tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 16,002 lines.
-- `FormView.tsx`: 14,132 lines.
+- `App.tsx`: 15,973 lines.
+- `FormView.tsx`: 14,093 lines.
 - `LineItemGroupQuestion.tsx`: 13,852 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
