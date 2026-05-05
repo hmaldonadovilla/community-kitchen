@@ -453,11 +453,16 @@ Forty-fourth-pass results:
 - `App.tsx`: extracted uploaded field override projection for submission payloads into the uploads domain helper, leaving the shell to pass the current override map. Current size: 14,188 lines.
 - Validation for the pass used focused upload override/merge and form comparison tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Forty-fifth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted guided virtual numeric max-field and integer-only rule checks into `virtualRowContext`, leaving numeric control wiring in the component. Current size: 13,416 lines.
+- Validation for the pass used focused virtual row context, virtual preset, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,862 lines.
-- `LineItemGroupQuestion.tsx`: 13,437 lines.
+- `LineItemGroupQuestion.tsx`: 13,416 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
