@@ -20,6 +20,10 @@ export type GuidedDataSourceConfigMap = {
   byNormalized: Map<string, any>;
 };
 
+/**
+ * Resolves guided-step visibility inputs that depend on client-side data-source cache state.
+ * This stays in the steps hook layer and exposes pure resolver boundaries for FormView wiring.
+ */
 export const resolveDataSourceCountVisibilityValue = (
   fieldId: string,
   configMap: GuidedDataSourceConfigMap,
@@ -33,6 +37,10 @@ export const resolveDataSourceCountVisibilityValue = (
   return count === null ? undefined : (count as FieldValue);
 };
 
+/**
+ * Coordinates guided step filtering with form values, line-item values, system fields, and
+ * data-source cache update events without keeping cache subscriptions inside FormView.
+ */
 export const useGuidedStepVisibility = (args: {
   definition: WebFormDefinition;
   guidedEnabled: boolean;

@@ -77,6 +77,7 @@ import { useSystemActionGateState } from './components/app/useSystemActionGateSt
 import { useAppPerfOpenRecordBridge, type AppRecordSelectHandler } from './components/app/useAppPerfOpenRecordBridge';
 import { useAppPerfTools } from './components/app/useAppPerfTools';
 import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
+import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -153,7 +154,6 @@ import {
 import { resolveTemplateIdForRecord } from './app/templateId';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { runSelectionEffectsForAncestors } from './app/runSelectionEffectsForAncestors';
-import { detectDebug, shouldAlwaysLogDiagnosticEvent } from './app/utils';
 import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
 import {
   buildFormDataSourceRefreshKey,
@@ -562,27 +562,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       : null
   );
-  const [debugEnabled] = useState<boolean>(() => detectDebug());
+  const { debugEnabled, logEvent } = useAppDiagnostics();
   const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
   const [ingredientNameBlurredForAutoSave, setIngredientNameBlurredForAutoSave] = useState<boolean>(false);
   const autoSaveNoticeSeenRef = useRef<boolean>(false);
   const homeLoadStartedAtRef = useRef<number>(getPerfNow());
   const homeTimeToDataMeasuredRef = useRef(false);
   const homePerfInitialisedRef = useRef(false);
-  const logEvent = useCallback(
-    (event: string, payload?: Record<string, unknown>) => {
-      // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
-      // Critical guided-flow and freshness diagnostics stay visible for production troubleshooting.
-      const alwaysLog = shouldAlwaysLogDiagnosticEvent(event);
-      if ((!debugEnabled && !alwaysLog) || typeof console === 'undefined' || typeof console.info !== 'function') return;
-      try {
-        console.info('[ReactForm]', event, payload || {});
-      } catch {
-        // ignore logging failures
-      }
-    },
-    [debugEnabled]
-  );
   const { isMobile, isCompact, blockLandscape } = useAppViewportState({
     portraitOnlyEnabled: definition.portraitOnly === true,
     language,
