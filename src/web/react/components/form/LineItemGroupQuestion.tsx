@@ -133,6 +133,7 @@ import {
 } from './virtualDataSourceRowValues';
 import { buildStepDataSourceAvailabilityOptimisticMutationAction } from './stepDataSourceAvailability';
 import { applyStepDataSourceDraftUpdateAction } from './stepDataSourceDrafts';
+import { applyStepDataSourceExclusiveSelectionRemovalAction } from './stepDataSourceExclusiveSelection';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
@@ -1396,35 +1397,15 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         const hasPositiveQty =
           quantityFieldId ? Number.isFinite(quantityValue) && !Number.isNaN(quantityValue) && Number(quantityValue) > 0 : true;
 
-        let nextState: LineItemState = prev;
-        const deleteRoots: Array<{ groupId: string; rowId: string }> = [];
-        const removeMatchingRows = (groupKey: string, matchValue: string): void => {
-          const rows = nextState[groupKey] || [];
-          const filtered = rows.filter(row => {
-            const matches = `${(row.values as any)?.[exclusiveSelectionKeyFieldId] ?? ''}` === matchValue;
-            if (matches) {
-              deleteRoots.push({ groupId: groupKey, rowId: row.id });
-            }
-            return !matches;
-          });
-          if (filtered.length === rows.length) return;
-          if (nextState === prev) nextState = { ...prev };
-          nextState[groupKey] = filtered;
-        };
-
-        if (sameRootScope) {
-          Object.keys(prev).forEach(groupKey => {
-            if (!groupKey.startsWith(`${q.id}::`) || !groupKey.endsWith(`::${(args.config?.outputGroupId || '').toString().trim()}`)) return;
-            removeMatchingRows(groupKey, sourceKey);
-          });
-        } else {
-          removeMatchingRows(output.key, sourceKey);
-        }
-
-        if (deleteRoots.length) {
-          const cascade = cascadeRemoveLineItemRows({ lineItems: nextState, roots: deleteRoots });
-          nextState = cascade.lineItems;
-        }
+        let nextState: LineItemState = applyStepDataSourceExclusiveSelectionRemovalAction({
+          lineItems: prev,
+          rootGroupId: q.id,
+          outputGroupKey: output.key,
+          outputGroupId: (args.config?.outputGroupId || '').toString().trim(),
+          exclusiveSelectionKeyFieldId,
+          sourceKey,
+          sameRootScope
+        });
 
         setStepDataSourceDrafts(prevDrafts => {
           const nextDrafts = applyStepDataSourceDraftUpdateAction({
