@@ -72,6 +72,7 @@ import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/r
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
 import { buildValidationErrorIndex } from '../features/validation/domain/errorIndex';
+import { useImperativeFieldNavigation } from '../features/validation/useImperativeFieldNavigation';
 import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
 import { useValidationNavigationRequest } from '../features/validation/useValidationNavigationRequest';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
@@ -6209,115 +6210,23 @@ const FormView: React.FC<FormViewProps> = ({
     values
   ]);
 
-  // NOTE: Must be declared AFTER `questionIdToGroupKey`, `nestedGroupMeta`, and `openSubgroupOverlay` are initialized.
+  // NOTE: Must be declared AFTER `questionIdToGroupKey`, `nestedGroupMeta`, and overlay open callbacks are initialized.
   // Otherwise production bundles can hit a TDZ "Cannot access X before initialization" when evaluating hook deps.
-  const navigateToFieldKey = useCallback(
-    (fieldKey: string) => {
-      const key = (fieldKey || '').toString();
-      if (!key) return;
-      if (typeof document === 'undefined') return;
-
-      const expandGroupForQuestionId = (questionId: string): boolean => {
-        const groupKey = questionIdToGroupKey[questionId];
-        if (!groupKey) return false;
-        setCollapsedGroups(prev => (prev[groupKey] === false ? prev : { ...prev, [groupKey]: false }));
-        return true;
-      };
-
-      const ensureMountedForKey = (): boolean => {
-        const parts = key.split('__');
-        if (parts.length !== 3) {
-          // Top-level question key: ensure its group card is expanded.
-          return expandGroupForQuestionId(key);
-        }
-        const prefix = parts[0];
-        const fieldId = parts[1];
-        const rowId = parts[2];
-        const subgroupInfo = parseSubgroupKey(prefix);
-        if (subgroupInfo) {
-          expandGroupForQuestionId(subgroupInfo.rootGroupId);
-          const collapseKey = `${subgroupInfo.parentGroupKey}::${subgroupInfo.parentRowId}`;
-          setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
-          const nestedKey =
-            nestedGroupMeta.subgroupFieldToGroupKey[`${subgroupInfo.rootGroupId}::${subgroupInfo.path.join('.') || subgroupInfo.subGroupId}__${fieldId}`];
-          if (nestedKey) {
-            setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
-          }
-          if (!subgroupOverlay.open || subgroupOverlay.subKey !== prefix) {
-            openSubgroupOverlay(prefix, { source: 'navigate' });
-            onDiagnostic?.('validation.navigate.openSubgroup', { key, subKey: prefix, source: 'click' });
-          }
-          return true;
-        }
-
-        // If this is a line-item group configured to open in a full-page overlay, open it so the row/fields can mount.
-        const groupCfg = definition.questions.find(q => q.id === prefix && q.type === 'LINE_ITEM_GROUP');
-        const groupOverlayEnabled = !!(groupCfg as any)?.lineItemConfig?.ui?.openInOverlay;
-        const suppressOverlayForGuidedInline = guidedEnabled && guidedInlineLineGroupIds.has(prefix);
-        if (groupOverlayEnabled && !suppressOverlayForGuidedInline) {
-          if (!lineItemGroupOverlay.open || lineItemGroupOverlay.groupId !== prefix) {
-            openLineItemGroupOverlay(prefix, { source: 'navigate' });
-            onDiagnostic?.('validation.navigate.openLineItemGroupOverlay', { key, groupId: prefix, source: 'click' });
-          }
-        }
-
-        expandGroupForQuestionId(prefix);
-        const collapseKey = `${prefix}::${rowId}`;
-        setCollapsedRows(prev => (prev[collapseKey] === false ? prev : { ...prev, [collapseKey]: false }));
-        const nestedKey = nestedGroupMeta.lineFieldToGroupKey[`${prefix}__${fieldId}`];
-        if (nestedKey) {
-          setCollapsedGroups(prev => (prev[nestedKey] === false ? prev : { ...prev, [nestedKey]: false }));
-        }
-        return true;
-      };
-
-      const scrollToKey = (): boolean => {
-        const target = document.querySelector<HTMLElement>(`[data-field-path="${key}"]`);
-        if (!target) return false;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const focusable = target.querySelector<HTMLElement>('input, select, textarea, button');
-        try {
-          focusable?.focus({ preventScroll: true } as any);
-        } catch {
-          // ignore
-        }
-        return true;
-      };
-
-      const requestedMount = ensureMountedForKey();
-      requestAnimationFrame(() => {
-        const found = scrollToKey();
-        if (!found && requestedMount) {
-          // wait for state-driven DOM mount (expanded row / subgroup overlay)
-          requestAnimationFrame(() => scrollToKey());
-          setTimeout(() => scrollToKey(), 80);
-        }
-      });
-    },
-    [
-      nestedGroupMeta.lineFieldToGroupKey,
-      nestedGroupMeta.subgroupFieldToGroupKey,
-      definition.questions,
-      guidedEnabled,
-      guidedInlineLineGroupIds,
-      onDiagnostic,
-      openLineItemGroupOverlay,
-      openSubgroupOverlay,
-      questionIdToGroupKey,
-      lineItemGroupOverlay.groupId,
-      lineItemGroupOverlay.open,
-      subgroupOverlay.open,
-      subgroupOverlay.subKey
-    ]
-  );
-
-  useEffect(() => {
-    if (!navigateToFieldRef) return;
-    navigateToFieldRef.current = navigateToFieldKey;
-    return () => {
-      navigateToFieldRef.current = null;
-    };
-  }, [navigateToFieldKey, navigateToFieldRef]);
+  const navigateToFieldKey = useImperativeFieldNavigation({
+    navigateToFieldRef,
+    nestedGroupMeta,
+    questions: definition.questions,
+    guidedEnabled,
+    guidedInlineLineGroupIds,
+    onDiagnostic,
+    openLineItemGroupOverlay,
+    openSubgroupOverlay,
+    questionIdToGroupKey,
+    lineItemGroupOverlay,
+    subgroupOverlay,
+    setCollapsedGroups,
+    setCollapsedRows
+  });
 
   const closeInfoOverlay = useCallback(() => {
     setInfoOverlay({ open: false });
