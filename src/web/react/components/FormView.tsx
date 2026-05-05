@@ -231,6 +231,7 @@ import {
   normalizeGuidedForwardGate,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
+  resolveGuidedStepSelectionAction,
   resolveGuidedStepsVirtualState,
   resolveMaxReachableGuidedStepIndex
 } from '../features/steps/domain/guidedNavigation';
@@ -1453,71 +1454,46 @@ const FormView: React.FC<FormViewProps> = ({
 
   const selectGuidedStep = useCallback(
     (nextStepId: string, reason: 'user' | 'auto' = 'user') => {
-      if (!guidedEnabled) return;
-      const nextId = (nextStepId || '').toString().trim();
-      if (!nextId) return;
-      const nextIdx = guidedStepIds.indexOf(nextId);
-      const currentIdx = guidedStepIds.indexOf(activeGuidedStepId);
-      if (nextIdx < 0) return;
-      if (nextIdx === currentIdx) return;
-
-      // Back navigation
-      if (nextIdx < currentIdx) {
-        const currentCfg = (guidedStepsCfg as any)?.items?.[Math.max(0, currentIdx)] as any;
-        const allowBack = (currentCfg?.navigation?.allowBack ?? currentCfg?.allowBack) !== false;
-        if (!allowBack) {
-          onDiagnostic?.('steps.step.blocked', { from: activeGuidedStepId, to: nextId, gate: 'allowBack', reason: 'allowBack=false' });
-          return;
-        }
+      const selection = resolveGuidedStepSelectionAction({
+        enabled: guidedEnabled,
+        nextStepId,
+        activeStepId: activeGuidedStepId,
+        stepIds: guidedStepIds,
+        stepsConfig: guidedStepsCfg,
+        reason,
+        forwardNavigationBlocked: Boolean(guidedForwardNavigationBlocked),
+        defaultForwardGate: guidedDefaultForwardGate,
+        maxReachableIndex: maxReachableGuidedIndex,
+        dedupNavigationBlocked: Boolean(dedupNavigationBlocked)
+      });
+      if (selection.action === 'none') return;
+      if (selection.clearBackErrorSuppression) {
+        guidedBackErrorNavSuppressionRef.current = null;
+      }
+      if (selection.action === 'blocked') {
+        onDiagnostic?.('steps.step.blocked', selection.diagnostic);
+        return;
+      }
+      if (selection.resetAutoAdvance) {
         guidedAutoAdvanceAttemptRef.current = null;
         if (guidedAutoAdvanceTimerRef.current) {
           globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
           guidedAutoAdvanceTimerRef.current = null;
         }
         guidedAutoAdvanceStateRef.current = null;
-        if (reason === 'user') {
+      }
+      if (Object.prototype.hasOwnProperty.call(selection, 'backErrorSuppressionStepId')) {
+        if (selection.backErrorSuppressionStepId) {
           guidedBackErrorNavSuppressionRef.current = {
-            stepId: nextId,
+            stepId: selection.backErrorSuppressionStepId,
             suppressUntil: Date.now() + 800
           };
         } else {
           guidedBackErrorNavSuppressionRef.current = null;
         }
-        setActiveGuidedStepId(nextId);
-        onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason });
-        return;
       }
-
-      guidedBackErrorNavSuppressionRef.current = null;
-
-      const effectiveMaxReachableIndex = guidedForwardNavigationBlocked
-        ? Math.min(maxReachableGuidedIndex, currentIdx)
-        : maxReachableGuidedIndex;
-
-      if (dedupNavigationBlocked) {
-        onDiagnostic?.('steps.step.blocked', {
-          from: activeGuidedStepId,
-          to: nextId,
-          gate: 'dedup',
-          reason: 'dedupGate'
-        });
-        return;
-      }
-
-      // Forward navigation: use computed reachability (contiguous gating).
-      if (nextIdx > effectiveMaxReachableIndex) {
-        onDiagnostic?.('steps.step.blocked', {
-          from: activeGuidedStepId,
-          to: nextId,
-          gate: guidedForwardNavigationBlocked ? 'systemActionGate' : guidedDefaultForwardGate,
-          reason: guidedForwardNavigationBlocked ? 'forwardNavigationBlocked' : 'notReachable',
-          maxReachableIndex: effectiveMaxReachableIndex
-        });
-        return;
-      }
-
-      setActiveGuidedStepId(nextId);
-      onDiagnostic?.('steps.step.change', { from: activeGuidedStepId, to: nextId, reason });
+      setActiveGuidedStepId(selection.nextStepId);
+      onDiagnostic?.('steps.step.change', selection.diagnostic);
     },
     [
       activeGuidedStepId,

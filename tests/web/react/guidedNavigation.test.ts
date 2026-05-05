@@ -4,6 +4,7 @@ import {
   normalizeGuidedForwardGate,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
+  resolveGuidedStepSelectionAction,
   resolveGuidedStepsVirtualState,
   resolveMaxReachableGuidedStepIndex
 } from '../../../src/web/react/features/steps/domain/guidedNavigation';
@@ -96,6 +97,110 @@ describe('guidedNavigation domain', () => {
       maxCompleteIndex: 0,
       maxValidIndex: 0,
       steps: [status]
+    });
+  });
+
+  test('resolves guided step selection decisions and blocked diagnostics', () => {
+    expect(
+      resolveGuidedStepSelectionAction({
+        enabled: true,
+        nextStepId: 'intro',
+        activeStepId: 'production',
+        stepIds: ['intro', 'production', 'email'],
+        stepsConfig: {
+          items: [
+            { id: 'intro' },
+            { id: 'production', navigation: { allowBack: false } }
+          ]
+        },
+        reason: 'user',
+        forwardNavigationBlocked: false,
+        defaultForwardGate: 'whenValid',
+        maxReachableIndex: 2,
+        dedupNavigationBlocked: false
+      })
+    ).toEqual({
+      action: 'blocked',
+      diagnostic: {
+        from: 'production',
+        to: 'intro',
+        gate: 'allowBack',
+        reason: 'allowBack=false'
+      }
+    });
+
+    expect(
+      resolveGuidedStepSelectionAction({
+        enabled: true,
+        nextStepId: 'intro',
+        activeStepId: 'production',
+        stepIds: ['intro', 'production', 'email'],
+        stepsConfig: { items: [{ id: 'intro' }, { id: 'production' }] },
+        reason: 'user',
+        forwardNavigationBlocked: false,
+        defaultForwardGate: 'whenValid',
+        maxReachableIndex: 2,
+        dedupNavigationBlocked: false
+      })
+    ).toEqual({
+      action: 'select',
+      nextStepId: 'intro',
+      resetAutoAdvance: true,
+      backErrorSuppressionStepId: 'intro',
+      diagnostic: {
+        from: 'production',
+        to: 'intro',
+        reason: 'user'
+      }
+    });
+
+    expect(
+      resolveGuidedStepSelectionAction({
+        enabled: true,
+        nextStepId: 'email',
+        activeStepId: 'intro',
+        stepIds: ['intro', 'production', 'email'],
+        stepsConfig: {},
+        reason: 'user',
+        forwardNavigationBlocked: false,
+        defaultForwardGate: 'whenValid',
+        maxReachableIndex: 1,
+        dedupNavigationBlocked: false
+      })
+    ).toEqual({
+      action: 'blocked',
+      clearBackErrorSuppression: true,
+      diagnostic: {
+        from: 'intro',
+        to: 'email',
+        gate: 'whenValid',
+        reason: 'notReachable',
+        maxReachableIndex: 1
+      }
+    });
+
+    expect(
+      resolveGuidedStepSelectionAction({
+        enabled: true,
+        nextStepId: 'production',
+        activeStepId: 'intro',
+        stepIds: ['intro', 'production', 'email'],
+        stepsConfig: {},
+        reason: 'auto',
+        forwardNavigationBlocked: false,
+        defaultForwardGate: 'whenValid',
+        maxReachableIndex: 1,
+        dedupNavigationBlocked: false
+      })
+    ).toEqual({
+      action: 'select',
+      nextStepId: 'production',
+      clearBackErrorSuppression: true,
+      diagnostic: {
+        from: 'intro',
+        to: 'production',
+        reason: 'auto'
+      }
     });
   });
 });

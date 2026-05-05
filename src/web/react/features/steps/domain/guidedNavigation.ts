@@ -130,3 +130,110 @@ export const resolveGuidedStepsVirtualState = (args: {
     steps: args.status.steps
   };
 };
+
+export type GuidedStepSelectionReason = 'user' | 'auto';
+
+export type GuidedStepSelectionResolution =
+  | { action: 'none' }
+  | {
+      action: 'blocked';
+      clearBackErrorSuppression?: boolean;
+      diagnostic: Record<string, unknown>;
+    }
+  | {
+      action: 'select';
+      nextStepId: string;
+      resetAutoAdvance?: boolean;
+      clearBackErrorSuppression?: boolean;
+      backErrorSuppressionStepId?: string | null;
+      diagnostic: Record<string, unknown>;
+    };
+
+export const resolveGuidedStepSelectionAction = (args: {
+  enabled: boolean;
+  nextStepId: string;
+  activeStepId: string;
+  stepIds: string[];
+  stepsConfig: any;
+  reason: GuidedStepSelectionReason;
+  forwardNavigationBlocked: boolean;
+  defaultForwardGate: GuidedForwardGate;
+  maxReachableIndex: number;
+  dedupNavigationBlocked: boolean;
+}): GuidedStepSelectionResolution => {
+  if (!args.enabled) return { action: 'none' };
+  const nextStepId = (args.nextStepId || '').toString().trim();
+  if (!nextStepId) return { action: 'none' };
+  const nextIndex = args.stepIds.indexOf(nextStepId);
+  const currentIndex = args.stepIds.indexOf(args.activeStepId);
+  if (nextIndex < 0 || nextIndex === currentIndex) return { action: 'none' };
+
+  if (nextIndex < currentIndex) {
+    const currentConfig = args.stepsConfig?.items?.[Math.max(0, currentIndex)] as any;
+    const allowBack = (currentConfig?.navigation?.allowBack ?? currentConfig?.allowBack) !== false;
+    if (!allowBack) {
+      return {
+        action: 'blocked',
+        diagnostic: {
+          from: args.activeStepId,
+          to: nextStepId,
+          gate: 'allowBack',
+          reason: 'allowBack=false'
+        }
+      };
+    }
+    return {
+      action: 'select',
+      nextStepId,
+      resetAutoAdvance: true,
+      backErrorSuppressionStepId: args.reason === 'user' ? nextStepId : null,
+      diagnostic: {
+        from: args.activeStepId,
+        to: nextStepId,
+        reason: args.reason
+      }
+    };
+  }
+
+  const effectiveMaxReachableIndex = args.forwardNavigationBlocked
+    ? Math.min(args.maxReachableIndex, currentIndex)
+    : args.maxReachableIndex;
+
+  if (args.dedupNavigationBlocked) {
+    return {
+      action: 'blocked',
+      clearBackErrorSuppression: true,
+      diagnostic: {
+        from: args.activeStepId,
+        to: nextStepId,
+        gate: 'dedup',
+        reason: 'dedupGate'
+      }
+    };
+  }
+
+  if (nextIndex > effectiveMaxReachableIndex) {
+    return {
+      action: 'blocked',
+      clearBackErrorSuppression: true,
+      diagnostic: {
+        from: args.activeStepId,
+        to: nextStepId,
+        gate: args.forwardNavigationBlocked ? 'systemActionGate' : args.defaultForwardGate,
+        reason: args.forwardNavigationBlocked ? 'forwardNavigationBlocked' : 'notReachable',
+        maxReachableIndex: effectiveMaxReachableIndex
+      }
+    };
+  }
+
+  return {
+    action: 'select',
+    nextStepId,
+    clearBackErrorSuppression: true,
+    diagnostic: {
+      from: args.activeStepId,
+      to: nextStepId,
+      reason: args.reason
+    }
+  };
+};
