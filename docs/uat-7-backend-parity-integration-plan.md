@@ -573,11 +573,16 @@ Sixty-eighth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted auto-add desired-row calculation and generated-row reconciliation into the line-items domain, preserving the component's auto-add effects while moving row mutation rules out of the renderer. Current size: 12,771 lines.
 - Validation for the pass used focused auto-add row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-ninth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted subgroup auto-add single-option anchor autofill target collection and line-item mutation into the auto-add row domain helper. Current size: 12,715 lines.
+- Validation for the pass used focused auto-add row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,771 lines.
+- `LineItemGroupQuestion.tsx`: 12,715 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
