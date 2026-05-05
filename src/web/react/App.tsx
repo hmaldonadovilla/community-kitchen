@@ -81,6 +81,7 @@ import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { useAppDialogState } from './components/app/useAppDialogState';
 import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
 import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
+import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -287,7 +288,6 @@ import {
 } from './app/copyProfile';
 import { hasInvalidRejectDedupKeyValues, shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
-import { buttonHasWrappedText, ensureButtonTextSpans } from './app/buttonTextWrap';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
   buildInventoryReservationPlanFingerprint,
@@ -747,33 +747,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const updateRecordBusyOpen = updateRecordBusy.state.open;
   const recordSyncBusyOpen = recordSyncBusy.state.open;
 
-  useEffect(() => {
-    if (typeof document === 'undefined' || !document.body) return;
-    let rafId: number | null = null;
-    const scan = () => {
-      rafId = null;
-      const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
-      buttons.forEach(button => {
-        ensureButtonTextSpans(button);
-        const wrapped = buttonHasWrappedText(button);
-        button.classList.toggle('ck-button-wrap-left', wrapped);
-      });
-    };
-    const schedule = () => {
-      if (rafId !== null) return;
-      rafId = globalThis.requestAnimationFrame(scan);
-    };
-
-    schedule();
-    const observer = new MutationObserver(() => schedule());
-    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-    globalThis.addEventListener?.('resize', schedule as any);
-    return () => {
-      observer.disconnect();
-      globalThis.removeEventListener?.('resize', schedule as any);
-      if (rafId !== null) globalThis.cancelAnimationFrame(rafId);
-    };
-  }, [view, language]);
+  useButtonTextWrapObserver({ view, language });
 
   const {
     systemActionGateDialog,
