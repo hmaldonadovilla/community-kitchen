@@ -292,10 +292,16 @@ Thirteenth-pass results:
 - `FormView.tsx`: replaced the inline overlay-pill line-item completeness algorithm with the existing tested `isLineItemGroupQuestionComplete` helper, removing a duplicate business-rule copy from the renderer. Current size: 14,479 lines.
 - `App.tsx`: extracted system action gate and copy-current-record dialog state into `useAppDialogState`, leaving the shell to wire the modal callbacks. Current size: 16,133 lines.
 
+Fourteenth-pass results:
+
+- `App.tsx`: extracted autosave notice storage/display lifecycle into `useAutoSaveNotice`, including ingredient-create readiness gating and dismiss persistence. Current size after the slice: 16,080 lines.
+- `FormView.tsx`: extracted the line-item open-in-overlay pill into `LineItemGroupOverlayPill`, keeping warning and overlay callbacks injected from the parent. Current size: 14,419 lines.
+- `App.tsx`: extracted read-only file overlay state, inline URL parsing, file-upload field lookup, and diagnostics into `useReadOnlyFilesOverlay`. Current size: 16,028 lines.
+
 Current large-file counts:
 
-- `App.tsx`: 16,133 lines.
-- `FormView.tsx`: 14,479 lines.
+- `App.tsx`: 16,028 lines.
+- `FormView.tsx`: 14,419 lines.
 - `LineItemGroupQuestion.tsx`: 14,355 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
