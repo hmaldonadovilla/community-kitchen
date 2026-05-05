@@ -213,7 +213,7 @@ import {
 } from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
-import { filterVisibleGuidedSteps } from '../features/steps/domain/stepVisibility';
+import { useGuidedStepVisibility } from '../features/steps/hooks/useGuidedStepVisibility';
 import {
   isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
@@ -240,16 +240,6 @@ import {
   detectGuidedReservationManagedRowRemovals,
   type GuidedReservationManagedRowRemovalImpact
 } from '../features/reservations/stepReservationPlan';
-import {
-  DATA_SOURCE_CACHE_CLEARED_EVENT,
-  DATA_SOURCE_CACHE_UPDATED_EVENT,
-  getCachedDataSourceItemCount
-} from '../../data/dataSources';
-import { collectDataSourceConfigsForPrefetch } from '../../data/dataSourcePrefetch';
-import {
-  DATA_SOURCE_COUNT_FIELD_PREFIX,
-  normalizeDataSourceVisibilityKey
-} from '../app/dataSourceVisibility';
 
 const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
 
@@ -830,78 +820,19 @@ const FormView: React.FC<FormViewProps> = ({
   const guidedStepsCfg = definition.steps?.mode === 'guided' ? definition.steps : undefined;
   const guidedEnabled = Boolean(guidedStepsCfg && Array.isArray(guidedStepsCfg.items) && guidedStepsCfg.items.length > 0);
   const guidedPrefix = (guidedStepsCfg?.stateFields?.prefix || '__ckStep').toString();
-  const [dataSourceVisibilityVersion, setDataSourceVisibilityVersion] = useState(0);
-  const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
-  const guidedDataSourceConfigMap = useMemo(() => {
-    const byExact = new Map<string, any>();
-    const byNormalized = new Map<string, any>();
-    guidedDataSourceConfigs.forEach(cfg => {
-      const id = (cfg?.id || '').toString().trim();
-      if (!id) return;
-      if (!byExact.has(id)) byExact.set(id, cfg);
-      const normalized = normalizeDataSourceVisibilityKey(id);
-      if (normalized && !byNormalized.has(normalized)) byNormalized.set(normalized, cfg);
-    });
-    return { byExact, byNormalized };
-  }, [guidedDataSourceConfigs]);
-
-  useEffect(() => {
-    const bump = () => setDataSourceVisibilityVersion(version => version + 1);
-    try {
-      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-      window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
-      window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
-      return () => {
-        window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
-        window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
-      };
-    } catch {
-      return;
-    }
-  }, []);
-
-  const resolveStepVisibilityValue = useCallback(
-    (fieldId: string): FieldValue | undefined => {
-      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
-        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
-        const config =
-          guidedDataSourceConfigMap.byExact.get(key) ||
-          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
-        if (config) {
-          const count = getCachedDataSourceItemCount(config, language);
-          if (count !== null) return count as FieldValue;
-        }
-      }
-      const direct = values[fieldId];
-      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-      const sys = getSystemFieldValue(fieldId, recordMeta);
-      if (sys !== undefined) return sys as FieldValue;
-      for (const rows of Object.values(lineItems)) {
-        if (!Array.isArray(rows)) continue;
-        for (const row of rows) {
-          const candidate = (row as LineItemRowState).values[fieldId];
-          if (candidate !== undefined && candidate !== null && candidate !== '') return candidate as FieldValue;
-        }
-      }
-      return undefined;
-    },
-    [guidedDataSourceConfigMap, language, lineItems, recordMeta, values]
-  );
-  const guidedStepVisibilityCtx = useMemo(
-    () => ({
-      getValue: (fieldId: string) => resolveStepVisibilityValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || [],
-      getLineItemKeys: () => Object.keys(lineItems)
-    }),
-    [lineItems, resolveStepVisibilityValue]
-  );
-  const guidedVisibleSteps = useMemo(
-    () => {
-      void dataSourceVisibilityVersion;
-      return guidedEnabled ? filterVisibleGuidedSteps((guidedStepsCfg?.items || []) as any[], guidedStepVisibilityCtx) : [];
-    },
-    [dataSourceVisibilityVersion, guidedEnabled, guidedStepVisibilityCtx, guidedStepsCfg]
-  );
+  const {
+    guidedStepVisibilityCtx,
+    guidedVisibleSteps,
+    resolveDataSourceCountValue
+  } = useGuidedStepVisibility({
+    definition,
+    guidedEnabled,
+    guidedStepsCfg,
+    language,
+    values,
+    lineItems,
+    recordMeta
+  });
 
   const guidedStatus = useMemo(() => {
     if (!guidedEnabled) return { steps: [], maxCompleteIndex: -1, maxValidIndex: -1 };
@@ -1392,7 +1323,7 @@ const FormView: React.FC<FormViewProps> = ({
     });
 
     return out;
-  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedVisibleSteps]);
+  }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg, guidedVisibleSteps]);
 
   const buildGuidedStepDefinition = useCallback(
     (stepId?: string): WebFormDefinition | null => {
@@ -2858,17 +2789,23 @@ const FormView: React.FC<FormViewProps> = ({
       buildSubgroupOverlayValidationDefinition,
       buildGuidedStepDefinition,
       activeGuidedStepId,
+      collapsedRowsRef,
+      collapsedSubgroupsRef,
       definition,
       guidedDefaultForwardGate,
       guidedEnabled,
       guidedStepsCfg,
+      guidedVirtualState,
+      guidedVisibleSteps,
       language,
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
+      lineItemsRef,
       onDiagnostic,
       setErrors,
       subgroupOverlay.open,
-      subgroupOverlay.subKey
+      subgroupOverlay.subKey,
+      valuesRef
     ]
   );
 
@@ -4353,6 +4290,7 @@ const FormView: React.FC<FormViewProps> = ({
     attemptCloseSubgroupOverlay('button');
   }, [
     attemptCloseSubgroupOverlay,
+    lineItemsRef,
     onDiagnostic,
     overlay.groupId,
     setOverlay,
@@ -7530,16 +7468,8 @@ const FormView: React.FC<FormViewProps> = ({
         const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
         if (virtual !== undefined) return virtual as FieldValue;
       }
-      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
-        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
-        const config =
-          guidedDataSourceConfigMap.byExact.get(key) ||
-          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
-        if (config) {
-          const count = getCachedDataSourceItemCount(config, language);
-          if (count !== null) return count as FieldValue;
-        }
-      }
+      const dataSourceCount = resolveDataSourceCountValue(fieldId);
+      if (dataSourceCount !== undefined) return dataSourceCount;
       const direct = values[fieldId];
       if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
       const sys = getSystemFieldValue(fieldId, recordMeta);
@@ -7554,7 +7484,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
       return undefined;
     },
-    [guidedDataSourceConfigMap, guidedVirtualState, language, lineItems, recordMeta, values]
+    [guidedVirtualState, lineItems, recordMeta, resolveDataSourceCountValue, values]
   );
 
   const topVisibilityCtx = useMemo(
@@ -7697,23 +7627,15 @@ const FormView: React.FC<FormViewProps> = ({
         const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
         if (virtual !== undefined) return virtual as FieldValue;
       }
-      if (fieldId.startsWith(DATA_SOURCE_COUNT_FIELD_PREFIX)) {
-        const key = fieldId.slice(DATA_SOURCE_COUNT_FIELD_PREFIX.length).trim();
-        const config =
-          guidedDataSourceConfigMap.byExact.get(key) ||
-          guidedDataSourceConfigMap.byNormalized.get(normalizeDataSourceVisibilityKey(key));
-        if (config) {
-          const count = getCachedDataSourceItemCount(config, language);
-          if (count !== null) return count as FieldValue;
-        }
-      }
+      const dataSourceCount = resolveDataSourceCountValue(fieldId);
+      if (dataSourceCount !== undefined) return dataSourceCount;
       const direct = sourceValues[fieldId];
       if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
       const sys = getSystemFieldValue(fieldId, recordMeta);
       if (sys !== undefined) return sys as FieldValue;
       return undefined;
     },
-    [guidedDataSourceConfigMap, guidedVirtualState, language, recordMeta]
+    [guidedVirtualState, recordMeta, resolveDataSourceCountValue]
   );
 
   const getTopValueNoScan = useCallback(
