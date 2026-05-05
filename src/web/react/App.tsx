@@ -69,6 +69,7 @@ import { type ReportOverlayState } from './components/app/ReportOverlay';
 import { AppOverlays } from './components/app/AppOverlays';
 import { DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
 import { useAppActionNotices } from './components/app/useAppActionNotices';
+import { useDedupDialogPresentation } from './components/app/useDedupDialogPresentation';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -258,11 +259,6 @@ import {
   shouldApplyDedupPrecheckResult
 } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
-import {
-  buildDedupDialogDetails as buildDedupDialogDetailsData,
-  resolveDedupDialogCopy,
-  type DedupDialogItem
-} from './app/dedupDialog';
 import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
@@ -415,9 +411,10 @@ type RecordSnapshotPrefetchRequest = {
 };
 
 const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytics, analyticsRev, envTag }) => {
-  const availableLanguages = (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<
-    'EN' | 'FR' | 'NL'
-  >;
+  const availableLanguages = useMemo(
+    () => (definition.languages && definition.languages.length ? definition.languages : ['EN']) as Array<'EN' | 'FR' | 'NL'>,
+    [definition.languages]
+  );
   const defaultLanguage = normalizeLanguage(definition.defaultLanguage || availableLanguages[0] || record?.language);
   const allowLanguageSelection = definition.languageSelectorEnabled !== false && availableLanguages.length > 1;
   const initialLanguage = allowLanguageSelection ? normalizeLanguage(record?.language || defaultLanguage) : defaultLanguage;
@@ -15704,75 +15701,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }, [headerAdminEnabled, headerServiceUrl, language, logEvent, navigateHomeBusy]);
 
-  const dedupDialogConflict = useMemo(() => {
-    const conflict = (dedupConflict || dedupNotice) as any;
-    if (!conflict || !conflict.existingRecordId) return null;
-    return conflict as DedupConflictInfo;
-  }, [dedupConflict, dedupNotice]);
-
-  const buildDedupDialogDetails = useCallback(
-    (args: { ruleId?: string; values: Record<string, FieldValue> }) =>
-      buildDedupDialogDetailsData({
-        definition,
-        dedupIdentityFieldIdMap,
-        optionState,
-        language,
-        ruleId: args.ruleId,
-        values: args.values
-      }),
-    [dedupIdentityFieldIdMap, definition, language, optionState]
-  );
-
-  const dedupDialogDetails = useMemo(() => {
-    if (!dedupDialogConflict) return null;
-    return buildDedupDialogDetails({ ruleId: dedupDialogConflict.ruleId, values });
-  }, [buildDedupDialogDetails, dedupDialogConflict, values]);
-
-  const dedupDialogCopy = useMemo(
-    () => resolveDedupDialogCopy(definition.dedupDialog, language),
-    [definition.dedupDialog, language]
-  );
-
-  const renderDedupDialogMessage = useCallback(
-    (items: DedupDialogItem[]) => {
-      const intro = dedupDialogCopy.intro.trim();
-      const outro = dedupDialogCopy.outro.trim();
-      const showKeyValues = !(ingredientsFormActive && createFlowRef.current);
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {intro ? <div>{intro}</div> : null}
-          {showKeyValues && items.length ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {items.map(item => (
-                <div key={item.fieldId}>
-                  {item.label}: {item.value}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {outro ? <div>{outro}</div> : null}
-        </div>
-      );
-    },
-    [dedupDialogCopy.intro, dedupDialogCopy.outro, ingredientsFormActive]
-  );
-
-  const dedupDialogMessage = useMemo(() => {
-    if (!dedupDialogConflict) return '';
-    const items = dedupDialogDetails?.items || [];
-    return renderDedupDialogMessage(items);
-  }, [dedupDialogConflict, dedupDialogDetails, renderDedupDialogMessage]);
-
-  const listDedupDialogDetails = useMemo(() => {
-    if (!listDedupPrompt) return null;
-    return buildDedupDialogDetails({ ruleId: listDedupPrompt.conflict.ruleId, values: listDedupPrompt.values });
-  }, [buildDedupDialogDetails, listDedupPrompt]);
-
-  const listDedupDialogMessage = useMemo(() => {
-    if (!listDedupPrompt) return '';
-    const items = listDedupDialogDetails?.items || [];
-    return renderDedupDialogMessage(items);
-  }, [listDedupDialogDetails, listDedupPrompt, renderDedupDialogMessage]);
+  const {
+    dedupDialogConflict,
+    dedupDialogDetails,
+    dedupDialogCopy,
+    dedupDialogMessage,
+    listDedupDialogMessage,
+    ingredientCreateDedupDialogMode,
+    dedupDialogConfirmLabel,
+    dedupDialogCancelLabel
+  } = useDedupDialogPresentation({
+    definition,
+    dedupConflict,
+    dedupNotice,
+    dedupIdentityFieldIdMap,
+    optionState,
+    language,
+    values,
+    listDedupPrompt,
+    ingredientsFormActive,
+    createFlowRef
+  });
 
   const resetDedupState = useCallback(
     (reason: string) => {
@@ -15927,9 +15876,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }, [listDedupPrompt, logEvent]);
 
-  const ingredientCreateDedupDialogMode = ingredientsFormActive && createFlowRef.current;
-  const dedupDialogConfirmLabel = ingredientCreateDedupDialogMode ? dedupDialogCopy.cancelLabel : dedupDialogCopy.openLabel;
-  const dedupDialogCancelLabel = dedupDialogCopy.changeLabel;
   const handleDedupDialogConfirm = ingredientCreateDedupDialogMode ? handleDedupCancelCreationToHome : handleDedupOpenExisting;
   const handleDedupDialogCancel = handleDedupChangeFields;
 
