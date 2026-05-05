@@ -508,10 +508,15 @@ Fifty-fifth-pass results:
 - `FormView.tsx`: extracted guided auto-advance state transition resolution into `guidedNavigation`, keeping timer scheduling, DOM focus checks, and step selection side effects in the component. Current size: 12,524 lines.
 - Validation for the pass used focused guided navigation and guided-step question-order tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fifty-sixth-pass results:
+
+- `FormView.tsx`: extracted guided auto-advance text-entry focus deferral detection into `guidedNavigation`, keeping the retry timer and diagnostic emission in the component. Current size: 12,509 lines.
+- Validation for the pass used focused guided navigation and guided-step question-order tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,524 lines.
+- `FormView.tsx`: 12,509 lines.
 - `LineItemGroupQuestion.tsx`: 13,149 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
