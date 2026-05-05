@@ -129,8 +129,7 @@ import {
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstAllocationReservationVisibilityScope,
   resolveSourceFirstRowSortMode,
-  shouldRemoveSourceFirstAllocationOutputWhenExcluded,
-  shouldShowSourceFirstAllocationLabel
+  shouldRemoveSourceFirstAllocationOutputWhenExcluded
 } from '../../app/sourceFirstAllocations';
 import {
   buildStepDataSourceBootstrapSignature,
@@ -152,10 +151,7 @@ import {
   listSortFor,
   normalizeIdValue,
   optionSortFor,
-  resolveSourceFirstAllocationDisplayValue,
-  resolveSourceFirstCompactTextParts,
   resolveSourceFirstListScrollStyle,
-  sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
@@ -166,7 +162,7 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
-import { SourceFirstAllocationRow } from '../../features/lineItems/components/SourceFirstAllocationRow';
+import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstDataSourceRowShell } from '../../features/lineItems/components/SourceFirstDataSourceRowShell';
 import { SourceFirstSentenceParts } from '../../features/lineItems/components/SourceFirstSentenceParts';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
@@ -6028,397 +6024,31 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             (entry.config as any)?.hideParentRowsWhenPresentationActive !== false
         );
 
-        const renderSourceFirstDataSourceConfigs = (): React.ReactNode => {
-          if (!sourceFirstPresentationEntries.length) return null;
-
-          const resolveDisplayValue = (
-            field: any,
-            virtualValues: Record<string, FieldValue>,
-            parentValues: Record<string, FieldValue>
-          ): string =>
-            resolveSourceFirstAllocationDisplayValue({ field, virtualValues, parentValues, language });
-
-          const resolveCompactTextParts = (
-            parts: any[],
-            virtualValues: Record<string, FieldValue>,
-            sourceRow: Record<string, any>,
-            fieldById: Map<string, any>,
-            parentValues: Record<string, FieldValue>
-          ): string =>
-            resolveSourceFirstCompactTextParts({
-              parts,
-              virtualValues,
-              sourceRow,
-              fieldById,
-              parentValues,
-              language
-            });
-
-          const renderAllocationSentenceParts = (args: {
-            config: any;
-            parentRow: LineItemRowState;
-            sourceRow: Record<string, any>;
-            virtualValues: Record<string, FieldValue>;
-            fieldById: Map<string, any>;
-            selectedFieldId: string;
-            sentenceParts: any[];
-          }): React.ReactNode => (
-            <SourceFirstSentenceParts
-              idBase={args.parentRow.id}
-              language={language}
-              parentRow={args.parentRow}
-              sourceRow={args.sourceRow}
-              virtualValues={args.virtualValues}
-              fieldById={args.fieldById}
-              sentenceParts={args.sentenceParts}
-              disabledForField={isLineFieldInteractionBlocked}
-              resolveDisplayValue={resolveDisplayValue}
-              resolveIntegerOnly={allowsVirtualIntegerOnly}
-              resolveMaxFieldId={resolveVirtualMaxFieldId}
-              toFiniteNumber={toFiniteNumber}
-              onNumberChange={({ fieldId, value, virtualValues, sourceRow }) => {
-                const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-                const patch = buildReservationFieldPatch({
-                  fieldId,
-                  value,
-                  selectedFieldId: args.selectedFieldId,
-                  selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
-                  quantityFieldId
-                }) as Record<string, FieldValue>;
-                const deferReservation = shouldDeferReservationSync({
-                  patch,
-                  selectedFieldId: args.selectedFieldId,
-                  quantityFieldId
-                });
-                const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
-                if (deferReservation) {
-                  seedReservationCommittedValues({
-                    config: args.config,
-                    parentRowId: args.parentRow.id,
-                    sourceKey,
-                    virtualValues
-                  });
-                }
-                const quantityNumber = Number(value);
-                const shouldStageDeferredQuantityEdit =
-                  deferReservation &&
-                  !!quantityFieldId &&
-                  fieldId === quantityFieldId &&
-                  (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
-                if (shouldStageDeferredQuantityEdit) {
-                  stageStepDataSourceDraftPatch({
-                    config: args.config,
-                    parentRowId: args.parentRow.id,
-                    sourceKey,
-                    virtualValues,
-                    patch
-                  });
-                  queueDeferredStepReservationSync({
-                    config: args.config,
-                    parentRow: args.parentRow,
-                    sourceRow,
-                    sourceKey,
-                    patch
-                  });
-                  return;
-                }
-                syncStepDataSourceOutputRowWithReservation({
-                  config: args.config,
-                  parentRow: args.parentRow,
-                  sourceRow,
-                  patch
-                }, {
-                  skipReservation: deferReservation
-                });
-                if (deferReservation) {
-                  queueDeferredStepReservationSync({
-                    config: args.config,
-                    parentRow: args.parentRow,
-                    sourceRow,
-                    sourceKey,
-                    patch
-                  });
-                }
-              }}
-              onNumberBlur={({ fieldId, value, virtualValues, sourceRow }) => {
-                const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-                const quantityNumber = Number(value);
-                const shouldReleaseQuantity =
-                  !!quantityFieldId &&
-                  fieldId === quantityFieldId &&
-                  (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
-                const patch = buildReservationFieldPatch({
-                  fieldId,
-                  value,
-                  selectedFieldId: args.selectedFieldId,
-                  selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
-                  quantityFieldId
-                }) as Record<string, FieldValue>;
-                if (shouldReleaseQuantity && args.selectedFieldId) {
-                  patch[args.selectedFieldId] = false;
-                }
-                const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
-                if (!sourceKey) {
-                  scheduleDeferredStepReservationAutoSaveHoldRelease();
-                  return;
-                }
-                const deferReservation = shouldDeferReservationSync({
-                  patch,
-                  selectedFieldId: args.selectedFieldId,
-                  quantityFieldId
-                });
-                if (!shouldReleaseQuantity && !deferReservation) return;
-                if (deferReservation) {
-                  if (!hasPendingDeferredReservationChange({
-                    config: args.config,
-                    parentRowId: args.parentRow.id,
-                    sourceKey,
-                    patch
-                  })) {
-                    scheduleDeferredStepReservationAutoSaveHoldRelease();
-                    return;
-                  }
-                }
-                cancelDeferredStepReservationSync({
-                  parentRowId: args.parentRow.id,
-                  sourceKey
-                });
-                syncStepDataSourceOutputRowWithReservation({
-                  config: args.config,
-                  parentRow: args.parentRow,
-                  sourceRow,
-                  patch
-                });
-                if (deferReservation) {
-                  scheduleDeferredStepReservationAutoSaveHoldRelease();
-                }
-              }}
-              onChoiceChange={({ fieldId, value, virtualValues, sourceRow }) => {
-                if (`${value ?? ''}` === `${virtualValues[fieldId] ?? ''}`) return;
-                syncStepDataSourceOutputRowWithReservation({
-                  config: args.config,
-                  parentRow: args.parentRow,
-                  sourceRow,
-                  patch: {
-                    ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                    [fieldId]: value
-                  }
-                });
-              }}
-            />
-          );
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
-              {sourceFirstPresentationEntries.map((entry, configIndex: number) => {
-                const { config, sourceRows, visibleSourceRows, emptyStateMessage } = entry;
-                if (!sourceRows.length && !emptyStateMessage) return null;
-                const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
-                const fields = Array.isArray(config?.fields) ? (config.fields as any[]) : [];
-                const fieldById = new Map<string, any>();
-                fields.forEach(field => {
-                  const id = field?.id ? field.id.toString() : '';
-                  if (id) fieldById.set(id, field);
-                });
-                const compactHeadlineRows = Array.isArray(uiCfg.compactHeadlineRows) ? (uiCfg.compactHeadlineRows as any[]) : [];
-                const compactDetailRows = Array.isArray(uiCfg.compactDetailRows) ? (uiCfg.compactDetailRows as any[]) : [];
-                const compactSentenceRows = Array.isArray(uiCfg.compactSentenceRows) ? (uiCfg.compactSentenceRows as any[]) : [];
-                const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
-                const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
-                const allocationLabelFieldId = `${config?.allocationLabelFieldId || uiCfg?.allocationLabelFieldId || ''}`.trim();
-                const showAllocationLabel = shouldShowSourceFirstAllocationLabel({
-                  allocationLabelFieldId,
-                  allocationLabelVisibility: config?.allocationLabelVisibility ?? uiCfg?.allocationLabelVisibility,
-                  parentRows
-                });
-                const listScrollStyle = resolveSourceFirstListScrollStyle(uiCfg?.maxVisibleRows);
-                if (!visibleSourceRows.length) {
-                  return emptyStateMessage ? (
-                    <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
-                      <div
-                        style={{
-                          padding: '12px 0',
-                          lineHeight: 1.4,
-                          color: 'var(--muted)'
-                        }}
-                      >
-                        {emptyStateMessage}
-                      </div>
-                    </div>
-                  ) : null;
-                }
-                const sourceFirstRowSortMode = resolveSourceFirstRowSortMode(
-                  config?.sourceFirstRowSort ?? uiCfg?.sourceFirstRowSort
-                );
-                const sortedVisibleSourceRows = sortSourceFirstVisibleSourceRows({
-                  rows: visibleSourceRows,
-                  sortMode: sourceFirstRowSortMode,
-                  config,
-                  compactHeadlineRows,
-                  fieldById,
-                  language,
-                  buildVirtualValues: ({ sourceRow, parentRow }) =>
-                    buildVirtualDataSourceRowValues({
-                      config,
-                      sourceRow,
-                      parentRowId: parentRow?.id
-                    }),
-                  matchesRule: ({ rule, virtualValues, parentValues }) =>
-                    !rule?.when ||
-                    matchesWhenClause(
-                      rule.when as any,
-                      resolveVirtualRowWhenContext({
-                        rowValues: virtualValues,
-                        parentValues
-                      })
-                    )
-                });
-                return (
-                  <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
-                    {sortedVisibleSourceRows.map(({ sourceRow, eligibleParents }, sourceIndex) => {
-                      const sourceKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
-                      const sourceKey = sourceKeyFieldId ? `${sourceRow?.[sourceKeyFieldId] ?? ''}`.trim() : '';
-                      if (!sourceKey) return null;
-                      const anchorParentRow = eligibleParents[0];
-                      const headlineVirtualValues = buildVirtualDataSourceRowValues({
-                        config,
-                        sourceRow,
-                        parentRowId: anchorParentRow?.id
-                      });
-                      const headlineRule = compactHeadlineRows.find(rule =>
-                        !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
-                          rowValues: headlineVirtualValues,
-                          parentValues: anchorParentRow?.values as Record<string, FieldValue>
-                        }))
-                      );
-                      const detailRule = compactDetailRows.find(rule =>
-                        !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
-                          rowValues: headlineVirtualValues,
-                          parentValues: anchorParentRow?.values as Record<string, FieldValue>
-                        }))
-                      );
-                      const headlineText = headlineRule
-                        ? resolveCompactTextParts(
-                            Array.isArray(headlineRule.parts) ? headlineRule.parts : [],
-                            headlineVirtualValues,
-                            sourceRow,
-                            fieldById,
-                            anchorParentRow?.values as Record<string, FieldValue>
-                          )
-                        : '';
-                      const detailText = detailRule
-                        ? resolveCompactTextParts(
-                            Array.isArray(detailRule.parts) ? detailRule.parts : [],
-                            headlineVirtualValues,
-                            sourceRow,
-                            fieldById,
-                            anchorParentRow?.values as Record<string, FieldValue>
-                          )
-                        : '';
-                      return (
-                        <div
-                          key={`source-first-row:${sourceKey}`}
-                          style={{
-                            padding: '12px 0',
-                            borderBottom:
-                              sourceIndex < sortedVisibleSourceRows.length - 1 ? '1px solid var(--border)' : undefined
-                          }}
-                        >
-                          {headlineText ? (
-                            <div style={{ fontSize: 'calc(var(--ck-font-control) * 1.08)', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                              {headlineText}
-                            </div>
-                          ) : null}
-                          {detailText ? (
-                            <div style={{ marginTop: 4, color: 'var(--muted)', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                              {detailText}
-                            </div>
-                          ) : null}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                            {eligibleParents.map(parentRow => {
-                              const output = resolveDataSourceOutputGroup(config, parentRow.id);
-                              const outputRows = output ? lineItems[output.key] || [] : [];
-                              const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
-                              const existingOutputRow =
-                                outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
-                              const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
-                              const virtualValues = buildVirtualDataSourceRowValues({
-                                config,
-                                sourceRow,
-                                outputRow: existingOutputRow,
-                                draftValues: stepDataSourceDrafts[draftKey] || null,
-                                parentRowId: parentRow.id
-                              });
-                              const isSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
-                              const sentenceRule = compactSentenceRows.find(rule =>
-                                !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
-                                  rowValues: virtualValues,
-                                  parentValues: parentRow.values as Record<string, FieldValue>
-                                }))
-                              );
-                              const sentenceParts = Array.isArray(sentenceRule?.parts) ? (sentenceRule.parts as any[]) : [];
-                              const sentenceFieldErrors = collectSourceFirstSentenceFieldErrors({
-                                parts: sentenceParts,
-                                fieldById,
-                                virtualValues,
-                                parentValues: parentRow.values as Record<string, FieldValue>,
-                                validateFieldRules: validateVirtualFieldRules
-                              });
-                              const buildSelectionTogglePatch = (checked: boolean): Record<string, any> =>
-                                buildSourceFirstSelectionTogglePatch({
-                                  checked,
-                                  selectedFieldId,
-                                  virtualValues,
-                                  quantityFieldId,
-                                  modeFieldId: config?.modeFieldId,
-                                  defaultModeValue: config?.defaultModeValue,
-                                  fieldById,
-                                  parentValues: parentRow.values as Record<string, FieldValue>,
-                                  resolveMaxFieldId: resolveVirtualMaxFieldId
-                                });
-                              const allocationLabel = allocationLabelFieldId
-                                ? `${parentRow.values[allocationLabelFieldId] ?? ''}`.trim()
-                                : '';
-                              return (
-                                <SourceFirstAllocationRow
-                                  key={`allocation:${sourceKey}:${parentRow.id}`}
-                                  rowKey={`allocation:${sourceKey}:${parentRow.id}`}
-                                  showAllocationLabel={showAllocationLabel}
-                                  allocationLabel={allocationLabel}
-                                  showSelectionCheckbox={!!selectedFieldId}
-                                  selected={isSelected}
-                                  errors={sentenceFieldErrors}
-                                  onSelectionChange={checked =>
-                                    syncStepDataSourceOutputRowWithReservation({
-                                      config,
-                                      parentRow,
-                                      sourceRow,
-                                      patch: buildSelectionTogglePatch(checked)
-                                    })
-                                  }
-                                >
-                                  {renderAllocationSentenceParts({
-                                    config,
-                                    parentRow,
-                                    sourceRow,
-                                    virtualValues,
-                                    fieldById,
-                                    selectedFieldId,
-                                    sentenceParts
-                                  })}
-                                </SourceFirstAllocationRow>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        };
+        const renderSourceFirstDataSourceConfigs = (): React.ReactNode => (
+          <SourceFirstAllocationList
+            entries={sourceFirstPresentationEntries}
+            language={language}
+            parentRows={parentRows}
+            lineItems={lineItems}
+            stepDataSourceDrafts={stepDataSourceDrafts}
+            buildVirtualDataSourceRowValues={buildVirtualDataSourceRowValues}
+            buildStepDataSourceDraftKey={buildStepDataSourceDraftKey}
+            resolveDataSourceOutputGroup={resolveDataSourceOutputGroup}
+            resolveVirtualRowWhenContext={resolveVirtualRowWhenContext}
+            validateVirtualFieldRules={validateVirtualFieldRules}
+            isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
+            allowsVirtualIntegerOnly={allowsVirtualIntegerOnly}
+            resolveVirtualMaxFieldId={resolveVirtualMaxFieldId}
+            toFiniteNumber={toFiniteNumber}
+            seedReservationCommittedValues={seedReservationCommittedValues}
+            stageStepDataSourceDraftPatch={stageStepDataSourceDraftPatch}
+            queueDeferredStepReservationSync={queueDeferredStepReservationSync}
+            hasPendingDeferredReservationChange={hasPendingDeferredReservationChange}
+            cancelDeferredStepReservationSync={cancelDeferredStepReservationSync}
+            scheduleDeferredStepReservationAutoSaveHoldRelease={scheduleDeferredStepReservationAutoSaveHoldRelease}
+            syncStepDataSourceOutputRowWithReservation={syncStepDataSourceOutputRowWithReservation}
+          />
+        );
 
         return (
             <div
@@ -8499,46 +8129,43 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                 ? shouldHideField(titleField.visibility, groupCtx, { rowId: row.id, linePrefix: q.id })
                 : true;
               const showTitleControl = !!titleField && !titleHidden;
-              const resolveCompactHeaderDisplayText = React.useCallback(
-                (field: any): string => {
-                  const displayRowValues = (rowVisibilityValues || row.values || {}) as Record<string, FieldValue>;
-                  const rawValue = displayRowValues[field.id];
-                  if (field.type === 'CHOICE') {
-                    ensureLineOptions(q.id, field);
-                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
-                    const dependencyIds = (
-                      Array.isArray(field.optionFilter?.dependsOn)
-                        ? field.optionFilter?.dependsOn
-                        : [field.optionFilter?.dependsOn || '']
-                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                    const allowedField = computeAllowedOptions(
-                      field.optionFilter,
-                      optionSetField,
-                      dependencyIds.map((dep: string) => toDependencyValue(displayRowValues[dep] ?? values[dep]))
-                    );
-                    const choiceVal = Array.isArray(rawValue) && rawValue.length ? (rawValue as string[])[0] : (rawValue as string);
-                    const allowedWithCurrent =
-                      choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
-                        ? [...allowedField, choiceVal]
-                        : allowedField;
-                    const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
-                    const selectedOpt = optsField.find(opt => opt.value === choiceVal);
-                    return resolveLineItemTableReadOnlyDisplay({
-                      baseValue: selectedOpt?.label || choiceVal,
-                      field,
-                      rowValues: displayRowValues,
-                      language
-                    });
-                  }
+              const resolveCompactHeaderDisplayText = (field: any): string => {
+                const displayRowValues = (rowVisibilityValues || row.values || {}) as Record<string, FieldValue>;
+                const rawValue = displayRowValues[field.id];
+                if (field.type === 'CHOICE') {
+                  ensureLineOptions(q.id, field);
+                  const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, q.id);
+                  const dependencyIds = (
+                    Array.isArray(field.optionFilter?.dependsOn)
+                      ? field.optionFilter?.dependsOn
+                      : [field.optionFilter?.dependsOn || '']
+                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
+                  const allowedField = computeAllowedOptions(
+                    field.optionFilter,
+                    optionSetField,
+                    dependencyIds.map((dep: string) => toDependencyValue(displayRowValues[dep] ?? values[dep]))
+                  );
+                  const choiceVal = Array.isArray(rawValue) && rawValue.length ? (rawValue as string[])[0] : (rawValue as string);
+                  const allowedWithCurrent =
+                    choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
+                      ? [...allowedField, choiceVal]
+                      : allowedField;
+                  const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, { sort: optionSortFor(field) });
+                  const selectedOpt = optsField.find(opt => opt.value === choiceVal);
                   return resolveLineItemTableReadOnlyDisplay({
-                    baseValue: rawValue,
+                    baseValue: selectedOpt?.label || choiceVal,
                     field,
                     rowValues: displayRowValues,
                     language
                   });
-                },
-                [ensureLineOptions, language, optionState, q.id, row.values, rowVisibilityValues, values]
-              );
+                }
+                return resolveLineItemTableReadOnlyDisplay({
+                  baseValue: rawValue,
+                  field,
+                  rowValues: displayRowValues,
+                  language
+                });
+              };
               const rowHeaderSummaryTemplateRaw =
                 (ui as any)?.rowHeaderSummaryTemplate ??
                 (ui as any)?.row_header_summary_template ??
@@ -12448,7 +12075,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       );
                     };
                     const subUi = (sub as any).ui as any;
-                    const subCount = orderedSubRows.length;
                     const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
                     const isSubTableMode = subUiMode === 'table';
                     const subMaxVisibleRowsRaw = Number((subUi as any)?.maxVisibleRows);
@@ -12485,15 +12111,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       lineItemConfig: { ...(sub as any), fields: sub.fields || [], subGroups: [] }
                     };
                     const targetGroup = subGroupDef;
-                    const scrollSubgroupBottom = () => {
-                      const el = subgroupBottomRefs.current[subKey];
-                      if (!el) return;
-                      requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        });
-                      });
-                    };
                     return (
                       <div
                         key={subKey}
