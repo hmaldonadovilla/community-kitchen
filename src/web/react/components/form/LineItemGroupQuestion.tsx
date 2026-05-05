@@ -136,6 +136,8 @@ import { applyStepDataSourceDraftUpdateAction } from './stepDataSourceDrafts';
 import { applyStepDataSourceExclusiveSelectionRemovalAction } from './stepDataSourceExclusiveSelection';
 import {
   decorateStepDataSourceRowForVisibilityAction,
+  resolveDataSourceOutputGroupAction,
+  resolveStepDataSourceReservationStateForSourceAction,
   resolveStepDataSourceRowsAction,
   resolveStepDataSourceRowsForParentAction
 } from './stepDataSourceRows';
@@ -1121,14 +1123,13 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
   }, [onDiagnostic, parentRows.length, q.id, sourceFirstPresentationEntries]);
 
   const resolveDataSourceOutputGroup = React.useCallback(
-    (config: any, parentRowId: string): { key: string; subConfig: any | null } | null => {
-      const outputGroupId = (config?.outputGroupId || '').toString().trim();
-      if (!outputGroupId) return null;
-      const subConfig = ((q.lineItemConfig?.subGroups || []) as any[]).find(
-        candidate => resolveSubgroupKey(candidate as any) === outputGroupId
-      );
-      return { key: buildSubgroupKey(q.id, parentRowId, outputGroupId), subConfig: subConfig || null };
-    },
+    (config: any, parentRowId: string): { key: string; subConfig: any | null } | null =>
+      resolveDataSourceOutputGroupAction({
+        config,
+        groupId: q.id,
+        subGroups: q.lineItemConfig?.subGroups || [],
+        parentRowId
+      }),
     [q.id, q.lineItemConfig?.subGroups]
   );
 
@@ -1139,48 +1140,20 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       currentParentRowId?: string,
       mode: 'local' | 'committed' = 'local'
     ): { totalReservedQuantity: number; currentRowQuantity: number } => {
-      const outputGroupId = `${config?.outputGroupId || ''}`.trim();
-      const outputKeyFieldId = `${config?.outputKeyFieldId || config?.rowKeyFieldId || ''}`.trim();
-      const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
-      const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
-      if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !sourceKey) {
-        return { totalReservedQuantity: 0, currentRowQuantity: 0 };
-      }
-
-      let totalReservedQuantity = 0;
-      let currentRowQuantity = 0;
-
-      parentRows.forEach(parentRow => {
-        const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, sourceKey);
-        const output = resolveDataSourceOutputGroup(config, parentRow.id);
-        const outputRows = output ? lineItems[output.key] || [] : [];
-        const existingOutputRow =
-          outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
-        const outputValues = existingOutputRow?.values as Record<string, FieldValue> | undefined;
-        const draftValues = stepDataSourceDraftsRef.current[draftKey] || null;
-        const committedValues = reservationCommittedValuesRef.current[draftKey] || null;
-        const quantity =
-          mode === 'committed'
-            ? resolveReservationQuantityFromValues(
-                committedValues || outputValues || null,
-                selectedFieldId,
-                quantityFieldId
-              )
-            : resolveLocalReservationQuantityForVisibility({
-                draftValues,
-                outputValues: outputValues || null,
-                committedValues,
-                selectedFieldId,
-                quantityFieldId
-              });
-
-        totalReservedQuantity += quantity;
-        if (parentRow.id === currentParentRowId) {
-          currentRowQuantity = quantity;
-        }
+      return resolveStepDataSourceReservationStateForSourceAction({
+        config,
+        sourceKey,
+        currentParentRowId,
+        mode,
+        parentRows,
+        lineItems,
+        stepDataSourceDrafts: stepDataSourceDraftsRef.current,
+        reservationCommittedValues: reservationCommittedValuesRef.current,
+        buildStepDataSourceDraftKey,
+        resolveDataSourceOutputGroup,
+        resolveLocalReservationQuantityForVisibility,
+        resolveReservationQuantityFromValues
       });
-
-      return { totalReservedQuantity, currentRowQuantity };
     },
     [
       buildStepDataSourceDraftKey,
