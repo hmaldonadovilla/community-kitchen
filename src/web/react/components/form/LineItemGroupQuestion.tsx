@@ -153,6 +153,7 @@ import {
   resolveCompactPartType,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
+  sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
@@ -6454,41 +6455,29 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                 const sourceFirstRowSortMode = resolveSourceFirstRowSortMode(
                   config?.sourceFirstRowSort ?? uiCfg?.sourceFirstRowSort
                 );
-                const sortedVisibleSourceRows =
-                  sourceFirstRowSortMode === 'alphabetical'
-                    ? [...visibleSourceRows].sort((left, right) => {
-                        const resolveSortLabel = (entry: { sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }): string => {
-                          const sourceKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
-                          const sourceKey = sourceKeyFieldId ? `${entry.sourceRow?.[sourceKeyFieldId] ?? ''}`.trim() : '';
-                          const anchorParentRow = entry.eligibleParents[0];
-                          const headlineVirtualValues = buildVirtualDataSourceRowValues({
-                            config,
-                            sourceRow: entry.sourceRow,
-                            parentRowId: anchorParentRow?.id
-                          });
-                          const headlineRule = compactHeadlineRows.find(rule =>
-                            !rule?.when || matchesWhenClause(rule.when as any, resolveVirtualRowWhenContext({
-                              rowValues: headlineVirtualValues,
-                              parentValues: anchorParentRow?.values as Record<string, FieldValue>
-                            }))
-                          );
-                          const headlineText = headlineRule
-                            ? resolveCompactTextParts(
-                                Array.isArray(headlineRule.parts) ? headlineRule.parts : [],
-                                headlineVirtualValues,
-                                entry.sourceRow,
-                                fieldById,
-                                anchorParentRow?.values as Record<string, FieldValue>
-                              )
-                            : '';
-                          return (headlineText || sourceKey).trim().toLowerCase();
-                        };
-                        return resolveSortLabel(left).localeCompare(resolveSortLabel(right), undefined, {
-                          numeric: true,
-                          sensitivity: 'base'
-                        });
+                const sortedVisibleSourceRows = sortSourceFirstVisibleSourceRows({
+                  rows: visibleSourceRows,
+                  sortMode: sourceFirstRowSortMode,
+                  config,
+                  compactHeadlineRows,
+                  fieldById,
+                  language,
+                  buildVirtualValues: ({ sourceRow, parentRow }) =>
+                    buildVirtualDataSourceRowValues({
+                      config,
+                      sourceRow,
+                      parentRowId: parentRow?.id
+                    }),
+                  matchesRule: ({ rule, virtualValues, parentValues }) =>
+                    !rule?.when ||
+                    matchesWhenClause(
+                      rule.when as any,
+                      resolveVirtualRowWhenContext({
+                        rowValues: virtualValues,
+                        parentValues
                       })
-                    : visibleSourceRows;
+                    )
+                });
                 return (
                   <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
                     {sortedVisibleSourceRows.map(({ sourceRow, eligibleParents }, sourceIndex) => {

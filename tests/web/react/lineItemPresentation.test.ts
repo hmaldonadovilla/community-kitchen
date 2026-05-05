@@ -9,6 +9,7 @@ import {
   resolveCompactPartType,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
+  sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../../src/web/react/features/lineItems/domain/lineItemPresentation';
 
@@ -106,5 +107,38 @@ describe('lineItem presentation domain', () => {
     });
 
     expect(text).toBe('Soup - 3 portionsMilk, Soy');
+  });
+
+  test('sorts source-first visible rows by resolved headline with source-key fallback', () => {
+    const rows = [
+      { sourceRow: { id: '2', name: 'Banana' }, eligibleParents: [{ id: 'p1', values: {} }] },
+      { sourceRow: { id: '10', name: 'Apple' }, eligibleParents: [{ id: 'p1', values: {} }] },
+      { sourceRow: { id: '1' }, eligibleParents: [{ id: 'p1', values: {} }] }
+    ] as any[];
+    const sourceOrder = sortSourceFirstVisibleSourceRows({
+      rows,
+      sortMode: 'source',
+      config: { rowKeyFieldId: 'id' },
+      compactHeadlineRows: [{ parts: [{ sourcePath: 'name' }] }],
+      fieldById: new Map(),
+      language: 'EN',
+      buildVirtualValues: () => ({}),
+      matchesRule: () => true
+    });
+    expect(sourceOrder).toBe(rows);
+
+    const alphaOrder = sortSourceFirstVisibleSourceRows({
+      rows,
+      sortMode: 'alphabetical',
+      config: { rowKeyFieldId: 'id' },
+      compactHeadlineRows: [{ parts: [{ sourcePath: 'name' }] }],
+      fieldById: new Map(),
+      language: 'EN',
+      buildVirtualValues: () => ({}),
+      matchesRule: () => true
+    });
+
+    expect(alphaOrder.map(entry => entry.sourceRow.id)).toEqual(['1', '10', '2']);
+    expect(rows.map(entry => entry.sourceRow.id)).toEqual(['2', '10', '1']);
   });
 });
