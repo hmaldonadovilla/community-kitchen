@@ -85,6 +85,7 @@ import { useAppStatusTransitions } from './components/app/useAppStatusTransition
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
+import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
@@ -6547,68 +6548,51 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [dedupPrecheckRules, definition, formKey, logEvent, openExistingRecordFromDedup]
   );
 
-  const handleSubmitAnother = useCallback(() => {
-    void (async () => {
-      // Compute candidate defaults first; if they match a dedup rule, open the existing record instead of creating a duplicate.
-      const normalized = normalizeRecordValues(definition);
-      const initialLineItems = buildInitialLineItems(definition);
-      const mapped = applyValueMapsToForm(definition, normalized, initialLineItems, { mode: 'init' });
-      const handled = await precheckCreateDedupAndMaybeNavigate({
-        values: mapped.values,
-        lineItems: mapped.lineItems,
-        source: 'createNew'
-      });
-      if (handled) return;
-
-      bumpRecordSession({ reason: 'createNew', nextRecordId: null });
-      createFlowRef.current = true;
-      createFlowUserEditedRef.current = false;
-      autoSaveUserEditedRef.current = false;
-      dedupHoldRef.current = false;
-      resetFieldChangeTransientState();
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-      setDedupChecking(false);
-      setDedupConflict(null);
-      setDedupNotice(null);
-      dedupCheckingRef.current = false;
-      dedupConflictRef.current = null;
-      lastDedupCheckedSignatureRef.current = '';
-      dedupBaselineSignatureRef.current = '';
-      dedupKeyFingerprintBaselineRef.current = '';
-      dedupDeleteOnKeyChangeInFlightRef.current = false;
-      recordStaleRef.current = null;
-      setRecordStale(null);
-      recordDataVersionRef.current = null;
-      optimisticClientDataVersionRef.current = null;
-      recordRowNumberRef.current = null;
-      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
-      setValues(mapped.values);
-      setLineItems(mapped.lineItems);
-      setErrors({});
-      setValidationWarnings({ top: [], byField: {} });
-      setValidationAttempted(false);
-      setValidationNoticeHidden(false);
-      setStatus(null);
-      setStatusLevel(null);
-      setSelectedRecordId('');
-      setSelectedRecordSnapshot(null);
-      setLastSubmissionMeta(null);
-      setView('form');
-      logEvent('form.reset', { reason: 'submitAnother' });
-    })();
-  }, [
+  const newRecordActionState = {
     bumpRecordSession,
+    resetFieldChangeTransientState,
+    rememberAutoSaveSeenState,
+    createFlowRef,
+    createFlowUserEditedRef,
+    autoSaveUserEditedRef,
+    dedupHoldRef,
+    autoSaveDirtyRef,
+    autoSaveTimerRef,
+    setDraftSave,
+    setDedupChecking,
+    setDedupConflict,
+    setDedupNotice,
+    dedupCheckingRef,
+    dedupConflictRef,
+    lastDedupCheckedSignatureRef,
+    dedupBaselineSignatureRef,
+    dedupKeyFingerprintBaselineRef,
+    dedupDeleteOnKeyChangeInFlightRef,
+    recordStaleRef,
+    setRecordStale,
+    recordDataVersionRef,
+    optimisticClientDataVersionRef,
+    recordRowNumberRef,
+    setValues,
+    setLineItems,
+    setErrors,
+    setValidationWarnings,
+    setValidationAttempted,
+    setValidationNoticeHidden,
+    setStatus,
+    setStatusLevel,
+    setSelectedRecordId,
+    setSelectedRecordSnapshot,
+    setLastSubmissionMeta,
+    setView
+  };
+
+  const handleSubmitAnother = useCreateNewRecordAction({
     definition,
     logEvent,
     precheckCreateDedupAndMaybeNavigate,
-    rememberAutoSaveSeenState,
-    resetFieldChangeTransientState
-  ]);
+    ...newRecordActionState
+  });
 
   const handleDuplicateCurrent = useCallback(async (args?: { busyAlreadyOpen?: boolean }) => {
     const busySeq = args?.busyAlreadyOpen
@@ -6909,49 +6893,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     parseButtonRef,
     logEvent,
     precheckCreateDedupAndMaybeNavigate,
-    bumpRecordSession,
-    resetFieldChangeTransientState,
-    rememberAutoSaveSeenState,
-    createFlowRef,
-    createFlowUserEditedRef,
-    autoSaveUserEditedRef,
-    dedupHoldRef,
-    autoSaveDirtyRef,
-    autoSaveTimerRef,
-    setDraftSave,
-    setDedupChecking,
-    setDedupConflict,
-    setDedupNotice,
-    dedupCheckingRef,
-    dedupConflictRef,
-    lastDedupCheckedSignatureRef,
-    dedupBaselineSignatureRef,
-    dedupKeyFingerprintBaselineRef,
-    dedupDeleteOnKeyChangeInFlightRef,
-    recordStaleRef,
-    setRecordStale,
-    recordDataVersionRef,
-    optimisticClientDataVersionRef,
-    recordRowNumberRef,
+    ...newRecordActionState,
     valuesRef,
     lineItemsRef,
-    setValues,
-    setLineItems,
-    setErrors,
-    setValidationWarnings,
-    setValidationAttempted,
-    setValidationNoticeHidden,
-    setStatus,
-    setStatusLevel,
     setRecordLoadError,
     setPrefetchedSummaryHtml,
-    setSelectedRecordId,
     selectedRecordIdRef,
-    setSelectedRecordSnapshot,
     selectedRecordSnapshotRef,
-    setLastSubmissionMeta,
     lastSubmissionMetaRef,
-    setView,
     setListDedupPrompt
   });
 
