@@ -71,6 +71,7 @@ import { AppOverlays } from './components/app/AppOverlays';
 import { DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
 import { useAppActionNotices } from './components/app/useAppActionNotices';
 import { useDedupDialogPresentation } from './components/app/useDedupDialogPresentation';
+import { useSubmitGateEnableDialog } from './components/app/useSubmitGateEnableDialog';
 import { useSystemActionGateState } from './components/app/useSystemActionGateState';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
@@ -16032,44 +16033,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     !systemActionGateState.copyCurrentRecord.disabled &&
     (view === 'form' ? true : Boolean(selectedRecordId || lastSubmissionMeta?.id));
 
-  const actionGateEnableDialogKeyRef = useRef<string>('');
-  const prevGuidedNextWouldEnableRef = useRef<boolean>(false);
-  useEffect(() => {
-    const prev = prevGuidedNextWouldEnableRef.current;
-    prevGuidedNextWouldEnableRef.current = guidedNextWouldEnable;
-    if (!guidedNextWouldEnable) {
-      actionGateEnableDialogKeyRef.current = '';
-      return;
-    }
-    if (prev) return;
-    if (!submitDisabledByGate) return;
-    const matched = systemActionGateState.submit.matchedRule;
-    if (!matched?.dialog) return;
-    const trigger = (matched.dialogTrigger || 'onAttempt').toString();
-    if (trigger !== 'onEnable') return;
-    const key = `submit::${systemActionGateState.submit.matchedRuleId || 'rule'}::${guidedUiState?.activeStepId || ''}`;
-    if (actionGateEnableDialogKeyRef.current === key) return;
-    actionGateEnableDialogKeyRef.current = key;
-    openSystemActionGateDialog({
-      actionId: 'submit',
-      ruleId: systemActionGateState.submit.matchedRuleId || undefined,
-      trigger: 'onEnable',
-      title: matched.dialog.title,
-      message: matched.dialog.message,
-      confirmLabel: matched.dialog.confirmLabel,
-      cancelLabel: matched.dialog.cancelLabel,
-      showCancel: matched.dialog.showCancel,
-      showCloseButton: matched.dialog.showCloseButton,
-      dismissOnBackdrop: matched.dialog.dismissOnBackdrop
-    });
-  }, [
+  useSubmitGateEnableDialog({
     guidedNextWouldEnable,
-    guidedUiState?.activeStepId,
-    openSystemActionGateDialog,
+    guidedUiState,
     submitDisabledByGate,
-    systemActionGateState.submit.matchedRule,
-    systemActionGateState.submit.matchedRuleId
-  ]);
+    systemActionGateState,
+    openSystemActionGateDialog
+  });
 
   return (
     <div
