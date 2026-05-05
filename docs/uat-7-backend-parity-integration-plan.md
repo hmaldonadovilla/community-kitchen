@@ -418,9 +418,14 @@ Thirty-seventh-pass results:
 - `App.tsx`: extracted field-change dialog input projection into `buildFieldChangeDialogInputsAction`, keeping dialog lifecycle and pending-change state in the shell. Current size: 14,457 lines.
 - Validation for the pass used focused App/autosave/report-preview/choice tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-eighth-pass results:
+
+- `App.tsx`: extracted dedup key-change delete/recreate orchestration into `triggerDedupDeleteOnKeyChangeAction`, leaving the shell as the state-ref wiring point. Current size: 14,246 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,457 lines.
+- `App.tsx`: 14,246 lines.
 - `FormView.tsx`: 13,200 lines.
 - `LineItemGroupQuestion.tsx`: 13,582 lines.
 
