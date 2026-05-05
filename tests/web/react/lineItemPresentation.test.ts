@@ -1,4 +1,5 @@
 import {
+  buildSourceFirstSelectionTogglePatch,
   fieldByIdSafe,
   formatLineItemTotalValue,
   getByPath,
@@ -46,6 +47,46 @@ describe('lineItem presentation domain', () => {
     expect(resolveCompactPartType({ sourcePath: 'recipe.name' })).toBe('field');
     expect(resolveCompactPartType({ fieldIdAlternatives: ['', 'mealType'] })).toBe('field');
     expect(resolveCompactPartType({ text: 'literal' })).toBe('text');
+  });
+
+  test('builds source-first selection toggle patches with quantity and mode defaults', () => {
+    const fieldById = new Map<string, any>([
+      ['quantity', { id: 'quantity' }],
+      ['mode', { id: 'mode' }]
+    ]);
+    const patch = buildSourceFirstSelectionTogglePatch({
+      checked: true,
+      selectedFieldId: 'selected',
+      virtualValues: { maxQuantity: 12 },
+      quantityFieldId: 'quantity',
+      modeFieldId: 'mode',
+      defaultModeValue: 'reserve',
+      fieldById,
+      parentValues: {},
+      resolveMaxFieldId: () => 'maxQuantity'
+    });
+
+    expect(patch).toEqual({
+      selected: true,
+      quantity: '12',
+      mode: 'reserve'
+    });
+  });
+
+  test('builds source-first deselection patches without applying defaults', () => {
+    const patch = buildSourceFirstSelectionTogglePatch({
+      checked: false,
+      selectedFieldId: 'selected',
+      virtualValues: { maxQuantity: 12 },
+      quantityFieldId: 'quantity',
+      modeFieldId: 'mode',
+      defaultModeValue: 'reserve',
+      fieldById: new Map([['quantity', { id: 'quantity' }]]),
+      parentValues: {},
+      resolveMaxFieldId: () => 'maxQuantity'
+    });
+
+    expect(patch).toEqual({ selected: false });
   });
 
   test('resolves source-first allocation display values', () => {

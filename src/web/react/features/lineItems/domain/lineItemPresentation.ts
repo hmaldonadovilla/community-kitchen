@@ -150,6 +150,59 @@ export const resolveSourceFirstAllocationDisplayValue = (args: {
   return `${raw}`.trim();
 };
 
+export const buildSourceFirstSelectionTogglePatch = (args: {
+  checked: boolean;
+  selectedFieldId: string;
+  virtualValues: Record<string, FieldValue>;
+  quantityFieldId?: string;
+  modeFieldId?: string;
+  defaultModeValue?: string;
+  fieldById: Map<string, any>;
+  parentValues: Record<string, FieldValue>;
+  resolveMaxFieldId: (field: any, rowValues: Record<string, FieldValue>, parentValues: Record<string, FieldValue>) => string;
+}): Record<string, FieldValue> => {
+  const selectedFieldId = normalizeIdValue(args.selectedFieldId);
+  if (!selectedFieldId) return {};
+  const patch: Record<string, FieldValue> = { [selectedFieldId]: args.checked };
+  if (!args.checked) return patch;
+
+  const nextVirtualValues: Record<string, FieldValue> = {
+    ...args.virtualValues,
+    [selectedFieldId]: true
+  };
+  const quantityFieldId = normalizeIdValue(args.quantityFieldId);
+  if (quantityFieldId) {
+    const quantityField = args.fieldById.get(quantityFieldId);
+    const currentQty = nextVirtualValues[quantityFieldId];
+    const qtyIsEmpty =
+      currentQty === undefined ||
+      currentQty === null ||
+      `${currentQty}`.trim() === '';
+    if (quantityField && qtyIsEmpty) {
+      const maxFieldId = args.resolveMaxFieldId(quantityField, nextVirtualValues, args.parentValues);
+      const maxValue = maxFieldId ? nextVirtualValues[maxFieldId] : undefined;
+      if (maxValue !== undefined && maxValue !== null && `${maxValue}`.trim() !== '') {
+        patch[quantityFieldId] = `${maxValue}`;
+        nextVirtualValues[quantityFieldId] = `${maxValue}`;
+      }
+    }
+  }
+
+  const modeFieldId = normalizeIdValue(args.modeFieldId);
+  const defaultModeValue = normalizeIdValue(args.defaultModeValue);
+  if (modeFieldId && defaultModeValue) {
+    const currentMode = nextVirtualValues[modeFieldId];
+    const modeIsEmpty =
+      currentMode === undefined ||
+      currentMode === null ||
+      `${currentMode}`.trim() === '';
+    if (modeIsEmpty) {
+      patch[modeFieldId] = defaultModeValue;
+    }
+  }
+  return patch;
+};
+
 export const resolveSourceFirstCompactFieldDisplayValue = (args: {
   fieldId: string;
   virtualValues: Record<string, FieldValue>;
