@@ -68,6 +68,11 @@ import {
   resolveGuidedOrderedQuestionsAction
 } from '../features/steps/domain/guidedStepQuestionOrder';
 import {
+  buildGuidedQuestionByIdMapAction,
+  filterGuidedTargetsForContextHeaderAction,
+  resolveGuidedTargetQuestionAction
+} from '../features/steps/domain/guidedTargets';
+import {
   collectDefinitionBlurDerivedDependencyIds,
   hasDefinitionBlurDerivedValues
 } from '../features/derivedValues/domain/blurDependencies';
@@ -11990,19 +11995,9 @@ const FormView: React.FC<FormViewProps> = ({
     } = collectGuidedContextHeaderConfig(stepCfg?.contextHeader);
     const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
 
-    const questionById = new Map<string, WebQuestionDefinition>();
-    (definition.questions || []).forEach(q => questionById.set(q.id, q));
-
-    const resolveTargetQuestion = (target: any): WebQuestionDefinition | null => {
-      if (!target || typeof target !== 'object') return null;
-      const id = (target.id || '').toString().trim();
-      if (!id) return null;
-      const q = questionById.get(id) || null;
-      if (!q) return null;
-      const renderAsLabel = (target as any)?.renderAsLabel === true;
-      if (!renderAsLabel) return q;
-      return { ...(q as any), readOnly: true, ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition;
-    };
+    const questionById = buildGuidedQuestionByIdMapAction(definition.questions);
+    const resolveTargetQuestion = (target: any): WebQuestionDefinition | null =>
+      resolveGuidedTargetQuestionAction({ target, questionById });
 
     const guidedContextHeaderNode = stepContextHeaderParts.length ? (
       <GuidedContextHeader
@@ -12015,14 +12010,10 @@ const FormView: React.FC<FormViewProps> = ({
       />
     ) : null;
 
-    const stepTargetsFiltered = guidedContextHeaderIds.size
-      ? stepTargets.filter(t => {
-          if (!t || typeof t !== 'object') return true;
-          const kind = (t.kind || '').toString().trim();
-          const id = (t.id || '').toString().trim();
-          return !(kind === 'question' && guidedContextHeaderIds.has(id));
-        })
-      : stepTargets;
+    const stepTargetsFiltered = filterGuidedTargetsForContextHeaderAction({
+      targets: stepTargets,
+      contextHeaderIds: guidedContextHeaderIds
+    });
 
     const renderTarget = (target: any, keyPrefix: string): React.ReactNode => {
       if (!target || typeof target !== 'object') return null;
