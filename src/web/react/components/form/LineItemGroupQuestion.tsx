@@ -162,12 +162,11 @@ import { applyLineItemRowSort } from '../../app/lineItemRowSort';
 import { applySourceFirstAncestorSelectionEffects } from '../../app/sourceFirstAncestorSelectionSync';
 import {
   fieldByIdSafe,
-  listSortFor,
   normalizeIdValue,
   optionSortFor,
-  sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
+import { resolveRowFlowDisplayValueAction } from '../../features/lineItems/domain/rowFlowDisplayValue';
 import {
   applyAutoAddSubgroupSingleOptionAnchorFillAction,
   collectAutoAddSubgroupAnchorTargetsAction,
@@ -2440,59 +2439,20 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       fallbackField?: any,
       fallbackParentValues?: Record<string, FieldValue>
     ): { text: string; hasValue: boolean } => {
-      const primaryValues = segment.values;
-      const fallbackValuesForField = segment.fallbackValues || [];
-      const useFallback = !primaryValues.length && !!fallbackValuesForField.length && !!fallbackField;
-      const valuesForField = useFallback ? fallbackValuesForField : primaryValues;
-      const effectiveField = useFallback ? fallbackField : field;
-      const effectiveTargetGroupKey = useFallback ? (fallbackGroupKey || targetGroupKey) : targetGroupKey;
-      const effectiveParentValues = useFallback ? fallbackParentValues : parentValues;
-      const formatType = segment.config?.format?.type === 'list' ? 'list' : 'text';
-      const listDelimiter = segment.config?.format?.listDelimiter || ', ';
-      const uniqueValues = segment.config?.format?.unique !== false;
-      const listSortMode = listSortFor(segment.config?.format?.sort);
-      const rowValues = useFallback
-        ? segment.fallbackTarget?.primaryRow?.row?.values || {}
-        : segment.target?.primaryRow?.row?.values || {};
-      const mapped = effectiveField?.valueMap
-        ? resolveValueMapValue(
-            effectiveField.valueMap,
-            (fid: string) => (rowValues as any)[fid] ?? (effectiveParentValues as any)?.[fid] ?? resolveTopValue(fid),
-            { language, targetOptions: toOptionSet(effectiveField as any) }
-          )
-        : undefined;
-      const rawValues = effectiveField?.valueMap ? normalizeValueList(mapped as FieldValue) : valuesForField;
-      if (!rawValues.length) return { text: '', hasValue: false };
-
-      if (effectiveField?.type === 'CHOICE' || effectiveField?.type === 'CHECKBOX') {
-        ensureLineOptions(effectiveTargetGroupKey, effectiveField);
-        const optionSetField: OptionSet = resolveOptionSetForField(optionState, effectiveField, effectiveTargetGroupKey);
-        const localized = buildLocalizedOptions(optionSetField, optionSetField.en || [], language, {
-          sort: optionSortFor(effectiveField)
-        });
-        const labels = rawValues.map(val => {
-          const raw = Array.isArray(val) ? val[0] : val;
-          const match = localized.find(opt => opt.value === raw);
-          return (match?.label || raw || '').toString();
-        });
-        const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
-        const orderedLabels = sortVisibleTextValues(normalizedLabels, listSortMode);
-        const text = formatType === 'list' ? orderedLabels.join(listDelimiter) : orderedLabels[0] || '';
-        return { text, hasValue: text.trim() !== '' };
-      }
-
-      const labels = rawValues.map(val => {
-        if (val === undefined || val === null) return '';
-        if (effectiveField?.type === 'DATE') return formatDateEeeDdMmmYyyy(val, language) || val.toString();
-        if (typeof val === 'boolean') {
-          return val ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
-        }
-        return val.toString();
+      return resolveRowFlowDisplayValueAction({
+        segment,
+        targetGroupKey,
+        field,
+        parentValues,
+        fallbackGroupKey,
+        fallbackField,
+        fallbackParentValues,
+        language,
+        resolveTopValue,
+        ensureLineOptions,
+        resolveOptionSetForField: (targetField, groupKey) => resolveOptionSetForField(optionState, targetField, groupKey),
+        resolveValueMapValue
       });
-      const normalizedLabels = uniqueValues ? Array.from(new Set(labels.filter(Boolean))) : labels.filter(Boolean);
-      const orderedLabels = sortVisibleTextValues(normalizedLabels, listSortMode);
-      const text = formatType === 'list' ? orderedLabels.join(listDelimiter) : orderedLabels[0] || '';
-      return { text, hasValue: text.trim() !== '' };
     },
     [ensureLineOptions, language, optionState, resolveTopValue]
   );
