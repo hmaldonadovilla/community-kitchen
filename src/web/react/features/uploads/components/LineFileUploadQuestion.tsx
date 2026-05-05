@@ -4,7 +4,7 @@ import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, LineItemFieldConfig, WebQuestionDefinition } from '../../../../types';
 import type { FormErrors } from '../../../types';
 import { resolveFieldLabel } from '../../../utils/labels';
-import { getUploadMinRequired, toUploadItems } from '../../../components/form/utils';
+import { describeUploadItem, getUploadMinRequired, toUploadItems } from '../../../components/form/utils';
 import {
   buttonStyles,
   CameraIcon,
@@ -56,10 +56,15 @@ export const LineFileUploadQuestion: React.FC<{
   language: LangCode;
   submitting: boolean;
   forceStackedLabel: boolean;
+  renderAsLabel?: boolean;
   labelStyle?: React.CSSProperties;
+  cameraButtonStyle?: React.CSSProperties;
+  progressButtonClassName?: string;
+  afterProgressNode?: React.ReactNode;
   errors: FormErrors;
   hasWarning: (fieldPath: string) => boolean;
   renderWarnings: (fieldPath: string) => React.ReactNode;
+  renderReadOnly?: (display: React.ReactNode) => React.ReactNode;
   checkFileUploadOrderedEntry: (args: LineFileUploadOrderedEntryCheckArgs) => boolean;
   openFileOverlay: (args: LineFileOverlayOpenArgs) => void;
   handleFileInputChange: (args: LineFileInputChangeArgs) => void;
@@ -76,10 +81,15 @@ export const LineFileUploadQuestion: React.FC<{
   language,
   submitting,
   forceStackedLabel,
+  renderAsLabel,
   labelStyle,
+  cameraButtonStyle,
+  progressButtonClassName,
+  afterProgressNode,
   errors,
   hasWarning,
   renderWarnings,
+  renderReadOnly,
   checkFileUploadOrderedEntry,
   openFileOverlay,
   handleFileInputChange,
@@ -90,6 +100,17 @@ export const LineFileUploadQuestion: React.FC<{
 }) => {
   const items = toUploadItems(value as any);
   const uploadConfig = field.uploadConfig || {};
+  if (renderAsLabel && renderReadOnly) {
+    const displayContent = items.length
+      ? items.map((item: any, idx: number) => (
+          <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
+            {describeUploadItem(item as any)}
+          </div>
+        ))
+      : null;
+    const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
+    return renderReadOnly(displayNode);
+  }
   const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
   const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
     size?: number;
@@ -114,7 +135,7 @@ export const LineFileUploadQuestion: React.FC<{
   const leftLabel = viewMode
     ? tSystem('files.view', language, 'View photos')
     : tSystem('files.add', language, 'Add photo');
-  const cameraStyleBase = viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary;
+  const cameraStyleBase = cameraButtonStyle ?? (viewMode ? buttonStyles.secondary : isEmpty ? buttonStyles.primary : buttonStyles.secondary);
   const orderedUploadBlocked = checkFileUploadOrderedEntry({
     group,
     rowId,
@@ -186,7 +207,7 @@ export const LineFileUploadQuestion: React.FC<{
         </button>
         <button
           type="button"
-          className={`ck-progress-pill ck-upload-pill-btn ${pillClass}`}
+          className={`ck-progress-pill ck-upload-pill-btn${progressButtonClassName ? ` ${progressButtonClassName}` : ''} ${pillClass}`}
           disabled={uploadInteractionBlocked}
           style={withDisabled({}, uploadInteractionBlocked)}
           aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
@@ -212,6 +233,7 @@ export const LineFileUploadQuestion: React.FC<{
           <span className="ck-progress-label">{tSystem('files.open', language, tSystem('common.open', language, 'Open'))}</span>
           <span className="ck-progress-caret">▸</span>
         </button>
+        {afterProgressNode}
         {maxed ? (
           <div className="ck-upload-helper muted">{tSystem('files.maxReached', language, 'Required photos added.')}</div>
         ) : showMissingHelper ? (
