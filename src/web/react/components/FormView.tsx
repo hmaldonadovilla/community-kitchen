@@ -136,6 +136,7 @@ import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { isLineItemGroupQuestionComplete } from './form/completeness';
+import { resolveAddOverlayCopy } from '../features/lineItems/domain/addOverlayCopy';
 import {
   findFirstOrderedEntryIssue,
   findOrderedEntryBlock,
@@ -494,20 +495,6 @@ const areOverlayHeaderFieldsComplete = (args: {
     const val = resolveRequiredValue(field, rowValues[field.id]);
     return !isEmptyValue(val as any);
   });
-};
-
-const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
-  const cfg = groupCfg?.addOverlay || {};
-  const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
-  const helperText =
-    cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
-  const searchHelperText =
-    cfg.searchHelperText !== undefined && cfg.searchHelperText !== null
-      ? resolveLocalizedString(cfg.searchHelperText, language, '').trim()
-      : undefined;
-  const placeholder =
-    cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
-  return { title, helperText, searchHelperText, placeholder };
 };
 
 const collectLineItemConfigEntries = (questions: WebQuestionDefinition[]) => {

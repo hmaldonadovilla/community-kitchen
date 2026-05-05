@@ -159,6 +159,7 @@ import {
   sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
+import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
 import { LineItemOverlayResetButton } from '../../features/lineItems/components/LineItemOverlayResetButton';
@@ -3341,20 +3342,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     },
     [mergeOverlayDetailConfig]
   );
-
-const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
-  const cfg = groupCfg?.addOverlay || {};
-  const title = cfg.title !== undefined && cfg.title !== null ? resolveLocalizedString(cfg.title, language, '').trim() : undefined;
-  const helperText =
-    cfg.helperText !== undefined && cfg.helperText !== null ? resolveLocalizedString(cfg.helperText, language, '').trim() : undefined;
-  const searchHelperText =
-    cfg.searchHelperText !== undefined && cfg.searchHelperText !== null
-      ? resolveLocalizedString(cfg.searchHelperText, language, '').trim()
-      : undefined;
-  const placeholder =
-    cfg.placeholder !== undefined && cfg.placeholder !== null ? resolveLocalizedString(cfg.placeholder, language, '').trim() : undefined;
-  return { title, helperText, searchHelperText, placeholder };
-};
 
   const buildOverlayGroupOverride = React.useCallback(
     (group: WebQuestionDefinition, override?: LineItemGroupConfigOverride) => {
