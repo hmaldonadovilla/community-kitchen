@@ -132,6 +132,7 @@ import {
   resolveServerCurrentRecordReservedQuantityFromRow
 } from './virtualDataSourceRowValues';
 import { buildStepDataSourceAvailabilityOptimisticMutationAction } from './stepDataSourceAvailability';
+import { applyStepDataSourceDraftUpdateAction } from './stepDataSourceDrafts';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
@@ -1426,33 +1427,18 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         }
 
         setStepDataSourceDrafts(prevDrafts => {
-          if (!shouldSelect) {
-            if (!Object.prototype.hasOwnProperty.call(prevDrafts, draftKey)) return prevDrafts;
-            const nextDrafts = { ...prevDrafts };
-            delete nextDrafts[draftKey];
+          const nextDrafts = applyStepDataSourceDraftUpdateAction({
+            previousDrafts: prevDrafts,
+            draftKey,
+            shouldSelect,
+            selectedFieldId,
+            quantityFieldId,
+            modeFieldId,
+            rowValues: nextRowValues
+          });
+          if (nextDrafts !== prevDrafts) {
             stepDataSourceDraftsRef.current = nextDrafts;
-            return nextDrafts;
           }
-          const nextDraft: Record<string, FieldValue> = {};
-          if (selectedFieldId) nextDraft[selectedFieldId] = true;
-          if (quantityFieldId && nextRowValues[quantityFieldId] !== undefined) {
-            nextDraft[quantityFieldId] = nextRowValues[quantityFieldId];
-          }
-          if (modeFieldId && nextRowValues[modeFieldId] !== undefined && nextRowValues[modeFieldId] !== null && `${nextRowValues[modeFieldId]}` !== '') {
-            nextDraft[modeFieldId] = nextRowValues[modeFieldId];
-          }
-          const previousDraft = prevDrafts[draftKey] || {};
-          const nextDraftKeys = Object.keys(nextDraft);
-          const previousDraftKeys = Object.keys(previousDraft);
-          if (
-            nextDraftKeys.length === previousDraftKeys.length &&
-            nextDraftKeys.every(key => previousDraft[key] === nextDraft[key])
-          ) {
-            return prevDrafts;
-          }
-          const nextDrafts = { ...prevDrafts };
-          nextDrafts[draftKey] = nextDraft;
-          stepDataSourceDraftsRef.current = nextDrafts;
           return nextDrafts;
         });
 
