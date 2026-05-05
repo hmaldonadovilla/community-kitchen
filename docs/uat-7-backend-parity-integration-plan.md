@@ -403,9 +403,14 @@ Thirty-fourth-pass results:
 - `FormView.tsx`: extracted top-level choice-control variant rendering and one-time diagnostics into `useChoiceControlRenderer`, keeping field wiring in `FormView`. Current size: 13,200 lines.
 - Validation for the pass used focused choice/form-rendering tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-fifth-pass results:
+
+- `App.tsx`: extracted active draft-save wait/timeout handling into `waitForActiveDraftSaveTransactionsAction`, keeping autosave refs wired by the shell. Current size: 14,553 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,595 lines.
+- `App.tsx`: 14,553 lines.
 - `FormView.tsx`: 13,200 lines.
 - `LineItemGroupQuestion.tsx`: 13,611 lines.
 
