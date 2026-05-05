@@ -548,11 +548,16 @@ Sixty-third-pass results:
 - `LineItemGroupQuestion.tsx`: extracted nested row-flow group-config resolution into the line-items domain, keeping the renderer responsible for memoization and field lookup only. Current size: 13,106 lines.
 - Validation for the pass used focused row-flow group config tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-fourth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted active row-flow field-path parsing and field-type resolution into the row-flow group config helper. Current size: 13,093 lines.
+- Validation for the pass used focused row-flow group config tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 13,106 lines.
+- `LineItemGroupQuestion.tsx`: 13,093 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
