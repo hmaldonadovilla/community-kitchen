@@ -333,9 +333,14 @@ Twentieth-pass results:
 - `App.tsx`: extracted custom button visibility, placement, action validation, and open-url disabled-state derivation into `useAppCustomButtons`, keeping the execution handlers in the shell. Current size: 15,824 lines.
 - Validation for the pass used focused App/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-first-pass results:
+
+- `App.tsx`: extracted PDF, Markdown, and HTML report preview generation into `useAppReportPreviewActions`, keeping custom button dispatch and record action routing in the shell. Current size: 15,404 lines.
+- Validation for the pass used focused App/report-preview/API transport tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 15,824 lines.
+- `App.tsx`: 15,404 lines.
 - `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,826 lines.
 
