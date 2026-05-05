@@ -85,6 +85,7 @@ import { useAppStatusTransitions } from './components/app/useAppStatusTransition
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
+import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -211,7 +212,7 @@ import {
   ROW_NON_MATCH_OPTIONS_KEY
 } from './app/lineItems';
 import { normalizeRecordValues } from './app/records';
-import { applyValueMapsToForm, coerceDefaultValue } from './app/valueMaps';
+import { applyValueMapsToForm } from './app/valueMaps';
 import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange';
 import { reconcileAutoAddModeGroups } from './app/autoAddModeOverlay';
 import {
@@ -6902,142 +6903,57 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     resolveLogMessage
   });
 
-  const createRecordFromPreset = useCallback(
-    async (args: { buttonId: string; presetValues: Record<string, any> }) => {
-      const { buttonId, presetValues } = args;
-
-      const parsedRef = parseButtonRef(buttonId || '');
-      const baseId = parsedRef.id;
-      const qIdx = parsedRef.qIdx;
-
-      const baseValues = normalizeRecordValues(definition);
-      const valuesWithPreset: Record<string, FieldValue> = { ...(baseValues as any) };
-      const unknownFields: string[] = [];
-      const appliedFields: string[] = [];
-
-      Object.keys(presetValues || {}).forEach(fieldIdRaw => {
-        const fieldId = (fieldIdRaw || '').toString().trim();
-        if (!fieldId) return;
-        const q = definition.questions.find(qq => qq.id === fieldId);
-        if (!q || q.type === 'LINE_ITEM_GROUP' || q.type === 'BUTTON' || q.type === 'FILE_UPLOAD') {
-          unknownFields.push(fieldId);
-          return;
-        }
-        const opts = (q as any).options;
-        const hasAnyOption = !!(opts?.en?.length || opts?.fr?.length || opts?.nl?.length);
-        const coerced = coerceDefaultValue({
-          type: (q as any).type || '',
-          raw: (presetValues as any)[fieldIdRaw],
-          hasAnyOption,
-          hasDataSource: !!(q as any).dataSource
-        });
-        if (coerced !== undefined) {
-          valuesWithPreset[fieldId] = coerced;
-          appliedFields.push(fieldId);
-        }
-      });
-
-      const initialLineItems = buildInitialLineItems(definition);
-      const mapped = applyValueMapsToForm(definition, valuesWithPreset, initialLineItems, { mode: 'init' });
-
-      // Precheck dedup BEFORE navigating to the new record (avoid duplicate creation when presets/defaults populate dedup keys).
-      const listViewDuplicateHandler =
-        view === 'list'
-          ? (conflict: DedupConflictInfo) => {
-              const prompt: ListDedupPromptState = {
-                conflict,
-                source: 'createRecordPreset',
-                buttonId: baseId,
-                qIdx: qIdx ?? null,
-                values: mapped.values
-              };
-              setListDedupPrompt(prompt);
-              logEvent('dedup.precreate.listDialog.open', {
-                source: prompt.source,
-                buttonId: prompt.buttonId,
-                qIdx: prompt.qIdx ?? null,
-                existingRecordId: conflict.existingRecordId || null,
-                existingRowNumber: conflict.existingRowNumber ?? null
-              });
-              return true;
-            }
-          : undefined;
-      const handled = await precheckCreateDedupAndMaybeNavigate({
-        values: mapped.values,
-        lineItems: mapped.lineItems,
-        source: 'createRecordPreset',
-        onDuplicate: listViewDuplicateHandler
-      });
-      if (handled) return;
-
-      bumpRecordSession({ reason: 'createRecordPreset', nextRecordId: null });
-      createFlowRef.current = true;
-      createFlowUserEditedRef.current = false;
-      autoSaveUserEditedRef.current = false;
-      dedupHoldRef.current = false;
-      resetFieldChangeTransientState();
-      // Creating a preset record is a "new record" flow: clear draft autosave and record context.
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-      setDedupChecking(false);
-      setDedupConflict(null);
-      setDedupNotice(null);
-      dedupCheckingRef.current = false;
-      dedupConflictRef.current = null;
-      lastDedupCheckedSignatureRef.current = '';
-      dedupBaselineSignatureRef.current = '';
-      dedupKeyFingerprintBaselineRef.current = '';
-      dedupDeleteOnKeyChangeInFlightRef.current = false;
-      recordStaleRef.current = null;
-      setRecordStale(null);
-      recordDataVersionRef.current = null;
-      optimisticClientDataVersionRef.current = null;
-      recordRowNumberRef.current = null;
-
-      rememberAutoSaveSeenState(mapped.values, mapped.lineItems);
-      valuesRef.current = mapped.values;
-      lineItemsRef.current = mapped.lineItems;
-      setValues(mapped.values);
-      setLineItems(mapped.lineItems);
-      setErrors({});
-      setValidationWarnings({ top: [], byField: {} });
-      setValidationAttempted(false);
-      setValidationNoticeHidden(false);
-      setStatus(null);
-      setStatusLevel(null);
-      setRecordLoadError(null);
-      setPrefetchedSummaryHtml(null);
-      setSelectedRecordId('');
-      selectedRecordIdRef.current = '';
-      setSelectedRecordSnapshot(null);
-      selectedRecordSnapshotRef.current = null;
-      setLastSubmissionMeta(null);
-      lastSubmissionMetaRef.current = null;
-      setView('form');
-
-      logEvent('button.createRecordPreset.apply', {
-        buttonId: baseId,
-        qIdx: qIdx ?? null,
-        appliedFieldCount: appliedFields.length,
-        unknownFieldCount: unknownFields.length,
-        unknownFields: unknownFields.length ? unknownFields.slice(0, 20) : []
-      });
-    },
-    [
-      bumpRecordSession,
-      definition,
-      logEvent,
-      parseButtonRef,
-      precheckCreateDedupAndMaybeNavigate,
-      rememberAutoSaveSeenState,
-      resetFieldChangeTransientState,
-      view
-    ]
-  );
+  const createRecordFromPreset = useCreateRecordPresetAction({
+    definition,
+    view,
+    parseButtonRef,
+    logEvent,
+    precheckCreateDedupAndMaybeNavigate,
+    bumpRecordSession,
+    resetFieldChangeTransientState,
+    rememberAutoSaveSeenState,
+    createFlowRef,
+    createFlowUserEditedRef,
+    autoSaveUserEditedRef,
+    dedupHoldRef,
+    autoSaveDirtyRef,
+    autoSaveTimerRef,
+    setDraftSave,
+    setDedupChecking,
+    setDedupConflict,
+    setDedupNotice,
+    dedupCheckingRef,
+    dedupConflictRef,
+    lastDedupCheckedSignatureRef,
+    dedupBaselineSignatureRef,
+    dedupKeyFingerprintBaselineRef,
+    dedupDeleteOnKeyChangeInFlightRef,
+    recordStaleRef,
+    setRecordStale,
+    recordDataVersionRef,
+    optimisticClientDataVersionRef,
+    recordRowNumberRef,
+    valuesRef,
+    lineItemsRef,
+    setValues,
+    setLineItems,
+    setErrors,
+    setValidationWarnings,
+    setValidationAttempted,
+    setValidationNoticeHidden,
+    setStatus,
+    setStatusLevel,
+    setRecordLoadError,
+    setPrefetchedSummaryHtml,
+    setSelectedRecordId,
+    selectedRecordIdRef,
+    setSelectedRecordSnapshot,
+    selectedRecordSnapshotRef,
+    setLastSubmissionMeta,
+    lastSubmissionMetaRef,
+    setView,
+    setListDedupPrompt
+  });
 
   const handleCustomButton = useCallback(
     (buttonId: string, opts?: { skipConfirm?: boolean }) => {
