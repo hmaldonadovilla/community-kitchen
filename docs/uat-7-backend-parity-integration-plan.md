@@ -578,11 +578,16 @@ Sixty-ninth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted subgroup auto-add single-option anchor autofill target collection and line-item mutation into the auto-add row domain helper. Current size: 12,715 lines.
 - Validation for the pass used focused auto-add row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Seventieth-pass results:
+
+- `LineItemGroupQuestion.tsx`: replaced duplicate overlay group-override merge logic with the shared line-item tree override helper. Current size: 12,666 lines.
+- Validation for the pass used focused line-item tree tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,715 lines.
+- `LineItemGroupQuestion.tsx`: 12,666 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
