@@ -234,6 +234,10 @@ import {
   getCachedDataSourceItemCount
 } from '../../data/dataSources';
 import { collectDataSourceConfigsForPrefetch } from '../../data/dataSourcePrefetch';
+import {
+  DATA_SOURCE_COUNT_FIELD_PREFIX,
+  normalizeDataSourceVisibilityKey
+} from '../app/dataSourceVisibility';
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -243,11 +247,7 @@ const formatTemplate = (value: string, vars?: Record<string, string | number | b
   });
 };
 
-const DATA_SOURCE_COUNT_FIELD_PREFIX = '__ckDataSourceCount.';
 const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
-
-const normalizeDataSourceVisibilityKey = (value: string): string =>
-  (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 const lineItemDedupDefaultMessage: LocalizedString = {
   en: 'This entry already exists in this list.',
