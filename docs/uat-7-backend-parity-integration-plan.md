@@ -280,11 +280,17 @@ Eleventh-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first allocation row chrome and source-first data-source row shell components, leaving reservation/edit callbacks in the parent while moving layout concerns out. Current size: 15,544 lines.
 - `App.tsx`: extracted navigation performance refs/effects into `useAppNavigationPerf`, keeping navigation-start decisions in the shell and moving completion measurement out. Current size: 16,246 lines.
 
+Twelfth-pass results:
+
+- `FormView.tsx`: extracted guided step/data-source visibility coordination into `useGuidedStepVisibility`, pure form group/page-section construction into `buildFormGroupSections`, and document-level blur side effects into `useFormBlurCoordinator`. Current size: 14,677 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first compact sentence controls plus the source-first allocation list renderer into line-item feature components, keeping data loading and reservation persistence injected from the parent. Current size: 14,763 lines.
+- `App.tsx`: extracted debug-mode and diagnostic logging policy into `useAppDiagnostics`. Current size: 16,232 lines.
+
 Current large-file counts:
 
-- `App.tsx`: 16,246 lines.
-- `FormView.tsx`: 14,956 lines.
-- `LineItemGroupQuestion.tsx`: 15,544 lines.
+- `App.tsx`: 16,232 lines.
+- `FormView.tsx`: 14,677 lines.
+- `LineItemGroupQuestion.tsx`: 14,763 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
@@ -357,7 +363,7 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
-| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref coordination, and source-first allocation display/sorting/selection row shells with focused tests. |
+| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur coordination, and source-first allocation display/sorting/selection/list renderers with focused tests where practical. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
