@@ -286,11 +286,17 @@ Twelfth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first compact sentence controls plus the source-first allocation list renderer into line-item feature components, keeping data loading and reservation persistence injected from the parent. Current size: 14,763 lines.
 - `App.tsx`: extracted debug-mode and diagnostic logging policy into `useAppDiagnostics`. Current size: 16,232 lines.
 
+Thirteenth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted source-first compact data-source actions and inline source-first data-source row rendering into focused line-item feature components, keeping reservation sync and overlay state callbacks injected from the parent. Current size: 14,355 lines.
+- `FormView.tsx`: replaced the inline overlay-pill line-item completeness algorithm with the existing tested `isLineItemGroupQuestionComplete` helper, removing a duplicate business-rule copy from the renderer. Current size: 14,479 lines.
+- `App.tsx`: extracted system action gate and copy-current-record dialog state into `useAppDialogState`, leaving the shell to wire the modal callbacks. Current size: 16,133 lines.
+
 Current large-file counts:
 
-- `App.tsx`: 16,232 lines.
-- `FormView.tsx`: 14,677 lines.
-- `LineItemGroupQuestion.tsx`: 14,763 lines.
+- `App.tsx`: 16,133 lines.
+- `FormView.tsx`: 14,479 lines.
+- `LineItemGroupQuestion.tsx`: 14,355 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
