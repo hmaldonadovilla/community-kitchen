@@ -152,7 +152,6 @@ import {
   listSortFor,
   normalizeIdValue,
   optionSortFor,
-  resolveCompactPartType,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
   resolveSourceFirstListScrollStyle,
@@ -169,6 +168,7 @@ import { LineItemTotals } from '../../features/lineItems/components/LineItemTota
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { SourceFirstAllocationRow } from '../../features/lineItems/components/SourceFirstAllocationRow';
 import { SourceFirstDataSourceRowShell } from '../../features/lineItems/components/SourceFirstDataSourceRowShell';
+import { SourceFirstSentenceParts } from '../../features/lineItems/components/SourceFirstSentenceParts';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -6062,338 +6062,151 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             fieldById: Map<string, any>;
             selectedFieldId: string;
             sentenceParts: any[];
-          }): React.ReactNode =>
-            args.sentenceParts.map((part: any, partIndex: number) => {
-              if (!part || typeof part !== 'object') return null;
-              const partType = resolveCompactPartType(part);
-              if (partType === 'text') {
-                const text = resolveLocalizedString(part.text, language, '');
-                return text ? (
-                  <span
-                    key={`text:${args.parentRow.id}:${partIndex}`}
-                    style={{
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                      fontSize: 'var(--ck-font-control)',
-                      whiteSpace: 'nowrap',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      minHeight: 40
-                    }}
-                  >
-                    {text}
-                  </span>
-                ) : null;
-              }
-              const fieldId = `${part.fieldId || ''}`.trim();
-              if (!fieldId) return null;
-              const field = args.fieldById.get(fieldId);
-              if (!field) return null;
-              if (field.type === 'NUMBER') {
-                const rawValue = args.virtualValues[fieldId];
-                const valueText = rawValue === undefined || rawValue === null ? '' : rawValue.toString();
-                const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 48;
-                const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 132;
-                const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.2;
-                const suffixText = part.suffix
-                  ? resolveLocalizedString(part.suffix, language, '')
-                  : part.suffixFieldId
-                    ? resolveDisplayValue(
-                        args.fieldById.get(`${part.suffixFieldId || ''}`.trim()),
-                        args.virtualValues,
-                        args.parentRow.values as Record<string, FieldValue>
-                      )
-                    : '';
-                const allowsIntegerOnly = allowsVirtualIntegerOnly(
-                  field,
-                  args.virtualValues,
-                  args.parentRow.values as Record<string, FieldValue>
-                );
-                const maxFieldId = resolveVirtualMaxFieldId(
-                  field,
-                  args.virtualValues,
-                  args.parentRow.values as Record<string, FieldValue>
-                );
-                const maxValue =
-                  maxFieldId && maxFieldId in args.virtualValues
-                    ? toFiniteNumber(args.virtualValues[maxFieldId])
-                    : null;
-                return (
-                  <span
-                    key={`field:${args.parentRow.id}:${fieldId}`}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      flex: '0 0 auto',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <AutoWidthInput
-                      className="ck-compact-control ck-compact-control--number"
-                      value={valueText}
-                      disabled={isLineFieldInteractionBlocked(field)}
-                      readOnly={false}
-                      inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
-                      pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
-                      ariaLabel={resolveFieldLabel(field, language, field.id)}
-                      selectAllOnFocus
-                      sanitize={raw =>
-                        sanitizeNumericDraft(raw, {
-                          integerOnly: allowsIntegerOnly,
-                          maxValue
-                        })
-                      }
-                      minWidth={minWidth}
-                      maxWidth={maxWidth}
-                      extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
-                      onChange={next => {
-                        const nextValue = next === '' ? null : next;
-                        const currentValue =
-                          args.virtualValues[fieldId] === undefined || args.virtualValues[fieldId] === null
-                            ? null
-                            : `${args.virtualValues[fieldId]}`;
-                        const normalizedNext =
-                          nextValue === null || nextValue === undefined ? null : `${nextValue}`;
-                        if (normalizedNext === currentValue) return;
-                        const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-                        const patch = buildReservationFieldPatch({
-                          fieldId,
-                          value: nextValue,
-                          selectedFieldId: args.selectedFieldId,
-                          selectedValue: args.selectedFieldId ? args.virtualValues[args.selectedFieldId] : true,
-                          quantityFieldId
-                        }) as Record<string, FieldValue>;
-                        const deferReservation = shouldDeferReservationSync({
-                          patch,
-                          selectedFieldId: args.selectedFieldId,
-                          quantityFieldId
-                        });
-                        const sourceKey = `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
-                        if (deferReservation) {
-                          seedReservationCommittedValues({
-                            config: args.config,
-                            parentRowId: args.parentRow.id,
-                            sourceKey,
-                            virtualValues: args.virtualValues as Record<string, FieldValue>
-                          });
-                        }
-                        const quantityNumber = Number(nextValue);
-                        const shouldStageDeferredQuantityEdit =
-                          deferReservation &&
-                          !!quantityFieldId &&
-                          fieldId === quantityFieldId &&
-                          (
-                            isEmptyValue(nextValue as any) ||
-                            (Number.isFinite(quantityNumber) && quantityNumber <= 0)
-                          );
-                        if (shouldStageDeferredQuantityEdit) {
-                          stageStepDataSourceDraftPatch({
-                            config: args.config,
-                            parentRowId: args.parentRow.id,
-                            sourceKey,
-                            virtualValues: args.virtualValues as Record<string, FieldValue>,
-                            patch
-                          });
-                          queueDeferredStepReservationSync({
-                            config: args.config,
-                            parentRow: args.parentRow,
-                            sourceRow: args.sourceRow,
-                            sourceKey,
-                            patch
-                          });
-                          return;
-                        }
-                        syncStepDataSourceOutputRowWithReservation({
-                          config: args.config,
-                          parentRow: args.parentRow,
-                          sourceRow: args.sourceRow,
-                          patch
-                        }, {
-                          skipReservation: deferReservation
-                        });
-                        if (deferReservation) {
-                          queueDeferredStepReservationSync({
-                            config: args.config,
-                            parentRow: args.parentRow,
-                            sourceRow: args.sourceRow,
-                            sourceKey,
-                            patch
-                          });
-                        }
-                      }}
-                      onBlur={next => {
-                        const nextValue = next === '' ? null : next;
-                        const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-                        const quantityNumber = Number(nextValue);
-                        const shouldReleaseQuantity =
-                          !!quantityFieldId &&
-                          fieldId === quantityFieldId &&
-                          (
-                            isEmptyValue(nextValue as any) ||
-                            (Number.isFinite(quantityNumber) && quantityNumber <= 0)
-                          );
-                        const patch = buildReservationFieldPatch({
-                          fieldId,
-                          value: nextValue,
-                          selectedFieldId: args.selectedFieldId,
-                          selectedValue: args.selectedFieldId ? args.virtualValues[args.selectedFieldId] : true,
-                          quantityFieldId
-                        }) as Record<string, FieldValue>;
-                        if (shouldReleaseQuantity && args.selectedFieldId) {
-                          patch[args.selectedFieldId] = false;
-                        }
-                        const sourceKey = `${args.sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
-                        if (!sourceKey) {
-                          scheduleDeferredStepReservationAutoSaveHoldRelease();
-                          return;
-                        }
-                        const deferReservation = shouldDeferReservationSync({
-                          patch,
-                          selectedFieldId: args.selectedFieldId,
-                          quantityFieldId
-                        });
-                        if (!shouldReleaseQuantity && !deferReservation) return;
-                        if (deferReservation) {
-                          if (!hasPendingDeferredReservationChange({
-                            config: args.config,
-                            parentRowId: args.parentRow.id,
-                            sourceKey,
-                            patch
-                          })) {
-                            scheduleDeferredStepReservationAutoSaveHoldRelease();
-                            return;
-                          }
-                        }
-                        cancelDeferredStepReservationSync({
-                          parentRowId: args.parentRow.id,
-                          sourceKey
-                        });
-                        syncStepDataSourceOutputRowWithReservation({
-                          config: args.config,
-                          parentRow: args.parentRow,
-                          sourceRow: args.sourceRow,
-                          patch
-                        });
-                        if (deferReservation) {
-                          scheduleDeferredStepReservationAutoSaveHoldRelease();
-                        }
-                      }}
-                      inputStyle={{
-                        boxSizing: 'border-box',
-                        minHeight: 34,
-                        paddingInlineStart: 8,
-                        paddingInlineEnd: 8,
-                        textAlign: 'center',
-                        fontVariantNumeric: 'tabular-nums',
-                        fontSize: 'var(--ck-font-control)',
-                        fontWeight: 500,
-                        lineHeight: 1
-                      }}
-                    />
-                    {suffixText ? <span style={{ whiteSpace: 'nowrap' }}>{suffixText}</span> : null}
-                  </span>
-                );
-              }
-              if (field.type === 'CHOICE') {
-                const rawValue = args.virtualValues[fieldId];
-                const valueText =
-                  Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
-                const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
-                  sort: optionSortFor(field)
-                }).map(option => ({
-                  value: option.value,
-                  label: option.label,
-                  tooltip: option.tooltip,
-                  searchText: option.searchText
-                }));
-                const controlDecision = computeChoiceControlVariant(
-                  options.map(option => ({ value: option.value, label: option.label })),
-                  !!field.required,
-                  ((field as any)?.ui?.control || '').toString()
-                );
-                if (controlDecision.variant === 'segmented') {
-                  return (
-                    <span
-                      key={`field:${args.parentRow.id}:${fieldId}`}
-                      style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
-                    >
-                      <div
-                        className="ck-choice-control ck-segmented"
-                        role="radiogroup"
-                        aria-label={resolveFieldLabel(field, language, field.id)}
-                        style={{ width: 'auto', maxWidth: 'none', flex: '0 0 auto' }}
-                      >
-                        {options.map(option => {
-                          const active = valueText === option.value;
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              className={active ? 'active' : undefined}
-                              aria-pressed={active}
-                              disabled={isLineFieldInteractionBlocked(field)}
-                              onClick={() => {
-                                if (active) return;
-                                syncStepDataSourceOutputRowWithReservation({
-                                  config: args.config,
-                                  parentRow: args.parentRow,
-                                  sourceRow: args.sourceRow,
-                                  patch: {
-                                    ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                                    [fieldId]: option.value
-                                  }
-                                });
-                              }}
-                              style={{
-                                flex: '0 0 auto',
-                                minWidth: '8.25ch',
-                                paddingInline: 16,
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </span>
-                  );
+          }): React.ReactNode => (
+            <SourceFirstSentenceParts
+              idBase={args.parentRow.id}
+              language={language}
+              parentRow={args.parentRow}
+              sourceRow={args.sourceRow}
+              virtualValues={args.virtualValues}
+              fieldById={args.fieldById}
+              sentenceParts={args.sentenceParts}
+              disabledForField={isLineFieldInteractionBlocked}
+              resolveDisplayValue={resolveDisplayValue}
+              resolveIntegerOnly={allowsVirtualIntegerOnly}
+              resolveMaxFieldId={resolveVirtualMaxFieldId}
+              toFiniteNumber={toFiniteNumber}
+              onNumberChange={({ fieldId, value, virtualValues, sourceRow }) => {
+                const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+                const patch = buildReservationFieldPatch({
+                  fieldId,
+                  value,
+                  selectedFieldId: args.selectedFieldId,
+                  selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
+                  quantityFieldId
+                }) as Record<string, FieldValue>;
+                const deferReservation = shouldDeferReservationSync({
+                  patch,
+                  selectedFieldId: args.selectedFieldId,
+                  quantityFieldId
+                });
+                const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
+                if (deferReservation) {
+                  seedReservationCommittedValues({
+                    config: args.config,
+                    parentRowId: args.parentRow.id,
+                    sourceKey,
+                    virtualValues
+                  });
                 }
-                return (
-                  <AutoWidthSelect
-                    key={`field:${args.parentRow.id}:${fieldId}`}
-                    className="ck-compact-control ck-compact-control--choice"
-                    value={valueText}
-                    options={options}
-                    ariaLabel={resolveFieldLabel(field, language, field.id)}
-                    minWidth={Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 72}
-                    maxWidth={Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 220}
-                    extraWidth={34}
-                    disabled={isLineFieldInteractionBlocked(field)}
-                    onChange={next => {
-                      if (`${next ?? ''}` === `${args.virtualValues[fieldId] ?? ''}`) return;
-                      syncStepDataSourceOutputRowWithReservation({
-                        config: args.config,
-                        parentRow: args.parentRow,
-                        sourceRow: args.sourceRow,
-                        patch: {
-                          ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
-                          [fieldId]: next
-                        }
-                      });
-                    }}
-                    selectStyle={{
-                      minHeight: 34,
-                      fontSize: 'var(--ck-font-control)',
-                      lineHeight: 1.2,
-                      fontWeight: 500
-                    }}
-                  />
-                );
-              }
-              return null;
-            });
+                const quantityNumber = Number(value);
+                const shouldStageDeferredQuantityEdit =
+                  deferReservation &&
+                  !!quantityFieldId &&
+                  fieldId === quantityFieldId &&
+                  (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
+                if (shouldStageDeferredQuantityEdit) {
+                  stageStepDataSourceDraftPatch({
+                    config: args.config,
+                    parentRowId: args.parentRow.id,
+                    sourceKey,
+                    virtualValues,
+                    patch
+                  });
+                  queueDeferredStepReservationSync({
+                    config: args.config,
+                    parentRow: args.parentRow,
+                    sourceRow,
+                    sourceKey,
+                    patch
+                  });
+                  return;
+                }
+                syncStepDataSourceOutputRowWithReservation({
+                  config: args.config,
+                  parentRow: args.parentRow,
+                  sourceRow,
+                  patch
+                }, {
+                  skipReservation: deferReservation
+                });
+                if (deferReservation) {
+                  queueDeferredStepReservationSync({
+                    config: args.config,
+                    parentRow: args.parentRow,
+                    sourceRow,
+                    sourceKey,
+                    patch
+                  });
+                }
+              }}
+              onNumberBlur={({ fieldId, value, virtualValues, sourceRow }) => {
+                const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+                const quantityNumber = Number(value);
+                const shouldReleaseQuantity =
+                  !!quantityFieldId &&
+                  fieldId === quantityFieldId &&
+                  (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
+                const patch = buildReservationFieldPatch({
+                  fieldId,
+                  value,
+                  selectedFieldId: args.selectedFieldId,
+                  selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
+                  quantityFieldId
+                }) as Record<string, FieldValue>;
+                if (shouldReleaseQuantity && args.selectedFieldId) {
+                  patch[args.selectedFieldId] = false;
+                }
+                const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
+                if (!sourceKey) {
+                  scheduleDeferredStepReservationAutoSaveHoldRelease();
+                  return;
+                }
+                const deferReservation = shouldDeferReservationSync({
+                  patch,
+                  selectedFieldId: args.selectedFieldId,
+                  quantityFieldId
+                });
+                if (!shouldReleaseQuantity && !deferReservation) return;
+                if (deferReservation) {
+                  if (!hasPendingDeferredReservationChange({
+                    config: args.config,
+                    parentRowId: args.parentRow.id,
+                    sourceKey,
+                    patch
+                  })) {
+                    scheduleDeferredStepReservationAutoSaveHoldRelease();
+                    return;
+                  }
+                }
+                cancelDeferredStepReservationSync({
+                  parentRowId: args.parentRow.id,
+                  sourceKey
+                });
+                syncStepDataSourceOutputRowWithReservation({
+                  config: args.config,
+                  parentRow: args.parentRow,
+                  sourceRow,
+                  patch
+                });
+                if (deferReservation) {
+                  scheduleDeferredStepReservationAutoSaveHoldRelease();
+                }
+              }}
+              onChoiceChange={({ fieldId, value, virtualValues, sourceRow }) => {
+                if (`${value ?? ''}` === `${virtualValues[fieldId] ?? ''}`) return;
+                syncStepDataSourceOutputRowWithReservation({
+                  config: args.config,
+                  parentRow: args.parentRow,
+                  sourceRow,
+                  patch: {
+                    ...(args.selectedFieldId ? { [args.selectedFieldId]: true } : {}),
+                    [fieldId]: value
+                  }
+                });
+              }}
+            />
+          );
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
@@ -12206,315 +12019,104 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                     })
                                   }
                                 >
-                                  {sentenceParts.map((part: any, partIndex: number) => {
-                                            if (!part || typeof part !== 'object') return null;
-                                            const partType = resolveCompactPartType(part);
-                                            if (partType === 'text') {
-                                              const text = resolveLocalizedString(part.text, language, '');
-                                              return text ? (
-                                                <span
-                                                  key={`text:${sourceKey}:${partIndex}`}
-                                                  style={{
-                                                    color: 'var(--muted)',
-                                                    fontWeight: 600,
-                                                    fontSize: 'var(--ck-font-control)',
-                                                    whiteSpace: 'nowrap',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    minHeight: 40
-                                                  }}
-                                                >
-                                                  {text}
-                                                </span>
-                                              ) : null;
-                                            }
-                                            const fieldId = (part.fieldId || '').toString().trim();
-                                            if (!fieldId) return null;
-                                            const field = fieldById.get(fieldId);
-                                            if (!field) return null;
-                                            if (field.type === 'NUMBER') {
-                                              const rawValue = virtualValues[fieldId];
-                                              const valueText =
-                                                rawValue === undefined || rawValue === null ? '' : rawValue.toString();
-                                              const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.2;
-                                              const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 48;
-                                              const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 132;
-                                              const suffixText = part.suffix
-                                                ? resolveLocalizedString(part.suffix, language, '')
-                                                : part.suffixFieldId
-                                                  ? resolveVirtualDisplay(virtualValues, fieldById.get(part.suffixFieldId))
-                                                  : '';
-                                              const allowsIntegerOnly = allowsVirtualIntegerOnly(
-                                                field,
-                                                virtualValues,
-                                                row.values as Record<string, FieldValue>
-                                              );
-                                              const maxFieldId = resolveVirtualMaxFieldId(
-                                                field,
-                                                virtualValues,
-                                                row.values as Record<string, FieldValue>
-                                              );
-                                              const maxValue =
-                                                maxFieldId && maxFieldId in virtualValues
-                                                  ? toFiniteNumber(virtualValues[maxFieldId])
-                                                  : null;
-                                              const sanitizeNumericValue = (raw: string): string =>
-                                                sanitizeNumericDraft(raw, {
-                                                  integerOnly: allowsIntegerOnly,
-                                                  maxValue
-                                                });
-                                              return (
-                                                <span
-                                                  key={`field:${sourceKey}:${fieldId}`}
-                                                  style={{
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: 6,
-                                                    flex: '0 0 auto',
-                                                    whiteSpace: 'nowrap',
-                                                    minWidth: 0,
-                                                    flexWrap: 'nowrap'
-                                                  }}
-                                                  data-compact-cluster="true"
-                                                >
-                                                  <AutoWidthInput
-                                                    className="ck-compact-control ck-compact-control--number"
-                                                    value={valueText}
-                                                    disabled={isLineFieldInteractionBlocked(field)}
-                                                    readOnly={false}
-                                                    inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
-                                                    pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
-                                                    ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                                    selectAllOnFocus
-                                                    sanitize={sanitizeNumericValue}
-                                                    minWidth={minWidth}
-                                                    maxWidth={maxWidth}
-                                                    extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
-                                                    onChange={next => {
-                                                      const nextValue = next === '' ? null : next;
-                                                      const currentValue =
-                                                        virtualValues[fieldId] === undefined || virtualValues[fieldId] === null
-                                                          ? null
-                                                          : `${virtualValues[fieldId]}`;
-                                                      const normalizedNext =
-                                                        nextValue === null || nextValue === undefined ? null : `${nextValue}`;
-                                                      if (normalizedNext === currentValue) return;
-                                                      const patch = buildReservationFieldPatch({
-                                                        fieldId,
-                                                        value: nextValue,
-                                                        selectedFieldId,
-                                                        selectedValue: selectedFieldId ? virtualValues[selectedFieldId] : true,
-                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
-                                                      }) as Record<string, FieldValue>;
-                                                      const deferReservation = shouldDeferReservationSync({
-                                                        patch,
-                                                        selectedFieldId,
-                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
-                                                      });
-                                                      if (deferReservation) {
-                                                        seedReservationCommittedValues({
-                                                          config,
-                                                          parentRowId: row.id,
-                                                          sourceKey,
-                                                          virtualValues: virtualValues as Record<string, FieldValue>
-                                                        });
-                                                      }
-                                                      syncStepDataSourceOutputRowWithReservation({
-                                                        config,
-                                                        parentRow: row,
-                                                        sourceRow,
-                                                        patch
-                                                      }, {
-                                                        skipReservation: deferReservation
-                                                      });
-                                                      if (deferReservation) {
-                                                        queueDeferredStepReservationSync({
-                                                          config,
-                                                          parentRow: row,
-                                                          sourceRow,
-                                                          sourceKey,
-                                                          patch
-                                                        });
-                                                      }
-                                                    }}
-                                                    onBlur={next => {
-                                                      const nextValue = next === '' ? null : next;
-                                                      const patch = buildReservationFieldPatch({
-                                                        fieldId,
-                                                        value: nextValue,
-                                                        selectedFieldId,
-                                                        selectedValue: selectedFieldId ? virtualValues[selectedFieldId] : true,
-                                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
-                                                      }) as Record<string, FieldValue>;
-                                                      if (
-                                                        !hasPendingDeferredReservationChange({
-                                                          config,
-                                                          parentRowId: row.id,
-                                                          sourceKey,
-                                                          patch
-                                                        })
-                                                      ) {
-                                                        return;
-                                                      }
-                                                      cancelDeferredStepReservationSync({
-                                                        parentRowId: row.id,
-                                                        sourceKey
-                                                      });
-                                                      syncStepDataSourceOutputRowWithReservation({
-                                                        config,
-                                                        parentRow: row,
-                                                        sourceRow,
-                                                        patch
-                                                      });
-                                                    }}
-                                                    style={{ flex: '0 0 auto' }}
-                                                    inputStyle={{
-                                                      boxSizing: 'border-box',
-                                                      minHeight: 34,
-                                                      paddingInlineStart: 8,
-                                                      paddingInlineEnd: 8,
-                                                      textAlign: 'center',
-                                                      fontVariantNumeric: 'tabular-nums',
-                                                      fontSize: 'var(--ck-font-control)',
-                                                      fontWeight: 500,
-                                                      lineHeight: 1
-                                                    }}
-                                                  />
-                                                  {suffixText ? (
-                                                    <span
-                                                      style={{
-                                                        fontSize: 'var(--ck-font-control)',
-                                                        whiteSpace: 'nowrap',
-                                                        flex: '0 0 auto',
-                                                        marginInlineStart: 0
-                                                      }}
-                                                    >
-                                                      {suffixText}
-                                                    </span>
-                                                  ) : null}
-                                                </span>
-                                              );
-                                            }
-                                            if (field.type === 'CHOICE') {
-                                              const rawValue = virtualValues[fieldId];
-                                              const valueText =
-                                                Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
-                                              const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
-                                                sort: optionSortFor(field)
-                                              }).map(option => ({
-                                                value: option.value,
-                                                label: option.label,
-                                                tooltip: option.tooltip,
-                                                searchText: option.searchText
-                                              }));
-                                              const controlDecision = computeChoiceControlVariant(
-                                                options.map(option => ({ value: option.value, label: option.label })),
-                                                !!field.required,
-                                                ((field as any)?.ui?.control || '').toString()
-                                              );
-                                              const selectedLabel =
-                                                options.find(option => option.value === valueText)?.label ||
-                                                resolveLocalizedString((part as any)?.placeholder, language, '') ||
-                                                tSystem('common.selectPlaceholder', language, 'Select…');
-                                              const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.8;
-                                              const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : 76;
-                                              const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : 156;
-                                              if (controlDecision.variant === 'segmented') {
-                                                return (
-                                                  <span
-                                                    key={`field:${sourceKey}:${fieldId}`}
-                                                    style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
-                                                    data-compact-cluster="true"
-                                                  >
-                                                    <div
-                                                      className="ck-choice-control ck-segmented"
-                                                      role="radiogroup"
-                                                      aria-label={resolveFieldLabel(field, language, field.id)}
-                                                      style={{ width: 'auto', maxWidth: 'none', flex: '0 0 auto' }}
-                                                    >
-                                                      {options.map(option => {
-                                                        const active = valueText === option.value;
-                                                        return (
-                                                          <button
-                                                            key={option.value}
-                                                            type="button"
-                                                            className={active ? 'active' : undefined}
-                                                            role="radio"
-                                                            aria-checked={active}
-                                                            title={option.label}
-                                                            disabled={isLineFieldInputDisabled(field)}
-                                                            onClick={() =>
-                                                              syncStepDataSourceOutputRowWithReservation({
-                                                                config,
-                                                                parentRow: row,
-                                                                sourceRow,
-                                                                patch: {
-                                                                  ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                                  [fieldId]: option.value
-                                                                }
-                                                              })
-                                                            }
-                                                            style={{
-                                                              flex: '0 0 auto',
-                                                              minWidth: '8.25ch',
-                                                              paddingInline: 16,
-                                                              whiteSpace: 'nowrap'
-                                                            }}
-                                                          >
-                                                            {option.label}
-                                                          </button>
-                                                        );
-                                                      })}
-                                                    </div>
-                                                  </span>
-                                                );
-                                              }
-                                              return (
-                                                <span
-                                                  key={`field:${sourceKey}:${fieldId}`}
-                                                  style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
-                                                  data-compact-cluster="true"
-                                                >
-                                                  <AutoWidthSelect
-                                                    value={valueText}
-                                                    options={options.map(option => ({
-                                                      value: option.value,
-                                                      label: option.label
-                                                    }))}
-                                                    disabled={isLineFieldInputDisabled(field)}
-                                                    ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                                    className="ck-compact-control ck-compact-control--choice"
-                                                    minWidth={minWidth}
-                                                    maxWidth={maxWidth}
-                                                    extraWidth={Math.max(30, Math.ceil(paddingChars * 7))}
-                                                    placeholder={selectedLabel}
-                                                    style={{ flex: '0 0 auto' }}
-                                                    selectStyle={{
-                                                      boxSizing: 'border-box',
-                                                      minHeight: 34,
-                                                      paddingInlineStart: 12,
-                                                      paddingInlineEnd: 28,
-                                                      fontSize: 'var(--ck-font-control)',
-                                                      fontWeight: 500,
-                                                      lineHeight: 1
-                                                    }}
-                                                    onChange={next =>
-                                                      syncStepDataSourceOutputRowWithReservation({
-                                                        config,
-                                                        parentRow: row,
-                                                        sourceRow,
-                                                        patch: {
-                                                          ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
-                                                          [fieldId]: next
-                                                        }
-                                                      })
-                                                    }
-                                                  />
-                                                </span>
-                                              );
-                                            }
-                                            return null;
-                                          })}
+                                  <SourceFirstSentenceParts
+                                    idBase={sourceKey}
+                                    language={language}
+                                    parentRow={row}
+                                    sourceRow={sourceRow}
+                                    virtualValues={virtualValues}
+                                    fieldById={fieldById}
+                                    sentenceParts={sentenceParts}
+                                    disabledForField={isLineFieldInputDisabled}
+                                    resolveDisplayValue={(field, currentVirtualValues) =>
+                                      resolveVirtualDisplay(currentVirtualValues, field)
+                                    }
+                                    resolveIntegerOnly={allowsVirtualIntegerOnly}
+                                    resolveMaxFieldId={resolveVirtualMaxFieldId}
+                                    toFiniteNumber={toFiniteNumber}
+                                    clustered
+                                    compactChoicePlaceholder
+                                    onNumberChange={({ fieldId, value, virtualValues: currentVirtualValues }) => {
+                                      const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
+                                      const patch = buildReservationFieldPatch({
+                                        fieldId,
+                                        value,
+                                        selectedFieldId,
+                                        selectedValue: selectedFieldId ? currentVirtualValues[selectedFieldId] : true,
+                                        quantityFieldId
+                                      }) as Record<string, FieldValue>;
+                                      const deferReservation = shouldDeferReservationSync({
+                                        patch,
+                                        selectedFieldId,
+                                        quantityFieldId
+                                      });
+                                      if (deferReservation) {
+                                        seedReservationCommittedValues({
+                                          config,
+                                          parentRowId: row.id,
+                                          sourceKey,
+                                          virtualValues: currentVirtualValues
+                                        });
+                                      }
+                                      syncStepDataSourceOutputRowWithReservation({
+                                        config,
+                                        parentRow: row,
+                                        sourceRow,
+                                        patch
+                                      }, {
+                                        skipReservation: deferReservation
+                                      });
+                                      if (deferReservation) {
+                                        queueDeferredStepReservationSync({
+                                          config,
+                                          parentRow: row,
+                                          sourceRow,
+                                          sourceKey,
+                                          patch
+                                        });
+                                      }
+                                    }}
+                                    onNumberBlur={({ fieldId, value, virtualValues: currentVirtualValues }) => {
+                                      const patch = buildReservationFieldPatch({
+                                        fieldId,
+                                        value,
+                                        selectedFieldId,
+                                        selectedValue: selectedFieldId ? currentVirtualValues[selectedFieldId] : true,
+                                        quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
+                                      }) as Record<string, FieldValue>;
+                                      if (
+                                        !hasPendingDeferredReservationChange({
+                                          config,
+                                          parentRowId: row.id,
+                                          sourceKey,
+                                          patch
+                                        })
+                                      ) {
+                                        return;
+                                      }
+                                      cancelDeferredStepReservationSync({
+                                        parentRowId: row.id,
+                                        sourceKey
+                                      });
+                                      syncStepDataSourceOutputRowWithReservation({
+                                        config,
+                                        parentRow: row,
+                                        sourceRow,
+                                        patch
+                                      });
+                                    }}
+                                    onChoiceChange={({ fieldId, value }) =>
+                                      syncStepDataSourceOutputRowWithReservation({
+                                        config,
+                                        parentRow: row,
+                                        sourceRow,
+                                        patch: {
+                                          ...(selectedFieldId ? { [selectedFieldId]: true } : {}),
+                                          [fieldId]: value
+                                        }
+                                      })
+                                    }
+                                  />
                                 </SourceFirstDataSourceRowShell>
                               );
                             })}
