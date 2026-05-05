@@ -122,6 +122,7 @@ import {
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 import { buildSourceFirstPresentationEntries } from './sourceFirstPresentationEntries';
 import { resolveVirtualPresetAction, resolveVirtualPresetValueAction } from './virtualPreset';
+import { buildVirtualRowWhenContext, validateVirtualFieldRulesAction } from './virtualRowContext';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
@@ -1016,15 +1017,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     (args: {
       rowValues: Record<string, FieldValue>;
       parentValues?: Record<string, FieldValue>;
-    }): VisibilityContext => ({
-      getValue: (fieldId: string) => {
-        if (Object.prototype.hasOwnProperty.call(args.rowValues || {}, fieldId)) return (args.rowValues as any)[fieldId];
-        if (args.parentValues && Object.prototype.hasOwnProperty.call(args.parentValues, fieldId)) return (args.parentValues as any)[fieldId];
-        return resolveTopValue(fieldId);
-      },
-      getLineItems: (groupId: string) => lineItems[groupId] || [],
-      getLineItemKeys: () => Object.keys(lineItems)
-    }),
+    }): VisibilityContext => buildVirtualRowWhenContext({ ...args, lineItems, resolveTopValue }),
     [lineItems, resolveTopValue]
   );
 
@@ -1034,21 +1027,16 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       rowValues: Record<string, FieldValue>,
       parentValues?: Record<string, FieldValue>
     ): string[] => {
-      const rules = Array.isArray(field?.validationRules)
-        ? (field.validationRules as ValidationRule[]).filter(rule => rule?.then?.fieldId === field?.id)
-        : [];
-      if (!rules.length) return [];
-      const ctx = {
-        ...resolveVirtualRowWhenContext({ rowValues, parentValues }),
+      return validateVirtualFieldRulesAction({
+        field,
+        rowValues,
+        parentValues,
         language,
-        phase: 'submit',
-        isHidden: () => false
-      } as any;
-      return validateRules(rules, ctx)
-        .map(issue => (issue?.message || '').toString().trim())
-        .filter(Boolean);
+        lineItems,
+        resolveTopValue
+      });
     },
-    [language, resolveVirtualRowWhenContext]
+    [language, lineItems, resolveTopValue]
   );
 
   const resolveVirtualPresetValue = React.useCallback(
