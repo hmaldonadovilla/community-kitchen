@@ -368,10 +368,15 @@ Twenty-seventh-pass results:
 - `App.tsx`: extracted copy-current-record orchestration into `useDuplicateCurrentRecordAction`, keeping profile/drop-field application, destructive-change bypasses, dedup precheck, and draft-id creation outside the main shell. Current size: 14,748 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-eighth-pass results:
+
+- `FormView.tsx`: extracted top-level read-only field chrome and overlay-open button chrome into `TopFieldChrome`, keeping value mutation and overlay reset orchestration in `FormView`. Current size: 13,409 lines.
+- Validation for the pass used focused form/upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,748 lines.
-- `FormView.tsx`: 13,454 lines.
+- `FormView.tsx`: 13,409 lines.
 - `LineItemGroupQuestion.tsx`: 13,618 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
