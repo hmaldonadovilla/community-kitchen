@@ -153,13 +153,17 @@ import {
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
-import { LineItemOverlayResetButton } from '../../features/lineItems/components/LineItemOverlayResetButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
+import {
+  LineItemOverlayOpenInlineButton,
+  LineItemOverlayOpenReplaceField,
+  LineItemReadOnlyField
+} from '../../features/lineItems/components/LineItemFieldChrome';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import { LineFileUploadQuestion } from '../../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadListQuestion } from '../../features/uploads/components/LineFileUploadListQuestion';
@@ -9082,134 +9086,39 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                     onConfirm: runReset
                   });
                 };
-	                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
-	                  const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-	                  const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                  const actionRow = (
-	                    <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-	                      <button
-                        type="button"
-                        className="ck-list-row-action-btn"
-                        onClick={handleOverlayOpenAction}
-                        disabled={overlayOpenDisabled}
-                        style={withListRowActionButtonStyle(
-                          overlayOpenDisabled,
-                          showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined,
-                          overlayActionButtonBaseStyle
-                        )}
-                      >
-                        {overlayOpenButtonText(displayValue)}
-                      </button>
-                      {showResetButton ? (
-                        <LineItemOverlayResetButton
-                          language={language}
-                          onReset={handleOverlayOpenActionReset}
-                          disabled={overlayOpenActionResetDisabled}
-                          baseStyle={overlayActionButtonBaseStyle}
-                        />
-                      ) : null}
-                    </div>
-                  );
-                  const flattenedGridItems =
-                    flattenPlacement !== 'below'
-                      ? renderOverlayOpenFlattenedFields(flattenPlacement, { asGridItems: true, forceStackedLabel: true })
-                      : null;
-                  const gridItems = Array.isArray(flattenedGridItems) ? flattenedGridItems : null;
-                  if (gridItems && gridItems.length) {
-                    const gridLabelStyle =
-                      labelStyle === srOnly ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : labelStyle;
-                    const actionField = (
-                      <div
-                        key={`${fieldPath}::overlayOpenAction`}
-                        className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
-                        data-field-path={fieldPath}
-                        data-has-error={errors[fieldPath] ? 'true' : undefined}
-                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                      >
-                        <label style={gridLabelStyle}>
-                          {resolveFieldLabel(field, language, field.id)}
-                          {field.required && <RequiredStar />}
-                        </label>
-                        <div className="ck-control-row">{actionRow}</div>
-                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                        {renderWarnings(fieldPath)}
-                        {nonMatchWarningNode}
-                      </div>
-                    );
-                    const items = flattenPlacement === 'left' ? [...gridItems, actionField] : [actionField, ...gridItems];
-                    const gridClassName = `ck-pair-grid${items.length >= 3 ? ' ck-pair-grid--3' : ''}`;
-                    return (
-                      <div
-                        key={field.id}
-                        className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                          forceStackedLabel ? ' ck-label-stacked' : ''
-                        }`}
-                      >
-                        <label style={srOnly} aria-hidden="true">
-                          {resolveFieldLabel(field, language, field.id)}
-                          {field.required && <RequiredStar />}
-                        </label>
-                        <PairedRowGrid className={gridClassName}>{items}</PairedRowGrid>
-                      </div>
-                    );
-                  }
-                  const flattenedFields = renderOverlayOpenFlattenedFields(flattenPlacement, { forceStackedLabel });
-                  const actionBlock =
-                    flattenPlacement !== 'below' && flattenedFields ? (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                          gap: 12,
-                          alignItems: 'start'
-                        }}
-                      >
-                        {flattenPlacement === 'left' ? flattenedFields : null}
-                        <div>{actionRow}</div>
-                        {flattenPlacement === 'right' ? flattenedFields : null}
-                      </div>
-                    ) : (
-                      <>
-                        {actionRow}
-                        {flattenedFields}
-                      </>
-                    );
-                  return (
-                    <div
-                      key={field.id}
-                      className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                        forceStackedLabel ? ' ck-label-stacked' : ''
-                      }`}
-                      data-field-path={fieldPath}
-                      data-has-error={errors[fieldPath] ? 'true' : undefined}
-                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                    >
-                      <label style={labelStyle}>
-                        {resolveFieldLabel(field, language, field.id)}
-                        {field.required && <RequiredStar />}
-                      </label>
-                      {actionBlock}
-                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                      {renderWarnings(fieldPath)}
-                      {nonMatchWarningNode}
-                    </div>
-                  );
-                };
+                const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
+                  <LineItemOverlayOpenReplaceField
+                    key={field.id}
+                    field={field}
+                    fieldPath={fieldPath}
+                    language={language}
+                    forceStackedLabel={forceStackedLabel}
+                    labelStyle={labelStyle}
+                    error={errors[fieldPath]}
+                    hasWarning={hasWarning(fieldPath)}
+                    renderWarnings={() => renderWarnings(fieldPath)}
+                    nonMatchWarningNode={nonMatchWarningNode}
+                    buttonLabel={overlayOpenButtonText(displayValue)}
+                    onOpen={handleOverlayOpenAction}
+                    openDisabled={overlayOpenDisabled}
+                    showResetButton={overlayOpenAction?.hideTrashIcon !== true}
+                    onReset={handleOverlayOpenActionReset}
+                    resetDisabled={overlayOpenActionResetDisabled}
+                    baseStyle={overlayActionButtonBaseStyle}
+                    flattenPlacement={normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement)}
+                    renderFlattenedFields={(placement, options) => renderOverlayOpenFlattenedFields(placement, options)}
+                  />
+                );
 	                const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
 	                  if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
 	                  return (
-	                    <div style={{ marginTop: 8 }}>
-	                      <button
-	                        type="button"
-                          className="ck-list-row-action-btn"
-	                        onClick={handleOverlayOpenAction}
-	                        disabled={overlayOpenDisabled}
-	                        style={withListRowActionButtonStyle(overlayOpenDisabled, undefined, overlayActionButtonBaseStyle)}
-	                      >
-	                        {overlayOpenButtonText(displayValue)}
-	                      </button>
-	                    </div>
-	                  );
+                      <LineItemOverlayOpenInlineButton
+                        buttonLabel={overlayOpenButtonText(displayValue)}
+                        onOpen={handleOverlayOpenAction}
+                        disabled={overlayOpenDisabled}
+                        baseStyle={overlayActionButtonBaseStyle}
+                      />
+                    );
 	                };
                 const showNonMatchWarning =
                   useDescriptiveNonMatchWarnings &&
@@ -9245,30 +9154,25 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   triggeredSubgroupIds.length && fieldIsStacked
                     ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'inline' })
                     : null;
-                const renderReadOnlyLine = (display: React.ReactNode) => {
-                  const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                    forceStackedLabel ? ' ck-label-stacked' : ''
-                  } ck-readonly-field`;
-                  return (
-                    <div
-                      key={field.id}
-                      className={cls}
-                      data-field-path={fieldPath}
-                      data-has-error={errors[fieldPath] ? 'true' : undefined}
-                      data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                    >
-                      <label style={labelStyle}>
-                        {resolveFieldLabel(field, language, field.id)}
-                        {field.required && <RequiredStar />}
-                      </label>
-                      <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
-                      {fieldIsStacked ? subgroupOpenInline : subgroupOpenStack}
-                      {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                      {renderWarnings(fieldPath)}
-                      {nonMatchWarningNode}
-                    </div>
-                  );
-                };
+                const renderReadOnlyLine = (display: React.ReactNode) => (
+                  <LineItemReadOnlyField
+                    key={field.id}
+                    field={field}
+                    fieldPath={fieldPath}
+                    language={language}
+                    forceStackedLabel={forceStackedLabel}
+                    fieldIsStacked={fieldIsStacked}
+                    labelStyle={labelStyle}
+                    error={errors[fieldPath]}
+                    hasWarning={hasWarning(fieldPath)}
+                    renderWarnings={() => renderWarnings(fieldPath)}
+                    nonMatchWarningNode={nonMatchWarningNode}
+                    display={display}
+                    subgroupOpenInline={subgroupOpenInline}
+                    subgroupOpenStack={subgroupOpenStack}
+                    stackedInlinePlacement="afterValue"
+                  />
+                );
 
                 switch (field.type) {
                   case 'CHOICE': {
@@ -10261,137 +10165,40 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                           onConfirm: runReset
                         });
                       };
-	                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => {
-	                        const showResetButton = overlayOpenAction?.hideTrashIcon !== true;
-	                        const flattenPlacement = normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement);
-	                        const actionRow = (
-	                          <div style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-	                            <button
-                              type="button"
-                              className="ck-list-row-action-btn"
-                              onClick={handleOverlayOpenAction}
-                              disabled={overlayOpenDisabled}
-                              style={withListRowActionButtonStyle(
-                                overlayOpenDisabled,
-                                showResetButton ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: '0' } : undefined,
-                                overlayActionButtonBaseStyle
-                              )}
-                            >
-                              {overlayOpenButtonText(displayValue)}
-                            </button>
-                            {showResetButton ? (
-                              <LineItemOverlayResetButton
-                                language={language}
-                                onReset={handleOverlayOpenActionReset}
-                                disabled={overlayOpenActionResetDisabled}
-                                baseStyle={overlayActionButtonBaseStyle}
-                              />
-                            ) : null}
-                          </div>
-                        );
-                        const flattenedGridItems =
-                          flattenPlacement !== 'below'
-                            ? renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction, flattenPlacement, {
-                                asGridItems: true,
-                                forceStackedLabel: true
-                              })
-                            : null;
-                        const gridItems = Array.isArray(flattenedGridItems) ? flattenedGridItems : null;
-                        if (gridItems && gridItems.length) {
-                          const gridLabelStyle =
-                            labelStyle === srOnly ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : labelStyle;
-                          const actionField = (
-                            <div
-                              key={`${fieldPath}::overlayOpenAction`}
-                              className={`field inline-field${forceStackedLabel ? ' ck-label-stacked' : ''}`}
-                              data-field-path={fieldPath}
-                              data-has-error={errors[fieldPath] ? 'true' : undefined}
-                              data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                            >
-                              <label style={gridLabelStyle}>
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
-                              <div className="ck-control-row">{actionRow}</div>
-                              {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                              {renderWarnings(fieldPath)}
-                            </div>
-                          );
-                          const items = flattenPlacement === 'left' ? [...gridItems, actionField] : [actionField, ...gridItems];
-                          const gridClassName = `ck-pair-grid${items.length >= 3 ? ' ck-pair-grid--3' : ''}`;
-                          return (
-                            <div
-                              key={field.id}
-                              className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                                forceStackedLabel ? ' ck-label-stacked' : ''
-                              }`}
-                            >
-                              <label style={srOnly} aria-hidden="true">
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
-                              <PairedRowGrid className={gridClassName}>{items}</PairedRowGrid>
-                            </div>
-                          );
-                        }
-                        const flattenedFields = renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction, flattenPlacement, {
-                          forceStackedLabel
-                        });
-                        const actionBlock =
-                          flattenPlacement !== 'below' && flattenedFields ? (
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                                gap: 12,
-                                alignItems: 'start'
-                              }}
-                            >
-                              {flattenPlacement === 'left' ? flattenedFields : null}
-                              <div>{actionRow}</div>
-                              {flattenPlacement === 'right' ? flattenedFields : null}
-                            </div>
-                          ) : (
-                            <>
-                              {actionRow}
-                              {flattenedFields}
-                            </>
-                          );
-                        return (
-                          <div
-                            key={field.id}
-                            className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                              forceStackedLabel ? ' ck-label-stacked' : ''
-                            }`}
-                            data-field-path={fieldPath}
-                            data-has-error={errors[fieldPath] ? 'true' : undefined}
-                            data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                          >
-                            <label style={labelStyle}>
-                              {resolveFieldLabel(field, language, field.id)}
-                              {field.required && <RequiredStar />}
-                            </label>
-                            {actionBlock}
-                            {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            {renderWarnings(fieldPath)}
-                          </div>
-                        );
-                      };
+                      const renderOverlayOpenReplaceLine = (displayValue?: string | null) => (
+                        <LineItemOverlayOpenReplaceField
+                          key={field.id}
+                          field={field}
+                          fieldPath={fieldPath}
+                          language={language}
+                          forceStackedLabel={forceStackedLabel}
+                          labelStyle={labelStyle}
+                          error={errors[fieldPath]}
+                          hasWarning={hasWarning(fieldPath)}
+                          renderWarnings={() => renderWarnings(fieldPath)}
+                          buttonLabel={overlayOpenButtonText(displayValue)}
+                          onOpen={handleOverlayOpenAction}
+                          openDisabled={overlayOpenDisabled}
+                          showResetButton={overlayOpenAction?.hideTrashIcon !== true}
+                          onReset={handleOverlayOpenActionReset}
+                          resetDisabled={overlayOpenActionResetDisabled}
+                          baseStyle={overlayActionButtonBaseStyle}
+                          flattenPlacement={normalizeOverlayFlattenPlacement(overlayOpenAction?.flattenPlacement)}
+                          renderFlattenedFields={(placement, options) =>
+                            renderOverlayOpenFlattenedFieldsShared(field, overlayOpenAction, placement, options)
+                          }
+                        />
+                      );
 	                      const renderOverlayOpenInlineButton = (displayValue?: string | null) => {
 	                        if (!overlayOpenAction || overlayOpenRenderMode !== 'inline') return null;
 	                        return (
-	                          <div style={{ marginTop: 8 }}>
-	                            <button
-	                              type="button"
-                                className="ck-list-row-action-btn"
-	                              onClick={handleOverlayOpenAction}
-	                              disabled={overlayOpenDisabled}
-	                              style={withListRowActionButtonStyle(overlayOpenDisabled, undefined, overlayActionButtonBaseStyle)}
-	                            >
-	                              {overlayOpenButtonText(displayValue)}
-	                            </button>
-	                          </div>
-	                        );
+                          <LineItemOverlayOpenInlineButton
+                            buttonLabel={overlayOpenButtonText(displayValue)}
+                            onOpen={handleOverlayOpenAction}
+                            disabled={overlayOpenDisabled}
+                            baseStyle={overlayActionButtonBaseStyle}
+                          />
+                        );
 	                      };
 
                       const overlayOpenTargets = overlayOpenActionTargetsForField(field);
@@ -10422,39 +10229,24 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                         ? renderSubgroupOpenStack(triggeredSubgroupIds, { sourceFieldId: field.id, variant: 'inline' })
                         : null;
 
-                      const renderReadOnlyLine = (display: React.ReactNode) => {
-                        const cls = `${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                          forceStackedLabel ? ' ck-label-stacked' : ''
-                        } ck-readonly-field`;
-                        return (
-                          <div
-                            key={field.id}
-                            className={cls}
-                            data-field-path={fieldPath}
-                            data-has-error={errors[fieldPath] ? 'true' : undefined}
-                            data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                          >
-                            {fieldIsStacked ? (
-                              <div className="ck-label-row">
-                                <label style={labelStyle}>
-                                  {resolveFieldLabel(field, language, field.id)}
-                                  {field.required && <RequiredStar />}
-                                </label>
-                                {subgroupOpenInline}
-                              </div>
-                            ) : (
-                              <label style={labelStyle}>
-                                {resolveFieldLabel(field, language, field.id)}
-                                {field.required && <RequiredStar />}
-                              </label>
-                            )}
-                            <div className="ck-readonly-value">{display ?? <span className="muted">—</span>}</div>
-                            {subgroupOpenStack}
-                            {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                            {renderWarnings(fieldPath)}
-                          </div>
-                        );
-                      };
+                      const renderReadOnlyLine = (display: React.ReactNode) => (
+                        <LineItemReadOnlyField
+                          key={field.id}
+                          field={field}
+                          fieldPath={fieldPath}
+                          language={language}
+                          forceStackedLabel={forceStackedLabel}
+                          fieldIsStacked={fieldIsStacked}
+                          labelStyle={labelStyle}
+                          error={errors[fieldPath]}
+                          hasWarning={hasWarning(fieldPath)}
+                          renderWarnings={() => renderWarnings(fieldPath)}
+                          display={display}
+                          subgroupOpenInline={subgroupOpenInline}
+                          subgroupOpenStack={subgroupOpenStack}
+                          stackedInlinePlacement="labelRow"
+                        />
+                      );
 
                     switch (field.type) {
                       case 'CHOICE': {
