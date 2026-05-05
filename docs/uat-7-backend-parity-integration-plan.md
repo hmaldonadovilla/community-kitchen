@@ -538,10 +538,15 @@ Sixty-first-pass results:
 - `FormView.tsx`: extracted top-level group progress calculation into a focused form helper, keeping auto-collapse effects in the component while moving required-field completeness rules out of the renderer. Current size: 12,369 lines.
 - Validation for the pass used focused group progress tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-second-pass results:
+
+- `FormView.tsx`: extracted pure group auto-collapse decisions into the group progress helper, keeping focus handling, diagnostics, state application, and scrolling in the component. Current size: 12,318 lines.
+- Validation for the pass used focused group progress tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,369 lines.
+- `FormView.tsx`: 12,318 lines.
 - `LineItemGroupQuestion.tsx`: 13,149 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
