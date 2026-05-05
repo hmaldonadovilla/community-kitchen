@@ -132,7 +132,12 @@ import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { buildFormGroupSections, buildPageSectionBlocks, resolveGroupSectionKey } from './form/grouping';
-import { computeTopLevelGroupProgress } from './form/groupProgress';
+import {
+  computeTopLevelGroupProgress,
+  resolveCollapsedGroupsAfterAutoCollapse,
+  resolveCompletedGroupAutoCollapse,
+  resolvePendingAutoCollapse
+} from './form/groupProgress';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { scrollFormGroupToTop } from './form/scrollFormGroupToTop';
@@ -2211,7 +2216,16 @@ const FormView: React.FC<FormViewProps> = ({
         lineItemsChanged: lineChanged
       });
     },
-    [definition, hasBlurDerived, onDiagnostic, setLineItems, setValues]
+    [
+      definition,
+      hasBlurDerived,
+      lineItemsRef,
+      onDiagnostic,
+      runSelectionEffectsForAncestorRows,
+      setLineItems,
+      setValues,
+      valuesRef
+    ]
   );
 
   const buildLineItemGroupOverlayValidationDefinition = useCallback((): WebFormDefinition | null => {
@@ -7320,50 +7334,20 @@ const FormView: React.FC<FormViewProps> = ({
   const flushPendingAutoCollapse = useCallback(
     (reason?: string) => {
       if (!autoCollapseGroups) return;
-      const pending = Array.from(new Set(pendingAutoCollapseRef.current || [])).filter(Boolean);
-      if (!pending.length) return;
-
-      const completeSet = new Set(topLevelGroupProgress.filter(g => g.complete).map(g => g.key));
-      const stillComplete = pending.filter(k => completeSet.has(k));
+      const { stillComplete, nextOpenKey } = resolvePendingAutoCollapse({
+        pendingKeys: pendingAutoCollapseRef.current,
+        progress: topLevelGroupProgress,
+        autoOpenNextIncomplete
+      });
       pendingAutoCollapseRef.current = [];
       if (!stillComplete.length) return;
 
-      const order = topLevelGroupProgress.map(g => g.key);
-      const anchorIdx = stillComplete.reduce((acc, key) => Math.max(acc, order.indexOf(key)), -1);
-      const anchorKey = anchorIdx >= 0 ? order[anchorIdx] : stillComplete[stillComplete.length - 1];
-
-      const findNextIncomplete = (): string | undefined => {
-        if (!autoOpenNextIncomplete) return undefined;
-        const baseIdx = anchorKey ? order.indexOf(anchorKey) : -1;
-        if (baseIdx < 0) return undefined;
-        const n = topLevelGroupProgress.length;
-        for (let step = 1; step <= n; step += 1) {
-          const idx = (baseIdx + step) % n;
-          const cand = topLevelGroupProgress[idx];
-          if (!cand) continue;
-          if (cand.totalRequired <= 0) continue;
-          if (!cand.complete) return cand.key;
-        }
-        return undefined;
-      };
-
-      const nextOpenKey = findNextIncomplete();
-
       setCollapsedGroups(prev => {
-        let changed = false;
-        const next = { ...prev };
-        stillComplete.forEach(key => {
-          if (next[key] !== true) {
-            next[key] = true;
-            changed = true;
-          }
+        const { next, changed } = resolveCollapsedGroupsAfterAutoCollapse({
+          collapsedGroups: prev,
+          completedKeys: stillComplete,
+          nextOpenKey
         });
-        if (nextOpenKey) {
-          if (next[nextOpenKey] !== false) {
-            next[nextOpenKey] = false;
-            changed = true;
-          }
-        }
         if (changed) {
           onDiagnostic?.('ui.group.autoCollapse', {
             completed: stillComplete,
@@ -7418,16 +7402,12 @@ const FormView: React.FC<FormViewProps> = ({
     if (!autoCollapseGroups) return;
     if (!topLevelGroupProgress.length) return;
 
-    const prevComplete = prevGroupCompleteRef.current || {};
-    const nextComplete: Record<string, boolean> = {};
-    topLevelGroupProgress.forEach(g => {
-      nextComplete[g.key] = g.complete;
+    const { nextComplete, completedNow, nextOpenKey } = resolveCompletedGroupAutoCollapse({
+      previousComplete: prevGroupCompleteRef.current || {},
+      progress: topLevelGroupProgress,
+      autoOpenNextIncomplete
     });
     prevGroupCompleteRef.current = nextComplete;
-
-    const completedNow = topLevelGroupProgress
-      .filter(g => g.complete && !prevComplete[g.key])
-      .map(g => g.key);
     if (!completedNow.length) return;
 
     const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
@@ -7443,43 +7423,12 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
 
-    // Choose the last group (in visual order) that just completed as the anchor for "open next".
-    const anchorKey = completedNow[completedNow.length - 1];
-    const anchorIdx = topLevelGroupProgress.findIndex(g => g.key === anchorKey);
-
-    const findNextIncomplete = (): string | undefined => {
-      if (!autoOpenNextIncomplete) return undefined;
-      if (anchorIdx < 0) return undefined;
-
-      const n = topLevelGroupProgress.length;
-      for (let step = 1; step <= n; step += 1) {
-        const idx = (anchorIdx + step) % n;
-        const cand = topLevelGroupProgress[idx];
-        if (!cand) continue;
-        if (cand.totalRequired <= 0) continue;
-        if (!cand.complete) return cand.key;
-      }
-      return undefined;
-    };
-
-    const nextOpenKey = findNextIncomplete();
-
     setCollapsedGroups(prev => {
-      let changed = false;
-      const next = { ...prev };
-      completedNow.forEach(key => {
-        if (next[key] !== true) {
-          next[key] = true;
-          changed = true;
-        }
+      const { next, changed } = resolveCollapsedGroupsAfterAutoCollapse({
+        collapsedGroups: prev,
+        completedKeys: completedNow,
+        nextOpenKey
       });
-      if (nextOpenKey) {
-        if (next[nextOpenKey] !== false) {
-          next[nextOpenKey] = false;
-          changed = true;
-        }
-      }
-
       if (changed) {
         onDiagnostic?.('ui.group.autoCollapse', {
           completed: completedNow,

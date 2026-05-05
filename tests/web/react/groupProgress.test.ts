@@ -1,4 +1,10 @@
-import { computeTopLevelGroupProgress } from '../../../src/web/react/components/form/groupProgress';
+import {
+  computeTopLevelGroupProgress,
+  findNextIncompleteGroupKey,
+  resolveCollapsedGroupsAfterAutoCollapse,
+  resolveCompletedGroupAutoCollapse,
+  resolvePendingAutoCollapse
+} from '../../../src/web/react/components/form/groupProgress';
 
 const visibilityCtx = (values: Record<string, any> = {}, lineItems: Record<string, any[]> = {}) =>
   ({
@@ -63,5 +69,44 @@ describe('group progress domain', () => {
       { key: 'main', complete: true, totalRequired: 2, requiredComplete: 2 },
       { key: 'optional', complete: false, totalRequired: 0, requiredComplete: 0 }
     ]);
+  });
+
+  test('resolves auto-collapse pending and newly completed groups', () => {
+    const progress = [
+      { key: 'a', complete: true, totalRequired: 1, requiredComplete: 1 },
+      { key: 'b', complete: true, totalRequired: 1, requiredComplete: 1 },
+      { key: 'c', complete: false, totalRequired: 1, requiredComplete: 0 },
+      { key: 'd', complete: false, totalRequired: 0, requiredComplete: 0 }
+    ];
+
+    expect(findNextIncompleteGroupKey({ progress, anchorKey: 'b', enabled: true })).toBe('c');
+    expect(findNextIncompleteGroupKey({ progress, anchorKey: 'b', enabled: false })).toBeUndefined();
+    expect(
+      resolvePendingAutoCollapse({
+        pendingKeys: ['missing', 'a', 'a', 'b'],
+        progress,
+        autoOpenNextIncomplete: true
+      })
+    ).toEqual({ stillComplete: ['a', 'b'], nextOpenKey: 'c' });
+
+    expect(
+      resolveCompletedGroupAutoCollapse({
+        previousComplete: { a: true },
+        progress,
+        autoOpenNextIncomplete: true
+      })
+    ).toEqual({
+      nextComplete: { a: true, b: true, c: false, d: false },
+      completedNow: ['b'],
+      nextOpenKey: 'c'
+    });
+
+    expect(
+      resolveCollapsedGroupsAfterAutoCollapse({
+        collapsedGroups: { a: false, c: true },
+        completedKeys: ['a', 'b'],
+        nextOpenKey: 'c'
+      })
+    ).toEqual({ next: { a: true, b: true, c: false }, changed: true });
   });
 });

@@ -94,3 +94,93 @@ export const computeTopLevelGroupProgress = (args: {
     })
     .filter(Boolean) as TopLevelGroupProgress[];
 };
+
+export const findNextIncompleteGroupKey = (args: {
+  progress: TopLevelGroupProgress[];
+  anchorKey?: string;
+  enabled: boolean;
+}): string | undefined => {
+  if (!args.enabled) return undefined;
+  const baseIndex = args.anchorKey ? args.progress.findIndex(group => group.key === args.anchorKey) : -1;
+  if (baseIndex < 0) return undefined;
+
+  const groupCount = args.progress.length;
+  for (let step = 1; step <= groupCount; step += 1) {
+    const index = (baseIndex + step) % groupCount;
+    const candidate = args.progress[index];
+    if (!candidate) continue;
+    if (candidate.totalRequired <= 0) continue;
+    if (!candidate.complete) return candidate.key;
+  }
+  return undefined;
+};
+
+export const resolvePendingAutoCollapse = (args: {
+  pendingKeys: string[];
+  progress: TopLevelGroupProgress[];
+  autoOpenNextIncomplete: boolean;
+}): { stillComplete: string[]; nextOpenKey?: string } => {
+  const pending = Array.from(new Set(args.pendingKeys || [])).filter(Boolean);
+  if (!pending.length) return { stillComplete: [] };
+
+  const completeSet = new Set(args.progress.filter(group => group.complete).map(group => group.key));
+  const stillComplete = pending.filter(key => completeSet.has(key));
+  if (!stillComplete.length) return { stillComplete: [] };
+
+  const order = args.progress.map(group => group.key);
+  const anchorIndex = stillComplete.reduce((acc, key) => Math.max(acc, order.indexOf(key)), -1);
+  const anchorKey = anchorIndex >= 0 ? order[anchorIndex] : stillComplete[stillComplete.length - 1];
+  return {
+    stillComplete,
+    nextOpenKey: findNextIncompleteGroupKey({
+      progress: args.progress,
+      anchorKey,
+      enabled: args.autoOpenNextIncomplete
+    })
+  };
+};
+
+export const resolveCompletedGroupAutoCollapse = (args: {
+  previousComplete: Record<string, boolean>;
+  progress: TopLevelGroupProgress[];
+  autoOpenNextIncomplete: boolean;
+}): { nextComplete: Record<string, boolean>; completedNow: string[]; nextOpenKey?: string } => {
+  const nextComplete: Record<string, boolean> = {};
+  args.progress.forEach(group => {
+    nextComplete[group.key] = group.complete;
+  });
+
+  const completedNow = args.progress
+    .filter(group => group.complete && !args.previousComplete[group.key])
+    .map(group => group.key);
+  const anchorKey = completedNow[completedNow.length - 1];
+  return {
+    nextComplete,
+    completedNow,
+    nextOpenKey: findNextIncompleteGroupKey({
+      progress: args.progress,
+      anchorKey,
+      enabled: args.autoOpenNextIncomplete
+    })
+  };
+};
+
+export const resolveCollapsedGroupsAfterAutoCollapse = (args: {
+  collapsedGroups: Record<string, boolean>;
+  completedKeys: string[];
+  nextOpenKey?: string;
+}): { next: Record<string, boolean>; changed: boolean } => {
+  let changed = false;
+  const next = { ...(args.collapsedGroups || {}) };
+  (args.completedKeys || []).forEach(key => {
+    if (next[key] !== true) {
+      next[key] = true;
+      changed = true;
+    }
+  });
+  if (args.nextOpenKey && next[args.nextOpenKey] !== false) {
+    next[args.nextOpenKey] = false;
+    changed = true;
+  }
+  return { next, changed };
+};
