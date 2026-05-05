@@ -164,6 +164,7 @@ import { withListRowActionButtonStyle } from '../../features/lineItems/component
 import { LineFileUploadQuestion } from '../../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadListQuestion } from '../../features/uploads/components/LineFileUploadListQuestion';
 import { LineFileUploadTableControl } from '../../features/uploads/components/LineFileUploadTableControl';
+import { LineFileUploadOverlayButtonField } from '../../features/uploads/components/LineFileUploadOverlayButtonField';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
   LineItemGroupQuestionProps
@@ -6184,53 +6185,26 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                         </div>
                       );
                     }
-                    case 'FILE_UPLOAD': {
-                      const uploadConfig = (field as any).uploadConfig || {};
-                      const items = toUploadItems(rowValues[field.id] as any);
-                      const count = items.length;
-                      const label = count
-                        ? tSystem('files.view', language, 'View photos')
-                        : tSystem('files.add', language, 'Add photo');
+                    case 'FILE_UPLOAD':
                       return (
-                        <div className="field inline-field ck-full-width" data-field-path={fieldPath}>
-                          <label style={labelStyle}>
-                            {labelText}
-                            {field.required && <RequiredStar />}
-                          </label>
-                          <button
-                            type="button"
-                            style={buttonStyles.secondary}
-                            onClick={() => {
-                              if (submitting) return;
-                              openFileOverlay({
-                                open: true,
-                                scope: 'line',
-                                group: args.groupDef,
-                                rowId: args.rowEntry!.row.id,
-                                field,
-                                fieldPath
-                              });
-                            }}
-                          >
-                            {label}
-                          </button>
-                          {helperNode}
-                          <input
-                            ref={el => {
-                              if (!el) return;
-                              fileInputsRef.current[fieldPath] = el;
-                            }}
-                            type="file"
-                            multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
-                            accept={uploadConfig.accept || undefined}
-                            style={{ display: 'none' }}
-                            onChange={e => handleLineFileInputChange({ group: args.groupDef, rowId: args.rowEntry!.row.id, field, fieldPath, list: e.target.files })}
-                          />
-                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                          {renderWarnings(fieldPath)}
-                        </div>
+                        <LineFileUploadOverlayButtonField
+                          group={args.groupDef}
+                          rowId={args.rowEntry!.row.id}
+                          field={field}
+                          fieldPath={fieldPath}
+                          value={rowValues[field.id] as FieldValue | undefined}
+                          label={labelText}
+                          language={language}
+                          submitting={submitting}
+                          labelStyle={labelStyle}
+                          helperNode={helperNode}
+                          errors={errors}
+                          renderWarnings={renderWarnings}
+                          openFileOverlay={openFileOverlay}
+                          handleFileInputChange={handleLineFileInputChange}
+                          fileInputsRef={fileInputsRef}
+                        />
                       );
-                    }
                     default: {
                       const value = rowValues[field.id] as any;
                       if (renderAsLabel) return renderReadOnly(value || null);
