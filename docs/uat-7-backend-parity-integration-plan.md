@@ -298,11 +298,18 @@ Fourteenth-pass results:
 - `FormView.tsx`: extracted the line-item open-in-overlay pill into `LineItemGroupOverlayPill`, keeping warning and overlay callbacks injected from the parent. Current size: 14,419 lines.
 - `App.tsx`: extracted read-only file overlay state, inline URL parsing, file-upload field lookup, and diagnostics into `useReadOnlyFilesOverlay`. Current size: 16,028 lines.
 
+Fifteenth-pass results:
+
+- `App.tsx`: extracted the button text-wrap DOM observer into `useButtonTextWrapObserver`, keeping the shell responsible only for supplying the current view and language. Current size: 16,002 lines.
+- `FormView.tsx`: extracted top-level and nested line/subgroup FILE_UPLOAD renderers into `src/web/react/features/uploads/components`, keeping upload persistence, ordered-entry validation, file-overlay state, and diagnostics injected by the parent. Current size: 14,132 lines.
+- `LineItemGroupQuestion.tsx`: extracted list-style, pill-style, and table-cell line upload renderers into the uploads feature layer, preserving read-only rendering, table value display, overlay opening, and mutation callbacks. Current size: 13,852 lines.
+- Validation for the pass used targeted upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 16,028 lines.
-- `FormView.tsx`: 14,419 lines.
-- `LineItemGroupQuestion.tsx`: 14,355 lines.
+- `App.tsx`: 16,002 lines.
+- `FormView.tsx`: 14,132 lines.
+- `LineItemGroupQuestion.tsx`: 13,852 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
