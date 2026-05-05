@@ -166,6 +166,7 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
+import { SourceFirstSelectionCheckbox } from '../../features/lineItems/components/SourceFirstSelectionCheckbox';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -6594,38 +6595,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                       </span>
                                     ) : null}
                                     {selectedFieldId ? (
-                                      <label
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          minHeight: 44,
-                                          minWidth: 44,
-                                          flex: '0 0 auto',
-                                          paddingTop: 0
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={event =>
-                                            syncStepDataSourceOutputRowWithReservation({
-                                              config,
-                                              parentRow,
-                                              sourceRow,
-                                              patch: buildSelectionTogglePatch(event.target.checked)
-                                            })
-                                          }
-                                          style={{
-                                            width: 36,
-                                            height: 36,
-                                            margin: 0,
-                                            accentColor: 'var(--accent)',
-                                            transform: 'scale(1.36)',
-                                            transformOrigin: 'center'
-                                          }}
-                                        />
-                                      </label>
+                                      <SourceFirstSelectionCheckbox
+                                        checked={isSelected}
+                                        variant="allocation"
+                                        onChange={checked =>
+                                          syncStepDataSourceOutputRowWithReservation({
+                                            config,
+                                            parentRow,
+                                            sourceRow,
+                                            patch: buildSelectionTogglePatch(checked)
+                                          })
+                                        }
+                                      />
                                     ) : null}
                                     {isSelected ? (
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: sentenceFieldErrors.length ? 4 : 0, minWidth: 0, flex: 1 }}>
@@ -12016,7 +11997,6 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         const compactActionRules = Array.isArray(uiCfg.compactActions) ? (uiCfg.compactActions as any[]) : [];
                         const selectedFieldId = (config?.selectedFieldId || '').toString().trim();
                         const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
-                        const modeFieldId = (config?.modeFieldId || '').toString().trim();
                         const outputKeyFieldId = (config?.outputKeyFieldId || config?.rowKeyFieldId || '').toString().trim();
                         const listScrollStyle = resolveSourceFirstListScrollStyle(uiCfg?.maxVisibleRows);
 
@@ -12284,40 +12264,18 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                                           }}
                                         >
                                           {selectedFieldId ? (
-                                            <label
-                                              style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                minHeight: 44,
-                                                minWidth: 44,
-                                                paddingRight: 0,
-                                                flex: '0 0 auto',
-                                                paddingTop: 2
-                                              }}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={event =>
-                                                  syncStepDataSourceOutputRowWithReservation({
-                                                    config,
-                                                    parentRow: row,
-                                                    sourceRow,
-                                                    patch: buildSelectionTogglePatch(event.target.checked)
+                                            <SourceFirstSelectionCheckbox
+                                              checked={isSelected}
+                                              onChange={checked =>
+                                                syncStepDataSourceOutputRowWithReservation({
+                                                  config,
+                                                  parentRow: row,
+                                                  sourceRow,
+                                                  patch: buildSelectionTogglePatch(checked)
                                                 })
                                               }
-                                              style={{
-                                                width: 36,
-                                                height: 36,
-                                                margin: 0,
-                                                accentColor: 'var(--accent)',
-                                                transform: 'scale(1.36)',
-                                                transformOrigin: 'center'
-                                              }}
                                             />
-                                          </label>
-                                        ) : null}
+                                          ) : null}
                                           <div
                                             style={{
                                               fontSize: 'calc(var(--ck-font-control) * 1.16)',
