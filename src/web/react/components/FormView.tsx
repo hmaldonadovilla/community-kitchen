@@ -229,6 +229,7 @@ import {
   isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
   normalizeGuidedForwardGate,
+  resolveGuidedAutoAdvanceTransitionAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
   resolveGuidedStepSelectionAction,
@@ -1796,16 +1797,6 @@ const FormView: React.FC<FormViewProps> = ({
       guidedDefaultAutoAdvance
     );
     const autoAdvanceWhen = (stepCfg?.navigation?.autoAdvanceWhen || null) as any;
-    if (autoAdvance === 'off') {
-      guidedAutoAdvanceAttemptRef.current = null;
-      if (guidedAutoAdvanceTimerRef.current) {
-        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
-        guidedAutoAdvanceTimerRef.current = null;
-      }
-      guidedAutoAdvanceStateRef.current = null;
-      return;
-    }
-
     const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
     const satisfiedBase = autoAdvance === 'onValid' ? !!stepStatus?.valid : !!stepStatus?.complete;
     const autoAdvanceConditionMatched = isGuidedStepAutoAdvanceAllowed({
@@ -1816,78 +1807,35 @@ const FormView: React.FC<FormViewProps> = ({
       guidedVirtualState
     });
     const satisfied = satisfiedBase && autoAdvanceConditionMatched;
+    const nextId = guidedStepIds[activeGuidedStepIndex + 1];
+    const transition = resolveGuidedAutoAdvanceTransitionAction({
+      activeStepId: activeGuidedStepId,
+      nextStepId: nextId || null,
+      currentState: guidedAutoAdvanceStateRef.current,
+      autoAdvance,
+      satisfied,
+      nextReachable: maxReachableGuidedIndex >= activeGuidedStepIndex + 1,
+      forwardGate,
+      conditionConfigured: Boolean(autoAdvanceWhen),
+      conditionMatched: autoAdvanceConditionMatched
+    });
 
-    const state = guidedAutoAdvanceStateRef.current;
-    // On step change: record current satisfied state but never auto-advance immediately.
-    if (!state || state.stepId !== activeGuidedStepId) {
+    guidedAutoAdvanceStateRef.current = transition.nextState;
+    if (transition.clearAttempt) {
       guidedAutoAdvanceAttemptRef.current = null;
-      guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: satisfied, armed: false };
-      if (guidedAutoAdvanceTimerRef.current) {
-        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
-        guidedAutoAdvanceTimerRef.current = null;
-      }
-      if (satisfied) {
-        const nextId = guidedStepIds[activeGuidedStepIndex + 1];
-        onDiagnostic?.('steps.step.autoAdvance.skipImmediate', {
-          from: activeGuidedStepId,
-          to: nextId || null,
-          gate: forwardGate,
-          mode: autoAdvance,
-          reason: 'stepChangeAlreadySatisfied',
-          conditionConfigured: Boolean(autoAdvanceWhen),
-          conditionMatched: autoAdvanceConditionMatched
-        });
-      }
-      return;
     }
-
-    // Disarm when the step is not satisfied.
-    if (!satisfied) {
-      guidedAutoAdvanceAttemptRef.current = null;
-      guidedAutoAdvanceStateRef.current = { stepId: activeGuidedStepId, lastSatisfied: false, armed: false };
-      if (guidedAutoAdvanceTimerRef.current) {
-        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
-        guidedAutoAdvanceTimerRef.current = null;
-      }
-      return;
-    }
-
-    // Arm when we transition from not-satisfied -> satisfied.
-    const shouldArm = !state.lastSatisfied && satisfied;
-    const nextState = { stepId: activeGuidedStepId, lastSatisfied: satisfied, armed: state.armed || shouldArm };
-    guidedAutoAdvanceStateRef.current = nextState;
-    if (shouldArm) {
-      const nextId = guidedStepIds[activeGuidedStepIndex + 1];
-      onDiagnostic?.('steps.step.autoAdvance.armed', {
-        from: activeGuidedStepId,
-        to: nextId || null,
-        gate: forwardGate,
-        mode: autoAdvance,
-        conditionConfigured: Boolean(autoAdvanceWhen),
-        conditionMatched: autoAdvanceConditionMatched
-      });
-    }
-    if (!nextState.armed) {
-      guidedAutoAdvanceAttemptRef.current = null;
-      return;
-    }
-
-    // Even when auto-advance is armed, never bypass the forward-gate reachability.
-    // NOTE: We still track/arm while not reachable, so we don't lose the transition moment.
-    const nextReachable = maxReachableGuidedIndex >= activeGuidedStepIndex + 1;
-    if (!nextReachable) {
-      guidedAutoAdvanceAttemptRef.current = null;
-      if (guidedAutoAdvanceTimerRef.current) {
-        globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
-        guidedAutoAdvanceTimerRef.current = null;
-      }
-      return;
-    }
-
-    if (guidedAutoAdvanceTimerRef.current) {
+    if (transition.clearTimer && guidedAutoAdvanceTimerRef.current) {
       globalThis.clearTimeout(guidedAutoAdvanceTimerRef.current);
       guidedAutoAdvanceTimerRef.current = null;
     }
+    if (transition.diagnostic) {
+      const eventName =
+        transition.diagnostic.reason === 'stepChangeAlreadySatisfied'
+          ? 'steps.step.autoAdvance.skipImmediate'
+          : 'steps.step.autoAdvance.armed';
+      onDiagnostic?.(eventName, transition.diagnostic);
+    }
+    if (transition.action !== 'schedule') return;
 
     let deferLogged = false;
     const attemptAdvance = async () => {

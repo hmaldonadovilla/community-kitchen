@@ -2,6 +2,7 @@ import {
   isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
   normalizeGuidedForwardGate,
+  resolveGuidedAutoAdvanceTransitionAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
   resolveGuidedStepSelectionAction,
@@ -201,6 +202,101 @@ describe('guidedNavigation domain', () => {
         to: 'production',
         reason: 'auto'
       }
+    });
+  });
+
+  test('resolves guided auto-advance state transitions', () => {
+    expect(
+      resolveGuidedAutoAdvanceTransitionAction({
+        activeStepId: 'production',
+        nextStepId: 'email',
+        currentState: { stepId: 'production', lastSatisfied: false, armed: false },
+        autoAdvance: 'off',
+        satisfied: true,
+        nextReachable: true,
+        forwardGate: 'whenValid',
+        conditionConfigured: false,
+        conditionMatched: true
+      })
+    ).toEqual({
+      action: 'reset',
+      nextState: null,
+      clearAttempt: true,
+      clearTimer: true
+    });
+
+    expect(
+      resolveGuidedAutoAdvanceTransitionAction({
+        activeStepId: 'production',
+        nextStepId: 'email',
+        currentState: null,
+        autoAdvance: 'onValid',
+        satisfied: true,
+        nextReachable: true,
+        forwardGate: 'whenValid',
+        conditionConfigured: true,
+        conditionMatched: true
+      })
+    ).toEqual({
+      action: 'reset',
+      nextState: { stepId: 'production', lastSatisfied: true, armed: false },
+      clearAttempt: true,
+      clearTimer: true,
+      diagnostic: {
+        from: 'production',
+        to: 'email',
+        gate: 'whenValid',
+        mode: 'onValid',
+        reason: 'stepChangeAlreadySatisfied',
+        conditionConfigured: true,
+        conditionMatched: true
+      }
+    });
+
+    expect(
+      resolveGuidedAutoAdvanceTransitionAction({
+        activeStepId: 'production',
+        nextStepId: 'email',
+        currentState: { stepId: 'production', lastSatisfied: false, armed: false },
+        autoAdvance: 'onComplete',
+        satisfied: true,
+        nextReachable: true,
+        forwardGate: 'whenComplete',
+        conditionConfigured: false,
+        conditionMatched: true
+      })
+    ).toEqual({
+      action: 'schedule',
+      nextState: { stepId: 'production', lastSatisfied: true, armed: true },
+      clearAttempt: false,
+      clearTimer: true,
+      diagnostic: {
+        from: 'production',
+        to: 'email',
+        gate: 'whenComplete',
+        mode: 'onComplete',
+        conditionConfigured: false,
+        conditionMatched: true
+      }
+    });
+
+    expect(
+      resolveGuidedAutoAdvanceTransitionAction({
+        activeStepId: 'production',
+        nextStepId: 'email',
+        currentState: { stepId: 'production', lastSatisfied: false, armed: false },
+        autoAdvance: 'onValid',
+        satisfied: true,
+        nextReachable: false,
+        forwardGate: 'whenValid',
+        conditionConfigured: false,
+        conditionMatched: true
+      })
+    ).toMatchObject({
+      action: 'reset',
+      nextState: { stepId: 'production', lastSatisfied: true, armed: true },
+      clearAttempt: true,
+      clearTimer: true
     });
   });
 });

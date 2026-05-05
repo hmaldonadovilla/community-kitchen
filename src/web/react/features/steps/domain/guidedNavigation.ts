@@ -147,7 +147,7 @@ export type GuidedStepSelectionResolution =
       clearBackErrorSuppression?: boolean;
       backErrorSuppressionStepId?: string | null;
       diagnostic: Record<string, unknown>;
-    };
+  };
 
 export const resolveGuidedStepSelectionAction = (args: {
   enabled: boolean;
@@ -235,5 +235,130 @@ export const resolveGuidedStepSelectionAction = (args: {
       to: nextStepId,
       reason: args.reason
     }
+  };
+};
+
+export type GuidedAutoAdvanceState = {
+  stepId: string;
+  lastSatisfied: boolean;
+  armed: boolean;
+};
+
+export type GuidedAutoAdvanceTransition =
+  | {
+      action: 'reset';
+      nextState: GuidedAutoAdvanceState | null;
+      clearAttempt: true;
+      clearTimer: true;
+      diagnostic?: Record<string, unknown>;
+    }
+  | {
+      action: 'waiting';
+      nextState: GuidedAutoAdvanceState;
+      clearAttempt: true;
+      clearTimer: false;
+      diagnostic?: Record<string, unknown>;
+    }
+  | {
+      action: 'schedule';
+      nextState: GuidedAutoAdvanceState;
+      clearAttempt: false;
+      clearTimer: true;
+      diagnostic?: Record<string, unknown>;
+    };
+
+export const resolveGuidedAutoAdvanceTransitionAction = (args: {
+  activeStepId: string;
+  nextStepId?: string | null;
+  currentState?: GuidedAutoAdvanceState | null;
+  autoAdvance: GuidedAutoAdvanceMode;
+  satisfied: boolean;
+  nextReachable: boolean;
+  forwardGate: GuidedForwardGate;
+  conditionConfigured: boolean;
+  conditionMatched: boolean;
+}): GuidedAutoAdvanceTransition => {
+  if (args.autoAdvance === 'off') {
+    return {
+      action: 'reset',
+      nextState: null,
+      clearAttempt: true,
+      clearTimer: true
+    };
+  }
+
+  if (!args.currentState || args.currentState.stepId !== args.activeStepId) {
+    const nextState = { stepId: args.activeStepId, lastSatisfied: args.satisfied, armed: false };
+    return {
+      action: 'reset',
+      nextState,
+      clearAttempt: true,
+      clearTimer: true,
+      diagnostic: args.satisfied
+        ? {
+            from: args.activeStepId,
+            to: args.nextStepId || null,
+            gate: args.forwardGate,
+            mode: args.autoAdvance,
+            reason: 'stepChangeAlreadySatisfied',
+            conditionConfigured: args.conditionConfigured,
+            conditionMatched: args.conditionMatched
+          }
+        : undefined
+    };
+  }
+
+  if (!args.satisfied) {
+    return {
+      action: 'reset',
+      nextState: { stepId: args.activeStepId, lastSatisfied: false, armed: false },
+      clearAttempt: true,
+      clearTimer: true
+    };
+  }
+
+  const shouldArm = !args.currentState.lastSatisfied && args.satisfied;
+  const nextState = {
+    stepId: args.activeStepId,
+    lastSatisfied: args.satisfied,
+    armed: args.currentState.armed || shouldArm
+  };
+  const diagnostic = shouldArm
+    ? {
+        from: args.activeStepId,
+        to: args.nextStepId || null,
+        gate: args.forwardGate,
+        mode: args.autoAdvance,
+        conditionConfigured: args.conditionConfigured,
+        conditionMatched: args.conditionMatched
+      }
+    : undefined;
+
+  if (!nextState.armed) {
+    return {
+      action: 'waiting',
+      nextState,
+      clearAttempt: true,
+      clearTimer: false,
+      diagnostic
+    };
+  }
+
+  if (!args.nextReachable) {
+    return {
+      action: 'reset',
+      nextState,
+      clearAttempt: true,
+      clearTimer: true,
+      diagnostic
+    };
+  }
+
+  return {
+    action: 'schedule',
+    nextState,
+    clearAttempt: false,
+    clearTimer: true,
+    diagnostic
   };
 };
