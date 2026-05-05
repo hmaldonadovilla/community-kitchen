@@ -8,6 +8,14 @@ export type SourceFirstVisibleSourceRowEntry = {
   sourceRow: Record<string, any>;
   eligibleParents: LineItemRowState[];
 };
+export type SourceFirstListScrollStyle = {
+  maxHeight: string;
+  overflowY: 'auto';
+  overflowX: 'hidden';
+  WebkitOverflowScrolling: 'touch';
+  overscrollBehavior: 'contain';
+  touchAction: 'pan-y';
+};
 
 /**
  * Owns pure line-item display helpers used by row/list renderers.
@@ -66,6 +74,22 @@ export const sortVisibleTextValues = (values: string[], sortMode: LineItemSortMo
   return [...values].sort((left, right) =>
     left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
   );
+};
+
+export const resolveSourceFirstListScrollStyle = (
+  maxVisibleRows: unknown,
+  rowHeightPx = 132
+): SourceFirstListScrollStyle | undefined => {
+  const count = Number(maxVisibleRows);
+  if (!Number.isFinite(count) || count <= 0) return undefined;
+  return {
+    maxHeight: `${Math.max(1, Math.floor(count)) * rowHeightPx}px`,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
+    touchAction: 'pan-y'
+  };
 };
 
 export const resolveCompactPartType = (part: any): string => {

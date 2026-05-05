@@ -155,6 +155,7 @@ import {
   resolveCompactPartType,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
+  resolveSourceFirstListScrollStyle,
   sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
@@ -6428,17 +6429,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                   allocationLabelVisibility: config?.allocationLabelVisibility ?? uiCfg?.allocationLabelVisibility,
                   parentRows
                 });
-                const listScrollStyle =
-                  Number.isFinite(Number(uiCfg?.maxVisibleRows)) && Number(uiCfg.maxVisibleRows) > 0
-                    ? ({
-                        maxHeight: `${Math.max(1, Math.floor(Number(uiCfg.maxVisibleRows))) * 132}px`,
-                        overflowY: 'auto' as const,
-                        overflowX: 'hidden' as const,
-                        WebkitOverflowScrolling: 'touch' as const,
-                        overscrollBehavior: 'contain' as const,
-                        touchAction: 'pan-y' as const
-                      })
-                    : undefined;
+                const listScrollStyle = resolveSourceFirstListScrollStyle(uiCfg?.maxVisibleRows);
                 if (!visibleSourceRows.length) {
                   return emptyStateMessage ? (
                     <div key={`source-first:${config.id || configIndex}`} style={listScrollStyle}>
@@ -12027,17 +12018,7 @@ const resolveAddOverlayCopy = (groupCfg: any, language: LangCode) => {
                         const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
                         const modeFieldId = (config?.modeFieldId || '').toString().trim();
                         const outputKeyFieldId = (config?.outputKeyFieldId || config?.rowKeyFieldId || '').toString().trim();
-                        const listScrollStyle =
-                          Number.isFinite(Number(uiCfg?.maxVisibleRows)) && Number(uiCfg.maxVisibleRows) > 0
-                            ? ({
-                                maxHeight: `${Math.max(1, Math.floor(Number(uiCfg.maxVisibleRows))) * 132}px`,
-                                overflowY: 'auto' as const,
-                                overflowX: 'hidden' as const,
-                                WebkitOverflowScrolling: 'touch' as const,
-                                overscrollBehavior: 'contain' as const,
-                                touchAction: 'pan-y' as const
-                              })
-                            : undefined;
+                        const listScrollStyle = resolveSourceFirstListScrollStyle(uiCfg?.maxVisibleRows);
 
                         const resolveVirtualValue = (virtualValues: Record<string, FieldValue>, fieldId: string): FieldValue | undefined => {
                           if (Object.prototype.hasOwnProperty.call(virtualValues, fieldId)) return virtualValues[fieldId];

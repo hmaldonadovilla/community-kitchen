@@ -11,6 +11,7 @@ import {
   resolveCompactPartType,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
+  resolveSourceFirstListScrollStyle,
   sortSourceFirstVisibleSourceRows,
   sortVisibleTextValues
 } from '../../../src/web/react/features/lineItems/domain/lineItemPresentation';
@@ -40,6 +41,19 @@ describe('lineItem presentation domain', () => {
     expect(listSortFor('other')).toBe('source');
     expect(sortVisibleTextValues(['b2', 'b10', 'a1'], 'alphabetical')).toEqual(['a1', 'b2', 'b10']);
     expect(sortVisibleTextValues(['b', 'a'], 'source')).toEqual(['b', 'a']);
+  });
+
+  test('resolves source-first list scroll style from max visible rows', () => {
+    expect(resolveSourceFirstListScrollStyle(undefined)).toBeUndefined();
+    expect(resolveSourceFirstListScrollStyle(0)).toBeUndefined();
+    expect(resolveSourceFirstListScrollStyle(2.8)).toEqual({
+      maxHeight: '264px',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      WebkitOverflowScrolling: 'touch',
+      overscrollBehavior: 'contain',
+      touchAction: 'pan-y'
+    });
   });
 
   test('infers compact field part type from source and field alternatives', () => {
