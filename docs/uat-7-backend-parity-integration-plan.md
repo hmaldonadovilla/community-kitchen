@@ -433,10 +433,15 @@ Fortieth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided step data-source row decoration, visibility accounting, and parent-scoped filtering into `stepDataSourceRows`, leaving React callback wiring in the component. Current size: 13,516 lines.
 - Validation for the pass used focused line-item presentation/helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Forty-first-pass results:
+
+- `FormView.tsx`: extracted blur-derived top-level and line-item value comparison into `formValueComparison`, leaving recompute orchestration in the component. Current size: 12,862 lines.
+- Validation for the pass used focused form comparison/form-rendering tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,246 lines.
-- `FormView.tsx`: 12,907 lines.
+- `FormView.tsx`: 12,862 lines.
 - `LineItemGroupQuestion.tsx`: 13,516 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
