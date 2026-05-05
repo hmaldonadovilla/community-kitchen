@@ -363,9 +363,14 @@ Twenty-sixth-pass results:
 - `App.tsx`: extracted the update-record custom button pipeline into `useUpdateRecordButtonAction`, including confirmation, dependency preview, busy-state handling, and mutation execution. Current size: 14,910 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-seventh-pass results:
+
+- `App.tsx`: extracted copy-current-record orchestration into `useDuplicateCurrentRecordAction`, keeping profile/drop-field application, destructive-change bypasses, dedup precheck, and draft-id creation outside the main shell. Current size: 14,748 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,910 lines.
+- `App.tsx`: 14,748 lines.
 - `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,618 lines.
 
