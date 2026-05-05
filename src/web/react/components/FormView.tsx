@@ -129,6 +129,7 @@ import { FormStatusNotices } from './form/FormStatusNotices';
 import { useFormViewStateRefs } from './form/useFormViewStateRefs';
 import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
 import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
+import { LineItemGroupOverlayPill } from '../features/lineItems/components/LineItemGroupOverlayPill';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import {
   computeChoiceControlVariant,
@@ -9780,88 +9781,27 @@ const FormView: React.FC<FormViewProps> = ({
       }
       case 'LINE_ITEM_GROUP': {
         const groupOverlayEnabled = !!q.lineItemConfig?.ui?.openInOverlay;
-        const groupCount = (lineItems[q.id] || []).length;
         const locked = submitting || isFieldLockedByDedup(q.id);
 
         if (groupOverlayEnabled) {
-          const suppressOverlayPill = overlayOpenActionTargetGroups.has(q.id);
-          const hideGroupLabel = q.ui?.hideLabel === true;
-          const tapToOpenLabel = tSystem('common.tapToOpen', language, 'Tap to open');
-          const needsAttentionMessage = resolveLocalizedString(
-            q.lineItemConfig?.ui?.needsAttentionMessage,
-            language,
-            ''
-          )
-            .toString()
-            .trim();
-          const groupHasAnyError = (() => {
-            if (errors[q.id]) return true;
-            const prefix = `${q.id}__`;
-            const subPrefix = `${q.id}::`;
-            return Object.keys(errors || {}).some(k => k === q.id || k.startsWith(prefix) || k.startsWith(subPrefix));
-          })();
-          const groupIsComplete = isLineItemGroupQuestionComplete({
-            groupId: q.id,
-            lineItemConfig: q.lineItemConfig,
-            values,
-            lineItems,
-            collapsedRows,
-            language,
-            getTopValue: getTopValueNoScan
-          });
-          const groupLabel = resolveLabel(q, language);
-          const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
-          const helperText = helperCfg.belowLabelText;
-          const isEditableField = !locked && q.readOnly !== true && q.ui?.renderAsLabel !== true;
-          const helperNode = helperText && isEditableField ? <div className="ck-field-helper">{helperText}</div> : null;
-          const pillText = groupLabel;
-          const pillAriaLabel = pillText ? `${tapToOpenLabel} ${pillText}` : tapToOpenLabel;
-          const pillClass = groupHasAnyError
-            ? 'ck-progress-bad'
-            : groupIsComplete
-              ? 'ck-progress-good'
-              : groupCount > 0
-                ? 'ck-progress-info'
-                : 'ck-progress-neutral';
           return (
-            <div
+            <LineItemGroupOverlayPill
               key={q.id}
-              className={`field inline-field ck-full-width${labelLayoutClass}`}
-              data-field-path={q.id}
-              data-has-error={groupHasAnyError ? 'true' : undefined}
-              data-has-warning={hasWarning(q.id) ? 'true' : undefined}
-            >
-              <label style={hideGroupLabel ? srOnly : labelStyle}>
-                {groupLabel}
-                {q.required && <RequiredStar />}
-              </label>
-              {!suppressOverlayPill ? (
-                <button
-                  type="button"
-                  className={`ck-progress-pill ck-upload-pill-btn ck-open-overlay-pill ${pillClass}`}
-                  aria-disabled={locked ? 'true' : undefined}
-                  aria-label={pillAriaLabel}
-                  onClick={() => {
-                    if (locked) return;
-                    openLineItemGroupOverlay(q.id);
-                  }}
-                >
-                  {pillClass === 'ck-progress-good' ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
-                  {pillText ? <span>{pillText}</span> : null}
-                  <span className="ck-progress-label">{tapToOpenLabel}</span>
-                  <span className="ck-progress-caret">▸</span>
-                </button>
-              ) : null}
-              {helperNode}
-              {renderWarnings(q.id)}
-              {errors[q.id] ? (
-                <div className="error">{errors[q.id]}</div>
-              ) : groupHasAnyError ? (
-                <div className="error">
-                  {needsAttentionMessage || tSystem('validation.needsAttention', language, 'Needs attention')}
-                </div>
-              ) : null}
-            </div>
+              q={q}
+              language={language}
+              values={values}
+              lineItems={lineItems}
+              collapsedRows={collapsedRows}
+              errors={errors}
+              locked={locked}
+              labelLayoutClass={labelLayoutClass}
+              labelStyle={labelStyle}
+              suppressOverlayPill={overlayOpenActionTargetGroups.has(q.id)}
+              hasWarning={hasWarning}
+              renderWarnings={renderWarnings}
+              getTopValue={getTopValueNoScan}
+              openLineItemGroupOverlay={openLineItemGroupOverlay}
+            />
           );
         }
 
