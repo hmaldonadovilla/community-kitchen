@@ -72,6 +72,7 @@ import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAcces
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
+import { resolveGuidedErrorNavigationTarget } from '../features/validation/domain/guidedErrorNavigation';
 import { useValidationNavigationRequest } from '../features/validation/useValidationNavigationRequest';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
@@ -10864,206 +10865,16 @@ const FormView: React.FC<FormViewProps> = ({
     if (errorNavConsumedRef.current === errorNavRequestRef.current) return;
     let firstKey = keys[0];
     if (typeof document === 'undefined') return;
-    const chooseGuidedKey = (): { key: string; stepId?: string } => {
-      if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return { key: firstKey };
-
-      const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-      const steps = guidedVisibleSteps;
-      const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-      const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-      const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
-
-      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
-        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
-        if (!s) return '';
-        const underscorePrefix = `${groupId}__`;
-        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
-        const dotPrefix = `${groupId}.`;
-        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
-        // If the config uses dotted paths, take the last segment.
-        if (s.includes('.')) return s.split('.').pop() || s;
-        return s;
-      };
-
-      const normalizeRowFilterForGroup = (groupId: string, filter?: any): any => {
-        if (!filter) return null;
-        const includeWhen = (filter as any)?.includeWhen;
-        const excludeWhen = (filter as any)?.excludeWhen;
-        const next: any = { ...(filter as any) };
-
-        const normalizeWhen = (when: any): any => {
-          if (!when) return undefined;
-          if (Array.isArray(when)) {
-            const list = when.map(entry => normalizeWhen(entry)).filter(Boolean);
-            return list.length ? list : undefined;
-          }
-          if (typeof when !== 'object') return when;
-          const all = (when as any).all ?? (when as any).and;
-          if (Array.isArray(all)) {
-            const list = all.map((entry: any) => normalizeWhen(entry)).filter(Boolean);
-            return list.length ? { ...(when as any), all: list } : undefined;
-          }
-          const anyList = (when as any).any ?? (when as any).or;
-          if (Array.isArray(anyList)) {
-            const list = anyList.map((entry: any) => normalizeWhen(entry)).filter(Boolean);
-            return list.length ? { ...(when as any), any: list } : undefined;
-          }
-          if (Object.prototype.hasOwnProperty.call(when as any, 'not')) {
-            const nested = normalizeWhen((when as any).not);
-            return nested ? { ...(when as any), not: nested } : undefined;
-          }
-          if ((when as any).fieldId) {
-            return { ...(when as any), fieldId: normalizeLineFieldId(groupId, (when as any).fieldId) };
-          }
-          return when;
-        };
-
-        if (includeWhen) next.includeWhen = normalizeWhen(includeWhen);
-        if (excludeWhen) next.excludeWhen = normalizeWhen(excludeWhen);
-        return next;
-      };
-
-      const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>, filter?: any): boolean => {
-        if (!filter) return true;
-        const includeWhen = (filter as any)?.includeWhen;
-        const excludeWhen = (filter as any)?.excludeWhen;
-        const rowCtx: any = { getValue: (fid: string) => (rowValues as any)[fid] };
-        const includeOk = includeWhen ? matchesWhenClause(includeWhen as any, rowCtx) : true;
-        const excludeMatch = excludeWhen ? matchesWhenClause(excludeWhen as any, rowCtx) : false;
-        return includeOk && !excludeMatch;
-      };
-
-      const isKeyVisibleInTargets = (targets: any[], stepCfgLocal: any, key: string): boolean => {
-        const raw = (key || '').toString();
-        if (!raw) return false;
-        const parts = raw.split('__');
-        const isLineKey = parts.length === 3;
-
-        for (const t of targets) {
-          if (!t || typeof t !== 'object') continue;
-          const kind = (t.kind || '').toString().trim();
-          const id = (t.id || '').toString().trim();
-          if (!kind || !id) continue;
-
-          if (kind === 'question') {
-            if (!isLineKey && raw === id) return true;
-            continue;
-          }
-
-          if (kind !== 'lineGroup') continue;
-          const groupId = id;
-
-          // Group-level error
-          if (!isLineKey && raw === groupId) return true;
-
-          if (isLineKey) {
-            const [prefix, fieldIdRaw, rowId] = parts;
-            const subgroupInfo = parseSubgroupKey(prefix);
-            if (subgroupInfo) {
-              if (subgroupInfo.rootGroupId !== groupId) continue;
-              const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
-              const presentation: 'groupEditor' | 'liftedRowFields' =
-                presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
-              const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
-              const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
-              // Match guided-step scoped validation semantics:
-              // when a step scopes parent fields (or uses liftedRowFields), subgroups are opt-in.
-              if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) continue;
-
-              const subTargetModeRaw = ((t.subGroups as any)?.displayMode || 'inherit').toString().trim().toLowerCase();
-              const subStepModeRaw = stepSubGroupsDefaultMode ? stepSubGroupsDefaultMode.toString().trim().toLowerCase() : '';
-              const resolvedSubMode =
-                subTargetModeRaw === 'inline' || subTargetModeRaw === 'overlay'
-                  ? (subTargetModeRaw as 'inline' | 'overlay')
-                  : subStepModeRaw === 'inline' || subStepModeRaw === 'overlay'
-                    ? (subStepModeRaw as 'inline' | 'overlay')
-                    : 'inline';
-              const hideInlineSubgroups = resolvedSubMode === 'overlay';
-
-              // If subgroups are only shown via overlay, they are still "reachable" (error navigation will open the overlay).
-              // Determine whether this step includes the subgroup at all.
-              const subIncludeRaw = (t.subGroups as any)?.include;
-              const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
-              const allowedSubIds = subIncludeList
-                .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
-                .filter(Boolean);
-              const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
-              if (allowedSubSet && !allowedSubSet.has(subgroupInfo.subGroupId)) continue;
-
-              // Parent row filter applies to subgroups too.
-              const parentRows = (lineItems as any)[subgroupInfo.parentGroupKey] || [];
-              const parentRow = parentRows.find((r: any) => r && r.id === subgroupInfo.parentRowId);
-              const parentRowValues = (parentRow?.values || {}) as any;
-              const normalizedRowFilter = normalizeRowFilterForGroup(groupId, (t as any).validationRows ?? (t as any).rows);
-              if (!isIncludedByRowFilter(parentRowValues, normalizedRowFilter)) continue;
-
-              // Subgroup errors are visible in this step (inline or overlay).
-              void hideInlineSubgroups;
-              void rowId;
-              return true;
-            }
-
-            if (prefix !== groupId) continue;
-
-            const rowValues = ((lineItems as any)[groupId] || []).find((r: any) => r && r.id === rowId)?.values || {};
-            const normalizedRowFilter = normalizeRowFilterForGroup(groupId, (t as any).validationRows ?? (t as any).rows);
-            if (!isIncludedByRowFilter(rowValues as any, normalizedRowFilter)) continue;
-
-            const allowedFieldIds = (() => {
-              const rawFields = (t as any).fields;
-              if (!rawFields) return null;
-              const ids: string[] = [];
-              const pushEntry = (v: any) => {
-                if (v === undefined || v === null) return;
-                if (typeof v === 'object') {
-                  const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
-                  if (id) ids.push(id);
-                  return;
-                }
-                const id = normalizeLineFieldId(groupId, v);
-                if (id) ids.push(id);
-              };
-              if (Array.isArray(rawFields)) {
-                rawFields.forEach(pushEntry);
-              } else {
-                rawFields
-                    .toString()
-                    .split(',')
-                  .map((s: string) => s.trim())
-                  .filter(Boolean)
-                  .forEach(pushEntry);
-              }
-              return new Set(ids);
-            })();
-            if (allowedFieldIds && !allowedFieldIds.has(fieldIdRaw)) continue;
-            return true;
-          }
-        }
-
-        return false;
-      };
-
-      // Prefer navigating to an error already visible in the current step (header + step targets).
-      const combinedCurrentTargets = [...headerTargets, ...stepTargets];
-      const inCurrent = keys.find(k => isKeyVisibleInTargets(combinedCurrentTargets, stepCfg, k));
-      if (inCurrent) return { key: inCurrent, stepId: activeGuidedStepId };
-
-      // Otherwise, navigate to the earliest reachable step that contains an error.
-      const stepIdByIndex = guidedStepIds;
-      for (let idx = 0; idx < stepIdByIndex.length; idx++) {
-        if (idx > maxReachableGuidedIndex) break;
-        const stepId = stepIdByIndex[idx];
-        const cfg = (steps.find((s: any) => (s?.id || '').toString() === stepId) || null) as any;
-        const stepTargetsLocal: any[] = Array.isArray(cfg?.include) ? cfg.include : [];
-        const combined = [...headerTargets, ...stepTargetsLocal];
-        const stepKey = keys.find(k => isKeyVisibleInTargets(combined, cfg, k));
-        if (stepKey) return { key: stepKey, stepId };
-      }
-
-      return { key: firstKey };
-    };
-
-    const guidedPick = chooseGuidedKey();
+    const guidedPick = resolveGuidedErrorNavigationTarget({
+      errorKeys: keys,
+      guidedEnabled,
+      guidedStepsCfg,
+      guidedStepIds,
+      guidedVisibleSteps,
+      activeGuidedStepId,
+      maxReachableGuidedIndex,
+      lineItems
+    });
     firstKey = guidedPick.key;
     const desiredStepId = guidedPick.stepId;
     if (desiredStepId && guidedEnabled && desiredStepId !== activeGuidedStepId) {
