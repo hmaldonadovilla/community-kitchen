@@ -328,9 +328,14 @@ Nineteenth-pass results:
 - `FormView.tsx`: extracted the file overlay renderer and save/remove orchestration into `FormFileOverlay`, keeping form value mutation and upload APIs injected from the parent. Current size: 13,454 lines.
 - Validation for the pass used targeted upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twentieth-pass results:
+
+- `App.tsx`: extracted custom button visibility, placement, action validation, and open-url disabled-state derivation into `useAppCustomButtons`, keeping the execution handlers in the shell. Current size: 15,824 lines.
+- Validation for the pass used focused App/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 15,910 lines.
+- `App.tsx`: 15,824 lines.
 - `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,826 lines.
 
