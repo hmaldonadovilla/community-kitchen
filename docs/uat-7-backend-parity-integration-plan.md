@@ -224,6 +224,12 @@ Exit criteria:
 - Source-first allocation, overlay session, autosave hold, viewport/orientation, validation navigation, and record lifecycle have named boundaries.
 - Targeted regression validation passes for the affected user flows.
 
+First-pass results:
+
+- `App.tsx`: extracted viewport/orientation, header-height, visual viewport, and bottom action-bar CSS-variable coordination into `useAppViewportState`. Current size: 16,471 lines.
+- `FormView.tsx`: extracted overlay session snapshot capture/restore and scoped autosave hold coordination into `useOverlaySessionController`. Current size: 15,600 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first allocation display and compact text-part helpers into line-item presentation domain helpers. Current size: 15,804 lines.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
@@ -295,6 +301,7 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
+| Stage 2C: Stateful workflow decomposition | In progress | First pass extracted App viewport shell state, FormView overlay session/autosave-hold coordination, and source-first allocation display helpers with focused tests. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
