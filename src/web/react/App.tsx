@@ -71,6 +71,7 @@ import { AppOverlays } from './components/app/AppOverlays';
 import { DedupCheckingNotice, DedupDuplicateNotice } from './components/app/AppNotices';
 import { useAppActionNotices } from './components/app/useAppActionNotices';
 import { useDedupDialogPresentation } from './components/app/useDedupDialogPresentation';
+import { useSystemActionGateState } from './components/app/useSystemActionGateState';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -260,7 +261,6 @@ import {
   shouldApplyDedupPrecheckResult
 } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
-import { buildSystemActionGateContext, evaluateSystemActionGate } from './app/actionGates';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
   filterGeneratedRecordsForDialog,
@@ -16008,50 +16008,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')
       : '';
 
-  const systemActionGates = definition.actionBars?.system?.gates;
-  const systemActionGateState = useMemo(() => {
-    const recordMeta = {
-      id: (selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMeta?.id || undefined) as any,
-      createdAt: (selectedRecordSnapshot?.createdAt || lastSubmissionMeta?.createdAt || undefined) as any,
-      updatedAt: (selectedRecordSnapshot?.updatedAt || lastSubmissionMeta?.updatedAt || undefined) as any,
-      status: (selectedRecordSnapshot?.status || lastSubmissionMeta?.status || null) as any,
-      pdfUrl: (selectedRecordSnapshot as any)?.pdfUrl || undefined
-    };
-
-    const guidedPrefix = (((definition as any)?.steps as any)?.stateFields?.prefix || '__ckStep').toString();
-    const guidedVirtualState =
-      guidedUiState && guidedUiState.activeStepId
-        ? ({
-            prefix: guidedPrefix,
-            activeStepId: guidedUiState.activeStepId,
-            activeStepIndex: guidedUiState.activeStepIndex || 0,
-            maxValidIndex: -1,
-            maxCompleteIndex: -1,
-            steps: []
-          } as any)
-        : null;
-
-    const evalFor = (actionId: any) => {
-      const ctx = buildSystemActionGateContext({
-        actionId,
-        view,
-        values,
-        lineItems,
-        recordMeta,
-        guidedVirtualState
-      });
-      return evaluateSystemActionGate({ gates: systemActionGates, actionId, ctx });
-    };
-
-    return {
-      submit: evalFor('submit'),
-      summary: evalFor('summary'),
-      edit: evalFor('edit'),
-      copyCurrentRecord: evalFor('copyCurrentRecord'),
-      create: evalFor('create'),
-      home: evalFor('home')
-    } as const;
-  }, [definition, guidedUiState, lastSubmissionMeta?.createdAt, lastSubmissionMeta?.id, lastSubmissionMeta?.status, lastSubmissionMeta?.updatedAt, lineItems, selectedRecordId, selectedRecordSnapshot, systemActionGates, values, view]);
+  const systemActionGateState = useSystemActionGateState({
+    definition,
+    view,
+    values,
+    lineItems,
+    selectedRecordId,
+    selectedRecordSnapshot,
+    lastSubmissionMeta,
+    guidedUiState
+  });
 
   const guidedNextWouldEnable =
     view === 'form' && guidedUiState && !guidedUiState.isFinal ? !!guidedUiState.forwardGateSatisfied && !dedupNavigationBlocked : false;
