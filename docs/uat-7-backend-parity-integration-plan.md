@@ -428,11 +428,16 @@ Thirty-ninth-pass results:
 - `FormView.tsx`: extracted sticky-header-aware group scrolling and iOS correction behavior into `scrollFormGroupToTop`, leaving the component responsible for scheduling scrolls and collapsed group state. Current size: 12,907 lines.
 - Validation for the pass used focused form-rendering tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fortieth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source row decoration, visibility accounting, and parent-scoped filtering into `stepDataSourceRows`, leaving React callback wiring in the component. Current size: 13,516 lines.
+- Validation for the pass used focused line-item presentation/helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,246 lines.
 - `FormView.tsx`: 12,907 lines.
-- `LineItemGroupQuestion.tsx`: 13,582 lines.
+- `LineItemGroupQuestion.tsx`: 13,516 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
