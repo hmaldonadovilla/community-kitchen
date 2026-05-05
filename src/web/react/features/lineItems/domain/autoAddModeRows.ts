@@ -1,9 +1,12 @@
 import { buildLocalizedOptions, computeAllowedOptions, toDependencyValue } from '../../../../core';
 import type { FieldValue, LangCode, OptionSet } from '../../../../types';
+import type { LineItemState } from '../../../types';
 import {
   ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
-  parseRowSource
+  buildSubgroupKey,
+  parseRowSource,
+  resolveSubgroupKey
 } from '../../../app/lineItems';
 import { optionSortFor } from './lineItemPresentation';
 
@@ -171,4 +174,110 @@ export const reconcileAutoAddRowsAction = (args: {
   const changed =
     combinedSorted.length !== currentRows.length || combinedSorted.some((row, idx) => row !== currentRows[idx]);
   return { rows: combinedSorted, changed, contextId, desiredCount: desired.length };
+};
+
+export type AutoAddSubgroupAnchorTarget = {
+  sub: any;
+  subId: string;
+  anchorFieldId: string;
+};
+
+export type AutoAddSubgroupAnchorAutofillDiagnostic = {
+  groupId: string;
+  rowId: string | null;
+  fieldId: string;
+  value: string;
+};
+
+export const collectAutoAddSubgroupAnchorTargetsAction = (parentConfig: any): AutoAddSubgroupAnchorTarget[] => {
+  const subGroups = Array.isArray(parentConfig?.subGroups) ? parentConfig.subGroups : [];
+  return subGroups
+    .map((sub: any) => ({
+      sub: sub as any,
+      subId: resolveSubgroupKey(sub as any),
+      anchorFieldId:
+        (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
+          ? (sub as any).anchorFieldId.toString()
+          : ''
+    }))
+    .filter((entry: AutoAddSubgroupAnchorTarget) =>
+      entry.subId && entry.anchorFieldId && Array.isArray(entry.sub?.fields) && entry.sub.fields.length
+    );
+};
+
+export const applyAutoAddSubgroupSingleOptionAnchorFillAction = (args: {
+  previousLineItems: LineItemState;
+  parentGroupId: string;
+  subgroupTargets: AutoAddSubgroupAnchorTarget[];
+  values: Record<string, FieldValue>;
+  subgroupSelectors: Record<string, string>;
+  buildOptionSetForLineField: (field: any, groupKey: string) => OptionSet;
+  language: LangCode;
+}): {
+  changed: boolean;
+  lineItems: LineItemState;
+  diagnostics: AutoAddSubgroupAnchorAutofillDiagnostic[];
+} => {
+  const parentRows = (args.previousLineItems[args.parentGroupId] || []) as any[];
+  if (!parentRows.length || !args.subgroupTargets.length) {
+    return { changed: false, lineItems: args.previousLineItems, diagnostics: [] };
+  }
+
+  let next: any = args.previousLineItems;
+  let didChange = false;
+  const diagnostics: AutoAddSubgroupAnchorAutofillDiagnostic[] = [];
+
+  args.subgroupTargets.forEach(({ sub, subId, anchorFieldId }) => {
+    const anchorField = (sub.fields || []).find((f: any) => f?.id === anchorFieldId);
+    if (!anchorField || anchorField.type !== 'CHOICE') return;
+    const dependencyIds = resolveAutoAddDependsOnIds(anchorField);
+    const subSelectorId =
+      sub?.sectionSelector?.id !== undefined && sub?.sectionSelector?.id !== null ? sub.sectionSelector.id.toString() : '';
+
+    parentRows.forEach(parentRow => {
+      const subKey = buildSubgroupKey(args.parentGroupId, parentRow.id, subId);
+      const subRows = (next[subKey] || args.previousLineItems[subKey] || []) as any[];
+      if (!subRows.length) return;
+
+      const optionSetField = args.buildOptionSetForLineField(anchorField, subKey);
+      const depVals = dependencyIds.map((dep: string) => {
+        const selectorFallback = subSelectorId && dep === subSelectorId ? (args.subgroupSelectors as any)[subKey] : undefined;
+        return toDependencyValue(
+          (subRows[0]?.values || {})[dep] ??
+            (args.values as any)[dep] ??
+            (parentRow?.values || {})[dep] ??
+            selectorFallback
+        );
+      });
+      const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
+      const localized = buildLocalizedOptions(optionSetField, allowed, args.language, { sort: optionSortFor(anchorField) });
+      const uniqueVals = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
+      if (uniqueVals.length !== 1) return;
+      const only = uniqueVals[0];
+
+      let changedRows: any[] | null = null;
+      subRows.forEach((subRow, idx) => {
+        const cur = normalizeAutoAddAnchorKey((subRow?.values || {})[anchorFieldId]);
+        if (cur) return;
+        if (!changedRows) changedRows = subRows.map(r => ({ ...r, values: { ...(r.values || {}) } }));
+        (changedRows[idx].values as any)[anchorFieldId] = only;
+        didChange = true;
+        diagnostics.push({
+          groupId: subKey,
+          rowId: subRow?.id || null,
+          fieldId: anchorFieldId,
+          value: only
+        });
+      });
+      if (changedRows) {
+        if (next === args.previousLineItems) next = { ...args.previousLineItems };
+        next[subKey] = changedRows;
+      }
+    });
+  });
+
+  if (!didChange || next === args.previousLineItems) {
+    return { changed: false, lineItems: args.previousLineItems, diagnostics: [] };
+  }
+  return { changed: true, lineItems: next as LineItemState, diagnostics };
 };

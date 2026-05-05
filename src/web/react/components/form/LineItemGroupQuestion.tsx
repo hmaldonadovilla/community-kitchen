@@ -165,6 +165,8 @@ import {
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import {
+  applyAutoAddSubgroupSingleOptionAnchorFillAction,
+  collectAutoAddSubgroupAnchorTargetsAction,
   reconcileAutoAddRowsAction,
   resolveAutoAddDependsOnIds,
   resolveAutoAddDesiredRowsAction
@@ -3432,16 +3434,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     const parentRows = (lineItems[q.id] || []) as any[];
     if (!parentRows.length) return;
 
-    const subgroupTargets = (parentCfg.subGroups || [])
-      .map(sub => ({
-        sub: sub as any,
-        subId: resolveSubgroupKey(sub as any),
-        anchorFieldId:
-          (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
-            ? (sub as any).anchorFieldId.toString()
-            : ''
-      }))
-      .filter(entry => entry.subId && entry.anchorFieldId && Array.isArray(entry.sub?.fields) && entry.sub.fields.length);
+    const subgroupTargets = collectAutoAddSubgroupAnchorTargetsAction(parentCfg);
     if (!subgroupTargets.length) return;
 
     // Prime option loads for subgroup anchor fields.
@@ -3454,71 +3447,22 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       });
     });
 
-    const normalizeChoice = (raw: any): string => {
-      if (raw === undefined || raw === null) return '';
-      if (Array.isArray(raw)) {
-        const first = raw[0];
-        return first === undefined || first === null ? '' : first.toString().trim();
-      }
-      return raw.toString().trim();
-    };
-
     setLineItems(prev => {
-      const parentRowsPrev = (prev[q.id] || []) as any[];
-      if (!parentRowsPrev.length) return prev;
-
-      let next: any = prev;
-      let didChange = false;
-
-      subgroupTargets.forEach(({ sub, subId, anchorFieldId }) => {
-        const anchorField = (sub.fields || []).find((f: any) => f?.id === anchorFieldId);
-        if (!anchorField || anchorField.type !== 'CHOICE') return;
-        const dependencyIds = resolveAutoAddDependsOnIds(anchorField);
-        const subSelectorId =
-          sub?.sectionSelector?.id !== undefined && sub?.sectionSelector?.id !== null ? sub.sectionSelector.id.toString() : '';
-
-        parentRowsPrev.forEach(parentRow => {
-          const subKey = buildSubgroupKey(q.id, parentRow.id, subId);
-          const subRows = (next[subKey] || prev[subKey] || []) as any[];
-          if (!subRows.length) return;
-
-          const optionSetField = buildOptionSetForLineField(anchorField, subKey);
-          const depVals = dependencyIds.map((dep: string) => {
-            const selectorFallback = subSelectorId && dep === subSelectorId ? (subgroupSelectors as any)[subKey] : undefined;
-            return toDependencyValue(
-              (subRows[0]?.values || {})[dep] ?? (values as any)[dep] ?? (parentRow?.values || {})[dep] ?? selectorFallback
-            );
-          });
-          const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
-          const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(anchorField) });
-          const uniqueVals = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
-          if (uniqueVals.length !== 1) return;
-          const only = uniqueVals[0];
-
-          let changedRows: any[] | null = null;
-          subRows.forEach((subRow, idx) => {
-            const cur = normalizeChoice((subRow?.values || {})[anchorFieldId]);
-            if (cur) return;
-            if (!changedRows) changedRows = subRows.map(r => ({ ...r, values: { ...(r.values || {}) } }));
-            (changedRows[idx].values as any)[anchorFieldId] = only;
-            didChange = true;
-            onDiagnostic?.('ui.subgroup.anchor.autofillSingleOption', {
-              groupId: subKey,
-              rowId: subRow?.id || null,
-              fieldId: anchorFieldId,
-              value: only
-            });
-          });
-          if (changedRows) {
-            if (next === prev) next = { ...prev };
-            next[subKey] = changedRows;
-          }
-        });
+      const fillResult = applyAutoAddSubgroupSingleOptionAnchorFillAction({
+        previousLineItems: prev,
+        parentGroupId: q.id,
+        subgroupTargets,
+        values: values as Record<string, FieldValue>,
+        subgroupSelectors,
+        buildOptionSetForLineField,
+        language
       });
-
-      if (!didChange || next === prev) return prev;
+      if (!fillResult.changed) return prev;
+      fillResult.diagnostics.forEach(entry => {
+        onDiagnostic?.('ui.subgroup.anchor.autofillSingleOption', entry);
+      });
       const latestValues = latestValuesRef.current || {};
-      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, next as any, {
+      const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, latestValues, fillResult.lineItems, {
         mode: 'change'
       });
       latestValuesRef.current = nextValues;
