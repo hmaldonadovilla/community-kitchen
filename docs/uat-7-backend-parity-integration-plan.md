@@ -593,11 +593,16 @@ Seventy-second-pass results:
 - `LineItemGroupQuestion.tsx`: extracted row-flow overlay context-header formatting into the row-flow display helper, leaving the component responsible for passing field lookup and display callbacks. Current size: 12,566 lines.
 - Validation for the pass used focused row-flow display value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Seventy-third-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted visible row-flow output segment selection into the row-flow output visibility helper. Current size: 12,554 lines.
+- Validation for the pass used focused row-flow output visibility tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,566 lines.
+- `LineItemGroupQuestion.tsx`: 12,554 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
