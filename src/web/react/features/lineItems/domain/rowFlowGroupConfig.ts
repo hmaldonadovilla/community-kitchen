@@ -1,5 +1,6 @@
 import type { WebQuestionDefinition } from '../../../../types';
 import { parseSubgroupKey, resolveSubgroupKey } from '../../../app/lineItems';
+import { parseLineFieldPath } from './formViewHelpers';
 
 export type RowFlowGroupConfigResolution = {
   groupId: string;
@@ -66,4 +67,20 @@ export const resolveRowFlowGroupConfigAction = (args: {
   }
 
   return null;
+};
+
+export const resolveRowFlowActiveFieldMetaAction = (args: {
+  activeElement: any;
+  resolveGroupConfig: (groupKey: string) => RowFlowGroupConfigResolution | null;
+  resolveFieldConfig: (groupKey: string, fieldId: string) => any | null;
+}): { path: string; type: string } => {
+  const active = args.activeElement;
+  const path = ((active?.closest?.('[data-field-path]') as any)?.dataset?.fieldPath || '').toString();
+  const parsed = parseLineFieldPath(path);
+  if (!parsed) return { path: '', type: '' };
+  const groupInfo = args.resolveGroupConfig(parsed.groupId);
+  if (!groupInfo) return { path: '', type: '' };
+  const field = args.resolveFieldConfig(parsed.groupId, parsed.fieldId);
+  const type = field?.type ? field.type.toString().trim().toUpperCase() : '';
+  return { path, type };
 };

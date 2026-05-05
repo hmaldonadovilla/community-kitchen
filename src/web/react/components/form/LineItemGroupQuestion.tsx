@@ -163,7 +163,10 @@ import {
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
-import { resolveRowFlowGroupConfigAction } from '../../features/lineItems/domain/rowFlowGroupConfig';
+import {
+  resolveRowFlowActiveFieldMetaAction,
+  resolveRowFlowGroupConfigAction
+} from '../../features/lineItems/domain/rowFlowGroupConfig';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
@@ -420,17 +423,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     return map;
   }, [parentRows]);
 
-  function parseFieldPath(path: string): { groupKey: string; fieldId: string; rowId: string } | null {
-    if (!path) return null;
-    const parts = path.split('__');
-    if (parts.length < 3) return null;
-    const groupKey = (parts[0] || '').toString().trim();
-    const fieldId = (parts[1] || '').toString().trim();
-    const rowId = (parts[2] || '').toString().trim();
-    if (!groupKey || !fieldId || !rowId) return null;
-    return { groupKey, fieldId, rowId };
-  }
-
   const resolveRowFlowGroupConfig = React.useCallback(
     (groupKey: string): { groupId: string; config: any } | null => {
       return resolveRowFlowGroupConfigAction({
@@ -454,16 +446,11 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
   );
 
   const activeFieldMeta = (() => {
-    if (typeof document === 'undefined') return { path: '', type: '' };
-    const active = document.activeElement as HTMLElement | null;
-    const path = ((active?.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath || '').toString();
-    const parsed = parseFieldPath(path);
-    if (!parsed) return { path: '', type: '' };
-    const groupInfo = resolveRowFlowGroupConfig(parsed.groupKey);
-    if (!groupInfo) return { path: '', type: '' };
-    const field = resolveRowFlowFieldConfig(parsed.groupKey, parsed.fieldId);
-    const type = field?.type ? field.type.toString().trim().toUpperCase() : '';
-    return { path, type };
+    return resolveRowFlowActiveFieldMetaAction({
+      activeElement: typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null,
+      resolveGroupConfig: resolveRowFlowGroupConfig,
+      resolveFieldConfig: resolveRowFlowFieldConfig
+    });
   })();
   const rowFlowStateByRowId = React.useMemo(() => {
     const map = new Map<string, RowFlowResolvedState>();

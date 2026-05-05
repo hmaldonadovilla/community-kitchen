@@ -1,5 +1,8 @@
 import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
-import { resolveRowFlowGroupConfigAction } from '../../../src/web/react/features/lineItems/domain/rowFlowGroupConfig';
+import {
+  resolveRowFlowActiveFieldMetaAction,
+  resolveRowFlowGroupConfigAction
+} from '../../../src/web/react/features/lineItems/domain/rowFlowGroupConfig';
 
 describe('row flow group config domain', () => {
   test('resolves root, subgroup, and current subgroup configs', () => {
@@ -36,5 +39,27 @@ describe('row flow group config domain', () => {
         definitionQuestions
       })
     ).toEqual({ groupId: nestedKey, config: itemConfig });
+  });
+
+  test('resolves active row-flow field metadata from an active element', () => {
+    const activeElement = {
+      closest: () => ({ dataset: { fieldPath: 'meals__quantity__row1' } })
+    };
+
+    expect(
+      resolveRowFlowActiveFieldMetaAction({
+        activeElement,
+        resolveGroupConfig: groupKey => (groupKey === 'meals' ? { groupId: 'meals', config: {} } : null),
+        resolveFieldConfig: (_groupKey, fieldId) => (fieldId === 'quantity' ? { id: 'quantity', type: 'number' } : null)
+      })
+    ).toEqual({ path: 'meals__quantity__row1', type: 'NUMBER' });
+
+    expect(
+      resolveRowFlowActiveFieldMetaAction({
+        activeElement: { closest: () => ({ dataset: { fieldPath: 'bad' } }) },
+        resolveGroupConfig: () => null,
+        resolveFieldConfig: () => null
+      })
+    ).toEqual({ path: '', type: '' });
   });
 });
