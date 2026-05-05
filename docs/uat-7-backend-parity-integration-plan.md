@@ -478,11 +478,16 @@ Forty-ninth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided step data-source optimistic availability cache mutation into `stepDataSourceAvailability`, leaving the component responsible only for cache mutation and refresh tick wiring. Current size: 13,182 lines.
 - Validation for the pass used focused step data-source availability, virtual data-source row value, and reservation quantity tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fiftieth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source draft-state transitions into `stepDataSourceDrafts`, keeping the component responsible for ref synchronization only when a draft map changes. Current size: 13,168 lines.
+- Validation for the pass used focused step data-source draft, availability, and virtual data-source row value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,843 lines.
-- `LineItemGroupQuestion.tsx`: 13,182 lines.
+- `LineItemGroupQuestion.tsx`: 13,168 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
