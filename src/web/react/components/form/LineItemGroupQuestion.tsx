@@ -163,6 +163,7 @@ import {
   sortVisibleTextValues
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
+import { resolveRowFlowGroupConfigAction } from '../../features/lineItems/domain/rowFlowGroupConfig';
 import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
@@ -432,56 +433,12 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
 
   const resolveRowFlowGroupConfig = React.useCallback(
     (groupKey: string): { groupId: string; config: any } | null => {
-      if (!groupKey) return null;
-      const baseParsed = parseSubgroupKey(q.id);
-      const baseRootId = baseParsed?.rootGroupId || q.id;
-      if (groupKey === q.id && q.lineItemConfig) {
-        return { groupId: q.id, config: q.lineItemConfig };
-      }
-      const rootQuestion = definition.questions.find(question => question.id === baseRootId);
-      const rootConfig =
-        baseRootId === q.id && q.lineItemConfig
-          ? q.lineItemConfig
-          : rootQuestion?.lineItemConfig;
-      const fallbackRootConfig = rootQuestion?.lineItemConfig;
-      if (!rootConfig && !fallbackRootConfig) return null;
-
-      const resolveFromConfig = (config: any, path: string[]): any | null => {
-        if (!config) return null;
-        if (!path.length) return config;
-        let current: any = config;
-        for (let i = 0; i < path.length; i += 1) {
-          const subId = path[i];
-          const next = (current?.subGroups || []).find((sub: any) => resolveSubgroupKey(sub as any) === subId);
-          if (!next) return null;
-          current = next;
-        }
-        return current;
-      };
-
-      const resolveFromRoot = (path: string[]): any | null =>
-        resolveFromConfig(rootConfig, path) || resolveFromConfig(fallbackRootConfig, path);
-
-      if (groupKey === baseRootId) {
-        return { groupId: baseRootId, config: rootConfig || fallbackRootConfig };
-      }
-
-      const parsed = parseSubgroupKey(groupKey);
-      if (parsed && parsed.rootGroupId === baseRootId) {
-        const cfg = resolveFromRoot(parsed.path);
-        return cfg ? { groupId: groupKey, config: cfg } : null;
-      }
-
-      if (groupKey === q.id && baseParsed?.path?.length) {
-        const cfg = resolveFromRoot(baseParsed.path);
-        return cfg ? { groupId: q.id, config: cfg } : null;
-      }
-
-      if (groupKey === q.id && !baseParsed) {
-        return { groupId: q.id, config: rootConfig };
-      }
-
-      return null;
+      return resolveRowFlowGroupConfigAction({
+        groupKey,
+        currentGroupId: q.id,
+        currentLineItemConfig: q.lineItemConfig,
+        definitionQuestions: definition.questions
+      });
     },
     [definition.questions, q.id, q.lineItemConfig]
   );
