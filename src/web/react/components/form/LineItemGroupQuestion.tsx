@@ -166,7 +166,10 @@ import {
   optionSortFor,
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
-import { resolveRowFlowDisplayValueAction } from '../../features/lineItems/domain/rowFlowDisplayValue';
+import {
+  buildRowFlowContextHeaderAction,
+  resolveRowFlowDisplayValueAction
+} from '../../features/lineItems/domain/rowFlowDisplayValue';
 import {
   applyAutoAddSubgroupSingleOptionAnchorFillAction,
   collectAutoAddSubgroupAnchorTargetsAction,
@@ -2464,76 +2467,14 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       rowValues: Record<string, FieldValue>;
       rowFlowState: RowFlowResolvedState;
     }): string => {
-      const simpleText = resolveLocalizedString(args.config as any, language, '').trim();
-      const fields = args.config?.fields || [];
-      if (!fields.length) return simpleText;
-      const parts = fields
-        .map(entry => {
-          const fieldRef = (entry?.fieldRef || '').toString().trim();
-          if (!fieldRef) return '';
-          const target = resolveRowFlowFieldTarget({
-            fieldRef,
-            groupId: q.id,
-            rowId: args.rowId,
-            rowValues: args.rowValues || {},
-            references: args.rowFlowState.references
-          });
-
-          const valuesForField = (() => {
-            if (target?.fieldId) {
-              return (target.rows || []).flatMap(entry => normalizeValueList((entry.row?.values || {})[target.fieldId]));
-            }
-            return [];
-          })();
-
-          const resolveFallbackText = (): string => {
-            const topVals = normalizeValueList(resolveTopValue(fieldRef));
-            if (!topVals.length) return '';
-            const text = topVals
-              .map(v => {
-                if (v === undefined || v === null) return '';
-                if (fieldRef === 'MP_PREP_DATE') return formatDateEeeDdMmmYyyy(v, language) || v.toString();
-                if (typeof v === 'boolean') {
-                  return v ? tSystem('common.yes', language, 'Yes') : tSystem('common.no', language, 'No');
-                }
-                return v.toString();
-              })
-              .filter(Boolean)
-              .join(', ');
-            return text;
-          };
-
-          const displayText = (() => {
-            if (target?.fieldId && valuesForField.length) {
-              const field = resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
-              const format = valuesForField.length > 1 ? { type: 'list' as const, listDelimiter: ', ' } : undefined;
-              const display = field
-                ? resolveRowFlowDisplayValue(
-                    {
-                      id: fieldRef,
-                      config: { fieldRef, format },
-                      target,
-                      values: valuesForField
-                    } as RowFlowResolvedSegment,
-                    target.groupKey,
-                    field,
-                    target.parentValues
-                  )
-                : { text: valuesForField.map(val => (val ?? '').toString()).filter(Boolean).join(', '), hasValue: true };
-              return display.text || '';
-            }
-            return resolveFallbackText();
-          })();
-
-          if (!displayText) return '';
-          const label = resolveLocalizedString(entry?.label, language, '');
-          if (!label) return displayText;
-          return label.includes('{{value}}')
-            ? label.replace('{{value}}', displayText)
-            : `${label}: ${displayText}`;
-        })
-        .filter(Boolean);
-      return parts.join(' ') || simpleText;
+      return buildRowFlowContextHeaderAction({
+        ...args,
+        groupId: q.id,
+        language,
+        resolveTopValue,
+        resolveRowFlowFieldConfig,
+        resolveRowFlowDisplayValue
+      });
     },
     [language, q.id, resolveRowFlowDisplayValue, resolveRowFlowFieldConfig, resolveTopValue]
   );

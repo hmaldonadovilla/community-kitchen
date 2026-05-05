@@ -1,4 +1,7 @@
-import { resolveRowFlowDisplayValueAction } from '../../../src/web/react/features/lineItems/domain/rowFlowDisplayValue';
+import {
+  buildRowFlowContextHeaderAction,
+  resolveRowFlowDisplayValueAction
+} from '../../../src/web/react/features/lineItems/domain/rowFlowDisplayValue';
 
 describe('row flow display value domain', () => {
   test('formats choice segment values with localized option labels', () => {
@@ -46,5 +49,26 @@ describe('row flow display value domain', () => {
     });
 
     expect(display).toEqual({ text: 'x-a, x-b', hasValue: true });
+  });
+
+  test('builds row-flow context headers from fallback top-level values', () => {
+    const header = buildRowFlowContextHeaderAction({
+      config: {
+        fields: [
+          { fieldRef: 'STATUS', label: { en: 'Status {{value}}' } },
+          { fieldRef: 'MP_PREP_DATE', label: { en: 'Date' } }
+        ]
+      },
+      rowId: 'row1',
+      rowValues: {},
+      rowFlowState: { references: [] } as any,
+      groupId: 'MEALS',
+      language: 'EN',
+      resolveTopValue: fieldId => (fieldId === 'STATUS' ? 'Ready' : fieldId === 'MP_PREP_DATE' ? '2026-05-05' : undefined),
+      resolveRowFlowFieldConfig: () => null,
+      resolveRowFlowDisplayValue: () => ({ text: '', hasValue: false })
+    });
+
+    expect(header).toBe('Status Ready Date: Tue, 05-May-2026');
   });
 });

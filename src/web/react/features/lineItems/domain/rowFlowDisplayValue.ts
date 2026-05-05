@@ -1,9 +1,17 @@
 import { buildLocalizedOptions, toOptionSet } from '../../../../core';
+import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
-import type { FieldValue, LangCode, OptionSet } from '../../../../types';
+import type {
+  FieldValue,
+  LangCode,
+  OptionSet,
+  RowFlowOverlayContextHeaderConfig
+} from '../../../../types';
 import { formatDateEeeDdMmmYyyy } from '../../../utils/valueDisplay';
 import {
   normalizeValueList,
+  resolveRowFlowFieldTarget,
+  type RowFlowResolvedState,
   type RowFlowResolvedSegment
 } from '../../steps/domain/rowFlow';
 import {
@@ -83,4 +91,92 @@ export const resolveRowFlowDisplayValueAction = (args: {
   const orderedLabels = sortVisibleTextValues(normalizedLabels, listSortMode);
   const text = formatType === 'list' ? orderedLabels.join(listDelimiter) : orderedLabels[0] || '';
   return { text, hasValue: text.trim() !== '' };
+};
+
+export const buildRowFlowContextHeaderAction = (args: {
+  config?: RowFlowOverlayContextHeaderConfig;
+  rowId: string;
+  rowValues: Record<string, FieldValue>;
+  rowFlowState: RowFlowResolvedState;
+  groupId: string;
+  language: LangCode;
+  resolveTopValue: (fieldId: string) => FieldValue;
+  resolveRowFlowFieldConfig: (groupKey: string, fieldId: string) => any;
+  resolveRowFlowDisplayValue: (
+    segment: RowFlowResolvedSegment,
+    targetGroupKey: string,
+    field: any,
+    parentValues?: Record<string, FieldValue>
+  ) => { text: string; hasValue: boolean };
+}): string => {
+  const simpleText = resolveLocalizedString(args.config as any, args.language, '').trim();
+  const fields = args.config?.fields || [];
+  if (!fields.length) return simpleText;
+  const parts = fields
+    .map(entry => {
+      const fieldRef = (entry?.fieldRef || '').toString().trim();
+      if (!fieldRef) return '';
+      const target = resolveRowFlowFieldTarget({
+        fieldRef,
+        groupId: args.groupId,
+        rowId: args.rowId,
+        rowValues: args.rowValues || {},
+        references: args.rowFlowState.references
+      });
+
+      const valuesForField = (() => {
+        if (target?.fieldId) {
+          return (target.rows || []).flatMap(entry => normalizeValueList((entry.row?.values || {})[target.fieldId]));
+        }
+        return [];
+      })();
+
+      const resolveFallbackText = (): string => {
+        const topVals = normalizeValueList(args.resolveTopValue(fieldRef));
+        if (!topVals.length) return '';
+        const text = topVals
+          .map(value => {
+            if (value === undefined || value === null) return '';
+            if (fieldRef === 'MP_PREP_DATE') return formatDateEeeDdMmmYyyy(value, args.language) || value.toString();
+            if (typeof value === 'boolean') {
+              return value ? tSystem('common.yes', args.language, 'Yes') : tSystem('common.no', args.language, 'No');
+            }
+            return value.toString();
+          })
+          .filter(Boolean)
+          .join(', ');
+        return text;
+      };
+
+      const displayText = (() => {
+        if (target?.fieldId && valuesForField.length) {
+          const field = args.resolveRowFlowFieldConfig(target.groupKey, target.fieldId);
+          const format = valuesForField.length > 1 ? { type: 'list' as const, listDelimiter: ', ' } : undefined;
+          const display = field
+            ? args.resolveRowFlowDisplayValue(
+                {
+                  id: fieldRef,
+                  config: { fieldRef, format },
+                  target,
+                  values: valuesForField
+                } as RowFlowResolvedSegment,
+                target.groupKey,
+                field,
+                target.parentValues
+              )
+            : { text: valuesForField.map(value => (value ?? '').toString()).filter(Boolean).join(', '), hasValue: true };
+          return display.text || '';
+        }
+        return resolveFallbackText();
+      })();
+
+      if (!displayText) return '';
+      const label = resolveLocalizedString(entry?.label, args.language, '');
+      if (!label) return displayText;
+      return label.includes('{{value}}')
+        ? label.replace('{{value}}', displayText)
+        : `${label}: ${displayText}`;
+    })
+    .filter(Boolean);
+  return parts.join(' ') || simpleText;
 };
