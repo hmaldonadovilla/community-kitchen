@@ -343,11 +343,16 @@ Twenty-second-pass results:
 - `App.tsx`: extracted submit confirmation/progress dialog selection, label resolution, and dialog-template interpolation into `useAppSubmitDialogConfig`, keeping submit execution in the shell. Current size: 15,224 lines.
 - Validation for the pass used focused App/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-third-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted repeated read-only field chrome, overlay-open replace field chrome, and inline overlay-open action buttons into `LineItemFieldChrome`, keeping row mutation and overlay action policies injected by the parent. Current size: 13,618 lines.
+- Validation for the pass used focused line-item/upload tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 15,224 lines.
 - `FormView.tsx`: 13,454 lines.
-- `LineItemGroupQuestion.tsx`: 13,826 lines.
+- `LineItemGroupQuestion.tsx`: 13,618 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
