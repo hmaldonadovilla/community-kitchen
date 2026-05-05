@@ -163,6 +163,7 @@ import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/compon
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import { LineFileUploadQuestion } from '../../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadListQuestion } from '../../features/uploads/components/LineFileUploadListQuestion';
+import { LineFileUploadTableControl } from '../../features/uploads/components/LineFileUploadTableControl';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
   LineItemGroupQuestionProps
@@ -5374,166 +5375,28 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             }
 
             if (field.type === 'FILE_UPLOAD') {
-              const items = toUploadItems(row.values[field.id]);
-              const count = items.length;
-              const uploadConfig = (field as any).uploadConfig || {};
-              const slotIconType = ((uploadConfig as any)?.ui?.slotIcon || 'camera').toString().trim().toLowerCase();
-              const SlotIcon = (slotIconType === 'clip' ? PaperclipIcon : CameraIcon) as React.FC<{
-                size?: number;
-                style?: React.CSSProperties;
-                className?: string;
-              }>;
-              const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
-              const maxFiles = uploadConfig.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
-              const denom = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
-              const displayCount = denom ? Math.min(items.length, denom) : items.length;
-              const maxed = maxFiles ? items.length >= maxFiles : false;
-              const isComplete = minRequired > 0 ? items.length >= minRequired : items.length > 0;
-              const isEmpty = items.length === 0;
-              const pillClass = isComplete ? 'ck-progress-good' : isEmpty ? 'ck-progress-neutral' : 'ck-progress-info';
-              const pillText = denom ? `${displayCount}/${denom}` : `${items.length}`;
-              const readOnly = (field as any)?.readOnly === true;
-              const hasFiles = items.length > 0;
-              const viewMode = readOnly || maxed || hasFiles;
-              const LeftIcon = viewMode ? EyeIcon : SlotIcon;
-              const leftLabel = viewMode
-                ? tSystem('files.view', language, 'View photos')
-                : tSystem('files.add', language, 'Add photo');
-              const cameraStyleBase = buttonStyles.primary;
-              const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
-                group: q,
-                rowId: row.id,
-                field,
-                fieldPath,
-                source: 'render',
-                validate: false
-              });
-              const uploadInteractionBlocked = fieldInteractionBlocked || orderedUploadBlocked;
-              const allowedDisplay = (uploadConfig.allowedExtensions || []).map((ext: string) =>
-                ext.trim().startsWith('.') ? ext.trim() : `.${ext.trim()}`
-              );
-              const allowedMimeDisplay = (uploadConfig.allowedMimeTypes || [])
-                .map((v: any) => (v !== undefined && v !== null ? v.toString().trim() : ''))
-                .filter(Boolean);
-              const acceptAttr = [...allowedDisplay, ...allowedMimeDisplay].filter(Boolean).join(',') || undefined;
-
-              if (renderAsLabel) {
-                return (
-                  <div
-                    className="ck-line-item-table__value"
-                    data-field-path={fieldPath}
-                    data-has-warning={showWarningHighlight ? 'true' : undefined}
-                    data-has-error={hasFieldError ? 'true' : undefined}
-                  >
-                    <span className="ck-line-item-table__value-text">
-                      {resolveLineItemTableReadOnlyDisplay({
-                        baseValue: count ? `${count}` : '',
-                        field,
-                        rowValues: (row.values || {}) as Record<string, FieldValue>,
-                        language
-                      })}
-                    </span>
-                    {errorNode}
-                  </div>
-                );
-              }
               return (
-                <div
-                  className="ck-line-item-table__control"
-                  data-field-path={fieldPath}
-                  data-has-warning={showWarningHighlight ? 'true' : undefined}
-                  data-has-error={hasFieldError ? 'true' : undefined}
-                >
-                  <div className="ck-upload-row ck-upload-row--table">
-                    <button
-                      type="button"
-                      className="ck-upload-camera-btn"
-                      disabled={uploadInteractionBlocked}
-                      style={withDisabled(cameraStyleBase, uploadInteractionBlocked)}
-                      aria-label={leftLabel}
-                      title={leftLabel}
-                      onClick={() => {
-                        if (uploadInteractionBlocked) return;
-                        if (viewMode) {
-                          onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
-                          openFileOverlay({
-                            scope: 'line',
-                            title: resolveFieldLabel(field, language, field.id),
-                            group: q,
-                            rowId: row.id,
-                            field,
-                            fieldPath
-                          });
-                          return;
-                        }
-                        if (readOnly) return;
-                        if (
-                          isFileUploadOrderedEntryBlocked({
-                            group: q,
-                            rowId: row.id,
-                            field,
-                            fieldPath,
-                            source: 'add'
-                          })
-                        ) {
-                          return;
-                        }
-                        onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
-                        fileInputsRef.current[fieldPath]?.click();
-                      }}
-                    >
-                      <LeftIcon style={{ width: '62%', height: '62%' }} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`ck-progress-pill ck-upload-pill-btn ck-upload-pill-btn--table ${pillClass}`}
-                      disabled={uploadInteractionBlocked}
-                      style={withDisabled({}, uploadInteractionBlocked)}
-                      aria-disabled={uploadInteractionBlocked ? 'true' : undefined}
-                      aria-label={`${tSystem('files.open', language, tSystem('common.open', language, 'Open'))} ${tSystem(
-                        'files.title',
-                        language,
-                        'Photos'
-                      )} ${pillText}`}
-                      onClick={() => {
-                        if (uploadInteractionBlocked) return;
-                        onDiagnostic?.('upload.view.click', { scope: 'line', fieldPath, currentCount: items.length });
-                        openFileOverlay({
-                          scope: 'line',
-                          title: resolveFieldLabel(field, language, field.id),
-                          group: q,
-                          rowId: row.id,
-                          field,
-                          fieldPath
-                        });
-                      }}
-                    >
-                      {isComplete ? <CheckIcon style={{ width: '1.05em', height: '1.05em' }} /> : null}
-                      <span>{pillText}</span>
-                      <span className="ck-progress-label">
-                        {tSystem('files.open', language, tSystem('common.open', language, 'Open'))}
-                      </span>
-                      <span className="ck-progress-caret">▸</span>
-                    </button>
-                  </div>
-                  <div style={srOnly} aria-live="polite">
-                    {uploadAnnouncements[fieldPath] || ''}
-                  </div>
-                  {renderUploadFailure(fieldPath, uploadInteractionBlocked || readOnly)}
-                  <input
-                    ref={el => {
-                      if (!el) return;
-                      fileInputsRef.current[fieldPath] = el;
-                    }}
-                    type="file"
-                    multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
-                    accept={acceptAttr}
-                    disabled={uploadInteractionBlocked}
-                    style={{ display: 'none' }}
-                    onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
-                  />
-                  {errorNode}
-                </div>
+                <LineFileUploadTableControl
+                  group={q}
+                  rowId={row.id}
+                  field={field}
+                  fieldPath={fieldPath}
+                  value={row.values[field.id] as FieldValue | undefined}
+                  rowValues={(row.values || {}) as Record<string, FieldValue>}
+                  language={language}
+                  fieldInteractionBlocked={fieldInteractionBlocked}
+                  renderAsLabel={renderAsLabel}
+                  showWarningHighlight={showWarningHighlight}
+                  hasFieldError={hasFieldError}
+                  errorNode={errorNode}
+                  checkFileUploadOrderedEntry={isFileUploadOrderedEntryBlocked}
+                  openFileOverlay={openFileOverlay}
+                  handleFileInputChange={handleLineFileInputChange}
+                  fileInputsRef={fileInputsRef}
+                  uploadAnnouncements={uploadAnnouncements}
+                  renderUploadFailure={renderUploadFailure}
+                  onDiagnostic={onDiagnostic}
+                />
               );
             }
 
