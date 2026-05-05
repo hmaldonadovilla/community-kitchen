@@ -167,6 +167,11 @@ import {
 } from '../../features/lineItems/domain/lineItemPresentation';
 import { resolveAddOverlayCopy } from '../../features/lineItems/domain/addOverlayCopy';
 import {
+  normalizeOverlayFieldListAction,
+  normalizeOverlayFlattenPlacementAction,
+  resolveOverlayFlattenedFieldTargetsAction
+} from '../../features/lineItems/domain/overlayFlattenedFields';
+import {
   buildRowFlowContextHeaderAction,
   resolveRowFlowDisplayValueAction,
   resolveRowFlowOutputSegmentPresentationAction
@@ -5947,23 +5952,8 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                 if (!raw) return [];
                 return Array.isArray(raw) ? raw : [raw];
               };
-              const normalizeOverlayFieldList = (raw: any): string[] => {
-                if (raw === undefined || raw === null) return [];
-                const list = Array.isArray(raw) ? raw : [raw];
-                const seen = new Set<string>();
-                return list
-                  .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
-                  .filter(entry => {
-                    if (!entry || seen.has(entry)) return false;
-                    seen.add(entry);
-                    return true;
-                  });
-              };
-              const normalizeOverlayFlattenPlacement = (raw: any): 'left' | 'right' | 'below' => {
-                const placement = (raw || '').toString().trim().toLowerCase();
-                if (placement === 'left' || placement === 'right') return placement;
-                return 'below';
-              };
+              const normalizeOverlayFieldList = normalizeOverlayFieldListAction;
+              const normalizeOverlayFlattenPlacement = normalizeOverlayFlattenPlacementAction;
               const overlayOpenActionTargetsForField = (field: any): string[] => {
                 const actions = normalizeOverlayOpenActions(field);
                 return actions
@@ -6168,11 +6158,14 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   return null;
                 }
 
-                const rowsAll = lineItems[targetKey] || [];
-                const rowsFiltered = overlayOpenAction.rowFilter
-                  ? rowsAll.filter(r => isIncludedByRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter))
-                  : rowsAll;
-                if (!rowsFiltered.length) {
+                const flattenedTargets = resolveOverlayFlattenedFieldTargetsAction({
+                  rows: lineItems[targetKey] || [],
+                  rowFilter: overlayOpenAction.rowFilter,
+                  flattenFields: overlayOpenAction.flattenFields,
+                  targetFieldsAll: (targetInfo.config?.fields || []) as any[],
+                  matchesRowFilter: isIncludedByRowFilter
+                });
+                if (!flattenedTargets.ok && flattenedTargets.reason === 'noRow') {
                   const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::noRow`;
                   logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
                     scope: 'line',
@@ -6183,7 +6176,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   });
                   return null;
                 }
-                if (rowsFiltered.length > 1) {
+                if (!flattenedTargets.ok && flattenedTargets.reason === 'multipleRows') {
                   const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::multiRow`;
                   logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
                     scope: 'line',
@@ -6191,17 +6184,13 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                     fieldId: field.id,
                     groupId: overlayOpenAction.groupId,
                     reason: 'multipleRows',
-                    count: rowsFiltered.length
+                    count: flattenedTargets.count
                   });
                   return null;
                 }
+                if (!flattenedTargets.ok) return null;
 
-                const targetRow = rowsFiltered[0];
-                const targetFieldsAll = (targetInfo.config?.fields || []) as any[];
-                const targetFields = overlayOpenAction.flattenFields
-                  .map((fid: string) => targetFieldsAll.find(f => f && f.id === fid))
-                  .filter(Boolean) as any[];
-                if (!targetFields.length) return null;
+                const { targetRow, targetFields } = flattenedTargets;
 
                 const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
                 const targetGroupCtx: VisibilityContext = {
@@ -7475,11 +7464,14 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                     return null;
                   }
 
-                  const rowsAll = lineItems[targetKey] || [];
-                  const rowsFiltered = overlayOpenAction.rowFilter
-                    ? rowsAll.filter(r => matchesOverlayRowFilter(((r as any)?.values || {}) as any, overlayOpenAction.rowFilter))
-                    : rowsAll;
-                  if (!rowsFiltered.length) {
+                  const flattenedTargets = resolveOverlayFlattenedFieldTargetsAction({
+                    rows: lineItems[targetKey] || [],
+                    rowFilter: overlayOpenAction.rowFilter,
+                    flattenFields: overlayOpenAction.flattenFields,
+                    targetFieldsAll: (targetInfo.config?.fields || []) as any[],
+                    matchesRowFilter: matchesOverlayRowFilter
+                  });
+                  if (!flattenedTargets.ok && flattenedTargets.reason === 'noRow') {
                     const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::noRow`;
                     logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
                       scope: 'line',
@@ -7490,7 +7482,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                     });
                     return null;
                   }
-                  if (rowsFiltered.length > 1) {
+                  if (!flattenedTargets.ok && flattenedTargets.reason === 'multipleRows') {
                     const skipKey = `${q.id}::${row.id}::${field.id}::overlayOpenAction::flatten::multiRow`;
                     logOverlayOpenActionOnce(skipKey, 'ui.overlayOpenAction.flatten.skip', {
                       scope: 'line',
@@ -7498,17 +7490,13 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       fieldId: field.id,
                       groupId: overlayOpenAction.groupId,
                       reason: 'multipleRows',
-                      count: rowsFiltered.length
+                      count: flattenedTargets.count
                     });
                     return null;
                   }
+                  if (!flattenedTargets.ok) return null;
 
-                  const targetRow = rowsFiltered[0];
-                  const targetFieldsAll = (targetInfo.config?.fields || []) as any[];
-                  const targetFields = overlayOpenAction.flattenFields
-                    .map(fid => targetFieldsAll.find(f => f && f.id === fid))
-                    .filter(Boolean) as any[];
-                  if (!targetFields.length) return null;
+                  const { targetRow, targetFields } = flattenedTargets;
 
                   const targetChoiceSearchDefault = (targetInfo.config?.ui as any)?.choiceSearchEnabled;
                   const targetGroupCtx: VisibilityContext = {
