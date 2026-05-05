@@ -1,4 +1,4 @@
-import { validateRules } from '../../../core';
+import { matchesWhenClause, validateRules } from '../../../core';
 import type { FieldValue, LangCode, ValidationRule, VisibilityContext } from '../../../types';
 import type { LineItemState } from '../../types';
 
@@ -48,4 +48,60 @@ export const validateVirtualFieldRulesAction = (args: {
   return validateRules(rules, ctx)
     .map(issue => (issue?.message || '').toString().trim())
     .filter(Boolean);
+};
+
+export const resolveVirtualMaxFieldIdAction = (args: {
+  field: any;
+  rowValues: Record<string, FieldValue>;
+  parentValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  resolveTopValue: (fieldId: string) => FieldValue | undefined;
+}): string => {
+  const rules = Array.isArray(args.field?.validationRules) ? (args.field.validationRules as any[]) : [];
+  const fieldId = `${args.field?.id || ''}`.trim();
+  if (!fieldId) return '';
+  const ctx = buildVirtualRowWhenContext({
+    rowValues: args.rowValues,
+    parentValues: args.parentValues,
+    lineItems: args.lineItems,
+    resolveTopValue: args.resolveTopValue
+  });
+  return rules.reduce<string>((matched, rule) => {
+    if (matched) return matched;
+    const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+    if (!thenCfg) return '';
+    const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
+    if (targetFieldId !== fieldId) return '';
+    const candidateMaxFieldId = (thenCfg.maxFieldId || '').toString().trim();
+    if (!candidateMaxFieldId) return '';
+    if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) return '';
+    return candidateMaxFieldId;
+  }, '');
+};
+
+export const allowsVirtualIntegerOnlyAction = (args: {
+  field: any;
+  rowValues: Record<string, FieldValue>;
+  parentValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  resolveTopValue: (fieldId: string) => FieldValue | undefined;
+}): boolean => {
+  const rules = Array.isArray(args.field?.validationRules) ? (args.field.validationRules as any[]) : [];
+  const fieldId = `${args.field?.id || ''}`.trim();
+  if (!fieldId) return false;
+  const ctx = buildVirtualRowWhenContext({
+    rowValues: args.rowValues,
+    parentValues: args.parentValues,
+    lineItems: args.lineItems,
+    resolveTopValue: args.resolveTopValue
+  });
+  return rules.some((rule: any) => {
+    const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+    if (!thenCfg) return false;
+    const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
+    if (targetFieldId !== fieldId) return false;
+    if (thenCfg.integer !== true) return false;
+    if (!rule?.when) return true;
+    return matchesWhenClause(rule.when as any, ctx);
+  });
 };

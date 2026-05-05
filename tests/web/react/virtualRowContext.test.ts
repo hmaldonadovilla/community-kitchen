@@ -1,5 +1,7 @@
 import {
+  allowsVirtualIntegerOnlyAction,
   buildVirtualRowWhenContext,
+  resolveVirtualMaxFieldIdAction,
   validateVirtualFieldRulesAction
 } from '../../../src/web/react/components/form/virtualRowContext';
 
@@ -43,5 +45,74 @@ describe('virtual row context helpers', () => {
     });
 
     expect(messages).toEqual(['Quantity required']);
+  });
+
+  test('resolves conditional max field ids for virtual numeric fields', () => {
+    const field = {
+      id: 'quantity',
+      validationRules: [
+        {
+          when: { fieldId: 'mode', equals: 'reserve' },
+          then: { fieldId: 'quantity', maxFieldId: 'availableQuantity' }
+        },
+        {
+          when: { fieldId: 'mode', equals: 'ignore' },
+          then: { fieldId: 'quantity', maxFieldId: 'ignoredMax' }
+        }
+      ]
+    };
+
+    expect(
+      resolveVirtualMaxFieldIdAction({
+        field,
+        rowValues: { mode: 'reserve' },
+        parentValues: {},
+        lineItems: {},
+        resolveTopValue: () => undefined
+      })
+    ).toBe('availableQuantity');
+    expect(
+      resolveVirtualMaxFieldIdAction({
+        field,
+        rowValues: { mode: 'other' },
+        parentValues: {},
+        lineItems: {},
+        resolveTopValue: () => undefined
+      })
+    ).toBe('');
+  });
+
+  test('detects conditional integer-only virtual numeric fields', () => {
+    const field = {
+      id: 'quantity',
+      validationRules: [
+        {
+          when: { fieldId: 'mode', equals: 'reserve' },
+          then: { fieldId: 'quantity', integer: true }
+        },
+        {
+          then: { fieldId: 'other', integer: true }
+        }
+      ]
+    };
+
+    expect(
+      allowsVirtualIntegerOnlyAction({
+        field,
+        rowValues: { mode: 'reserve' },
+        parentValues: {},
+        lineItems: {},
+        resolveTopValue: () => undefined
+      })
+    ).toBe(true);
+    expect(
+      allowsVirtualIntegerOnlyAction({
+        field,
+        rowValues: { mode: 'other' },
+        parentValues: {},
+        lineItems: {},
+        resolveTopValue: () => undefined
+      })
+    ).toBe(false);
   });
 });

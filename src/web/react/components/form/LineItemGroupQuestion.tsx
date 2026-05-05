@@ -122,7 +122,12 @@ import {
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 import { buildSourceFirstPresentationEntries } from './sourceFirstPresentationEntries';
 import { resolveVirtualPresetAction, resolveVirtualPresetValueAction } from './virtualPreset';
-import { buildVirtualRowWhenContext, validateVirtualFieldRulesAction } from './virtualRowContext';
+import {
+  allowsVirtualIntegerOnlyAction,
+  buildVirtualRowWhenContext,
+  resolveVirtualMaxFieldIdAction,
+  validateVirtualFieldRulesAction
+} from './virtualRowContext';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
@@ -1536,23 +1541,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       rowValues: Record<string, FieldValue>,
       parentValues: Record<string, FieldValue>
     ): string => {
-      const rules = Array.isArray(field?.validationRules) ? (field.validationRules as any[]) : [];
-      const fieldId = `${field?.id || ''}`.trim();
-      if (!fieldId) return '';
-      const ctx = resolveVirtualRowWhenContext({ rowValues, parentValues });
-      return rules.reduce<string>((matched, rule) => {
-        if (matched) return matched;
-        const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
-        if (!thenCfg) return '';
-        const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
-        if (targetFieldId !== fieldId) return '';
-        const candidateMaxFieldId = (thenCfg.maxFieldId || '').toString().trim();
-        if (!candidateMaxFieldId) return '';
-        if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) return '';
-        return candidateMaxFieldId;
-      }, '');
+      return resolveVirtualMaxFieldIdAction({ field, rowValues, parentValues, lineItems, resolveTopValue });
     },
-    [resolveVirtualRowWhenContext]
+    [lineItems, resolveTopValue]
   );
 
   const allowsVirtualIntegerOnly = React.useCallback(
@@ -1561,21 +1552,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       rowValues: Record<string, FieldValue>,
       parentValues: Record<string, FieldValue>
     ): boolean => {
-      const rules = Array.isArray(field?.validationRules) ? (field.validationRules as any[]) : [];
-      const fieldId = `${field?.id || ''}`.trim();
-      if (!fieldId) return false;
-      const ctx = resolveVirtualRowWhenContext({ rowValues, parentValues });
-      return rules.some((rule: any) => {
-        const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
-        if (!thenCfg) return false;
-        const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
-        if (targetFieldId !== fieldId) return false;
-        if (thenCfg.integer !== true) return false;
-        if (!rule?.when) return true;
-        return matchesWhenClause(rule.when as any, ctx);
-      });
+      return allowsVirtualIntegerOnlyAction({ field, rowValues, parentValues, lineItems, resolveTopValue });
     },
-    [resolveVirtualRowWhenContext]
+    [lineItems, resolveTopValue]
   );
 
   const syncStepDataSourceOutputRow = React.useCallback(
