@@ -85,6 +85,7 @@ import { useAppReportPreviewActions } from './components/app/useAppReportPreview
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
+import { useDuplicateCurrentRecordAction } from './components/app/useDuplicateCurrentRecordAction';
 import { useUpdateRecordButtonAction } from './components/app/useUpdateRecordButtonAction';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
@@ -204,7 +205,6 @@ import { resolveNonMatchWarningFieldIds } from './app/nonMatchWarningFields';
 import {
   buildInitialLineItems,
   buildSubgroupKey,
-  clearAutoIncrementFields,
   parseSubgroupKey,
   parseRowNonMatchOptions,
   resolveSubgroupKey,
@@ -280,13 +280,8 @@ import {
 } from './features/steps/domain/milestoneDialogs';
 import { applyRecordDeltaToAnalyticsSnapshot } from './analytics/liveSnapshot';
 import { runWithConcurrencyLimit } from './utils/runWithConcurrencyLimit';
-import {
-  applyCopyCurrentRecordDropFields,
-  applyCopyCurrentRecordProfile,
-  resolveCopyCurrentRecordDestructiveChangeBypassFieldIds,
-  shouldBypassCopyCurrentRecordDestructiveChange
-} from './app/copyProfile';
-import { hasInvalidRejectDedupKeyValues, shouldDeferCopiedDraftCreation } from './app/copyDraftCreation';
+import { shouldBypassCopyCurrentRecordDestructiveChange } from './app/copyProfile';
+import { hasInvalidRejectDedupKeyValues } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
@@ -6593,181 +6588,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     ...newRecordActionState
   });
 
-  const handleDuplicateCurrent = useCallback(async (args?: { busyAlreadyOpen?: boolean }) => {
-    const busySeq = args?.busyAlreadyOpen
-      ? null
-      : copyRecordBusy.lock({
-          title: tSystem('navigation.waitTitle', language, 'Please wait'),
-          message: tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...'),
-          diagnosticMeta: {}
-        });
-    bumpRecordSession({ reason: 'duplicateCurrent', nextRecordId: null });
-    const copySession = recordSessionRef.current;
-    try {
-      createFlowRef.current = true;
-      createFlowUserEditedRef.current = false;
-      autoSaveUserEditedRef.current = false;
-      dedupHoldRef.current = false;
-      resetFieldChangeTransientState();
-      // Preserve current values/line items but clear record context so the next submit creates a new record.
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-      setDedupChecking(false);
-      setDedupConflict(null);
-      setDedupNotice(null);
-      dedupCheckingRef.current = false;
-      dedupConflictRef.current = null;
-      lastDedupCheckedSignatureRef.current = '';
-      dedupBaselineSignatureRef.current = '';
-      dedupKeyFingerprintBaselineRef.current = '';
-      dedupDeleteOnKeyChangeInFlightRef.current = false;
-      recordStaleRef.current = null;
-      setRecordStale(null);
-      recordDataVersionRef.current = null;
-      optimisticClientDataVersionRef.current = null;
-      recordRowNumberRef.current = null;
-      const profiled = applyCopyCurrentRecordProfile({
-        definition: definition as any,
-        values: valuesRef.current,
-        lineItems: lineItemsRef.current
-      });
-      if (profiled) {
-        logEvent('ui.copyCurrent.profile.applied', {
-          keepValueCount: Object.keys(profiled.values || {}).length,
-          groupCount: Object.keys(profiled.lineItems || {}).length
-        });
-      }
-      const base = profiled || { values: valuesRef.current, lineItems: lineItemsRef.current };
-      const cleared = clearAutoIncrementFields(definition, base.values, base.lineItems);
-      const dropFieldsRaw = Array.isArray(definition.copyCurrentRecordDropFields) ? definition.copyCurrentRecordDropFields : [];
-      const dropFields = dropFieldsRaw
-        .map(v => (v === undefined || v === null ? '' : v.toString()).trim())
-        .filter(Boolean);
-      const destructiveChangeBypassFieldIds = resolveCopyCurrentRecordDestructiveChangeBypassFieldIds({
-        definition: definition as any,
-        dropFields
-      });
-      if (destructiveChangeBypassFieldIds.length) {
-        copyCurrentRecordDestructiveChangeBypassFieldIdsRef.current = destructiveChangeBypassFieldIds.reduce<
-          Record<string, true>
-        >((acc, fieldId) => {
-          acc[fieldId] = true;
-          return acc;
-        }, {});
-        logEvent('ui.copyCurrent.destructiveChangeBypass', {
-          count: destructiveChangeBypassFieldIds.length,
-          fieldIds: destructiveChangeBypassFieldIds
-        });
-      }
-      if (dropFields.length) {
-        const dropped = applyCopyCurrentRecordDropFields({
-          definition: definition as any,
-          values: cleared.values as any,
-          lineItems: cleared.lineItems,
-          dropFields
-        });
-        const nextValues: Record<string, any> = { ...(dropped.values as any) };
-        const nextLineItems: any = dropped.lineItems;
-        logEvent('ui.copyCurrent.dropFields', {
-          count: dropFields.length,
-          droppedValuesCount: dropped.droppedValues.length,
-          droppedValues: dropped.droppedValues,
-          lineItemsCleared: dropped.lineItemsCleared
-        });
-        // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
-        valuesRef.current = nextValues as any;
-        lineItemsRef.current = nextLineItems;
-        rememberAutoSaveSeenState(nextValues as any, nextLineItems);
-        setValues(nextValues as any);
-        setLineItems(nextLineItems);
-      } else {
-        // Keep refs in sync immediately so downstream actions (autosave/submit) can use the new draft values without waiting for a re-render.
-        valuesRef.current = cleared.values as any;
-        lineItemsRef.current = cleared.lineItems;
-        rememberAutoSaveSeenState(cleared.values, cleared.lineItems);
-        setValues(cleared.values);
-        setLineItems(cleared.lineItems);
-      }
-      setSelectedRecordId('');
-      // Keep refs in sync immediately so autosave/submit flows do not treat the copied draft
-      // as an update of the currently selected (potentially Closed) record.
-      selectedRecordIdRef.current = '';
-      setSelectedRecordSnapshot(null);
-      selectedRecordSnapshotRef.current = null;
-      setLastSubmissionMeta(null);
-      lastSubmissionMetaRef.current = null;
-      setErrors({});
-      setValidationWarnings({ top: [], byField: {} });
-      setValidationAttempted(false);
-      setValidationNoticeHidden(false);
-      setStatus(null);
-      setStatusLevel(null);
-      setView('form');
-
-      if (
-        shouldDeferCopiedDraftCreation({
-          dedupRules: (definition as any)?.dedupRules,
-          questions: definition.questions,
-          values: valuesRef.current as any,
-          lineItems: lineItemsRef.current,
-          language: languageRef.current,
-          existingRecordId: ''
-        })
-      ) {
-        logEvent('ui.copyCurrent.ensureRecordId.deferred', {
-          reason: 'dedupKeysIncompleteOrInvalid'
-        });
-        openCopyCurrentRecordDialogIfConfigured();
-        return;
-      }
-
-      const duplicateHandled = await precheckCreateDedupAndMaybeNavigate({
-        values: valuesRef.current as any,
-        lineItems: lineItemsRef.current,
-        source: 'copyCurrentRecord'
-      });
-      if (recordSessionRef.current !== copySession) return;
-      if (duplicateHandled) return;
-
-      const ensureRecordId = ensureDraftRecordIdActionRef.current;
-      if (!ensureRecordId) {
-        openCopyCurrentRecordDialogIfConfigured();
-        return;
-      }
-      const ensured = await ensureRecordId({ reason: 'copyCurrentRecord' });
-      if (recordSessionRef.current !== copySession) return;
-      if (!ensured.success || !ensured.recordId) {
-        const message = (ensured.message || 'Could not create the copied draft record.').toString();
-        setStatus(message);
-        setStatusLevel('error');
-        logEvent('ui.copyCurrent.ensureRecordId.failed', { message });
-        return;
-      }
-      logEvent('ui.copyCurrent.ensureRecordId.done', { recordId: ensured.recordId });
-      openCopyCurrentRecordDialogIfConfigured();
-    } finally {
-      if (busySeq !== null) {
-        copyRecordBusy.unlock(busySeq, {
-          source: 'copyCurrentRecord',
-          session: copySession
-        });
-      }
-    }
-  }, [
-    bumpRecordSession,
-    copyRecordBusy,
+  const handleDuplicateCurrent = useDuplicateCurrentRecordAction({
     definition,
     language,
+    languageRef,
     logEvent,
-    openCopyCurrentRecordDialogIfConfigured,
+    copyRecordBusy,
     precheckCreateDedupAndMaybeNavigate,
-    rememberAutoSaveSeenState,
-    resetFieldChangeTransientState
-  ]);
+    openCopyCurrentRecordDialogIfConfigured,
+    ensureDraftRecordIdActionRef,
+    recordSessionRef,
+    valuesRef,
+    lineItemsRef,
+    selectedRecordIdRef,
+    selectedRecordSnapshotRef,
+    lastSubmissionMetaRef,
+    copyCurrentRecordDestructiveChangeBypassFieldIdsRef,
+    ...newRecordActionState
+  });
 
   const CK_BUTTON_IDX_TOKEN = '__ckQIdx=';
   const parseButtonRef = useCallback((ref: string): { id: string; qIdx?: number } => {
