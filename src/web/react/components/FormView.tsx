@@ -126,6 +126,7 @@ import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey }
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
+import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
@@ -233,17 +234,6 @@ import {
   getCachedDataSourceItemCount
 } from '../../data/dataSources';
 import { collectDataSourceConfigsForPrefetch } from '../../data/dataSourcePrefetch';
-
-const LIST_ROW_ACTION_BUTTON_WIDTH = 'var(--ck-list-row-action-width)';
-const listRowActionButtonWidthStyle: React.CSSProperties = {
-  width: 'fit-content',
-  minWidth: `min(${LIST_ROW_ACTION_BUTTON_WIDTH}, 100%)`,
-  maxWidth: '100%'
-};
-const withListRowActionButtonStyle = (
-  baseStyle: React.CSSProperties,
-  disabled: boolean
-): React.CSSProperties => withDisabled({ ...baseStyle, ...listRowActionButtonWidthStyle }, disabled);
 
 const formatTemplate = (value: string, vars?: Record<string, string | number | boolean | null | undefined>): string => {
   if (!vars) return value;
@@ -11017,7 +11007,7 @@ const FormView: React.FC<FormViewProps> = ({
               if (subMaxRowsReached) return;
               addLineItemRowManual(subKey, undefined, subAddRowOptions);
             }}
-            style={withListRowActionButtonStyle(buttonStyles.secondary, subMaxRowsReached)}
+            style={withListRowActionButtonStyle(subMaxRowsReached, undefined, buttonStyles.secondary)}
             disabled={subMaxRowsReached}
           >
             <PlusIcon />
@@ -11033,8 +11023,9 @@ const FormView: React.FC<FormViewProps> = ({
 	                            type="button"
 	                            className="ck-list-row-action-btn"
 	            style={withListRowActionButtonStyle(
-                addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary,
-                submitting || subSelectorIsMissing || subMaxRowsReached
+                submitting || subSelectorIsMissing || subMaxRowsReached,
+                undefined,
+                addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary
               )}
 	            disabled={submitting || subSelectorIsMissing || subMaxRowsReached}
 	                            onClick={async () => {
@@ -11135,8 +11126,9 @@ const FormView: React.FC<FormViewProps> = ({
             addLineItemRowManual(subKey, Object.keys(preset).length ? preset : undefined, subAddRowOptions);
           }}
 	          style={withListRowActionButtonStyle(
-              addLinePrimary ? buttonStyles.primary : buttonStyles.secondary,
-              subSelectorIsMissing || subMaxRowsReached
+              subSelectorIsMissing || subMaxRowsReached,
+              undefined,
+              addLinePrimary ? buttonStyles.primary : buttonStyles.secondary
             )}
 	        >
           <PlusIcon />
@@ -13640,7 +13632,7 @@ const FormView: React.FC<FormViewProps> = ({
               if (locked || maxRowsReached) return;
               addLineItemRowManual(groupId, undefined, groupAddRowOptions);
             }}
-            style={withListRowActionButtonStyle(buttonStyles.secondary, locked || maxRowsReached)}
+            style={withListRowActionButtonStyle(locked || maxRowsReached, undefined, buttonStyles.secondary)}
             disabled={locked || maxRowsReached}
           >
             <PlusIcon />
@@ -13657,8 +13649,9 @@ const FormView: React.FC<FormViewProps> = ({
             className="ck-list-row-action-btn"
             disabled={locked || selectorIsMissing || maxRowsReached}
             style={withListRowActionButtonStyle(
-              addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary,
-              locked || selectorIsMissing || maxRowsReached
+              locked || selectorIsMissing || maxRowsReached,
+              undefined,
+              addLinesPrimary ? buttonStyles.primary : buttonStyles.secondary
             )}
             onClick={async () => {
               if (locked || selectorIsMissing || maxRowsReached) {
@@ -13756,8 +13749,9 @@ const FormView: React.FC<FormViewProps> = ({
             addLineItemRowManual(groupId, selectorPreset, groupAddRowOptions);
           }}
           style={withListRowActionButtonStyle(
-            addLinePrimary ? buttonStyles.primary : buttonStyles.secondary,
-            locked || selectorIsMissing || maxRowsReached
+            locked || selectorIsMissing || maxRowsReached,
+            undefined,
+            addLinePrimary ? buttonStyles.primary : buttonStyles.secondary
           )}
         >
           <PlusIcon />
