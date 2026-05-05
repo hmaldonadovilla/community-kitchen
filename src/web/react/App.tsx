@@ -63,6 +63,7 @@ import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
 import { AppRecordLoadingPlaceholder } from './components/app/AppRecordLoadingPlaceholder';
 import { ActionBar } from './components/app/ActionBar';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
+import { useAppViewportState } from './components/app/useAppViewportState';
 import { matchesWhenClause } from '../rules/visibility';
 import { type ReportOverlayState } from './components/app/ReportOverlay';
 import { AppOverlays } from './components/app/AppOverlays';
@@ -560,9 +561,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       : null
   );
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [isCompact, setIsCompact] = useState<boolean>(false);
-  const [isLandscape, setIsLandscape] = useState<boolean>(false);
   const [debugEnabled] = useState<boolean>(() => detectDebug());
   const [autoSaveNoticeOpen, setAutoSaveNoticeOpen] = useState<boolean>(false);
   const [ingredientNameBlurredForAutoSave, setIngredientNameBlurredForAutoSave] = useState<boolean>(false);
@@ -586,6 +584,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [debugEnabled]
   );
+  const { isMobile, isCompact, blockLandscape } = useAppViewportState({
+    portraitOnlyEnabled: definition.portraitOnly === true,
+    language,
+    onDiagnostic: logEvent
+  });
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -2405,47 +2408,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     recordStaleRef.current = recordStale;
   }, [recordStale]);
 
-  const portraitOnlyEnabled = definition.portraitOnly === true;
-  const blockLandscape = portraitOnlyEnabled && isMobile && isLandscape;
-
-  useEffect(() => {
-    if (!portraitOnlyEnabled) return;
-    logEvent('ui.portraitOnly.enabled', { enabled: true });
-
-    // Best-effort orientation lock (works in some browsers, usually requires full-screen / user gesture).
-    try {
-      const screenAny = (globalThis as any).screen;
-      const orientation = screenAny?.orientation;
-      if (orientation && typeof orientation.lock === 'function') {
-        Promise.resolve()
-          .then(() => orientation.lock('portrait'))
-          .then(() => logEvent('ui.orientation.lock.ok', { mode: 'portrait' }))
-          .catch((err: any) =>
-            logEvent('ui.orientation.lock.failed', {
-              mode: 'portrait',
-              message: (err?.message || err?.toString?.() || 'lock failed').toString()
-            })
-          );
-      } else {
-        logEvent('ui.orientation.lock.unavailable', { mode: 'portrait' });
-      }
-    } catch (err: any) {
-      logEvent('ui.orientation.lock.failed', {
-        mode: 'portrait',
-        message: (err?.message || err?.toString?.() || 'lock failed').toString()
-      });
-    }
-  }, [logEvent, portraitOnlyEnabled]);
-
-  useEffect(() => {
-    if (!portraitOnlyEnabled) return;
-    if (!isMobile) return;
-    logEvent(blockLandscape ? 'ui.orientation.blocked' : 'ui.orientation.allowed', {
-      landscape: isLandscape,
-      blocked: blockLandscape
-    });
-  }, [blockLandscape, isLandscape, isMobile, logEvent, portraitOnlyEnabled]);
-
   const definitionFollowupConfig = definition.followup || null;
   const hasTemplateRenderTargets = useMemo(() => {
     if (definition.summaryViewEnabled !== false && !!definition.summaryHtmlTemplateId) return true;
@@ -2581,8 +2543,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const [requestedGuidedStepId, setRequestedGuidedStepId] = useState<string | null>(null);
   const guidedExternalSyncTokenRef = useRef<number>(0);
   const [guidedExternalSyncSignal, setGuidedExternalSyncSignal] = useState<GuidedExternalSyncSignal | null>(null);
-  const vvBottomRef = useRef<number>(-1);
-  const bottomBarHeightRef = useRef<number>(-1);
   const [draftSave, setDraftSave] = useState<{ phase: DraftSavePhase; message?: string; updatedAt?: string }>(() => ({
     phase: 'idle'
   }));
@@ -6491,173 +6451,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     globalThis.addEventListener?.('keydown', onKeyDown as any);
     return () => globalThis.removeEventListener?.('keydown', onKeyDown as any);
   }, [submitConfirmOpen]);
-
-  useEffect(() => {
-    const updateMobile = () => {
-      if (typeof window === 'undefined') return;
-      const widthBased = window.innerWidth <= 900;
-      const shortBased = window.innerHeight <= 520;
-      // Use media query for orientation so the on-screen keyboard (which shrinks innerHeight)
-      // doesn't accidentally flip us into "landscape/compact" mode while typing in portrait.
-      const landscapeBased =
-        typeof window.matchMedia === 'function'
-          ? window.matchMedia('(orientation: landscape)').matches
-          : window.innerWidth > window.innerHeight;
-      const uaBased = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const mobile = widthBased || uaBased;
-      setIsMobile(mobile);
-      setIsLandscape(landscapeBased);
-      setIsCompact(mobile && shortBased && landscapeBased);
-    };
-    updateMobile();
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', updateMobile);
-      window.addEventListener('orientationchange', updateMobile);
-      return () => {
-        window.removeEventListener('resize', updateMobile);
-        window.removeEventListener('orientationchange', updateMobile);
-      };
-    }
-    return undefined;
-  }, []);
-
-  // Measure sticky header height so the Top action bar can stick just below it.
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (typeof window === 'undefined') return;
-    const root = document.documentElement;
-    if (!root) return;
-
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const header = document.querySelector<HTMLElement>('.ck-app-header');
-      if (!header) return;
-      const h = header.offsetHeight || 0;
-      root.style.setProperty('--ck-header-height', `${h}px`);
-    };
-    const schedule = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(update);
-    };
-    schedule();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, [language, isCompact, isMobile]);
-
-  // iOS Safari / in-app browsers can "clip" fixed bottom bars due to dynamic toolbars.
-  // Use visualViewport to compute a bottom inset and expose it as a CSS variable.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (typeof document === 'undefined') return;
-
-    const root = document.documentElement;
-    const vv = window.visualViewport;
-    if (!root) return;
-
-    if (!vv) {
-      root.style.setProperty('--vv-bottom', '0px');
-      return;
-    }
-
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const bottom = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-      root.style.setProperty('--vv-bottom', `${bottom}px`);
-      if (vvBottomRef.current !== bottom) {
-        vvBottomRef.current = bottom;
-        logEvent('ui.viewport.vvBottom', {
-          bottomPx: bottom,
-          innerHeight: window.innerHeight,
-          vvHeight: vv.height,
-          vvOffsetTop: vv.offsetTop
-        });
-      }
-    };
-    const schedule = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(update);
-    };
-
-    schedule();
-    vv.addEventListener('resize', schedule);
-    vv.addEventListener('scroll', schedule);
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      vv.removeEventListener('resize', schedule);
-      vv.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, [logEvent]);
-
-  // Measure bottom action bar height so content isn't covered when buttons wrap onto multiple rows.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    if (!root) return;
-
-    const cssVar = '--ck-bottom-bar-height';
-    let raf = 0;
-    let ro: ResizeObserver | null = null;
-    let observed: HTMLElement | null = null;
-
-    const update = () => {
-      raf = 0;
-      const bar = document.querySelector<HTMLElement>('.ck-bottom-bar');
-
-      if (bar !== observed) {
-        ro?.disconnect();
-        observed = bar;
-        if (ro && bar) ro.observe(bar);
-      }
-
-      if (!bar) {
-        root.style.removeProperty(cssVar);
-        if (bottomBarHeightRef.current !== -1) {
-          bottomBarHeightRef.current = -1;
-          logEvent('ui.actionBars.bottomBarHeight', { heightPx: null });
-        }
-        return;
-      }
-
-      const h = Math.max(0, Math.round(bar.getBoundingClientRect().height));
-      root.style.setProperty(cssVar, `${h}px`);
-      if (bottomBarHeightRef.current !== h) {
-        bottomBarHeightRef.current = h;
-        logEvent('ui.actionBars.bottomBarHeight', { heightPx: h });
-      }
-    };
-
-    const schedule = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(update);
-    };
-
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => schedule());
-    }
-
-    schedule();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-      ro?.disconnect();
-    };
-  }, [logEvent]);
 
   useEffect(() => {
     // iOS Safari/WebViews can still auto-zoom/re-scale on focus in some contexts.

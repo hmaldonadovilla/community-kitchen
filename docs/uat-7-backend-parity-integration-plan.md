@@ -194,11 +194,35 @@ Completion-pass results:
 - `FormView.tsx`: extracted guided target pairing and guided line-group config building into focused step modules. Current size: 15,695 lines.
 - `App.tsx`: extracted action-bar notice/list legend state plus orientation and loading shell chrome. Current size: 16,678 lines.
 
-Deferred decomposition opportunities:
+### Stage 2C: Stateful Workflow Decomposition
 
-- `LineItemGroupQuestion.tsx`: split guided compact row rendering, subgroup table rendering, overlay-open field rendering, and source-first allocation panels.
-- `FormView.tsx`: split guided target rendering, line-item overlay/session controller, upload overlay controller, and validation/error navigation.
-- `App.tsx`: split record load/save lifecycle, dedup dialog state, action/report orchestration, home/list cache orchestration, and guided reservation sync into hooks.
+Purpose: continue the component/hook decomposition beyond safe presentational helpers and move stateful workflow decisions behind focused domain, hook, and controller boundaries. The objective is maintainability and regression reduction first; line-count reduction is an expected side effect, not the only success measure.
+
+Target boundaries:
+
+- `LineItemGroupQuestion.tsx`
+  - Split source-first allocation display helpers and panels into focused line-item modules.
+  - Split guided compact row rendering into focused render components after compact display rules are isolated.
+  - Split subgroup table rendering and overlay-open field rendering once their state inputs are explicit.
+- `FormView.tsx`
+  - Split overlay session snapshot capture/restore and scoped autosave hold coordination into hooks.
+  - Split upload overlay controller and retry UI after the session boundary is isolated.
+  - Split validation/error navigation into a focused hook with tests for guided and non-guided behavior.
+- `App.tsx`
+  - Split viewport/orientation shell state, then record load/save lifecycle, dedup dialog state, action/report orchestration, home/list cache orchestration, and guided reservation sync into hooks.
+
+Implementation rules:
+
+- Prefer extracting a cohesive state machine with explicit inputs over moving arbitrary blocks for line count.
+- Add focused tests to each extracted domain helper or hook-facing utility when practical.
+- Use Playwright/staging smoke for slices touching guided line items, overlays, record loading, save/submit, uploads, or navigation.
+- Commit each meaningful slice independently.
+
+Exit criteria:
+
+- The three target files no longer own business decisions that can be tested outside the component.
+- Source-first allocation, overlay session, autosave hold, viewport/orientation, validation navigation, and record lifecycle have named boundaries.
+- Targeted regression validation passes for the affected user flows.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
