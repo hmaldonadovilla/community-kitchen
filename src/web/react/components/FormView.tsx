@@ -71,6 +71,7 @@ import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAcces
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
+import { buildValidationErrorIndex } from '../features/validation/domain/errorIndex';
 import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
 import { useValidationNavigationRequest } from '../features/validation/useValidationNavigationRequest';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
@@ -10833,25 +10834,7 @@ const FormView: React.FC<FormViewProps> = ({
     }
   }, [definition, language, lineItems, optionState, setErrors, setLineItems, values, onSelectionEffect]);
 
-  const errorIndex = useMemo(() => {
-    const rowErrors = new Set<string>();
-    const subgroupErrors = new Set<string>();
-    const keys = Object.keys(errors || {});
-    keys.forEach(key => {
-      const parts = key.split('__');
-      if (parts.length !== 3) return;
-      const prefix = parts[0];
-      const rowId = parts[2];
-      const info = parseSubgroupKey(prefix);
-      if (info) {
-        subgroupErrors.add(prefix);
-        rowErrors.add(`${info.parentGroupKey}::${info.parentRowId}`);
-        return;
-      }
-      rowErrors.add(`${prefix}::${rowId}`);
-    });
-    return { rowErrors, subgroupErrors };
-  }, [errors]);
+  const errorIndex = useMemo(() => buildValidationErrorIndex(errors), [errors]);
 
   useValidationErrorNavigation({
     errors,
