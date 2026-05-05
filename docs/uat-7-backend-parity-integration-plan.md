@@ -458,10 +458,15 @@ Forty-fifth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided virtual numeric max-field and integer-only rule checks into `virtualRowContext`, leaving numeric control wiring in the component. Current size: 13,416 lines.
 - Validation for the pass used focused virtual row context, virtual preset, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Forty-sixth-pass results:
+
+- `FormView.tsx`: extracted root line-item and subgroup overlay validation definition builders into `overlayValidationDefinition`, keeping overlay validation orchestration in the component. Current size: 12,843 lines.
+- Validation for the pass used focused overlay validation, form comparison, and line-item form helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,862 lines.
+- `FormView.tsx`: 12,843 lines.
 - `LineItemGroupQuestion.tsx`: 13,416 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
