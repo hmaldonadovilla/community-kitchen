@@ -64,6 +64,10 @@ import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guide
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
 import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
 import {
+  resolveGuidedClearOnChangeOrderedFieldIdsAction,
+  resolveGuidedOrderedQuestionsAction
+} from '../features/steps/domain/guidedStepQuestionOrder';
+import {
   collectDerivedBlurDependencies,
   isBlurDerivedValue
 } from '../features/derivedValues/domain/blurDependencies';
@@ -1416,35 +1420,16 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const orderedEntryQuestions = useMemo(() => {
-    if (!orderedEntryEnabled) return [] as WebQuestionDefinition[];
-    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return definition.questions || [];
-
-    const steps = guidedVisibleSteps;
-    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-    const ordered: WebQuestionDefinition[] = [];
-    const seen = new Set<string>();
-
-    const questionById = new Map<string, WebQuestionDefinition>();
-    (definition.questions || []).forEach(q => questionById.set(q.id, q));
-    const scopedDefinition = buildGuidedStepDefinition(activeGuidedStepId);
-    const scopedById = new Map<string, WebQuestionDefinition>();
-    (scopedDefinition?.questions || []).forEach(q => scopedById.set(q.id, q));
-
-    [...headerTargets, ...stepTargets].forEach(target => {
-      if (!target || typeof target !== 'object') return;
-      const kind = (target.kind || '').toString().trim();
-      const id = (target.id || '').toString().trim();
-      if (!id || (kind !== 'question' && kind !== 'lineGroup')) return;
-      if (seen.has(id)) return;
-      const q = scopedById.get(id) || questionById.get(id);
-      if (!q) return;
-      seen.add(id);
-      ordered.push(q);
+    return resolveGuidedOrderedQuestionsAction({
+      orderedEntryEnabled,
+      guidedEnabled,
+      guidedStepsCfg,
+      guidedStepIds,
+      guidedVisibleSteps,
+      activeGuidedStepId,
+      definition,
+      scopedDefinition: buildGuidedStepDefinition(activeGuidedStepId)
     });
-
-    return ordered.length ? ordered : definition.questions || [];
   }, [
     activeGuidedStepId,
     buildGuidedStepDefinition,
@@ -1457,41 +1442,14 @@ const FormView: React.FC<FormViewProps> = ({
   ]);
 
   const clearOnChangeOrderedFieldIds = useMemo(() => {
-    const byConfig = (definition.questions || [])
-      .map(q => (q?.id || '').toString().trim())
-      .filter(Boolean);
-    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return byConfig;
-
-    const ordered: string[] = [];
-    const seen = new Set<string>();
-    const add = (idRaw: any) => {
-      const id = idRaw === undefined || idRaw === null ? '' : idRaw.toString().trim();
-      if (!id || seen.has(id)) return;
-      seen.add(id);
-      ordered.push(id);
-    };
-
-    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header.include : [];
-    headerTargets.forEach(target => {
-      if (!target || typeof target !== 'object') return;
-      const kind = (target.kind || '').toString().trim();
-      if (kind !== 'question' && kind !== 'lineGroup') return;
-      add((target as any).id);
+    return resolveGuidedClearOnChangeOrderedFieldIdsAction({
+      guidedEnabled,
+      guidedStepsCfg,
+      guidedStepIds,
+      guidedVisibleSteps,
+      definition
     });
-
-    guidedVisibleSteps.forEach(step => {
-      const stepTargets: any[] = Array.isArray((step as any)?.include) ? (step as any).include : [];
-      stepTargets.forEach(target => {
-        if (!target || typeof target !== 'object') return;
-        const kind = (target.kind || '').toString().trim();
-        if (kind !== 'question' && kind !== 'lineGroup') return;
-        add((target as any).id);
-      });
-    });
-
-    byConfig.forEach(add);
-    return ordered.length ? ordered : byConfig;
-  }, [definition.questions, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg]);
+  }, [definition, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg]);
 
   const selectGuidedStep = useCallback(
     (nextStepId: string, reason: 'user' | 'auto' = 'user') => {
