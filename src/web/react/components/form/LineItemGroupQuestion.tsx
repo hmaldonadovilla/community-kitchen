@@ -120,6 +120,7 @@ import {
   collectSubgroupSeedInitTargets
 } from './selectionEffectInit';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
+import { buildSourceFirstPresentationEntries } from './sourceFirstPresentationEntries';
 import {
   decorateSourceFirstAllocationRowForVisibility,
   filterSourceFirstAllocationRows,
@@ -1312,61 +1313,31 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     [lineItems, resolveStepDataSourceRows, values]
   );
 
-  const sourceFirstPresentationEntries = React.useMemo(() => {
-    void stepDataSourceDrafts;
-    return sourceFirstDataSourceRows.map((config: any) => {
-      const loading = isStepDataSourceLoading(config);
-      const sourceRows = resolveStepDataSourceRows(config);
-      const visibleSourceRows = sourceRows
-        .map((sourceRow: Record<string, any>) => {
-          const eligibleParents = parentRows.filter(parentRow => {
-            const scopedSourceRow = decorateStepDataSourceRowForVisibility(config, sourceRow, parentRow.id);
-            const parentScopedRows = filterSourceFirstAllocationRows({
-              rows: [scopedSourceRow],
-              sourceRowsConfig: config?.sourceRows,
-              parentValues: (parentRow.values || {}) as Record<string, FieldValue>,
-              topValues: values,
-              lineItems
-            });
-            if (!parentScopedRows.length) return false;
-            const parentMatchFieldId = `${config?.parentMatchFieldId || ''}`.trim();
-            const sourceMatchFieldId = `${config?.sourceMatchFieldId || ''}`.trim();
-            const sourceMatchFieldIds = Array.isArray(config?.sourceMatchFieldIds)
-              ? (config.sourceMatchFieldIds as any[]).map(value => `${value || ''}`.trim()).filter(Boolean)
-              : [];
-            if (!parentMatchFieldId || (!sourceMatchFieldId && !sourceMatchFieldIds.length)) return true;
-            return matchesDataSourceRowToParent({
-              item: scopedSourceRow,
-              sourceMatchFieldId,
-              sourceMatchFieldIds,
-              parentValue: (parentRow.values as any)?.[parentMatchFieldId],
-              mode: `${config?.sourceMatchMode || 'equals'}`.trim(),
-              delimiter: `${config?.sourceMatchDelimiter || ''}`.trim()
-            });
-          });
-          if (!eligibleParents.length) return null;
-          return { sourceRow, eligibleParents };
-        })
-        .filter(Boolean) as Array<{ sourceRow: Record<string, any>; eligibleParents: LineItemRowState[] }>;
-      const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
-      const emptyStateMessage = loading
-        ? tSystem('common.loading', language, 'Loading…').trim()
-        : sourceRows.length
-        ? resolveLocalizedString((uiCfg as any)?.emptyStateMessage, language, '').trim()
-        : resolveLocalizedString(
-            (uiCfg as any)?.noSourceRowsMessage,
-            language,
-            tSystem('datasource.empty', language, 'No records are available.')
-          ).trim();
-      return {
-        config,
-        loading,
-        sourceRows,
-        visibleSourceRows,
-        emptyStateMessage
-      };
-    });
-  }, [decorateStepDataSourceRowForVisibility, isStepDataSourceLoading, language, lineItems, parentRows, resolveStepDataSourceRows, sourceFirstDataSourceRows, stepDataSourceDrafts, values]);
+  const sourceFirstPresentationEntries = React.useMemo(
+    () =>
+      buildSourceFirstPresentationEntries({
+        sourceFirstDataSourceRows,
+        stepDataSourceDrafts,
+        parentRows,
+        values,
+        lineItems,
+        language,
+        isStepDataSourceLoading,
+        resolveStepDataSourceRows,
+        decorateStepDataSourceRowForVisibility
+      }),
+    [
+      decorateStepDataSourceRowForVisibility,
+      isStepDataSourceLoading,
+      language,
+      lineItems,
+      parentRows,
+      resolveStepDataSourceRows,
+      sourceFirstDataSourceRows,
+      stepDataSourceDrafts,
+      values
+    ]
+  );
 
   const hideSupplementalHelper = React.useMemo(
     () =>
