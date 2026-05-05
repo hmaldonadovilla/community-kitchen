@@ -84,6 +84,7 @@ import { useAppCustomButtons } from './components/app/useAppCustomButtons';
 import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
+import { usePendingFollowupBatchWait } from './components/app/usePendingFollowupBatchWait';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
 import { useDuplicateCurrentRecordAction } from './components/app/useDuplicateCurrentRecordAction';
@@ -6921,65 +6922,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       ),
     [submitButtonLabelResolved]
   );
-  const waitForPendingFollowupBatch = useCallback(
-    async (args: {
-      recordId: string;
-      reason: string;
-      timeoutMs?: number;
-    }): Promise<{ ok: boolean; message?: string }> => {
-      const recordId = (args.recordId || '').toString().trim();
-      if (!recordId) return { ok: true };
-      const pending = pendingFollowupBatchPromisesRef.current.get(recordId);
-      if (!pending) return { ok: true };
-      const timeoutMs = Number.isFinite(Number(args.timeoutMs)) && Number(args.timeoutMs) > 0 ? Number(args.timeoutMs) : 60_000;
-      const fallbackMessage = submitPreviousActionRetryMessage();
-      const startedAt = Date.now();
-      logEvent('followup.pending.wait.begin', {
-        reason: args.reason,
-        recordId,
-        timeoutMs
-      });
-      let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
-      try {
-        const timeoutPromise = new Promise<{
-          success: boolean;
-          message?: string;
-          recordId: string;
-          sessionId: number;
-          reason: string;
-        }>(resolve => {
-          timer = globalThis.setTimeout(
-            () =>
-              resolve({
-                success: false,
-                message: fallbackMessage,
-                recordId,
-                sessionId: recordSessionRef.current,
-                reason: args.reason
-              }),
-            timeoutMs
-          );
-        });
-        const outcome = await Promise.race([pending, timeoutPromise]);
-        logEvent('followup.pending.wait.done', {
-          reason: args.reason,
-          recordId,
-          durationMs: Date.now() - startedAt,
-          success: Boolean(outcome?.success)
-        });
-        if (outcome?.success) return { ok: true };
-        return {
-          ok: false,
-          message: fallbackMessage
-        };
-      } finally {
-        if (timer) {
-          globalThis.clearTimeout(timer);
-        }
-      }
-    },
-    [logEvent, submitPreviousActionRetryMessage]
-  );
+  const waitForPendingFollowupBatch = usePendingFollowupBatchWait({
+    pendingFollowupBatchPromisesRef,
+    recordSessionRef,
+    submitPreviousActionRetryMessage,
+    logEvent
+  });
   const {
     submitConfirmationDialogConfig,
     submitProgressDialogConfig,
