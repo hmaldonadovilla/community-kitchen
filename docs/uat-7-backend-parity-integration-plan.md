@@ -378,11 +378,16 @@ Twenty-ninth-pass results:
 - `App.tsx`: extracted `openUrlField` custom button execution into `useOpenUrlFieldAction`, leaving the custom button handler responsible for routing only. Current size: 14,727 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirtieth-pass results:
+
+- `LineItemGroupQuestion.tsx`: reused the shared `LineItemReadOnlyField` component for nested subgroup read-only field chrome, removing another local read-only renderer copy. Current size: 13,611 lines.
+- Validation for the pass used focused line-item/upload tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,727 lines.
 - `FormView.tsx`: 13,409 lines.
-- `LineItemGroupQuestion.tsx`: 13,618 lines.
+- `LineItemGroupQuestion.tsx`: 13,611 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
