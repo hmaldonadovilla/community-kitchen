@@ -161,6 +161,10 @@ import {
   optionSortFor,
 } from '../../features/lineItems/domain/lineItemPresentation';
 import {
+  buildGuidedHeaderRows,
+  resolveGuidedHeaderLayout
+} from '../../features/lineItems/domain/guidedHeaderLayout';
+import {
   coerceCompactItemsCollectionAction,
   getCompactSourceValueAction,
   mapCompactActionEntriesAction,
@@ -197,6 +201,7 @@ import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowR
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { LineItemTableModeRenderer } from '../../features/lineItems/components/LineItemTableModeRenderer';
+import { LineItemRowTogglePill } from '../../features/lineItems/components/LineItemRowTogglePill';
 import { SubgroupOpenStackRenderer } from '../../features/lineItems/components/SubgroupOpenStackRenderer';
 import {
   LineItemOverlayOpenInlineButton,
@@ -5187,274 +5192,50 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
               const canExpand = gateResult.canExpand;
               const rowLocked = isProgressive && rowCollapsed && !canExpand;
               const rowHasError = errorIndex.rowErrors.has(collapseKey);
-              const requiredRowProgress = (() => {
-                let hasAnyRequired = false;
-                let allRequiredComplete = true;
-
-                const isFilled = (field: any, raw: any): boolean => {
-                  if (field?.type === 'FILE_UPLOAD') {
-                    return isUploadValueComplete({
-                      value: raw as any,
-                      uploadConfig: (field as any).uploadConfig,
-                      required: !!field.required
+              const rowTogglePill = (
+                <LineItemRowTogglePill
+                  hidden={guidedCollapsedFieldsInHeader}
+                  groupId={q.id}
+                  row={row}
+                  fields={allFields}
+                  subGroups={subGroups || []}
+                  lineItems={lineItems}
+                  groupCtx={groupCtx}
+                  language={language}
+                  rowHasError={rowHasError}
+                  rowLocked={rowLocked}
+                  rowCollapsed={rowCollapsed}
+                  canExpand={canExpand}
+                  gateReason={gateResult.reason}
+                  resolveTopValue={resolveTopValue}
+                  onBlockedExpand={reason => {
+                    onDiagnostic?.('edit.progressive.expand.blocked', {
+                      groupId: q.id,
+                      rowId: row.id,
+                      reason
                     });
-                  }
-                  return !isEmptyValue(raw as any);
-                };
-
-                // 1) Required fields on the row itself
-                (allFields || []).forEach((field: any) => {
-                  const hideField = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-                  if (hideField) return;
-                  if (!field?.required) return;
-                  hasAnyRequired = true;
-
-                  const mapped = field.valueMap
-                    ? resolveValueMapValue(
-                        field.valueMap,
-                        (fid: string) => {
-                          if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                          return resolveTopValue(fid);
-                        },
-                        { language, targetOptions: toOptionSet(field) }
-                      )
-                    : undefined;
-                  const raw = field.valueMap ? mapped : (row.values || {})[field.id];
-                  if (!isFilled(field, raw)) allRequiredComplete = false;
-                });
-
-                // 2) Required fields in any EXISTING subgroup rows under this parent row
-                (subGroups || []).forEach(sub => {
-                  const subId = resolveSubgroupKey(sub);
-                  if (!subId) return;
-                  const subKey = buildSubgroupKey(q.id, row.id, subId);
-                  const subRows = (lineItems[subKey] || []) as any[];
-                  if (!subRows.length) return;
-                  const subFields = ((sub as any)?.fields || []) as any[];
-                  subRows.forEach(subRow => {
-                    const subCtx: VisibilityContext = {
-                      getValue: fid => resolveTopValue(fid),
-                      getLineValue: (_rowId, fid) => (subRow?.values || {})[fid],
-                      getLineItems: groupId => lineItems?.[groupId] || [],
-                      getLineItemKeys: () => Object.keys(lineItems || {})
-                    };
-                    subFields.forEach((field: any) => {
-                      const hide = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
-                      if (hide) return;
-                      if (!field?.required) return;
-                      hasAnyRequired = true;
-
-                      const mapped = field.valueMap
-                        ? resolveValueMapValue(
-                            field.valueMap,
-                            (fid: string) => {
-                              if ((subRow?.values || {}).hasOwnProperty(fid)) return (subRow?.values || {})[fid];
-                              if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                              return resolveTopValue(fid);
-                            },
-                            { language, targetOptions: toOptionSet(field) }
-                          )
-                        : undefined;
-                      const raw = field.valueMap ? mapped : (subRow?.values || {})[field.id];
-                      if (!isFilled(field, raw)) allRequiredComplete = false;
-                    });
-                  });
-                });
-
-                return { hasAnyRequired, allRequiredComplete };
-              })();
-              let requiredRowProgressClass = requiredRowProgress.hasAnyRequired
-                ? requiredRowProgress.allRequiredComplete
-                  ? 'ck-progress-good'
-                  : 'ck-progress-bad'
-                : 'ck-progress-neutral';
-              if (rowHasError) requiredRowProgressClass = 'ck-progress-bad';
-
-              const tapExpandLabel = tSystem('common.tapToExpand', language, 'Tap to expand');
-              const tapCollapseLabel = tSystem('common.tapToCollapse', language, 'Tap to collapse');
-              const lockedLabel = tSystem('lineItems.locked', language, 'Locked');
-              const pillActionLabel = rowLocked ? lockedLabel : rowCollapsed ? tapExpandLabel : tapCollapseLabel;
-              const rowTogglePill = !guidedCollapsedFieldsInHeader ? (
-                <button
-                  type="button"
-                  className="ck-row-toggle"
-                  aria-label={pillActionLabel}
-                  aria-expanded={!rowCollapsed}
-                  aria-disabled={rowCollapsed && !canExpand}
-                  title={rowCollapsed && !canExpand ? gateResult.reason : pillActionLabel}
-                  onClick={() => {
-                    if (rowCollapsed && !canExpand) {
-                      onDiagnostic?.('edit.progressive.expand.blocked', {
-                        groupId: q.id,
-                        rowId: row.id,
-                        reason: gateResult.reason
-                      });
-                      return;
-                    }
-                    setCollapsedRows(prev => ({ ...prev, [collapseKey]: !rowCollapsed }));
-                    onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: !rowCollapsed });
                   }}
-                >
-                  {(() => {
-                    const parts: string[] = [];
-                    if (rowHasError) parts.push(tSystem('lineItems.needsAttention', language, 'Needs attention'));
-                    if (rowLocked) parts.push(tSystem('lineItems.locked', language, 'Locked'));
-                    const text = parts.join(' · ');
-                    if (!text) return null;
-                    return (
-                      <span
-                        className="muted"
-                        style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600, color: rowHasError ? 'var(--danger)' : undefined }}
-                      >
-                        {text}
-                      </span>
-                    );
-                  })()}
-                  <span
-                    className={`ck-progress-pill ${requiredRowProgressClass}`}
-                    data-has-error={rowHasError ? 'true' : undefined}
-                    aria-disabled={rowCollapsed && !canExpand ? 'true' : undefined}
-                  >
-                    {requiredRowProgressClass === 'ck-progress-good' ? (
-                      <CheckIcon style={{ width: '1.05em', height: '1.05em' }} />
-                    ) : null}
-                    <span className="ck-progress-label">{pillActionLabel}</span>
-                    <span className="ck-progress-caret">{rowCollapsed ? '▸' : '▾'}</span>
-                  </span>
-                </button>
-              ) : null;
-              const buildHeaderRows = (fields: any[]): any[][] => {
-                if (!fields.length) return [];
-                if (fields.length <= 3) {
-                  const seen = new Set<string>();
-                  const unique = fields.filter(f => {
-                    const id = (f?.id ?? '').toString();
-                    if (!id || seen.has(id)) return false;
-                    seen.add(id);
-                    return true;
-                  });
-                  return unique.length ? [unique] : [];
-                }
-                const used = new Set<string>();
-                const rows: any[][] = [];
-                const isPairable = (field: any): boolean => {
-                  if (!(field as any)?.pair) return false;
-                  if ((field?.type || '').toString() === 'PARAGRAPH') return false;
-                  return true;
-                };
-
-                for (let i = 0; i < fields.length; i += 1) {
-                  const f = fields[i];
-                  const fid = (f?.id ?? '').toString();
-                  if (!fid || used.has(fid)) continue;
-
-                  const pairKey = f?.pair ? f.pair.toString() : '';
-                  if (pairKey && isPairable(f)) {
-                    // Group all pairable fields with the same pairKey into the same header row (3-up supported).
-                    const group: any[] = [f];
-                    for (let j = i + 1; j < fields.length; j += 1) {
-                      const cand = fields[j];
-                      const candId = (cand?.id ?? '').toString();
-                      if (!candId || used.has(candId)) continue;
-                      if ((cand?.pair ? cand.pair.toString() : '') === pairKey && isPairable(cand)) {
-                        group.push(cand);
-                      }
-                    }
-                    group.forEach(g => used.add((g?.id ?? '').toString()));
-                    const maxPerRow = 3;
-                    for (let k = 0; k < group.length; k += maxPerRow) {
-                      rows.push(group.slice(k, k + maxPerRow));
-                    }
-                      continue;
-                    }
-
-                  // Fallback: try to keep 2-up layout by pairing with the next available field.
-                  let partner: any | null = null;
-                  for (let j = i + 1; j < fields.length; j += 1) {
-                    const cand = fields[j];
-                    const candId = (cand?.id ?? '').toString();
-                    if (!candId || used.has(candId)) continue;
-                    partner = cand;
-                    break;
-                  }
-                  used.add(fid);
-                  if (partner) {
-                    used.add((partner.id ?? '').toString());
-                    rows.push([f, partner]);
-                  } else {
-                    rows.push([f]);
-                  }
-                }
-                return rows;
-              };
-
-              const headerCollapsedFieldsBase = guidedCollapsedFieldsInHeader
-                ? ((collapsedFieldsOrdered.length ? collapsedFieldsOrdered : fieldsToRender) || []).filter((f: any) => {
-                    const fid = f?.id !== undefined && f?.id !== null ? f.id.toString() : '';
-                    if (!fid) return false;
-                    // In guided-header mode we may show the anchor as a standalone row title. Don't also render it in the grid.
-                    if (showAnchorTitleAsHeaderTitle && fid === anchorFieldId) return false;
-                    if (showTitleControlInHeader && fid === titleFieldId) return false;
-                    if (guidedCompactHeaderSummaryFieldIdSet.has(fid)) return false;
-                    return true;
-                  })
-                : [];
-              const guidedCollapsedFieldIdSet = new Set<string>(
-                guidedCollapsedFieldsInHeader
-                  ? (collapsedFieldConfigs || [])
-                      .map((cfg: any) => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
-                      .filter(Boolean)
-                  : []
+                  onToggle={nextCollapsed => {
+                    setCollapsedRows(prev => ({ ...prev, [collapseKey]: nextCollapsed }));
+                    onDiagnostic?.('edit.progressive.toggle', { groupId: q.id, rowId: row.id, collapsed: nextCollapsed });
+                  }}
+                />
               );
-              const headerCollapsedFieldsToRender =
-                guidedCollapsedFieldsInHeader && !guidedCompactHeaderSummaryText && !hasExplicitRowHeaderSummary
-                  ? headerCollapsedFieldsBase.slice(0, 3)
-                  : [];
-              const headerCollapsedFieldIdSet = new Set<string>(
-                headerCollapsedFieldsToRender
-                  .map((f: any) => (f?.id !== undefined && f?.id !== null ? f.id.toString() : ''))
-                  .filter(Boolean)
-              );
-              const compactHeaderSummaryFieldIdSet = new Set<string>(
-                !guidedCollapsedFieldsInHeader && isProgressive && rowCollapsed
-                  ? (collapsedFieldConfigs || [])
-                      .filter((cfg: any) => cfg && cfg.showLabel === false)
-                      .map((cfg: any) => (cfg?.fieldId ? cfg.fieldId.toString() : ''))
-                      .filter(Boolean)
-                  : []
-              );
-              const bodyFieldsToRenderBase =
-                guidedCollapsedFieldsInHeader
-                  ? (fieldsToRender || []).filter((f: any) => {
-                      const fid = (f?.id || '').toString();
-                      if (headerCollapsedFieldIdSet.has(fid)) return false;
-                      if (guidedCollapsedFieldIdSet.has(fid)) return false;
-                      if (guidedCompactHeaderSummaryFieldIdSet.has(fid)) return false;
-                      return true;
-                    })
-                  : !guidedCollapsedFieldsInHeader && isProgressive && rowCollapsed && compactHeaderSummaryFieldIdSet.size
-                    ? (fieldsToRender || []).filter((f: any) => !compactHeaderSummaryFieldIdSet.has((f?.id || '').toString()))
-                  : fieldsToRender;
-              const canHoistSingleBodyFieldIntoHeader =
-                guidedCollapsedFieldsInHeader &&
-                isProgressive &&
-                headerCollapsedFieldsToRender.length === 2 &&
-                headerCollapsedFieldsToRender.every((f: any) => (f as any)?.ui?.renderAsLabel === true) &&
-                (bodyFieldsToRenderBase || []).length === 1 &&
-                Boolean((bodyFieldsToRenderBase?.[0] as any)?.pair);
-              const headerFieldsToRender = (() => {
-                if (!canHoistSingleBodyFieldIntoHeader) return headerCollapsedFieldsToRender;
-                const extra = (bodyFieldsToRenderBase?.[0] as any) || null;
-                if (!extra) return headerCollapsedFieldsToRender;
-                const seen = new Set<string>();
-                return [...headerCollapsedFieldsToRender, extra].filter((f: any) => {
-                  const id = (f?.id ?? '').toString();
-                  if (!id || seen.has(id)) return false;
-                  seen.add(id);
-                  return true;
-                });
-              })();
-              const bodyFieldsToRender = canHoistSingleBodyFieldIntoHeader ? [] : bodyFieldsToRenderBase;
+              const { headerFieldsToRender, bodyFieldsToRender } = resolveGuidedHeaderLayout({
+                guidedCollapsedFieldsInHeader,
+                collapsedFieldsOrdered,
+                fieldsToRender,
+                showAnchorTitleAsHeaderTitle,
+                anchorFieldId,
+                showTitleControlInHeader,
+                titleFieldId,
+                guidedCompactHeaderSummaryFieldIdSet,
+                collapsedFieldConfigs,
+                guidedCompactHeaderSummaryText,
+                hasExplicitRowHeaderSummary,
+                isProgressive,
+                rowCollapsed
+              });
 
               const renderLineItemField = (
                 field: any,
@@ -6944,7 +6725,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                               gap: 12
                             }}
                           >
-                            {buildHeaderRows(headerFieldsToRender).map((row, idx) => {
+                            {buildGuidedHeaderRows(headerFieldsToRender).map((row, idx) => {
                               const renderHeaderField = (f: any, opts?: { inGrid?: boolean }) => {
                                   const fid = (f?.id ?? '').toString();
                                   const showLabel = collapsedLabelMap[fid] !== false;
