@@ -518,10 +518,15 @@ Fifty-seventh-pass results:
 - `FormView.tsx`: extracted guided action-bar UI state derivation into `guidedUiState`, keeping the component responsible for publishing the state to the app shell. Current size: 12,482 lines.
 - Validation for the pass used focused guided UI state and guided navigation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fifty-eighth-pass results:
+
+- `FormView.tsx`: extracted guided back-action gate resolution into `guidedNavigation`, keeping the component responsible for wiring the imperative back action ref and applying select/block outcomes. Current size: 12,483 lines.
+- Validation for the pass used focused guided navigation and guided UI state tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,482 lines.
+- `FormView.tsx`: 12,483 lines.
 - `LineItemGroupQuestion.tsx`: 13,149 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
