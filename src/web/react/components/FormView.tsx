@@ -123,7 +123,7 @@ import { SectionInstruction } from './form/SectionInstruction';
 import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
-import { buildPageSectionBlocks, resolveGroupSectionKey, resolvePageSectionKey } from './form/grouping';
+import { buildFormGroupSections, buildPageSectionBlocks, resolveGroupSectionKey } from './form/grouping';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { useFormViewStateRefs } from './form/useFormViewStateRefs';
@@ -2809,102 +2809,7 @@ const FormView: React.FC<FormViewProps> = ({
     ]
   );
 
-  const groupSections = useMemo(() => {
-    type GroupSection = {
-      key: string;
-      title?: string;
-      collapsible: boolean;
-      defaultCollapsed: boolean;
-      isHeader: boolean;
-      pageSectionKey?: string;
-      pageSectionTitle?: string;
-      pageSectionInfoText?: string;
-      pageSectionInfoDisplay?: 'pill' | 'belowTitle' | 'hidden';
-      questions: WebQuestionDefinition[];
-      order: number;
-    };
-
-    const resolveGroupKey = (group?: QuestionGroupConfig): string => {
-      if (!group) return '__default__';
-      if (group.id) return group.id.toString();
-      if (group.header) return '__header__';
-      const rawTitle: any = group.title;
-      if (typeof rawTitle === 'string') {
-        const t = rawTitle.trim();
-        if (t) return `title:${t}`;
-      }
-      if (rawTitle && typeof rawTitle === 'object') {
-        const t = (rawTitle.en || rawTitle.fr || rawTitle.nl || '').toString().trim();
-        if (t) return `title:${t}`;
-      }
-      return '__default__';
-    };
-
-    const map = new Map<string, GroupSection>();
-    let order = 0;
-
-    (definition.questions || []).forEach(q => {
-      const legacyHeader = !!(q as any).header;
-      const group: QuestionGroupConfig | undefined =
-        (q as any).group ||
-        (legacyHeader
-          ? {
-              header: true,
-              title: { en: 'Header', fr: 'Header', nl: 'Header' },
-              collapsible: true
-            }
-          : undefined);
-
-      const isHeader = !!group?.header;
-      const key = resolveGroupKey(group);
-      const title = group?.title ? resolveLocalizedString(group.title as any, language, isHeader ? 'Header' : '') : undefined;
-      const collapsible = group?.collapsible !== undefined ? !!group.collapsible : !!title;
-      const defaultCollapsed = group?.defaultCollapsed !== undefined ? !!group.defaultCollapsed : false;
-      const pageSectionKey = !isHeader ? resolvePageSectionKey(group) : '__none__';
-      const pageSectionTitle =
-        !isHeader && group?.pageSection?.title ? resolveLocalizedString(group.pageSection.title as any, language, '') : undefined;
-      const pageSectionInfoText =
-        !isHeader && group?.pageSection?.infoText ? resolveLocalizedString(group.pageSection.infoText as any, language, '') : undefined;
-      const pageSectionInfoDisplayRaw = !isHeader ? (group as any)?.pageSection?.infoDisplay : undefined;
-      const pageSectionInfoDisplay =
-        pageSectionInfoDisplayRaw === 'belowTitle' || pageSectionInfoDisplayRaw === 'hidden' || pageSectionInfoDisplayRaw === 'pill'
-          ? (pageSectionInfoDisplayRaw as 'pill' | 'belowTitle' | 'hidden')
-          : undefined;
-
-      const existing = map.get(key);
-      if (!existing) {
-        map.set(key, {
-          key,
-          title,
-          collapsible,
-          defaultCollapsed,
-          isHeader,
-          pageSectionKey,
-          pageSectionTitle,
-          pageSectionInfoText,
-          pageSectionInfoDisplay,
-          questions: [q],
-          order: order++
-        });
-        return;
-      }
-
-      existing.questions.push(q);
-      if (!existing.title && title) existing.title = title;
-      existing.isHeader = existing.isHeader || isHeader;
-      existing.collapsible = existing.collapsible || collapsible;
-      existing.defaultCollapsed = existing.defaultCollapsed || defaultCollapsed;
-      if (!existing.pageSectionKey && pageSectionKey) existing.pageSectionKey = pageSectionKey;
-      if (!existing.pageSectionTitle && pageSectionTitle) existing.pageSectionTitle = pageSectionTitle;
-      if (!existing.pageSectionInfoText && pageSectionInfoText) existing.pageSectionInfoText = pageSectionInfoText;
-      if (!existing.pageSectionInfoDisplay && pageSectionInfoDisplay) existing.pageSectionInfoDisplay = pageSectionInfoDisplay;
-    });
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.isHeader !== b.isHeader) return a.isHeader ? -1 : 1;
-      return a.order - b.order;
-    });
-  }, [definition.questions, language]);
+  const groupSections = useMemo(() => buildFormGroupSections(definition.questions, language), [definition.questions, language]);
 
   const groupSectionBlocks = useMemo(() => buildPageSectionBlocks(groupSections), [groupSections]);
 
@@ -7500,21 +7405,21 @@ const FormView: React.FC<FormViewProps> = ({
     const locationSearch = (() => {
       try {
         return globalAny?.location?.search || '';
-      } catch (_) {
+      } catch {
         return '';
       }
     })();
     const locationHash = (() => {
       try {
         return globalAny?.location?.hash || '';
-      } catch (_) {
+      } catch {
         return '';
       }
     })();
     const locationHref = (() => {
       try {
         return globalAny?.location?.href || '';
-      } catch (_) {
+      } catch {
         return '';
       }
     })();
