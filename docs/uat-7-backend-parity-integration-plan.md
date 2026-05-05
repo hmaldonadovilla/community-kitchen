@@ -247,6 +247,10 @@ Fifth-pass results:
 
 - `LineItemGroupQuestion.tsx`: extracted source-first selection toggle patching into line-item presentation domain logic, covering selected flags, quantity max defaults, and mode defaults with focused unit tests. Current size: 15,734 lines.
 
+Sixth-pass results:
+
+- `App.tsx`: extracted dedup dialog presentation derivation into `useDedupDialogPresentation`, moving conflict selection, copy/details resolution, dialog message rendering, and dialog label choice out of the shell. Current size: 16,417 lines.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
