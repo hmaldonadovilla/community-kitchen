@@ -1,5 +1,8 @@
 import type { VisibilityContext } from '../../../src/web/types';
-import { shouldRenderRowFlowOutputField } from '../../../src/web/react/features/steps/domain/rowFlowOutputVisibility';
+import {
+  resolveVisibleRowFlowOutputSegments,
+  shouldRenderRowFlowOutputField
+} from '../../../src/web/react/features/steps/domain/rowFlowOutputVisibility';
 
 const ctx: VisibilityContext = {
   getValue: () => undefined,
@@ -47,5 +50,52 @@ describe('rowFlow output visibility', () => {
     });
 
     expect(visible).toBe(false);
+  });
+
+  it('filters visible output segments while always keeping text and spacer segments', () => {
+    const segments = [
+      { id: 'text', config: { type: 'text' }, target: null, values: [], fallbackTarget: null, fallbackValues: [] },
+      { id: 'spacer', config: { type: 'spacer' }, target: null, values: [], fallbackTarget: null, fallbackValues: [] },
+      {
+        id: 'hiddenControl',
+        config: { fieldRef: 'row.FIELD', renderAs: 'control' },
+        target: {
+          groupKey: 'ROWS',
+          fieldId: 'FIELD',
+          primaryRow: { row: { id: 'targetRow', values: { ALWAYS: true } } },
+          parentValues: {}
+        },
+        values: ['x'],
+        fallbackTarget: null,
+        fallbackValues: []
+      },
+      {
+        id: 'visibleDisplay',
+        config: { fieldRef: 'row.HELPER' },
+        target: {
+          groupKey: 'ROWS',
+          fieldId: 'HELPER',
+          primaryRow: { row: { id: 'targetRow', values: { ALWAYS: true } } },
+          parentValues: {}
+        },
+        values: ['x'],
+        fallbackTarget: null,
+        fallbackValues: []
+      }
+    ] as any[];
+
+    const visible = resolveVisibleRowFlowOutputSegments({
+      segments,
+      currentRowId: 'currentRow',
+      resolveFieldConfig: (_groupKey, fieldId) => ({
+        visibility: fieldId === 'FIELD' ? { hideWhen: { fieldId: 'ALWAYS', equals: [true] } } : undefined
+      }),
+      buildFieldContext: ({ rowValues }) => ({
+        ...ctx,
+        getValue: (fieldId: string) => (rowValues as any)[fieldId]
+      })
+    });
+
+    expect(visible.map(segment => segment.id)).toEqual(['text', 'spacer', 'visibleDisplay']);
   });
 });

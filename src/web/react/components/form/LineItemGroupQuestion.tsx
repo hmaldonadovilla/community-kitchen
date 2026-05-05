@@ -234,7 +234,7 @@ import {
   type RowFlowResolvedSegment,
   type RowFlowResolvedState
 } from '../../features/steps/domain/rowFlow';
-import { shouldRenderRowFlowOutputField } from '../../features/steps/domain/rowFlowOutputVisibility';
+import { resolveVisibleRowFlowOutputSegments } from '../../features/steps/domain/rowFlowOutputVisibility';
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
@@ -5421,23 +5421,11 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   );
                 };
 
-                const outputSegments = rowFlowState.segments.filter(segment => {
-                  const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
-                  if (segmentType === 'text' || segmentType === 'spacer') return true;
-                  const target = segment.target?.fieldId ? segment.target : segment.fallbackTarget;
-                  const field = target?.fieldId ? resolveRowFlowFieldConfig(target.groupKey, target.fieldId) : null;
-                  if (!target?.fieldId || !field) return false;
-                  const ctxForVisibility = buildRowFlowFieldCtx({
-                    rowValues: target.primaryRow?.row?.values || {},
-                    parentValues: target.parentValues
-                  });
-                  return shouldRenderRowFlowOutputField({
-                    segment,
-                    field,
-                    ctx: ctxForVisibility,
-                    rowId: target.primaryRow?.row?.id || row.id,
-                    linePrefix: target.groupKey
-                  });
+                const outputSegments = resolveVisibleRowFlowOutputSegments({
+                  segments: rowFlowState.segments,
+                  currentRowId: row.id,
+                  resolveFieldConfig: resolveRowFlowFieldConfig,
+                  buildFieldContext: buildRowFlowFieldCtx
                 });
 
                 const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {

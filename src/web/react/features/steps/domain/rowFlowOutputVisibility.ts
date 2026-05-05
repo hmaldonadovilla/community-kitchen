@@ -1,5 +1,5 @@
 import { shouldHideField } from '../../../../rules/visibility';
-import type { VisibilityContext } from '../../../../types';
+import type { FieldValue, VisibilityContext } from '../../../../types';
 import type { RowFlowResolvedSegment } from './rowFlow';
 
 export const shouldRenderRowFlowOutputField = (args: {
@@ -18,3 +18,31 @@ export const shouldRenderRowFlowOutputField = (args: {
   }
   return !shouldHideField(field.visibility as any, ctx, { rowId, linePrefix });
 };
+
+export const resolveVisibleRowFlowOutputSegments = (args: {
+  segments: RowFlowResolvedSegment[];
+  currentRowId: string;
+  resolveFieldConfig: (groupKey: string, fieldId: string) => { visibility?: unknown } | null;
+  buildFieldContext: (args: {
+    rowValues: Record<string, FieldValue>;
+    parentValues?: Record<string, FieldValue>;
+  }) => VisibilityContext;
+}): RowFlowResolvedSegment[] =>
+  args.segments.filter(segment => {
+    const segmentType = ((segment.config?.type || 'field').toString() || 'field').trim().toLowerCase();
+    if (segmentType === 'text' || segmentType === 'spacer') return true;
+    const target = segment.target?.fieldId ? segment.target : segment.fallbackTarget;
+    const field = target?.fieldId ? args.resolveFieldConfig(target.groupKey, target.fieldId) : null;
+    if (!target?.fieldId || !field) return false;
+    const ctxForVisibility = args.buildFieldContext({
+      rowValues: target.primaryRow?.row?.values || {},
+      parentValues: target.parentValues
+    });
+    return shouldRenderRowFlowOutputField({
+      segment,
+      field,
+      ctx: ctxForVisibility,
+      rowId: target.primaryRow?.row?.id || args.currentRowId,
+      linePrefix: target.groupKey
+    });
+  });
