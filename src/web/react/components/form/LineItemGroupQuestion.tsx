@@ -161,6 +161,7 @@ import { RowFlowActionControl } from '../../features/lineItems/components/RowFlo
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
+import { LineFileUploadListQuestion } from '../../features/uploads/components/LineFileUploadListQuestion';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
   LineItemGroupQuestionProps
@@ -9641,132 +9642,33 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       </div>
                     );
                   }
-                  case 'FILE_UPLOAD': {
-                    const readOnly = (field as any)?.readOnly === true;
-                    const uploadConfig: any = (field as any)?.uploadConfig || {};
-                    const items = toUploadItems(row.values[field.id]);
-                    if (renderAsLabel) {
-                      const displayContent = items.length
-                        ? items.map((item: any, idx: number) => (
-                            <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
-                              {describeUploadItem(item as any)}
-                            </div>
-                          ))
-                        : null;
-                      const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
-                      return renderReadOnlyLine(displayNode);
-                    }
-                    const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
-                    const orderedUploadBlocked = isFileUploadOrderedEntryBlocked({
-                      group: q,
-                      rowId: row.id,
-                      field,
-                      fieldPath,
-                      source: 'render',
-                      validate: false
-                    });
-                    const onAdd = () => {
-                      if (submitting || readOnly) return;
-                      if (isFileUploadOrderedEntryBlocked({ group: q, rowId: row.id, field, fieldPath, source: 'add' })) return;
-                      if (maxed) return;
-                      fileInputsRef.current[fieldPath]?.click();
-                    };
-                    const onClearAll = () => {
-                      if (submitting || readOnly) return;
-                      if (isFileUploadOrderedEntryBlocked({ group: q, rowId: row.id, field, fieldPath, source: 'clearAll' })) return;
-                      clearLineFiles({ group: q, rowId: row.id, field, fieldPath });
-                    };
-                    const onRemoveAt = (idx: number) => {
-                      if (submitting || readOnly) return;
-                      removeLineFile({ group: q, rowId: row.id, field, fieldPath, index: idx });
-                    };
-                    const acceptAttr = Array.isArray(uploadConfig?.accept) ? uploadConfig.accept.join(',') : uploadConfig?.accept || undefined;
-                    const minRequired = getUploadMinRequired({ uploadConfig, required: !!field.required });
-                    const helperText = minRequired
-                      ? tSystem(
-                          minRequired === 1 ? 'files.helper.min1' : 'files.helper.minMany',
-                          language,
-                          minRequired === 1 ? 'Required' : 'Required ({min})',
-                          { min: minRequired }
-                        )
-                      : uploadConfig?.maxFiles
-                        ? tSystem('files.helper.max', language, 'Max ({max})', { max: uploadConfig.maxFiles })
-                        : '';
+                  case 'FILE_UPLOAD':
                     return (
-                      <div
+                      <LineFileUploadListQuestion
                         key={field.id}
-                        className={`field inline-field ck-full-width${forceStackedLabel ? ' ck-label-stacked' : ''}`}
-                        data-field-path={fieldPath}
-                        data-has-error={errors[fieldPath] ? 'true' : undefined}
-                        data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                      >
-                        <label style={labelStyle}>
-                          {resolveFieldLabel(field, language, field.id)}
-                          {field.required && <RequiredStar />}
-                        </label>
-                        <div className="ck-upload-row">
-                          <div className="ck-upload-row__actions">
-                            <button
-                              type="button"
-                              className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
-                              disabled={submitting || readOnly || orderedUploadBlocked}
-                              style={withDisabled({}, submitting || readOnly || orderedUploadBlocked)}
-                              aria-disabled={submitting || readOnly || orderedUploadBlocked ? 'true' : undefined}
-                              onClick={onAdd}
-                            >
-                              <span>{tSystem('files.add', language, 'Add')}</span>
-                              <span className="ck-progress-caret">▸</span>
-                            </button>
-                            {items.length ? (
-                              <button
-                                type="button"
-                                className="ck-progress-pill ck-upload-pill-btn ck-list-row-action-btn"
-                                disabled={submitting || readOnly || orderedUploadBlocked}
-                                style={withDisabled({}, submitting || readOnly || orderedUploadBlocked)}
-                                aria-disabled={submitting || readOnly || orderedUploadBlocked ? 'true' : undefined}
-                                onClick={onClearAll}
-                              >
-                                <span>{tSystem('files.clearAll', language, 'Clear all')}</span>
-                                <span className="ck-progress-caret">▸</span>
-                              </button>
-                            ) : null}
-                          </div>
-                          {!readOnly && helperText ? <div className="ck-upload-helper">{helperText}</div> : null}
-                          <div className="ck-upload-items">
-                            {items.map((item: any, idx: number) => (
-                              <div key={`${field.id}-file-${idx}`} className="ck-upload-item">
-                                <a href={item.url} target="_blank" rel="noreferrer">
-                                  {item.label || item.url}
-                                </a>
-                                {!readOnly ? (
-                                  <button type="button" className="ck-upload-remove" onClick={() => onRemoveAt(idx)}>
-                                    ×
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                          <div style={srOnly} aria-live="polite">
-                            {uploadAnnouncements[fieldPath] || ''}
-                          </div>
-                          {renderUploadFailure(fieldPath, submitting || readOnly || orderedUploadBlocked)}
-                          <input
-                            ref={el => {
-                              fileInputsRef.current[fieldPath] = el;
-                            }}
-                            type="file"
-                            multiple={!uploadConfig.maxFiles || uploadConfig.maxFiles > 1}
-                            accept={acceptAttr}
-                            disabled={submitting || readOnly || orderedUploadBlocked}
-                            style={{ display: 'none' }}
-                            onChange={e => handleLineFileInputChange({ group: q, rowId: row.id, field, fieldPath, list: e.target.files })}
-                          />
-                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                          {renderWarnings(fieldPath)}
-                        </div>
-                      </div>
+                        group={q}
+                        rowId={row.id}
+                        field={field}
+                        fieldPath={fieldPath}
+                        value={row.values[field.id] as FieldValue | undefined}
+                        language={language}
+                        submitting={submitting}
+                        renderAsLabel={renderAsLabel}
+                        forceStackedLabel={forceStackedLabel}
+                        labelStyle={labelStyle}
+                        errors={errors}
+                        hasWarning={hasWarning}
+                        renderWarnings={renderWarnings}
+                        renderReadOnlyLine={renderReadOnlyLine}
+                        checkFileUploadOrderedEntry={isFileUploadOrderedEntryBlocked}
+                        handleFileInputChange={handleLineFileInputChange}
+                        removeFile={removeLineFile}
+                        clearFiles={clearLineFiles}
+                        fileInputsRef={fileInputsRef}
+                        uploadAnnouncements={uploadAnnouncements}
+                        renderUploadFailure={renderUploadFailure}
+                      />
                     );
-                  }
                   default: {
                     const mapped = field.valueMap
                       ? resolveValueMapValue(
