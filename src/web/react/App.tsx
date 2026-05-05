@@ -76,6 +76,7 @@ import { useSubmitGateEnableDialog } from './components/app/useSubmitGateEnableD
 import { useSystemActionGateState } from './components/app/useSystemActionGateState';
 import { useAppPerfOpenRecordBridge, type AppRecordSelectHandler } from './components/app/useAppPerfOpenRecordBridge';
 import { useAppPerfTools } from './components/app/useAppPerfTools';
+import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
 import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
@@ -568,8 +569,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const homeLoadStartedAtRef = useRef<number>(getPerfNow());
   const homeTimeToDataMeasuredRef = useRef(false);
   const homePerfInitialisedRef = useRef(false);
-  const openRecordPerfRef = useRef<{ recordId: string; startedAt: number; startMark: string } | null>(null);
-  const backToHomePerfRef = useRef<{ trigger: string; startedAt: number; startMark: string } | null>(null);
   const logEvent = useCallback(
     (event: string, payload?: Record<string, unknown>) => {
       // Default diagnostics are gated behind detectDebug() to avoid noisy consoles.
@@ -4212,6 +4211,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const response = annotateListResponseWithInitialDateFilter(bootstrap?.listResponse || initialHomeListResponse || null, definition.listView);
     const records = bootstrap?.records || {};
     return { response, records };
+  });
+  const { openRecordPerfRef, backToHomePerfRef } = useAppNavigationPerf({
+    selectedRecordId,
+    view,
+    firstListItemCount: listCache.response?.items?.length || 0,
+    perfMark,
+    perfMeasure
   });
   const [analyticsSnapshot, setAnalyticsSnapshot] = useState<AnalyticsSnapshot | null>(() => {
     const globalAny = globalThis as any;
@@ -10132,6 +10138,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     },
     [
+      backToHomePerfRef,
       flushPendingDraftSaveForAction,
       getCurrentOpenRecordId,
       logEvent,
@@ -15555,35 +15562,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     };
   }, [debugEnabled, envTag, selectedRecordId, view]);
-
-  useEffect(() => {
-    const pending = openRecordPerfRef.current;
-    if (!pending) return;
-    if (selectedRecordId !== pending.recordId) return;
-    if (view !== 'form' && view !== 'summary') return;
-    const endMark = `ck.nav.openRecord.end.${pending.startedAt}`;
-    perfMark(endMark);
-    perfMeasure('ck.nav.openRecord', pending.startMark, endMark, {
-      recordId: pending.recordId,
-      view
-    });
-    openRecordPerfRef.current = null;
-  }, [perfMark, perfMeasure, selectedRecordId, view]);
-
-  useEffect(() => {
-    const pending = backToHomePerfRef.current;
-    if (!pending) return;
-    if (view !== 'list') return;
-    const firstListItemCount = listCache.response?.items?.length || 0;
-    if (firstListItemCount <= 0) return;
-    const endMark = `ck.nav.back.end.${pending.startedAt}`;
-    perfMark(endMark);
-    perfMeasure('ck.nav.backToHome', pending.startMark, endMark, {
-      trigger: pending.trigger,
-      firstItemCount: firstListItemCount
-    });
-    backToHomePerfRef.current = null;
-  }, [listCache.response?.items?.length, perfMark, perfMeasure, view]);
 
   const currentRecord = selectedRecordSnapshot || (selectedRecordId && !recordLoadingId ? listCache.records[selectedRecordId] : null);
   const showFormRecordLoadingPlaceholder = shouldShowRecordLoadingPlaceholder({
