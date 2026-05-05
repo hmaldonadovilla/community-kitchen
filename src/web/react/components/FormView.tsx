@@ -72,6 +72,7 @@ import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAcces
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
+import { useValidationNavigationRequest } from '../features/validation/useValidationNavigationRequest';
 import { resolveFieldLabel, resolveLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
@@ -890,11 +891,15 @@ const FormView: React.FC<FormViewProps> = ({
   const dragCounterRef = useRef<Record<string, number>>({});
   const [uploadAnnouncements, setUploadAnnouncements] = useState<Record<string, string>>({});
   const [uploadFailures, setUploadFailures] = useState<UploadFailureMap<UploadRetryTarget>>({});
-  const firstErrorRef = useRef<string | null>(null);
-  const errorNavRequestRef = useRef(0);
-  const errorNavConsumedRef = useRef(0);
-  const errorNavModeRef = useRef<'focus' | 'scroll'>('focus');
-  const errorNavAllowOverlayOpenRef = useRef(true);
+  const {
+    firstErrorRef,
+    requestRef: errorNavRequestRef,
+    consumedRef: errorNavConsumedRef,
+    modeRef: errorNavModeRef,
+    allowOverlayOpenRef: errorNavAllowOverlayOpenRef,
+    requestValidationNavigation,
+    consumeValidationNavigation
+  } = useValidationNavigationRequest({ onDiagnostic });
   const guidedBackErrorNavSuppressionRef = useRef<{ stepId: string; suppressUntil: number } | null>(null);
   const orderedEntryGuideFieldPathRef = useRef<string | null>(null);
   const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
@@ -2093,14 +2098,7 @@ const FormView: React.FC<FormViewProps> = ({
           trigger: args.trigger
         });
         if (errorCount) {
-          errorNavAllowOverlayOpenRef.current = true;
-          errorNavRequestRef.current += 1;
-          errorNavModeRef.current = 'focus';
-          onDiagnostic?.('validation.navigate.request', {
-            attempt: errorNavRequestRef.current,
-            scope: 'guidedStep',
-            mode: errorNavModeRef.current
-          });
+          requestValidationNavigation({ scope: 'guidedStep' });
           return false;
         }
         const firstTarget = (Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [])
@@ -2133,14 +2131,7 @@ const FormView: React.FC<FormViewProps> = ({
           requiredMode: 'configured',
           trigger: args.trigger
         });
-        errorNavAllowOverlayOpenRef.current = true;
-        errorNavRequestRef.current += 1;
-        errorNavModeRef.current = 'focus';
-        onDiagnostic?.('validation.navigate.request', {
-          attempt: errorNavRequestRef.current,
-          scope: 'guidedStep',
-          mode: errorNavModeRef.current
-        });
+        requestValidationNavigation({ scope: 'guidedStep' });
         return false;
       }
 
@@ -2169,14 +2160,7 @@ const FormView: React.FC<FormViewProps> = ({
             if (targetStepId && targetStepId !== activeGuidedStepId) {
               selectGuidedStep(targetStepId, 'user');
             }
-            errorNavAllowOverlayOpenRef.current = true;
-            errorNavRequestRef.current += 1;
-            errorNavModeRef.current = 'focus';
-            onDiagnostic?.('validation.navigate.request', {
-              attempt: errorNavRequestRef.current,
-              scope: validationScope,
-              mode: errorNavModeRef.current
-            });
+            requestValidationNavigation({ scope: validationScope });
             return false;
           }
         }
@@ -2264,6 +2248,7 @@ const FormView: React.FC<FormViewProps> = ({
       onBeforeGuidedStepAdvance,
       onDiagnostic,
       onGuidedStepMilestone,
+      requestValidationNavigation,
       setPendingScrollAnchor,
       setErrors,
       selectGuidedStep,
@@ -2634,10 +2619,7 @@ const FormView: React.FC<FormViewProps> = ({
       } catch {
         // ignore
       }
-      errorNavAllowOverlayOpenRef.current = true;
-      errorNavRequestRef.current += 1;
-      errorNavModeRef.current = 'focus';
-      onDiagnostic?.('validation.navigate.request', { attempt: errorNavRequestRef.current, mode: errorNavModeRef.current });
+      requestValidationNavigation();
       const submitCtx: {
         collapsedRows: Record<string, boolean>;
         collapsedSubgroups: Record<string, boolean>;
@@ -2677,6 +2659,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     onSubmit,
     onGuidedStepMilestone,
+    requestValidationNavigation,
     selectGuidedStep,
     summarySubmitIntentRef,
     submitActionRef,
@@ -5410,19 +5393,13 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     setErrors(prev => mergeLineItemGroupErrors(prev, groupId, nextErrors));
-    errorNavAllowOverlayOpenRef.current = true;
-    errorNavRequestRef.current += 1;
-    errorNavModeRef.current = 'focus';
-    onDiagnostic?.('validation.navigate.request', {
-      attempt: errorNavRequestRef.current,
-      scope: 'lineItemOverlayReopen',
-      mode: errorNavModeRef.current
-    });
+    requestValidationNavigation({ scope: 'lineItemOverlayReopen' });
     onDiagnostic?.('lineItemGroup.overlay.reopen.validate', { groupId, errorCount: keys.length });
   }, [
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
     onDiagnostic,
+    requestValidationNavigation,
     setErrors,
     validateLineItemGroupOverlay
   ]);
@@ -8272,13 +8249,10 @@ const FormView: React.FC<FormViewProps> = ({
       setErrors(buildOrderedEntryErrors(missingFieldPath, nextErrors));
       const shouldNavigate = options?.navigate !== false || options?.scrollOnly === true;
       if (shouldNavigate) {
-        errorNavAllowOverlayOpenRef.current = options?.allowOverlayOpen !== false;
-        errorNavRequestRef.current += 1;
-        errorNavModeRef.current = options?.scrollOnly ? 'scroll' : 'focus';
-        onDiagnostic?.('validation.navigate.request', {
-          attempt: errorNavRequestRef.current,
+        requestValidationNavigation({
           scope: 'orderedEntry',
-          mode: errorNavModeRef.current
+          scrollOnly: options?.scrollOnly,
+          allowOverlayOpen: options?.allowOverlayOpen
         });
       } else {
         onDiagnostic?.('validation.ordered.blocked.noNavigate', {
@@ -8305,6 +8279,7 @@ const FormView: React.FC<FormViewProps> = ({
       lineItems,
       onDiagnostic,
       orderedEntryValidationDefinition,
+      requestValidationNavigation,
       setErrors,
       values
     ]
@@ -8338,13 +8313,10 @@ const FormView: React.FC<FormViewProps> = ({
     const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
     const activeTag = (activeEl?.tagName || '').toLowerCase();
     if (shouldDeferOrderedEntryGuidance({ issue: firstOrderedEntryIssue, activeTag })) return;
-    errorNavAllowOverlayOpenRef.current = false;
-    errorNavRequestRef.current += 1;
-    errorNavModeRef.current = 'scroll';
-    onDiagnostic?.('validation.navigate.request', {
-      attempt: errorNavRequestRef.current,
+    requestValidationNavigation({
       scope: 'orderedEntryAuto',
-      mode: errorNavModeRef.current
+      mode: 'scroll',
+      allowOverlayOpen: false
     });
   }, [
     buildOrderedEntryErrors,
@@ -8353,6 +8325,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic,
     orderedEntryEnabled,
     orderedEntryErrors,
+    requestValidationNavigation,
     setErrors,
     submitting
   ]);
@@ -11109,8 +11082,7 @@ const FormView: React.FC<FormViewProps> = ({
           key: firstKey,
           reason: 'manualBack'
         });
-        errorNavAllowOverlayOpenRef.current = true;
-        errorNavConsumedRef.current = errorNavRequestRef.current;
+        consumeValidationNavigation();
         return;
       }
       // Switch steps first, then re-run this navigation effect to scroll once the field is mounted.
@@ -11204,10 +11176,15 @@ const FormView: React.FC<FormViewProps> = ({
         setTimeout(() => attempt(), 80);
       }
     });
-    errorNavAllowOverlayOpenRef.current = true;
-    errorNavConsumedRef.current = errorNavRequestRef.current;
+    consumeValidationNavigation();
   }, [
     errors,
+    consumeValidationNavigation,
+    errorNavAllowOverlayOpenRef,
+    errorNavConsumedRef,
+    errorNavModeRef,
+    errorNavRequestRef,
+    firstErrorRef,
     nestedGroupMeta.lineFieldToGroupKey,
     nestedGroupMeta.subgroupFieldToGroupKey,
     definition.questions,
