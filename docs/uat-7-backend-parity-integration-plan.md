@@ -257,6 +257,29 @@ Seventh-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first sentence field validation error collection into line-item presentation domain logic, removing duplicated field-error mapping across source-first render paths. Current size: 15,713 lines.
 - `App.tsx`: extracted header drawer/layout/back-navigation wiring into `useAppHeaderNavigation`, keeping landing URL construction and blocking-overlay navigation feedback out of the shell. Current size: 16,405 lines.
 
+Eighth-pass results:
+
+- `FormView.tsx`: extracted imperative validation-field navigation into `useImperativeFieldNavigation`, leaving the component to wire the callback ref while the hook owns the current request target.
+- `LineItemGroupQuestion.tsx`: extracted source-first list scroll style resolution into line-item presentation domain logic.
+- `App.tsx`: extracted system action gate evaluation, submit-gate enable dialog coordination, and action-bar state derivation into focused app hooks. Current size after this pass: 16,342 lines.
+
+Ninth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted the repeated source-first selection checkbox renderer into `SourceFirstSelectionCheckbox`, preserving the allocation and row spacing variants. Current size: 15,652 lines after the slice.
+- `FormView.tsx` and `LineItemGroupQuestion.tsx`: extracted shared add-overlay copy resolution into `src/web/react/features/lineItems/domain/addOverlayCopy.ts` with focused unit tests. Current sizes after the slice: `FormView.tsx` 15,132 lines, `LineItemGroupQuestion.tsx` 15,639 lines.
+- `FormView.tsx`: reused the shared line-item action button style helper and the shared data-source visibility key helpers instead of keeping local copies. Current size: 15,126 lines.
+
+Tenth-pass results:
+
+- `App.tsx`: extracted browser performance mark/measure utilities into `useAppPerfTools`, keeping all existing timing call sites unchanged.
+- `App.tsx`: extracted the performance-only `__CK_PERF_OPEN_RECORD_BY_ID__` global bridge into `useAppPerfOpenRecordBridge`, leaving record selection behavior in the App shell. Current size: 16,268 lines.
+
+Current large-file counts:
+
+- `App.tsx`: 16,268 lines.
+- `FormView.tsx`: 15,126 lines.
+- `LineItemGroupQuestion.tsx`: 15,639 lines.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
@@ -328,7 +351,7 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
-| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, FormView overlay session/autosave-hold and validation navigation request coordination, plus source-first allocation display/sorting helpers with focused tests. |
+| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, performance tools/bridge, action-gate/action-bar hooks, FormView overlay session/autosave-hold plus validation navigation coordination, and source-first allocation display/sorting/selection helpers with focused tests. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions
