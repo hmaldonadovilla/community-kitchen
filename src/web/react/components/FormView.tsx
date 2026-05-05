@@ -229,6 +229,7 @@ import {
   isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
   normalizeGuidedForwardGate,
+  resolveGuidedAutoAdvanceFocusDeferralAction,
   resolveGuidedAutoAdvanceTransitionAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
@@ -1845,34 +1846,18 @@ const FormView: React.FC<FormViewProps> = ({
 
       // If the user is actively editing inside the step, keep waiting (do not steal focus).
       try {
-        const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
-        const isTextEntryEl = (el: any): boolean => {
-          if (!el) return false;
-          const tag = (el.tagName || '').toString().toLowerCase();
-          if (tag === 'textarea') return true;
-          if (tag === 'input') {
-            const type = ((el as any).type || 'text').toString().toLowerCase();
-            // These input types are not "typing" contexts where auto-advance would feel like it steals focus.
-            if (['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(type)) return false;
-            return true;
-          }
-          return Boolean((el as any).isContentEditable);
-        };
-        if (
-          activeEl &&
-          guidedStepBodyRef.current &&
-          guidedStepBodyRef.current.contains(activeEl) &&
-          isTextEntryEl(activeEl)
-        ) {
+        const focusDeferral = resolveGuidedAutoAdvanceFocusDeferralAction({
+          activeElement: typeof document !== 'undefined' ? document.activeElement : null,
+          stepBodyElement: guidedStepBodyRef.current
+        });
+        if (focusDeferral.shouldDefer) {
           if (!deferLogged) {
-            const tag = (activeEl as any)?.tagName ? (activeEl as any).tagName.toString().toLowerCase() : null;
-            const inputType = tag === 'input' ? (((activeEl as any).type || 'text').toString().toLowerCase() as any) : null;
             onDiagnostic?.('steps.step.autoAdvance.defer', {
               from: activeGuidedStepId,
               to: nextId,
               mode: autoAdvance,
-              tag,
-              inputType
+              tag: focusDeferral.tag,
+              inputType: focusDeferral.inputType
             });
             deferLogged = true;
           }

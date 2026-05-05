@@ -362,3 +362,40 @@ export const resolveGuidedAutoAdvanceTransitionAction = (args: {
     diagnostic
   };
 };
+
+export type GuidedAutoAdvanceFocusDeferral = {
+  shouldDefer: boolean;
+  tag: string | null;
+  inputType: string | null;
+};
+
+const isGuidedAutoAdvanceTextEntryElement = (element: any): boolean => {
+  if (!element) return false;
+  const tag = (element.tagName || '').toString().toLowerCase();
+  if (tag === 'textarea') return true;
+  if (tag === 'input') {
+    const type = ((element as any).type || 'text').toString().toLowerCase();
+    if (['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(type)) return false;
+    return true;
+  }
+  return Boolean((element as any).isContentEditable);
+};
+
+export const resolveGuidedAutoAdvanceFocusDeferralAction = (args: {
+  activeElement: any;
+  stepBodyElement: any;
+}): GuidedAutoAdvanceFocusDeferral => {
+  const activeElement = args.activeElement;
+  const tag = activeElement?.tagName ? activeElement.tagName.toString().toLowerCase() : null;
+  const inputType = tag === 'input' ? (((activeElement as any).type || 'text').toString().toLowerCase() as any) : null;
+  if (!activeElement || !args.stepBodyElement) {
+    return { shouldDefer: false, tag, inputType };
+  }
+  const containsActiveElement =
+    typeof args.stepBodyElement.contains === 'function' && args.stepBodyElement.contains(activeElement);
+  return {
+    shouldDefer: Boolean(containsActiveElement && isGuidedAutoAdvanceTextEntryElement(activeElement)),
+    tag,
+    inputType
+  };
+};

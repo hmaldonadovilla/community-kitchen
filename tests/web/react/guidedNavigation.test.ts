@@ -2,6 +2,7 @@ import {
   isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
   normalizeGuidedForwardGate,
+  resolveGuidedAutoAdvanceFocusDeferralAction,
   resolveGuidedAutoAdvanceTransitionAction,
   resolveGuidedStepAutoAdvance,
   resolveGuidedStepForwardGate,
@@ -297,6 +298,35 @@ describe('guidedNavigation domain', () => {
       nextState: { stepId: 'production', lastSatisfied: true, armed: true },
       clearAttempt: true,
       clearTimer: true
+    });
+  });
+
+  test('detects guided auto-advance focus deferral for text-entry elements inside the step body', () => {
+    const input = { tagName: 'INPUT', type: 'text' };
+    const checkbox = { tagName: 'INPUT', type: 'checkbox' };
+    const textarea = { tagName: 'TEXTAREA' };
+    const editor = { tagName: 'DIV', isContentEditable: true };
+    const body = { contains: (element: any) => element !== checkbox };
+
+    expect(resolveGuidedAutoAdvanceFocusDeferralAction({ activeElement: input, stepBodyElement: body })).toEqual({
+      shouldDefer: true,
+      tag: 'input',
+      inputType: 'text'
+    });
+    expect(resolveGuidedAutoAdvanceFocusDeferralAction({ activeElement: textarea, stepBodyElement: body })).toEqual({
+      shouldDefer: true,
+      tag: 'textarea',
+      inputType: null
+    });
+    expect(resolveGuidedAutoAdvanceFocusDeferralAction({ activeElement: editor, stepBodyElement: body })).toEqual({
+      shouldDefer: true,
+      tag: 'div',
+      inputType: null
+    });
+    expect(resolveGuidedAutoAdvanceFocusDeferralAction({ activeElement: checkbox, stepBodyElement: body })).toEqual({
+      shouldDefer: false,
+      tag: 'input',
+      inputType: 'checkbox'
     });
   });
 });
