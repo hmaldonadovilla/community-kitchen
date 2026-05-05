@@ -80,6 +80,7 @@ import { useAppNavigationPerf } from './components/app/useAppNavigationPerf';
 import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { useAppDialogState } from './components/app/useAppDialogState';
 import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
+import { useAppAutoSaveDedupConfig } from './components/app/useAppAutoSaveDedupConfig';
 import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
 import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
@@ -301,14 +302,10 @@ import {
 import { applyInventoryAvailabilitySnapshotsToCachedDataSources } from './features/reservations/availabilityCache';
 import { buildRejectedStepReservationEntries } from './features/reservations/rejectedReservations';
 import {
-  buildFieldIdMap,
-  filterDedupRulesForPrecheck,
   hasEnteredLineItemValues,
   hasEnteredTopLevelValues,
   hasIncompleteConfiguredFields,
-  normalizeFieldIdList,
   resolveDebouncedAutoSaveDelay,
-  resolveDedupCheckDialogCopy,
   shouldArmAutoSaveForUserEditEvent,
   shouldScheduleAutoSaveAfterPendingFollowup,
   shouldSuppressAutomatedAutoSave,
@@ -697,40 +694,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     createFlowRef,
     logEvent
   });
-  const autoSaveEnableFieldIds = useMemo(
-    () => normalizeFieldIdList((definition.autoSave as any)?.enableWhenFields ?? (definition.autoSave as any)?.enableFields),
-    [definition.autoSave]
-  );
-  const dedupTriggerFieldIds = useMemo(
-    () => normalizeFieldIdList((definition.autoSave as any)?.dedupTriggerFields ?? (definition.autoSave as any)?.dedupFields),
-    [definition.autoSave]
-  );
-  const dedupPrecheckRules = useMemo(
-    () => filterDedupRulesForPrecheck((definition as any)?.dedupRules, dedupTriggerFieldIds),
-    [definition, dedupTriggerFieldIds]
-  );
-  const dedupTriggerFieldIdMap = useMemo(
-    () =>
-      dedupTriggerFieldIds.length ? buildFieldIdMap(dedupTriggerFieldIds) : computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
-    [dedupTriggerFieldIds, definition]
-  );
-  const dedupIdentityFieldIdMap = useMemo(
-    () => computeDedupKeyFieldIdMap((definition as any)?.dedupRules),
-    [definition]
-  );
-  const dedupCheckDialogCopy = useMemo(
-    () =>
-      resolveDedupCheckDialogCopy((definition.autoSave as any)?.dedupCheckDialog, language, {
-        checkingTitle: 'Checking duplicates',
-        checkingMessage: 'Please wait while the system checks whether this record already exists.',
-        availableTitle: 'Value available',
-        availableMessage: 'You can continue entering details.',
-        duplicateTitle: 'Duplicate found',
-        duplicateMessage: tSystem('dedup.duplicate', language, 'Duplicate record.')
-      }),
-    [definition.autoSave, language]
-  );
-  const dedupCheckDialogEnabled = dedupTriggerFieldIds.length > 0 && dedupCheckDialogCopy.enabled;
+  const {
+    autoSaveEnableFieldIds,
+    dedupPrecheckRules,
+    dedupTriggerFieldIdMap,
+    dedupIdentityFieldIdMap,
+    dedupCheckDialogCopy,
+    dedupCheckDialogEnabled
+  } = useAppAutoSaveDedupConfig({ definition, language });
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
