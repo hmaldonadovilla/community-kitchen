@@ -127,6 +127,7 @@ import { buildFormGroupSections, buildPageSectionBlocks, resolveGroupSectionKey 
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { useFormViewStateRefs } from './form/useFormViewStateRefs';
+import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
 import { LineItemUploadFailureNotice } from '../features/lineItems/components/LineItemUploadFailureNotice';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import {
@@ -229,7 +230,6 @@ import {
   areOverlayHeaderFieldsComplete,
   collectLineItemConfigEntries,
   hasSelectionEffects,
-  parseLineFieldPath,
   resolveLineItemDedupMessage,
   resolveLineItemDedupValueToken,
   resolveOverlayHeaderFields,
@@ -3032,129 +3032,23 @@ const FormView: React.FC<FormViewProps> = ({
     [lineItemGroupOverlay, onDiagnostic, subgroupOverlay]
   );
 
-  useEffect(() => {
-    const handler = (event: FocusEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      const tag = target.tagName ? target.tagName.toLowerCase() : '';
-      const role = (target.getAttribute('role') || '').toString().trim().toLowerCase();
-      const isInputLike = tag === 'input' || tag === 'textarea' || tag === 'select';
-      const isButtonLike =
-        tag === 'button' || role === 'button' || role === 'radio' || role === 'option' || role === 'combobox';
-      if (!isInputLike && !isButtonLike) return;
-      // Derived-value blur recompute should run for any field blur within the form content, including guided steps.
-      // Note: guided step content is not always wrapped in `.form-card`, so use `.ck-form-sections` as a stable root.
-      const root = target.closest('.ck-form-sections') || target.closest('.webform-overlay') || target.closest('.form-card');
-      if (!root) return;
-      const fieldPath = (target.closest('[data-field-path]') as HTMLElement | null)?.dataset?.fieldPath;
-      const inputType = (target as any)?.type !== undefined && (target as any)?.type !== null ? String((target as any).type) : undefined;
-
-      // Surface blur events to the app shell (used for warning UX + telemetry).
-      if (onUserEdit && fieldPath) {
-        const fp = fieldPath.toString();
-        const parts = fp.split('__');
-        const isLine = parts.length >= 3;
-        onUserEdit({
-          scope: isLine ? 'line' : 'top',
-          fieldPath: fp,
-          fieldId: isLine ? parts[1] : fp,
-          groupId: isLine ? parts[0] : undefined,
-          rowId: isLine ? parts[2] : undefined,
-          event: 'blur',
-          tag,
-          inputType
-        });
-      }
-
-      const blurredFieldId = (() => {
-        if (!fieldPath) return '';
-        const parts = fieldPath.split('__');
-        if (parts.length >= 2) return (parts[1] || '').toString().trim();
-        return fieldPath.toString().trim();
-      })();
-      const shouldRecomputeBlurDerived =
-        !!fieldPath && hasBlurDerived && (!blurDerivedDependencyIds.size || (blurredFieldId ? blurDerivedDependencyIds.has(blurredFieldId) : true));
-
-      if (fieldPath && !shouldRecomputeBlurDerived) {
-        validateErrorsOnBlur(fieldPath, { tag, inputType });
-      }
-
-      if (paragraphDisclaimerTimerRef.current !== null) {
-        window.clearTimeout(paragraphDisclaimerTimerRef.current);
-      }
-      paragraphDisclaimerTimerRef.current = window.setTimeout(() => {
-        paragraphDisclaimerTimerRef.current = null;
-        if (!paragraphDisclaimerPendingRef.current) return;
-        paragraphDisclaimerSyncRef.current?.('blur');
-      }, 0);
-
-      const lineField = fieldPath ? parseLineFieldPath(fieldPath.toString()) : null;
-      if (lineField) {
-        if (overlayDetailBlurTimerRef.current !== null) {
-          window.clearTimeout(overlayDetailBlurTimerRef.current);
-        }
-        overlayDetailBlurTimerRef.current = window.setTimeout(() => {
-          overlayDetailBlurTimerRef.current = null;
-          const groupDef = resolveLineItemGroupForKey(lineField.groupId);
-          if (!groupDef) return;
-          const rows = lineItemsRef.current[lineField.groupId] || [];
-          const row = rows.find(r => r.id === lineField.rowId);
-          if (!row) return;
-          attemptOverlayDetailAutoOpen({
-            group: groupDef,
-            rowId: lineField.rowId,
-            rowValues: (row.values || {}) as Record<string, FieldValue>,
-            nextValues: valuesRef.current,
-            nextLineItems: lineItemsRef.current,
-            triggerFieldId: lineField.fieldId,
-            source: 'blur'
-          });
-        }, 0);
-      }
-
-      if (hasBlurDerived) {
-        if (!shouldRecomputeBlurDerived) {
-          onDiagnostic?.('derived.blur.skip', { fieldPath, blurredFieldId });
-          return;
-        }
-        if (blurRecomputeTimerRef.current !== null) {
-          window.clearTimeout(blurRecomputeTimerRef.current);
-        }
-        blurRecomputeTimerRef.current = window.setTimeout(() => {
-          blurRecomputeTimerRef.current = null;
-          recomputeDerivedOnBlur({ fieldPath, tag });
-          if (fieldPath) {
-            validateErrorsOnBlur(fieldPath, { tag, inputType });
-          }
-        }, 0);
-      }
-    };
-    document.addEventListener('focusout', handler, true);
-    return () => {
-      document.removeEventListener('focusout', handler, true);
-      if (blurRecomputeTimerRef.current !== null) {
-        window.clearTimeout(blurRecomputeTimerRef.current);
-        blurRecomputeTimerRef.current = null;
-      }
-      if (overlayDetailBlurTimerRef.current !== null) {
-        window.clearTimeout(overlayDetailBlurTimerRef.current);
-        overlayDetailBlurTimerRef.current = null;
-      }
-      if (paragraphDisclaimerTimerRef.current !== null) {
-        window.clearTimeout(paragraphDisclaimerTimerRef.current);
-        paragraphDisclaimerTimerRef.current = null;
-      }
-    };
-  }, [
-    attemptOverlayDetailAutoOpen,
-    blurDerivedDependencyIds,
+  useFormBlurCoordinator({
     hasBlurDerived,
+    blurDerivedDependencyIds,
     onDiagnostic,
     onUserEdit,
     recomputeDerivedOnBlur,
+    validateErrorsOnBlur,
+    blurRecomputeTimerRef,
+    overlayDetailBlurTimerRef,
+    paragraphDisclaimerTimerRef,
+    paragraphDisclaimerPendingRef,
+    paragraphDisclaimerSyncRef,
     resolveLineItemGroupForKey,
-    validateErrorsOnBlur
-  ]);
+    lineItemsRef,
+    valuesRef,
+    attemptOverlayDetailAutoOpen
+  });
 
   useEffect(() => {
     setCollapsedGroups(prev => {
