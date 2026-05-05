@@ -66,6 +66,7 @@ import {
   collectDerivedBlurDependencies,
   isBlurDerivedValue
 } from '../features/derivedValues/domain/blurDependencies';
+import { areLineItemsShallowEqual, diffFormValues } from './form/formValueComparison';
 import { buildValidationErrorIndex } from '../features/validation/domain/errorIndex';
 import { useImperativeFieldNavigation } from '../features/validation/useImperativeFieldNavigation';
 import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
@@ -2561,52 +2562,6 @@ const FormView: React.FC<FormViewProps> = ({
   const blurRecomputeTimerRef = useRef<number | null>(null);
   const overlayDetailBlurTimerRef = useRef<number | null>(null);
 
-  const shallowEqualFieldValue = (a: FieldValue, b: FieldValue): boolean => {
-    if (a === b) return true;
-    if (Array.isArray(a) || Array.isArray(b)) {
-      const aa = Array.isArray(a) ? a : [a];
-      const bb = Array.isArray(b) ? b : [b];
-      if (aa.length !== bb.length) return false;
-      for (let i = 0; i < aa.length; i += 1) {
-        if ((aa[i] as any) !== (bb[i] as any)) return false;
-      }
-      return true;
-    }
-    return false;
-  };
-
-  const diffValues = (a: Record<string, FieldValue>, b: Record<string, FieldValue>): string[] => {
-    const changed: string[] = [];
-    const keys = Array.from(new Set([...Object.keys(a || {}), ...Object.keys(b || {})]));
-    keys.forEach(k => {
-      if (!shallowEqualFieldValue((a as any)[k], (b as any)[k])) changed.push(k);
-    });
-    return changed;
-  };
-
-  const lineItemsEqual = (a: LineItemState, b: LineItemState): boolean => {
-    if (a === b) return true;
-    const keys = Array.from(new Set([...Object.keys(a || {}), ...Object.keys(b || {})]));
-    for (const key of keys) {
-      const ra = (a as any)[key] || [];
-      const rb = (b as any)[key] || [];
-      if (ra.length !== rb.length) return false;
-      for (let i = 0; i < ra.length; i += 1) {
-        const rowA = ra[i];
-        const rowB = rb[i];
-        if (!rowA || !rowB) return false;
-        if (rowA.id !== rowB.id) return false;
-        const va = rowA.values || {};
-        const vb = rowB.values || {};
-        const vKeys = Array.from(new Set([...Object.keys(va), ...Object.keys(vb)]));
-        for (const fid of vKeys) {
-          if (!shallowEqualFieldValue((va as any)[fid], (vb as any)[fid])) return false;
-        }
-      }
-    }
-    return true;
-  };
-
   const recomputeDerivedOnBlur = useCallback(
     (meta?: { fieldPath?: string; tag?: string }) => {
       if (!hasBlurDerived) return;
@@ -2616,8 +2571,8 @@ const FormView: React.FC<FormViewProps> = ({
         mode: 'blur'
       });
 
-      const changedFields = diffValues(currentValues, nextValues);
-      const lineChanged = !lineItemsEqual(currentLineItems, nextLineItems);
+      const changedFields = diffFormValues(currentValues, nextValues);
+      const lineChanged = !areLineItemsShallowEqual(currentLineItems, nextLineItems);
       if (!changedFields.length && !lineChanged) return;
 
       if (changedFields.length) {
