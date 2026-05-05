@@ -468,11 +468,16 @@ Forty-seventh-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided reservation quantity derivation into `reservationQuantity`, keeping data-source and reservation state wiring in the component. Current size: 13,372 lines.
 - Validation for the pass used focused reservation quantity, virtual row context, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Forty-eighth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted guided virtual data-source row value projection and optimistic availability max/display derivation into `virtualDataSourceRowValues`, keeping live reservation-state callbacks injected by the component. Current size: 13,229 lines.
+- Validation for the pass used focused virtual data-source row value, reservation quantity, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,843 lines.
-- `LineItemGroupQuestion.tsx`: 13,372 lines.
+- `LineItemGroupQuestion.tsx`: 13,229 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
