@@ -243,6 +243,10 @@ Fourth-pass results:
 
 - `FormView.tsx`: extracted validation error navigation orchestration into `useValidationErrorNavigation`, keeping guided step redirection, overlay opening, group/row expansion, and scroll/focus behavior behind a named hook boundary. Current size: 15,253 lines.
 
+Fifth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted source-first selection toggle patching into line-item presentation domain logic, covering selected flags, quantity max defaults, and mode defaults with focused unit tests. Current size: 15,734 lines.
+
 ### Stage 3: Backend and Domain Separation Follow-through
 
 Purpose: reduce pressure on `WebFormService.ts` and align Apps Script and Cloud Run around clearer domain/use-case boundaries.
