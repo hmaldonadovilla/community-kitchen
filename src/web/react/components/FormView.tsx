@@ -224,9 +224,9 @@ import {
 } from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
 import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
+import { resolveGuidedUiStateAction } from '../features/steps/domain/guidedUiState';
 import { useGuidedStepVisibility } from '../features/steps/hooks/useGuidedStepVisibility';
 import {
-  isGuidedStepForwardGateSatisfied,
   normalizeGuidedAutoAdvance,
   normalizeGuidedForwardGate,
   resolveGuidedAutoAdvanceFocusDeferralAction,
@@ -2091,47 +2091,20 @@ const FormView: React.FC<FormViewProps> = ({
 
   useEffect(() => {
     if (!onGuidedUiChange) return;
-    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) {
-      onGuidedUiChange(null);
-      return;
-    }
-    const stepCfg = guidedVisibleSteps[activeGuidedStepIndex] as any;
-    const isFinal = activeGuidedStepIndex >= guidedStepIds.length - 1;
-    const forwardGate = resolveGuidedStepForwardGate(stepCfg, guidedDefaultForwardGate);
-    const stepStatus = guidedStatus.steps.find(s => s.id === activeGuidedStepId);
-    const forwardGateSatisfied = isGuidedStepForwardGateSatisfied({
-      gate: forwardGate,
-      status: stepStatus,
-      navigationBlocked: dedupNavigationBlocked
-    });
-    const allowBack = (stepCfg?.navigation?.allowBack ?? stepCfg?.allowBack) !== false;
-    const showBackGlobal = (guidedStepsCfg as any)?.showBackButton !== false;
-    const showBackStep = (stepCfg?.navigation?.showBackButton ?? stepCfg?.showBackButton) !== false;
-    const backVisible = activeGuidedStepIndex > 0 && allowBack && showBackGlobal && showBackStep;
-    const backLabel = resolveLocalizedString(
-      (stepCfg?.navigation?.backLabel as any) || (guidedStepsCfg as any)?.backButtonLabel,
-      language,
-      tSystem('actions.back', language, 'Back')
+    onGuidedUiChange(
+      resolveGuidedUiStateAction({
+        enabled: guidedEnabled,
+        stepsConfig: guidedStepsCfg,
+        stepIds: guidedStepIds,
+        visibleSteps: guidedVisibleSteps,
+        activeStepId: activeGuidedStepId,
+        activeStepIndex: activeGuidedStepIndex,
+        statuses: guidedStatus.steps,
+        defaultForwardGate: guidedDefaultForwardGate,
+        dedupNavigationBlocked,
+        language
+      })
     );
-    const submitLabel = !isFinal
-      ? resolveLocalizedString(
-          (stepCfg?.navigation?.submitLabel as any) || (guidedStepsCfg as any)?.stepSubmitLabel,
-          language,
-          tSystem('steps.next', language, 'Next')
-        )
-      : null;
-    onGuidedUiChange({
-      activeStepId: activeGuidedStepId || null,
-      activeStepIndex: activeGuidedStepIndex,
-      stepCount: guidedStepIds.length,
-      isFirst: activeGuidedStepIndex <= 0,
-      isFinal,
-      forwardGateSatisfied,
-      backAllowed: allowBack,
-      backVisible,
-      backLabel: backLabel?.toString?.() || '',
-      stepSubmitLabel: submitLabel || undefined
-    });
   }, [
     activeGuidedStepId,
     activeGuidedStepIndex,
