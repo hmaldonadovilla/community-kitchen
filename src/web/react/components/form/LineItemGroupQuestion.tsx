@@ -78,9 +78,6 @@ import { AutoWidthSelect } from './AutoWidthSelect';
 import { resolveCompactTextControlDisplayValue } from './compactControlValue';
 import { PairedRowGrid } from './PairedRowGrid';
 import {
-  computeOptimisticAggregateReservedQuantity,
-  computeAvailableFromAggregate,
-  resolveServerCurrentRecordReservedQuantity,
   sanitizeNumericDraft,
   toFiniteNumberValue
 } from './quantityConstraints';
@@ -134,13 +131,13 @@ import {
   buildVirtualDataSourceRowValuesAction,
   resolveServerCurrentRecordReservedQuantityFromRow
 } from './virtualDataSourceRowValues';
+import { buildStepDataSourceAvailabilityOptimisticMutationAction } from './stepDataSourceAvailability';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
   resolveStepDataSourceRowsForParentAction
 } from './stepDataSourceRows';
 import {
-  resolveSourceFirstAllocationAvailabilityFieldPair,
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstRowSortMode,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded
@@ -1286,63 +1283,19 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         localCurrentRecordReservedQuantity?: number;
       }
     ): void => {
-      const availabilityConfig = config?.availability && typeof config.availability === 'object'
-        ? config.availability
-        : null;
-      const dataSourceConfig = config?.dataSource;
-      if (!availabilityConfig || !dataSourceConfig || !args.sourceKey) return;
-
-      const committedReservationState = resolveCommittedReservationStateForSource(config, args.sourceKey, args.parentRowId);
-      const localCurrentRecordReservedQuantity = Object.prototype.hasOwnProperty.call(
-        args,
-        'localCurrentRecordReservedQuantity'
-      )
-        ? Math.max(0, toFiniteNumberValue(args.localCurrentRecordReservedQuantity))
-        : resolveCurrentReservationStateForSource(config, args.sourceKey, args.parentRowId).totalReservedQuantity;
-      const serverCurrentRecordReservedQuantity = Object.prototype.hasOwnProperty.call(
-        args,
-        'serverCurrentRecordReservedQuantity'
-      )
-        ? resolveServerCurrentRecordReservedQuantity({
-            hasExplicitServerCurrentRecordReservedQuantity: true,
-            serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
-            fallbackCurrentRecordReservedQuantity: committedReservationState.totalReservedQuantity
-          })
-        : resolveServerCurrentRecordReservedQuantityFromRow(
-            args.sourceRow,
-            committedReservationState.totalReservedQuantity
-          );
-      const { remainingFieldId: sourceRemainingFieldId, reservedFieldId: sourceReservedFieldId } =
-        resolveSourceFirstAllocationAvailabilityFieldPair(availabilityConfig, args.sourceRow);
-      if (!sourceRemainingFieldId || !sourceReservedFieldId) return;
-
-      const remainingQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceRemainingFieldId]);
-      const currentReservedQuantity = toFiniteNumberValue((args.sourceRow as any)?.[sourceReservedFieldId]);
-      const nextReservedQuantity = computeOptimisticAggregateReservedQuantity({
-        reservedQuantity: currentReservedQuantity,
-        serverCurrentRecordReservedQuantity,
-        localCurrentRecordReservedQuantity
+      const mutation = buildStepDataSourceAvailabilityOptimisticMutationAction({
+        config,
+        sourceRow: args.sourceRow,
+        sourceKey: args.sourceKey,
+        parentRowId: args.parentRowId,
+        serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
+        localCurrentRecordReservedQuantity: args.localCurrentRecordReservedQuantity,
+        resolveCommittedReservationStateForSource,
+        resolveCurrentReservationStateForSource
       });
-      const nextFreeQuantity = computeAvailableFromAggregate(remainingQuantity, nextReservedQuantity);
+      if (!mutation) return;
 
-      mutateCachedDataSource(dataSourceConfig, language, items =>
-        items.map(item => {
-          if (!item || typeof item !== 'object') return item;
-          const matchesRecord = `${item.id ?? ''}`.trim() === `${args.sourceRow?.id ?? ''}`.trim();
-          const matchesItem = resolveReservationSourceItemKey(config, item) === args.sourceKey;
-          if (!matchesRecord || !matchesItem) return item;
-          return {
-            ...item,
-            [sourceReservedFieldId]: nextReservedQuantity,
-            // The optimistic aggregate now includes the local current-record reservation.
-            // Keep this marker aligned with the aggregate component to avoid subtracting
-            // the current record twice on the next visibility render.
-            __ckServerCurrentRecordReservedQuantity: localCurrentRecordReservedQuantity,
-            __ckCurrentRecordReservedQuantity: localCurrentRecordReservedQuantity,
-            __ckFreeQuantity: nextFreeQuantity
-          };
-        })
-      );
+      mutateCachedDataSource(mutation.dataSourceConfig, language, mutation.updateItems);
       queueStepDataSourceRefreshTick();
     },
     [language, queueStepDataSourceRefreshTick, resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
