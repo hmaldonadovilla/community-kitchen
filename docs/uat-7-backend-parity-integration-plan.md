@@ -413,9 +413,14 @@ Thirty-sixth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first row eligibility and empty-state projection into `buildSourceFirstPresentationEntries`, keeping rendering and state wiring in the component. Current size: 13,582 lines.
 - Validation for the pass used focused line-item presentation/helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-seventh-pass results:
+
+- `App.tsx`: extracted field-change dialog input projection into `buildFieldChangeDialogInputsAction`, keeping dialog lifecycle and pending-change state in the shell. Current size: 14,457 lines.
+- Validation for the pass used focused App/autosave/report-preview/choice tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,553 lines.
+- `App.tsx`: 14,457 lines.
 - `FormView.tsx`: 13,200 lines.
 - `LineItemGroupQuestion.tsx`: 13,582 lines.
 
