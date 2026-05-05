@@ -323,10 +323,15 @@ Eighteenth-pass results:
 - `FormView.tsx`: extracted file overlay state, drag counters, upload announcements, upload failure retry state, and overlay open/close/staging helpers into `useFormUploadController`, keeping the actual upload persistence callbacks injected by the form. Current size: 13,689 lines.
 - Validation for the pass used targeted upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Nineteenth-pass results:
+
+- `FormView.tsx`: extracted the file overlay renderer and save/remove orchestration into `FormFileOverlay`, keeping form value mutation and upload APIs injected from the parent. Current size: 13,454 lines.
+- Validation for the pass used targeted upload/line-item tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 15,910 lines.
-- `FormView.tsx`: 13,689 lines.
+- `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,826 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
