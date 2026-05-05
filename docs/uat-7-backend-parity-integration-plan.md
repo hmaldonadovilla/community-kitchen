@@ -348,9 +348,14 @@ Twenty-third-pass results:
 - `LineItemGroupQuestion.tsx`: extracted repeated read-only field chrome, overlay-open replace field chrome, and inline overlay-open action buttons into `LineItemFieldChrome`, keeping row mutation and overlay action policies injected by the parent. Current size: 13,618 lines.
 - Validation for the pass used focused line-item/upload tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Twenty-fourth-pass results:
+
+- `App.tsx`: extracted configured create-record-preset execution into `useCreateRecordPresetAction`, keeping preset value coercion, dedup precheck/list duplicate prompting, and new-record context reset outside the main shell. Current size: 15,140 lines.
+- Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 15,224 lines.
+- `App.tsx`: 15,140 lines.
 - `FormView.tsx`: 13,454 lines.
 - `LineItemGroupQuestion.tsx`: 13,618 lines.
 
