@@ -493,10 +493,15 @@ Fifty-second-pass results:
 - `FormView.tsx`: extracted guided-step ordered-entry question projection and clear-on-change field ordering into `guidedStepQuestionOrder`, keeping guided config traversal out of the component. Current size: 12,600 lines.
 - Validation for the pass used focused guided-step question order, definition, and target-field tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Fifty-third-pass results:
+
+- `FormView.tsx`: extracted guided-step selection gate resolution into `guidedNavigation`, keeping timer/ref cleanup and state mutation in the component. Current size: 12,576 lines.
+- Validation for the pass used focused guided navigation and guided-step question-order tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 12,600 lines.
+- `FormView.tsx`: 12,576 lines.
 - `LineItemGroupQuestion.tsx`: 13,168 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
