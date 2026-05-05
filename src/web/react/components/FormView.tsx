@@ -114,6 +114,7 @@ import {
   TopOverlayOpenReplaceButton,
   TopReadOnlyField
 } from './form/TopFieldChrome';
+import { useChoiceControlRenderer } from './form/useChoiceControlRenderer';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
 import { SectionInstruction } from './form/SectionInstruction';
@@ -136,12 +137,6 @@ import {
   type FileUploadOrderedEntryCheckArgs,
   type UploadRetryTarget
 } from '../features/uploads/useFormUploadController';
-import {
-  computeChoiceControlVariant,
-  resolveNoneLabel,
-  shouldUseSearchableChoiceControl,
-  type OptionLike
-} from './form/choiceControls';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
@@ -158,7 +153,6 @@ import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow
 import {
   buildLineContextId,
   buildSubgroupKey,
-  buildLineItemDedupKey,
   cascadeRemoveLineItemRows,
   computeRowNonMatchOptions,
   findLineItemDedupConflict,
@@ -667,9 +661,6 @@ const FormView: React.FC<FormViewProps> = ({
   const guidedBackErrorNavSuppressionRef = useRef<{ stepId: string; suppressUntil: number } | null>(null);
   const orderedEntryGuideFieldPathRef = useRef<string | null>(null);
   const overlayCloseValidateOnOpenRef = useRef<Record<string, boolean>>({});
-  const choiceVariantLogRef = useRef<Record<string, string>>({});
-  const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
-  const choiceSearchIndexLoggedRef = useRef<Set<string>>(new Set());
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
   const overlayOpenActionLoggedRef = useRef<Set<string>>(new Set());
   const guidedLineGroupOverrideLoggedRef = useRef<Set<string>>(new Set());
@@ -3429,217 +3420,7 @@ const FormView: React.FC<FormViewProps> = ({
     [onDiagnostic, scheduleScrollGroupToTop]
   );
 
-  const renderChoiceControl = useCallback(
-    (args: {
-      fieldPath: string;
-      value: string;
-      options: OptionLike[];
-      required: boolean;
-      placeholder?: string;
-      searchEnabled?: boolean;
-      override?: string | null;
-      disabled?: boolean;
-      className?: string;
-      style?: React.CSSProperties;
-      inputStyle?: React.CSSProperties;
-      onChange: (next: string) => void;
-    }) => {
-      const {
-        fieldPath,
-        value,
-        options,
-        required,
-        placeholder: placeholderOverride,
-        searchEnabled,
-        override,
-        disabled,
-        className,
-        style,
-        inputStyle,
-        onChange
-      } = args;
-      const decision = computeChoiceControlVariant(options, required, override);
-
-      const prev = choiceVariantLogRef.current[fieldPath];
-      if (prev !== decision.variant) {
-        choiceVariantLogRef.current[fieldPath] = decision.variant;
-        onDiagnostic?.('ui.choiceControl.variant', {
-          fieldPath,
-          variant: decision.variant,
-          optionCount: options.length,
-          required,
-          override: (override || 'auto').toString(),
-          booleanDetected: decision.booleanDetected
-        });
-      }
-
-      const placeholder =
-        (placeholderOverride || '').toString().trim() || tSystem('common.selectPlaceholder', language, 'Select…');
-      const shouldUseSearchableSelect = shouldUseSearchableChoiceControl({
-        variant: decision.variant,
-        optionCount: options.length,
-        searchEnabled,
-        override
-      });
-
-      const renderSelectControl = () => {
-        if (shouldUseSearchableSelect) {
-          if (!choiceSearchLoggedRef.current.has(fieldPath)) {
-            choiceSearchLoggedRef.current.add(fieldPath);
-            onDiagnostic?.('ui.choiceControl.search.enabled', {
-              fieldPath,
-              optionCount: options.length,
-              enabled: searchEnabled === true ? 'forced' : 'auto'
-            });
-          }
-          const searchableCount = options.filter(opt => !!opt.searchText).length;
-          if (searchableCount && !choiceSearchIndexLoggedRef.current.has(fieldPath)) {
-            choiceSearchIndexLoggedRef.current.add(fieldPath);
-            onDiagnostic?.('ui.choiceControl.search.multiField', {
-              fieldPath,
-              optionCount: options.length,
-              indexedCount: searchableCount
-            });
-          }
-          return (
-            <SearchableSelect
-              value={value || ''}
-              options={options.map(o => ({
-                value: o.value,
-                label: o.label,
-                tooltip: (o as any).tooltip,
-                searchText: o.searchText
-              }))}
-              disabled={!!disabled}
-              placeholder={placeholder}
-              emptyText={tSystem('common.noMatches', language, 'No matches.')}
-              className={className}
-              style={style}
-              inputStyle={inputStyle}
-              onDiagnostic={(event, payload) => onDiagnostic?.(event, { fieldPath, ...(payload || {}) })}
-              onChange={next => {
-                if (disabled) return;
-                onDiagnostic?.('ui.choiceControl.search.select', { fieldPath, value: next });
-                onChange(next);
-              }}
-            />
-          );
-        }
-        return (
-          <div className={className} style={style}>
-            <select
-              value={value || ''}
-              disabled={!!disabled}
-              style={{
-                width: '100%',
-                minWidth: 0,
-                maxWidth: '100%',
-                boxSizing: 'border-box',
-                ...(inputStyle || {})
-              }}
-              onChange={e => {
-                if (disabled) return;
-                onChange(e.target.value);
-              }}
-            >
-              <option value="">{placeholder}</option>
-              {options.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        );
-      };
-
-      switch (decision.variant) {
-        case 'segmented': {
-          return (
-            <div className="ck-choice-control ck-segmented" role="radiogroup" aria-label="Options">
-              {options.map(opt => {
-                const active = value === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className={active ? 'active' : undefined}
-                    role="radio"
-                    aria-checked={active}
-                    title={opt.label}
-                    disabled={!!disabled}
-                    onClick={() => {
-                      if (disabled) return;
-                      if (!required && active) {
-                        onChange('');
-                        return;
-                      }
-                      onChange(opt.value);
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        }
-        case 'radio': {
-          const name = `ck-radio-${fieldPath}`;
-          const noneLabel = resolveNoneLabel(language);
-          const radioOptions = required ? options : [{ value: '', label: noneLabel }, ...options];
-          return (
-            <div className="ck-choice-control ck-radio-list" role="radiogroup" aria-label="Options">
-              {radioOptions.map(opt => (
-                <label key={opt.value || '__none__'} className="ck-radio-row">
-                  <input
-                    type="radio"
-                    name={name}
-                    value={opt.value}
-                    checked={(value || '') === (opt.value || '')}
-                    disabled={!!disabled}
-                    onChange={e => {
-                      if (disabled) return;
-                      onChange(e.target.value);
-                    }}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          );
-        }
-        case 'switch': {
-          const map = decision.booleanMap;
-          if (!map) {
-            // fallback
-            return renderSelectControl();
-          }
-          const checked = value === map.trueValue;
-          return (
-            <div className="ck-choice-control ck-switch-control">
-              <label className="ck-switch" aria-label="Toggle">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!!disabled}
-                  onChange={e => {
-                    if (disabled) return;
-                    onChange(e.target.checked ? map.trueValue : map.falseValue);
-                  }}
-                />
-                <span className="ck-switch-track" aria-hidden="true" />
-              </label>
-            </div>
-          );
-        }
-        case 'select':
-        default:
-          return renderSelectControl();
-      }
-    },
-    [language, onDiagnostic]
-  );
+  const renderChoiceControl = useChoiceControlRenderer({ language, onDiagnostic });
 
   const closeSubgroupOverlay = useCallback(() => {
     if (overlay.open) {
@@ -7519,7 +7300,17 @@ const FormView: React.FC<FormViewProps> = ({
     }
     paragraphDisclaimerPendingRef.current = false;
     syncParagraphDisclaimers('change');
-  }, [definition, lineItems, optionState, language, submitting, computeParagraphDisclaimerUpdates, syncParagraphDisclaimers]);
+  }, [
+    definition,
+    lineItems,
+    lineItemsRef,
+    optionState,
+    language,
+    submitting,
+    valuesRef,
+    computeParagraphDisclaimerUpdates,
+    syncParagraphDisclaimers
+  ]);
 
   const overlayOpenStateRef = useRef({ line: false, sub: false });
 
