@@ -408,11 +408,16 @@ Thirty-fifth-pass results:
 - `App.tsx`: extracted active draft-save wait/timeout handling into `waitForActiveDraftSaveTransactionsAction`, keeping autosave refs wired by the shell. Current size: 14,553 lines.
 - Validation for the pass used focused App/autosave/report-preview tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Thirty-sixth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted source-first row eligibility and empty-state projection into `buildSourceFirstPresentationEntries`, keeping rendering and state wiring in the component. Current size: 13,582 lines.
+- Validation for the pass used focused line-item presentation/helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,553 lines.
 - `FormView.tsx`: 13,200 lines.
-- `LineItemGroupQuestion.tsx`: 13,611 lines.
+- `LineItemGroupQuestion.tsx`: 13,582 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
