@@ -75,12 +75,8 @@ import { NumberStepper } from './NumberStepper';
 import { SectionInstruction } from './SectionInstruction';
 import { AutoWidthInput } from './AutoWidthInput';
 import { AutoWidthSelect } from './AutoWidthSelect';
-import { resolveCompactTextControlDisplayValue } from './compactControlValue';
 import { PairedRowGrid } from './PairedRowGrid';
-import {
-  sanitizeNumericDraft,
-  toFiniteNumberValue
-} from './quantityConstraints';
+import { toFiniteNumberValue } from './quantityConstraints';
 import {
   buildReservationConflictDialogCopy,
   computeReservationConflictUsableQuantity
@@ -108,7 +104,6 @@ import {
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { applyValueMapsToLineRow, resolveDerivedValue, resolveValueMapValue } from './valueMaps';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './lineItemSelectors';
-import { computeChoiceControlVariant } from './choiceControls';
 import {
   collectComputedSelectionEffectInitTargets,
   collectSelectionEffectInitTargets,
@@ -179,14 +174,8 @@ import {
 } from '../../features/lineItems/domain/overlayFlattenedFields';
 import {
   buildRowFlowContextHeaderAction,
-  resolveRowFlowDisplayValueAction,
-  resolveRowFlowOutputSegmentPresentationAction
+  resolveRowFlowDisplayValueAction
 } from '../../features/lineItems/domain/rowFlowDisplayValue';
-import {
-  partitionRowFlowPromptActionsAction,
-  resolveRowFlowPromptLayoutAction,
-  splitRowFlowPromptLabelAction
-} from '../../features/lineItems/domain/rowFlowPromptPresentation';
 import {
   applyAutoAddSubgroupSingleOptionAnchorFillAction,
   collectAutoAddSubgroupAnchorTargetsAction,
@@ -204,6 +193,8 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
+import { RowFlowOutputSegmentsRenderer } from '../../features/lineItems/components/RowFlowOutputSegmentsRenderer';
+import { RowFlowPromptRenderer } from '../../features/lineItems/components/RowFlowPromptRenderer';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import {
@@ -226,11 +217,9 @@ const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationD
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_NON_MATCH_OPTIONS_KEY,
-  ROW_SOURCE_AUTO,
   ROW_SOURCE_KEY,
   cascadeRemoveLineItemRows,
   buildSubgroupKey,
-  parseSubgroupKey,
   resolveLineItemRowLimits,
   parseRowHideRemove,
   parseRowNonMatchOptions,
@@ -5207,224 +5196,32 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   }
                 };
 
-                const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => {
-                  if (!prompt.visible) return null;
-                  const inputKind = (prompt.config.input?.kind || 'field').toString().trim().toLowerCase();
-                  if (inputKind === 'selectoroverlay') {
-                    const targetRef = prompt.config.input?.targetRef || '';
-                    if (!targetRef) return null;
-                    const target = resolveRowFlowFieldTarget({
-                      fieldRef: `${targetRef}.`,
-                      groupId: q.id,
-                      rowId: row.id,
-                      rowValues: row.values || {},
-                      references: rowFlowState.references
-                    });
-                    if (!target?.refId) return null;
-                    const ref = rowFlowState.references[target.refId];
-                    const refGroupId = (ref?.groupId || target.groupId || '').toString().trim();
-                    const isSubgroupRef = !!refGroupId && rowFlowSubGroupIds.includes(refGroupId);
-                    const targetGroupKey =
-                      target.primaryRow?.groupKey ||
-                      (isSubgroupRef ? buildSubgroupKey(q.id, row.id, refGroupId) : refGroupId || target.groupKey);
-                    const targetInfo = targetGroupKey ? resolveRowFlowGroupConfig(targetGroupKey) : null;
-                    if (!targetInfo?.config) return null;
-                    const promptGroupOverride = prompt.config.input?.groupOverride;
-                    const effectiveTargetConfig = promptGroupOverride
-                      ? applyLineItemGroupOverride(targetInfo.config, promptGroupOverride)
-                      : targetInfo.config;
-                    const anchorFieldId =
-                      effectiveTargetConfig?.anchorFieldId !== undefined && effectiveTargetConfig?.anchorFieldId !== null
-                        ? effectiveTargetConfig.anchorFieldId.toString()
-                        : '';
-                    const anchorField = anchorFieldId
-                      ? (effectiveTargetConfig?.fields || []).find((f: any) => f.id === anchorFieldId)
-                      : null;
-                    if (!anchorField || anchorField.type !== 'CHOICE') return null;
-                    ensureLineOptions(targetInfo.groupId, anchorField);
-                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, anchorField, targetInfo.groupId);
-                    const depIds = (
-                      Array.isArray(anchorField.optionFilter?.dependsOn)
-                        ? anchorField.optionFilter?.dependsOn
-                        : [anchorField.optionFilter?.dependsOn || '']
-                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                    const depVals = depIds.map((dep: string) =>
-                      toDependencyValue(
-                        (row.values as any)[dep] ?? (target.parentValues as any)?.[dep] ?? values[dep]
-                      )
-                    );
-                    const allowed = computeAllowedOptions(anchorField.optionFilter, optionSetField, depVals);
-                    const localized = buildLocalizedOptions(optionSetField, allowed, language, { sort: optionSortFor(anchorField) });
-                    const seen = new Set<string>();
-                    const options = localized
-                      .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))
-                      .filter(opt => {
-                        const key = (opt.value || '').toString();
-                        if (!key || seen.has(key)) return false;
-                        seen.add(key);
-                        return true;
-                      });
-                    const resolvedLabel = resolveLocalizedString(
-                      prompt.config.input?.label,
-                      language,
-                      resolveLocalizedString(anchorField.label, language, anchorField.id)
-                    );
-                    const { labelText, helperText: labelHelperText } = splitRowFlowPromptLabelAction(resolvedLabel);
-                    const helperOverride = resolveLocalizedString(prompt.config.input?.helperText, language, '').trim();
-                    const helperText = helperOverride || labelHelperText;
-                    const placeholder =
-                      resolveLocalizedString(prompt.config.input?.placeholder, language, '') ||
-                      tSystem('lineItems.selectLinesSearch', language, 'Search items');
-                    return (
-                      <div className="field inline-field ck-full-width">
-                        <label>{labelText}</label>
-                        <LineItemMultiAddSelect
-                          label={labelText}
-                          language={language}
-                          options={options}
-                          disabled={submitting}
-                          placeholder={placeholder}
-                          helperText={helperOverride || undefined}
-                          emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                          onDiagnostic={(event, payload) =>
-                            onDiagnostic?.(event, {
-                              scope: 'lineItems.rowFlow.selector',
-                              groupId: targetInfo.groupId,
-                              rowId: row.id,
-                              promptId: prompt.id,
-                              ...(payload || {})
-                            })
-                          }
-                          onAddSelected={valuesToAdd => {
-                            if (submitting) return;
-                            const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
-                            if (!deduped.length) return;
-                            const addRowOptions = promptGroupOverride
-                              ? { configOverride: effectiveTargetConfig }
-                              : undefined;
-                            deduped.forEach(val =>
-                              addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: val }, addRowOptions)
-                            );
-                            const shouldOpenOverlay =
-                              !!promptGroupOverride && !!(effectiveTargetConfig as any)?.ui?.openInOverlay;
-                            if (shouldOpenOverlay) {
-                              const promptCloseButtonLabel = resolveLocalizedString(
-                                prompt.config?.input?.closeButtonLabel as any,
-                                language,
-                                ''
-                              ).trim();
-                              if (isSubgroupRef && targetGroupKey) {
-                                openSubgroupOverlay?.(targetGroupKey, {
-                                  groupOverride: promptGroupOverride,
-                                  source: 'system',
-                                  closeButtonLabel: promptCloseButtonLabel || undefined
-                                });
-                              } else if (!isSubgroupRef) {
-                                const baseGroup = definition.questions.find(
-                                  question => question.id === targetInfo.groupId && question.type === 'LINE_ITEM_GROUP'
-                                ) as WebQuestionDefinition | undefined;
-                                const overrideGroup =
-                                  baseGroup && promptGroupOverride
-                                    ? buildOverlayGroupOverride(baseGroup, promptGroupOverride)
-                                    : undefined;
-                                if (overrideGroup) {
-                                  openLineItemGroupOverlay?.(overrideGroup, {
-                                    source: 'system',
-                                    closeButtonLabel: promptCloseButtonLabel || undefined
-                                  });
-                                }
-                              }
-                            }
-                            onDiagnostic?.('lineItems.rowFlow.selector.add', {
-                              groupId: targetInfo.groupId,
-                              rowId: row.id,
-                              promptId: prompt.id,
-                              count: deduped.length
-                            });
-                          }}
-                        />
-                        {helperText && !helperOverride ? (
-                          <div className="muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>
-                            {helperText}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  const promptTarget = resolvePromptTargets(prompt);
-                  if (!promptTarget) return null;
-                  const promptLabelRaw = resolveLocalizedString(
-                    prompt.config.input?.label,
-                    language,
-                    resolveFieldLabel(promptTarget.field, language, promptTarget.field.id)
-                  );
-                  const { labelText: promptLabel, helperText: promptHelperText } =
-                    splitRowFlowPromptLabelAction(promptLabelRaw);
-                  const { useInlineLabel, hideLabel, actionsInline } = resolveRowFlowPromptLayoutAction(prompt.config);
-                  const fieldNode = renderRowFlowField({
-                    field: promptTarget.field,
-                    groupDef: promptTarget.groupDef,
-                    rowEntry: promptTarget.rowEntry,
-                    parentValues: promptTarget.parentValues,
-                    showLabel: !useInlineLabel && !hideLabel,
-                    labelOverride: promptLabel
-                  });
-                  const inlineLabelNode = useInlineLabel ? (
-                    <span style={{ fontWeight: 600 }}>{promptLabel}</span>
-                  ) : null;
-                  const inlineFieldRow = useInlineLabel ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                      {inlineLabelNode}
-                      <div style={{ flex: 1, minWidth: 0 }}>{fieldNode}</div>
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1, minWidth: 0 }}>{fieldNode}</div>
-                  );
-                  const helperNode = promptHelperText ? (
-                    <div className="muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>
-                      {promptHelperText}
-                    </div>
-                  ) : null;
-                  if (!prompt.config.actions?.length) {
-                    if (!helperNode) return useInlineLabel ? inlineFieldRow : fieldNode;
-                    return (
-                      <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {useInlineLabel ? inlineFieldRow : fieldNode}
-                        {helperNode}
-                      </div>
-                    );
-                  }
-                  const { startActions, endActions } = partitionRowFlowPromptActionsAction(prompt.config.actions);
-                  if (actionsInline) {
-                    return (
-                      <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          {startActions.map(action => renderRowFlowActionControl(action.id))}
-                          {inlineFieldRow}
-                          {endActions.map(action => renderRowFlowActionControl(action.id))}
-                        </div>
-                        {helperNode}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="ck-full-width" style={{ display: 'flex', flexDirection: 'column', gap: helperNode ? 6 : 10 }}>
-                      {useInlineLabel ? inlineFieldRow : fieldNode}
-                      {helperNode}
-                      {(startActions.length || endActions.length) ? (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {startActions.map(action => renderRowFlowActionControl(action.id))}
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {endActions.map(action => renderRowFlowActionControl(action.id))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                };
+                const renderRowFlowPrompt = (prompt: RowFlowResolvedPrompt) => (
+                  <RowFlowPromptRenderer
+                    prompt={prompt}
+                    groupId={q.id}
+                    row={row}
+                    rowFlowState={rowFlowState}
+                    rowFlowSubGroupIds={rowFlowSubGroupIds}
+                    definition={definition}
+                    language={language}
+                    values={values}
+                    submitting={submitting}
+                    resolvePromptTargets={resolvePromptTargets}
+                    renderRowFlowField={renderRowFlowField}
+                    renderRowFlowActionControl={renderRowFlowActionControl}
+                    resolveRowFlowGroupConfig={resolveRowFlowGroupConfig}
+                    ensureLineOptions={ensureLineOptions}
+                    resolveOptionSetForPromptField={(field, groupKey) =>
+                      resolveOptionSetForField(optionState, field, groupKey)
+                    }
+                    addLineItemRowManual={addLineItemRowManual}
+                    buildOverlayGroupOverride={buildOverlayGroupOverride}
+                    openSubgroupOverlay={openSubgroupOverlay}
+                    openLineItemGroupOverlay={openLineItemGroupOverlay}
+                    onDiagnostic={onDiagnostic}
+                  />
+                );
 
                 const outputSegments = resolveVisibleRowFlowOutputSegments({
                   segments: rowFlowState.segments,
@@ -5433,420 +5230,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                   buildFieldContext: buildRowFlowFieldCtx
                 });
 
-                const renderOutputSegment = (segment: RowFlowResolvedSegment, idx: number, showSeparator: boolean) => {
-                  const {
-                    segmentType,
-                    isBlockLayout,
-                    segmentTextStyle,
-                    segmentContainerStyle,
-                    spacerStyle
-                  } = resolveRowFlowOutputSegmentPresentationAction(segment.config);
-                  if (segmentType === 'spacer') {
-                    return (
-                      <span
-                        key={`${segment.id}-${idx}`}
-                        aria-hidden="true"
-                        style={spacerStyle}
-                      />
-                    );
-                  }
-                  if (segmentType === 'text') {
-                    const text = resolveLocalizedString(segment.config?.text, language, '');
-                    if (!text) return null;
-                    const separatorNode = showSeparator && separator ? (
-                      <span aria-hidden="true" style={{ marginLeft: 6, flexShrink: 0 }}>
-                        {separator}
-                      </span>
-                    ) : null;
-                    return (
-                      <span key={`${segment.id}-${idx}`} style={segmentContainerStyle}>
-                        <span
-                          style={{
-                            overflowWrap: 'anywhere',
-                            wordBreak: 'break-word',
-                            whiteSpace: text.includes('\n') ? 'pre-wrap' : undefined,
-                            ...segmentTextStyle
-                          }}
-                        >
-                          {text}
-                        </span>
-                        {separatorNode}
-                      </span>
-                    );
-                  }
-                  const target = segment.target;
-                  const fallbackTarget = segment.fallbackTarget;
-                  const field = target?.fieldId ? resolveRowFlowFieldConfig(target.groupKey, target.fieldId) : null;
-                  const fallbackField =
-                    fallbackTarget?.fieldId ? resolveRowFlowFieldConfig(fallbackTarget.groupKey, fallbackTarget.fieldId) : null;
-                  const displayTarget = target?.fieldId ? target : fallbackTarget;
-                  const displayField = field || fallbackField;
-                  if (!displayTarget || !displayField) return null;
-                  const label = segment.config.label
-                    ? resolveLocalizedString(segment.config.label, language, '')
-                    : '';
-                  const segmentActionIds = resolveRowFlowSegmentActionIds(segment.config);
-                  const segmentActionNodes = segmentActionIds
-                    .map(actionId => renderRowFlowActionControl(actionId))
-                    .filter(Boolean) as React.ReactNode[];
-                  const segmentActions = segmentActionNodes.length ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {segmentActionNodes}
-                    </span>
-                  ) : null;
-                  const separatorNode = showSeparator && separator ? (
-                    <span aria-hidden="true" style={{ marginLeft: 6, flexShrink: 0 }}>
-                      {separator}
-                    </span>
-                  ) : null;
-                  if (segment.config.renderAs === 'control' && target?.primaryRow && field) {
-                    const groupInfo = resolveRowFlowGroupConfig(target.primaryRow.groupKey);
-                    if (!groupInfo?.config) return null;
-                    const groupDef = buildRowFlowGroupDefinition(target.primaryRow.groupKey, groupInfo.config);
-                    const controlStyle = ((segment.config.controlStyle || 'default').toString() || 'default').trim().toLowerCase();
-                    if (controlStyle === 'compact') {
-                      const fieldPath = `${target.primaryRow.groupKey}__${field.id}__${target.primaryRow.row.id}`;
-                      const segmentHasError = Boolean((errors as any)?.[fieldPath]);
-                      if (field.type === 'NUMBER') {
-                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
-                        const valueText = rawValue === undefined || rawValue === null ? '' : `${rawValue}`;
-                        const allowsIntegerOnly = Array.isArray(field?.validationRules)
-                          ? field.validationRules.some((rule: any) => rule?.then?.integer === true)
-                          : false;
-                        return (
-                          <span
-                            key={`${segment.config.fieldRef}-${idx}`}
-                            style={{
-                              display: 'inline-flex',
-                              flexDirection: 'column',
-                              alignItems: 'flex-start',
-                              gap: 4,
-                              minWidth: 0,
-                              maxWidth: '100%',
-                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
-                            }}
-                            data-field-path={fieldPath}
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
-                              <AutoWidthInput
-                                className="ck-compact-control ck-compact-control--number"
-                                value={valueText}
-                                disabled={isLineFieldInteractionBlocked(field)}
-                                readOnly={field?.readOnly === true}
-                                inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
-                                pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
-                                ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                selectAllOnFocus
-                                sanitize={raw =>
-                                  sanitizeNumericDraft(raw, {
-                                    integerOnly: allowsIntegerOnly
-                                  })
-                                }
-                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 48}
-                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 132}
-                                extraWidth={Math.max(
-                                  24,
-                                  Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 2.2) * 8)
-                                )}
-                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
-                                inputStyle={{
-                                  boxSizing: 'border-box',
-                                  minHeight: 34,
-                                  paddingInlineStart: 8,
-                                  paddingInlineEnd: 8,
-                                  textAlign: 'center',
-                                  fontVariantNumeric: 'tabular-nums',
-                                  fontSize: 'var(--ck-font-control)',
-                                  fontWeight: 500,
-                                  lineHeight: 1,
-                                  ...(segmentHasError
-                                    ? {
-                                        borderColor: 'var(--danger)',
-                                        boxShadow: '0 0 0 1px var(--danger)'
-                                      }
-                                    : {})
-                                }}
-                              />
-                              {segmentActions}
-                              {separatorNode}
-                            </span>
-                            {segmentHasError && (errors as any)?.[fieldPath] ? (
-                              <div className="error" style={{ marginTop: 0 }}>
-                                {(errors as any)[fieldPath]}
-                              </div>
-                            ) : null}
-                          </span>
-                        );
-                      }
-                      if (field.type === 'CHOICE') {
-                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
-                        const valueText =
-                          Array.isArray(rawValue) && rawValue.length ? `${rawValue[0] ?? ''}` : `${rawValue ?? ''}`;
-                        const options = buildLocalizedOptions(toOptionSet(field), toOptionSet(field).en || [], language, {
-                          sort: optionSortFor(field)
-                        }).map(option => ({
-                          value: option.value,
-                          label: option.label
-                        }));
-                        return (
-                          <span
-                            key={`${segment.config.fieldRef}-${idx}`}
-                            style={{
-                              display: 'inline-flex',
-                              flexDirection: 'column',
-                              alignItems: 'flex-start',
-                              gap: 4,
-                              minWidth: 0,
-                              maxWidth: '100%',
-                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
-                            }}
-                            data-field-path={fieldPath}
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
-                              <AutoWidthSelect
-                                className="ck-compact-control ck-compact-control--choice"
-                                value={valueText}
-                                options={options}
-                                ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 76}
-                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 180}
-                                extraWidth={34}
-                                disabled={isLineFieldInputDisabled(field)}
-                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next)}
-                                selectStyle={{
-                                  minHeight: 34,
-                                  fontSize: 'var(--ck-font-control)',
-                                  fontWeight: 500,
-                                  lineHeight: 1,
-                                  ...(segmentHasError
-                                    ? {
-                                        borderColor: 'var(--danger)',
-                                        boxShadow: '0 0 0 1px var(--danger)'
-                                      }
-                                    : {})
-                                }}
-                              />
-                              {segmentActions}
-                              {separatorNode}
-                            </span>
-                            {segmentHasError && (errors as any)?.[fieldPath] ? (
-                              <div className="error" style={{ marginTop: 0 }}>
-                                {(errors as any)[fieldPath]}
-                              </div>
-                            ) : null}
-                          </span>
-                        );
-                      }
-                      if (field.type === 'TEXT' || field.type === 'PARAGRAPH') {
-                        const rawValue = (target.primaryRow.row?.values || {})[field.id];
-                        const fallbackDisplay = resolveRowFlowDisplayValue(
-                          segment,
-                          target.groupKey,
-                          field,
-                          target.parentValues,
-                          fallbackTarget?.groupKey,
-                          fallbackField,
-                          fallbackTarget?.parentValues
-                        ).text;
-                        const displayValue = resolveCompactTextControlDisplayValue({
-                          explicitValue: rawValue as FieldValue,
-                          fallbackValue: fallbackDisplay,
-                          preserveEmptyWhileEditing: activeFieldMeta.path === fieldPath
-                        });
-                        return (
-                          <span
-                            key={`${segment.config.fieldRef}-${idx}`}
-                            style={{
-                              display: 'inline-flex',
-                              flexDirection: 'column',
-                              alignItems: 'stretch',
-                              gap: 4,
-                              minWidth: 0,
-                              maxWidth: '100%',
-                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '1 1 220px' })
-                            }}
-                            data-field-path={fieldPath}
-                          >
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                minWidth: 0,
-                                maxWidth: '100%',
-                                width: '100%',
-                                flex: '1 1 auto'
-                              }}
-                            >
-                              <AutoWidthInput
-                                className="ck-compact-control ck-compact-control--text"
-                                value={displayValue}
-                                disabled={isLineFieldInteractionBlocked(field)}
-                                readOnly={field?.readOnly === true}
-                                ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                selectAllOnFocus
-                                constrainToContainer
-                                minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 120}
-                                maxWidth={Number.isFinite(Number(segment.config.maxWidth)) ? Number(segment.config.maxWidth) : 320}
-                                extraWidth={Math.max(
-                                  32,
-                                  Math.ceil((Number.isFinite(Number(segment.config.paddingChars)) ? Number(segment.config.paddingChars) : 3) * 8)
-                                )}
-                                onChange={next => handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, next === '' ? null : next)}
-                                onBlur={next => {
-                                  if (next !== '') return;
-                                  handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, null);
-                                }}
-                                inputStyle={{
-                                  boxSizing: 'border-box',
-                                  minHeight: 34,
-                                  paddingInlineStart: 8,
-                                  paddingInlineEnd: 8,
-                                  textAlign: 'left',
-                                  fontSize: 'var(--ck-font-control)',
-                                  fontWeight: 500,
-                                  lineHeight: 1,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  ...(segmentHasError
-                                    ? {
-                                        borderColor: 'var(--danger)',
-                                        boxShadow: '0 0 0 1px var(--danger)'
-                                      }
-                                    : {})
-                                }}
-                              />
-                              {segmentActions}
-                              {separatorNode}
-                            </span>
-                            {segmentHasError && (errors as any)?.[fieldPath] ? (
-                              <div className="error" style={{ marginTop: 0 }}>
-                                {(errors as any)[fieldPath]}
-                              </div>
-                            ) : null}
-                          </span>
-                        );
-                      }
-                      if (field.type === 'CHECKBOX') {
-                        const optionSet = toOptionSet(field);
-                        const hasAnyOption =
-                          !!((optionSet.en && optionSet.en.length) ||
-                            ((optionSet as any).fr && (optionSet as any).fr.length) ||
-                            ((optionSet as any).nl && (optionSet as any).nl.length));
-                        const isConsentCheckbox = !(field as any)?.dataSource && !hasAnyOption;
-                        if (!isConsentCheckbox) return null;
-                        const checked = !!(target.primaryRow.row?.values || {})[field.id];
-                        return (
-                          <span
-                            key={`${segment.config.fieldRef}-${idx}`}
-                            style={{
-                              display: 'inline-flex',
-                              flexDirection: 'column',
-                              alignItems: 'flex-start',
-                              gap: 4,
-                              minWidth: 0,
-                              maxWidth: '100%',
-                              ...(isBlockLayout ? { flex: '1 0 100%', width: '100%' } : { flex: '0 0 auto' })
-                            }}
-                            data-field-path={fieldPath}
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', flex: '0 0 auto' }}>
-                              <label
-                                className="ck-row-flow__consent-toggle"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  minWidth: 32,
-                                  minHeight: 32,
-                                  marginInlineStart: 4,
-                                  cursor: isLineFieldInputDisabled(field) ? 'default' : 'pointer'
-                                }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="ck-row-flow__consent-checkbox"
-                                  checked={checked}
-                                  disabled={isLineFieldInputDisabled(field)}
-                                  aria-label={resolveFieldLabel(field, language, field.id)}
-                                  onChange={e => {
-                                    if (isLineFieldInputDisabled(field)) return;
-                                    handleLineFieldChange(groupDef, target.primaryRow!.row.id, field, e.target.checked);
-                                  }}
-                                  style={{ margin: 0 }}
-                                />
-                              </label>
-                              {segmentActions}
-                              {separatorNode}
-                            </span>
-                            {segmentHasError && (errors as any)?.[fieldPath] ? (
-                              <div className="error" style={{ marginTop: 0 }}>
-                                {(errors as any)[fieldPath]}
-                              </div>
-                            ) : null}
-                          </span>
-                        );
-                      }
-                    }
-                    return (
-                      <span key={`${segment.config.fieldRef}-${idx}`} style={{ ...segmentContainerStyle, gap: 8 }}>
-                        {label ? (
-                          <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{label}:</span>
-                        ) : null}
-                        {renderRowFlowField({
-                          field,
-                          groupDef,
-                          rowEntry: target.primaryRow,
-                          parentValues: target.parentValues,
-                          showLabel: false
-                        })}
-                        {segmentActions}
-                        {separatorNode}
-                      </span>
-                    );
-                  }
-                  const display = resolveRowFlowDisplayValue(
-                    segment,
-                    displayTarget.groupKey,
-                    displayField,
-                    displayTarget.parentValues,
-                    fallbackTarget?.groupKey,
-                    fallbackField,
-                    fallbackTarget?.parentValues
-                  );
-                  const text = display.text || '—';
-                  const formatted = label
-                    ? label.includes('{{value}}')
-                      ? label.replace('{{value}}', text)
-                      : `${label}: ${text}`
-                    : text;
-                  return (
-                    <span key={`${segment.config.fieldRef}-${idx}`} style={segmentContainerStyle}>
-                      <span
-                        style={{
-                          overflowWrap: 'anywhere',
-                          wordBreak: 'break-word',
-                          whiteSpace: formatted.includes('\n') ? 'pre-wrap' : undefined,
-                          ...segmentTextStyle
-                        }}
-                      >
-                        {formatted}
-                      </span>
-                      {segmentActions}
-                      {separatorNode}
-                    </span>
-                  );
-                };
-
                 const separator = rowFlow?.output?.separator ?? ' | ';
                 const rowOutputActions = rowFlowState.outputActions.filter(action => resolveOutputActionScope(action) === 'row');
-                const outputActionsStart = rowOutputActions.filter(a => (a.position || 'start') !== 'end');
-                const outputActionsEnd = rowOutputActions.filter(a => (a.position || 'start') === 'end');
-                const hasOutputActions = outputActionsStart.length > 0 || outputActionsEnd.length > 0;
-                const hasOutputSegments = outputSegments.length > 0;
-                const renderOutputSegmentList = (segments: RowFlowResolvedSegment[]) =>
-                  segments.map((segment, idx) => renderOutputSegment(segment, idx, idx < segments.length - 1));
+
                 const promptsToRender = rowFlowState.prompts.filter(
                   prompt =>
                     prompt.visible &&
@@ -5866,27 +5252,24 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       marginBottom: useEdgeToEdgeRowChrome ? 0 : 14
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, rowGap: 6, alignItems: 'center', flex: 1, minWidth: 0 }}>
-                        {outputActionsLayout === 'inline'
-                          ? outputActionsStart.map(action => renderRowFlowActionControl(action.id))
-                          : null}
-                        {renderOutputSegmentList(outputSegments)}
-                        {outputActionsLayout === 'inline'
-                          ? outputActionsEnd.map(action => renderRowFlowActionControl(action.id))
-                          : null}
-                      </div>
-                    </div>
-                    {outputActionsLayout === 'below' && hasOutputActions ? (
-                      <div style={{ marginTop: hasOutputSegments ? 8 : 0, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {outputActionsStart.map(action => renderRowFlowActionControl(action.id))}
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {outputActionsEnd.map(action => renderRowFlowActionControl(action.id))}
-                        </div>
-                      </div>
-                    ) : null}
+                    <RowFlowOutputSegmentsRenderer
+                      segments={outputSegments}
+                      separator={separator}
+                      rowOutputActions={rowOutputActions}
+                      outputActionsLayout={outputActionsLayout}
+                      language={language}
+                      activeFieldPath={activeFieldMeta.path}
+                      errors={errors}
+                      renderRowFlowActionControl={renderRowFlowActionControl}
+                      resolveRowFlowFieldConfig={resolveRowFlowFieldConfig}
+                      resolveRowFlowGroupConfig={resolveRowFlowGroupConfig}
+                      buildRowFlowGroupDefinition={buildRowFlowGroupDefinition}
+                      renderRowFlowField={renderRowFlowField}
+                      resolveRowFlowDisplayValue={resolveRowFlowDisplayValue}
+                      handleLineFieldChange={handleLineFieldChange}
+                      isLineFieldInputDisabled={isLineFieldInputDisabled}
+                      isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
+                    />
                     {promptsToRender.length ? (
                       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {promptsToRender.map(prompt => (
@@ -11484,7 +10867,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                     }
                                   ): React.ReactNode => {
                                     const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
-                                    const fieldText = ((((subRow.values[field.id] as any) ?? '') || '').toString() || '').trim();
                                     const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
                                     const placeholder =
                                       helperCfg.text && helperCfg.placement === 'placeholder' ? helperCfg.text : undefined;
