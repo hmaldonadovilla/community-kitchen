@@ -76,6 +76,7 @@ import { useAppDiagnostics } from './components/app/useAppDiagnostics';
 import { useAppDialogState } from './components/app/useAppDialogState';
 import { useAutoSaveNotice } from './components/app/useAutoSaveNotice';
 import { useAppAutoSaveDedupConfig } from './components/app/useAppAutoSaveDedupConfig';
+import { useDedupProgressDialog } from './components/app/useDedupProgressDialog';
 import { useReadOnlyFilesOverlay } from './components/app/useReadOnlyFilesOverlay';
 import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObserver';
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
@@ -454,21 +455,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const statusRef = useRef<string | null>(status);
   const statusLevelRef = useRef<'info' | 'success' | 'error' | null>(statusLevel);
   type DedupConflictInfo = { ruleId: string; message: string; existingRecordId?: string; existingRowNumber?: number };
-  type DedupProgressState = {
-    open: boolean;
-    phase: 'checking' | 'available' | 'duplicate';
-    title: string;
-    message: string;
-  };
   const [dedupChecking, setDedupChecking] = useState<boolean>(false);
   const [dedupConflict, setDedupConflict] = useState<DedupConflictInfo | null>(null);
   const [dedupNotice, setDedupNotice] = useState<DedupConflictInfo | null>(null);
-  const [dedupProgress, setDedupProgress] = useState<DedupProgressState>({
-    open: false,
-    phase: 'checking',
-    title: '',
-    message: ''
-  });
   type ListDedupPromptState = {
     conflict: DedupConflictInfo;
     source: string;
@@ -480,7 +469,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const [precreateDedupChecking, setPrecreateDedupChecking] = useState<boolean>(false);
   const dedupCheckingRef = useRef<boolean>(false);
   const dedupConflictRef = useRef<DedupConflictInfo | null>(null);
-  const dedupProgressTimerRef = useRef<number | null>(null);
   const dedupSignatureRef = useRef<string>('');
   const dedupCheckSeqRef = useRef<number>(0);
   const dedupCheckTimerRef = useRef<number | null>(null);
@@ -627,6 +615,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     dedupCheckDialogCopy,
     dedupCheckDialogEnabled
   } = useAppAutoSaveDedupConfig({ definition, language });
+  const {
+    dedupProgress,
+    hideDedupProgressDialog,
+    showDedupProgressDialog
+  } = useDedupProgressDialog({
+    view,
+    dedupCheckDialogEnabled,
+    dedupChecking
+  });
 
   // Feature overlays (kept out of App.tsx as much as possible; App only wires them).
   const customConfirm = useConfirmDialog({ closeOnKey: view, eventPrefix: 'ui.customConfirm', onDiagnostic: logEvent });
@@ -7074,57 +7071,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     dedupSignatureRef.current = dedupSignature;
   }, [dedupSignature]);
-
-  const hideDedupProgressDialog = useCallback(() => {
-    if (dedupProgressTimerRef.current) {
-      globalThis.clearTimeout(dedupProgressTimerRef.current);
-      dedupProgressTimerRef.current = null;
-    }
-    setDedupProgress(prev => (prev.open ? { ...prev, open: false } : prev));
-  }, []);
-
-  const showDedupProgressDialog = useCallback(
-    (args: { phase: 'checking' | 'available' | 'duplicate'; title: string; message: string; autoCloseMs?: number }) => {
-      if (dedupProgressTimerRef.current) {
-        globalThis.clearTimeout(dedupProgressTimerRef.current);
-        dedupProgressTimerRef.current = null;
-      }
-      setDedupProgress({
-        open: true,
-        phase: args.phase,
-        title: args.title,
-        message: args.message
-      });
-      if (args.autoCloseMs !== undefined && args.autoCloseMs >= 0) {
-        dedupProgressTimerRef.current = globalThis.setTimeout(() => {
-          setDedupProgress(prev => (prev.open ? { ...prev, open: false } : prev));
-          dedupProgressTimerRef.current = null;
-        }, args.autoCloseMs) as any;
-      }
-    },
-    []
-  );
-
-  useEffect(
-    () => () => {
-      if (!dedupProgressTimerRef.current) return;
-      globalThis.clearTimeout(dedupProgressTimerRef.current);
-      dedupProgressTimerRef.current = null;
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (view === 'form' && dedupCheckDialogEnabled) return;
-    hideDedupProgressDialog();
-  }, [dedupCheckDialogEnabled, hideDedupProgressDialog, view]);
-
-  useEffect(() => {
-    if (!dedupProgress.open) return;
-    if (dedupProgress.phase !== 'checking') return;
-    if (dedupChecking) return;
-    hideDedupProgressDialog();
-  }, [dedupChecking, dedupProgress.open, dedupProgress.phase, hideDedupProgressDialog]);
 
   const createFlowDedupKeyValuesInvalid =
     view === 'form' &&
