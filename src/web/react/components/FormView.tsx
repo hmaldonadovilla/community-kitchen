@@ -67,6 +67,10 @@ import {
   isBlurDerivedValue
 } from '../features/derivedValues/domain/blurDependencies';
 import { areLineItemsShallowEqual, diffFormValues } from './form/formValueComparison';
+import {
+  buildLineItemGroupOverlayValidationDefinitionAction,
+  buildSubgroupOverlayValidationDefinitionAction
+} from './form/overlayValidationDefinition';
 import { buildValidationErrorIndex } from '../features/validation/domain/errorIndex';
 import { useImperativeFieldNavigation } from '../features/validation/useImperativeFieldNavigation';
 import { useValidationErrorNavigation } from '../features/validation/useValidationErrorNavigation';
@@ -2605,42 +2609,19 @@ const FormView: React.FC<FormViewProps> = ({
     [definition, hasBlurDerived, onDiagnostic, setLineItems, setValues]
   );
 
-  const buildLineItemGroupOverlayValidationDefinition = (): WebFormDefinition | null => {
-    if (!lineItemGroupOverlay.open || !lineItemGroupOverlay.groupId) return null;
-    const overrideGroup = lineItemGroupOverlay.group;
-    const baseGroup =
-      overrideGroup && overrideGroup.type === 'LINE_ITEM_GROUP'
-        ? overrideGroup
-        : definition.questions.find(q => q.id === lineItemGroupOverlay.groupId && q.type === 'LINE_ITEM_GROUP');
-    if (!baseGroup) return null;
-    const baseConfig = (baseGroup as any).lineItemConfig;
-    if (!baseConfig) return null;
-    const rowFilter = lineItemGroupOverlay.rowFilter || null;
-    const nextConfig = rowFilter ? { ...baseConfig, _guidedRowFilter: rowFilter } : baseConfig;
-    const validationGroup =
-      nextConfig === baseConfig ? baseGroup : ({ ...(baseGroup as any), lineItemConfig: nextConfig } as WebQuestionDefinition);
-    return { ...(definition as any), questions: [validationGroup] } as WebFormDefinition;
-  };
+  const buildLineItemGroupOverlayValidationDefinition = useCallback((): WebFormDefinition | null => {
+    return buildLineItemGroupOverlayValidationDefinitionAction({
+      definition,
+      overlay: lineItemGroupOverlay
+    });
+  }, [definition, lineItemGroupOverlay]);
 
-  const buildSubgroupOverlayValidationDefinition = (): WebFormDefinition | null => {
-    if (!subgroupOverlay.open || !subgroupOverlay.subKey) return null;
-    const subKey = subgroupOverlay.subKey;
-    const subgroupDefs = resolveSubgroupDefs(subKey);
-    const parentGroup = subgroupDefs.root;
-    const subConfigBase = subgroupDefs.sub;
-    if (!parentGroup || !subConfigBase) return null;
-    const overlayRowFilter = subgroupOverlay.rowFilter || null;
-    const subConfig = subgroupOverlay.groupOverride
-      ? applyLineItemGroupOverride(subConfigBase, subgroupOverlay.groupOverride)
-      : subConfigBase;
-    const nextConfig = overlayRowFilter ? { ...subConfig, _guidedRowFilter: overlayRowFilter } : subConfig;
-    const validationGroup: WebQuestionDefinition = {
-      ...(parentGroup as any),
-      id: subKey,
-      lineItemConfig: { ...(nextConfig as any), fields: nextConfig.fields || [], subGroups: nextConfig.subGroups || [] }
-    };
-    return { ...(definition as any), questions: [validationGroup] } as WebFormDefinition;
-  };
+  const buildSubgroupOverlayValidationDefinition = useCallback((): WebFormDefinition | null => {
+    return buildSubgroupOverlayValidationDefinitionAction({
+      definition,
+      overlay: subgroupOverlay
+    });
+  }, [definition, subgroupOverlay]);
 
   const validateErrorsOnBlur = useCallback(
     (fieldPath?: string, meta?: { tag?: string; inputType?: string }) => {
