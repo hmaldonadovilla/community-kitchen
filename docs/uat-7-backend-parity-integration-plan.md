@@ -558,11 +558,16 @@ Sixty-fifth-pass results:
 - `LineItemGroupQuestion.tsx`: extracted source-first data-source output group and reservation-state calculations into `stepDataSourceRows`, keeping the component responsible for callback wiring and refs. Current size: 13,066 lines.
 - Validation for the pass used focused step data-source row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Sixty-sixth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted matched source-first output-row mutation and nested child-row projection into `stepDataSourceRows`, keeping the renderer responsible for rule matching and recomputation side effects. Current size: 13,039 lines.
+- Validation for the pass used focused step data-source row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 13,066 lines.
+- `LineItemGroupQuestion.tsx`: 13,039 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
