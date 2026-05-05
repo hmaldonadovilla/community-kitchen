@@ -443,11 +443,16 @@ Forty-second-pass results:
 - `LineItemGroupQuestion.tsx`: extracted guided virtual row preset token resolution into `virtualPreset`, keeping source-row, parent-row, and top-level projection as a tested pure helper. Current size: 13,449 lines.
 - Validation for the pass used focused virtual preset and line-item presentation/helper tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Forty-third-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted guided virtual row visibility context and field-rule validation into `virtualRowContext`, keeping callback wiring in the component. Current size: 13,437 lines.
+- Validation for the pass used focused virtual row context, virtual preset, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,246 lines.
 - `FormView.tsx`: 12,862 lines.
-- `LineItemGroupQuestion.tsx`: 13,449 lines.
+- `LineItemGroupQuestion.tsx`: 13,437 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
