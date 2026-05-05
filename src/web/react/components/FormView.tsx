@@ -62,6 +62,7 @@ import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAcces
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedLineGroupConfig } from '../features/steps/domain/guidedLineGroupConfig';
+import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
 import {
   collectDerivedBlurDependencies,
   isBlurDerivedValue
@@ -1317,229 +1318,27 @@ const FormView: React.FC<FormViewProps> = ({
   }, [activeGuidedStepId, definition.questions, guidedEnabled, guidedStepsCfg, guidedVisibleSteps]);
 
   const buildGuidedStepDefinition = useCallback(
-    (stepId?: string): WebFormDefinition | null => {
-      if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length) return null;
-      const steps = guidedVisibleSteps;
-      const resolvedStepId = (stepId || activeGuidedStepId || '').toString().trim();
-      const stepCfg =
-        (steps.find(s => (s?.id || '').toString().trim() === resolvedStepId) || steps[0]) as any;
-      if (!stepCfg) return null;
-
-      const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? guidedStepsCfg.header!.include : [];
-      const stepTargets: any[] = Array.isArray(stepCfg?.include) ? stepCfg.include : [];
-
-      const topQuestionIds = new Set<string>();
-      const renderQuestionAsLabel = new Set<string>();
-      const lineTargetsById = new Map<string, any>();
-      const addTarget = (t: any) => {
-        if (!t || typeof t !== 'object') return;
-        const kind = (t.kind || '').toString().trim();
-        const id = (t.id || '').toString().trim();
-        if (!kind || !id) return;
-        if (kind === 'question') {
-          topQuestionIds.add(id);
-          if ((t as any)?.renderAsLabel === true) renderQuestionAsLabel.add(id);
-          return;
-        }
-        if (kind === 'lineGroup') {
-          if (!lineTargetsById.has(id)) lineTargetsById.set(id, t);
-        }
-      };
-      [...headerTargets, ...stepTargets].forEach(addTarget);
-
-      const normalizeLineFieldId = (groupId: string, rawId: any): string => {
-        const s = rawId !== undefined && rawId !== null ? rawId.toString().trim() : '';
-        if (!s) return '';
-        const underscorePrefix = `${groupId}__`;
-        if (s.startsWith(underscorePrefix)) return s.slice(underscorePrefix.length);
-        const dotPrefix = `${groupId}.`;
-        if (s.startsWith(dotPrefix)) return s.slice(dotPrefix.length);
-        if (s.includes('.')) return s.split('.').pop() || s;
-        return s;
-      };
-
-      const parseStepFieldEntries = (
-        groupId: string,
-        raw: any
-      ): { allowed: Set<string> | null; renderAsLabel: Set<string>; explicit: boolean } => {
-        if (raw === undefined || raw === null) return { allowed: null, renderAsLabel: new Set(), explicit: false };
-
-        const entries: Array<{ id: string; renderAsLabel: boolean }> = [];
-        const pushEntry = (v: any) => {
-          if (v === undefined || v === null) return;
-          if (typeof v === 'object') {
-            const id = normalizeLineFieldId(groupId, (v as any).id ?? (v as any).fieldId ?? (v as any).field);
-            if (!id) return;
-            entries.push({ id, renderAsLabel: Boolean((v as any).renderAsLabel) });
-            return;
-          }
-          const id = normalizeLineFieldId(groupId, v);
-          if (!id) return;
-          entries.push({ id, renderAsLabel: false });
-        };
-
-        if (Array.isArray(raw)) {
-          raw.forEach(pushEntry);
-        } else {
-          raw
-            .toString()
-            .split(',')
-            .map((s: string) => s.trim())
-            .filter(Boolean)
-            .forEach(pushEntry);
-        }
-
-        const ids = entries.map(e => e.id).filter(Boolean);
-        const roIds = entries.filter(e => e.renderAsLabel).map(e => e.id).filter(Boolean);
-        return { allowed: new Set(ids), renderAsLabel: new Set(roIds), explicit: true };
-      };
-
-      const scopedQuestions: WebQuestionDefinition[] = [];
-      (definition.questions || []).forEach(q => {
-        if (!q) return;
-        if (q.type !== 'LINE_ITEM_GROUP') {
-          if (topQuestionIds.has(q.id)) {
-            const asLabel = renderQuestionAsLabel.has(q.id);
-            scopedQuestions.push(
-              asLabel
-                ? ({ ...(q as any), ui: { ...((q as any).ui || {}), renderAsLabel: true } } as WebQuestionDefinition)
-                : q
-            );
-          }
-          return;
-        }
-
-        if (topQuestionIds.has(q.id)) {
-          scopedQuestions.push(q);
-          return;
-        }
-
-        const t = lineTargetsById.get(q.id);
-        if (!t) return;
-        const groupId = q.id;
-        const groupOverride = (t as any).groupOverride as LineItemGroupConfigOverride | undefined;
-        const baseLineCfg = (q as any).lineItemConfig || {};
-        const lineCfg = groupOverride ? applyLineItemGroupOverride(baseLineCfg, groupOverride) : baseLineCfg;
-        if (groupOverride && onDiagnostic) {
+    (stepId?: string): WebFormDefinition | null =>
+      buildGuidedStepDefinitionAction({
+        guidedEnabled,
+        guidedStepsCfg,
+        guidedStepIds,
+        guidedVisibleSteps,
+        activeGuidedStepId,
+        stepId,
+        definition,
+        onLineGroupOverrideApplied: ({ stepId: resolvedStepId, groupId, groupOverride }) => {
+          if (!onDiagnostic) return;
           const logKey = `${resolvedStepId}::${groupId}::groupOverride`;
-          if (!guidedLineGroupOverrideLoggedRef.current.has(logKey)) {
-            guidedLineGroupOverrideLoggedRef.current.add(logKey);
-            onDiagnostic('steps.lineGroup.groupOverride.applied', {
-              stepId: resolvedStepId,
-              groupId,
-              keys: Object.keys(groupOverride || {})
-            });
-          }
-        }
-
-        const {
-          allowed: allowedFieldIds,
-          renderAsLabel: renderAsLabelFieldIdsFromFields,
-          explicit: hasExplicitFieldScope
-        } = parseStepFieldEntries(
-          groupId,
-          (t as any).fields
-        );
-        const readOnlyFieldIds = (() => {
-          const raw = (t as any).readOnlyFields;
-          const parsed = parseStepFieldEntries(groupId, raw);
-          const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-          const merged = new Set<string>([...ids, ...Array.from(renderAsLabelFieldIdsFromFields)]);
-          return merged.size ? merged : null;
-        })();
-        const filteredFieldsBase = hasExplicitFieldScope
-          ? ((lineCfg.fields || []) as any[]).filter((f: any) => {
-              const fid = normalizeLineFieldId(groupId, (f as any)?.id);
-              return fid && !!allowedFieldIds?.has(fid);
-            })
-          : lineCfg.fields || [];
-        const filteredFields = (filteredFieldsBase as any[]).map((f: any) => {
-          const fid = normalizeLineFieldId(groupId, (f as any)?.id);
-          if (readOnlyFieldIds && fid && readOnlyFieldIds.has(fid)) {
-            return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-          }
-          return f;
-        });
-
-        const presentationRaw = ((t as any).presentation || 'groupEditor').toString().trim().toLowerCase();
-        const presentation: 'groupEditor' | 'liftedRowFields' =
-          presentationRaw === 'liftedrowfields' ? 'liftedRowFields' : 'groupEditor';
-        const parentFieldsScoped = (t as any).fields !== undefined && (t as any).fields !== null;
-
-        const subGroupsCfgPresent = !!(t as any).subGroups && typeof (t as any).subGroups === 'object';
-        const subIncludeRaw = subGroupsCfgPresent ? (t as any)?.subGroups?.include : undefined;
-        const subIncludeList: any[] = Array.isArray(subIncludeRaw) ? subIncludeRaw : subIncludeRaw ? [subIncludeRaw] : [];
-        const allowedSubIds = subIncludeList
-          .map(s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : ''))
-          .filter(Boolean);
-        const allowedSubSet = allowedSubIds.length ? new Set(allowedSubIds) : null;
-        const filteredSubGroups = (() => {
-          const subs = (lineCfg.subGroups || []) as any[];
-          if (!subs.length) return subs;
-          // In guided steps, subgroup validation should be explicit whenever the step scopes parent fields.
-          // This avoids blocking a step on subgroup fields that are not reachable from that step.
-          if (!subGroupsCfgPresent && (presentation === 'liftedRowFields' || parentFieldsScoped)) return [];
-          const kept = allowedSubSet
-            ? subs.filter(sub => {
-                const subId = resolveSubgroupKey(sub as any);
-                return subId && allowedSubSet.has(subId);
-              })
-            : subs;
-          return kept.map(sub => {
-            const subId = resolveSubgroupKey(sub as any);
-            const subTarget = subIncludeList.find(
-              s => (s?.id !== undefined && s?.id !== null ? s.id.toString().trim() : '') === subId
-            );
-            const allowedSubFieldsRaw = subTarget?.fields;
-            const {
-              allowed: allowedSubFields,
-              renderAsLabel: renderAsLabelSubFieldIdsFromFields,
-              explicit: hasExplicitSubFieldScope
-            } = parseStepFieldEntries(subId, allowedSubFieldsRaw);
-            const readOnlySubFieldsRaw = subTarget?.readOnlyFields;
-            const readOnlySubFields = (() => {
-              const parsed = parseStepFieldEntries(subId, readOnlySubFieldsRaw);
-              const ids = parsed.allowed ? Array.from(parsed.allowed) : [];
-              const merged = new Set<string>([...ids, ...Array.from(renderAsLabelSubFieldIdsFromFields)]);
-              return merged.size ? merged : null;
-            })();
-
-            const nextSub: any = { ...(sub as any) };
-            // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
-            nextSub._guidedRowFilter = subTarget?.validationRows ?? subTarget?.rows;
-            nextSub._expandGateFields = (sub as any).fields || [];
-
-            if (hasExplicitSubFieldScope) {
-              nextSub.fields = ((sub as any).fields || []).filter((f: any) => {
-                const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                return fid && !!allowedSubFields?.has(fid);
-              });
-            }
-            if (readOnlySubFields && readOnlySubFields.size) {
-              nextSub.fields = (nextSub.fields || (sub as any).fields || []).map((f: any) => {
-                const fid = normalizeLineFieldId(subId, (f as any)?.id);
-                if (fid && readOnlySubFields.has(fid)) {
-                  return { ...(f as any), readOnly: true, ui: { ...((f as any).ui || {}), renderAsLabel: true } };
-                }
-                return f;
-              });
-            }
-            return nextSub;
+          if (guidedLineGroupOverrideLoggedRef.current.has(logKey)) return;
+          guidedLineGroupOverrideLoggedRef.current.add(logKey);
+          onDiagnostic('steps.lineGroup.groupOverride.applied', {
+            stepId: resolvedStepId,
+            groupId,
+            keys: Object.keys(groupOverride || {})
           });
-        })();
-
-        const stepLineCfg: any = { ...(lineCfg as any), fields: filteredFields, subGroups: filteredSubGroups };
-        // Guided-step validation needs row filters + expandGate metadata even when we filter fields.
-        stepLineCfg._guidedRowFilter = (t as any).validationRows ?? (t as any).rows;
-        stepLineCfg._expandGateFields = (lineCfg as any).fields || [];
-        if ((t as any).collapsedFieldsInHeader === true) {
-          stepLineCfg.ui = { ...(stepLineCfg.ui || {}), guidedCollapsedFieldsInHeader: true };
         }
-        scopedQuestions.push({ ...(q as any), lineItemConfig: stepLineCfg } as WebQuestionDefinition);
-      });
-
-      return { ...(definition as any), questions: scopedQuestions } as WebFormDefinition;
-    },
+      }),
     [activeGuidedStepId, definition, guidedEnabled, guidedStepIds, guidedVisibleSteps, guidedStepsCfg, onDiagnostic]
   );
 
