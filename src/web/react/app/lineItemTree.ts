@@ -1,4 +1,4 @@
-import { LineItemGroupConfigOverride } from '../../types';
+import { LineItemGroupConfigOverride, WebQuestionDefinition } from '../../types';
 import { LineItemState } from '../types';
 import { ROW_ID_KEY, buildSubgroupKey, resolveSubgroupKey, shouldPersistLineItemRows } from './lineItems';
 
@@ -42,6 +42,21 @@ export const applyLineItemGroupOverride = (baseConfig: any, override?: LineItemG
     (mergedConfig as any).addOverlay = { ...baseAddOverlay, ...overrideAddOverlay };
   }
   return mergedConfig;
+};
+
+export const buildLineItemOverlayGroupOverride = (
+  group: WebQuestionDefinition,
+  override?: LineItemGroupConfigOverride
+): WebQuestionDefinition | undefined => {
+  if (!override || typeof override !== 'object') return undefined;
+  const baseConfig = group.lineItemConfig as any;
+  if (!baseConfig) return undefined;
+  const mergedConfig = applyLineItemGroupOverride(baseConfig, override);
+  return {
+    ...group,
+    id: group.id,
+    lineItemConfig: mergedConfig
+  };
 };
 
 export const serializeLineItemTree = (args: {
