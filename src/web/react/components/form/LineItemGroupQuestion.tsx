@@ -167,6 +167,7 @@ import { LineItemUploadFailureNotice } from '../../features/lineItems/components
 import { LineItemTableTotalsFooter } from '../../features/lineItems/components/LineItemTableTotalsFooter';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
+import { SourceFirstAllocationRow } from '../../features/lineItems/components/SourceFirstAllocationRow';
 import { SourceFirstSelectionCheckbox } from '../../features/lineItems/components/SourceFirstSelectionCheckbox';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
 import type {
@@ -6566,68 +6567,33 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                 ? `${parentRow.values[allocationLabelFieldId] ?? ''}`.trim()
                                 : '';
                               return (
-                                <div key={`allocation:${sourceKey}:${parentRow.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'flex-start',
-                                      flexWrap: 'wrap',
-                                      gap: 8,
-                                      paddingInlineStart: showAllocationLabel ? 12 : 0
-                                    }}
-                                  >
-                                    {showAllocationLabel && allocationLabel ? (
-                                      <span style={{ minWidth: 96, lineHeight: 1.35, fontWeight: 600 }}>
-                                        {allocationLabel}
-                                      </span>
-                                    ) : null}
-                                    {selectedFieldId ? (
-                                      <SourceFirstSelectionCheckbox
-                                        checked={isSelected}
-                                        variant="allocation"
-                                        onChange={checked =>
-                                          syncStepDataSourceOutputRowWithReservation({
-                                            config,
-                                            parentRow,
-                                            sourceRow,
-                                            patch: buildSelectionTogglePatch(checked)
-                                          })
-                                        }
-                                      />
-                                    ) : null}
-                                    {isSelected ? (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: sentenceFieldErrors.length ? 4 : 0, minWidth: 0, flex: 1 }}>
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            flexWrap: 'nowrap',
-                                            alignItems: 'center',
-                                            columnGap: 6,
-                                            rowGap: 6,
-                                            minWidth: 0,
-                                            lineHeight: 1.35,
-                                            overflowX: 'auto'
-                                          }}
-                                        >
-                                          {renderAllocationSentenceParts({
-                                            config,
-                                            parentRow,
-                                            sourceRow,
-                                            virtualValues,
-                                            fieldById,
-                                            selectedFieldId,
-                                            sentenceParts
-                                          })}
-                                        </div>
-                                        {sentenceFieldErrors.map((message, index) => (
-                                          <div key={`allocation-error:${sourceKey}:${parentRow.id}:${index}`} className="error">
-                                            {message}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
+                                <SourceFirstAllocationRow
+                                  key={`allocation:${sourceKey}:${parentRow.id}`}
+                                  rowKey={`allocation:${sourceKey}:${parentRow.id}`}
+                                  showAllocationLabel={showAllocationLabel}
+                                  allocationLabel={allocationLabel}
+                                  showSelectionCheckbox={!!selectedFieldId}
+                                  selected={isSelected}
+                                  errors={sentenceFieldErrors}
+                                  onSelectionChange={checked =>
+                                    syncStepDataSourceOutputRowWithReservation({
+                                      config,
+                                      parentRow,
+                                      sourceRow,
+                                      patch: buildSelectionTogglePatch(checked)
+                                    })
+                                  }
+                                >
+                                  {renderAllocationSentenceParts({
+                                    config,
+                                    parentRow,
+                                    sourceRow,
+                                    virtualValues,
+                                    fieldById,
+                                    selectedFieldId,
+                                    sentenceParts
+                                  })}
+                                </SourceFirstAllocationRow>
                               );
                             })}
                           </div>
@@ -11983,7 +11949,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                         const compactSentenceRows = Array.isArray(uiCfg.compactSentenceRows) ? (uiCfg.compactSentenceRows as any[]) : [];
                         const compactActionRules = Array.isArray(uiCfg.compactActions) ? (uiCfg.compactActions as any[]) : [];
                         const selectedFieldId = (config?.selectedFieldId || '').toString().trim();
-                        const quantityFieldId = (config?.quantityFieldId || '').toString().trim();
                         const outputKeyFieldId = (config?.outputKeyFieldId || config?.rowKeyFieldId || '').toString().trim();
                         const listScrollStyle = resolveSourceFirstListScrollStyle(uiCfg?.maxVisibleRows);
 
