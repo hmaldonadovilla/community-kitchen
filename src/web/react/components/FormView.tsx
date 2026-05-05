@@ -132,6 +132,7 @@ import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { buildFormGroupSections, buildPageSectionBlocks, resolveGroupSectionKey } from './form/grouping';
+import { computeTopLevelGroupProgress } from './form/groupProgress';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { scrollFormGroupToTop } from './form/scrollFormGroupToTop';
@@ -151,7 +152,6 @@ import {
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from './form/lineItemSelectors';
 import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
-import { isLineItemGroupQuestionComplete } from './form/completeness';
 import { resolveAddOverlayCopy } from '../features/lineItems/domain/addOverlayCopy';
 import {
   findFirstOrderedEntryIssue,
@@ -7299,55 +7299,19 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
-  const topLevelGroupProgress = useMemo(() => {
-    // Mirror the progress logic used in the group header UI.
-    const isQuestionComplete = (q: WebQuestionDefinition): boolean => {
-      if (q.type === 'LINE_ITEM_GROUP') {
-        if (!q.lineItemConfig) return false;
-        return isLineItemGroupQuestionComplete({
-          groupId: q.id,
-          lineItemConfig: q.lineItemConfig,
-          values,
-          lineItems,
-          collapsedRows,
-          language,
-          getTopValue: getTopValueNoScan
-        });
-      }
-      const mappedValue = (q as any).valueMap
-        ? resolveValueMapValue((q as any).valueMap, (fieldId: string) => values[fieldId], {
-            language,
-            targetOptions: toOptionSet(q as any)
-          })
-        : undefined;
-      const raw = (q as any).valueMap ? mappedValue : (values[q.id] as any);
-      if (q.type === 'FILE_UPLOAD') {
-        return isUploadValueComplete({ value: raw as any, uploadConfig: (q as any).uploadConfig, required: !!q.required });
-      }
-      if (q.type === 'PARAGRAPH') {
-        const cfg = (q.ui as any)?.paragraphDisclaimer;
-        if (cfg && !cfg.editable) {
-          const userText = resolveParagraphUserText({ rawValue: raw as any, config: cfg });
-          return !isEmptyValue(userText as any);
-        }
-      }
-      return !isEmptyValue(raw as any);
-    };
-
-    const groups = (groupSections || []).filter(s => s && !s.isHeader && s.collapsible);
-    return groups
-      .map(section => {
-        const visible = (section.questions || []).filter(q => !shouldHideField(q.visibility, topVisibilityCtx));
-        if (!visible.length) return null;
-
-        const requiredQs = visible.filter(q => !!q.required);
-        const totalRequired = requiredQs.length;
-        const requiredComplete = requiredQs.reduce((acc, q) => (isQuestionComplete(q) ? acc + 1 : acc), 0);
-        const complete = totalRequired > 0 && requiredComplete >= totalRequired;
-        return { key: section.key, complete, totalRequired, requiredComplete };
-      })
-      .filter(Boolean) as Array<{ key: string; complete: boolean; totalRequired: number; requiredComplete: number }>;
-  }, [collapsedRows, getTopValueNoScan, groupSections, language, lineItems, topVisibilityCtx, values]);
+  const topLevelGroupProgress = useMemo(
+    () =>
+      computeTopLevelGroupProgress({
+        groupSections,
+        values,
+        lineItems,
+        collapsedRows,
+        language,
+        topVisibilityCtx,
+        getTopValue: getTopValueNoScan
+      }),
+    [collapsedRows, getTopValueNoScan, groupSections, language, lineItems, topVisibilityCtx, values]
+  );
 
   const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
   const pendingAutoCollapseRef = useRef<string[]>([]);
