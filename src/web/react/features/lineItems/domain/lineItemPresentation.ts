@@ -203,6 +203,32 @@ export const buildSourceFirstSelectionTogglePatch = (args: {
   return patch;
 };
 
+export const collectSourceFirstSentenceFieldErrors = (args: {
+  parts: any[];
+  fieldById: Map<string, any>;
+  virtualValues: Record<string, FieldValue>;
+  parentValues: Record<string, FieldValue>;
+  validateFieldRules: (
+    field: any,
+    virtualValues: Record<string, FieldValue>,
+    parentValues: Record<string, FieldValue>
+  ) => string[];
+}): string[] => {
+  const seen = new Set<string>();
+  const messages: string[] = [];
+  (args.parts || []).forEach((part: any) => {
+    const fieldId = normalizeIdValue(part?.fieldId);
+    if (!fieldId) return;
+    const field = args.fieldById.get(fieldId);
+    if (!field) return;
+    const message = args.validateFieldRules(field, args.virtualValues, args.parentValues)[0] || '';
+    if (!message || seen.has(message)) return;
+    seen.add(message);
+    messages.push(message);
+  });
+  return messages;
+};
+
 export const resolveSourceFirstCompactFieldDisplayValue = (args: {
   fieldId: string;
   virtualValues: Record<string, FieldValue>;

@@ -1,5 +1,6 @@
 import {
   buildSourceFirstSelectionTogglePatch,
+  collectSourceFirstSentenceFieldErrors,
   fieldByIdSafe,
   formatLineItemTotalValue,
   getByPath,
@@ -87,6 +88,22 @@ describe('lineItem presentation domain', () => {
     });
 
     expect(patch).toEqual({ selected: false });
+  });
+
+  test('collects first unique source-first sentence field validation errors', () => {
+    const fieldById = new Map<string, any>([
+      ['quantity', { id: 'quantity' }],
+      ['mode', { id: 'mode' }]
+    ]);
+    const messages = collectSourceFirstSentenceFieldErrors({
+      parts: [{ fieldId: 'quantity' }, { fieldId: 'mode' }, { fieldId: 'quantity' }, { text: 'literal' }],
+      fieldById,
+      virtualValues: { quantity: '', mode: '' },
+      parentValues: {},
+      validateFieldRules: field => (field.id === 'quantity' ? ['Quantity required'] : ['Mode required'])
+    });
+
+    expect(messages).toEqual(['Quantity required', 'Mode required']);
   });
 
   test('resolves source-first allocation display values', () => {
