@@ -129,6 +129,10 @@ import {
   validateVirtualFieldRulesAction
 } from './virtualRowContext';
 import {
+  resolveLocalReservationQuantityForVisibility,
+  resolveReservationQuantityFromValues
+} from './reservationQuantity';
+import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveStepDataSourceRowsAction,
   resolveStepDataSourceRowsForParentAction
@@ -1080,52 +1084,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     [q.id]
   );
 
-  const resolveReservationQuantityFromValues = React.useCallback(
-    (
-      values: Record<string, FieldValue> | null | undefined,
-      selectedFieldId: string,
-      quantityFieldId: string
-    ): number => {
-      if (!values || !quantityFieldId) return 0;
-      const selected =
-        !selectedFieldId ||
-        !Object.prototype.hasOwnProperty.call(values, selectedFieldId) ||
-        values[selectedFieldId] === true;
-      return selected ? toFiniteNumberValue(values[quantityFieldId]) : 0;
-    },
-    []
-  );
-
-  const resolveLocalReservationQuantityForVisibility = React.useCallback(
-    (args: {
-      draftValues?: Record<string, FieldValue> | null;
-      outputValues?: Record<string, FieldValue> | null;
-      committedValues?: Record<string, FieldValue> | null;
-      selectedFieldId: string;
-      quantityFieldId: string;
-    }): number => {
-      const localQuantity = resolveReservationQuantityFromValues(
-        args.draftValues || args.outputValues || null,
-        args.selectedFieldId,
-        args.quantityFieldId
-      );
-      if (!args.draftValues || localQuantity > 0 || !args.quantityFieldId) return localQuantity;
-      if (!Object.prototype.hasOwnProperty.call(args.draftValues, args.quantityFieldId)) return localQuantity;
-      if (!isEmptyValue(args.draftValues[args.quantityFieldId] as any)) return localQuantity;
-      const selected =
-        !args.selectedFieldId ||
-        !Object.prototype.hasOwnProperty.call(args.draftValues, args.selectedFieldId) ||
-        args.draftValues[args.selectedFieldId] === true;
-      if (!selected) return localQuantity;
-      return resolveReservationQuantityFromValues(
-        args.committedValues || args.outputValues || null,
-        args.selectedFieldId,
-        args.quantityFieldId
-      );
-    },
-    [resolveReservationQuantityFromValues]
-  );
-
   const decorateStepDataSourceRowForVisibility = React.useCallback(
     (config: any, sourceRow: Record<string, any>, _currentParentRowId?: string): Record<string, any> => {
       return decorateStepDataSourceRowForVisibilityAction({
@@ -1141,7 +1099,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         resolveReservationQuantityFromValues
       });
     },
-    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, resolveLocalReservationQuantityForVisibility, resolveReservationQuantityFromValues]
+    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id]
   );
 
   const resolveStepDataSourceRows = React.useCallback(
@@ -1302,8 +1260,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       buildStepDataSourceDraftKey,
       lineItems,
       parentRows,
-      resolveLocalReservationQuantityForVisibility,
-      resolveReservationQuantityFromValues,
       resolveDataSourceOutputGroup
     ]
   );
