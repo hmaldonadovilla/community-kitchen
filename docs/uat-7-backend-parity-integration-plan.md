@@ -583,11 +583,16 @@ Seventieth-pass results:
 - `LineItemGroupQuestion.tsx`: replaced duplicate overlay group-override merge logic with the shared line-item tree override helper. Current size: 12,666 lines.
 - Validation for the pass used focused line-item tree tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
+Seventy-first-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted row-flow segment display formatting into a line-items domain helper, keeping the component responsible for callback wiring and rendering only. Current size: 12,625 lines.
+- Validation for the pass used focused row-flow display value tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 12,318 lines.
-- `LineItemGroupQuestion.tsx`: 12,666 lines.
+- `LineItemGroupQuestion.tsx`: 12,625 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
