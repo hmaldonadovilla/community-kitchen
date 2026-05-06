@@ -201,6 +201,7 @@ import {
   LineItemSubgroupHeader,
   LineItemSubgroupToolbar
 } from '../../features/lineItems/components/LineItemSubgroupChrome';
+import { renderLineItemSubgroupField } from '../../features/lineItems/components/LineItemSubgroupFieldRenderer';
 import { LineItemSubgroupTableRenderer } from '../../features/lineItems/components/LineItemSubgroupTableRenderer';
 import { LineItemSubgroupAddButton } from '../../features/lineItems/components/LineItemSubgroupAddButton';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
@@ -215,7 +216,6 @@ import {
   LineItemReadOnlyField
 } from '../../features/lineItems/components/LineItemFieldChrome';
 import { withListRowActionButtonStyle } from '../../features/lineItems/components/lineItemActionButtonStyle';
-import { LineFileUploadQuestion } from '../../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadListQuestion } from '../../features/uploads/components/LineFileUploadListQuestion';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -6396,422 +6396,39 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                 </div>
                               )}
                               {(() => {
-                                const renderSubField = (field: any, opts?: { inGrid?: boolean }) => {
-                                ensureLineOptions(subKey, field);
-                                const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
-                                const dependencyIds = (
-                                  Array.isArray(field.optionFilter?.dependsOn)
-                                    ? field.optionFilter?.dependsOn
-                                    : [field.optionFilter?.dependsOn || '']
-                                  ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                                const allowedField = computeAllowedOptions(
-                                  field.optionFilter,
-                                  optionSetField,
-                                    dependencyIds.map((dep: string) => {
-                                    const selectorFallback =
-                                      subSelectorCfg && dep === subSelectorCfg.id ? subgroupSelectors[subKey] : undefined;
-                                    return toDependencyValue(
-                                      subRow.values[dep] ?? values[dep] ?? row.values[dep] ?? selectorFallback
-                                    );
-                                  })
-                                );
-                                const currentVal = subRow.values[field.id];
-                                const allowedWithCurrent =
-                                  currentVal && typeof currentVal === 'string' && !allowedField.includes(currentVal)
-                                    ? [...allowedField, currentVal]
-                                    : allowedField;
-                                const selectedSub = Array.isArray(subRow.values[field.id])
-                                  ? (subRow.values[field.id] as string[])
-                                  : null;
-                                const allowedWithSelection =
-                                  selectedSub && selectedSub.length
-                                    ? selectedSub.reduce((acc, val) => {
-                                        if (val && !acc.includes(val)) acc.push(val);
-                                        return acc;
-                                      }, [...allowedWithCurrent])
-                                    : allowedWithCurrent;
-                                const optsField = buildLocalizedOptions(optionSetField, allowedWithSelection, language, { sort: optionSortFor(field) });
-                                const hideField = shouldHideField(field.visibility, subCtx, {
-                                  rowId: subRow.id,
-                                  linePrefix: subKey
-                                });
-                                if (hideField) return null;
-                                  const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
-                                  const hideLabel = Boolean((field as any)?.ui?.hideLabel);
-                                  const inGrid = opts?.inGrid === true;
-                                  const labelStyle = hideLabel ? (inGrid ? ({ opacity: 0, pointerEvents: 'none' } as React.CSSProperties) : srOnly) : undefined;
-                                  const renderAsLabel =
-                                    (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
-
-                                  const renderReadOnlyLine = (display: React.ReactNode) => (
-                                    <LineItemReadOnlyField
-                                      key={field.id}
-                                      field={field}
-                                      fieldPath={fieldPath}
-                                      language={language}
-                                      forceStackedLabel={(field as any)?.ui?.labelLayout === 'stacked'}
-                                      fieldIsStacked={false}
-                                      labelStyle={labelStyle}
-                                      error={errors[fieldPath]}
-                                      hasWarning={hasWarning(fieldPath)}
-                                      renderWarnings={() => renderWarnings(fieldPath)}
-                                      display={display}
-                                    />
-                                  );
-
-                                  if (renderAsLabel) {
-                                    switch (field.type) {
-                                      case 'CHOICE': {
-                                        const rawVal = subRow.values[field.id];
-                                        const choiceVal =
-                                          Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                                        const selected = optsField.find(opt => opt.value === choiceVal);
-                                        const display = selected?.label || choiceVal || null;
-                                        return renderReadOnlyLine(display);
-                                      }
-                                      case 'CHECKBOX': {
-                                        const hasAnyOption =
-                                          !!((optionSetField.en && optionSetField.en.length) ||
-                                            ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
-                                            ((optionSetField as any).nl && (optionSetField as any).nl.length));
-                                        const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
-                                        if (isConsentCheckbox) {
-                                          const display = subRow.values[field.id]
-                                            ? tSystem('common.yes', language, 'Yes')
-                                            : tSystem('common.no', language, 'No');
-                                          return renderReadOnlyLine(display);
-                                        }
-                                        const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
-                                        const labels = selected
-                                          .map(val => optsField.find(opt => opt.value === val)?.label || val)
-                                          .filter(Boolean);
-                                        const display = labels.length ? labels.join(', ') : null;
-                                        return renderReadOnlyLine(display);
-                                      }
-                                      case 'FILE_UPLOAD': {
-                                        const items = toUploadItems(subRow.values[field.id] as any);
-                                        const displayContent = items.length
-                                          ? items.map((item: any, idx: number) => (
-                                              <div key={`${field.id}-file-${idx}`} className="ck-readonly-file">
-                                                {describeUploadItem(item as any)}
-                                              </div>
-                                            ))
-                                          : null;
-                                        const displayNode = displayContent ? <div className="ck-readonly-file-list">{displayContent}</div> : null;
-                                        return renderReadOnlyLine(displayNode);
-                                      }
-                                      default: {
-                                        const mapped = field.valueMap
-                                          ? resolveValueMapValue(field.valueMap, (fid: string) => {
-                                              if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                                              if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                                              return values[fid];
-                                            }, { language, targetOptions: toOptionSet(field) })
-                                          : undefined;
-                                        const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
-                                        const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
-                                        const numberText =
-                                          field.type === 'NUMBER'
-                                            ? fieldValue === undefined || fieldValue === null
-                                              ? ''
-                                              : (fieldValue as any).toString()
-                                            : '';
-                                        const display =
-                                          field.type === 'NUMBER'
-                                            ? numberText
-                                            : field.type === 'DATE'
-                                              ? fieldValue
-                                              : fieldValue;
-                                        return renderReadOnlyLine(display || null);
-                                      }
-                                    }
-                                  }
-
-                                switch (field.type) {
-                                  case 'CHOICE': {
-                                    const rawVal = subRow.values[field.id];
-                                    const choiceVal =
-                                        Array.isArray(rawVal) && rawVal.length
-                                          ? (rawVal as string[])[0]
-                                          : (rawVal as string);
-                                    return (
-                                        <div
-                                          key={field.id}
-                                          className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
-                                          data-field-path={fieldPath}
-                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
-                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                                        >
-                                        <label style={labelStyle}>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                          {renderChoiceControl({
-                                            fieldPath,
-                                            value: choiceVal || '',
-                                            options: optsField,
-                                            required: !!field.required,
-                                            placeholder: resolveFieldHelperText({ ui: (field as any)?.ui, language }).placeholderText || undefined,
-                                            searchEnabled:
-                                              (field as any)?.ui?.choiceSearchEnabled ??
-                                              (((targetGroup as any)?.lineItemConfig?.ui as any)?.choiceSearchEnabled),
-                                            override: (field as any)?.ui?.control,
-                                            disabled: isLineFieldInputDisabled(field),
-                                            onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
-                                          })}
-                                        {(() => {
-                                          const selected = optsField.find(opt => opt.value === choiceVal);
-                                          if (!selected?.tooltip) return null;
-                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                                          const tooltipLabel = resolveLocalizedString(
-                                            field.dataSource?.tooltipLabel,
-                                            language,
-                                            fallbackLabel
-                                          );
-                                            return (
-                                              <InfoTooltip text={selected.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                            );
-                                        })()}
-                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                                          {renderWarnings(fieldPath)}
-                                      </div>
-                                    );
-                                  }
-                                  case 'CHECKBOX': {
-                                      const hasAnyOption =
-                                        !!((optionSetField.en && optionSetField.en.length) ||
-                                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
-                                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
-                                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
-                                      const selected = Array.isArray(subRow.values[field.id])
-                                        ? (subRow.values[field.id] as string[])
-                                        : [];
-                                    return (
-                                        <div
-                                          key={field.id}
-                                          className={`field inline-field${(field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''}`}
-                                          data-field-path={fieldPath}
-                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
-                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                                        >
-                                        <label style={labelStyle}>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                          {isConsentCheckbox ? (
-                                            <div className="ck-choice-control ck-consent-control">
-                                              <label className="ck-consent">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={!!subRow.values[field.id]}
-                                                  disabled={isLineFieldInputDisabled(field)}
-                                                  onChange={e => {
-                                                    if (isLineFieldInputDisabled(field)) return;
-                                                    handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
-                                                  }}
-                                                />
-                                              </label>
-                                            </div>
-                                          ) : (
-                                        <div className="inline-options">
-                                          {optsField.map(opt => (
-                                            <label key={opt.value} className="inline">
-                                              <input
-                                                type="checkbox"
-                                                checked={selected.includes(opt.value)}
-                                                disabled={isLineFieldInputDisabled(field)}
-                                                onChange={e => {
-                                                  if (isLineFieldInputDisabled(field)) return;
-                                                  const next = e.target.checked
-                                                    ? [...selected, opt.value]
-                                                    : selected.filter(v => v !== opt.value);
-                                                  handleLineFieldChange(targetGroup, subRow.id, field, next);
-                                                }}
-                                              />
-                                              <span>{opt.label}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                          )}
-                                        {(() => {
-                                          const withTooltips = optsField.filter(opt => opt.tooltip && selected.includes(opt.value));
-                                          if (!withTooltips.length) return null;
-                                          const fallbackLabel = resolveFieldLabel(field, language, field.id);
-                                          const tooltipLabel = resolveLocalizedString(
-                                            field.dataSource?.tooltipLabel,
-                                            language,
-                                            fallbackLabel
-                                          );
-                                          return (
-                                            <div className="muted" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                              {withTooltips.map(opt => (
-                                                  <span
-                                                    key={opt.value}
-                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                                  >
-                                                    {opt.label}{' '}
-                                                    <InfoTooltip text={opt.tooltip} label={tooltipLabel} onOpen={openInfoOverlay} />
-                                                </span>
-                                              ))}
-                                            </div>
-                                          );
-                                        })()}
-                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                                          {renderWarnings(fieldPath)}
-                                        </div>
-                                      );
-                                    }
-                                    case 'FILE_UPLOAD':
-                                      return (
-                                        <LineFileUploadQuestion
-                                          key={field.id}
-                                          group={targetGroup}
-                                          rowId={subRow.id}
-                                          field={field}
-                                          fieldPath={fieldPath}
-                                          value={subRow.values[field.id] as FieldValue | undefined}
-                                          language={language}
-                                          submitting={submitting}
-                                          forceStackedLabel={(field as any)?.ui?.labelLayout === 'stacked'}
-                                          labelStyle={labelStyle}
-                                          cameraButtonStyle={buttonStyles.primary}
-                                          progressButtonClassName="ck-list-row-action-btn"
-                                          errors={errors}
-                                          hasWarning={hasWarning}
-                                          renderWarnings={renderWarnings}
-                                          checkFileUploadOrderedEntry={isFileUploadOrderedEntryBlocked}
-                                          openFileOverlay={openFileOverlay}
-                                          handleFileInputChange={handleLineFileInputChange}
-                                          fileInputsRef={fileInputsRef}
-                                          uploadAnnouncements={uploadAnnouncements}
-                                          renderUploadFailure={renderUploadFailure}
-                                          onDiagnostic={onDiagnostic}
-                                        />
-                                      );
-                                  default: {
-                                    const mapped = field.valueMap
-                                      ? resolveValueMapValue(field.valueMap, fid => {
-                                          if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                                          if (row.values.hasOwnProperty(fid)) return row.values[fid];
-                                          return values[fid];
-                                        }, { language, targetOptions: toOptionSet(field) })
-                                      : undefined;
-                                      const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
-                                      const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
-                                      const numberText =
-                                        field.type === 'NUMBER'
-                                          ? fieldValue === undefined || fieldValue === null
-                                            ? ''
-                                            : (fieldValue as any).toString()
-                                          : '';
-                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                      const helperText = helperCfg.text;
-                                      const supportsPlaceholder =
-                                        field.type === 'TEXT' || field.type === 'PARAGRAPH' || field.type === 'NUMBER';
-                                      const effectivePlacement =
-                                        helperCfg.placement === 'placeholder' && supportsPlaceholder ? 'placeholder' : 'belowLabel';
-                                      const isEditableField =
-                                        !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
-                                        (field as any)?.ui?.renderAsLabel !== true &&
-                                        (field as any)?.renderAsLabel !== true &&
-                                        !field.valueMap;
-                                      const helperId =
-                                        helperText && effectivePlacement === 'belowLabel' && isEditableField
-                                          ? `ck-field-helper-${fieldPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`
-                                          : undefined;
-                                      const helperNode =
-                                        helperText && effectivePlacement === 'belowLabel' && isEditableField ? (
-                                          <div id={helperId} className="ck-field-helper">
-                                            {helperText}
-                                          </div>
-                                        ) : null;
-                                      const placeholder =
-                                        helperText && effectivePlacement === 'placeholder' && isEditableField ? helperText : undefined;
-                                    return (
-                                        <div
-                                          key={field.id}
-                                          className={`${field.type === 'PARAGRAPH' ? 'field inline-field ck-full-width' : 'field inline-field'}${
-                                            (field as any)?.ui?.labelLayout === 'stacked' ? ' ck-label-stacked' : ''
-                                          }`}
-                                          data-field-path={fieldPath}
-                                          data-has-error={errors[fieldPath] ? 'true' : undefined}
-                                          data-has-warning={hasWarning(fieldPath) ? 'true' : undefined}
-                                        >
-                                        <label style={labelStyle}>
-                                          {resolveFieldLabel(field, language, field.id)}
-                                          {field.required && <RequiredStar />}
-                                        </label>
-                                        {field.type === 'NUMBER' ? (
-                                          <NumberStepper
-                                            value={numberText}
-                                            disabled={isLineFieldInteractionBlocked(field)}
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                            ariaDescribedBy={helperId}
-                                            placeholder={placeholder}
-                                            onInvalidInput={
-                                              isEditableField
-                                                ? ({ reason, value }) => {
-                                                    const numericOnlyMessage = tSystem(
-                                                      'validation.numberOnly',
-                                                      language,
-                                                      'Only numbers are allowed in this field.'
-                                                    );
-                                                    setErrors(prev => {
-                                                      const next = { ...prev };
-                                                      const existing = next[fieldPath];
-                                                      if (existing && existing !== numericOnlyMessage) return prev;
-                                                      if (existing === numericOnlyMessage) return prev;
-                                                      next[fieldPath] = numericOnlyMessage;
-                                                      return next;
-                                                    });
-                                                    onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
-                                                  }
-                                                : undefined
-                                            }
-                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
-                                          />
-                                        ) : field.type === 'PARAGRAPH' ? (
-                                          <textarea
-                                            className="ck-paragraph-input"
-                                            value={fieldValue}
-                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            rows={(field as any)?.ui?.paragraphRows || 4}
-                                            placeholder={placeholder}
-                                            aria-describedby={helperId}
-                                          />
-                                        ) : field.type === 'DATE' ? (
-                                          <DateInput
-                                            value={fieldValue}
-                                            language={language}
-                                            min={(field as any)?.ui?.minDate}
-                                            max={(field as any)?.ui?.maxDate}
-                                            correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
-                                            iosNativeCommitMode="deferWhileFocused"
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                            ariaDescribedBy={helperId}
-                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
-                                          />
-                                        ) : (
-                                          <input
-                                            type={field.type === 'DATE' ? 'date' : 'text'}
-                                            value={fieldValue}
-                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            placeholder={placeholder}
-                                            aria-describedby={helperId}
-                                          />
-                                        )}
-                                        {helperNode}
-                                          {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                                          {renderWarnings(fieldPath)}
-                                      </div>
-                                    );
-                                  }
-                                }
-                                };
+                                const renderSubField = (field: any, opts?: { inGrid?: boolean }) =>
+                                  renderLineItemSubgroupField({
+                                    field,
+                                    opts,
+                                    subKey,
+                                    subRow,
+                                    parentRowValues: row.values as Record<string, FieldValue>,
+                                    values,
+                                    selectorCfg: subSelectorCfg,
+                                    selectorValue: subgroupSelectors[subKey],
+                                    targetGroup,
+                                    optionState,
+                                    language,
+                                    errors,
+                                    submitting,
+                                    subCtx,
+                                    fileInputsRef,
+                                    uploadAnnouncements,
+                                    ensureLineOptions,
+                                    renderChoiceControl,
+                                    handleLineFieldChange,
+                                    handleLineFileInputChange,
+                                    isLineFieldInteractionBlocked,
+                                    isLineFieldInputDisabled,
+                                    isFileUploadOrderedEntryBlocked,
+                                    hasWarning,
+                                    renderWarnings,
+                                    renderUploadFailure,
+                                    openInfoOverlay,
+                                    openFileOverlay,
+                                    setErrors,
+                                    onDiagnostic
+                                  });
 
                                 const visibleFields = (sub.fields || []).filter(field => {
                                   const hideField = shouldHideField(field.visibility, subCtx, { rowId: subRow.id, linePrefix: subKey });
