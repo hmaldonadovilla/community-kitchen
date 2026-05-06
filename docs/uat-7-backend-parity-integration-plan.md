@@ -859,10 +859,15 @@ One-hundred-nineteenth-pass results:
 - `FormView.tsx`: extracted top-level group progress and auto-collapse coordination into `useTopLevelGroupAutoCollapse`, moving progress computation, deferred focus handling, collapse state mutation, diagnostics, and scroll coordination behind a focused form hook. Current size: 10,456 lines.
 - Validation for the pass used focused group-progress tests and `npx tsc --noEmit --pretty false`.
 
+One-hundred-twentieth-pass results:
+
+- `FormView.tsx`: extracted field-disable rule state and ready-for-production unlock behavior into `useFieldDisableRuleState`, moving unlock query resolution, URL scrubbing, active disable-rule matching, bypass diagnostics, and the field-lock predicate behind a focused form hook. Current size: 10,336 lines.
+- Validation for the pass used focused field-disable and ready-for-production unlock tests plus `npx tsc --noEmit --pretty false`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 10,456 lines.
+- `FormView.tsx`: 10,336 lines.
 - `LineItemGroupQuestion.tsx`: 869 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

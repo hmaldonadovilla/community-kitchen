@@ -127,6 +127,7 @@ import { scrollFormGroupToTop } from './form/scrollFormGroupToTop';
 import { useFormViewStateRefs } from './form/useFormViewStateRefs';
 import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
 import { useTopLevelGroupAutoCollapse } from './form/useTopLevelGroupAutoCollapse';
+import { useFieldDisableRuleState } from './form/useFieldDisableRuleState';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import { LineFileUploadQuestion } from '../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadTableOpenControl } from '../features/uploads/components/LineFileUploadTableOpenControl';
@@ -183,8 +184,6 @@ import {
 } from '../app/autoAddModeOverlay';
 import { applyClearOnChange, isClearOnChangeEnabled } from '../app/clearOnChange';
 import { isPrimaryActionLabel } from '../app/buttonTone';
-import { isFieldDisabledByRule, resolveActiveFieldDisableRule } from '../app/fieldDisableRules';
-import { removeUnlockParamFromHref, resolveUnlockRecordId, shouldBypassReadyForProductionLock } from '../app/readyForProductionLock';
 import {
   computeParagraphDisclaimerUpdates as computeParagraphDisclaimerUpdatesAction,
 } from '../app/paragraphDisclaimer';
@@ -5720,131 +5719,12 @@ const FormView: React.FC<FormViewProps> = ({
     }),
     [lineItems, resolveVisibilityValue]
   );
-  const unlockResolution = useMemo(() => {
-    const globalAny = globalThis as any;
-    const locationSearch = (() => {
-      try {
-        return globalAny?.location?.search || '';
-      } catch {
-        return '';
-      }
-    })();
-    const locationHash = (() => {
-      try {
-        return globalAny?.location?.hash || '';
-      } catch {
-        return '';
-      }
-    })();
-    const locationHref = (() => {
-      try {
-        return globalAny?.location?.href || '';
-      } catch {
-        return '';
-      }
-    })();
-    return resolveUnlockRecordId({
-      requestParams: globalAny?.__WEB_FORM_REQUEST_PARAMS__,
-      bootstrap: globalAny?.__WEB_FORM_BOOTSTRAP__,
-      search: locationSearch,
-      hash: locationHash,
-      href: locationHref
-    });
-  }, []);
-  useEffect(() => {
-    if (!onDiagnostic || !unlockResolution.unlockRecordId) return;
-    onDiagnostic('readyForProduction.unlock.query', {
-      unlockRecordId: unlockResolution.unlockRecordId,
-      source: unlockResolution.source
-    });
-  }, [onDiagnostic, unlockResolution]);
-  useEffect(() => {
-    if (!unlockResolution.unlockRecordId) return;
-    try {
-      const globalAny = globalThis as any;
-      const tryScrubWindowHref = (target: any, scope: 'self' | 'top'): boolean => {
-        if (!target) return false;
-        const hrefRaw = (target?.location?.href || '').toString();
-        if (!hrefRaw) return false;
-        const cleaned = removeUnlockParamFromHref(hrefRaw);
-        if (!cleaned.changed || !cleaned.href || cleaned.href === hrefRaw) return false;
-        const historyApi = target?.history;
-        if (!historyApi || typeof historyApi.replaceState !== 'function') return false;
-        historyApi.replaceState(historyApi.state || null, '', cleaned.href);
-        onDiagnostic?.('readyForProduction.unlock.urlScrubbed', {
-          source: unlockResolution.source,
-          scope,
-          changed: true
-        });
-        return true;
-      };
-      tryScrubWindowHref(globalAny, 'self');
-      if (globalAny?.top && globalAny.top !== globalAny) {
-        try {
-          tryScrubWindowHref(globalAny.top, 'top');
-        } catch {
-          // ignore cross-origin access failures
-        }
-      }
-    } catch {
-      onDiagnostic?.('readyForProduction.unlock.urlScrubbed.error', {
-        source: unlockResolution.source
-      });
-    }
-  }, [onDiagnostic, unlockResolution.unlockRecordId, unlockResolution.source]);
-  const activeFieldDisableRule = useMemo(
-    () =>
-      resolveActiveFieldDisableRule({
-        rules: definition.fieldDisableRules,
-        matchesWhen: when => matchesWhenClause(when, topVisibilityCtx)
-      }),
-    [definition.fieldDisableRules, topVisibilityCtx]
-  );
-  const bypassReadyForProductionLock = useMemo(
-    () =>
-      shouldBypassReadyForProductionLock({
-        activeRuleId: activeFieldDisableRule?.id,
-        unlockRecordId: unlockResolution.unlockRecordId,
-        recordId: recordMeta?.id !== undefined && recordMeta?.id !== null ? recordMeta.id.toString() : undefined
-      }),
-    [activeFieldDisableRule?.id, recordMeta?.id, unlockResolution.unlockRecordId]
-  );
-  const effectiveFieldDisableRule = bypassReadyForProductionLock ? undefined : activeFieldDisableRule;
-  const activeFieldDisableRuleKeyRef = useRef<string>('');
-  useEffect(() => {
-    if (!onDiagnostic) return;
-    const nextKey = effectiveFieldDisableRule
-      ? `${effectiveFieldDisableRule.id || '__anonymous__'}::${(effectiveFieldDisableRule.bypassFields || []).join(',')}`
-      : bypassReadyForProductionLock
-        ? `unlock::${unlockResolution.unlockRecordId || ''}::${(recordMeta?.id || '').toString()}`
-        : '';
-    if (activeFieldDisableRuleKeyRef.current === nextKey) return;
-    activeFieldDisableRuleKeyRef.current = nextKey;
-    onDiagnostic('fieldDisableRules.state', {
-      active: Boolean(effectiveFieldDisableRule),
-      ruleId: effectiveFieldDisableRule?.id || null,
-      matchedRuleId: activeFieldDisableRule?.id || null,
-      bypassFields: effectiveFieldDisableRule?.bypassFields || [],
-      unlockOverrideActive: bypassReadyForProductionLock,
-      unlockRecordId: unlockResolution.unlockRecordId || null,
-      unlockSource: unlockResolution.source,
-      recordId: recordMeta?.id || null,
-              recordMeta,
-      reason: bypassReadyForProductionLock ? 'unlockOverride' : effectiveFieldDisableRule ? 'matched' : 'noMatch'
-    });
-  }, [
-    activeFieldDisableRule?.id,
-    bypassReadyForProductionLock,
-    effectiveFieldDisableRule,
-    onDiagnostic,
+  const { isFieldLockedByDedup } = useFieldDisableRuleState({
+    fieldDisableRules: definition.fieldDisableRules,
+    topVisibilityCtx,
     recordMeta,
-    recordMeta?.id,
-    unlockResolution
-  ]);
-  const isFieldLockedByDedup = useCallback(
-    (fieldId: string): boolean => isFieldDisabledByRule(fieldId, effectiveFieldDisableRule),
-    [effectiveFieldDisableRule]
-  );
+    onDiagnostic
+  });
 
   const resolveTopValueNoScan = useCallback(
     (sourceValues: Record<string, FieldValue>, fieldId: string): FieldValue | undefined => {
