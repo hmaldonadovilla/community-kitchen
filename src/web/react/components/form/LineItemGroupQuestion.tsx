@@ -65,11 +65,6 @@ import {
 } from '../../features/reservations/sourceFields';
 import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../api';
 import { resolveValueMapValue } from './valueMaps';
-import {
-  collectComputedSelectionEffectInitTargets,
-  collectSelectionEffectInitTargets,
-  collectSubgroupSeedInitTargets
-} from './selectionEffectInit';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from './lineItemGroupQuestionHelperText';
 import { buildSourceFirstPresentationEntries } from './sourceFirstPresentationEntries';
 import { resolveVirtualPresetAction, resolveVirtualPresetValueAction } from './virtualPreset';
@@ -141,6 +136,7 @@ import { LineItemTableModeRenderer } from '../../features/lineItems/components/L
 import { useLineItemAttentionAutoExpand } from '../../features/lineItems/components/useLineItemAttentionAutoExpand';
 import { useLineItemGroupControls } from '../../features/lineItems/components/useLineItemGroupControls';
 import { useLineItemAutoAddEffects } from '../../features/lineItems/hooks/useLineItemAutoAddEffects';
+import { useLineItemSelectionEffectInit } from '../../features/lineItems/hooks/useLineItemSelectionEffectInit';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
   LineItemGroupQuestionProps
@@ -2970,60 +2966,16 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     onDiagnostic
   });
 
-  const initializedSelectionEffectsRef = React.useRef<Set<string>>(new Set());
-  const initSourceQuestion = React.useMemo(
-    () => definition.questions.find(entry => entry.id === q.id) || q,
-    [definition, q]
-  );
-  const selectionEffectInitTopValues = React.useMemo(
-    () =>
-      ({
-        ...(values as Record<string, FieldValue>),
-        ...(recordMeta?.id !== undefined ? { id: recordMeta.id as FieldValue } : {}),
-        ...(recordMeta?.createdAt !== undefined ? { createdAt: recordMeta.createdAt as FieldValue } : {}),
-        ...(recordMeta?.updatedAt !== undefined ? { updatedAt: recordMeta.updatedAt as FieldValue } : {}),
-        ...(recordMeta?.status !== undefined ? { status: recordMeta.status as FieldValue, STATUS: recordMeta.status as FieldValue } : {}),
-        ...(recordMeta?.pdfUrl !== undefined ? { pdfUrl: recordMeta.pdfUrl as FieldValue } : {})
-      }) as Record<string, FieldValue>,
-    [recordMeta?.createdAt, recordMeta?.id, recordMeta?.pdfUrl, recordMeta?.status, recordMeta?.updatedAt, values]
-  );
-
-  React.useEffect(() => {
-    if (submitting) return;
-    const targets = [
-      ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues),
-      ...collectSubgroupSeedInitTargets(initSourceQuestion, lineItems),
-      ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues)
-    ];
-    if (!targets.length) {
-      initializedSelectionEffectsRef.current.clear();
-      return;
-    }
-
-    const nextKeys = new Set<string>();
-    targets.forEach(target => {
-      nextKeys.add(target.signature);
-      if (initializedSelectionEffectsRef.current.has(target.signature)) return;
-
-      initializedSelectionEffectsRef.current.add(target.signature);
-      onDiagnostic?.('selectionEffects.initRowValue', {
-        groupId: target.groupKey,
-        rowId: target.rowId || null,
-        fieldId: target.field.id
-      });
-      const initField =
-        target.field && typeof target.field === 'object' && target.field.readOnly === true
-          ? { ...target.field, readOnly: false }
-          : target.field;
-      handleLineFieldChange(target.group as any, target.rowId, initField, target.rawValue as any, {
-        source: 'selectionEffectInit'
-      });
-    });
-
-    initializedSelectionEffectsRef.current.forEach(signature => {
-      if (!nextKeys.has(signature)) initializedSelectionEffectsRef.current.delete(signature);
-    });
-  }, [submitting, initSourceQuestion, lineItems, selectionEffectInitTopValues, handleLineFieldChange, onDiagnostic]);
+  useLineItemSelectionEffectInit({
+    q,
+    definition,
+    submitting,
+    values,
+    lineItems,
+    recordMeta,
+    handleLineFieldChange,
+    onDiagnostic
+  });
 
         const {
           selectorCfg,

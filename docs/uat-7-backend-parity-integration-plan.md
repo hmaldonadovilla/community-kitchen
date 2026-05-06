@@ -755,11 +755,17 @@ One-hundred-first-pass results:
 - Validation for the pass used direct ESLint on touched files, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
+One-hundred-second-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted hydrated-row selection-effect initialization into `useLineItemSelectionEffectInit` and moved the pure selection-effect init collector from `components/form` to `features/lineItems/domain`. Current size: 3,424 lines.
+- Validation for the pass used direct ESLint on touched files, selection-effect init tests, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
+- `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 11,931 lines.
-- `LineItemGroupQuestion.tsx`: 3,472 lines.
+- `LineItemGroupQuestion.tsx`: 3,424 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
@@ -832,7 +838,7 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
-| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, guided target resolution and guided line-group rendering, source-first allocation display/sorting/selection/list/upload renderers, row-flow prompt/output/field/row/action renderers, line-item table/body-field/group-row rendering, subgroup selector/add/table/field/row/open-stack/inline-subgroup rendering, group selector/add controls, automatic line-item row effects, progressive attention auto-expand policy, guided row toggle/header layout, flattened overlay target helpers/rendering, and compact row source mapping with focused tests where practical. |
+| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, guided target resolution and guided line-group rendering, source-first allocation display/sorting/selection/list/upload renderers, row-flow prompt/output/field/row/action renderers, line-item table/body-field/group-row rendering, subgroup selector/add/table/field/row/open-stack/inline-subgroup rendering, group selector/add controls, automatic line-item row effects, hydrated-row selection-effect initialization, progressive attention auto-expand policy, guided row toggle/header layout, flattened overlay target helpers/rendering, and compact row source mapping with focused tests where practical. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
 ## Open Questions

@@ -1,5 +1,5 @@
-import { FieldValue, WebQuestionDefinition } from '../../../types';
-import { matchesWhenClause } from '../../../core';
+import { FieldValue, WebQuestionDefinition } from '../../../../types';
+import { matchesWhenClause } from '../../../../core';
 import {
   buildSubgroupKey,
   parseSubgroupKey,
@@ -8,11 +8,11 @@ import {
   ROW_PARENT_ROW_ID_KEY,
   ROW_SELECTION_EFFECT_ID_KEY,
   shouldPersistLineItemRows
-} from '../../app/lineItems';
-import { applyValueMapsToLineRow } from './valueMaps';
-import { LineItemState } from '../../types';
-import { isEmptyValue } from '../../utils/values';
-import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../app/recipeIngredientsDirty';
+} from '../../../app/lineItems';
+import { applyValueMapsToLineRow } from '../../../app/valueMaps';
+import { LineItemState } from '../../../types';
+import { isEmptyValue } from '../../../utils/values';
+import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../../app/recipeIngredientsDirty';
 
 export interface SelectionEffectInitTarget {
   group: WebQuestionDefinition;
@@ -34,7 +34,7 @@ const toStableSignatureValue = (rawValue: FieldValue): string => {
   if (rawValue === undefined) return '__undefined__';
   try {
     return JSON.stringify(rawValue);
-  } catch (_) {
+  } catch {
     return `${rawValue ?? ''}`;
   }
 };
@@ -43,7 +43,7 @@ const normalizeString = (rawValue: unknown): string => {
   if (rawValue === undefined || rawValue === null) return '';
   try {
     return rawValue.toString().trim();
-  } catch (_) {
+  } catch {
     return '';
   }
 };

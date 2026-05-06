@@ -2,7 +2,7 @@ import {
   collectComputedSelectionEffectInitTargets,
   collectSelectionEffectInitTargets,
   collectSubgroupSeedInitTargets
-} from '../../../src/web/react/components/form/selectionEffectInit';
+} from '../../../src/web/react/features/lineItems/domain/selectionEffectInit';
 import { buildSubgroupKey } from '../../../src/web/react/app/lineItems';
 
 describe('collectSelectionEffectInitTargets', () => {

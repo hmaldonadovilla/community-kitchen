@@ -1,6 +1,6 @@
 import { buildSubgroupKey } from '../../src/web/react/app/lineItems';
 import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../src/web/react/app/recipeIngredientsDirty';
-import { collectSelectionEffectInitTargets } from '../../src/web/react/components/form/selectionEffectInit';
+import { collectSelectionEffectInitTargets } from '../../src/web/react/features/lineItems/domain/selectionEffectInit';
 import { WebQuestionDefinition } from '../../src/types';
 
 const buildMealQuestion = (effectOverrides: Record<string, any> = {}): WebQuestionDefinition =>
