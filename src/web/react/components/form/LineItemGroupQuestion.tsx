@@ -4,7 +4,6 @@ import {
   buildLocalizedOptions,
   getOptionStateValue,
   matchesWhenClause,
-  computeTotals,
   toDependencyValue,
   toOptionSet
 } from '../../../core';
@@ -22,7 +21,6 @@ import {
   RowFlowActionRef,
   RowFlowConfig,
   RowFlowOverlayContextHeaderConfig,
-  ValidationRule,
   VisibilityContext,
   WebQuestionDefinition
 } from '../../../types';
@@ -124,6 +122,7 @@ import { useLineItemAttentionAutoExpand } from '../../features/lineItems/compone
 import { useLineItemGroupControls } from '../../features/lineItems/components/useLineItemGroupControls';
 import { useLineItemAutoAddEffects } from '../../features/lineItems/hooks/useLineItemAutoAddEffects';
 import { useGuidedStepDataSourceState } from '../../features/lineItems/hooks/useGuidedStepDataSourceState';
+import { useLineItemGroupPresentationState } from '../../features/lineItems/hooks/useLineItemGroupPresentationState';
 import { useLineItemSelectionEffectInit } from '../../features/lineItems/hooks/useLineItemSelectionEffectInit';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -133,7 +132,6 @@ import type {
 const GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON = 'guidedStepReservationDeferred';
 
 import {
-  ROW_NON_MATCH_OPTIONS_KEY,
   cascadeRemoveLineItemRows,
   buildSubgroupKey,
   resolveSubgroupKey
@@ -313,7 +311,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
   const selectorSearchLoggedRef = React.useRef<Set<string>>(new Set());
   const selectorOverlayLoggedRef = React.useRef<Set<string>>(new Set());
   const selectorLabelLoggedRef = React.useRef<Set<string>>(new Set());
-  const warningModeLoggedRef = React.useRef<Set<string>>(new Set());
   const overlayOpenActionLoggedRef = React.useRef<Set<string>>(new Set());
   const rowFlowLoggedRef = React.useRef<Set<string>>(new Set());
   const rowFlowPromptRef = React.useRef<Record<string, string>>({});
@@ -2472,27 +2469,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     }
   });
 
-  const warningsFor = (fieldPath: string): string[] => {
-    const key = (fieldPath || '').toString();
-    const list = key && warningByField ? (warningByField as any)[key] : undefined;
-    return Array.isArray(list) ? list.filter(Boolean).map(m => (m || '').toString()) : [];
-  };
-  const filterWarnings = (msgs: string[]): string[] => {
-    if (!msgs.length) return msgs;
-    if (useValidationNonMatchWarnings) return msgs;
-    return msgs.filter(msg => !genericNonMatchWarnings.has(msg));
-  };
-  const hasWarning = (fieldPath: string): boolean => filterWarnings(warningsFor(fieldPath)).length > 0;
-  const renderWarnings = (fieldPath: string): React.ReactNode => {
-    const msgs = filterWarnings(warningsFor(fieldPath));
-    if (!msgs.length) return null;
-    return msgs.map((m, idx) => (
-      <div key={`${fieldPath}-warning-${idx}`} className="warning">
-        {m}
-      </div>
-    ));
-  };
-
   const buildOptionSetForLineField = React.useCallback(
     (field: any, groupKey: string): OptionSet => resolveOptionSetForField(optionState, field, groupKey),
     [optionState]
@@ -2556,92 +2532,39 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
           onDiagnostic
         });
 
-        const groupTotals = computeTotals({ config: q.lineItemConfig!, rows: parentRows, groupId: q.id, invalidFieldPaths: errors }, language);
-        const liUi = q.lineItemConfig?.ui;
-        const uiMode = (liUi?.mode || 'default').toString().trim().toLowerCase();
-        const isTableMode = uiMode === 'table';
-        const hideGroupLabel = q.ui?.hideLabel === true;
-
-        React.useEffect(() => {
-          if (!onDiagnostic) return;
-          if (liUi?.addButtonPlacement && liUi.addButtonPlacement !== 'both') {
-            onDiagnostic('ui.lineItems.addButtonPlacement', { groupId: q.id, value: liUi.addButtonPlacement });
-          }
-        }, [onDiagnostic, liUi?.addButtonPlacement, q.id]);
-
-        const nonMatchWarningModeRaw = (liUi as any)?.nonMatchWarningMode;
-        const nonMatchWarningModeCandidate =
-          nonMatchWarningModeRaw !== undefined && nonMatchWarningModeRaw !== null
-            ? nonMatchWarningModeRaw.toString().trim().toLowerCase()
-            : '';
-        const nonMatchWarningMode: 'descriptive' | 'validation' | 'both' =
-          nonMatchWarningModeCandidate === 'validation' ||
-          nonMatchWarningModeCandidate === 'rules' ||
-          nonMatchWarningModeCandidate === 'rule' ||
-          nonMatchWarningModeCandidate === 'generic'
-            ? 'validation'
-            : nonMatchWarningModeCandidate === 'both' || nonMatchWarningModeCandidate === 'all'
-              ? 'both'
-              : 'descriptive';
-        const useValidationNonMatchWarnings = nonMatchWarningMode !== 'descriptive';
-        const useDescriptiveNonMatchWarnings = nonMatchWarningMode !== 'validation';
-        if (nonMatchWarningModeCandidate) {
-          const warningKey = `${q.id}::nonMatchWarningMode`;
-          if (!warningModeLoggedRef.current.has(warningKey)) {
-            warningModeLoggedRef.current.add(warningKey);
-            onDiagnostic?.('ui.lineItems.nonMatchWarningMode', { groupId: q.id, mode: nonMatchWarningMode });
-          }
-        }
-
-        const messageFieldsAll = q.lineItemConfig?.fields || [];
-        const tableColumnIdsRaw = isTableMode && Array.isArray(liUi?.tableColumns) ? liUi?.tableColumns : [];
-        const tableColumnIds = tableColumnIdsRaw
-          .map(id => (id !== undefined && id !== null ? id.toString().trim() : ''))
-          .filter(Boolean);
-        const tableFieldsAll = messageFieldsAll;
-        const tableFields = isTableMode
-          ? (tableColumnIds.length ? tableColumnIds : tableFieldsAll.map(f => f.id))
-              .map(fid => tableFieldsAll.find(f => f.id === fid))
-              .filter((field): field is (typeof tableFieldsAll)[number] => Boolean(field))
-          : [];
-        const tableFieldIdSet = new Set(tableFields.map(field => field.id));
-        const isSourceFirstAllocations = (() => {
-          if (!rowFlowEnabled) return false;
-          const dataSourceRowsCfg = Array.isArray((q.lineItemConfig as any)?.dataSourceRows)
-            ? ((q.lineItemConfig as any).dataSourceRows as any[])
-            : [];
-          return dataSourceRowsCfg.some(cfg => ((cfg?.presentation || '').toString().trim().toLowerCase() === 'sourcefirstallocations'));
-        })();
-        const tableTotals =
-          isTableMode && !rowFlowEnabled
-            ? groupTotals.filter(total => {
-                const key = (total.key || '').toString();
-                return key ? tableFieldIdSet.has(key) : false;
-              })
-            : [];
-        const toolbarTotals = isTableMode && !rowFlowEnabled ? [] : isSourceFirstAllocations ? [] : groupTotals;
-        const genericNonMatchWarnings = (() => {
-          const seen = new Set<string>();
-          messageFieldsAll.forEach(field => {
-            const rules = Array.isArray((field as any)?.validationRules)
-              ? ((field as any).validationRules as ValidationRule[])
-              : [];
-            rules.forEach((rule: ValidationRule) => {
-              if (!rule || (rule as any)?.level !== 'warning') return;
-              const when = (rule as any)?.when;
-              if (!when || typeof when !== 'object') return;
-              if ((when as any)?.fieldId !== ROW_NON_MATCH_OPTIONS_KEY) return;
-              const msg = resolveLocalizedString((rule as any)?.message, language, '');
-              const text = msg ? msg.toString().trim() : '';
-              if (text) seen.add(text);
-            });
-          });
-          return seen;
-        })();
-
-        const shouldRenderTopToolbar = !hideToolbars && (showSelectorTop || showAddTop);
-        const shouldRenderBottomToolbar =
-          !hideToolbars && (parentRows.length > 0 || showAddBottom) && (showAddBottom || showSelectorBottom || toolbarTotals.length > 0);
+        const {
+          liUi,
+          isTableMode,
+          hideGroupLabel,
+          messageFieldsAll,
+          tableFieldsAll,
+          tableFields,
+          tableFieldIdSet,
+          tableTotals,
+          toolbarTotals,
+          genericNonMatchWarnings,
+          useValidationNonMatchWarnings,
+          useDescriptiveNonMatchWarnings,
+          shouldRenderTopToolbar,
+          shouldRenderBottomToolbar,
+          warningsFor,
+          filterWarnings,
+          hasWarning,
+          renderWarnings
+        } = useLineItemGroupPresentationState({
+          q,
+          parentRows,
+          rowFlowEnabled,
+          errors,
+          language,
+          hideToolbars,
+          showAddTop,
+          showAddBottom,
+          showSelectorTop,
+          showSelectorBottom,
+          warningByField,
+          onDiagnostic
+        });
 
         useLineItemAttentionAutoExpand({
           q,
