@@ -11,9 +11,6 @@ import {
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import {
-  DATA_SOURCE_CACHE_CLEARED_EVENT,
-  DATA_SOURCE_CACHE_UPDATED_EVENT,
-  fetchDataSource,
   mutateCachedDataSource,
   peekCachedDataSource
 } from '../../../data/dataSources';
@@ -56,10 +53,6 @@ import {
   type GuidedStepReservationAvailabilityEventDetail
 } from '../../features/reservations/liveSyncEvents';
 import {
-  applyInventoryAvailabilitySnapshotToRow,
-  normalizeInventoryAvailabilitySnapshotForDisplay
-} from '../../features/reservations/availabilitySnapshots';
-import {
   resolveReservationResourceFieldIds,
   resolveReservationSourceItemKey
 } from '../../features/reservations/sourceFields';
@@ -97,14 +90,8 @@ import {
   resolveStepDataSourceRowsForParentAction
 } from './stepDataSourceRows';
 import {
-  resolveSourceFirstAllocationLabelVisibility,
-  resolveSourceFirstRowSortMode,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded
 } from '../../app/sourceFirstAllocations';
-import {
-  buildStepDataSourceBootstrapSignature,
-  shouldWaitForGuidedReservationSyncOnBootstrap
-} from '../../app/stepDataSourceBootstrap';
 import {
   applyLineItemGroupOverride,
   buildLineItemOverlayGroupOverride
@@ -136,6 +123,7 @@ import { LineItemTableModeRenderer } from '../../features/lineItems/components/L
 import { useLineItemAttentionAutoExpand } from '../../features/lineItems/components/useLineItemAttentionAutoExpand';
 import { useLineItemGroupControls } from '../../features/lineItems/components/useLineItemGroupControls';
 import { useLineItemAutoAddEffects } from '../../features/lineItems/hooks/useLineItemAutoAddEffects';
+import { useGuidedStepDataSourceState } from '../../features/lineItems/hooks/useGuidedStepDataSourceState';
 import { useLineItemSelectionEffectInit } from '../../features/lineItems/hooks/useLineItemSelectionEffectInit';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -406,481 +394,43 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     return map;
   }, [activeFieldMeta.path, activeFieldMeta.type, lineItems, parentRows, q.id, rowFlow, rowFlowEnabled, rowFlowSubGroupIds, values]);
 
-  const guidedStepFieldId = `${(definition as any)?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
-  const currentGuidedStepId = `${resolveTopValue(guidedStepFieldId) ?? ''}`.trim();
-  const stepDataSourceRows = React.useMemo(
-    () => (Array.isArray(dataSourceRows) ? dataSourceRows.filter(Boolean) : []),
-    [dataSourceRows]
-  );
-  const topLevelVisibilityContext = React.useMemo<VisibilityContext>(
-    () => ({
-      getValue: (fieldId: string) => resolveTopValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || [],
-      getLineItemKeys: () => Object.keys(lineItems)
-    }),
-    [lineItems, resolveTopValue]
-  );
-  const activeStepDataSourceRows = React.useMemo(
-    () =>
-      stepDataSourceRows.filter(config => {
-        const when = (config as any)?.presentationWhen;
-        return !when || matchesWhenClause(when as any, topLevelVisibilityContext);
-      }),
-    [stepDataSourceRows, topLevelVisibilityContext]
-  );
-  const sourceFirstDataSourceRows = React.useMemo(
-    () =>
-      activeStepDataSourceRows.filter(config => {
-        if (`${(config as any)?.presentation || ''}`.trim() !== 'sourceFirstAllocations') return false;
-        return true;
-      }),
-    [activeStepDataSourceRows]
-  );
-  const [stepDataSourceRefreshTick, setStepDataSourceRefreshTick] = React.useState(0);
-  const stepDataSourceRefreshHandleRef = React.useRef<{
-    kind: 'raf' | 'timeout';
-    handle: number | ReturnType<typeof setTimeout>;
-  } | null>(null);
-  const queueStepDataSourceRefreshTick = React.useCallback(() => {
-    if (stepDataSourceRefreshHandleRef.current) return;
-    const flush = () => {
-      stepDataSourceRefreshHandleRef.current = null;
-      setStepDataSourceRefreshTick(prev => prev + 1);
-    };
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      stepDataSourceRefreshHandleRef.current = {
-        kind: 'raf',
-        handle: window.requestAnimationFrame(flush)
-      };
-      return;
-    }
-    stepDataSourceRefreshHandleRef.current = {
-      kind: 'timeout',
-      handle: setTimeout(flush, 0)
-    };
-  }, []);
-  React.useEffect(
-    () => () => {
-      const pending = stepDataSourceRefreshHandleRef.current;
-      stepDataSourceRefreshHandleRef.current = null;
-      if (!pending) return;
-      if (
-        pending.kind === 'raf' &&
-        typeof window !== 'undefined' &&
-        typeof window.cancelAnimationFrame === 'function'
-      ) {
-        window.cancelAnimationFrame(pending.handle as number);
-        return;
-      }
-      clearTimeout(pending.handle as ReturnType<typeof setTimeout>);
-    },
-    []
-  );
-  const [stepDataSourceLoadingCounts, setStepDataSourceLoadingCounts] = React.useState<Record<string, number>>({});
-  const [stepDataSourceDrafts, setStepDataSourceDrafts] = React.useState<Record<string, Record<string, FieldValue>>>({});
-  const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
-  const stepDataSourceRecordIdRef = React.useRef<string>('');
-  const stepDataSourceBootstrapSignatureRef = React.useRef<string>('');
-  const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
-  const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
-  const reservationSyncCounterRef = React.useRef(0);
-  const latestStepDataSourceSyncedLineItemsRef = React.useRef<LineItemState | null>(null);
-  const deferredReservationAutoSaveHoldReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sourceFirstPresentationLoggedRef = React.useRef<string>('');
-  const pendingStepReservationDraftSyncRef = React.useRef<{
-    stepId: string;
-    reason: string;
-  } | null>(null);
-  const shouldWaitForReservationSyncBeforeBootstrap = React.useMemo(
-    () => shouldWaitForGuidedReservationSyncOnBootstrap(dataSourceBootstrap),
-    [dataSourceBootstrap]
-  );
-  const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
-  const stepDataSourceBootstrapSignature = React.useMemo(
-    () =>
-      buildStepDataSourceBootstrapSignature({
-        recordId,
-        language,
-        stepId: currentGuidedStepId,
-        configs: activeStepDataSourceRows,
-        bootstrap: dataSourceBootstrap
-      }),
-    [activeStepDataSourceRows, currentGuidedStepId, dataSourceBootstrap, language, recordId]
-  );
-
-  React.useEffect(() => {
-    stepDataSourceDraftsRef.current = stepDataSourceDrafts;
-  }, [stepDataSourceDrafts]);
-
-  React.useEffect(() => {
-    return () => {
-      Object.values(reservationDebounceTimersRef.current).forEach(timer => {
-        clearTimeout(timer);
-      });
-      reservationDebounceTimersRef.current = {};
-      reservationCommittedValuesRef.current = {};
-    };
-  }, []);
+  const {
+    currentGuidedStepId,
+    activeStepDataSourceRows,
+    sourceFirstDataSourceRows,
+    stepDataSourceRefreshTick,
+    queueStepDataSourceRefreshTick,
+    stepDataSourceDrafts,
+    setStepDataSourceDrafts,
+    stepDataSourceDraftsRef,
+    reservationDebounceTimersRef,
+    reservationRequestVersionRef,
+    reservationCommittedValuesRef,
+    reservationSyncCounterRef,
+    latestStepDataSourceSyncedLineItemsRef,
+    deferredReservationAutoSaveHoldReleaseTimerRef,
+    isStepDataSourceLoading,
+    queueStepReservationDraftSnapshotSync,
+    queueImmediateStepReservationDraftSync,
+    updateStepDataSourceAvailability,
+    applyStepDataSourceAvailabilitySnapshots
+  } = useGuidedStepDataSourceState({
+    groupId: q.id,
+    definition,
+    recordId,
+    language,
+    values,
+    lineItems,
+    dataSourceRows,
+    dataSourceBootstrap,
+    parentRowCount: parentRows.length,
+    resolveTopValue,
+    queueGuidedStepReservationDraftSync,
+    waitForGuidedStepReservationDraftSync,
+    onDiagnostic
+  });
 
   const toFiniteNumber = React.useCallback((value: any): number => toFiniteNumberValue(value), []);
-
-  const buildStepDataSourceLoadKey = React.useCallback(
-    (config: any): string => {
-      const dataSource = config?.dataSource && typeof config.dataSource === 'object' ? config.dataSource : config;
-      return JSON.stringify({
-        sourceId: `${dataSource?.id || ''}`.trim(),
-        sourceFormKey: `${dataSource?.formKey || ''}`.trim(),
-        projection: Array.isArray(dataSource?.projection)
-          ? dataSource.projection.map((entry: any) => `${entry ?? ''}`.trim()).filter(Boolean)
-          : [],
-        language: `${language || 'EN'}`.trim().toUpperCase()
-      });
-    },
-    [language]
-  );
-
-  const mutateStepDataSourceLoading = React.useCallback(
-    (configs: any[], delta: 1 | -1) => {
-      const candidates = Array.isArray(configs) ? configs.filter(Boolean) : [];
-      if (!candidates.length) return;
-      setStepDataSourceLoadingCounts(prev => {
-        let changed = false;
-        const next = { ...prev };
-        candidates.forEach(config => {
-          const key = buildStepDataSourceLoadKey(config);
-          const current = Number(next[key] || 0);
-          const nextValue = Math.max(0, current + delta);
-          if (nextValue === current) return;
-          changed = true;
-          if (nextValue > 0) next[key] = nextValue;
-          else delete next[key];
-        });
-        return changed ? next : prev;
-      });
-    },
-    [buildStepDataSourceLoadKey]
-  );
-
-  const beginStepDataSourceLoading = React.useCallback(
-    (configs: any[]) => mutateStepDataSourceLoading(configs, 1),
-    [mutateStepDataSourceLoading]
-  );
-
-  const endStepDataSourceLoading = React.useCallback(
-    (configs: any[]) => mutateStepDataSourceLoading(configs, -1),
-    [mutateStepDataSourceLoading]
-  );
-
-  const isStepDataSourceLoading = React.useCallback(
-    (config: any): boolean => {
-      const key = buildStepDataSourceLoadKey(config);
-      return Number(stepDataSourceLoadingCounts[key] || 0) > 0;
-    },
-    [buildStepDataSourceLoadKey, stepDataSourceLoadingCounts]
-  );
-
-  const queueImmediateStepReservationDraftSync = React.useCallback(
-    (args: {
-      config: any;
-      parentRowId: string;
-      sourceKey: string;
-      patch: Record<string, FieldValue>;
-      snapshotLineItems?: LineItemState | null;
-    }) => {
-      if (!queueGuidedStepReservationDraftSync) return;
-      if (!currentGuidedStepId) return;
-      const reason = `lineItem:${q.id}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`;
-      onDiagnostic?.('guidedStep.reservationSync.queued', {
-        groupId: q.id,
-        stepId: currentGuidedStepId,
-        parentRowId: args.parentRowId,
-        sourceKey: args.sourceKey,
-        patchFields: Object.keys(args.patch).sort()
-      });
-      const snapshotLineItems = args.snapshotLineItems || latestStepDataSourceSyncedLineItemsRef.current || null;
-      if (snapshotLineItems) {
-        latestStepDataSourceSyncedLineItemsRef.current = null;
-        queueGuidedStepReservationDraftSync({
-          stepId: currentGuidedStepId,
-          reason,
-          snapshotLineItems
-        });
-        return;
-      }
-      pendingStepReservationDraftSyncRef.current = {
-        stepId: currentGuidedStepId,
-        reason
-      };
-      setPendingStepReservationDraftSyncTick(prev => prev + 1);
-    },
-    [currentGuidedStepId, onDiagnostic, q.id, queueGuidedStepReservationDraftSync]
-  );
-
-  const updateStepDataSourceAvailability = React.useCallback(
-    (config: any, availability: InventoryAvailabilitySnapshot | null | undefined): void => {
-      if (!config?.dataSource || !availability) return;
-      mutateCachedDataSource(config.dataSource, language, items =>
-        items.map(item => {
-          if (!item || typeof item !== 'object') return item;
-          const matchesRecord = `${item.id ?? ''}`.trim() === `${availability.resourceRecordId || ''}`.trim();
-          const matchesItem =
-            !availability.resourceItemId ||
-            resolveReservationSourceItemKey(config, item) === `${availability.resourceItemId}`.trim();
-          if (!matchesRecord || !matchesItem) return item;
-          return applyInventoryAvailabilitySnapshotToRow(item, availability);
-        })
-      );
-      queueStepDataSourceRefreshTick();
-    },
-    [language, queueStepDataSourceRefreshTick]
-  );
-
-  const applyStepDataSourceAvailabilitySnapshots = React.useCallback(
-    (snapshots: InventoryAvailabilitySnapshot[] | null | undefined): void => {
-      const entries = Array.isArray(snapshots) ? snapshots.filter(Boolean) : [];
-      if (!entries.length || !activeStepDataSourceRows.length) return;
-      activeStepDataSourceRows.forEach(config => {
-        const dataSourceFormKey = `${config?.dataSource?.formKey || ''}`.trim();
-        entries.forEach(snapshot => {
-          if (!snapshot) return;
-          if (dataSourceFormKey && dataSourceFormKey !== `${snapshot.resourceFormKey || ''}`.trim()) return;
-          updateStepDataSourceAvailability(config, normalizeInventoryAvailabilitySnapshotForDisplay(snapshot));
-        });
-      });
-    },
-    [activeStepDataSourceRows, updateStepDataSourceAvailability]
-  );
-
-  React.useEffect(() => {
-    if (!stepDataSourceRows.length) {
-      stepDataSourceBootstrapSignatureRef.current = '';
-      return;
-    }
-    const normalizedRecordId = `${recordId || ''}`.trim();
-    const recordChanged = stepDataSourceRecordIdRef.current !== normalizedRecordId;
-    stepDataSourceRecordIdRef.current = normalizedRecordId;
-    if (recordChanged) {
-      const timerKeys = Object.keys(reservationDebounceTimersRef.current);
-      if (timerKeys.length) {
-        timerKeys.forEach(key => {
-          const timer = reservationDebounceTimersRef.current[key];
-          if (timer) clearTimeout(timer);
-          delete reservationDebounceTimersRef.current[key];
-        });
-      }
-      reservationRequestVersionRef.current = {};
-      reservationCommittedValuesRef.current = {};
-      if (Object.keys(stepDataSourceDraftsRef.current).length) {
-        stepDataSourceDraftsRef.current = {};
-        setStepDataSourceDrafts({});
-      }
-    }
-    if (!activeStepDataSourceRows.length) {
-      stepDataSourceBootstrapSignatureRef.current = '';
-      return;
-    }
-    if (!recordChanged && stepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
-      return;
-    }
-    let cancelled = false;
-    const configEntries = activeStepDataSourceRows
-      .map(candidate => {
-        if (!candidate || typeof candidate !== 'object') return null;
-        const dataSource = (candidate as any).dataSource;
-        if (!dataSource || typeof dataSource !== 'object') return null;
-        const shouldForceRefresh =
-          recordChanged ||
-          (candidate as any).forceRefreshOnMount === true ||
-          Boolean((candidate as any).availability) ||
-          Boolean((candidate as any).reservationBehavior);
-        return { dataSource, shouldForceRefresh };
-      })
-      .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
-    if (!configEntries.length) return;
-
-    const runBootstrap = async () => {
-      const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
-      stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
-      beginStepDataSourceLoading(loadingEntries);
-      try {
-        if (
-          shouldWaitForReservationSyncBeforeBootstrap &&
-          normalizedRecordId &&
-          waitForGuidedStepReservationDraftSync
-        ) {
-          onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.start', {
-            groupId: q.id,
-            stepId: currentGuidedStepId || null,
-            recordId: normalizedRecordId
-          });
-          const waitResult = await waitForGuidedStepReservationDraftSync({
-            recordId: normalizedRecordId,
-            stepId: currentGuidedStepId || undefined,
-            reason: `stepDataSourceBootstrap:${q.id}`
-          });
-          if (cancelled) return;
-          if (!waitResult.ok) {
-            onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.blocked', {
-              groupId: q.id,
-              stepId: currentGuidedStepId || null,
-              recordId: normalizedRecordId,
-              message: waitResult.message || null
-            });
-            return;
-          }
-          onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
-            groupId: q.id,
-            stepId: currentGuidedStepId || null,
-            recordId: normalizedRecordId
-          });
-        }
-
-        const pendingFetches = configEntries
-          .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
-          .map(({ dataSource, shouldForceRefresh }) => ({
-            config: dataSource,
-            promise: fetchDataSource(
-              dataSource,
-              language,
-              shouldForceRefresh ? { forceRefresh: true } : undefined
-            ).catch(() => null)
-          }));
-        if (!pendingFetches.length) {
-          if (!cancelled) {
-            queueStepDataSourceRefreshTick();
-          }
-          return;
-        }
-        await Promise.all(pendingFetches.map(entry => entry.promise));
-        if (!cancelled) {
-          queueStepDataSourceRefreshTick();
-        }
-      } finally {
-        endStepDataSourceLoading(loadingEntries);
-      }
-    };
-
-    void runBootstrap();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeStepDataSourceRows,
-    beginStepDataSourceLoading,
-    currentGuidedStepId,
-    endStepDataSourceLoading,
-    language,
-    onDiagnostic,
-    q.id,
-    queueStepDataSourceRefreshTick,
-    recordId,
-    shouldWaitForReservationSyncBeforeBootstrap,
-    stepDataSourceBootstrapSignature,
-    stepDataSourceRows,
-    waitForGuidedStepReservationDraftSync
-  ]);
-
-  React.useEffect(() => {
-    if (!activeStepDataSourceRows.length) return;
-    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-    let cancelled = false;
-    const watchedDataSourceIds = new Set(
-      activeStepDataSourceRows
-        .map(candidate =>
-          candidate && typeof candidate === 'object' ? `${(candidate as any)?.dataSource?.id || ''}`.trim() : ''
-        )
-        .filter(Boolean)
-    );
-
-    const handleCacheCleared = () => {
-      const configs = activeStepDataSourceRows
-        .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
-        .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
-      if (!configs.length) {
-        queueStepDataSourceRefreshTick();
-        return;
-      }
-      beginStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
-      Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null)))
-        .then(() => {
-          if (cancelled) return;
-          queueStepDataSourceRefreshTick();
-        })
-        .finally(() => {
-          endStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
-        });
-    };
-
-    const handleCacheUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<{ id?: string }>).detail;
-      const dataSourceId = `${detail?.id || ''}`.trim();
-      if (dataSourceId && !watchedDataSourceIds.has(dataSourceId)) return;
-      queueStepDataSourceRefreshTick();
-    };
-
-    window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
-    window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
-      window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
-    };
-  }, [activeStepDataSourceRows, beginStepDataSourceLoading, endStepDataSourceLoading, language, queueStepDataSourceRefreshTick]);
-
-  React.useEffect(() => {
-    const pending = pendingStepReservationDraftSyncRef.current;
-    if (!pending || !queueGuidedStepReservationDraftSync) return;
-    pendingStepReservationDraftSyncRef.current = null;
-    const snapshotLineItems = latestStepDataSourceSyncedLineItemsRef.current || lineItems;
-    latestStepDataSourceSyncedLineItemsRef.current = null;
-    queueGuidedStepReservationDraftSync({
-      stepId: pending.stepId,
-      reason: pending.reason,
-      snapshotLineItems
-    });
-  }, [
-    lineItems,
-    pendingStepReservationDraftSyncTick,
-    queueGuidedStepReservationDraftSync,
-    stepDataSourceDrafts,
-    values
-  ]);
-
-  React.useEffect(() => {
-    if (!sourceFirstDataSourceRows.length) {
-      sourceFirstPresentationLoggedRef.current = '';
-      return;
-    }
-    const countRows = (config: any): number => {
-      if (!config?.dataSource || typeof config.dataSource !== 'object') return 0;
-      const cached = peekCachedDataSource(config.dataSource, language);
-      const items = Array.isArray((cached as any)?.items) ? (cached as any).items : Array.isArray(cached) ? cached : [];
-      return items.length;
-    };
-    const signature = sourceFirstDataSourceRows
-      .map(config => `${(config as any)?.id || 'datasource'}:${countRows(config)}`)
-      .join('|');
-    if (!signature || sourceFirstPresentationLoggedRef.current === signature) return;
-    sourceFirstPresentationLoggedRef.current = signature;
-    onDiagnostic?.('dataSourceRows.sourceFirst.enabled', {
-      groupId: q.id,
-      configIds: sourceFirstDataSourceRows.map(config => `${(config as any)?.id || ''}`.trim()).filter(Boolean),
-      allocationLabelVisibilityByConfig: sourceFirstDataSourceRows.map(config => ({
-        id: `${(config as any)?.id || ''}`.trim() || 'datasource',
-        visibility: resolveSourceFirstAllocationLabelVisibility(
-          (config as any)?.allocationLabelVisibility ?? (config as any)?.ui?.allocationLabelVisibility
-        )
-      })),
-      rowSortByConfig: sourceFirstDataSourceRows.map(config => ({
-        id: `${(config as any)?.id || ''}`.trim() || 'datasource',
-        sort: resolveSourceFirstRowSortMode((config as any)?.sourceFirstRowSort ?? (config as any)?.ui?.sourceFirstRowSort)
-      })),
-      sourceRowCount: sourceFirstDataSourceRows.reduce((count, config) => count + countRows(config), 0),
-      parentRowCount: parentRows.length
-    });
-  }, [language, onDiagnostic, parentRows.length, q.id, sourceFirstDataSourceRows]);
 
   const resolveVirtualRowWhenContext = React.useCallback(
     (args: {
@@ -959,7 +509,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         resolveReservationQuantityFromValues
       });
     },
-    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id]
+    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, reservationCommittedValuesRef, stepDataSourceDraftsRef]
   );
 
   const resolveStepDataSourceRows = React.useCallback(
@@ -1091,7 +641,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       buildStepDataSourceDraftKey,
       lineItems,
       parentRows,
-      resolveDataSourceOutputGroup
+      resolveDataSourceOutputGroup,
+      reservationCommittedValuesRef,
+      stepDataSourceDraftsRef
     ]
   );
 
@@ -1343,9 +895,12 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       resolveVirtualPresetValue,
       resolveVirtualRowWhenContext,
       resolveRowFlowGroupConfig,
+      latestStepDataSourceSyncedLineItemsRef,
       language,
       setLineItems,
+      setStepDataSourceDrafts,
       setValues,
+      stepDataSourceDraftsRef,
       validateVirtualFieldRules
     ]
   );
@@ -1809,6 +1364,11 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       resolveCommittedReservationStateForSource,
       resolveCurrentReservationStateForSource,
       resolveDataSourceOutputGroup,
+      reservationCommittedValuesRef,
+      reservationDebounceTimersRef,
+      reservationRequestVersionRef,
+      reservationSyncCounterRef,
+      stepDataSourceDraftsRef,
       syncStepDataSourceOutputRow,
       toFiniteNumber,
       updateStepDataSourceAvailability,
@@ -1829,7 +1389,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       deferredReservationAutoSaveHoldReleaseTimerRef.current = null;
     }
     setAutoSaveHold?.(true, { reason: GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON });
-  }, [setAutoSaveHold]);
+  }, [deferredReservationAutoSaveHoldReleaseTimerRef, setAutoSaveHold]);
 
   const releaseDeferredStepReservationAutoSaveHold = React.useCallback(() => {
     if (deferredReservationAutoSaveHoldReleaseTimerRef.current) {
@@ -1837,7 +1397,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       deferredReservationAutoSaveHoldReleaseTimerRef.current = null;
     }
     setAutoSaveHold?.(false, { reason: GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON });
-  }, [setAutoSaveHold]);
+  }, [deferredReservationAutoSaveHoldReleaseTimerRef, setAutoSaveHold]);
 
   const scheduleDeferredStepReservationAutoSaveHoldRelease = React.useCallback(() => {
     if (!setAutoSaveHold) return;
@@ -1848,7 +1408,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       deferredReservationAutoSaveHoldReleaseTimerRef.current = null;
       setAutoSaveHold(false, { reason: GUIDED_RESERVATION_DEFERRED_AUTOSAVE_HOLD_REASON });
     }, 500);
-  }, [setAutoSaveHold]);
+  }, [deferredReservationAutoSaveHoldReleaseTimerRef, setAutoSaveHold]);
 
   React.useEffect(
     () => () => {
@@ -1865,7 +1425,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       clearTimeout(timer);
       delete reservationDebounceTimersRef.current[timerKey];
     },
-    [buildDeferredStepReservationTimerKey]
+    [buildDeferredStepReservationTimerKey, reservationDebounceTimersRef]
   );
 
   const queueDeferredStepReservationSync = React.useCallback(
@@ -1889,7 +1449,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         delete reservationDebounceTimersRef.current[timerKey];
       }
     },
-    [buildDeferredStepReservationTimerKey, requestDeferredStepReservationAutoSaveHold]
+    [buildDeferredStepReservationTimerKey, requestDeferredStepReservationAutoSaveHold, reservationDebounceTimersRef]
   );
 
   const rollbackRejectedStepReservations = React.useCallback(
@@ -2026,7 +1586,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       buildStepDataSourceDraftKey,
       lineItems,
       parentRows,
-      resolveDataSourceOutputGroup
+      resolveDataSourceOutputGroup,
+      reservationCommittedValuesRef,
+      stepDataSourceDraftsRef
     ]
   );
 
@@ -2108,20 +1670,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     });
 
     const reason = `sourceRowExcluded:${staleEntries.map(entry => entry.sourceKey).join(',')}`;
-    if (syncedLineItems && queueGuidedStepReservationDraftSync) {
-      latestStepDataSourceSyncedLineItemsRef.current = null;
-      queueGuidedStepReservationDraftSync({
-        stepId: currentGuidedStepId,
-        reason,
-        snapshotLineItems: syncedLineItems
-      });
-      return;
-    }
-    pendingStepReservationDraftSyncRef.current = {
-      stepId: currentGuidedStepId,
-      reason
-    };
-    setPendingStepReservationDraftSyncTick(prev => prev + 1);
+    queueStepReservationDraftSnapshotSync(reason, syncedLineItems);
   }, [
     activeStepDataSourceRows,
     currentGuidedStepId,
@@ -2130,7 +1679,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     lineItems,
     onDiagnostic,
     q.id,
-    queueGuidedStepReservationDraftSync,
+    queueStepReservationDraftSnapshotSync,
     resolveDataSourceOutputGroup,
     resolveStepDataSourceRowsForParent,
     syncStepDataSourceOutputRow
@@ -2189,7 +1738,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       if (modeFieldId) committedValues[modeFieldId] = args.virtualValues[modeFieldId];
       reservationCommittedValuesRef.current[draftKey] = committedValues;
     },
-    [buildStepDataSourceDraftKey]
+    [buildStepDataSourceDraftKey, reservationCommittedValuesRef]
   );
 
   const stageStepDataSourceDraftPatch = React.useCallback(
@@ -2243,7 +1792,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         return nextDrafts;
       });
     },
-    [buildStepDataSourceDraftKey]
+    [buildStepDataSourceDraftKey, setStepDataSourceDrafts, stepDataSourceDraftsRef]
   );
 
   const hasPendingDeferredReservationChange = React.useCallback(
@@ -2286,7 +1835,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
       const committedQuantity = normalizeValue(committedValues[quantityFieldId]);
       return nextSelected !== committedSelected || nextQuantity !== committedQuantity;
     },
-    [buildStepDataSourceDraftKey]
+    [buildStepDataSourceDraftKey, reservationCommittedValuesRef]
   );
 
   const stepDataSourceNormalizationSignatureRef = React.useRef<string>('');
