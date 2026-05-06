@@ -707,11 +707,17 @@ Ninety-third-pass results:
 - Validation for the pass used focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
+Ninety-fourth-pass results:
+
+- `LineItemGroupQuestion.tsx`: extracted subgroup header and bottom-toolbar chrome into `LineItemSubgroupHeader` and `LineItemSubgroupToolbar`, moving selector/add/totals placement and collapse-button rendering out of the parent shell. Current size: 8,475 lines.
+- Validation for the pass used focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
+- `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
+
 Current large-file counts:
 
 - `App.tsx`: 14,188 lines.
 - `FormView.tsx`: 11,931 lines.
-- `LineItemGroupQuestion.tsx`: 8,539 lines.
+- `LineItemGroupQuestion.tsx`: 8,475 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
