@@ -199,6 +199,10 @@ import { RowFlowGroupOutputActions } from '../../features/lineItems/components/R
 import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
 import { LineItemBodyFieldsSection } from '../../features/lineItems/components/LineItemBodyFieldsSection';
 import { LineItemSectionSelectorControl } from '../../features/lineItems/components/LineItemSectionSelectorControl';
+import {
+  LineItemSubgroupHeader,
+  LineItemSubgroupToolbar
+} from '../../features/lineItems/components/LineItemSubgroupChrome';
 import { LineItemSubgroupAddButton } from '../../features/lineItems/components/LineItemSubgroupAddButton';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
@@ -6209,6 +6213,59 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       />
                     );
                     const subUi = (sub as any).ui as any;
+                    const subAddButtonPlacement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
+                    const showSubAddTop =
+                      subAddButtonPlacement !== 'hidden' &&
+                      (subAddButtonPlacement === 'both' || subAddButtonPlacement === 'top');
+                    const showSubAddBottom =
+                      subAddButtonPlacement !== 'hidden' &&
+                      (subAddButtonPlacement === 'both' || subAddButtonPlacement === 'bottom');
+                    const toggleSubgroupCollapsed = () =>
+                      setCollapsedSubgroups(prev => ({
+                        ...prev,
+                        [subKey]: !(prev[subKey] ?? true)
+                      }));
+                    const renderSubSelectorControl = (opts?: { multiAdd?: boolean; labelStyle?: React.CSSProperties }) =>
+                      subSelectorCfg ? (
+                        <LineItemSectionSelectorControl
+                          selectorCfg={subSelectorCfg}
+                          value={subSelectorValue}
+                          language={language}
+                          options={subSelectorOptions}
+                          disabled={submitting}
+                          searchEnabled={useSubSelectorSearch}
+                          labelStyle={opts?.labelStyle}
+                          diagnosticPayload={{ scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey }}
+                          onDiagnostic={onDiagnostic}
+                          onChange={nextValue => {
+                            latestSubgroupSelectorValueRef.current[subKey] = nextValue;
+                            setSubgroupSelectors(prev => {
+                              if (prev[subKey] === nextValue) return prev;
+                              return { ...prev, [subKey]: nextValue };
+                            });
+                          }}
+                          multiAdd={
+                            opts?.multiAdd && canUseSubSelectorOverlay
+                              ? {
+                                  enabled: true,
+                                  options: subSelectorOverlayOptions,
+                                  diagnosticPayload: {
+                                    scope: 'subgroup.selectorOverlay',
+                                    fieldId: subSelectorCfg.id,
+                                    subKey
+                                  },
+                                  onAddSelected: valuesToAdd => {
+                                    if (submitting) return;
+                                    if (!subSelectorOverlayAnchorFieldId) return;
+                                    const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
+                                    if (!deduped.length) return;
+                                    deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
+                                  }
+                                }
+                              : undefined
+                          }
+                        />
+                      ) : null;
                     const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
                     const isSubTableMode = subUiMode === 'table';
                     const subMaxVisibleRowsRaw = Number((subUi as any)?.maxVisibleRows);
@@ -6255,70 +6312,16 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                             : { marginTop: 12, background: 'var(--card)' }
                         }
                       >
-                        <div
-                          className="subgroup-header"
-                          style={{ display: 'flex', flexDirection: 'column', gap: inlineSubgroupChromeHidden ? 0 : 6 }}
-                        >
-                          {!inlineSubgroupChromeHidden ? (
-                            <div style={{ textAlign: 'center', fontWeight: 600 }}>
-                              {subLabelResolved || subId}
-                            </div>
-                          ) : null}
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flex: 1 }}>
-                              {(() => {
-                                const subUi = (sub as any).ui as any;
-                                const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
-                                const showTop = placement !== 'hidden' && (placement === 'both' || placement === 'top');
-                                return (
-                                  <>
-                                    {subSelectorCfg && showTop ? (
-                                      <LineItemSectionSelectorControl
-                                        selectorCfg={subSelectorCfg}
-                                        value={subSelectorValue}
-                                        language={language}
-                                        options={subSelectorOptions}
-                                        disabled={submitting}
-                                        searchEnabled={useSubSelectorSearch}
-                                        labelStyle={{ fontWeight: 600 }}
-                                        diagnosticPayload={{ scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey }}
-                                        onDiagnostic={onDiagnostic}
-                                        onChange={nextValue => {
-                                          latestSubgroupSelectorValueRef.current[subKey] = nextValue;
-                                          setSubgroupSelectors(prev => {
-                                            if (prev[subKey] === nextValue) return prev;
-                                            return { ...prev, [subKey]: nextValue };
-                                          });
-                                        }}
-                                      />
-                                    ) : null}
-                                    {showTop ? renderSubAddButton() : null}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                            {!inlineSubgroupChromeHidden ? (
-                              <div style={{ marginLeft: 'auto' }}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setCollapsedSubgroups(prev => ({
-                                      ...prev,
-                                      [subKey]: !(prev[subKey] ?? true)
-                                    }))
-                                  }
-                                  aria-expanded={!collapsed}
-                                  aria-controls={`${subKey}-body`}
-                                  style={buttonStyles.secondary}
-                                >
-                                  {collapsed
-                                    ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                    : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
+                        <LineItemSubgroupHeader
+                          subKey={subKey}
+                          label={subLabelResolved || subId}
+                          collapsed={collapsed}
+                          inlineChromeHidden={inlineSubgroupChromeHidden}
+                          language={language}
+                          selectorControl={showSubAddTop && subSelectorCfg ? renderSubSelectorControl({ labelStyle: { fontWeight: 600 } }) : null}
+                          addButton={showSubAddTop ? renderSubAddButton() : null}
+                          onToggleCollapsed={toggleSubgroupCollapsed}
+                        />
                         {collapsed ? null : (
                         <div id={`${subKey}-body`}>
                         <div style={isSubTableMode ? { marginTop: 8 } : { marginTop: 8, ...(subListScrollStyle || {}) }}>
@@ -8398,95 +8401,28 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                           );
                         }))}
                         {(() => {
-                          const subUi = (sub as any).ui as any;
-                          const placement = (subUi?.addButtonPlacement || 'both').toString().toLowerCase();
-                          const showBottom = placement !== 'hidden' && (placement === 'both' || placement === 'bottom');
-                          const shouldRender = orderedSubRows.length > 0 || showBottom;
+                          const shouldRender = orderedSubRows.length > 0 || showSubAddBottom;
                           if (!shouldRender) return null;
+                          const selectorControl =
+                            subSelectorCfg &&
+                            showSubAddBottom &&
+                            (canUseSubSelectorOverlay ? subSelectorOverlayOptions.length : subSelectorOptions.length)
+                              ? renderSubSelectorControl({ multiAdd: canUseSubSelectorOverlay })
+                              : null;
                           return (
-                        <div
-                            ref={el => {
-                              subgroupBottomRefs.current[subKey] = el;
-                            }}
-                            className="line-item-toolbar"
-                            style={{ marginTop: 12 }}
-                          >
-                            <div
-                              className="line-item-toolbar-actions"
-                              style={{
-                                display: 'flex',
-                                gap: 12,
-                                alignItems: 'flex-end',
-                                flex: 1,
-                                flexWrap: 'wrap',
-                                justifyContent: 'space-between'
+                            <LineItemSubgroupToolbar
+                              subKey={subKey}
+                              collapsed={collapsed}
+                              inlineChromeHidden={inlineSubgroupChromeHidden}
+                              language={language}
+                              totals={subTotals}
+                              selectorControl={selectorControl}
+                              addButton={showSubAddBottom ? renderSubAddButton() : null}
+                              setBottomRef={el => {
+                                subgroupBottomRefs.current[subKey] = el;
                               }}
-                            >
-                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                              {subSelectorCfg && showBottom && (canUseSubSelectorOverlay ? subSelectorOverlayOptions.length : subSelectorOptions.length) ? (
-                                  <LineItemSectionSelectorControl
-                                    selectorCfg={subSelectorCfg}
-                                    value={subSelectorValue}
-                                    language={language}
-                                    options={subSelectorOptions}
-                                    disabled={submitting}
-                                    searchEnabled={useSubSelectorSearch}
-                                    diagnosticPayload={{ scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey }}
-                                    onDiagnostic={onDiagnostic}
-                                    onChange={nextValue => {
-                                      latestSubgroupSelectorValueRef.current[subKey] = nextValue;
-                                      setSubgroupSelectors(prev => {
-                                        if (prev[subKey] === nextValue) return prev;
-                                        return { ...prev, [subKey]: nextValue };
-                                      });
-                                    }}
-                                    multiAdd={
-                                      canUseSubSelectorOverlay
-                                        ? {
-                                            enabled: true,
-                                            options: subSelectorOverlayOptions,
-                                            diagnosticPayload: {
-                                              scope: 'subgroup.selectorOverlay',
-                                              fieldId: subSelectorCfg.id,
-                                              subKey
-                                            },
-                                            onAddSelected: valuesToAdd => {
-                                              if (submitting) return;
-                                              if (!subSelectorOverlayAnchorFieldId) return;
-                                              const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
-                                              if (!deduped.length) return;
-                                              deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
-                                            }
-                                          }
-                                        : undefined
-                                    }
-                                  />
-                                ) : null}
-                                {showBottom ? renderSubAddButton() : null}
-                                <LineItemTotals totals={subTotals} />
-                              </div>
-                              {!inlineSubgroupChromeHidden ? (
-                                <div style={{ marginLeft: 'auto'}}>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setCollapsedSubgroups(prev => ({
-                                        ...prev,
-                                        [subKey]: !(prev[subKey] ?? true)
-                                      }))
-                                    }
-                                    style={buttonStyles.secondary}
-                                    aria-expanded={!collapsed}
-                                    aria-controls={`${subKey}-body`}
-                                  >
-                                    {collapsed
-                                      ? resolveLocalizedString({ en: 'Show', fr: 'Afficher', nl: 'Tonen' }, language, 'Show')
-                                      : resolveLocalizedString({ en: 'Hide', fr: 'Masquer', nl: 'Verbergen' }, language, 'Hide')}
-                                  </button>
-                                </div>
-                              ) : null}
-                            </div>
-                        </div>
+                              onToggleCollapsed={toggleSubgroupCollapsed}
+                            />
                           );
                         })()}
                         </div>
