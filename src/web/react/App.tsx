@@ -11056,12 +11056,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       try {
         beginFollowupLaunchDataSourcePrefetchHold();
-        if (milestoneQueuePolicy === 'all') {
+        const queueWaitPolicyForMilestone =
+          closeOnlyPrimarySubmitMilestone && milestoneQueuePolicy === 'all'
+            ? 'uploadsOnly'
+            : milestoneQueuePolicy;
+        if (milestoneQueuePolicy === 'all' && !closeOnlyPrimarySubmitMilestone) {
           const waitResult = await flushAutoSaveBeforeNavigate(reason);
           logEvent('guidedStep.milestone.flush', {
             stepId: args.stepId,
             recordId: existingRecordId || null,
             flushed: waitResult
+          });
+        } else if (milestoneQueuePolicy === 'all' && closeOnlyPrimarySubmitMilestone) {
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          autoSaveQueuedRef.current = false;
+          logEvent('guidedStep.milestone.flush.deferredToPrimaryClose', {
+            stepId: args.stepId,
+            recordId: existingRecordId || null,
+            waitForQueue: milestoneQueuePolicy
           });
         } else if (autoSaveTimerRef.current) {
           globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -11072,12 +11087,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             waitForQueue: milestoneQueuePolicy
           });
         }
-        if (milestoneQueuePolicy !== 'none') {
-          const queueResult = await waitForBackgroundSaves(reason, milestoneQueuePolicy);
+        if (queueWaitPolicyForMilestone !== 'none') {
+          const queueResult = await waitForBackgroundSaves(reason, queueWaitPolicyForMilestone);
           logEvent('guidedStep.milestone.queueWait', {
             stepId: args.stepId,
             recordId: existingRecordId || null,
-            waitForQueue: milestoneQueuePolicy,
+            waitForQueue: queueWaitPolicyForMilestone,
+            configuredWaitForQueue: milestoneQueuePolicy,
             ok: queueResult.ok
           });
           if (!queueResult.ok) {
@@ -11274,6 +11290,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         };
 
         const runCloseOnlyPrimarySubmitMilestone = async (): Promise<{ success: boolean; advanceToNext?: boolean; message?: string }> => {
+          const activeSaveWait = await waitForActiveDraftSaveTransactions(`${reason}.primaryClose`);
+          if (!activeSaveWait.ok) {
+            const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            return { success: false, advanceToNext: false, message };
+          }
           const reservationWait = await waitForCloseReservationSync();
           if (!reservationWait.ok) {
             const message = (reservationWait.message || 'Could not confirm reservation changes.').toString();
@@ -11609,6 +11632,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       scheduleLatestAutoSave,
       statusTransitions,
       resolveUiErrorMessage,
+      waitForActiveDraftSaveTransactions,
       waitForPendingReservationSync,
       waitForBackgroundSaves
     ]
