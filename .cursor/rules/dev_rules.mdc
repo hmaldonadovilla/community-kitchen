@@ -28,7 +28,7 @@ description: Development Rules
 - Run typescript lint verification and fix errors and new warnings introduced by your change.
 - Run unit tests to ensure the new feature works as expected. Fix failures and update the tests to cover the new feature.
 - Run `npm run build` to ensure the application can be compiled successfully.
-- Before stating a new feature, create a solution design, and implementation pland and split the work into logical slices that can be tracked, bring value, can be tested and make sense to be commited individually.
+- Before starting a new feature, create a solution design and implementation plan. Split the work into logical slices that can be tracked, bring value, can be tested, and make sense to be committed individually.
 
 ## Deployment flow (staging only, mandatory)
 
@@ -49,20 +49,58 @@ description: Development Rules
 
 ## Architecture, separation of concerns, and scalability
 
-- Prefer clear boundaries: **UI (React components)**, **state (hooks/store)**, **domain logic (pure TS)**, and **infrastructure (API/IO)** must be separated.
-- Keep React components focused on rendering + wiring. Move business logic to `hooks/` (UI state) and `services/` / `domain/` (business rules).
-- Business/domain logic should be **pure and testable** (no direct DOM, network calls, or global mutable state).
-- Do not call external services directly from components. Use a single abstraction layer (e.g., `src/services/*`) to centralize API clients, retries, error mapping, and telemetry.
-- Use dependency injection via parameters (or lightweight factories) for domain/services to avoid hard-coding environment-specific details.
-- Prefer composition over inheritance. Keep files small; if a module grows beyond ~200–300 lines, consider splitting.
-- Avoid circular dependencies. Imports should flow “down” the layers (UI → hooks/store → domain → services/infrastructure).
-- Keep configuration and constants centralized (e.g., `src/config/`, `src/constants/`). No magic strings scattered across the codebase.
-- Design for extensibility: feature code should live in a `src/features/<feature>/` folder (components, hooks, services, tests) rather than a flat global structure.
-- Reuse logic via shared utilities and hooks, not by duplicating code. If you copy/paste twice, extract.
-- Prefer explicit, typed interfaces at module boundaries (request/response models, DTO mapping). Validate untrusted inputs at the boundary.
+- Separation of concerns is mandatory. Every change must preserve clear boundaries between **UI rendering**, **UI state/orchestration**, **domain/business rules**, **application use cases**, and **infrastructure/API/IO**.
+- Do not add new business logic to monolithic or legacy components/services. When a touched area is not following these boundaries, improve the touched slice by extracting or routing the changed behavior through the correct layer instead of contributing more non-compliant code.
+- Scope the cleanup to the touched behavior. Do not start a broad rewrite unless the task explicitly asks for it, but never use "legacy file already does this" as a reason to add more rendering, state, domain, and IO logic into the same block.
+
+### Frontend structure
+
+- `src/web/react/App.tsx` is the app shell only. It may compose hooks/components and wire high-level callbacks, but new record lifecycle, dialog, transport, dedup, report, upload, cache, navigation, or status-transition logic must live in focused hooks or helpers.
+- App-level hooks and shell helpers belong under `src/web/react/components/app/` or a more specific `src/web/react/features/<feature>/hooks/` folder when the concern is feature-owned.
+- `src/web/react/components/FormView.tsx` is the form orchestration shell only. New guided-step, overlay, validation, upload, blur, autosave-hold, or section/group logic must be extracted into feature hooks, components, or domain helpers.
+- `src/web/react/components/form/LineItemGroupQuestion.tsx` is the line-item orchestration shell only. New row rendering, row-flow rendering, table rendering, source-first rendering, upload rendering, subgroup rendering, overlay-open rendering, compact-row logic, reservation derivation, or row mutation rules must live under `src/web/react/features/lineItems/`, `src/web/react/features/uploads/`, `src/web/react/features/reservations/`, `src/web/react/features/steps/`, or another focused feature folder.
+- `src/web/react/components/` is for shared, low-level, feature-neutral UI components. Feature-specific components must not be added there.
+- `src/web/react/features/<feature>/components/` contains React rendering components that receive resolved values and callbacks. Components in this folder should not own persistence, transport, or cross-feature business rules.
+- `src/web/react/features/<feature>/hooks/` contains React state machines and orchestration for a feature. Hooks may coordinate effects and call injected services, but should delegate pure decisions to domain helpers.
+- `src/web/react/features/<feature>/domain/` contains pure TypeScript rules and projections. Domain modules must not import React, DOM APIs, browser globals, Apps Script globals, network clients, or mutable singleton state.
+- `src/web/react/features/<feature>/services/` contains feature-specific client-side service adapters only when a shared API layer is not appropriate. Services must be injected into hooks/components rather than imported into pure domain modules.
+- `src/web/react/app/` is for app-wide pure helpers and shell policy helpers that are not owned by a specific feature. Prefer a feature folder when the logic has a clear feature owner.
+- Shared low-level constants belong in `src/constants/`; configuration normalization/validation belongs in `src/config/`; generic domain rules belong in `src/domain/` only when they are not specific to the React app.
+
+### Backend structure
+
+- `src/services/WebFormService.ts` and `src/services/WebFormTemplate.ts` must remain compatibility/orchestration boundaries. Do not add large new business workflows there when a focused module can own the behavior.
+- Apps Script backend logic should be split into focused modules under `src/services/webform/` by concern, such as submissions, follow-up, templates, analytics, lifecycle, data sources, and scheduler behavior.
+- Cloud Run API handlers should remain thin request/response adapters. Domain decisions and repository operations must live behind focused services/repositories under `cloud-run/api/`.
+- Repository modules own infrastructure details for Sheets, Drive, Firestore, Gmail, and other IO. Domain/use-case modules must receive repositories/adapters through parameters instead of importing platform-specific clients directly.
+- Shared backend business rules should be pure TypeScript where possible and reused conceptually across Apps Script and Cloud Run instead of being duplicated in each runtime.
+
+### Import direction and boundaries
+
+- Imports must flow from outer layers to inner layers: UI components -> hooks/orchestration -> domain/use-case helpers -> infrastructure adapters. Inner layers must not import outer layers.
+- React components may import hooks, feature components, UI primitives, and domain helpers. They must not call external services, Apps Script APIs, Google APIs, or Cloud Run repositories directly.
+- Hooks may import domain helpers and service/API adapters. Hooks should not contain large business-rule branches that can be tested as pure functions.
+- Domain helpers may import only types, constants, and other pure helpers.
+- Infrastructure adapters may import API clients and platform globals, but they must expose typed functions/results to the rest of the application.
+- Avoid circular dependencies. If a circular import appears, split shared types/helpers into a lower-level module.
+
+### Legacy touch rule
+
+- When editing a file that mixes rendering, state, business logic, and IO, first identify the smallest coherent part related to the task that can move to the correct layer.
+- If adding a new condition, projection, parser, formatter, field mapping, row mutation rule, validation rule, transport decision, or status transition, put it in a domain/helper/use-case module and call it from the legacy file.
+- If adding a new visual branch or repeated JSX block, put it in a focused component and inject callbacks/data from the parent.
+- If adding stateful UI coordination, put it in a hook unless the state is trivially local to a small component.
+- If a fully compliant extraction is too risky for the current slice, do the smallest safe extraction, add or update tests for the extracted behavior, and leave a clear TODO only when further decomposition genuinely requires a separate slice.
+
+### Size, reuse, and tests
+
+- Prefer composition over inheritance. Keep files small; if a module grows beyond ~200–300 lines, consider splitting before adding more code. Large compatibility shells may exceed this temporarily, but new logic must move outward to focused modules.
+- Reuse logic through shared utilities, hooks, components, and domain helpers, not by duplicating code. If similar code exists in two places, extract or reuse the shared version as part of the touched slice.
+- Prefer explicit typed interfaces at module boundaries, including request/response models and DTO mapping. Validate untrusted inputs at the boundary.
+- Keep configuration and constants centralized. No magic strings should be scattered across the codebase when a named constant or config field can express the behavior.
 - Keep state local by default. Promote state upward only when multiple siblings need it. Avoid global state for transient UI concerns.
-- Tests: unit test domain logic; integration test service layers; keep UI tests focused on user flows.
-- Every new module should have a clear owner and a doc comment explaining responsibility and boundaries.
+- Unit test domain logic. Add focused tests for new parsers, projections, gates, row mutation rules, and business decisions. Use integration/service tests for adapters and use UI/Playwright tests only for user-visible flows.
+- Every new module should have a clear owner and a short doc comment when the responsibility or boundary is not obvious from the module name.
 
 ## Miscellaneous
 
