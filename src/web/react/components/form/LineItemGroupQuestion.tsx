@@ -199,6 +199,7 @@ import { RowFlowGroupOutputActions } from '../../features/lineItems/components/R
 import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
 import { LineItemBodyFieldsSection } from '../../features/lineItems/components/LineItemBodyFieldsSection';
 import { LineItemSectionSelectorControl } from '../../features/lineItems/components/LineItemSectionSelectorControl';
+import { LineItemSubgroupAddButton } from '../../features/lineItems/components/LineItemSubgroupAddButton';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { LineItemTableModeRenderer } from '../../features/lineItems/components/LineItemTableModeRenderer';
@@ -6185,164 +6186,28 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       }
                     }
 
-                    const renderSubAddButton = () => {
-                      if (isSubOverlayAddMode && sub.anchorFieldId) {
-                        return (
-                          <button
-                            type="button"
-                            style={buttonStyles.secondary}
-                            disabled={submitting || subSelectorIsMissing}
-                            onClick={async () => {
-                              const subSelectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '')
-                                .toString()
-                                .trim();
-                              if (submitting) return;
-                              if (subSelectorIsMissing) {
-                                onDiagnostic?.('ui.addRow.blocked', { groupId: subKey, reason: 'sectionSelector.required', selectorId: subSelectorCfg?.id });
-                                return;
-                              }
-                              const anchorField = (sub.fields || []).find(f => f.id === sub.anchorFieldId);
-                              if (!anchorField || anchorField.type !== 'CHOICE') {
-                                addLineItemRowManual(subKey);
-                                return;
-                              }
-                              const key = optionKey(anchorField.id, subKey);
-                              let opts = optionState[key];
-                              if (!opts && anchorField.dataSource) {
-                                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
-                                if (loaded) {
-                                  opts = loaded;
-                                  setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
-                                }
-                              }
-                              if (!opts) opts = resolveOptionSetForField(optionState, anchorField, subKey);
-                              const dependencyIds = (
-                                Array.isArray(anchorField.optionFilter?.dependsOn)
-                                  ? anchorField.optionFilter?.dependsOn
-                                  : [anchorField.optionFilter?.dependsOn || '']
-                              ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                              const depVals = dependencyIds.map(dep =>
-                                toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorNow)
-                              );
-                              const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                              const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
-                              const deduped = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
-                              const optionsForOverlay = localized
-                                .filter(opt => deduped.includes(opt.value))
-                                .map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }));
-                              if (optionsForOverlay.length === 1) {
-                                onDiagnostic?.('ui.subgroup.addRow.autofillSingleOption', {
-                                  groupId: subKey,
-                                  anchorFieldId: anchorField.id,
-                                  value: optionsForOverlay[0].value
-                                });
-                                addLineItemRowManual(subKey, { [anchorField.id]: optionsForOverlay[0].value });
-                                return;
-                              }
-                              onDiagnostic?.('ui.lineItems.overlay.open', {
-                                groupId: subKey,
-                                optionCount: optionsForOverlay.length,
-                                indexedCount: optionsForOverlay.filter(opt => opt.searchText).length
-                              });
-                              const addOverlayCopy = resolveAddOverlayCopy(sub, language);
-                              if (addOverlayCopy.title || addOverlayCopy.helperText || addOverlayCopy.placeholder) {
-                                onDiagnostic?.('ui.lineItems.overlay.copy.override', {
-                                  groupId: subKey,
-                                  scope: 'subgroup',
-                                  hasTitle: !!addOverlayCopy.title,
-                                  hasHelperText: !!addOverlayCopy.helperText,
-                                  hasPlaceholder: !!addOverlayCopy.placeholder
-                                });
-                              }
-                              setOverlay({
-                                open: true,
-                                options: optionsForOverlay,
-                                groupId: subKey,
-                                anchorFieldId: anchorField.id,
-                                selected: [],
-                                title: addOverlayCopy.title,
-                                helperText: addOverlayCopy.helperText,
-                                placeholder: addOverlayCopy.placeholder
-                              });
-                            }}
-                          >
-                            <PlusIcon />
-                            {resolveLocalizedString(
-                              sub.addButtonLabel,
-                              language,
-                              tSystem('lineItems.addLines', language, 'Add lines')
-                            )}
-                          </button>
-                        );
-                      }
-                      if (canUseSubSelectorOverlay) {
-                        return null;
-                      }
-                      return (
-                        <button
-                          type="button"
-                          disabled={submitting || subSelectorIsMissing}
-                          onClick={async () => {
-                            const subSelectorNow = (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '')
-                              .toString()
-                              .trim();
-                            const anchorFieldId =
-                              (sub as any)?.anchorFieldId !== undefined && (sub as any)?.anchorFieldId !== null
-                                ? (sub as any).anchorFieldId.toString()
-                                : '';
-                            const selectorPreset =
-                              anchorFieldId && subSelectorNow
-                                ? { [anchorFieldId]: subSelectorNow }
-                                : undefined;
-                            if (selectorPreset) {
-                              addLineItemRowManual(subKey, selectorPreset);
-                              return;
-                            }
-                            const anchorField = anchorFieldId ? (sub.fields || []).find(f => f.id === anchorFieldId) : undefined;
-                            if (!anchorField || anchorField.type !== 'CHOICE') {
-                              addLineItemRowManual(subKey);
-                              return;
-                            }
-                            const key = optionKey(anchorField.id, subKey);
-                            let opts = optionState[key];
-                            if (!opts && anchorField.dataSource) {
-                              const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
-                              if (loaded) {
-                                opts = loaded;
-                                setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
-                              }
-                            }
-                            if (!opts) opts = resolveOptionSetForField(optionState, anchorField, subKey);
-                            const dependencyIds = (
-                              Array.isArray(anchorField.optionFilter?.dependsOn)
-                                ? anchorField.optionFilter?.dependsOn
-                                : [anchorField.optionFilter?.dependsOn || '']
-                            ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                            const depVals = dependencyIds.map(dep =>
-                              toDependencyValue(row.values[dep] ?? values[dep] ?? subSelectorNow)
-                            );
-                            const allowed = computeAllowedOptions(anchorField.optionFilter, opts, depVals);
-                            const localized = buildLocalizedOptions(opts, allowed, language, { sort: optionSortFor(anchorField) });
-                            const uniqueVals = Array.from(new Set(localized.map(opt => opt.value).filter(Boolean)));
-                            if (uniqueVals.length === 1) {
-                              onDiagnostic?.('ui.subgroup.addRow.autofillSingleOption', {
-                                groupId: subKey,
-                                anchorFieldId: anchorField.id,
-                                value: uniqueVals[0]
-                              });
-                              addLineItemRowManual(subKey, { [anchorField.id]: uniqueVals[0] });
-                              return;
-                            }
-                            addLineItemRowManual(subKey);
-                          }}
-                          className="ck-list-row-action-btn"
-                          style={withListRowActionButtonStyle(submitting || subSelectorIsMissing)}
-                        >
-                          <PlusIcon />
-                          {resolveLocalizedString(sub.addButtonLabel, language, 'Add line')}
-                        </button>
-                      );
-                    };
+                    const renderSubAddButton = () => (
+                      <LineItemSubgroupAddButton
+                        sub={sub}
+                        subKey={subKey}
+                        rowValues={row.values as Record<string, FieldValue>}
+                        values={values}
+                        language={language}
+                        submitting={submitting}
+                        optionState={optionState}
+                        isOverlayAddMode={isSubOverlayAddMode}
+                        canUseSelectorOverlay={canUseSubSelectorOverlay}
+                        selectorIsMissing={subSelectorIsMissing}
+                        selectorCfg={subSelectorCfg}
+                        getCurrentSelectorValue={() =>
+                          (latestSubgroupSelectorValueRef.current[subKey] || subSelectorValue || '').toString().trim()
+                        }
+                        setOptionState={setOptionState}
+                        addLineItemRowManual={addLineItemRowManual}
+                        setOverlay={setOverlay}
+                        onDiagnostic={onDiagnostic}
+                      />
+                    );
                     const subUi = (sub as any).ui as any;
                     const subUiMode = (subUi?.mode || 'default').toString().trim().toLowerCase();
                     const isSubTableMode = subUiMode === 'table';
