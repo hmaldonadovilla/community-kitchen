@@ -1,12 +1,12 @@
-import type { FieldValue, LineItemRowState } from '../../../types';
-import { resolveSourceFirstAllocationDisplayFreeQuantity } from '../../app/sourceFirstAllocations';
-import { resolveReservationSourceItemKey } from '../../features/reservations/sourceFields';
-import { hasAvailabilityPairValue } from '../../features/lineItems/domain/lineItemPresentation';
+import type { FieldValue, LineItemRowState } from '../../../../types';
+import { resolveSourceFirstAllocationDisplayFreeQuantity } from '../../../app/sourceFirstAllocations';
+import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
+import { hasAvailabilityPairValue } from './lineItemPresentation';
 import {
   ensureEditableMaxIncludesCurrentValue,
   resolveServerCurrentRecordReservedQuantity,
   toFiniteNumberValue
-} from './quantityConstraints';
+} from '../../../app/quantityConstraints';
 
 export const resolveServerCurrentRecordReservedQuantityFromRow = (
   row: Record<string, any> | null | undefined,

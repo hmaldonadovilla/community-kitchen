@@ -1,4 +1,4 @@
-import { matchesDataSourceRowToParent } from '../../../src/web/react/components/form/dataSourceRowMatching';
+import { matchesDataSourceRowToParent } from '../../../src/web/react/features/lineItems/domain/dataSourceRowMatching';
 
 describe('matchesDataSourceRowToParent', () => {
   test('matches exact values by default', () => {

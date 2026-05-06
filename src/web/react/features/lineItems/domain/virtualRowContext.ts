@@ -1,6 +1,6 @@
-import { matchesWhenClause, validateRules } from '../../../core';
-import type { FieldValue, LangCode, ValidationRule, VisibilityContext } from '../../../types';
-import type { LineItemState } from '../../types';
+import { matchesWhenClause, validateRules } from '../../../../core';
+import type { FieldValue, LangCode, ValidationRule, VisibilityContext } from '../../../../types';
+import type { LineItemState } from '../../../types';
 
 /**
  * Owner: guided virtual row visibility and validation context.

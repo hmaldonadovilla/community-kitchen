@@ -1,4 +1,4 @@
-import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../../../src/web/react/components/form/stepDataSourceAvailability';
+import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../../../src/web/react/features/lineItems/domain/stepDataSourceAvailability';
 
 describe('step data-source availability helpers', () => {
   const config = {

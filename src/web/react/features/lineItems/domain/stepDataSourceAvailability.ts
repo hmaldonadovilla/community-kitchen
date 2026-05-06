@@ -3,9 +3,9 @@ import {
   computeOptimisticAggregateReservedQuantity,
   resolveServerCurrentRecordReservedQuantity,
   toFiniteNumberValue
-} from './quantityConstraints';
-import { resolveSourceFirstAllocationAvailabilityFieldPair } from '../../app/sourceFirstAllocations';
-import { resolveReservationSourceItemKey } from '../../features/reservations/sourceFields';
+} from '../../../app/quantityConstraints';
+import { resolveSourceFirstAllocationAvailabilityFieldPair } from '../../../app/sourceFirstAllocations';
+import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
 import { resolveServerCurrentRecordReservedQuantityFromRow } from './virtualDataSourceRowValues';
 
 type ReservationStateResolver = (

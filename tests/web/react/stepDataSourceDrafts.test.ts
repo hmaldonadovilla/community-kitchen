@@ -1,7 +1,7 @@
 import {
   applyStepDataSourceDraftUpdateAction,
   buildStepDataSourceDraftValuesAction
-} from '../../../src/web/react/components/form/stepDataSourceDrafts';
+} from '../../../src/web/react/features/lineItems/domain/stepDataSourceDrafts';
 
 describe('step data-source draft helpers', () => {
   test('builds selected draft values from configured fields', () => {

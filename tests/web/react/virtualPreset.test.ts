@@ -1,7 +1,7 @@
 import {
   resolveVirtualPresetAction,
   resolveVirtualPresetValueAction
-} from '../../../src/web/react/components/form/virtualPreset';
+} from '../../../src/web/react/features/lineItems/domain/virtualPreset';
 
 const context = {
   rowValues: { meal: 'Soup', quantity: 12 },

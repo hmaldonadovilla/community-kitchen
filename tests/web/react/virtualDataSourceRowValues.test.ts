@@ -1,7 +1,7 @@
 import {
   buildVirtualDataSourceRowValuesAction,
   resolveServerCurrentRecordReservedQuantityFromRow
-} from '../../../src/web/react/components/form/virtualDataSourceRowValues';
+} from '../../../src/web/react/features/lineItems/domain/virtualDataSourceRowValues';
 
 describe('virtual data source row value helpers', () => {
   const emptyReservationState = () => ({ totalReservedQuantity: 0, currentRowQuantity: 0 });

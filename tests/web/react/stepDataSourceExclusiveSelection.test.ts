@@ -1,4 +1,4 @@
-import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../../../src/web/react/components/form/stepDataSourceExclusiveSelection';
+import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../../../src/web/react/features/lineItems/domain/stepDataSourceExclusiveSelection';
 
 describe('step data-source exclusive selection helpers', () => {
   test('removes matching rows from the configured output group and cascades child rows', () => {

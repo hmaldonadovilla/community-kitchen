@@ -1,5 +1,5 @@
-import type { FieldValue } from '../../../types';
-import { getByPath } from '../../features/lineItems/domain/lineItemPresentation';
+import type { FieldValue } from '../../../../types';
+import { getByPath } from './lineItemPresentation';
 
 export type VirtualPresetContext = {
   rowValues: Record<string, FieldValue>;

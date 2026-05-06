@@ -1,4 +1,4 @@
-import type { FieldValue } from '../../../types';
+import type { FieldValue } from '../../../../types';
 
 export type StepDataSourceDrafts = Record<string, Record<string, FieldValue>>;
 

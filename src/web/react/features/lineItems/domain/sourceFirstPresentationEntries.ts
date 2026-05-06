@@ -1,8 +1,8 @@
-import { resolveLocalizedString } from '../../../i18n';
-import { tSystem } from '../../../systemStrings';
-import type { FieldValue, LangCode, LineItemRowState } from '../../../types';
-import type { LineItemState } from '../../types';
-import { filterSourceFirstAllocationRows } from '../../app/sourceFirstAllocations';
+import { resolveLocalizedString } from '../../../../i18n';
+import { tSystem } from '../../../../systemStrings';
+import type { FieldValue, LangCode, LineItemRowState } from '../../../../types';
+import type { LineItemState } from '../../../types';
+import { filterSourceFirstAllocationRows } from '../../../app/sourceFirstAllocations';
 import { matchesDataSourceRowToParent } from './dataSourceRowMatching';
 
 export type SourceFirstPresentationEntry = {

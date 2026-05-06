@@ -1,5 +1,5 @@
-import type { LineItemState } from '../../types';
-import { cascadeRemoveLineItemRows } from '../../app/lineItems';
+import type { LineItemState } from '../../../types';
+import { cascadeRemoveLineItemRows } from '../../../app/lineItems';
 
 /**
  * Owner: guided step data-source exclusive output selection.

@@ -1,6 +1,6 @@
-import type { FieldValue } from '../../../types';
-import { isEmptyValue } from '../../utils/values';
-import { toFiniteNumberValue } from './quantityConstraints';
+import type { FieldValue } from '../../../../types';
+import { isEmptyValue } from '../../../utils/values';
+import { toFiniteNumberValue } from '../../../app/quantityConstraints';
 
 /**
  * Owner: guided reservation quantity visibility.

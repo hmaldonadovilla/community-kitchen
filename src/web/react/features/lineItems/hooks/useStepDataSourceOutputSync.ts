@@ -24,15 +24,15 @@ import {
   shouldBlockDataSourceFreshnessForInvalidStepReservation,
   shouldImmediatelySyncStepReservationChange
 } from '../../../components/form/reservationSyncPolicy';
-import { applyStepDataSourceDraftUpdateAction } from '../../../components/form/stepDataSourceDrafts';
-import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../../../components/form/stepDataSourceExclusiveSelection';
-import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../../../components/form/stepDataSourceAvailability';
+import { applyStepDataSourceDraftUpdateAction } from '../domain/stepDataSourceDrafts';
+import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../domain/stepDataSourceExclusiveSelection';
+import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../domain/stepDataSourceAvailability';
 import {
   applyStepDataSourceMatchedOutputRuleAction
-} from '../../../components/form/stepDataSourceRows';
+} from '../domain/stepDataSourceRows';
 import {
   resolveServerCurrentRecordReservedQuantityFromRow
-} from '../../../components/form/virtualDataSourceRowValues';
+} from '../domain/virtualDataSourceRowValues';
 import { resolveReservationDisplayLabel } from '../../reservations/displayLabel';
 import { resolveReservationResourceFieldIds } from '../../reservations/sourceFields';
 import {

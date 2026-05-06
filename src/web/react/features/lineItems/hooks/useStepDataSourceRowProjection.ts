@@ -8,31 +8,31 @@ import type {
 } from '../../../../types';
 import type { LineItemState } from '../../../types';
 import { shouldHideSupplementalHelperTextForDataSourceRows } from '../../../components/form/lineItemGroupQuestionHelperText';
-import { buildSourceFirstPresentationEntries } from '../../../components/form/sourceFirstPresentationEntries';
+import { buildSourceFirstPresentationEntries } from '../domain/sourceFirstPresentationEntries';
 import {
   resolveVirtualPresetAction,
   resolveVirtualPresetValueAction
-} from '../../../components/form/virtualPreset';
+} from '../domain/virtualPreset';
 import {
   allowsVirtualIntegerOnlyAction,
   buildVirtualRowWhenContext,
   resolveVirtualMaxFieldIdAction,
   validateVirtualFieldRulesAction
-} from '../../../components/form/virtualRowContext';
+} from '../domain/virtualRowContext';
 import {
   resolveLocalReservationQuantityForVisibility,
   resolveReservationQuantityFromValues
-} from '../../../components/form/reservationQuantity';
+} from '../domain/reservationQuantity';
 import {
   buildVirtualDataSourceRowValuesAction
-} from '../../../components/form/virtualDataSourceRowValues';
+} from '../domain/virtualDataSourceRowValues';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveDataSourceOutputGroupAction,
   resolveStepDataSourceReservationStateForSourceAction,
   resolveStepDataSourceRowsAction,
   resolveStepDataSourceRowsForParentAction
-} from '../../../components/form/stepDataSourceRows';
+} from '../domain/stepDataSourceRows';
 import { toFiniteNumberValue } from '../../../components/form/quantityConstraints';
 
 type UseStepDataSourceRowProjectionArgs = {

@@ -844,6 +844,11 @@ One-hundred-sixteenth-pass results:
 - `App.tsx`: extracted guided reservation plan resolution, stale-response guarding, apply failure handling, source-meta adoption, availability cache dispatch, and serialized reservation plan queueing into `useGuidedReservationPlanSync`, keeping live-sync and background-sync callers in the shell while moving the reservation apply workflow into the reservations feature layer. Current size: 14,317 lines.
 - Validation for the pass used focused reservation tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-seventeenth-pass results:
+
+- Moved guided source-first datasource/reservation pure helpers from `src/web/react/components/form` into `src/web/react/features/lineItems/domain`, including source-first presentation projection, row projection, optimistic availability, draft transitions, exclusive selection cleanup, virtual row values, virtual presets, virtual validation context, reservation quantity projection, and datasource row matching. This leaves `components/form` closer to shared form UI and keeps line-item business rules under the line-items feature boundary.
+- Validation for the pass used focused datasource/reservation helper tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.

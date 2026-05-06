@@ -1,7 +1,7 @@
 import {
   resolveLocalReservationQuantityForVisibility,
   resolveReservationQuantityFromValues
-} from '../../../src/web/react/components/form/reservationQuantity';
+} from '../../../src/web/react/features/lineItems/domain/reservationQuantity';
 
 describe('reservation quantity helpers', () => {
   test('resolves quantities only when selected or no selected field is configured', () => {

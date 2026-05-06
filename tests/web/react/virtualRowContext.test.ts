@@ -3,7 +3,7 @@ import {
   buildVirtualRowWhenContext,
   resolveVirtualMaxFieldIdAction,
   validateVirtualFieldRulesAction
-} from '../../../src/web/react/components/form/virtualRowContext';
+} from '../../../src/web/react/features/lineItems/domain/virtualRowContext';
 
 describe('virtual row context helpers', () => {
   test('resolves row values before parent and top-level values', () => {

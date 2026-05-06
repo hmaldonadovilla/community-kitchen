@@ -5,7 +5,7 @@ import {
   collectStepDataSourceNestedPresetNormalizationsAction,
   resolveDataSourceOutputGroupAction,
   resolveStepDataSourceReservationStateForSourceAction
-} from '../../../src/web/react/components/form/stepDataSourceRows';
+} from '../../../src/web/react/features/lineItems/domain/stepDataSourceRows';
 import {
   ROW_HIDE_REMOVE_KEY,
   ROW_ID_KEY,

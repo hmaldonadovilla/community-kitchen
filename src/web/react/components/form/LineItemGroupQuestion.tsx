@@ -20,7 +20,7 @@ import {
   applyStepDataSourceNestedPresetNormalizationsAction,
   buildStepDataSourceNestedPresetNormalizationSignatureAction,
   collectStepDataSourceNestedPresetNormalizationsAction
-} from './stepDataSourceRows';
+} from '../../features/lineItems/domain/stepDataSourceRows';
 import {
   applyLineItemRowSort
 } from '../../app/lineItemRowSort';
