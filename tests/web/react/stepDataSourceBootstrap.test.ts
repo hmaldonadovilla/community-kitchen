@@ -1,6 +1,7 @@
 import {
   buildStepDataSourceBootstrapSignature,
-  shouldWaitForGuidedReservationSyncOnBootstrap
+  shouldWaitForGuidedReservationSyncOnBootstrap,
+  shouldWaitForSharedDataMutationsOnBootstrap
 } from '../../../src/web/react/app/stepDataSourceBootstrap';
 
 describe('buildStepDataSourceBootstrapSignature', () => {
@@ -83,6 +84,22 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         bootstrap: { waitForGuidedReservationSync: true }
       })
     ).not.toBe(baseline);
+
+    expect(
+      buildStepDataSourceBootstrapSignature({
+        recordId: 'REC-1',
+        language: 'EN',
+        stepId: 'leftoverForm',
+        configs: [
+          {
+            id: 'leftoverRows',
+            dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+            availability: { enabled: true }
+          }
+        ],
+        bootstrap: { waitForSharedDataMutations: true }
+      })
+    ).not.toBe(baseline);
   });
 
   it('changes when the active guided step changes', () => {
@@ -115,5 +132,11 @@ describe('buildStepDataSourceBootstrapSignature', () => {
     expect(
       shouldWaitForGuidedReservationSyncOnBootstrap({ waitForGuidedReservationSync: true })
     ).toBe(true);
+  });
+
+  it('normalizes the shared data mutation wait flag', () => {
+    expect(shouldWaitForSharedDataMutationsOnBootstrap(undefined)).toBe(false);
+    expect(shouldWaitForSharedDataMutationsOnBootstrap({})).toBe(false);
+    expect(shouldWaitForSharedDataMutationsOnBootstrap({ waitForSharedDataMutations: true })).toBe(true);
   });
 });

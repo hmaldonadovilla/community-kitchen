@@ -16,8 +16,10 @@ import {
 } from '../../../app/sourceFirstAllocations';
 import {
   buildStepDataSourceBootstrapSignature,
-  shouldWaitForGuidedReservationSyncOnBootstrap
+  shouldWaitForGuidedReservationSyncOnBootstrap,
+  shouldWaitForSharedDataMutationsOnBootstrap
 } from '../../../app/stepDataSourceBootstrap';
+import { resolveStepDataSourceTargetFormKeys } from '../../../app/sharedDataMutations';
 import type { LineItemState } from '../../../types';
 import {
   applyInventoryAvailabilitySnapshotToRow,
@@ -38,6 +40,14 @@ type GuidedStepReservationDraftSyncWaiter = (args: {
   reason: string;
 }) => Promise<{ ok: boolean; message?: string }>;
 
+type PendingSharedDataMutationsWaiter = (args: {
+  targetFormKeys: string[];
+  recordId?: string;
+  stepId?: string;
+  reason: string;
+  timeoutMs?: number;
+}) => Promise<{ ok: boolean; message?: string }>;
+
 type UseGuidedStepDataSourceStateArgs = {
   groupId: string;
   definition: any;
@@ -51,6 +61,7 @@ type UseGuidedStepDataSourceStateArgs = {
   resolveTopValue: (fieldId: string) => FieldValue | undefined;
   queueGuidedStepReservationDraftSync?: GuidedStepReservationDraftSyncQueue;
   waitForGuidedStepReservationDraftSync?: GuidedStepReservationDraftSyncWaiter;
+  waitForPendingSharedDataMutations?: PendingSharedDataMutationsWaiter;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 };
 
@@ -107,6 +118,7 @@ export const useGuidedStepDataSourceState = ({
   resolveTopValue,
   queueGuidedStepReservationDraftSync,
   waitForGuidedStepReservationDraftSync,
+  waitForPendingSharedDataMutations,
   onDiagnostic
 }: UseGuidedStepDataSourceStateArgs): UseGuidedStepDataSourceStateResult => {
   const guidedStepFieldId = `${definition?.steps?.stateFields?.prefix || '__ckStep'}`.trim() || '__ckStep';
@@ -197,6 +209,10 @@ export const useGuidedStepDataSourceState = ({
   } | null>(null);
   const shouldWaitForReservationSyncBeforeBootstrap = React.useMemo(
     () => shouldWaitForGuidedReservationSyncOnBootstrap(dataSourceBootstrap),
+    [dataSourceBootstrap]
+  );
+  const shouldWaitForSharedDataBeforeBootstrap = React.useMemo(
+    () => shouldWaitForSharedDataMutationsOnBootstrap(dataSourceBootstrap),
     [dataSourceBootstrap]
   );
   const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
@@ -419,7 +435,6 @@ export const useGuidedStepDataSourceState = ({
 
     const runBootstrap = async () => {
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
-      stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
       beginStepDataSourceLoading(loadingEntries);
       try {
         if (
@@ -454,6 +469,41 @@ export const useGuidedStepDataSourceState = ({
           });
         }
 
+        if (shouldWaitForSharedDataBeforeBootstrap && waitForPendingSharedDataMutations) {
+          const targetFormKeys = resolveStepDataSourceTargetFormKeys(configEntries.map(({ dataSource }) => dataSource));
+          if (targetFormKeys.length) {
+            onDiagnostic?.('guidedStep.dataSourceBootstrap.sharedDataWait.start', {
+              groupId,
+              stepId: currentGuidedStepId || null,
+              recordId: normalizedRecordId || null,
+              targetFormKeys
+            });
+            const waitResult = await waitForPendingSharedDataMutations({
+              targetFormKeys,
+              recordId: normalizedRecordId || undefined,
+              stepId: currentGuidedStepId || undefined,
+              reason: `stepDataSourceBootstrap:${groupId}`
+            });
+            if (cancelled) return;
+            if (!waitResult.ok) {
+              onDiagnostic?.('guidedStep.dataSourceBootstrap.sharedDataWait.blocked', {
+                groupId,
+                stepId: currentGuidedStepId || null,
+                recordId: normalizedRecordId || null,
+                targetFormKeys,
+                message: waitResult.message || null
+              });
+              return;
+            }
+            onDiagnostic?.('guidedStep.dataSourceBootstrap.sharedDataWait.done', {
+              groupId,
+              stepId: currentGuidedStepId || null,
+              recordId: normalizedRecordId || null,
+              targetFormKeys
+            });
+          }
+        }
+
         const pendingFetches = configEntries
           .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
           .map(({ dataSource, shouldForceRefresh }) => ({
@@ -467,13 +517,24 @@ export const useGuidedStepDataSourceState = ({
         if (!pendingFetches.length) {
           if (!cancelled) {
             queueStepDataSourceRefreshTick();
+            stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
           }
           return;
         }
-        await Promise.all(pendingFetches.map(entry => entry.promise));
-        if (!cancelled) {
-          queueStepDataSourceRefreshTick();
+        const fetchResults = await Promise.all(pendingFetches.map(entry => entry.promise));
+        if (cancelled) return;
+        const failedFetches = pendingFetches.filter((_, index) => !fetchResults[index]);
+        if (failedFetches.length) {
+          onDiagnostic?.('guidedStep.dataSourceBootstrap.fetch.partialFailure', {
+            groupId,
+            stepId: currentGuidedStepId || null,
+            recordId: normalizedRecordId || null,
+            dataSourceIds: failedFetches.map(entry => `${entry.config?.id || ''}`.trim()).filter(Boolean)
+          });
+          return;
         }
+        queueStepDataSourceRefreshTick();
+        stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
       } finally {
         endStepDataSourceLoading(loadingEntries);
       }
@@ -495,9 +556,11 @@ export const useGuidedStepDataSourceState = ({
     queueStepDataSourceRefreshTick,
     recordId,
     shouldWaitForReservationSyncBeforeBootstrap,
+    shouldWaitForSharedDataBeforeBootstrap,
     stepDataSourceBootstrapSignature,
     stepDataSourceRows,
-    waitForGuidedStepReservationDraftSync
+    waitForGuidedStepReservationDraftSync,
+    waitForPendingSharedDataMutations
   ]);
 
   React.useEffect(() => {

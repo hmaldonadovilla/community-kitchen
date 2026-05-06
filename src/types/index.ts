@@ -4489,6 +4489,14 @@ export interface StepDataSourceBootstrapConfig {
    * reservation-managed output rows deleted in an earlier step.
    */
   waitForGuidedReservationSync?: boolean;
+  /**
+   * When true, delay the initial guided-step datasource bootstrap until in-flight
+   * follow-up actions that mutate the datasource's shared form keys have finished.
+   *
+   * Use this when a step reads shared inventory that can be created or reconciled by
+   * background follow-up work from the same app session.
+   */
+  waitForSharedDataMutations?: boolean;
 }
 
 export interface StepLineGroupTargetConfig {

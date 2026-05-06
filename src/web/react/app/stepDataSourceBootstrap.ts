@@ -34,6 +34,7 @@ export const buildStepDataSourceBootstrapSignature = (args: {
     language,
     stepId,
     waitForGuidedReservationSync: args.bootstrap?.waitForGuidedReservationSync === true,
+    waitForSharedDataMutations: args.bootstrap?.waitForSharedDataMutations === true,
     configs: normalizedConfigs
   });
 };
@@ -41,3 +42,7 @@ export const buildStepDataSourceBootstrapSignature = (args: {
 export const shouldWaitForGuidedReservationSyncOnBootstrap = (
   config?: StepDataSourceBootstrapConfig | null
 ): boolean => config?.waitForGuidedReservationSync === true;
+
+export const shouldWaitForSharedDataMutationsOnBootstrap = (
+  config?: StepDataSourceBootstrapConfig | null
+): boolean => config?.waitForSharedDataMutations === true;

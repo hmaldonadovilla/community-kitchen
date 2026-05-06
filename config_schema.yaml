@@ -4755,6 +4755,17 @@ components:
 
                 This avoids fetching stale shared inventory immediately after another step
                 deleted reservation-managed output rows and queued a release plan.
+            waitForSharedDataMutations:
+              type: boolean
+              description: |
+                When true, delay the initial guided-step datasource bootstrap until any
+                in-flight follow-up action that mutates one of this step's datasource form
+                keys has finished.
+
+                Use this when the datasource reads shared inventory that can be created,
+                updated, consumed, or released by background follow-up work in the same
+                app session. This keeps the step from fetching stale shared data or
+                showing a freshness-change dialog before the previous mutation settles.
       required: [kind, id]
       additionalProperties: true
 

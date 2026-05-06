@@ -37,6 +37,11 @@ describe('meal production leftover selection config', () => {
     expect(formTarget?.helperText?.en).toBe(
       "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
+    expect(target?.dataSourceBootstrap).toEqual({
+      waitForGuidedReservationSync: true,
+      waitForSharedDataMutations: true
+    });
+    expect(formTarget?.dataSourceBootstrap).toEqual(target?.dataSourceBootstrap);
     expect(target?.subGroups).toBeUndefined();
     expect((question.lineItemConfig.subGroups || []).map((group: any) => group.id)).not.toContain('MP_LEFTOVER_SELECTION_LI');
     expect(

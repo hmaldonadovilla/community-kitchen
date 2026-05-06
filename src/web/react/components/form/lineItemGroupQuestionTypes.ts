@@ -171,6 +171,13 @@ export interface LineItemGroupQuestionCtx {
     stepId?: string;
     reason: string;
   }) => Promise<{ ok: boolean; message?: string }>;
+  waitForPendingSharedDataMutations?: (args: {
+    targetFormKeys: string[];
+    recordId?: string;
+    stepId?: string;
+    reason: string;
+    timeoutMs?: number;
+  }) => Promise<{ ok: boolean; message?: string }>;
   handleLineFieldChange: (
     group: WebQuestionDefinition,
     rowId: string,

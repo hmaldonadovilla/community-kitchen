@@ -98,6 +98,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     queueGuidedStepReservationDraftSync,
     onGuidedStepReservationDraftStateChange,
     waitForGuidedStepReservationDraftSync,
+    waitForPendingSharedDataMutations,
     handleLineFieldChange,
     collapsedGroups,
     toggleGroupCollapsed,
@@ -267,6 +268,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     resolveTopValue,
     queueGuidedStepReservationDraftSync,
     waitForGuidedStepReservationDraftSync,
+    waitForPendingSharedDataMutations,
     onDiagnostic
   });
 

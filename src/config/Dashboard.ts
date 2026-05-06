@@ -2105,6 +2105,17 @@ export class Dashboard {
       return Object.keys(out).length ? (out as SystemActionGateDialogConfig) : undefined;
     };
 
+    const normalizeOptionalBoolean = (input: any): boolean | undefined => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'boolean') return input;
+      if (typeof input === 'number') return input !== 0;
+      const raw = normalizeString(input).toLowerCase();
+      if (!raw) return undefined;
+      if (raw === 'true' || raw === '1' || raw === 'yes' || raw === 'y') return true;
+      if (raw === 'false' || raw === '0' || raw === 'no' || raw === 'n') return false;
+      return Boolean(input);
+    };
+
     const normalizeTarget = (raw: any): any => {
       if (!raw) return null;
       // Allow compact string as a question id
@@ -2128,6 +2139,23 @@ export class Dashboard {
       const out: any = { kind: 'lineGroup', id };
       const dataSourceRowsRaw = (raw as any).dataSourceRows;
       if (Array.isArray(dataSourceRowsRaw)) out.dataSourceRows = dataSourceRowsRaw;
+      const dataSourceBootstrapRaw = (raw as any).dataSourceBootstrap;
+      if (dataSourceBootstrapRaw && typeof dataSourceBootstrapRaw === 'object') {
+        const dataSourceBootstrap: any = {};
+        const waitForGuidedReservationSync = normalizeOptionalBoolean(
+          (dataSourceBootstrapRaw as any).waitForGuidedReservationSync
+        );
+        const waitForSharedDataMutations = normalizeOptionalBoolean(
+          (dataSourceBootstrapRaw as any).waitForSharedDataMutations
+        );
+        if (waitForGuidedReservationSync !== undefined) {
+          dataSourceBootstrap.waitForGuidedReservationSync = waitForGuidedReservationSync;
+        }
+        if (waitForSharedDataMutations !== undefined) {
+          dataSourceBootstrap.waitForSharedDataMutations = waitForSharedDataMutations;
+        }
+        if (Object.keys(dataSourceBootstrap).length) out.dataSourceBootstrap = dataSourceBootstrap;
+      }
 
       const normalizeFieldTarget = (input: any): any => {
         if (input === undefined || input === null) return null;

@@ -227,7 +227,14 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       if (deps.refs.uploadQueueRef.current.size > 0) {
         deps.busy.setMessage(busySeq, deps.tSystem('common.loading', language, 'Loading…'));
         const snapshots = Array.from(deps.refs.uploadQueueRef.current.values());
-        const settled = await Promise.allSettled(snapshots);
+        const settled = await Promise.all(
+          snapshots.map(promise =>
+            promise.then(
+              value => ({ status: 'fulfilled' as const, value }),
+              reason => ({ status: 'rejected' as const, reason })
+            )
+          )
+        );
         const failures: string[] = [];
         settled.forEach(s => {
           if (s.status !== 'fulfilled') {

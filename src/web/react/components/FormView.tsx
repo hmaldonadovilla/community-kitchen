@@ -495,6 +495,13 @@ interface FormViewProps {
     stepId?: string;
     reason: string;
   }) => Promise<{ ok: boolean; message?: string }>;
+  waitForPendingSharedDataMutations?: (args: {
+    targetFormKeys: string[];
+    recordId?: string;
+    stepId?: string;
+    reason: string;
+    timeoutMs?: number;
+  }) => Promise<{ ok: boolean; message?: string }>;
 }
 
 const FormView: React.FC<FormViewProps> = ({
@@ -552,7 +559,8 @@ const FormView: React.FC<FormViewProps> = ({
   ensureRecordId,
   queueGuidedStepReservationDraftSync,
   onGuidedStepReservationDraftStateChange,
-  waitForGuidedStepReservationDraftSync
+  waitForGuidedStepReservationDraftSync,
+  waitForPendingSharedDataMutations
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
     const raw = (field as any)?.optionSort;
@@ -7215,6 +7223,7 @@ const FormView: React.FC<FormViewProps> = ({
     queueGuidedStepReservationDraftSync,
     onGuidedStepReservationDraftStateChange,
     waitForGuidedStepReservationDraftSync,
+    waitForPendingSharedDataMutations,
     ...(overrides || {})
   });
 

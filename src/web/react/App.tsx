@@ -88,6 +88,10 @@ import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { usePendingFollowupBatchWait } from './components/app/usePendingFollowupBatchWait';
+import {
+  usePendingSharedDataMutations,
+  type PendingSharedDataMutationEntry
+} from './components/app/usePendingSharedDataMutations';
 import { useServerGeneratedTopValues } from './components/app/useServerGeneratedTopValues';
 import { useCreateNewRecordAction } from './components/app/useCreateNewRecordAction';
 import { useCreateRecordPresetAction } from './components/app/useCreateRecordPresetAction';
@@ -161,6 +165,10 @@ import {
   filterDataSourceFreshnessWatchesByDataSourceIds,
   resolveDataSourceConfigById
 } from './app/dataSourceVisibility';
+import {
+  resolvePendingSharedDataMutationMatches,
+  resolveStepDataSourceTargetFormKeys
+} from './app/sharedDataMutations';
 import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
@@ -2099,6 +2107,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
    */
   const recordSessionRef = useRef<number>(0);
   const [recordSessionKey, setRecordSessionKey] = useState<number>(0);
+  const getCurrentRecordSessionId = useCallback(() => recordSessionRef.current, []);
+  const {
+    pendingSharedDataMutationsRef,
+    trackPendingSharedDataMutation,
+    waitForPendingSharedDataMutations
+  } = usePendingSharedDataMutations({
+    definition,
+    getCurrentSessionId: getCurrentRecordSessionId,
+    logEvent
+  });
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>>>(new Map());
   const uploadQueueBlockingRef = useRef<Map<string, boolean>>(new Map());
   const uploadQueueBusyMessageRef = useRef<Map<string, string>>(new Map());
@@ -3133,6 +3151,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         scheduleDataSourceFreshnessCheck(`${reason}.inFlight`);
         return;
       }
+      const dueWatchTargetFormKeys = resolveStepDataSourceTargetFormKeys(
+        dueWatches.flatMap(watch =>
+          watch.dataSourceIds.map(dataSourceId => resolveWatchedDataSourceConfig(dataSourceId)).filter(Boolean)
+        )
+      );
+      const pendingSharedDataMatches = resolvePendingSharedDataMutationMatches({
+        pending: Array.from(pendingSharedDataMutationsRef.current.values()),
+        targetFormKeys: dueWatchTargetFormKeys
+      }) as PendingSharedDataMutationEntry[];
+      if (pendingSharedDataMatches.length) {
+        const skippedAt = Date.now();
+        dueWatches.forEach(watch => {
+          lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current[watch.key] = skippedAt;
+        });
+        logEvent('datasource.freshness.check.skipped', {
+          reason,
+          recordId,
+          stepId,
+          skipReason: 'pendingSharedDataMutation',
+          targetFormKeys: dueWatchTargetFormKeys,
+          pendingCount: pendingSharedDataMatches.length,
+          pendingIds: pendingSharedDataMatches.map(entry => entry.id),
+          pendingRecordIds: Array.from(new Set(pendingSharedDataMatches.map(entry => entry.recordId).filter(Boolean))),
+          pendingReasons: Array.from(new Set(pendingSharedDataMatches.map(entry => entry.reason).filter(Boolean)))
+        });
+        scheduleDataSourceFreshnessCheck(`${reason}.pendingSharedDataMutation`);
+        return;
+      }
       if (
         autoSaveInFlightRef.current ||
         draftSaveRequestInFlightRef.current ||
@@ -3328,6 +3374,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       customConfirm,
       getCurrentOpenRecordId,
       logEvent,
+      pendingSharedDataMutationsRef,
       resolveRunnableDataSourceFreshnessWatches,
       resolveInvalidGuidedReservationDraftsForStep,
       resolveWatchedDataSourceConfig,
@@ -7971,7 +8018,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       if (uploadQueueRef.current.size > 0) {
         const snapshots = Array.from(uploadQueueRef.current.values());
-        const settled = await Promise.allSettled(snapshots);
+        const settled = await Promise.all(
+          snapshots.map(promise =>
+            promise.then(
+              value => ({ status: 'fulfilled' as const, value }),
+              reason => ({ status: 'rejected' as const, reason })
+            )
+          )
+        );
         const failures: string[] = [];
         settled.forEach(result => {
           if (result.status !== 'fulfilled') {
@@ -11622,6 +11676,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               nextStepId: args.nextStepId || null
             });
           });
+          trackPendingSharedDataMutation({
+            recordId,
+            stepId: args.stepId,
+            reason: `${reason}.background`,
+            actions: allBackgroundActions,
+            promise: backgroundPromise
+          });
           pendingFollowupBatchPromisesRef.current.set(recordId, backgroundPromise);
           logEvent('followup.pending.tracked', {
             stepId: args.stepId,
@@ -11725,6 +11786,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       runSerializedFollowupBatchRequest,
       scheduleLatestAutoSave,
       statusTransitions,
+      trackPendingSharedDataMutation,
       resolveUiErrorMessage,
       waitForActiveDraftSaveTransactions,
       waitForPendingReservationSync,
@@ -13079,6 +13141,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 }
               }
             })();
+            trackPendingSharedDataMutation({
+              recordId,
+              reason: 'submit.afterSubmit.background',
+              actions: configuredBackgroundActions,
+              promise: backgroundPromise
+            });
             pendingFollowupBatchPromisesRef.current.set(recordId, backgroundPromise);
             logEvent('followup.pending.tracked', {
               stepId: null,
@@ -14577,6 +14645,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
           onGuidedStepReservationDraftStateChange={handleGuidedStepReservationDraftStateChange}
           waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
+          waitForPendingSharedDataMutations={waitForPendingSharedDataMutations}
           onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
         />
       ) : null}
