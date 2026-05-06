@@ -51,9 +51,7 @@ export type LineItemBodyFieldRenderOptions = {
   inGrid?: boolean;
 };
 
-type LineItemBodyFieldRendererArgs = {
-  field: any;
-  opts?: LineItemBodyFieldRenderOptions;
+export type LineItemBodyFieldRendererDeps = {
   q: WebQuestionDefinition;
   row: { id: string; values: Record<string, FieldValue> };
   values: Record<string, FieldValue>;
@@ -113,6 +111,11 @@ type LineItemBodyFieldRendererArgs = {
   }) => void;
   renderUploadFailure: (fieldPath: string) => React.ReactNode;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
+};
+
+type LineItemBodyFieldRendererArgs = LineItemBodyFieldRendererDeps & {
+  field: any;
+  opts?: LineItemBodyFieldRenderOptions;
 };
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>

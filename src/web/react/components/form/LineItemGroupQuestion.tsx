@@ -197,7 +197,7 @@ import { LineItemTotals } from '../../features/lineItems/components/LineItemTota
 import { RowFlowActionControl } from '../../features/lineItems/components/RowFlowActionControl';
 import { RowFlowGroupOutputActions } from '../../features/lineItems/components/RowFlowGroupOutputActions';
 import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
-import { renderLineItemBodyField } from '../../features/lineItems/components/LineItemBodyFieldRenderer';
+import { LineItemBodyFieldsSection } from '../../features/lineItems/components/LineItemBodyFieldsSection';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { LineItemTableModeRenderer } from '../../features/lineItems/components/LineItemTableModeRenderer';
@@ -5907,119 +5907,58 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                       {rowDisclaimerText}
                     </div>
                   ) : null}
-                  {(() => {
-                    const renderLineItemField = (
-                      field: any,
-                      opts?: { showLabel?: boolean; forceStackedLabel?: boolean; inGrid?: boolean }
-                    ) =>
-                      renderLineItemBodyField({
-                        field,
-                        opts,
-                        q,
-                        row,
-                        values,
-                        lineItems,
-                        optionState,
-                        language,
-                        groupCtx,
-                        errors,
-                        submitting,
-                        isProgressive,
-                        rowCollapsed,
-                        rowLocked,
-                        collapsedLabelMap,
-                        subIds,
-                        subIdToLabel,
-                        definition,
-                        latestValuesRef,
-                        fileInputsRef,
-                        uploadAnnouncements,
-                        groupChoiceSearchDefault,
-                        overlayActionCtx,
-                        ctx,
-                        setValues,
-                        setLineItems,
-                        setErrors,
-                        setSubgroupSelectors,
-                        ensureLineOptions,
-                        renderChoiceControl,
-                        resolveOverlayOpenActionForField,
-                        overlayOpenActionTargetsForField,
-                        renderOverlayOpenFlattenedFieldsShared,
-                        renderSubgroupOpenStack,
-                        renderWarnings,
-                        hasWarning,
-                        isLineFieldInputDisabled,
-                        isLineFieldInteractionBlocked,
-                        isFileUploadOrderedEntryBlocked,
-                        openLineItemGroupOverlay,
-                        openSubgroupOverlay,
-                        openInfoOverlay,
-                        openFileOverlay,
-                        handleLineFieldChange,
-                        handleLineFileInputChange,
-                        renderUploadFailure,
-                        onDiagnostic
-                      });
-
-                    if (isProgressive && rowCollapsed) {
-                      return (
-                        <div
-                          className={`collapsed-fields-grid${bodyFieldsToRender.length > 1 ? ' ck-collapsed-stack' : ''}`}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns:
-                              bodyFieldsToRender.length === 2
-                                ? 'repeat(2, minmax(0, 1fr))'
-                                : 'repeat(auto-fit, minmax(220px, 1fr))',
-                            gap: 12
-                          }}
-                        >
-                          {bodyFieldsToRender.map(field => renderLineItemField(field, { inGrid: bodyFieldsToRender.length > 1 }))}
-                        </div>
-                      );
-                    }
-
-                    const visibleExpandedFields = bodyFieldsToRender.filter(field => {
-                      if (guidedCollapsedFieldsInHeader && guidedCompactHeaderSummaryFieldIdSet.has((field?.id || '').toString())) {
-                        return false;
-                      }
-                      const hide = shouldHideField(field.visibility, groupCtx, { rowId: row.id, linePrefix: q.id });
-                      return !hide;
-                    });
-                    if (guidedCollapsedFieldsInHeader && isProgressive && !visibleExpandedFields.length) {
-                      return null;
-                    }
-
-                    return (
-                      <GroupedPairedFields
-                        contextPrefix={`li:${q.id}`}
-                        fields={visibleExpandedFields}
-                        language={language}
-                        collapsedGroups={collapsedGroups}
-                        toggleGroupCollapsed={toggleGroupCollapsed}
-                        renderField={renderLineItemField}
-                        hasError={(field: any) => !!errors[`${q.id}__${field.id}__${row.id}`]}
-                        isComplete={(field: any) => {
-                          const mapped = field.valueMap
-                            ? resolveValueMapValue(field.valueMap, (fid: string) => {
-                                if ((row.values || {}).hasOwnProperty(fid)) return (row.values || {})[fid];
-                                return values[fid];
-                              }, { language, targetOptions: toOptionSet(field) })
-                            : undefined;
-                          const raw = field.valueMap ? mapped : (row.values || {})[field.id];
-                          if (field.type === 'FILE_UPLOAD') {
-                            return isUploadValueComplete({
-                              value: raw as any,
-                              uploadConfig: (field as any).uploadConfig,
-                              required: !!field.required
-                            });
-                          }
-                          return !isEmptyValue(raw as any);
-                        }}
-                      />
-                    );
-                  })()}
+                  <LineItemBodyFieldsSection
+                    bodyFieldsToRender={bodyFieldsToRender}
+                    guidedCollapsedFieldsInHeader={guidedCollapsedFieldsInHeader}
+                    guidedCompactHeaderSummaryFieldIdSet={guidedCompactHeaderSummaryFieldIdSet}
+                    collapsedGroups={collapsedGroups}
+                    toggleGroupCollapsed={toggleGroupCollapsed}
+                    q={q}
+                    row={row}
+                    values={values}
+                    lineItems={lineItems}
+                    optionState={optionState}
+                    language={language}
+                    groupCtx={groupCtx}
+                    errors={errors}
+                    submitting={submitting}
+                    isProgressive={isProgressive}
+                    rowCollapsed={rowCollapsed}
+                    rowLocked={rowLocked}
+                    collapsedLabelMap={collapsedLabelMap}
+                    subIds={subIds}
+                    subIdToLabel={subIdToLabel}
+                    definition={definition}
+                    latestValuesRef={latestValuesRef}
+                    fileInputsRef={fileInputsRef}
+                    uploadAnnouncements={uploadAnnouncements}
+                    groupChoiceSearchDefault={groupChoiceSearchDefault}
+                    overlayActionCtx={overlayActionCtx}
+                    ctx={ctx}
+                    setValues={setValues}
+                    setLineItems={setLineItems}
+                    setErrors={setErrors}
+                    setSubgroupSelectors={setSubgroupSelectors}
+                    ensureLineOptions={ensureLineOptions}
+                    renderChoiceControl={renderChoiceControl}
+                    resolveOverlayOpenActionForField={resolveOverlayOpenActionForField}
+                    overlayOpenActionTargetsForField={overlayOpenActionTargetsForField}
+                    renderOverlayOpenFlattenedFieldsShared={renderOverlayOpenFlattenedFieldsShared}
+                    renderSubgroupOpenStack={renderSubgroupOpenStack}
+                    renderWarnings={renderWarnings}
+                    hasWarning={hasWarning}
+                    isLineFieldInputDisabled={isLineFieldInputDisabled}
+                    isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
+                    isFileUploadOrderedEntryBlocked={isFileUploadOrderedEntryBlocked}
+                    openLineItemGroupOverlay={openLineItemGroupOverlay}
+                    openSubgroupOverlay={openSubgroupOverlay}
+                    openInfoOverlay={openInfoOverlay}
+                    openFileOverlay={openFileOverlay}
+                    handleLineFieldChange={handleLineFieldChange}
+                    handleLineFileInputChange={handleLineFileInputChange}
+                    renderUploadFailure={renderUploadFailure}
+                    onDiagnostic={onDiagnostic}
+                  />
                   {guidedCollapsedFieldsInHeader && isProgressive && rowDisclaimerText ? (
                     <div className="ck-row-disclaimer" style={{ marginTop: 10 }}>
                       {rowDisclaimerText}
