@@ -198,6 +198,7 @@ import { RowFlowActionControl } from '../../features/lineItems/components/RowFlo
 import { RowFlowGroupOutputActions } from '../../features/lineItems/components/RowFlowGroupOutputActions';
 import { RowFlowRowRenderer } from '../../features/lineItems/components/RowFlowRowRenderer';
 import { LineItemBodyFieldsSection } from '../../features/lineItems/components/LineItemBodyFieldsSection';
+import { LineItemSectionSelectorControl } from '../../features/lineItems/components/LineItemSectionSelectorControl';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
 import { LineItemTableModeRenderer } from '../../features/lineItems/components/LineItemTableModeRenderer';
@@ -6407,60 +6408,24 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                                 return (
                                   <>
                                     {subSelectorCfg && showTop ? (
-                                      <div
-                                        className="section-selector"
-                                        data-field-path={subSelectorCfg.id}
-                                        style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
-                                      >
-                                        <label style={{ fontWeight: 600 }}>
-                                          {resolveSelectorLabel(subSelectorCfg, language)}
-                                          {subSelectorCfg.required && <RequiredStar />}
-                                        </label>
-                                        {useSubSelectorSearch ? (
-                                          <SearchableSelect
-                                            value={subSelectorValue || ''}
-                                            disabled={submitting}
-                                            placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
-                                            emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                                            options={subSelectorOptions.map(opt => ({
-                                              value: opt.value,
-                                              label: opt.label,
-                                              searchText: opt.searchText
-                                            }))}
-                                            onDiagnostic={(event, payload) =>
-                                              onDiagnostic?.(event, { scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
-                                            }
-                                            onChange={nextValue => {
-                                              latestSubgroupSelectorValueRef.current[subKey] = nextValue;
-                                              setSubgroupSelectors(prev => {
-                                                if (prev[subKey] === nextValue) return prev;
-                                                return { ...prev, [subKey]: nextValue };
-                                              });
-                                            }}
-                                          />
-                                        ) : (
-                                          <select
-                                            value={subSelectorValue}
-                                            onChange={e => {
-                                              const nextValue = e.target.value;
-                                              latestSubgroupSelectorValueRef.current[subKey] = nextValue;
-                                              setSubgroupSelectors(prev => {
-                                                if (prev[subKey] === nextValue) return prev;
-                                                return { ...prev, [subKey]: nextValue };
-                                              });
-                                            }}
-                                          >
-                                            <option value="">
-                                              {tSystem('common.selectPlaceholder', language, 'Select…')}
-                                            </option>
-                                            {subSelectorOptions.map(opt => (
-                                              <option key={opt.value} value={opt.value}>
-                                                {opt.label}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        )}
-                                      </div>
+                                      <LineItemSectionSelectorControl
+                                        selectorCfg={subSelectorCfg}
+                                        value={subSelectorValue}
+                                        language={language}
+                                        options={subSelectorOptions}
+                                        disabled={submitting}
+                                        searchEnabled={useSubSelectorSearch}
+                                        labelStyle={{ fontWeight: 600 }}
+                                        diagnosticPayload={{ scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey }}
+                                        onDiagnostic={onDiagnostic}
+                                        onChange={nextValue => {
+                                          latestSubgroupSelectorValueRef.current[subKey] = nextValue;
+                                          setSubgroupSelectors(prev => {
+                                            if (prev[subKey] === nextValue) return prev;
+                                            return { ...prev, [subKey]: nextValue };
+                                          });
+                                        }}
+                                      />
                                     ) : null}
                                     {showTop ? renderSubAddButton() : null}
                                   </>
@@ -8594,84 +8559,43 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                             >
                               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
                               {subSelectorCfg && showBottom && (canUseSubSelectorOverlay ? subSelectorOverlayOptions.length : subSelectorOptions.length) ? (
-                                  <div
-                                    className="section-selector"
-                                    data-field-path={subSelectorCfg.id}
-                                    style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
-                                  >
-                                    <label>
-                                      {resolveSelectorLabel(subSelectorCfg, language)}
-                                      {subSelectorCfg.required && <RequiredStar />}
-                                    </label>
-                                    {canUseSubSelectorOverlay ? (
-                                      <LineItemMultiAddSelect
-                                        label={resolveSelectorLabel(subSelectorCfg, language)}
-                                        language={language}
-                                        options={subSelectorOverlayOptions}
-                                        disabled={submitting}
-                                        placeholder={
-                                          resolveSelectorPlaceholder(subSelectorCfg, language) ||
-                                          tSystem('lineItems.selectLinesSearch', language, 'Search items')
-                                        }
-                                        helperText={resolveSelectorHelperText(subSelectorCfg, language) || undefined}
-                                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                                        onDiagnostic={(event, payload) =>
-                                          onDiagnostic?.(event, {
-                                            scope: 'subgroup.selectorOverlay',
-                                            fieldId: subSelectorCfg.id,
-                                            subKey,
-                                            ...(payload || {})
-                                          })
-                                        }
-                                        onAddSelected={valuesToAdd => {
-                                          if (submitting) return;
-                                          if (!subSelectorOverlayAnchorFieldId) return;
-                                          const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
-                                          if (!deduped.length) return;
-                                          deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
-                                        }}
-                                      />
-                                    ) : useSubSelectorSearch ? (
-                                      <SearchableSelect
-                                        value={subSelectorValue || ''}
-                                        disabled={submitting}
-                                        placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
-                                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                                        options={subSelectorOptions.map(opt => ({
-                                          value: opt.value,
-                                          label: opt.label,
-                                          searchText: opt.searchText
-                                        }))}
-                                        onDiagnostic={(event, payload) =>
-                                          onDiagnostic?.(event, { scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey, ...(payload || {}) })
-                                        }
-                                        onChange={nextValue => {
-                                          setSubgroupSelectors(prev => {
-                                            if (prev[subKey] === nextValue) return prev;
-                                            return { ...prev, [subKey]: nextValue };
-                                          });
-                                        }}
-                                      />
-                                    ) : (
-                                      <select
-                                        value={subSelectorValue}
-                                        onChange={e => {
-                                          const nextValue = e.target.value;
-                                          setSubgroupSelectors(prev => {
-                                            if (prev[subKey] === nextValue) return prev;
-                                            return { ...prev, [subKey]: nextValue };
-                                          });
-                                        }}
-                                      >
-                                        <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                                        {subSelectorOptions.map(opt => (
-                                          <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    )}
-                                  </div>
+                                  <LineItemSectionSelectorControl
+                                    selectorCfg={subSelectorCfg}
+                                    value={subSelectorValue}
+                                    language={language}
+                                    options={subSelectorOptions}
+                                    disabled={submitting}
+                                    searchEnabled={useSubSelectorSearch}
+                                    diagnosticPayload={{ scope: 'subgroup.selector', fieldId: subSelectorCfg.id, subKey }}
+                                    onDiagnostic={onDiagnostic}
+                                    onChange={nextValue => {
+                                      latestSubgroupSelectorValueRef.current[subKey] = nextValue;
+                                      setSubgroupSelectors(prev => {
+                                        if (prev[subKey] === nextValue) return prev;
+                                        return { ...prev, [subKey]: nextValue };
+                                      });
+                                    }}
+                                    multiAdd={
+                                      canUseSubSelectorOverlay
+                                        ? {
+                                            enabled: true,
+                                            options: subSelectorOverlayOptions,
+                                            diagnosticPayload: {
+                                              scope: 'subgroup.selectorOverlay',
+                                              fieldId: subSelectorCfg.id,
+                                              subKey
+                                            },
+                                            onAddSelected: valuesToAdd => {
+                                              if (submitting) return;
+                                              if (!subSelectorOverlayAnchorFieldId) return;
+                                              const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
+                                              if (!deduped.length) return;
+                                              deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
+                                            }
+                                          }
+                                        : undefined
+                                    }
+                                  />
                                 ) : null}
                                 {showBottom ? renderSubAddButton() : null}
                                 <LineItemTotals totals={subTotals} />
@@ -8721,50 +8645,23 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             {shouldRenderBottomToolbar ? (
               <div className="line-item-toolbar">
                 {showSelectorBottom && selectorCfg ? (
-                  <div
-                    className="section-selector"
-                    data-field-path={selectorCfg.id}
-                    style={{ minWidth: 0, width: '100%', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}
-                  >
-                    <label style={{ fontWeight: 600 }}>
-                      {resolveSelectorLabel(selectorCfg, language)}
-                      {selectorCfg.required && <RequiredStar />}
-                    </label>
-                    {useSelectorSearch ? (
-                      <SearchableSelect
-                        value={selectorValue || ''}
-                        disabled={submitting}
-                        placeholder={tSystem('common.selectPlaceholder', language, 'Select…')}
-                        emptyText={tSystem('common.noMatches', language, 'No matches.')}
-                        options={selectorOptions.map(opt => ({ value: opt.value, label: opt.label, searchText: opt.searchText }))}
-                        onDiagnostic={(event, payload) => onDiagnostic?.(event, { scope: 'lineItems.selector', fieldId: selectorCfg.id, ...(payload || {}) })}
-                        onChange={nextValue => {
-                          setValues(prev => {
-                            if (prev[selectorCfg.id] === nextValue) return prev;
-                            return { ...prev, [selectorCfg.id]: nextValue };
-                          });
-                        }}
-                      />
-                    ) : (
-                      <select
-                        value={selectorValue}
-                        onChange={e => {
-                          const nextValue = e.target.value;
-                          setValues(prev => {
-                            if (prev[selectorCfg.id] === nextValue) return prev;
-                            return { ...prev, [selectorCfg.id]: nextValue };
-                          });
-                        }}
-                      >
-                        <option value="">{tSystem('common.selectPlaceholder', language, 'Select…')}</option>
-                        {selectorOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
+                  <LineItemSectionSelectorControl
+                    selectorCfg={selectorCfg}
+                    value={selectorValue}
+                    language={language}
+                    options={selectorOptions}
+                    disabled={submitting}
+                    searchEnabled={useSelectorSearch}
+                    labelStyle={{ fontWeight: 600 }}
+                    diagnosticPayload={{ scope: 'lineItems.selector', fieldId: selectorCfg.id }}
+                    onDiagnostic={onDiagnostic}
+                    onChange={nextValue => {
+                      setValues(prev => {
+                        if (prev[selectorCfg.id] === nextValue) return prev;
+                        return { ...prev, [selectorCfg.id]: nextValue };
+                      });
+                    }}
+                  />
                 ) : null}
                 <div className="line-item-toolbar-actions">
                   {showAddBottom ? renderAddButton() : null}
