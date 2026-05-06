@@ -854,10 +854,15 @@ One-hundred-eighteenth-pass results:
 - `FormView.tsx`: extracted form configuration diagnostics into `useFormConfigDiagnostics` plus pure diagnostic collectors, moving guided visibility, ordered-entry, selector-overlay, add-overlay copy, non-match warning, dedup, overlay-detail, row-flow, and food-safety diagnostic traversal out of the main renderer. Current size: 10,576 lines.
 - Validation for the pass used focused form diagnostic collector tests and `npx tsc --noEmit --pretty false`.
 
+One-hundred-nineteenth-pass results:
+
+- `FormView.tsx`: extracted top-level group progress and auto-collapse coordination into `useTopLevelGroupAutoCollapse`, moving progress computation, deferred focus handling, collapse state mutation, diagnostics, and scroll coordination behind a focused form hook. Current size: 10,456 lines.
+- Validation for the pass used focused group-progress tests and `npx tsc --noEmit --pretty false`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 10,576 lines.
+- `FormView.tsx`: 10,456 lines.
 - `LineItemGroupQuestion.tsx`: 869 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

@@ -121,17 +121,12 @@ import { HtmlPreview } from './app/HtmlPreview';
 import { isGuidedStepAutoAdvanceAllowed } from '../app/stepAutoAdvance';
 import { GroupedPairedFields } from './form/GroupedPairedFields';
 import { buildFormGroupSections, buildPageSectionBlocks, resolveGroupSectionKey } from './form/grouping';
-import {
-  computeTopLevelGroupProgress,
-  resolveCollapsedGroupsAfterAutoCollapse,
-  resolveCompletedGroupAutoCollapse,
-  resolvePendingAutoCollapse
-} from './form/groupProgress';
 import { GroupedFormSections } from './form/GroupedFormSections';
 import { FormStatusNotices } from './form/FormStatusNotices';
 import { scrollFormGroupToTop } from './form/scrollFormGroupToTop';
 import { useFormViewStateRefs } from './form/useFormViewStateRefs';
 import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
+import { useTopLevelGroupAutoCollapse } from './form/useTopLevelGroupAutoCollapse';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import { LineFileUploadQuestion } from '../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadTableOpenControl } from '../features/uploads/components/LineFileUploadTableOpenControl';
@@ -6815,135 +6810,20 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
-  const topLevelGroupProgress = useMemo(
-    () =>
-      computeTopLevelGroupProgress({
-        groupSections,
-        values,
-        lineItems,
-        collapsedRows,
-        language,
-        topVisibilityCtx,
-        getTopValue: getTopValueNoScan
-      }),
-    [collapsedRows, getTopValueNoScan, groupSections, language, lineItems, topVisibilityCtx, values]
-  );
-
-  const prevGroupCompleteRef = useRef<Record<string, boolean>>({});
-  const pendingAutoCollapseRef = useRef<string[]>([]);
-  const autoCollapseFlushTimerRef = useRef<number | null>(null);
-
-  const flushPendingAutoCollapse = useCallback(
-    (reason?: string) => {
-      if (!autoCollapseGroups) return;
-      const { stillComplete, nextOpenKey } = resolvePendingAutoCollapse({
-        pendingKeys: pendingAutoCollapseRef.current,
-        progress: topLevelGroupProgress,
-        autoOpenNextIncomplete
-      });
-      pendingAutoCollapseRef.current = [];
-      if (!stillComplete.length) return;
-
-      setCollapsedGroups(prev => {
-        const { next, changed } = resolveCollapsedGroupsAfterAutoCollapse({
-          collapsedGroups: prev,
-          completedKeys: stillComplete,
-          nextOpenKey
-        });
-        if (changed) {
-          onDiagnostic?.('ui.group.autoCollapse', {
-            completed: stillComplete,
-            opened: nextOpenKey || null,
-            deferred: true,
-            reason: reason || 'flush'
-          });
-        }
-        return changed ? next : prev;
-      });
-
-      if (nextOpenKey) {
-        scheduleScrollGroupToTop(nextOpenKey, { reason: 'autoOpenNext' });
-      }
-    },
-    [autoCollapseGroups, autoOpenNextIncomplete, onDiagnostic, scheduleScrollGroupToTop, topLevelGroupProgress]
-  );
-
-  useEffect(() => {
-    if (!autoCollapseGroups) return;
-    if (typeof document === 'undefined' || typeof window === 'undefined') return;
-
-    const handler = () => {
-      if (!pendingAutoCollapseRef.current.length) return;
-      if (autoCollapseFlushTimerRef.current !== null) {
-        window.clearTimeout(autoCollapseFlushTimerRef.current);
-      }
-      autoCollapseFlushTimerRef.current = window.setTimeout(() => {
-        autoCollapseFlushTimerRef.current = null;
-        const active = document.activeElement as HTMLElement | null;
-        const activeGroupKey = (active?.closest('[data-group-key]') as HTMLElement | null)?.dataset?.groupKey || '';
-        if (activeGroupKey && pendingAutoCollapseRef.current.includes(activeGroupKey)) {
-          return;
-        }
-        flushPendingAutoCollapse('focus');
-      }, 0);
-    };
-
-    document.addEventListener('focusin', handler, true);
-    document.addEventListener('focusout', handler, true);
-    return () => {
-      document.removeEventListener('focusin', handler, true);
-      document.removeEventListener('focusout', handler, true);
-      if (autoCollapseFlushTimerRef.current !== null) {
-        window.clearTimeout(autoCollapseFlushTimerRef.current);
-        autoCollapseFlushTimerRef.current = null;
-      }
-    };
-  }, [autoCollapseGroups, flushPendingAutoCollapse]);
-
-  useEffect(() => {
-    if (!autoCollapseGroups) return;
-    if (!topLevelGroupProgress.length) return;
-
-    const { nextComplete, completedNow, nextOpenKey } = resolveCompletedGroupAutoCollapse({
-      previousComplete: prevGroupCompleteRef.current || {},
-      progress: topLevelGroupProgress,
-      autoOpenNextIncomplete
-    });
-    prevGroupCompleteRef.current = nextComplete;
-    if (!completedNow.length) return;
-
-    const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
-    const tag = active?.tagName ? active.tagName.toLowerCase() : '';
-    const isEditable =
-      tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean((active as any)?.isContentEditable);
-    const activeGroupKey = (active?.closest('[data-group-key]') as HTMLElement | null)?.dataset?.groupKey || '';
-    if (isEditable && activeGroupKey && completedNow.includes(activeGroupKey)) {
-      // Avoid collapsing the group while the user is mid-edit (e.g., first keystroke of the last required field).
-      // We'll flush after focus leaves the group.
-      pendingAutoCollapseRef.current = Array.from(new Set([...(pendingAutoCollapseRef.current || []), ...completedNow]));
-      onDiagnostic?.('ui.group.autoCollapse.defer', { activeGroupKey, completed: completedNow });
-      return;
-    }
-
-    setCollapsedGroups(prev => {
-      const { next, changed } = resolveCollapsedGroupsAfterAutoCollapse({
-        collapsedGroups: prev,
-        completedKeys: completedNow,
-        nextOpenKey
-      });
-      if (changed) {
-        onDiagnostic?.('ui.group.autoCollapse', {
-          completed: completedNow,
-          opened: nextOpenKey || null
-        });
-      }
-      return changed ? next : prev;
-    });
-
-    if (nextOpenKey) {
-      scheduleScrollGroupToTop(nextOpenKey, { reason: 'autoOpenNext' });
-    }
-  }, [autoCollapseGroups, autoOpenNextIncomplete, onDiagnostic, scheduleScrollGroupToTop, topLevelGroupProgress]);
+  const topLevelGroupProgress = useTopLevelGroupAutoCollapse({
+    groupSections,
+    values,
+    lineItems,
+    collapsedRows,
+    language,
+    topVisibilityCtx,
+    getTopValue: getTopValueNoScan,
+    autoCollapseGroups,
+    autoOpenNextIncomplete,
+    setCollapsedGroups,
+    scheduleScrollGroupToTop,
+    onDiagnostic
+  });
 
   const buildLineItemGroupQuestionContext = (overrides?: Record<string, any>) => ({
     formKey,
