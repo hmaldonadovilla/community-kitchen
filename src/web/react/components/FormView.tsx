@@ -60,17 +60,11 @@ import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOver
 import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
-import { collectGuidedContextHeaderConfig } from '../features/steps/domain/guidedContextHeader';
 import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
 import {
   resolveGuidedClearOnChangeOrderedFieldIdsAction,
   resolveGuidedOrderedQuestionsAction
 } from '../features/steps/domain/guidedStepQuestionOrder';
-import {
-  buildGuidedQuestionByIdMapAction,
-  filterGuidedTargetsForContextHeaderAction,
-  resolveGuidedTargetQuestionAction
-} from '../features/steps/domain/guidedTargets';
 import {
   collectDefinitionBlurDerivedDependencyIds,
   hasDefinitionBlurDerivedValues
@@ -96,7 +90,6 @@ import {
   describeUploadItem,
   resolveFieldHelperText,
   formatOptionFilterNonMatchWarning,
-  getUploadMinRequired,
   isUploadValueComplete,
   resolveRowDisclaimerText,
   resolveLineItemTableReadOnlyDisplay,
@@ -105,11 +98,8 @@ import {
 } from './form/utils';
 import {
   buttonStyles,
-  CameraIcon,
-  CheckIcon,
   EyeIcon,
   PencilIcon,
-  PaperclipIcon,
   PlusIcon,
   RequiredStar,
   srOnly,
@@ -222,10 +212,7 @@ import {
 import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
-import { GuidedContextHeader } from '../features/steps/components/GuidedContextHeader';
-import { GuidedFormContent } from '../features/steps/components/GuidedFormContent';
-import { GuidedLineGroupTargetRenderer } from '../features/steps/components/GuidedLineGroupTargetRenderer';
-import { renderGuidedTargetsWithPairing } from '../features/steps/components/renderGuidedTargetsWithPairing';
+import { GuidedContentRenderer } from '../features/steps/components/GuidedContentRenderer';
 import { computeGuidedStepsStatus } from '../features/steps/domain/computeStepStatus';
 import {
   shouldApplyGuidedExternalSyncSignal,
@@ -6015,11 +6002,11 @@ const FormView: React.FC<FormViewProps> = ({
       if (globalAny?.top && globalAny.top !== globalAny) {
         try {
           tryScrubWindowHref(globalAny.top, 'top');
-        } catch (_) {
+        } catch {
           // ignore cross-origin access failures
         }
       }
-    } catch (_) {
+    } catch {
       onDiagnostic?.('readyForProduction.unlock.urlScrubbed.error', {
         source: unlockResolution.source
       });
@@ -6483,7 +6470,7 @@ const FormView: React.FC<FormViewProps> = ({
       onDiagnostic?.('paragraphDisclaimer.sync', { updatedCount, source });
       return true;
     },
-    [computeParagraphDisclaimerUpdates, onDiagnostic, setValues, submitting]
+    [computeParagraphDisclaimerUpdates, lineItemsRef, onDiagnostic, setValues, submitting, valuesRef]
   );
 
   const requestParagraphDisclaimerSync = useCallback(
@@ -11742,125 +11729,36 @@ const FormView: React.FC<FormViewProps> = ({
     />
   );
 
-  const renderGuidedContent = (): React.ReactNode => {
-    if (!guidedEnabled || !guidedStepsCfg) return null;
-    const steps = guidedVisibleSteps;
-    if (!steps.length) return null;
-
-    const stepCfg = (steps.find(s => (s?.id || '').toString() === activeGuidedStepId) || steps[0]) as any;
-    const headerTargets: any[] = Array.isArray(guidedStepsCfg.header?.include) ? (guidedStepsCfg.header!.include as any[]) : [];
-    const stepTargets: any[] = Array.isArray(stepCfg?.include) ? (stepCfg.include as any[]) : [];
-
-    const stepHelpText = stepCfg?.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '';
-    const stepLineGroupsDefaultMode = (stepCfg?.render?.lineGroups?.mode || '') as 'inline' | 'overlay' | '';
-    const stepSubGroupsDefaultMode = (stepCfg?.render?.subGroups?.mode || '') as 'inline' | 'overlay' | '';
-    const {
-      parts: stepContextHeaderParts,
-      partIds: stepContextHeaderPartIds,
-      separator: guidedContextHeaderSeparator
-    } = collectGuidedContextHeaderConfig(stepCfg?.contextHeader);
-    const guidedContextHeaderIds = new Set<string>(stepContextHeaderPartIds);
-
-    const questionById = buildGuidedQuestionByIdMapAction(definition.questions);
-    const resolveTargetQuestion = (target: any): WebQuestionDefinition | null =>
-      resolveGuidedTargetQuestionAction({ target, questionById });
-
-    const guidedContextHeaderNode = stepContextHeaderParts.length ? (
-      <GuidedContextHeader
-        language={language}
-        parts={stepContextHeaderParts}
-        separator={guidedContextHeaderSeparator}
-        values={values}
-        questionById={questionById}
-        resolveOptionSet={renderOptions}
-      />
-    ) : null;
-
-    const stepTargetsFiltered = filterGuidedTargetsForContextHeaderAction({
-      targets: stepTargets,
-      contextHeaderIds: guidedContextHeaderIds
-    });
-
-    const renderTarget = (target: any, keyPrefix: string): React.ReactNode => {
-      if (!target || typeof target !== 'object') return null;
-      const kind = (target.kind || '').toString().trim();
-      const id = (target.id || '').toString().trim();
-      if (!kind || !id) return null;
-
-      if (kind === 'question') {
-        const q = resolveTargetQuestion(target);
-        if (!q) return null;
-        return <React.Fragment key={`${keyPrefix}:q:${q.id}`}>{renderQuestion(q)}</React.Fragment>;
-      }
-
-      if (kind !== 'lineGroup') return null;
-      const groupQ = definition.questions.find(q2 => q2.id === id && q2.type === 'LINE_ITEM_GROUP');
-      if (!groupQ) return null;
-
-      const onGroupOverrideApplied = onDiagnostic
-        ? (groupId: string, keys: string[]) => {
-            const logKey = `${activeGuidedStepId}::${groupId}::groupOverride`;
-            if (guidedLineGroupOverrideLoggedRef.current.has(logKey)) return;
-            guidedLineGroupOverrideLoggedRef.current.add(logKey);
-            onDiagnostic('steps.lineGroup.groupOverride.applied', {
-              stepId: activeGuidedStepId,
-              groupId,
-              keys
-            });
-          }
-        : undefined;
-
-      return (
-        <GuidedLineGroupTargetRenderer
-          key={`${keyPrefix}:lg:${id}`}
-          target={target}
-          keyPrefix={keyPrefix}
-          groupQ={groupQ}
-          activeGuidedStepId={activeGuidedStepId}
-          language={language}
-          stepLineGroupsDefaultMode={stepLineGroupsDefaultMode}
-          stepSubGroupsDefaultMode={stepSubGroupsDefaultMode}
-          submitting={submitting}
-          errors={errors}
-          hasWarning={hasWarning}
-          renderWarnings={renderWarnings}
-          isFieldLockedByDedup={isFieldLockedByDedup}
-          openLineItemGroupOverlay={openLineItemGroupOverlay}
-          buildLineItemGroupQuestionContext={buildLineItemGroupQuestionContext}
-          onGroupOverrideApplied={onGroupOverrideApplied}
-        />
-      );
-    };
-
-    const renderTargetsWithPairing = (targets: any[], keyPrefix: string): React.ReactNode[] =>
-      renderGuidedTargetsWithPairing({
-        targets,
-        keyPrefix,
-        resolveTargetQuestion,
-        renderTarget,
-        renderQuestion,
-        isQuestionVisible: q => !shouldHideField(q.visibility, topVisibilityCtx)
-      });
-
-    return (
-      <GuidedFormContent
-        language={language}
-        steps={steps}
-        status={guidedStatus.steps}
-        activeStepId={activeGuidedStepId}
-        disabledStepIds={guidedStepBarBlockedIds}
-        maxReachableIndex={
-          guidedForwardNavigationBlocked ? Math.min(maxReachableGuidedIndex, activeGuidedStepIndex) : maxReachableGuidedIndex
-        }
-        bodyRef={guidedStepBodyRef}
-        contextHeader={guidedContextHeaderNode}
-        stepHelpText={stepHelpText}
-        headerContent={renderTargetsWithPairing(headerTargets, 'header')}
-        stepContent={renderTargetsWithPairing(stepTargetsFiltered, `step:${activeGuidedStepId}`)}
-        onSelectStep={handleGuidedStepSelect}
-      />
-    );
-  };
+  const guidedContent = (
+    <GuidedContentRenderer
+      guidedEnabled={guidedEnabled}
+      guidedStepsCfg={guidedStepsCfg}
+      guidedVisibleSteps={guidedVisibleSteps}
+      activeGuidedStepId={activeGuidedStepId}
+      activeGuidedStepIndex={activeGuidedStepIndex}
+      guidedStatusSteps={guidedStatus.steps}
+      guidedStepBarBlockedIds={guidedStepBarBlockedIds}
+      guidedForwardNavigationBlocked={guidedForwardNavigationBlocked}
+      maxReachableGuidedIndex={maxReachableGuidedIndex}
+      guidedStepBodyRef={guidedStepBodyRef}
+      guidedLineGroupOverrideLoggedRef={guidedLineGroupOverrideLoggedRef}
+      language={language}
+      definitionQuestions={definition.questions}
+      values={values}
+      submitting={submitting}
+      errors={errors}
+      renderOptions={renderOptions}
+      renderQuestion={renderQuestion}
+      isQuestionVisible={question => !shouldHideField(question.visibility, topVisibilityCtx)}
+      hasWarning={hasWarning}
+      renderWarnings={renderWarnings}
+      isFieldLockedByDedup={isFieldLockedByDedup}
+      openLineItemGroupOverlay={openLineItemGroupOverlay}
+      buildLineItemGroupQuestionContext={buildLineItemGroupQuestionContext}
+      handleGuidedStepSelect={handleGuidedStepSelect}
+      onDiagnostic={onDiagnostic}
+    />
+  );
 
   return (
     <>
@@ -11882,7 +11780,7 @@ const FormView: React.FC<FormViewProps> = ({
         <fieldset disabled={submitting} style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}>
           <div className="ck-group-stack">
             {guidedEnabled ? (
-              renderGuidedContent()
+              guidedContent
             ) : (
               <GroupedFormSections
                 blocks={groupSectionBlocks}
