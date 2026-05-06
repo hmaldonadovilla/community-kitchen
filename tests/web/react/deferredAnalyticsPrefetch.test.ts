@@ -1,7 +1,8 @@
 import {
   releaseDeferredAnalyticsPrefetchKey,
   reserveDeferredAnalyticsPrefetchKey,
-  shouldPrefetchDeferredAnalytics
+  shouldPrefetchDeferredAnalytics,
+  shouldRequestHomeAnalyticsRefreshOnListEnter
 } from '../../../src/web/react/app/deferredAnalyticsPrefetch';
 
 describe('deferred analytics prefetch keys', () => {
@@ -69,6 +70,44 @@ describe('deferred analytics prefetch keys', () => {
         hasListViewAnalyticsWidgets: false,
         snapshotItemCount: 0,
         refreshRequested: true,
+        stale: true
+      })
+    ).toBe(false);
+  });
+
+  it('does not request an initial home analytics refresh when bootstrap already provided a snapshot', () => {
+    expect(
+      shouldRequestHomeAnalyticsRefreshOnListEnter({
+        hasListViewAnalyticsWidgets: true,
+        previousView: null,
+        snapshotItemCount: 2,
+        stale: false
+      })
+    ).toBe(false);
+  });
+
+  it('requests home analytics when entering from another view or when the initial snapshot is missing', () => {
+    expect(
+      shouldRequestHomeAnalyticsRefreshOnListEnter({
+        hasListViewAnalyticsWidgets: true,
+        previousView: 'form',
+        snapshotItemCount: 2,
+        stale: false
+      })
+    ).toBe(true);
+    expect(
+      shouldRequestHomeAnalyticsRefreshOnListEnter({
+        hasListViewAnalyticsWidgets: true,
+        previousView: null,
+        snapshotItemCount: 0,
+        stale: false
+      })
+    ).toBe(true);
+    expect(
+      shouldRequestHomeAnalyticsRefreshOnListEnter({
+        hasListViewAnalyticsWidgets: false,
+        previousView: 'form',
+        snapshotItemCount: 0,
         stale: true
       })
     ).toBe(false);

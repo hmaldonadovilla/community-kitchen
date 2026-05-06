@@ -1638,13 +1638,22 @@ export function buildWebFormHtml(
                 window.google.script.run
                   .withSuccessHandler(function (res) {
                     try {
-                      if (res && res.listResponse && Array.isArray(res.listResponse.items)) {
+                      if (res) {
                         var currentBootstrap = window.__WEB_FORM_BOOTSTRAP__ || {};
-                        window.__WEB_FORM_BOOTSTRAP__ = Object.assign({}, currentBootstrap, {
-                          homeRev: res.rev,
-                          listResponse: res.listResponse,
-                          records: res.records || {}
-                        });
+                        var nextBootstrap = {};
+                        if (res.listResponse && Array.isArray(res.listResponse.items)) {
+                          nextBootstrap.homeRev = res.rev;
+                          nextBootstrap.listResponse = res.listResponse;
+                          nextBootstrap.records = res.records || {};
+                        }
+                        if (res.analytics && typeof res.analytics === 'object') {
+                          var analyticsRev = Number(res.analyticsRev || res.analytics.revision || 0) || 0;
+                          nextBootstrap.analytics = res.analytics;
+                          nextBootstrap.analyticsRev = analyticsRev;
+                        }
+                        if (Object.keys(nextBootstrap).length) {
+                          window.__WEB_FORM_BOOTSTRAP__ = Object.assign({}, currentBootstrap, nextBootstrap);
+                        }
                       }
                     } catch (e) {
                       // ignore
@@ -1654,6 +1663,7 @@ export function buildWebFormHtml(
                       elapsedMs: Date.now() - homeStartedAt,
                       rev: res && typeof res.rev !== 'undefined' ? res.rev : null,
                       notModified: !!(res && res.notModified),
+                      analyticsRev: res && typeof res.analyticsRev !== 'undefined' ? res.analyticsRev : (res && res.analytics ? res.analytics.revision || null : null),
                       cache: res && res.cache ? res.cache : null
                     });
                     resolve(res);

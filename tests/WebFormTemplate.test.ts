@@ -46,6 +46,8 @@ describe('WebFormTemplate', () => {
 
     expect(html).toContain('window.__CK_HOME_BOOTSTRAP_PREFETCH__ = prefetchState');
     expect(html).toContain('.fetchHomeBootstrap(homeKey, null);');
+    expect(html).toContain('nextBootstrap.analytics = res.analytics');
+    expect(html).toContain('nextBootstrap.analyticsRev = analyticsRev');
   });
 
   test('exposes server timings to the client shell when timing is enabled', () => {

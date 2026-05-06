@@ -277,7 +277,8 @@ import {
 import {
   releaseDeferredAnalyticsPrefetchKey,
   reserveDeferredAnalyticsPrefetchKey,
-  shouldPrefetchDeferredAnalytics
+  shouldPrefetchDeferredAnalytics,
+  shouldRequestHomeAnalyticsRefreshOnListEnter
 } from './app/deferredAnalyticsPrefetch';
 import { shouldApplyDedupPrecheckResult } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
@@ -4064,12 +4065,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const previous = previousAnalyticsViewRef.current;
     previousAnalyticsViewRef.current = view;
     if (view !== 'list') return;
-    if (previous === 'list') return;
+    const snapshotItemCount = Array.isArray(analyticsSnapshotRef.current?.items)
+      ? analyticsSnapshotRef.current.items.length
+      : 0;
+    const stale = analyticsSnapshotStaleRef.current;
+    if (
+      !shouldRequestHomeAnalyticsRefreshOnListEnter({
+        hasListViewAnalyticsWidgets,
+        previousView: previous,
+        snapshotItemCount,
+        stale
+      })
+    ) {
+      return;
+    }
     requestHomeAnalyticsRefresh({
       reason: previous ? 'returnHome' : 'initialHome',
       previousView: previous || null
     });
-  }, [requestHomeAnalyticsRefresh, view]);
+  }, [hasListViewAnalyticsWidgets, requestHomeAnalyticsRefresh, view]);
 
   useEffect(() => {
     const response = listCache.response;

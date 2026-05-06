@@ -29,3 +29,16 @@ export const shouldPrefetchDeferredAnalytics = (args: {
   if (!args.hasListViewAnalyticsWidgets) return false;
   return Boolean(args.refreshRequested) || args.stale || args.snapshotItemCount <= 0;
 };
+
+export const shouldRequestHomeAnalyticsRefreshOnListEnter = (args: {
+  hasListViewAnalyticsWidgets: boolean;
+  previousView?: string | null;
+  snapshotItemCount: number;
+  stale: boolean;
+}): boolean => {
+  if (!args.hasListViewAnalyticsWidgets) return false;
+  const previousView = (args.previousView || '').toString().trim();
+  if (previousView === 'list') return false;
+  if (previousView) return true;
+  return args.stale || args.snapshotItemCount <= 0;
+};
