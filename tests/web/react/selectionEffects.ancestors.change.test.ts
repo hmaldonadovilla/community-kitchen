@@ -8,6 +8,8 @@ import { runSelectionEffectsForAncestors } from '../../../src/web/react/app/runS
 import { applySourceFirstAncestorSelectionEffects } from '../../../src/web/react/app/sourceFirstAncestorSelectionSync';
 import {
   buildSubgroupKey,
+  ROW_HIDE_REMOVE_KEY,
+  ROW_ID_KEY,
   ROW_PARENT_GROUP_ID_KEY,
   ROW_PARENT_ROW_ID_KEY,
   ROW_SELECTION_EFFECT_ID_KEY,
@@ -566,7 +568,7 @@ describe('selectionEffects ancestor propagation (change)', () => {
                   op: 'calc',
                   expression: '{ORD_QTY} - SUM(MP_TYPE_LI.PREP_QTY)',
                   lineItemFilters: [
-                    { ref: 'MP_TYPE_LI.PREP_QTY', when: { fieldId: 'PREP_TYPE', equals: ['Multi-ingredient'] } }
+                    { ref: 'MP_TYPE_LI.PREP_QTY', when: { fieldId: 'PREP_TYPE', notEquals: 'Cook' } }
                   ],
                   min: 0
                 },
@@ -621,7 +623,7 @@ describe('selectionEffects ancestor propagation (change)', () => {
       ]
     };
     const nextLineItems: LineItemState = {
-      MEALS: [{ id: mealRowId, values: { ORD_QTY: 450, MP_TO_COOK: 400 } }],
+      MEALS: [{ id: mealRowId, values: { ORD_QTY: 450, MP_TO_COOK: 375 } }],
       [prepKey]: [
         ...(prevLineItems[prepKey] || []),
         {
@@ -631,6 +633,15 @@ describe('selectionEffects ancestor propagation (change)', () => {
             PREP_QTY: 50,
             [ROW_SOURCE_KEY]: 'auto',
             [ROW_SELECTION_EFFECT_ID_KEY]: 'sync_leftover_multi_prep'
+          }
+        },
+        {
+          id: 'leftover_2',
+          values: {
+            PREP_TYPE: 'Single-ingredient',
+            PREP_QTY: 25,
+            [ROW_SOURCE_KEY]: 'auto',
+            [ROW_SELECTION_EFFECT_ID_KEY]: 'sync_leftover_single_prep'
           }
         }
       ]
@@ -647,13 +658,131 @@ describe('selectionEffects ancestor propagation (change)', () => {
 
     const prepRows = result.lineItems[prepKey] || [];
     const cookRows = prepRows.filter(row => row.values.PREP_TYPE === 'Cook');
-    const leftoverRows = prepRows.filter(row => row.values.PREP_TYPE === 'Multi-ingredient');
+    const leftoverRows = prepRows.filter(row => row.values.PREP_TYPE !== 'Cook');
     expect(cookRows).toHaveLength(1);
-    expect(Number(cookRows[0].values.PREP_QTY)).toBe(400);
-    expect(leftoverRows).toHaveLength(1);
-    expect(Number(leftoverRows[0].values.PREP_QTY)).toBe(50);
+    expect(Number(cookRows[0].values.PREP_QTY)).toBe(375);
+    expect(leftoverRows).toHaveLength(2);
+    expect(leftoverRows.map(row => Number(row.values.PREP_QTY)).sort()).toEqual([25, 50]);
     const mealRow = (result.lineItems.MEALS || []).find(row => row.id === mealRowId);
-    expect(Number(mealRow?.values.MP_TO_COOK)).toBe(400);
+    expect(Number(mealRow?.values.MP_TO_COOK)).toBe(375);
+  });
+
+  it('does not replay cook row mutations when the generated row is already current', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'MP_TO_COOK',
+                type: 'NUMBER',
+                label: { en: 'To cook', fr: 'To cook', nl: 'To cook' },
+                required: false,
+                selectionEffects: [
+                  {
+                    id: 'delete_mp_to_cook_sync',
+                    type: 'deleteLineItems',
+                    groupId: 'MP_TYPE_LI',
+                    targetEffectId: 'mp_to_cook_sync'
+                  },
+                  {
+                    id: 'mp_to_cook_sync',
+                    type: 'addLineItems',
+                    groupId: 'MP_TYPE_LI',
+                    when: { fieldId: 'MP_TO_COOK', greaterThan: 0 },
+                    preset: { PREP_QTY: '$row.MP_TO_COOK', PREP_TYPE: 'Cook' },
+                    hideRemoveButton: true
+                  }
+                ]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                fields: [
+                  { id: 'PREP_QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' } },
+                  { id: 'PREP_TYPE', type: 'TEXT', label: { en: 'Type', fr: 'Type', nl: 'Type' } }
+                ]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+    const mealRowId = 'meal_1';
+    const prepKey = buildSubgroupKey('MEALS', mealRowId, 'MP_TYPE_LI');
+    const originalLineItems: LineItemState = {
+      MEALS: [{ id: mealRowId, values: { MP_TO_COOK: 8 } }],
+      [prepKey]: [
+        {
+          id: 'cook_1',
+          values: {
+            [ROW_ID_KEY]: 'cook_1',
+            [ROW_SELECTION_EFFECT_ID_KEY]: 'mp_to_cook_sync',
+            [ROW_HIDE_REMOVE_KEY]: true,
+            [ROW_PARENT_GROUP_ID_KEY]: 'MEALS',
+            [ROW_PARENT_ROW_ID_KEY]: mealRowId,
+            PREP_TYPE: 'Cook',
+            PREP_QTY: 8
+          },
+          parentGroupId: 'MEALS',
+          parentId: mealRowId
+        }
+      ]
+    };
+    let lineItems = originalLineItems;
+    const setLineItems = (next: LineItemState | ((prev: LineItemState) => LineItemState)) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+    const onLineItemsMutated = jest.fn();
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'MP_TO_COOK',
+        type: 'NUMBER',
+        selectionEffects: [
+          {
+            id: 'delete_mp_to_cook_sync',
+            type: 'deleteLineItems',
+            groupId: 'MP_TYPE_LI',
+            targetEffectId: 'mp_to_cook_sync'
+          },
+          {
+            id: 'mp_to_cook_sync',
+            type: 'addLineItems',
+            groupId: 'MP_TYPE_LI',
+            when: { fieldId: 'MP_TO_COOK', greaterThan: 0 },
+            preset: { PREP_QTY: '$row.MP_TO_COOK', PREP_TYPE: 'Cook' },
+            hideRemoveButton: true
+          }
+        ]
+      } as any,
+      value: 8,
+      language: 'EN' as any,
+      values: {},
+      lineItems,
+      setValues: jest.fn(),
+      setLineItems,
+      opts: {
+        lineItem: {
+          groupId: 'MEALS',
+          rowId: mealRowId,
+          rowValues: { MP_TO_COOK: 8 }
+        }
+      },
+      onLineItemsMutated
+    });
+
+    expect(lineItems).toBe(originalLineItems);
+    expect(onLineItemsMutated).not.toHaveBeenCalled();
   });
 
   it('recomputes same-row recipe ingredients when an auto row multiplier changes', async () => {
