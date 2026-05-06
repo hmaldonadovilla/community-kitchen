@@ -1345,6 +1345,11 @@ export const resolveExistingRecordId = (args: {
   return selectedRecordId || selectedRecordSnapshot?.id || lastSubmissionMetaId || undefined;
 };
 
+export const markNoopIfUnchanged = <T extends Record<string, any>>(payload: T): T => {
+  (payload as any).__ckNoopIfUnchanged = '1';
+  return payload;
+};
+
 export const applyClientDataVersionToPayload = (args: {
   payload: SubmissionPayload;
   currentRecordId?: string | null;

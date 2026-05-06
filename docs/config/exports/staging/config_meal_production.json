@@ -101,56 +101,11 @@
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
               "collection": {
-                "op": "ifPresent",
-                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
-                "then": {
-                  "op": "filterCollection",
-                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
-                  "when": {
-                    "fieldId": "ING_SELECTED",
-                    "equals": true
-                  },
-                  "pickFields": [
-                    "ING"
-                  ]
-                },
-                "else": {
-                  "op": "flattenCollection",
-                  "collectionPath": "parent.MP_TYPE_LI",
-                  "nestedCollectionPath": "MP_INGREDIENTS_LI",
-                  "rowFilter": {
-                    "includeWhen": {
-                      "any": [
-                        {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Cook",
-                            "Single-ingredient",
-                            "Part dish"
-                          ]
-                        },
-                        {
-                          "all": [
-                            {
-                              "fieldId": "PREP_TYPE",
-                              "equals": [
-                                "Multi-ingredient",
-                                "Entire dish"
-                              ]
-                            },
-                            {
-                              "fieldId": "PREP_QTY",
-                              "equals": 0
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  "pickFields": [
-                    "ING"
-                  ]
-                }
+                "op": "filterCollection",
+                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "pickFields": [
+                  "ING"
+                ]
               },
               "itemFieldId": "ING",
               "lookupFormKey": "Config: Ingredients Management",
@@ -179,64 +134,20 @@
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
             "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
             "LEFTOVER_INGREDIENTS_LI": {
-              "op": "ifPresent",
-              "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
-              "then": {
-                "op": "filterCollection",
-                "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
-                "when": {
-                  "fieldId": "ING_SELECTED",
-                  "equals": true
-                },
-                "pickFields": [
-                  "ING",
-                  "QTY",
-                  "UNIT",
-                  "CAT",
-                  "ALLERGEN"
-                ]
-              },
-              "else": {
-                "op": "flattenCollection",
-                "collectionPath": "parent.MP_TYPE_LI",
-                "nestedCollectionPath": "MP_INGREDIENTS_LI",
-                "rowFilter": {
-                  "includeWhen": {
-                    "any": [
-                      {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Cook",
-                          "Single-ingredient",
-                          "Part dish"
-                        ]
-                      },
-                      {
-                        "all": [
-                          {
-                            "fieldId": "PREP_TYPE",
-                            "equals": [
-                              "Multi-ingredient",
-                              "Entire dish"
-                            ]
-                          },
-                          {
-                            "fieldId": "PREP_QTY",
-                            "equals": 0
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                "pickFields": [
-                  "ING",
-                  "QTY",
-                  "UNIT",
-                  "CAT",
-                  "ALLERGEN"
-                ]
-              }
+              "op": "scaleCollection",
+              "collectionPath": "row.MP_INGREDIENTS_LI",
+              "pickFields": [
+                "ING",
+                "QTY",
+                "UNIT",
+                "CAT",
+                "ALLERGEN"
+              ],
+              "scaleNumericFields": [
+                "QTY"
+              ],
+              "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+              "divisorPath": "row.PREP_QTY"
             },
             "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
           }
@@ -12353,56 +12264,11 @@
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
               "collection": {
-                "op": "ifPresent",
-                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
-                "then": {
-                  "op": "filterCollection",
-                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
-                  "when": {
-                    "fieldId": "ING_SELECTED",
-                    "equals": true
-                  },
-                  "pickFields": [
-                    "ING"
-                  ]
-                },
-                "else": {
-                  "op": "flattenCollection",
-                  "collectionPath": "parent.MP_TYPE_LI",
-                  "nestedCollectionPath": "MP_INGREDIENTS_LI",
-                  "rowFilter": {
-                    "includeWhen": {
-                      "any": [
-                        {
-                          "fieldId": "PREP_TYPE",
-                          "equals": [
-                            "Cook",
-                            "Single-ingredient",
-                            "Part dish"
-                          ]
-                        },
-                        {
-                          "all": [
-                            {
-                              "fieldId": "PREP_TYPE",
-                              "equals": [
-                                "Multi-ingredient",
-                                "Entire dish"
-                              ]
-                            },
-                            {
-                              "fieldId": "PREP_QTY",
-                              "equals": 0
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  "pickFields": [
-                    "ING"
-                  ]
-                }
+                "op": "filterCollection",
+                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "pickFields": [
+                  "ING"
+                ]
               },
               "itemFieldId": "ING",
               "lookupFormKey": "Config: Ingredients Management",
@@ -12431,64 +12297,20 @@
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
             "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
             "LEFTOVER_INGREDIENTS_LI": {
-              "op": "ifPresent",
-              "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
-              "then": {
-                "op": "filterCollection",
-                "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
-                "when": {
-                  "fieldId": "ING_SELECTED",
-                  "equals": true
-                },
-                "pickFields": [
-                  "ING",
-                  "QTY",
-                  "UNIT",
-                  "CAT",
-                  "ALLERGEN"
-                ]
-              },
-              "else": {
-                "op": "flattenCollection",
-                "collectionPath": "parent.MP_TYPE_LI",
-                "nestedCollectionPath": "MP_INGREDIENTS_LI",
-                "rowFilter": {
-                  "includeWhen": {
-                    "any": [
-                      {
-                        "fieldId": "PREP_TYPE",
-                        "equals": [
-                          "Cook",
-                          "Single-ingredient",
-                          "Part dish"
-                        ]
-                      },
-                      {
-                        "all": [
-                          {
-                            "fieldId": "PREP_TYPE",
-                            "equals": [
-                              "Multi-ingredient",
-                              "Entire dish"
-                            ]
-                          },
-                          {
-                            "fieldId": "PREP_QTY",
-                            "equals": 0
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                "pickFields": [
-                  "ING",
-                  "QTY",
-                  "UNIT",
-                  "CAT",
-                  "ALLERGEN"
-                ]
-              }
+              "op": "scaleCollection",
+              "collectionPath": "row.MP_INGREDIENTS_LI",
+              "pickFields": [
+                "ING",
+                "QTY",
+                "UNIT",
+                "CAT",
+                "ALLERGEN"
+              ],
+              "scaleNumericFields": [
+                "QTY"
+              ],
+              "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+              "divisorPath": "row.PREP_QTY"
             },
             "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
           }

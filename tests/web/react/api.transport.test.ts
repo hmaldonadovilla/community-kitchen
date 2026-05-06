@@ -377,8 +377,8 @@ describe('react api transport', () => {
         runner.failure = handler;
         return runner;
       }),
-      triggerFollowupAction: jest.fn(() => {
-        runner.success({ success: true, fileId: 'cloud-pdf-1', pdfUrl: 'https://drive.google.com/file/d/cloud-pdf-1/view' });
+      enqueueFollowupEmail: jest.fn(() => {
+        runner.success({ success: true, queued: true, fileId: 'cloud-pdf-1', pdfUrl: 'https://drive.google.com/file/d/cloud-pdf-1/view' });
       })
     };
     (globalThis as any).google = { script: { run: runner } };
@@ -402,6 +402,7 @@ describe('react api transport', () => {
           action: 'SEND_EMAIL',
           result: {
             success: true,
+            queued: true,
             fileId: 'cloud-pdf-1',
             pdfUrl: 'https://drive.google.com/file/d/cloud-pdf-1/view'
           }
@@ -414,7 +415,7 @@ describe('react api transport', () => {
       'SEND_EMAIL'
     ]);
     expect(invoke).toHaveBeenNthCalledWith(2, 'triggerFollowupActions', 'Config: Meal Production', 'meal-1', ['CREATE_PDF']);
-    expect(runner.triggerFollowupAction).toHaveBeenCalledWith('Config: Meal Production', 'meal-1', 'SEND_EMAIL', {
+    expect(runner.enqueueFollowupEmail).toHaveBeenCalledWith('Config: Meal Production', 'meal-1', {
       pdfArtifact: {
         success: true,
         fileId: 'cloud-pdf-1',

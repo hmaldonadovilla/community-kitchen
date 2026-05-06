@@ -19,6 +19,24 @@ const isPlainObject = value => Boolean(value && typeof value === 'object' && !Ar
 
 const isTruthyFlag = value => value === true || value === 'true' || value === '1' || value === 1;
 
+const resolveLocalizedTextValue = (value, language, fallback = '') => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'string') return value.trim() || fallback;
+  if (typeof value !== 'object' || Array.isArray(value)) return value.toString();
+  const key = (language || 'EN').toString().trim().toLowerCase();
+  return (
+    value[key] ||
+    value[key.toUpperCase()] ||
+    value.en ||
+    value.EN ||
+    value.fr ||
+    value.FR ||
+    value.nl ||
+    value.NL ||
+    fallback
+  );
+};
+
 const normalizeLanguage = raw => {
   const value = Array.isArray(raw) ? raw[raw.length - 1] || raw[0] : raw;
   const language = (value || 'EN').toString().trim().toUpperCase();
@@ -36,6 +54,24 @@ const parseRows = raw => {
     }
   }
   return [];
+};
+
+const buildReservationSubgroupKey = (parentGroupId, parentRowId, subGroupId) =>
+  `${toText(parentGroupId)}::${toText(parentRowId)}::${toText(subGroupId)}`;
+
+const toFiniteNumber = value => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const toOptionalFiniteNumber = value => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const normalizeComputedNumber = value => {
+  const rounded = Math.round(value * 1000000) / 1000000;
+  return Object.is(rounded, -0) ? 0 : rounded;
 };
 
 const readPathValue = (root, pathRaw) => {
@@ -334,6 +370,40 @@ class SubmitEffectsRepository {
     });
   }
 
+  resolveComputedScale(value, vars) {
+    const multiplierRaw = value.multiplierPath ? readPathValue(vars, value.multiplierPath) : value.multiplier;
+    const divisorRaw = value.divisorPath ? readPathValue(vars, value.divisorPath) : value.divisor;
+    const multiplier = multiplierRaw === undefined ? 1 : toOptionalFiniteNumber(multiplierRaw);
+    const divisor = divisorRaw === undefined ? 1 : toOptionalFiniteNumber(divisorRaw);
+    if (multiplier === null) return 0;
+    if (divisor === null || divisor === 0) return 0;
+    return multiplier / divisor;
+  }
+
+  async scaleCollection(value, vars) {
+    const pickFields = Array.isArray(value.pickFields) ? value.pickFields.map(toText).filter(Boolean) : [];
+    const scaleNumericFields = new Set(
+      Array.isArray(value.scaleNumericFields) ? value.scaleNumericFields.map(toText).filter(Boolean) : []
+    );
+    const scale = this.resolveComputedScale(value, vars);
+    const entries = await this.filterCollectionEntries(value, vars);
+    return entries.map(entry => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const out = {};
+      const fieldIds = pickFields.length ? pickFields : Object.keys(entry);
+      fieldIds.forEach(fieldId => {
+        const sourceValue = entry[fieldId];
+        if (!scaleNumericFields.has(fieldId)) {
+          out[fieldId] = sourceValue;
+          return;
+        }
+        const numericValue = toOptionalFiniteNumber(sourceValue);
+        out[fieldId] = numericValue === null ? sourceValue : normalizeComputedNumber(numericValue * scale);
+      });
+      return out;
+    });
+  }
+
   async flattenCollection(value, vars) {
     const parentRows = await this.filterCollectionEntries(value, vars);
     const nestedCollectionPath = toText(value.nestedCollectionPath);
@@ -436,6 +506,7 @@ class SubmitEffectsRepository {
     if (op === 'lookupSetIntersection') return this.resolveLookupSetIntersection(value, vars);
     if (op === 'firstNonEmpty') return this.resolveFirstNonEmpty(value, vars);
     if (op === 'filterCollection') return this.filterCollection(value, vars);
+    if (op === 'scaleCollection') return this.scaleCollection(value, vars);
     if (op === 'flattenCollection') return this.flattenCollection(value, vars);
     if (op === 'ifPresent') return this.resolveIfPresent(value, vars);
     const out = {};
@@ -465,6 +536,7 @@ class SubmitEffectsRepository {
         language: sourceRecord.language || 'EN',
         values: payloadValues,
         __ckSkipSubmitEffects: '1',
+        __ckNoopIfUnchanged: '1',
         __ckAuditAction: resolved.auditAction || `submitEffect:${resolved.type}:${sourceRecord.id || 'source'}`
       };
       const recordId = toText(resolved.recordId);
@@ -540,6 +612,116 @@ class SubmitEffectsRepository {
     return { enabled: true, ledgerFormKey: toText(ledgerFormKey) || DEFAULT_LEDGER_FORM_KEY, refreshMode };
   }
 
+  isStatusOnlyClosePayload(form, payload) {
+    if (!isTruthyFlag(payload && payload.__ckStatusOnlyClose)) return false;
+    if (!toText(payload && payload.id)) return false;
+    const requestedStatus = toText((payload && payload.__ckStatus) || (payload && payload.status));
+    if (!requestedStatus) return false;
+    const closeStatus =
+      toText(resolveLocalizedTextValue(
+        form && form.followupConfig && form.followupConfig.statusTransitions && form.followupConfig.statusTransitions.onClose,
+        payload && payload.language,
+        ''
+      )) ||
+      'Closed';
+    return requestedStatus.toLowerCase() === closeStatus.toLowerCase();
+  }
+
+  inferReservationFieldId(outputKeyFieldId, suffix) {
+    const key = toText(outputKeyFieldId);
+    const base = key.endsWith('_ID') ? key.slice(0, -3) : key;
+    return base ? `${base}_${suffix}` : '';
+  }
+
+  collectStepReservationConfigs(form) {
+    const steps = form && form.steps && form.steps.mode === 'guided' && Array.isArray(form.steps.items)
+      ? form.steps.items
+      : [];
+    const configs = [];
+    steps.forEach(step => {
+      (Array.isArray(step && step.include) ? step.include : []).forEach(target => {
+        if (!target || target.kind !== 'lineGroup') return;
+        const parentGroupId = toText(target.id);
+        if (!parentGroupId) return;
+        (Array.isArray(target.dataSourceRows) ? target.dataSourceRows : []).forEach(config => {
+          const reservation = config && config.reservation && typeof config.reservation === 'object' ? config.reservation : null;
+          if (!reservation || reservation.enabled === false) return;
+          if (toText(reservation.commitMode).toLowerCase() !== 'step') return;
+          const outputGroupId = toText(config.outputGroupId);
+          const outputKeyFieldId = toText(config.outputKeyFieldId || config.rowKeyFieldId);
+          const quantityFieldId = toText(config.quantityFieldId);
+          const resourceRecordIdFieldId =
+            toText(reservation.resourceRecordIdFieldId) || this.inferReservationFieldId(outputKeyFieldId, 'RECORD_ID');
+          if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !resourceRecordIdFieldId) return;
+          configs.push({
+            parentGroupId,
+            outputGroupId,
+            outputKeyFieldId,
+            quantityFieldId,
+            resourceRecordIdFieldId
+          });
+        });
+      });
+    });
+    return configs;
+  }
+
+  readRecordValue(record, fieldId) {
+    const key = toText(fieldId);
+    if (!record || !key) return undefined;
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, key)) return record.values[key];
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, `${key}_json`)) {
+      return record.values[`${key}_json`];
+    }
+    if (Object.prototype.hasOwnProperty.call(record, key)) return record[key];
+    return record[`${key}_json`];
+  }
+
+  readReservationRowValue(row, fieldId) {
+    const key = toText(fieldId);
+    if (!row || !key) return undefined;
+    if (row.values && Object.prototype.hasOwnProperty.call(row.values, key)) return row.values[key];
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+    return row[`${key}_json`];
+  }
+
+  reservationRowId(row) {
+    return toText(row && (row[ROW_ID_KEY] || row.id));
+  }
+
+  recordHasReservationSelections(form, record) {
+    const configs = this.collectStepReservationConfigs(form);
+    if (!configs.length) return true;
+    if (!record) return false;
+    return configs.some(config => {
+      const parentRows = parseRows(this.readRecordValue(record, config.parentGroupId));
+      return parentRows.some(parentRow => {
+        const parentRowId = this.reservationRowId(parentRow);
+        const nestedRows = parseRows(this.readReservationRowValue(parentRow, config.outputGroupId));
+        const flattenedRows = parentRowId
+          ? parseRows(this.readRecordValue(record, buildReservationSubgroupKey(config.parentGroupId, parentRowId, config.outputGroupId)))
+          : [];
+        return [...nestedRows, ...flattenedRows].some(row => {
+          const resourceRecordId = toText(this.readReservationRowValue(row, config.resourceRecordIdFieldId));
+          const resourceItemId = toText(this.readReservationRowValue(row, config.outputKeyFieldId));
+          const quantity = toFiniteNumber(this.readReservationRowValue(row, config.quantityFieldId));
+          return Boolean(resourceRecordId && resourceItemId && quantity > 0);
+        });
+      });
+    });
+  }
+
+  buildSkippedReservationReconciliationMeta(recordId) {
+    return {
+      success: true,
+      sourceRecordId: recordId,
+      reconciledReservations: 0,
+      consumedReservations: 0,
+      releasedReservations: 0,
+      touchedInventoryRecords: 0
+    };
+  }
+
   async applyReservationLifecycle(form, formKey, formObject, result) {
     if (!this.inventoryReservationRepository || !result || !result.success) return result;
     const savedRecordId = toText(result.meta && result.meta.id) || toText(formObject && formObject.id);
@@ -589,6 +771,20 @@ class SubmitEffectsRepository {
           : '';
     const reconcileConfig = this.shouldReconcileReservations(form, nextStatus);
     if (savedRecordId && !deleteRecordId && reconcileConfig.enabled) {
+      if (isTruthyFlag(formObject && formObject.__ckSkipReservationReconciliation)) {
+        result.meta = {
+          ...(result.meta || {}),
+          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
+        };
+        return result;
+      }
+      if (!this.recordHasReservationSelections(form, formObject)) {
+        result.meta = {
+          ...(result.meta || {}),
+          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
+        };
+        return result;
+      }
       const reconcileResult = await this.inventoryReservationRepository.reconcile({
         sourceFormKey: formKey,
         sourceRecordId: savedRecordId,
@@ -619,6 +815,67 @@ class SubmitEffectsRepository {
       };
     }
     return result;
+  }
+
+  async saveStatusOnlyCloseWithId(payload, context) {
+    const recordId = toText(payload && payload.id);
+    const closeStatus = toText((payload && payload.__ckStatus) || (payload && payload.status)) || 'Closed';
+    const sourceRecord = await this.submissionRepository.fetchSubmissionById(context.formKey, recordId);
+    if (!sourceRecord) {
+      return { success: false, message: 'Record not found.', meta: { id: recordId } };
+    }
+    const sourcePayload = {
+      ...sourceRecord,
+      formKey: context.formKey,
+      language: normalizeLanguage(sourceRecord.language),
+      id: recordId,
+      values: cloneJson(sourceRecord.values || {}),
+      status: closeStatus,
+      __ckStatus: closeStatus,
+      __ckStatusOnlyClose: '1',
+      __ckSkipSubmitEffects: '1',
+      __ckClientDataVersion: payload && payload.__ckClientDataVersion
+    };
+    if (isTruthyFlag(payload && payload.__ckSkipReservationReconciliation)) {
+      sourcePayload.__ckSkipReservationReconciliation = '1';
+    }
+    const statusResult = await this.submissionRepository.saveStatusOnlyWithId(sourcePayload);
+    if (!statusResult || !statusResult.success) return statusResult;
+
+    const lifecycleResult = await this.applyReservationLifecycle(
+      context.form,
+      context.formKey,
+      sourcePayload,
+      statusResult
+    );
+    if (!lifecycleResult || !lifecycleResult.success) return lifecycleResult;
+
+    const submitEffectsResult = await this.applySubmitEffects({
+      form: context.form,
+      questions: context.questions,
+      formKey: context.formKey,
+      formObject: sourcePayload,
+      saveResult: lifecycleResult
+    });
+    if (!submitEffectsResult.success) {
+      return {
+        success: false,
+        message: submitEffectsResult.message || lifecycleResult.message,
+        meta: {
+          ...(lifecycleResult.meta || {}),
+          submitEffects: submitEffectsResult.meta || undefined,
+          sourceSaved: true,
+          statusOnlyClose: true
+        }
+      };
+    }
+    lifecycleResult.meta = {
+      ...(lifecycleResult.meta || {}),
+      submitEffects: submitEffectsResult.meta || undefined,
+      status: closeStatus,
+      statusOnlyClose: true
+    };
+    return lifecycleResult;
   }
 
   async applySubmitEffects(args) {
@@ -713,6 +970,9 @@ class SubmitEffectsRepository {
     }
     const formKey = toText(payload.formKey || payload.form);
     const context = this.getFormContext(formKey);
+    if (this.isStatusOnlyClosePayload(context.form, payload)) {
+      return this.saveStatusOnlyCloseWithId(payload, context);
+    }
     const sourcePayload = { ...payload, __ckSkipSubmitEffects: true };
     const result = await this.submissionRepository.saveSubmissionWithId(sourcePayload);
     if (!result || !result.success) return result;

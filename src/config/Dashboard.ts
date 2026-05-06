@@ -2126,6 +2126,8 @@ export class Dashboard {
       }
 
       const out: any = { kind: 'lineGroup', id };
+      const dataSourceRowsRaw = (raw as any).dataSourceRows;
+      if (Array.isArray(dataSourceRowsRaw)) out.dataSourceRows = dataSourceRowsRaw;
 
       const normalizeFieldTarget = (input: any): any => {
         if (input === undefined || input === null) return null;

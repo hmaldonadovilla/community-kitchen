@@ -3636,4 +3636,91 @@ describe('GoogleSheetsSubmissionRepository', () => {
       }
     });
   });
+
+  test('saveSubmissionWithId returns noop only when unchanged-row contract is requested', async () => {
+    const rows = [
+      ['Language', 'Name [NAME]', 'Active on [ACTIVE_ON]', 'Record ID', 'Data Version', 'Created At', 'Updated At', 'Status'],
+      ['EN', 'Soup', '2026-04-30', 'recipe-1', '4', '2026-04-29T10:00:00Z', '2026-04-30T10:00:00Z', 'Active']
+    ];
+    const indexRows: any[][] = [];
+    const repository = new GoogleSheetsSubmissionRepository({
+      env: { CK_DEFAULT_SPREADSHEET_ID: 'spreadsheet-1' },
+      configRepository: new FormConfigRepository({
+        bundle: {
+          forms: [
+            {
+              formKey: 'Config: Recipes',
+              form: { title: 'Recipes', configSheet: 'Config: Recipes', destinationTab: 'Recipes Data' },
+              questions: [
+                { id: 'NAME', type: 'TEXT', qEn: 'Name', status: 'Active' },
+                { id: 'ACTIVE_ON', type: 'DATE', qEn: 'Active on', status: 'Active' }
+              ],
+              definition: {
+                questions: [
+                  { id: 'NAME', type: 'TEXT', qEn: 'Name', status: 'Active' },
+                  { id: 'ACTIVE_ON', type: 'DATE', qEn: 'Active on', status: 'Active' }
+                ]
+              }
+            }
+          ]
+        }
+      }),
+      sheetsClient: {
+        getSheetValues: jest.fn().mockImplementation(async (_spreadsheetId, tabName) =>
+          tabName === 'Recipes Data' ? rows.map(row => row.slice()) : indexRows.map(row => row.slice())
+        ),
+        updateRowValues: jest.fn().mockImplementation(async (_spreadsheetId, tabName, rowNumber, values) => {
+          const target = tabName === 'Recipes Data' ? rows : indexRows;
+          while (target.length < rowNumber) target.push([]);
+          target[rowNumber - 1] = values.slice();
+          return { updatedRows: 1 };
+        })
+      }
+    });
+    const updateRowValues = repository.sheetsClient.updateRowValues;
+
+    const basePayload = {
+      formKey: 'Config: Recipes',
+      language: 'EN',
+      id: 'recipe-1',
+      values: {
+        NAME: 'Soup',
+        ACTIVE_ON: '2026-04-30'
+      },
+      __ckSkipSubmitEffects: true,
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Active',
+      __ckClientDataVersion: 4
+    };
+
+    const withoutContract = await repository.saveSubmissionWithId(basePayload);
+    expect(withoutContract).toMatchObject({
+      success: true,
+      message: 'Saved to sheet',
+      meta: {
+        id: 'recipe-1',
+        dataVersion: 5,
+        operation: 'update'
+      }
+    });
+    expect(updateRowValues.mock.calls.filter((call: any[]) => call[1] === 'Recipes Data')).toHaveLength(1);
+
+    const withContract = await repository.saveSubmissionWithId({
+      ...basePayload,
+      __ckClientDataVersion: 5,
+      __ckNoopIfUnchanged: '1'
+    });
+    expect(withContract).toMatchObject({
+      success: true,
+      message: 'No changes to save.',
+      meta: {
+        id: 'recipe-1',
+        dataVersion: 5,
+        operation: 'noop',
+        noop: true,
+        noopReason: 'unchanged'
+      }
+    });
+    expect(updateRowValues.mock.calls.filter((call: any[]) => call[1] === 'Recipes Data')).toHaveLength(1);
+  });
 });

@@ -20,6 +20,7 @@ import {
   WebFormSubmission
 } from '../types';
 import type {
+  FollowupActionResult,
   InventoryAvailabilitySnapshot,
   InventoryReservationPlanRequest,
   InventoryReservationPlanScope
@@ -27,9 +28,11 @@ import type {
 import {
   BootstrapContext,
   applyInventoryReservationPlanApi,
+  reconcileInventoryReservationsApi,
   submit,
   checkDedupConflictApi,
   triggerFollowupBatch,
+  enqueueFollowupEmailApi,
   prefetchTemplatesApi,
   clearHtmlRenderClientCache,
   invalidateClientSharedDataCaches,
@@ -46,7 +49,8 @@ import {
   fetchRecordsByRowNumbers,
   getRecordVersionApi,
   seedSummaryHtmlTemplateCache,
-  resolveUserFacingErrorMessage
+  resolveUserFacingErrorMessage,
+  isBackendFunctionRoutedToHttp
 } from './api';
 import FormView from './components/FormView';
 import ListView from './components/ListView';
@@ -107,6 +111,7 @@ import {
   collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
   isSubmissionStaleMessage,
+  markNoopIfUnchanged,
   prepareClientDataVersionDispatch,
   resolveFollowupActionResultMeta,
   resolveReservationPlanSourceMetaAdoption,
@@ -283,6 +288,12 @@ import { hasInvalidRejectDedupKeyValues } from './app/copyDraftCreation';
 import { resolveCopyCurrentRecordDialog } from './app/copyCurrentRecordDialog';
 import { buildReservationReconciliationFeedback } from './app/reservationReconciliationFeedback';
 import {
+  areReportFollowupActions,
+  buildReconcileFollowupActionResult,
+  resolveOptimisticStatusTransitionForActions,
+  resolveParallelReconcileFollowupPlan
+} from './app/followupParallel';
+import {
   buildInventoryReservationPlanFingerprint,
   buildStepInventoryReservationPlan,
   mergeGuidedReservationLineItemsFromSnapshot
@@ -384,6 +395,7 @@ const BUILD_MARKER = `v${(packageJson as any).version || 'dev'}`;
 const HOME_LIST_BACKGROUND_PREFETCH_DELAY_MS = 9000;
 const HOME_ANALYTICS_PREFETCH_DELAY_MS = 1400;
 const HOME_DATA_SOURCE_PREFETCH_DELAY_MS = 2200;
+const HOME_TEMPLATE_PREFETCH_DELAY_MS = 3400;
 const HOME_RECORD_PREFETCH_DELAY_MS = 250;
 const RETRYABLE_AUTOSAVE_DELAYS_MS = [1500, 3000, 5000];
 const DRAFT_SNAPSHOT_RETRY_DELAYS_MS = [0, 1500, 3000];
@@ -1316,6 +1328,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const editAt = Date.now();
           lastUserInteractionRef.current = editAt;
           lastLocalRecordMutationAtRef.current = editAt;
+          const activeRecordId =
+            (selectedRecordIdRef.current || selectedRecordSnapshotRef.current?.id || lastSubmissionMetaRef.current?.id || '')
+              .toString()
+              .trim();
+          if (activeRecordId) {
+            completedReservationReconciliationByRecordRef.current.delete(activeRecordId);
+          }
 
           // Mark dirty immediately on user edits so navigation handlers can flush autosave
           // even if the debounced autosave effect hasn't run yet.
@@ -1789,8 +1808,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
   }, [definition.questions, definition.summaryHtmlTemplateId, definition.summaryViewEnabled, definitionFollowupConfig]);
 
-  // Prefetch Drive/HTML templates in the background as early as possible (including Home/list),
-  // so report + summary renders can reuse warmed templates when users open records/actions.
+  // Prefetch Drive/HTML templates in the background after the home page has meaningful data,
+  // so report + summary renders can reuse warmed templates without competing with initial list load.
   useEffect(() => {
     const key = (formKey || '').toString().trim();
     if (!key) return;
@@ -1815,7 +1834,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         view,
         homeFirstDataReadyAtMs: homeFirstDataReadyAtMs || null,
         startedAfterHomeDataMs:
-          homeFirstDataReadyAtMs > 0 ? Math.max(0, Date.now() - homeFirstDataReadyAtMs) : null
+          homeFirstDataReadyAtMs > 0 ? Math.max(0, Date.now() - homeFirstDataReadyAtMs) : null,
+        phase: shouldWaitForHomeData ? 'postHomeData' : 'postBootstrap'
       });
       prefetchTemplatesApi(key)
         .then(res => {
@@ -1855,19 +1875,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
     };
 
-    try {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleHandle = (window as any).requestIdleCallback(run, { timeout: 2000 }) as number;
-      } else {
-        // Defer a bit to avoid clashing with immediate post-render input work.
-        retryTimer = globalThis.setTimeout(() => {
-          retryTimer = null;
-          run();
-        }, 600);
+    const scheduleRun = () => {
+      try {
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          idleHandle = (window as any).requestIdleCallback(run, { timeout: shouldWaitForHomeData ? 2500 : 1500 }) as number;
+          return;
+        }
+      } catch {
+        // fall back below
       }
-    } catch {
       run();
-    }
+    };
+
+    retryTimer = globalThis.setTimeout(() => {
+      retryTimer = null;
+      scheduleRun();
+    }, shouldWaitForHomeData ? HOME_TEMPLATE_PREFETCH_DELAY_MS : 0);
     return () => {
       cancelled = true;
       if (retryTimer !== null) globalThis.clearTimeout(retryTimer);
@@ -2001,6 +2024,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     >
   >(new Map());
   const pendingFollowupStatusByRecordRef = useRef<Map<string, string>>(new Map());
+  const completedReservationReconciliationByRecordRef = useRef<Map<string, number>>(new Map());
   const applyPendingFollowupStatusesToRecordCache = useCallback(
     (records: Record<string, WebFormSubmission>): Record<string, WebFormSubmission> => {
       const pending = pendingFollowupStatusByRecordRef.current;
@@ -2280,10 +2304,184 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const runSerializedFollowupBatchRequest = useCallback(
     async (args: { recordId: string; actions: string[]; reason: string }): Promise<FollowupBatchResponse> => {
       return runSerializedSubmissionRequest(`followup:${args.reason}`, async () => {
-        return triggerFollowupBatch(formKey, args.recordId, args.actions);
+        const parallelPlan = resolveParallelReconcileFollowupPlan({
+          definition,
+          formKey,
+          recordId: args.recordId,
+          actions: args.actions
+        });
+        if (!parallelPlan) {
+          return triggerFollowupBatch(formKey, args.recordId, args.actions);
+        }
+        if (isBackendFunctionRoutedToHttp('triggerFollowupActions')) {
+          return triggerFollowupBatch(formKey, args.recordId, args.actions);
+        }
+
+        const actionErrorMessage = (err: unknown, fallback: string): string =>
+          (err as any)?.message?.toString?.() || (err as any)?.toString?.() || fallback;
+        const failedFollowupAction = (
+          action: string,
+          message: string,
+          startedAt?: number
+        ): { action: string; result: FollowupActionResult } => ({
+          action,
+          result: {
+            success: false,
+            message,
+            ...(startedAt !== undefined ? { durationMs: Math.max(0, Date.now() - startedAt) } : {})
+          }
+        });
+        const runSingleFollowupAction = async (
+          action: string,
+          fallbackMessage: string
+        ): Promise<{ action: string; result: FollowupActionResult }> => {
+          const startedAt = Date.now();
+          try {
+            const batch = await triggerFollowupBatch(formKey, args.recordId, [action]);
+            const normalizedAction = action.toString().trim().toUpperCase();
+            const results = Array.isArray(batch?.results) ? batch.results : [];
+            const entry =
+              results.find(item => (item?.action || '').toString().trim().toUpperCase() === normalizedAction) ||
+              results[0] ||
+              null;
+            if (entry?.result) {
+              return { action, result: entry.result };
+            }
+            return failedFollowupAction(action, 'Follow-up action did not return a result.', startedAt);
+          } catch (err) {
+            return failedFollowupAction(action, actionErrorMessage(err, fallbackMessage), startedAt);
+          }
+        };
+
+        const reservationPlan = buildStepInventoryReservationPlan({
+          definition,
+          stepId: '',
+          formKey,
+          recordId: args.recordId,
+          lineItems: lineItemsRef.current,
+          mode: 'all'
+        });
+        const shouldRunReconcile = !reservationPlan || Number(reservationPlan.reservations?.length || 0) > 0;
+        const reconcileStartedAt = Date.now();
+        const reconcilePromise = shouldRunReconcile
+          ? reconcileInventoryReservationsApi(parallelPlan.request)
+              .then(result =>
+                buildReconcileFollowupActionResult({
+                  recordId: args.recordId,
+                  result,
+                  durationMs: Date.now() - reconcileStartedAt
+                })
+              )
+              .catch(err =>
+                buildReconcileFollowupActionResult({
+                  recordId: args.recordId,
+                  result: {
+                    success: false,
+                    message:
+                      (err as any)?.message?.toString?.() ||
+                      (err as any)?.toString?.() ||
+                      'Failed to reconcile active reservations.'
+                  } as any,
+                  durationMs: Date.now() - reconcileStartedAt
+                })
+              )
+          : Promise.resolve<FollowupActionResult>({
+              success: true,
+              message: 'No reservation selections found on the record.',
+              durationMs: 0,
+              reservationReconciliation: {
+                success: true,
+                sourceRecordId: args.recordId,
+                reconciledReservations: 0,
+                consumedReservations: 0,
+                releasedReservations: 0,
+                touchedInventoryRecords: 0
+              }
+            });
+        const pdfPromise = runSingleFollowupAction(parallelPlan.createPdfAction, 'Failed to create final report.');
+
+        logEvent('followup.batch.parallel.begin', {
+          recordId: args.recordId,
+          reason: args.reason,
+          actions: args.actions,
+          reconcileSkipped: !shouldRunReconcile,
+          parallelActions: [
+            parallelPlan.reconcileAction.toString().trim().toUpperCase(),
+            parallelPlan.createPdfAction.toString().trim().toUpperCase()
+          ],
+          serializedAfterSuccess: parallelPlan.sendEmailAction
+            ? [parallelPlan.sendEmailAction.toString().trim().toUpperCase()]
+            : []
+        });
+
+        const [reconcileResult, pdfEntry] = await Promise.all([reconcilePromise, pdfPromise]);
+        const followupResults = new Map<string, { action: string; result: FollowupActionResult }>();
+        followupResults.set(parallelPlan.createPdfAction.toString().trim().toUpperCase(), pdfEntry);
+        if (parallelPlan.sendEmailAction) {
+          if (reconcileResult.success && pdfEntry.result?.success) {
+            const emailStartedAt = Date.now();
+            try {
+              const queuedEmail = await enqueueFollowupEmailApi(formKey, args.recordId, {
+                pdfArtifact: {
+                  success: true,
+                  fileId: pdfEntry.result.fileId,
+                  url: pdfEntry.result.pdfUrl,
+                  pdfUrl: pdfEntry.result.pdfUrl
+                }
+              });
+              followupResults.set(parallelPlan.sendEmailAction.toString().trim().toUpperCase(), {
+                action: parallelPlan.sendEmailAction,
+                result: {
+                  ...queuedEmail,
+                  durationMs: Math.max(0, Date.now() - emailStartedAt)
+                }
+              });
+            } catch (err) {
+              followupResults.set(
+                parallelPlan.sendEmailAction.toString().trim().toUpperCase(),
+                failedFollowupAction(
+                  parallelPlan.sendEmailAction,
+                  actionErrorMessage(err, 'Failed to queue final report email.'),
+                  emailStartedAt
+                )
+              );
+            }
+          } else {
+            followupResults.set(
+              parallelPlan.sendEmailAction.toString().trim().toUpperCase(),
+              failedFollowupAction(
+                parallelPlan.sendEmailAction,
+                'Skipped because reconciliation or PDF creation did not complete successfully.'
+              )
+            );
+          }
+        }
+        const results = args.actions.map(action => {
+          const key = (action || '').toString().trim().toUpperCase();
+          if (key === 'RECONCILE_RESERVATIONS') {
+            return { action, result: reconcileResult };
+          }
+          return followupResults.get(key) || {
+            action,
+            result: { success: false, message: 'Follow-up action did not return a result.' }
+          };
+        });
+        const success = results.every(entry => Boolean(entry.result?.success));
+        logEvent('followup.batch.parallel.done', {
+          recordId: args.recordId,
+          reason: args.reason,
+          actions: args.actions,
+          success,
+          reconcileDurationMs: reconcileResult.durationMs ?? null,
+          pdfDurationMs: pdfEntry.result?.durationMs ?? null,
+          emailDurationMs: parallelPlan.sendEmailAction
+            ? followupResults.get(parallelPlan.sendEmailAction.toString().trim().toUpperCase())?.result?.durationMs ?? null
+            : null
+        });
+        return { success, results };
       });
     },
-    [formKey, runSerializedSubmissionRequest]
+    [definition, formKey, logEvent, runSerializedSubmissionRequest]
   );
 
   const getCurrentKnownClientDataVersion = useCallback(
@@ -3695,6 +3893,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const listRecordSnapshotPrefetchByRowRef = useRef<Map<number, RecordSnapshotPrefetchRequest>>(new Map());
   const deferredAnalyticsPrefetchKeyRef = useRef<string>('');
   const guidedDataSourceRefreshTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const followupLaunchDataSourcePrefetchHoldRef = useRef(0);
   const [, setDataSourceVisibilityVersion] = useState(0);
   const guidedDataSourceConfigs = useMemo(() => collectDataSourceConfigsForPrefetch(definition), [definition]);
   const formOpenGuidedDataSourceConfigs = useMemo(
@@ -7113,6 +7312,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }) as any
         );
         payload.__ckSaveMode = 'draft';
+        markNoopIfUnchanged(payload);
         payload.__ckStatus = statusForSave;
         payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
         const baseVersion = recordDataVersionRef.current;
@@ -8697,6 +8897,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }) as any
         );
         draft.__ckSaveMode = 'draft';
+        markNoopIfUnchanged(draft);
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
         const res = await runCoalescedDraftSaveRequest('ensureDraftRecordId', draft, (nextPayload: any) =>
@@ -8850,6 +9051,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('followup.batch.error', { action, recordId: args.recordId, message: msg, reason: args.reason });
           continue;
         }
+        if (action === 'RECONCILE_RESERVATIONS') {
+          completedReservationReconciliationByRecordRef.current.set(args.recordId, Date.now());
+        }
         const cachedRecordForMeta =
           selectedRecordSnapshotRef.current?.id === args.recordId
             ? selectedRecordSnapshotRef.current
@@ -8990,6 +9194,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     (args: { reason: string; forceRefresh?: boolean; retryDelaysMs?: number[]; dataSourceConfigs?: any[] }) => {
       const dataSourceConfigs = Array.isArray(args.dataSourceConfigs) ? args.dataSourceConfigs.filter(Boolean) : guidedDataSourceConfigs;
       if (!dataSourceConfigs.length) return;
+      if (followupLaunchDataSourcePrefetchHoldRef.current > 0) {
+        logEvent('dataSource.prefetch.skipped.followupLaunch', {
+          formKey,
+          language,
+          dataSources: dataSourceConfigs.length,
+          reason: args.reason,
+          forceRefresh: Boolean(args.forceRefresh)
+        });
+        return;
+      }
       const retryDelays = normalizeDataSourcePrefetchRetryDelays(args.retryDelaysMs);
       logEvent('dataSource.prefetch.submitEffects.start', {
         formKey,
@@ -9044,6 +9258,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (view !== 'form') return;
     if (!formOpenGuidedDataSourceConfigs.length) return;
     if (recordLoadingId) return;
+    if (followupLaunchDataSourcePrefetchHoldRef.current > 0) {
+      logEvent('dataSource.prefetch.formOpen.skipped.followupLaunch', {
+        formKey,
+        language,
+        selectedRecordId: selectedRecordId || null
+      });
+      return;
+    }
     const refreshKey = buildFormDataSourceRefreshKey({ formKey, language, selectedRecordId, view });
     if (formDataSourceRefreshKeyRef.current === refreshKey) return;
     formDataSourceRefreshKeyRef.current = refreshKey;
@@ -9056,10 +9278,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       retryDelaysMs: [0],
       dataSourceConfigs: formOpenGuidedDataSourceConfigs
     });
-  }, [formKey, formOpenGuidedDataSourceConfigs, language, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
+  }, [formKey, formOpenGuidedDataSourceConfigs, language, logEvent, recordLoadingId, refreshGuidedDataSourcesInBackground, selectedRecordId, view]);
 
   const refreshAfterFollowupBatch = useCallback(
-    async (args: { recordId: string; reason: string; mode?: 'snapshot' | 'sharedDataOnly' }) => {
+    async (args: { recordId: string; reason: string; mode?: 'snapshot' | 'sharedDataOnly' | 'none' }) => {
+      if (args.mode === 'none') {
+        logEvent('sharedData.cache.refresh.skipped.followupServerOnly', {
+          reason: args.reason,
+          recordId: args.recordId
+        });
+        return;
+      }
       invalidateClientSharedDataCaches({ includePersistedDataSources: true });
       logEvent('sharedData.cache.invalidated', {
         reason: args.reason,
@@ -9273,6 +9502,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         language?: LangCode;
       };
       force?: boolean;
+      statusOnlyWhenClean?: boolean;
+      skipReservationReconciliationWhenAlreadyDone?: boolean;
     }): Promise<{ success: boolean; response?: any; payload?: any; recordId?: string; message?: string }> => {
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -9339,38 +9570,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const snapshotLineItems = args.snapshotOverride?.lineItems || lineItemsRef.current;
       const snapshotLanguage = args.snapshotOverride?.language || languageRef.current;
       const localMutationAtSnapshotStart = lastLocalRecordMutationAtRef.current || 0;
-      const payloadSource = applyUploadedFieldOverrides({
-        values: snapshotValues,
-        lineItems: snapshotLineItems
-      });
-      const valuesForPayload = ingredientsFormActive
-        ? applyIngredientActivationSystemFields(payloadSource.values as any)
-        : payloadSource.values;
-      const payload = applyUploadedFieldPayloadOverrides(
-        args.mode === 'submit'
-          ? await buildSubmissionPayload({
-              definition,
-              formKey,
-              language: snapshotLanguage,
-              values: valuesForPayload,
-              lineItems: payloadSource.lineItems,
-              existingRecordId: args.existingRecordId,
-              collapsedRows: args.collapsedRows,
-              collapsedSubgroups: args.collapsedSubgroups
-            })
-          : buildDraftPayload({
-              definition,
-              formKey,
-              language: snapshotLanguage,
-              values: valuesForPayload,
-              lineItems: payloadSource.lineItems,
-              existingRecordId: args.existingRecordId
-            })
-      );
-      if (args.mode === 'draft') {
-        (payload as any).__ckSaveMode = 'draft';
-        (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
-      }
       const nextStatus =
         (args.statusOverride || '').toString().trim() ||
         (args.mode === 'draft'
@@ -9379,6 +9578,85 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 '')
             )
           : '');
+      const baseVersion = recordDataVersionRef.current;
+      const currentStateFingerprint = buildPersistedDraftStateFingerprint({
+        language: snapshotLanguage,
+        values: snapshotValues,
+        lineItems: snapshotLineItems
+      });
+      const canUseStatusOnlyClose =
+        args.mode === 'submit' &&
+        args.statusOnlyWhenClean === true &&
+        !args.snapshotOverride &&
+        !!args.existingRecordId &&
+        !!nextStatus &&
+        !recordStaleRef.current &&
+        !autoSaveDirtyRef.current &&
+        !autoSaveQueuedRef.current &&
+        !autoSaveInFlightRef.current &&
+        !draftSaveRequestInFlightRef.current &&
+        currentStateFingerprint === lastAutoSaveStateFingerprintRef.current;
+
+      let payload: any;
+      if (canUseStatusOnlyClose) {
+        const statusOnlyRecordId = (args.existingRecordId || '').toString();
+        payload = {
+          formKey,
+          language: snapshotLanguage,
+          id: statusOnlyRecordId,
+          values: {
+            status: nextStatus
+          },
+          status: nextStatus,
+          __ckStatus: nextStatus,
+          __ckStatusOnlyClose: '1'
+        };
+        if (
+          args.skipReservationReconciliationWhenAlreadyDone === true &&
+          completedReservationReconciliationByRecordRef.current.has(statusOnlyRecordId)
+        ) {
+          payload.__ckSkipReservationReconciliation = '1';
+        }
+        logEvent('snapshot.save.statusOnlyClose', {
+          reason: args.reason,
+          recordId: statusOnlyRecordId,
+          skipReservationReconciliation: payload.__ckSkipReservationReconciliation === '1'
+        });
+      } else {
+        const payloadSource = applyUploadedFieldOverrides({
+          values: snapshotValues,
+          lineItems: snapshotLineItems
+        });
+        const valuesForPayload = ingredientsFormActive
+          ? applyIngredientActivationSystemFields(payloadSource.values as any)
+          : payloadSource.values;
+        payload = applyUploadedFieldPayloadOverrides(
+          args.mode === 'submit'
+            ? await buildSubmissionPayload({
+                definition,
+                formKey,
+                language: snapshotLanguage,
+                values: valuesForPayload,
+                lineItems: payloadSource.lineItems,
+                existingRecordId: args.existingRecordId,
+                collapsedRows: args.collapsedRows,
+                collapsedSubgroups: args.collapsedSubgroups
+              })
+            : buildDraftPayload({
+                definition,
+                formKey,
+                language: snapshotLanguage,
+                values: valuesForPayload,
+                lineItems: payloadSource.lineItems,
+                existingRecordId: args.existingRecordId
+              })
+        );
+        if (args.mode === 'draft') {
+          (payload as any).__ckSaveMode = 'draft';
+          markNoopIfUnchanged(payload as any);
+          (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
+        }
+      }
       if (nextStatus) {
         (payload as any).__ckStatus = nextStatus;
         (payload as any).values = {
@@ -9386,7 +9664,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           status: nextStatus
         };
       }
-      const baseVersion = recordDataVersionRef.current;
       if (args.existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
         (payload as any).__ckClientDataVersion = Number(baseVersion);
       }
@@ -9532,6 +9809,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       applySuccessfulSubmissionState,
       applyUploadedFieldPayloadOverrides,
       applyUploadedFieldOverrides,
+      buildPersistedDraftStateFingerprint,
       clearSaveFailureStatusAfterSuccessfulSave,
       definition,
       formKey,
@@ -10643,21 +10921,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         backgroundActions.length > 0
           ? backgroundActions
           : (preActions.length === 0 ? legacyActions : []);
+      const normalizedPreActions = preActions.map(entry => (entry || '').toString().trim().toUpperCase()).filter(Boolean);
+      const normalizedBackgroundActions = effectiveBackgroundActions
+        .map(entry => (entry || '').toString().trim().toUpperCase())
+        .filter(Boolean);
+      const closeOnlyPrimarySubmitMilestone =
+        normalizedPreActions.length === 1 &&
+        normalizedPreActions[0] === 'CLOSE_RECORD' &&
+        normalizedBackgroundActions.length === 0 &&
+        args.action.runInBackground !== true;
       const resolveOptimisticStatusForActions = (actions: string[]): string => {
-        const normalized = actions.map(entry => (entry || '').toString().trim().toUpperCase()).filter(Boolean);
-        if (!normalized.length) return '';
-        if (normalized.includes('CLOSE_RECORD')) {
+        const transition = resolveOptimisticStatusTransitionForActions(actions);
+        if (transition === 'onClose') {
           return resolveStatusTransitionValue(statusTransitions, 'onClose', languageRef.current, {
             includeDefaultOnClose: true
           }) || 'Closed';
         }
-        if (normalized.includes('SEND_EMAIL')) {
-          return resolveStatusTransitionValue(statusTransitions, 'onEmail', languageRef.current, {
+        if (transition === 'onPdf') {
+          return resolveStatusTransitionValue(statusTransitions, 'onPdf', languageRef.current, {
             includeDefaultOnClose: false
           });
         }
-        if (normalized.includes('CREATE_PDF')) {
-          return resolveStatusTransitionValue(statusTransitions, 'onPdf', languageRef.current, {
+        if (transition === 'onEmail') {
+          return resolveStatusTransitionValue(statusTransitions, 'onEmail', languageRef.current, {
             includeDefaultOnClose: false
           });
         }
@@ -10746,14 +11032,55 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           selectedRecordSnapshot: selectedRecordSnapshotRef.current,
           lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
         }) || '';
+      const reportFollowupMilestone = areReportFollowupActions([...preActions, ...effectiveBackgroundActions]);
+      let followupLaunchDataSourcePrefetchHoldActive = false;
+      const beginFollowupLaunchDataSourcePrefetchHold = () => {
+        if (!reportFollowupMilestone || followupLaunchDataSourcePrefetchHoldActive) return;
+        followupLaunchDataSourcePrefetchHoldActive = true;
+        followupLaunchDataSourcePrefetchHoldRef.current += 1;
+        if (guidedDataSourceRefreshTimersRef.current.length) {
+          guidedDataSourceRefreshTimersRef.current.forEach(timer => clearTimeout(timer));
+          guidedDataSourceRefreshTimersRef.current = [];
+        }
+        logEvent('dataSource.prefetch.hold.begin.followupLaunch', {
+          stepId: args.stepId,
+          recordId: existingRecordId || null,
+          actions: [...preActions, ...effectiveBackgroundActions]
+        });
+      };
+      const endFollowupLaunchDataSourcePrefetchHold = () => {
+        if (!followupLaunchDataSourcePrefetchHoldActive) return;
+        followupLaunchDataSourcePrefetchHoldActive = false;
+        followupLaunchDataSourcePrefetchHoldRef.current = Math.max(0, followupLaunchDataSourcePrefetchHoldRef.current - 1);
+        logEvent('dataSource.prefetch.hold.end.followupLaunch', {
+          stepId: args.stepId,
+          recordId: existingRecordId || null
+        });
+      };
 
       try {
-        if (milestoneQueuePolicy === 'all') {
+        beginFollowupLaunchDataSourcePrefetchHold();
+        const queueWaitPolicyForMilestone =
+          closeOnlyPrimarySubmitMilestone && milestoneQueuePolicy === 'all'
+            ? 'uploadsOnly'
+            : milestoneQueuePolicy;
+        if (milestoneQueuePolicy === 'all' && !closeOnlyPrimarySubmitMilestone) {
           const waitResult = await flushAutoSaveBeforeNavigate(reason);
           logEvent('guidedStep.milestone.flush', {
             stepId: args.stepId,
             recordId: existingRecordId || null,
             flushed: waitResult
+          });
+        } else if (milestoneQueuePolicy === 'all' && closeOnlyPrimarySubmitMilestone) {
+          if (autoSaveTimerRef.current) {
+            globalThis.clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+          }
+          autoSaveQueuedRef.current = false;
+          logEvent('guidedStep.milestone.flush.deferredToPrimaryClose', {
+            stepId: args.stepId,
+            recordId: existingRecordId || null,
+            waitForQueue: milestoneQueuePolicy
           });
         } else if (autoSaveTimerRef.current) {
           globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -10764,12 +11091,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             waitForQueue: milestoneQueuePolicy
           });
         }
-        if (milestoneQueuePolicy !== 'none') {
-          const queueResult = await waitForBackgroundSaves(reason, milestoneQueuePolicy);
+        if (queueWaitPolicyForMilestone !== 'none') {
+          const queueResult = await waitForBackgroundSaves(reason, queueWaitPolicyForMilestone);
           logEvent('guidedStep.milestone.queueWait', {
             stepId: args.stepId,
             recordId: existingRecordId || null,
-            waitForQueue: milestoneQueuePolicy,
+            waitForQueue: queueWaitPolicyForMilestone,
+            configuredWaitForQueue: milestoneQueuePolicy,
             ok: queueResult.ok
           });
           if (!queueResult.ok) {
@@ -10794,44 +11122,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             return { success: false, message };
           }
           recordId = ensured.recordId;
-        }
-
-        const snapshotResult = await persistCurrentSnapshot({
-          reason: `${reason}.snapshot`,
-          mode: 'draft',
-          existingRecordId: recordId,
-          force: true
-        });
-        if (!snapshotResult.success || !snapshotResult.recordId) {
-          const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
-          setStatus(message);
-          setStatusLevel('error');
-          logEvent('guidedStep.milestone.snapshot.failed', {
-            stepId: args.stepId,
-            recordId: recordId || null,
-            message
-          });
-          return { success: false, message };
-        }
-        recordId = snapshotResult.recordId;
-
-        const requiresReservationSyncDrain = [...preActions, ...effectiveBackgroundActions]
-          .map(entry => (entry || '').toString().trim().toUpperCase())
-          .includes('CLOSE_RECORD');
-        if (requiresReservationSyncDrain) {
-          const reservationWait = await waitForPendingReservationSync({
-            recordId,
-            reason: `${reason}.reservationSync`
-          });
-          if (!reservationWait.ok) {
-            const message = (
-              reservationWait.message ||
-              tSystem('inventory.reservationConfirmFailed', languageRef.current, 'Could not confirm reservation changes.')
-            ).toString();
-            setStatus(message);
-            setStatusLevel('error');
-            return { success: false, advanceToNext: false, message };
-          }
         }
 
         const runBatch = async (
@@ -10869,10 +11159,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               sessionId: options?.sessionId ?? null
             });
             const { followupErrors } = batchOutcome;
+            const followupRefreshMode = areReportFollowupActions(actions)
+              ? 'none'
+              : (batchReason.endsWith('.background') || batchReason.endsWith('.pre') ? 'sharedDataOnly' : 'snapshot');
             await refreshAfterFollowupBatch({
               recordId,
               reason: batchReason,
-              mode: batchReason.endsWith('.background') || batchReason.endsWith('.pre') ? 'sharedDataOnly' : 'snapshot'
+              mode: followupRefreshMode
             });
             if (followupErrors.length) {
               const message = followupErrors.join(' · ');
@@ -10982,6 +11275,153 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
           return true;
         };
+
+        const requiresReservationSyncDrain = [...normalizedPreActions, ...normalizedBackgroundActions].includes('CLOSE_RECORD');
+        const waitForCloseReservationSync = async (): Promise<{ ok: boolean; message?: string }> => {
+          if (!requiresReservationSyncDrain) return { ok: true };
+          const reservationWait = await waitForPendingReservationSync({
+            recordId,
+            reason: `${reason}.reservationSync`
+          });
+          if (reservationWait.ok) return { ok: true };
+          return {
+            ok: false,
+            message: (
+              reservationWait.message ||
+              tSystem('inventory.reservationConfirmFailed', languageRef.current, 'Could not confirm reservation changes.')
+            ).toString()
+          };
+        };
+
+        const runCloseOnlyPrimarySubmitMilestone = async (): Promise<{ success: boolean; advanceToNext?: boolean; message?: string }> => {
+          const activeSaveWait = await waitForActiveDraftSaveTransactions(`${reason}.primaryClose`);
+          if (!activeSaveWait.ok) {
+            const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            return { success: false, advanceToNext: false, message };
+          }
+          const reservationWait = await waitForCloseReservationSync();
+          if (!reservationWait.ok) {
+            const message = (reservationWait.message || 'Could not confirm reservation changes.').toString();
+            setStatus(message);
+            setStatusLevel('error');
+            return { success: false, advanceToNext: false, message };
+          }
+          const closeStatus =
+            resolveStatusTransitionValue(statusTransitions, 'onClose', languageRef.current, {
+              includeDefaultOnClose: true
+            }) || 'Closed';
+          logEvent('guidedStep.milestone.primaryClose.begin', {
+            stepId: args.stepId,
+            recordId,
+            status: closeStatus
+          });
+          const closeStartedAt = Date.now();
+          const submitResult = await persistCurrentSnapshot({
+            reason: `${reason}.primaryClose`,
+            mode: 'submit',
+            existingRecordId: recordId,
+            statusOverride: closeStatus,
+            statusOnlyWhenClean: true,
+            skipReservationReconciliationWhenAlreadyDone: true
+          });
+          if (!submitResult.success || !submitResult.recordId || !submitResult.response?.success) {
+            const message = (
+              submitResult.message ||
+              submitResult.response?.message ||
+              'Could not close the record.'
+            ).toString();
+            setStatus(message);
+            setStatusLevel('error');
+            logEvent('guidedStep.milestone.primaryClose.failed', {
+              stepId: args.stepId,
+              recordId: recordId || null,
+              message
+            });
+            return { success: false, advanceToNext: false, message };
+          }
+          recordId = submitResult.recordId;
+          const resMeta = submitResult.response?.meta || {};
+          const closeResult = {
+            success: true,
+            status: resMeta.status || closeStatus,
+            reservationReconciliation: resMeta.reservationReconciliation || null,
+            submitEffects: resMeta.submitEffects || null
+          };
+          const submitEffectsCreated = Number(resMeta.submitEffects?.created || 0) || 0;
+          const submitEffectsUpdated = Number(resMeta.submitEffects?.updated || 0) || 0;
+          invalidateClientSharedDataCaches({ includePersistedDataSources: true });
+          if (submitEffectsCreated > 0 || submitEffectsUpdated > 0) {
+            refreshGuidedDataSourcesInBackground({
+              reason: `${reason}.primaryClose.submitEffects`,
+              forceRefresh: true,
+              retryDelaysMs: [0, 1200, 3500]
+            });
+          }
+          logEvent('guidedStep.milestone.primaryClose.done', {
+            stepId: args.stepId,
+            recordId,
+            durationMs: Date.now() - closeStartedAt,
+            submitEffectsCreated,
+            submitEffectsUpdated
+          });
+          guidedMilestoneBusy.unlock(busySeq, {
+            stepId: args.stepId,
+            launchedBackground: false,
+            success: true
+          });
+          busyUnlocked = true;
+          const generatedDialogShown = await maybeOpenGeneratedRecordsDialog(closeResult);
+          if (!generatedDialogShown && args.action.feedbackDialog) {
+            const feedbackDialog = args.action.feedbackDialog;
+            await openConfiguredConfirmDialog({
+              dialog: {
+                ...feedbackDialog,
+                showCancel: feedbackDialog.showCancel ?? false,
+                confirmLabel: feedbackDialog.confirmLabel ?? tSystem('common.ok', languageRef.current, 'OK')
+              },
+              kind: 'guidedStepMilestone',
+              refId: args.stepId
+            });
+          }
+          navigateAfterSuccess(args.action.navigateToAfterSuccess);
+          return {
+            success: true,
+            advanceToNext: args.action.advanceAfterStart !== false
+          };
+        };
+
+        if (closeOnlyPrimarySubmitMilestone) {
+          return runCloseOnlyPrimarySubmitMilestone();
+        }
+
+        const snapshotResult = await persistCurrentSnapshot({
+          reason: `${reason}.snapshot`,
+          mode: 'draft',
+          existingRecordId: recordId,
+          force: !reportFollowupMilestone
+        });
+        if (!snapshotResult.success || !snapshotResult.recordId) {
+          const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
+          setStatus(message);
+          setStatusLevel('error');
+          logEvent('guidedStep.milestone.snapshot.failed', {
+            stepId: args.stepId,
+            recordId: recordId || null,
+            message
+          });
+          return { success: false, message };
+        }
+        recordId = snapshotResult.recordId;
+
+        const reservationWait = await waitForCloseReservationSync();
+        if (!reservationWait.ok) {
+          const message = (reservationWait.message || 'Could not confirm reservation changes.').toString();
+          setStatus(message);
+          setStatusLevel('error');
+          return { success: false, advanceToNext: false, message };
+        }
 
         if (launchEntireBatchInBackground && allBackgroundActions.length) {
           const previousStatus =
@@ -11164,6 +11604,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           message: outcome.message
         };
       } finally {
+        endFollowupLaunchDataSourcePrefetchHold();
         if (!busyUnlocked) {
           guidedMilestoneBusy.unlock(busySeq, {
             stepId: args.stepId,
@@ -11188,12 +11629,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       persistCurrentSnapshot,
       refreshDetachedRecordSnapshotCache,
       refreshAfterFollowupBatch,
+      refreshGuidedDataSourcesInBackground,
       resolveLogMessage,
       requestHomeAnalyticsRefresh,
       runSerializedFollowupBatchRequest,
       scheduleLatestAutoSave,
       statusTransitions,
       resolveUiErrorMessage,
+      waitForActiveDraftSaveTransactions,
       waitForPendingReservationSync,
       waitForBackgroundSaves
     ]
@@ -11363,6 +11806,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             target
           });
           payload.__ckSaveMode = 'draft';
+          markNoopIfUnchanged(payload);
           payload.__ckStatus = statusForSave;
           payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
           payload.__ckReturnUploadValues = true;
@@ -12187,7 +12631,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         existingRecordId,
         statusOverride: closeStatusForPrimarySubmit || undefined,
         collapsedRows: submitUi?.collapsedRows,
-        collapsedSubgroups: submitUi?.collapsedSubgroups
+        collapsedSubgroups: submitUi?.collapsedSubgroups,
+        statusOnlyWhenClean: closeOnlyPreActions,
+        skipReservationReconciliationWhenAlreadyDone: closeOnlyPreActions
       });
       perfMark(submitRpcEndMark);
       perfMeasure('ck.submit.rpc', submitRpcStartMark, submitRpcEndMark, {

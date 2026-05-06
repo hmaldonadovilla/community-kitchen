@@ -1,4 +1,8 @@
-const { collectTemplateIdsFromMap, collectTemplatePrefetchIds } = require('../cloud-run/api/domain/templateTargets');
+const {
+  collectTemplateIdsFromMap,
+  collectTemplatePrefetchIds,
+  isBundledHtmlPdfTemplate
+} = require('../cloud-run/api/domain/templateTargets');
 
 describe('Cloud Run template target domain', () => {
   test('collects ids from conditional maps and prefetch groups by renderer type', () => {
@@ -29,5 +33,26 @@ describe('Cloud Run template target domain', () => {
       markdownIds: ['button-md'],
       docIds: ['pdf-doc', 'email-en', 'email-fr', 'button-doc']
     });
+  });
+
+  test('classifies bundled HTML PDF follow-up templates as HTML prefetch targets', () => {
+    const result = collectTemplatePrefetchIds(
+      {
+        followupConfig: {
+          pdfTemplateId: {
+            EN: 'bundle:meal_production.pdf.html',
+            FR: 'google-doc-template-id'
+          },
+          emailTemplateId: 'email-template-id'
+        }
+      },
+      []
+    );
+
+    expect(isBundledHtmlPdfTemplate('bundle:meal_production.pdf.html')).toBe(true);
+    expect(result.htmlIds).toContain('bundle:meal_production.pdf.html');
+    expect(result.docIds).toContain('google-doc-template-id');
+    expect(result.docIds).toContain('email-template-id');
+    expect(result.docIds).not.toContain('bundle:meal_production.pdf.html');
   });
 });

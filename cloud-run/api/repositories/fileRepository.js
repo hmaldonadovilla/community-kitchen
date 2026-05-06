@@ -148,6 +148,19 @@ class GoogleDriveFileRepository {
     return { id, name: metadata.name || '', mimeType: mimeType || 'text/plain', raw };
   }
 
+  async downloadFileBuffer(fileId) {
+    const id = (fileId || '').toString().trim();
+    if (!id) throw new Error('Google Drive file id is required.');
+    const metadata = await this.driveClient.getFileMetadata(id, 'id,name,mimeType,size,modifiedTime,webViewLink,webContentLink');
+    const buffer = await this.driveClient.downloadFile(id);
+    return {
+      id,
+      name: metadata.name || id,
+      mimeType: metadata.mimeType || '',
+      buffer
+    };
+  }
+
   async trashFile(fileId) {
     const id = (fileId || '').toString().trim();
     if (!id) throw new Error('Google Drive file id is required.');

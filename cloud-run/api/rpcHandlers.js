@@ -290,6 +290,7 @@ const buildDependencyMutationSavePayload = args => {
   payload.__ckStatus = !args.record || args.record.status === undefined || args.record.status === null ? '' : args.record.status;
   payload.__ckAuditAction = args.auditAction;
   payload.__ckSkipSubmitEffects = true;
+  payload.__ckNoopIfUnchanged = '1';
   if (Number.isFinite(Number(args.clientDataVersion)) && Number(args.clientDataVersion) > 0) {
     payload.__ckClientDataVersion = Number(args.clientDataVersion);
   }
@@ -300,6 +301,7 @@ const forceSkipSubmitEffects = formObject => {
   const payload = formObject && typeof formObject === 'object' ? { ...formObject } : {};
   if (payload.values && typeof payload.values === 'object') payload.values = cloneJson(payload.values);
   payload.__ckSkipSubmitEffects = true;
+  payload.__ckNoopIfUnchanged = '1';
   return payload;
 };
 
@@ -551,10 +553,16 @@ const createRpcHandlers = deps => {
       return submitEffectsRepository.saveSubmissionWithId(args[0]);
     },
     async triggerFollowupAction(...args) {
-      return followupRepository.triggerFollowupAction(args[0], args[1], args[2]);
+      return followupRepository.triggerFollowupAction(args[0], args[1], args[2], args[3]);
     },
     async triggerFollowupActions(...args) {
-      return followupRepository.triggerFollowupActions(args[0], args[1], args[2]);
+      return followupRepository.triggerFollowupActions(args[0], args[1], args[2], args[3]);
+    },
+    async enqueueFollowupEmail(...args) {
+      return followupRepository.enqueueFollowupEmail(args[0], args[1], args[2] || {});
+    },
+    async runQueuedFollowupEmailJobs(...args) {
+      return followupRepository.runQueuedFollowupEmailJobs(args[0] || {});
     },
     async previewUpdateRecordDependencies(...args) {
       const context = await resolveUpdateRecordDependencyContext(args[0], args[1]);

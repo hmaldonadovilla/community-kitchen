@@ -77,11 +77,13 @@ import {
   buildFollowupBatchFailureResult,
   buildSkippedFollowupActionResults,
   isFollowupBatchSuccess,
-  normalizeFollowupActions
+  normalizeFollowupActions,
+  resolveParallelReconcileFollowupPlan
 } from './webform/followup/actionPlan';
 import { prefetchMarkdownTemplateIds } from './webform/followup/markdownTemplateCache';
 import { prefetchHtmlTemplateIds } from './webform/followup/htmlTemplateCache';
 import { prefetchDocTextTemplateIds } from './webform/followup/docTextTemplateCache';
+import { parseBundledHtmlTemplateId } from './webform/followup/bundledHtmlTemplates';
 import { hydrateMealProductionPrepIngredientsFromLeftovers } from './webform/followup/mealProductionLeftoverIngredients';
 import { ensureRecordIndexSheet } from './webform/recordIndex';
 import { getBundledConfigEnv, getBundledFormConfig, listBundledFormConfigs } from './webform/formConfigBundle';
@@ -104,6 +106,7 @@ import {
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
 import { HeaderColumns } from './webform/types';
+import { resolveStatusTransitionValue } from '../domain/statusTransitions';
 import {
   shiftIsoDate as shiftLifecycleIsoDate,
   shouldApplyLifecycleStatusDateRule
@@ -116,6 +119,12 @@ const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
 const HOME_BOOTSTRAP_CACHE_SCHEMA_VERSION = 'v2';
 const HOME_BOOTSTRAP_LIST_MAX_ITEMS = 200;
+
+const isTruthyMutationFlag = (value: any): boolean => {
+  if (value === true || value === 1) return true;
+  const normalized = (value === undefined || value === null ? '' : value.toString()).trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+};
 const FOLLOWUP_LANE_PROPERTY_PREFIX = 'CK_FOLLOWUP_LANE_';
 const FOLLOWUP_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const FOLLOWUP_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
@@ -127,6 +136,10 @@ const RECORD_MUTATION_LANE_POLL_MS = 250;
 const ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_QUEUE';
 const ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_TRIGGER_ID';
 const ANALYTICS_PIPELINE_TRIGGER_HANDLER = 'runQueuedAnalyticsPipelineJobs';
+const FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY = 'CK_FOLLOWUP_EMAIL_OUTBOX_QUEUE';
+const FOLLOWUP_EMAIL_OUTBOX_TRIGGER_PROPERTY_KEY = 'CK_FOLLOWUP_EMAIL_OUTBOX_TRIGGER_ID';
+const FOLLOWUP_EMAIL_OUTBOX_TRIGGER_HANDLER = 'runQueuedFollowupEmailJobs';
+const FOLLOWUP_EMAIL_OUTBOX_MAX_ATTEMPTS = 3;
 const USER_RECORD_SAVE_RETRY_DELAYS_MS = [0, 900];
 const INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS = [0, 500, 1500];
 const RESERVATION_FOLLOWUP_RETRY_DELAYS_MS = [0, 750, 2000];
@@ -134,6 +147,12 @@ const RESERVATION_TRANSACTION_LOCK_RETRY_DELAYS_MS = [0, 750, 2000];
 const FORM_BACKED_OPTIONS_AUTO_PAGE_MAX_PAGES = 8;
 const cloneRecordValues = <T extends Record<string, any>>(value: T): T => JSON.parse(JSON.stringify(value || {}));
 const toPlainData = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+const buildReservationSubgroupKey = (parentGroupId: string, parentRowId: string, subGroupId: string): string =>
+  `${(parentGroupId || '').toString().trim()}::${(parentRowId || '').toString().trim()}::${(subGroupId || '').toString().trim()}`;
+const toFiniteReservationNumber = (raw: any): number => {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
 const IN_MEMORY_BUNDLED_DEFINITION_CACHE = new Map<string, WebFormDefinition>();
 
@@ -232,6 +251,28 @@ type InternalRecordSaveQueueEntry = {
 };
 
 type InternalRecordSaveQueue = Map<string, InternalRecordSaveQueueEntry>;
+
+type FollowupEmailOutboxJob = {
+  id: string;
+  formKey: string;
+  recordId: string;
+  queuedAt: string;
+  attempts?: number;
+  lastError?: string;
+  pdfArtifact?: (Partial<GeneratedPdfArtifact> & { pdfUrl?: string }) | null;
+};
+
+type SubmitEffectPendingSave = {
+  effect: FollowupSubmitEffect;
+  effectIndex: number;
+  payloadIndex: number;
+  payload: WebFormSubmission;
+  effectType: 'createRecord' | 'updateRecord';
+  targetFormKey: string;
+  targetContext: { form: FormConfig; questions: QuestionConfig[] };
+  targetDedupRules: DedupRule[];
+  order: number;
+};
 
 export class WebFormService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -587,6 +628,9 @@ export class WebFormService {
     if (bundled.form?.steps && typeof bundled.form.steps === 'object') {
       normalized.steps = this.mergeBundledSteps(bundled.form.steps, normalized.steps);
     }
+    if (bundled.form?.reservationLifecycle && typeof bundled.form.reservationLifecycle === 'object') {
+      normalized.reservationLifecycle = cloneRecordValues(bundled.form.reservationLifecycle);
+    }
     return normalized;
   }
 
@@ -785,7 +829,7 @@ export class WebFormService {
         debugLog('definition.cache.hit', { formKey: keyBase, elapsedMs: Date.now() - startedAt });
         return cached;
       }
-    } catch (_) {
+    } catch {
       // Ignore cache read failures; fall back to building the definition.
     }
 
@@ -798,7 +842,7 @@ export class WebFormService {
         questionCount: def.questions?.length || 0,
         elapsedMs: Date.now() - startedAt
       });
-    } catch (_) {
+    } catch {
       // Ignore cache write failures; definition is still valid for this request.
     }
     return def;
@@ -1247,6 +1291,184 @@ export class WebFormService {
     return {
       success: errors.length === 0,
       processed,
+      errors
+    };
+  }
+
+  public enqueueFollowupEmail(
+    formKey: string,
+    recordId: string,
+    options?: FollowupRuntimeOptions
+  ): FollowupActionResult {
+    const normalizedFormKey = (formKey || '').toString().trim();
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedFormKey || !normalizedRecordId) {
+      return { success: false, message: 'formKey and recordId are required.' };
+    }
+    const pdfArtifact = normalizeFollowupRuntimePdfArtifact(options);
+    const jobId = (typeof Utilities !== 'undefined' && (Utilities as any).getUuid
+      ? (Utilities as any).getUuid()
+      : `${Date.now()}-${Math.random()}`)
+      .toString();
+    const job: FollowupEmailOutboxJob = {
+      id: jobId,
+      formKey: normalizedFormKey,
+      recordId: normalizedRecordId,
+      queuedAt: new Date().toISOString(),
+      attempts: 0,
+      pdfArtifact: pdfArtifact
+        ? {
+            success: pdfArtifact.success,
+            message: pdfArtifact.message,
+            url: pdfArtifact.url,
+            pdfUrl: pdfArtifact.url,
+            fileId: pdfArtifact.fileId
+          }
+        : null
+    };
+
+    try {
+      this.withScriptLock('followup.emailOutbox.queue', 30_000, () => {
+        const props = this.scriptProperties();
+        if (!props) throw new Error('PropertiesService is not available.');
+        const queue = this.readFollowupEmailOutboxQueue(props);
+        const dedupeKey = this.followupEmailOutboxDedupeKey(job);
+        const alreadyQueued = queue.some(existing => this.followupEmailOutboxDedupeKey(existing) === dedupeKey);
+        if (!alreadyQueued) {
+          queue.push(job);
+          props.setProperty(FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY, this.serializeFollowupEmailOutboxQueue(queue));
+        }
+        this.ensureFollowupEmailOutboxTriggerScheduled(props);
+      });
+    } catch (err: any) {
+      const message = (err?.message || err?.toString?.() || 'Failed to queue follow-up email.').toString();
+      debugLog('followup.emailOutbox.queue.failed', {
+        formKey: normalizedFormKey,
+        recordId: normalizedRecordId,
+        message
+      });
+      return { success: false, message };
+    }
+
+    debugLog('followup.emailOutbox.queued', {
+      formKey: normalizedFormKey,
+      recordId: normalizedRecordId,
+      jobId,
+      hasPdfArtifact: Boolean(pdfArtifact?.fileId || pdfArtifact?.url)
+    });
+    return {
+      success: true,
+      queued: true,
+      jobId,
+      message: 'Final report email queued.',
+      pdfUrl: pdfArtifact?.url,
+      fileId: pdfArtifact?.fileId
+    };
+  }
+
+  public runQueuedFollowupEmailJobs(options?: { limit?: number }): {
+    success: boolean;
+    processed: number;
+    retried: number;
+    failed: number;
+    errors: string[];
+  } {
+    const limit = Math.max(1, Math.min(Number(options?.limit || 5) || 5, 25));
+    let jobs: FollowupEmailOutboxJob[] = [];
+    let remaining: FollowupEmailOutboxJob[] = [];
+    let triggerId = '';
+    try {
+      this.withScriptLock('followup.emailOutbox.consume', 30_000, () => {
+        const props = this.scriptProperties();
+        if (!props) return;
+        const queue = this.readFollowupEmailOutboxQueue(props);
+        jobs = queue.slice(0, limit);
+        remaining = queue.slice(limit);
+        triggerId = (props.getProperty(FOLLOWUP_EMAIL_OUTBOX_TRIGGER_PROPERTY_KEY) || '').toString().trim();
+        if (remaining.length) {
+          props.setProperty(FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY, this.serializeFollowupEmailOutboxQueue(remaining));
+          this.ensureFollowupEmailOutboxTriggerScheduled(props);
+        } else {
+          props.deleteProperty(FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY);
+          props.deleteProperty(FOLLOWUP_EMAIL_OUTBOX_TRIGGER_PROPERTY_KEY);
+        }
+      });
+    } catch (err) {
+      return {
+        success: false,
+        processed: 0,
+        retried: 0,
+        failed: 0,
+        errors: [(err as any)?.message || (err as any)?.toString?.() || 'Failed to load queued follow-up email jobs.']
+      };
+    }
+
+    if (!remaining.length) {
+      this.deleteFollowupEmailOutboxTriggers(triggerId);
+    }
+
+    const errors: string[] = [];
+    const retryJobs: FollowupEmailOutboxJob[] = [];
+    let processed = 0;
+    let failed = 0;
+    jobs.forEach(job => {
+      const attempts = Number(job.attempts || 0) + 1;
+      try {
+        const result = this.triggerFollowupAction(job.formKey, job.recordId, 'SEND_EMAIL', {
+          pdfArtifact: job.pdfArtifact || undefined
+        });
+        if (!result?.success) {
+          throw new Error(result?.message || 'Failed to send queued follow-up email.');
+        }
+        processed += 1;
+        debugLog('followup.emailOutbox.sent', {
+          formKey: job.formKey,
+          recordId: job.recordId,
+          jobId: job.id,
+          attempts
+        });
+      } catch (err: any) {
+        const message = (err?.message || err?.toString?.() || 'Failed to send queued follow-up email.').toString();
+        errors.push(`${job.formKey}/${job.recordId}: ${message}`);
+        if (attempts < FOLLOWUP_EMAIL_OUTBOX_MAX_ATTEMPTS) {
+          retryJobs.push({
+            ...job,
+            attempts,
+            lastError: message
+          });
+        } else {
+          failed += 1;
+        }
+        debugLog('followup.emailOutbox.failed', {
+          formKey: job.formKey,
+          recordId: job.recordId,
+          jobId: job.id,
+          attempts,
+          retry: attempts < FOLLOWUP_EMAIL_OUTBOX_MAX_ATTEMPTS,
+          message
+        });
+      }
+    });
+
+    if (retryJobs.length) {
+      try {
+        this.withScriptLock('followup.emailOutbox.retry', 30_000, () => {
+          const props = this.scriptProperties();
+          if (!props) return;
+          const queue = this.readFollowupEmailOutboxQueue(props);
+          props.setProperty(FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY, this.serializeFollowupEmailOutboxQueue([...retryJobs, ...queue]));
+          this.ensureFollowupEmailOutboxTriggerScheduled(props);
+        });
+      } catch (err: any) {
+        errors.push((err?.message || err?.toString?.() || 'Failed to requeue follow-up email jobs.').toString());
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      processed,
+      retried: retryJobs.length,
+      failed,
       errors
     };
   }
@@ -2517,6 +2739,58 @@ export class WebFormService {
     });
   }
 
+  private readComputedNumber(raw: any): number | null {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeComputedNumber(raw: number): number {
+    const rounded = Math.round(raw * 1000000) / 1000000;
+    return Object.is(rounded, -0) ? 0 : rounded;
+  }
+
+  private resolveComputedScale(value: Record<string, any>, vars: Record<string, any>): number {
+    const multiplierRaw = value.multiplierPath
+      ? this.readTemplatePathValue(value.multiplierPath, vars)
+      : value.multiplier;
+    const divisorRaw = value.divisorPath
+      ? this.readTemplatePathValue(value.divisorPath, vars)
+      : value.divisor;
+    const multiplier = multiplierRaw === undefined ? 1 : this.readComputedNumber(multiplierRaw);
+    const divisor = divisorRaw === undefined ? 1 : this.readComputedNumber(divisorRaw);
+    if (multiplier === null) return 0;
+    if (divisor === null || divisor === 0) return 0;
+    return multiplier / divisor;
+  }
+
+  private scaleComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const pickFields = Array.isArray(value.pickFields)
+      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+      : [];
+    const scaleNumericFields = new Set(
+      Array.isArray(value.scaleNumericFields)
+        ? value.scaleNumericFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+        : []
+    );
+    const scale = this.resolveComputedScale(value, vars);
+    return this.filterComputedCollectionEntries(value, vars).map(entry => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const next: Record<string, any> = {};
+      const source = entry as Record<string, any>;
+      const fieldIds = pickFields.length ? pickFields : Object.keys(source);
+      fieldIds.forEach(fieldId => {
+        const sourceValue = source[fieldId];
+        if (!scaleNumericFields.has(fieldId)) {
+          next[fieldId] = sourceValue;
+          return;
+        }
+        const numericValue = this.readComputedNumber(sourceValue);
+        next[fieldId] = numericValue === null ? sourceValue : this.normalizeComputedNumber(numericValue * scale);
+      });
+      return next;
+    });
+  }
+
   private flattenComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
     const parentRows = this.filterComputedCollectionEntries(value, vars);
     if (!parentRows.length) return [];
@@ -2674,6 +2948,9 @@ export class WebFormService {
     }
     if (op === 'filterCollection') {
       return this.filterComputedCollection(value as Record<string, any>, vars);
+    }
+    if (op === 'scaleCollection') {
+      return this.scaleComputedCollection(value as Record<string, any>, vars);
     }
     if (op === 'flattenCollection') {
       return this.flattenComputedCollection(value as Record<string, any>, vars);
@@ -3730,6 +4007,7 @@ export class WebFormService {
       });
 
       const availability: InventoryAvailabilitySnapshot[] = [];
+      const pendingSaves: InternalRecordSaveQueue = new Map();
       let consumedReservations = 0;
       let releasedReservations = 0;
       grouped.forEach(groupEntry => {
@@ -3785,7 +4063,8 @@ export class WebFormService {
           language: inventoryRecord.language || 'EN',
           status: fieldIds.statusFieldId ? (nextInventoryValues[fieldIds.statusFieldId] || '').toString() : inventoryRecord.status,
           values: nextInventoryValues,
-          auditAction: 'inventoryReservation:reconcile'
+          auditAction: 'inventoryReservation:reconcile',
+          queue: pendingSaves
         });
         if (!inventorySaveResult.success) {
           throw new Error(inventorySaveResult.message || 'Failed to reconcile inventory reservation.');
@@ -3816,7 +4095,8 @@ export class WebFormService {
             language: record.language || 'EN',
             status: 'consumed',
             values: nextReservationValues,
-            auditAction: 'inventoryReservation:consume'
+            auditAction: 'inventoryReservation:consume',
+            queue: pendingSaves
           });
           if (!saveResult.success) {
             throw new Error(saveResult.message || 'Failed to close reservation ledger row.');
@@ -3833,7 +4113,8 @@ export class WebFormService {
             language: record.language || 'EN',
             status: 'released',
             values: nextReservationValues,
-            auditAction: 'inventoryReservation:release'
+            auditAction: 'inventoryReservation:release',
+            queue: pendingSaves
           });
           if (!saveResult.success) {
             throw new Error(saveResult.message || 'Failed to close reservation ledger row.');
@@ -3841,6 +4122,18 @@ export class WebFormService {
         });
         consumedReservations += groupEntry.consume.length;
         releasedReservations += groupEntry.release.length;
+      });
+
+      const flushStartedAt = Date.now();
+      const flushResult = this.flushInternalRecordSaveQueue(pendingSaves);
+      if (!flushResult.success) {
+        throw new Error(flushResult.message || 'Failed to save inventory reservation reconciliation updates.');
+      }
+      debugLog('inventoryReservation.reconcile.batchFlush.done', {
+        sourceFormKey,
+        sourceRecordId,
+        formCount: pendingSaves.size,
+        durationMs: Date.now() - flushStartedAt
       });
 
       if (refreshMode !== 'none') {
@@ -4041,6 +4334,145 @@ export class WebFormService {
     };
   }
 
+  private inferReservationFieldId(outputKeyFieldId: string, suffix: 'RECORD_ID' | 'KIND' | 'UNIT'): string {
+    const key = (outputKeyFieldId || '').toString().trim();
+    const base = key.endsWith('_ID') ? key.slice(0, -3) : key;
+    return base ? `${base}_${suffix}` : '';
+  }
+
+  private collectStepReservationConfigs(form: FormConfig): Array<{
+    parentGroupId: string;
+    outputGroupId: string;
+    outputKeyFieldId: string;
+    quantityFieldId: string;
+    resourceRecordIdFieldId: string;
+  }> {
+    const steps = form.steps?.mode === 'guided' && Array.isArray(form.steps.items) ? form.steps.items : [];
+    const configs: Array<{
+      parentGroupId: string;
+      outputGroupId: string;
+      outputKeyFieldId: string;
+      quantityFieldId: string;
+      resourceRecordIdFieldId: string;
+    }> = [];
+    steps.forEach((step: any) => {
+      (Array.isArray(step?.include) ? step.include : []).forEach((target: any) => {
+        if (!target || target.kind !== 'lineGroup') return;
+        const parentGroupId = (target.id || '').toString().trim();
+        if (!parentGroupId) return;
+        (Array.isArray(target.dataSourceRows) ? target.dataSourceRows : []).forEach((config: any) => {
+          const reservation = config?.reservation && typeof config.reservation === 'object' ? config.reservation : null;
+          if (!reservation || reservation.enabled === false) return;
+          if ((reservation.commitMode || '').toString().trim().toLowerCase() !== 'step') return;
+          const outputGroupId = (config.outputGroupId || '').toString().trim();
+          const outputKeyFieldId = (config.outputKeyFieldId || config.rowKeyFieldId || '').toString().trim();
+          const quantityFieldId = (config.quantityFieldId || '').toString().trim();
+          const resourceRecordIdFieldId =
+            (reservation.resourceRecordIdFieldId || '').toString().trim() ||
+            this.inferReservationFieldId(outputKeyFieldId, 'RECORD_ID');
+          if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !resourceRecordIdFieldId) return;
+          configs.push({
+            parentGroupId,
+            outputGroupId,
+            outputKeyFieldId,
+            quantityFieldId,
+            resourceRecordIdFieldId
+          });
+        });
+      });
+    });
+    return configs;
+  }
+
+  private parseReservationRows(raw: any): any[] {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private readRecordValue(record: WebFormSubmission | null | undefined, fieldId: string): any {
+    const key = (fieldId || '').toString().trim();
+    if (!record || !key) return undefined;
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, key)) return (record.values as any)[key];
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, `${key}_json`)) {
+      return (record.values as any)[`${key}_json`];
+    }
+    if (Object.prototype.hasOwnProperty.call(record as any, key)) return (record as any)[key];
+    return (record as any)[`${key}_json`];
+  }
+
+  private readReservationRowValue(row: any, fieldId: string): any {
+    const key = (fieldId || '').toString().trim();
+    if (!row || !key) return undefined;
+    if (row.values && Object.prototype.hasOwnProperty.call(row.values, key)) return row.values[key];
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+    return row[`${key}_json`];
+  }
+
+  private reservationRowId(row: any): string {
+    return ((row?.__ckRowId || row?.id || '') as any).toString().trim();
+  }
+
+  private recordHasReservationSelections(form: FormConfig, record: WebFormSubmission | null | undefined): boolean {
+    const configs = this.collectStepReservationConfigs(form);
+    if (!configs.length) return true;
+    if (!record) return false;
+    return configs.some(config => {
+      const parentRows = this.parseReservationRows(this.readRecordValue(record, config.parentGroupId));
+      return parentRows.some(parentRow => {
+        const parentRowId = this.reservationRowId(parentRow);
+        const nestedRows = this.parseReservationRows(this.readReservationRowValue(parentRow, config.outputGroupId));
+        const flattenedRows = parentRowId
+          ? this.parseReservationRows(
+              this.readRecordValue(
+                record,
+                buildReservationSubgroupKey(config.parentGroupId, parentRowId, config.outputGroupId)
+              )
+            )
+          : [];
+        return [...nestedRows, ...flattenedRows].some(row => {
+          const resourceRecordId = (this.readReservationRowValue(row, config.resourceRecordIdFieldId) || '').toString().trim();
+          const resourceItemId = (this.readReservationRowValue(row, config.outputKeyFieldId) || '').toString().trim();
+          const quantity = toFiniteReservationNumber(this.readReservationRowValue(row, config.quantityFieldId));
+          return Boolean(resourceRecordId && resourceItemId && quantity > 0);
+        });
+      });
+    });
+  }
+
+  private shouldRunReservationReconciliationForRecord(
+    form: FormConfig,
+    formKey: string,
+    recordId: string,
+    sourceRecord?: WebFormSubmission | null
+  ): boolean {
+    if (!this.collectStepReservationConfigs(form).length) return true;
+    const record = sourceRecord !== undefined ? sourceRecord : this.fetchSubmissionById(formKey, recordId);
+    return this.recordHasReservationSelections(form, record);
+  }
+
+  private buildSkippedReservationReconciliationResult(recordId: string): FollowupActionResult {
+    return {
+      success: true,
+      message: 'No reservation selections found on the record.',
+      reservationReconciliation: {
+        success: true,
+        sourceRecordId: recordId,
+        reconciledReservations: 0,
+        consumedReservations: 0,
+        releasedReservations: 0,
+        touchedInventoryRecords: 0
+      }
+    };
+  }
+
   private runFollowupActionWithLifecycle(
     formKey: string,
     form: FormConfig,
@@ -4060,6 +4492,9 @@ export class WebFormService {
           success: false,
           message: 'Reservation reconciliation is not configured for this form.'
         };
+      }
+      if (!this.shouldRunReservationReconciliationForRecord(form, formKey, recordId)) {
+        return this.buildSkippedReservationReconciliationResult(recordId);
       }
       const reconcileResult = this.reconcileInventoryReservations({
         sourceFormKey: formKey,
@@ -4109,26 +4544,31 @@ export class WebFormService {
       }
       const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, closeStatus);
       if (recordId && reconcileOnFinalSubmit.enabled) {
-        const reconcileResult = this.reconcileInventoryReservations({
-          sourceFormKey: formKey,
-          sourceRecordId: recordId,
-          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
-          refreshMode: reconcileOnFinalSubmit.refreshMode
-        });
-        if (!reconcileResult.success) {
-          return {
-            success: false,
-            message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.'
+        if (!this.shouldRunReservationReconciliationForRecord(form, formKey, recordId)) {
+          const skipped = this.buildSkippedReservationReconciliationResult(recordId);
+          result.reservationReconciliation = skipped.reservationReconciliation;
+        } else {
+          const reconcileResult = this.reconcileInventoryReservations({
+            sourceFormKey: formKey,
+            sourceRecordId: recordId,
+            ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+            refreshMode: reconcileOnFinalSubmit.refreshMode
+          });
+          if (!reconcileResult.success) {
+            return {
+              success: false,
+              message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.'
+            };
+          }
+          result.reservationReconciliation = {
+            success: true,
+            sourceRecordId: recordId,
+            reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+            consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+            releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+            touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
           };
         }
-        result.reservationReconciliation = {
-          success: true,
-          sourceRecordId: recordId,
-          reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
-          consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
-          releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
-          touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
-        };
       }
     }
     return result;
@@ -4176,6 +4616,86 @@ export class WebFormService {
     }
 
     return lastResult;
+  }
+
+  private buildEmailQueueOptionsFromPdfResult(result: FollowupActionResult): FollowupRuntimeOptions | undefined {
+    if (!result?.success) return undefined;
+    const fileId = (result.fileId || '').toString().trim();
+    const pdfUrl = (result.pdfUrl || '').toString().trim();
+    if (!fileId && !pdfUrl) return undefined;
+    return {
+      pdfArtifact: {
+        success: true,
+        fileId: fileId || undefined,
+        url: pdfUrl || undefined,
+        pdfUrl: pdfUrl || undefined
+      }
+    };
+  }
+
+  private runReconcilePdfFollowupBatch(
+    formKey: string,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    actions: string[],
+    runtime: { pdfArtifact?: GeneratedPdfArtifact | null },
+    touchLaneOwner: () => void
+  ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } | null {
+    const plan = resolveParallelReconcileFollowupPlan(actions);
+    if (!plan) return null;
+    const resultByAction = new Map<string, { action: string; result: FollowupActionResult }>();
+
+    const runAction = (action: string): FollowupActionResult => {
+      const startedAt = Date.now();
+      touchLaneOwner();
+      const result = this.runFollowupActionWithResilience(
+        formKey,
+        form,
+        questions,
+        recordId,
+        action,
+        touchLaneOwner,
+        runtime
+      );
+      (result as any).durationMs = Date.now() - startedAt;
+      return result;
+    };
+
+    const reconcileResult = runAction(plan.reconcileAction);
+    resultByAction.set(plan.reconcileAction.toString().trim().toUpperCase(), {
+      action: plan.reconcileAction,
+      result: reconcileResult
+    });
+    const pdfResult = runAction(plan.createPdfAction);
+    resultByAction.set(plan.createPdfAction.toString().trim().toUpperCase(), {
+      action: plan.createPdfAction,
+      result: pdfResult
+    });
+
+    if (plan.sendEmailAction) {
+      const emailStartedAt = Date.now();
+      const emailResult =
+        reconcileResult.success && pdfResult.success
+          ? this.enqueueFollowupEmail(formKey, recordId, this.buildEmailQueueOptionsFromPdfResult(pdfResult))
+          : {
+              success: false,
+              message: 'Skipped because reconciliation or PDF creation did not complete successfully.'
+            };
+      (emailResult as any).durationMs = Date.now() - emailStartedAt;
+      resultByAction.set(plan.sendEmailAction.toString().trim().toUpperCase(), {
+        action: plan.sendEmailAction,
+        result: emailResult
+      });
+    }
+
+    const results = plan.actions
+      .map(action => resultByAction.get(action.toString().trim().toUpperCase()))
+      .filter(Boolean) as Array<{ action: string; result: FollowupActionResult }>;
+    return {
+      success: isFollowupBatchSuccess(results),
+      results
+    };
   }
 
   private applySubmitEffectsForCurrentRecordState(args: {
@@ -4226,6 +4746,232 @@ export class WebFormService {
     });
   }
 
+  private isStatusOnlyClosePayload(form: FormConfig, formObject: WebFormSubmission): boolean {
+    if (!isTruthyMutationFlag((formObject as any).__ckStatusOnlyClose)) return false;
+    const recordId = ((formObject as any).id || '').toString().trim();
+    if (!recordId) return false;
+    const requestedStatus = ((formObject as any).__ckStatus || (formObject as any).status || '').toString().trim();
+    if (!requestedStatus) return false;
+    const closeStatus = (
+      resolveStatusTransitionValue(form.followupConfig?.statusTransitions, 'onClose', (formObject as any).language, {
+        includeDefaultOnClose: true
+      }) || 'Closed'
+    ).toString().trim().toLowerCase();
+    return requestedStatus.toLowerCase() === closeStatus;
+  }
+
+  private validateStatusOnlyClientVersion(
+    context: { record?: WebFormSubmission | null },
+    formObject: WebFormSubmission
+  ): { ok: boolean; message?: string; dataVersion?: number; updatedAt?: string } {
+    const clientRaw = (formObject as any).__ckClientDataVersion;
+    const clientVersion = clientRaw === undefined || clientRaw === null ? Number.NaN : Number(clientRaw);
+    const serverVersion = Number((context.record as any)?.dataVersion);
+    if (
+      Number.isFinite(clientVersion) &&
+      clientVersion > 0 &&
+      Number.isFinite(serverVersion) &&
+      serverVersion > 0 &&
+      clientVersion < serverVersion
+    ) {
+      return {
+        ok: false,
+        message: 'This record was modified by another user. Please refresh.',
+        dataVersion: serverVersion,
+        updatedAt: context.record?.updatedAt
+      };
+    }
+    return { ok: true };
+  }
+
+  private saveStatusOnlyCloseWithIdDirect(
+    formObject: WebFormSubmission,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    formKey: string,
+    recordId: string
+  ): { success: boolean; message: string; meta: any } {
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedRecordId) {
+      return {
+        success: false,
+        message: 'Record ID is required.',
+        meta: {}
+      };
+    }
+    const context = this.submissions.getRecordContext(form, questions, normalizedRecordId);
+    if (!context?.record) {
+      return {
+        success: false,
+        message: 'Record not found.',
+        meta: {
+          id: normalizedRecordId
+        }
+      };
+    }
+    const versionCheck = this.validateStatusOnlyClientVersion(context, formObject);
+    if (!versionCheck.ok) {
+      return {
+        success: false,
+        message: versionCheck.message || 'This record was modified by another user. Please refresh.',
+        meta: {
+          id: normalizedRecordId,
+          dataVersion: versionCheck.dataVersion,
+          updatedAt: versionCheck.updatedAt,
+          rowNumber: context.rowIndex
+        }
+      };
+    }
+
+    const closeStartedAt = Date.now();
+    const closeResult = this.followups.triggerFollowupAction(form, questions, normalizedRecordId, 'CLOSE_RECORD');
+    if (!closeResult?.success) {
+      return {
+        success: false,
+        message: closeResult?.message || 'Failed to close record.',
+        meta: {
+          id: normalizedRecordId
+        }
+      };
+    }
+
+    const closeStatus = (
+      closeResult.status ||
+      resolveStatusTransitionValue(form.followupConfig?.statusTransitions, 'onClose', context.record.language, {
+        includeDefaultOnClose: true
+      }) ||
+      'Closed'
+    ).toString().trim();
+    const submitEffectsStartedAt = Date.now();
+    const submitEffectsResult = this.applySubmitEffectsForCurrentRecordState({
+      form,
+      questions,
+      formKey,
+      recordId: normalizedRecordId,
+      operation: 'update',
+      statusOverride: closeStatus,
+      updatedAt: closeResult.updatedAt
+    });
+    if (!submitEffectsResult.success) {
+      return {
+        success: false,
+        message: submitEffectsResult.message || 'Record closed but failed to apply submit effects.',
+        meta: {
+          id: normalizedRecordId,
+          status: closeStatus,
+          updatedAt: closeResult.updatedAt,
+          dataVersion: closeResult.dataVersion,
+          rowNumber: closeResult.rowNumber,
+          submitEffects: submitEffectsResult.meta || undefined,
+          sourceSaved: true,
+          statusOnlyClose: true
+        }
+      };
+    }
+
+    debugLog('saveSubmission.statusOnlyClose.submitEffects.done', {
+      formKey,
+      recordId: normalizedRecordId,
+      durationMs: Date.now() - submitEffectsStartedAt,
+      configured: Number(submitEffectsResult.meta?.configured || 0) || 0,
+      executed: Number(submitEffectsResult.meta?.executed || 0) || 0,
+      created: Number(submitEffectsResult.meta?.created || 0) || 0,
+      updated: Number(submitEffectsResult.meta?.updated || 0) || 0
+    });
+
+    const skipReservationReconciliation = isTruthyMutationFlag((formObject as any).__ckSkipReservationReconciliation);
+    const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, closeStatus);
+    let reservationReconciliation: any = undefined;
+    if (reconcileOnFinalSubmit.enabled) {
+      const reconcileStartedAt = Date.now();
+      if (skipReservationReconciliation) {
+        const skipped = this.buildSkippedReservationReconciliationResult(normalizedRecordId);
+        reservationReconciliation = skipped.reservationReconciliation;
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.skipped', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reason: 'clientKnownReconciled'
+        });
+      } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, normalizedRecordId)) {
+        const skipped = this.buildSkippedReservationReconciliationResult(normalizedRecordId);
+        reservationReconciliation = skipped.reservationReconciliation;
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.skipped', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reason: 'noReservationSelections'
+        });
+      } else {
+        const reconcileResult = this.reconcileInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: normalizedRecordId,
+          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+          refreshMode: reconcileOnFinalSubmit.refreshMode
+        });
+        if (!reconcileResult.success) {
+          return {
+            success: false,
+            message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.',
+            meta: {
+              id: normalizedRecordId,
+              status: closeStatus,
+              updatedAt: closeResult.updatedAt,
+              dataVersion: closeResult.dataVersion,
+              rowNumber: closeResult.rowNumber,
+              reservationReconciliation: {
+                success: false,
+                sourceRecordId: normalizedRecordId
+              },
+              submitEffects: submitEffectsResult.meta || undefined,
+              sourceSaved: true,
+              statusOnlyClose: true
+            }
+          };
+        }
+        reservationReconciliation = {
+          success: true,
+          sourceRecordId: normalizedRecordId,
+          reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+          consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+          releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+          touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
+        };
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.done', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reconciledReservations: reservationReconciliation.reconciledReservations,
+          touchedInventoryRecords: reservationReconciliation.touchedInventoryRecords
+        });
+      }
+    }
+
+    this.refreshMutationCaches(form, questions, 'saveSubmissionWithId.statusOnlyClose', 'revisionOnly');
+    debugLog('saveSubmission.statusOnlyClose.done', {
+      formKey,
+      recordId: normalizedRecordId,
+      durationMs: Date.now() - closeStartedAt,
+      dataVersion: closeResult.dataVersion || null
+    });
+
+    return {
+      success: true,
+      message: 'Record closed.',
+      meta: {
+        id: normalizedRecordId,
+        status: closeStatus,
+        updatedAt: closeResult.updatedAt,
+        dataVersion: closeResult.dataVersion,
+        rowNumber: closeResult.rowNumber,
+        operation: 'update',
+        reservationReconciliation,
+        submitEffects: submitEffectsResult.meta || undefined,
+        statusOnlyClose: true
+      }
+    };
+  }
+
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const recordId = this.ensureMutationRecordId(formObject);
@@ -4255,6 +5001,9 @@ export class WebFormService {
     const recordId = this.ensureMutationRecordId(formObject);
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
+    if (this.isStatusOnlyClosePayload(form, formObject)) {
+      return this.saveStatusOnlyCloseWithIdDirect(formObject, form, questions, formKey, recordId);
+    }
     const result = this.saveSubmissionRecordWithRetry({
       formKey,
       recordId,
@@ -4316,37 +5065,71 @@ export class WebFormService {
       }
       const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, nextStatus);
       if (savedRecordId && !deleteRecordId && reconcileOnFinalSubmit.enabled) {
-        const reconcileResult = this.reconcileInventoryReservations({
-          sourceFormKey: formKey,
-          sourceRecordId: savedRecordId,
-          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
-          refreshMode: reconcileOnFinalSubmit.refreshMode
-        });
-        if (!reconcileResult.success) {
-          return {
-            success: false,
-            message: reconcileResult.message || 'Record saved but failed to reconcile active reservations.',
-            meta: {
-              ...(result.meta || {}),
-              reservationReconciliation: {
-                success: false,
-                sourceRecordId: savedRecordId
-              },
-              sourceSaved: true
+        const reconcileStartedAt = Date.now();
+        if (isTruthyMutationFlag((formObject as any).__ckSkipReservationReconciliation)) {
+          const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
+          result.meta = {
+            ...(result.meta || {}),
+            reservationReconciliation: skipped.reservationReconciliation
+          };
+          debugLog('saveSubmission.reservationReconcile.skipped', {
+            formKey,
+            recordId: savedRecordId,
+            durationMs: Date.now() - reconcileStartedAt,
+            reason: 'clientKnownReconciled'
+          });
+        } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, savedRecordId, formObject)) {
+          const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
+          result.meta = {
+            ...(result.meta || {}),
+            reservationReconciliation: skipped.reservationReconciliation
+          };
+          debugLog('saveSubmission.reservationReconcile.skipped', {
+            formKey,
+            recordId: savedRecordId,
+            durationMs: Date.now() - reconcileStartedAt,
+            reason: 'noReservationSelections'
+          });
+        } else {
+          const reconcileResult = this.reconcileInventoryReservations({
+            sourceFormKey: formKey,
+            sourceRecordId: savedRecordId,
+            ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+            refreshMode: reconcileOnFinalSubmit.refreshMode
+          });
+          if (!reconcileResult.success) {
+            return {
+              success: false,
+              message: reconcileResult.message || 'Record saved but failed to reconcile active reservations.',
+              meta: {
+                ...(result.meta || {}),
+                reservationReconciliation: {
+                  success: false,
+                  sourceRecordId: savedRecordId
+                },
+                sourceSaved: true
+              }
+            };
+          }
+          result.meta = {
+            ...(result.meta || {}),
+            reservationReconciliation: {
+              success: true,
+              sourceRecordId: savedRecordId,
+              reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+              consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+              releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+              touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
             }
           };
-        }
-        result.meta = {
-          ...(result.meta || {}),
-          reservationReconciliation: {
-            success: true,
-            sourceRecordId: savedRecordId,
+          debugLog('saveSubmission.reservationReconcile.done', {
+            formKey,
+            recordId: savedRecordId,
+            durationMs: Date.now() - reconcileStartedAt,
             reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
-            consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
-            releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
             touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
-          }
-        };
+          });
+        }
       }
       const skipSubmitEffectsRaw = (formObject as any).__ckSkipSubmitEffects;
       const skipSubmitEffects =
@@ -4355,12 +5138,14 @@ export class WebFormService {
         skipSubmitEffectsRaw === '1' ||
         skipSubmitEffectsRaw === 1;
       if (!skipSubmitEffects) {
+        const submitEffectsStartedAt = Date.now();
         const submitEffectsResult = this.applyFollowupSubmitEffects({
           form,
           questions,
           formKey,
           formObject,
-          saveResult: result
+          saveResult: result,
+          refreshMode: 'revisionOnly'
         });
         if (!submitEffectsResult.success) {
           return {
@@ -4379,6 +5164,15 @@ export class WebFormService {
             submitEffects: submitEffectsResult.meta
           };
         }
+        debugLog('saveSubmission.submitEffects.done', {
+          formKey,
+          recordId: savedRecordId || null,
+          durationMs: Date.now() - submitEffectsStartedAt,
+          configured: Number(submitEffectsResult.meta?.configured || 0) || 0,
+          executed: Number(submitEffectsResult.meta?.executed || 0) || 0,
+          created: Number(submitEffectsResult.meta?.created || 0) || 0,
+          updated: Number(submitEffectsResult.meta?.updated || 0) || 0
+        });
       }
       const refreshMode = this.resolveSaveSubmissionRefreshMode(formObject, result);
       if (refreshMode !== 'none') {
@@ -4447,6 +5241,9 @@ export class WebFormService {
     if (saveMode === 'draft') {
       return 'revisionOnly';
     }
+    if (isTruthyMutationFlag((formObject as any).__ckStatusOnlyClose) || result?.meta?.submitEffects) {
+      return 'revisionOnly';
+    }
     return 'full';
   }
 
@@ -4487,6 +5284,44 @@ export class WebFormService {
         }
       };
     }
+  }
+
+  private saveSubmitEffectBatchWithRetry(args: {
+    formKey: string;
+    formObjects: WebFormSubmission[];
+    form: FormConfig;
+    questions: QuestionConfig[];
+    dedupRules: DedupRule[];
+  }): { success: boolean; message: string; metaById: Record<string, RecordMetadata> } {
+    let lastResult: { success: boolean; message: string; metaById: Record<string, RecordMetadata> } | null = null;
+    for (let attemptIndex = 0; attemptIndex < INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+      const delayMs = INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS[attemptIndex];
+      if (delayMs > 0) {
+        sleepWithUtilities(delayMs);
+      }
+      const result = this.submissions.saveTrustedSubmissionBatch(
+        args.formObjects,
+        args.form,
+        args.questions,
+        args.dedupRules
+      );
+      lastResult = result;
+      if (result.success || !isRetryableMutationLockErrorMessage(result.message)) {
+        return result;
+      }
+      debugLog('submitEffects.batch.retry', {
+        formKey: args.formKey,
+        payloadCount: args.formObjects.length,
+        attempt: attemptIndex + 1,
+        attempts: INTERNAL_RECORD_SAVE_RETRY_DELAYS_MS.length,
+        message: result.message || 'retryable failure'
+      });
+    }
+    return lastResult || {
+      success: false,
+      message: 'Failed to save downstream records.',
+      metaById: {}
+    };
   }
 
   private ensureMutationRecordId(formObject: WebFormSubmission): string {
@@ -4891,6 +5726,18 @@ export class WebFormService {
       pdfArtifact: normalizeFollowupRuntimePdfArtifact(options)
     };
     try {
+      const plannedResult = this.runReconcilePdfFollowupBatch(
+        formKey,
+        form,
+        questions,
+        normalizedRecordId,
+        normalizedActions,
+        runtime,
+        () => this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket as FollowupLaneTicket)
+      );
+      if (plannedResult) {
+        return plannedResult;
+      }
       for (let actionIndex = 0; actionIndex < normalizedActions.length; actionIndex += 1) {
         const action = normalizedActions[actionIndex];
         const actionStartedAt = Date.now();
@@ -4904,12 +5751,13 @@ export class WebFormService {
           () => this.touchFollowupLaneOwner(formKey, normalizedRecordId, ticket as FollowupLaneTicket),
           runtime
         );
+        (result as any).durationMs = Date.now() - actionStartedAt;
         debugLog('followup.batch.action.done', {
           formKey,
           recordId: normalizedRecordId,
           action: (action || '').toString().trim().toUpperCase(),
           success: Boolean(result?.success),
-          durationMs: Date.now() - actionStartedAt
+          durationMs: (result as any).durationMs
         });
         results.push({ action, result });
         if (!result.success) {
@@ -5066,7 +5914,7 @@ export class WebFormService {
           .filter(Boolean)
       )
     );
-    const docTemplateIds = Array.from(
+    const rawDocTemplateIds = Array.from(
       new Set(
         docMaps
           .flatMap(map => collectTemplateIdsFromMap(map))
@@ -5074,12 +5922,20 @@ export class WebFormService {
           .filter(Boolean)
       )
     );
+    const bundledHtmlPdfTemplateIds = rawDocTemplateIds.filter(id => {
+      const bundledKey = parseBundledHtmlTemplateId(id);
+      return Boolean(bundledKey && bundledKey.toLowerCase().endsWith('.pdf.html'));
+    });
+    const docTemplateIds = rawDocTemplateIds.filter(id => !bundledHtmlPdfTemplateIds.includes(id));
     const htmlTemplateIds = Array.from(
       new Set(
-        htmlMaps
-          .flatMap(map => collectTemplateIdsFromMap(map))
-          .map(id => (id || '').toString().trim())
-          .filter(Boolean)
+        [
+          ...htmlMaps
+            .flatMap(map => collectTemplateIdsFromMap(map))
+            .map(id => (id || '').toString().trim())
+            .filter(Boolean),
+          ...bundledHtmlPdfTemplateIds
+        ]
       )
     );
     const docTextTemplateIds = Array.from(
@@ -5291,7 +6147,7 @@ export class WebFormService {
         // Invalidate caches after maintenance.
         try {
           this.cacheManager.bumpSheetEtag(sheet, columns, 'rebuildIndexes');
-        } catch (_) {
+        } catch {
           // ignore
         }
 
@@ -6326,6 +7182,7 @@ export class WebFormService {
     (payload as any).__ckSkipSubmitEffects = '1';
     (payload as any).__ckAllowClosedUpdate = '1';
     (payload as any).__ckSaveMode = 'draft';
+    (payload as any).__ckNoopIfUnchanged = '1';
     (payload as any).__ckAuditAction = args.auditAction;
     if (args.status !== undefined) {
       (payload as any).__ckStatus = args.status;
@@ -6492,6 +7349,7 @@ export class WebFormService {
     });
     (payload as any).__ckSaveMode = 'draft';
     (payload as any).__ckAllowClosedUpdate = '1';
+    (payload as any).__ckNoopIfUnchanged = '1';
     (payload as any).__ckStatus = args.record.status === undefined || args.record.status === null ? '' : args.record.status;
     (payload as any).__ckAuditAction = args.auditAction;
     if (Number.isFinite(Number(args.clientDataVersion)) && Number(args.clientDataVersion) > 0) {
@@ -6525,10 +7383,139 @@ export class WebFormService {
     const { ctx } = buildRecordVisibilityContext(sourceRecord, args.questions);
     const operation = (args.saveResult.meta?.operation || 'update').toString().trim().toLowerCase();
     const touchedForms = new Map<string, { form: FormConfig; questions: QuestionConfig[] }>();
+    const pendingSaves: SubmitEffectPendingSave[] = [];
     let executed = 0;
     let created = 0;
     let updated = 0;
     const generatedRecords: SubmitEffectGeneratedRecord[] = [];
+    let pendingSaveOrder = 0;
+
+    const saveSequential = (item: SubmitEffectPendingSave): void => {
+      const saveResult = this.saveSubmissionWithIdQueuedDirect({
+        formObject: item.payload,
+        form: item.targetContext.form,
+        questions: item.targetContext.questions,
+        dedupRules: item.targetDedupRules,
+        reason: `submitEffects.${item.effectType}`
+      });
+      if (!saveResult?.success) {
+        throw new Error(
+          (
+            saveResult?.message ||
+            (item.effectType === 'updateRecord'
+              ? 'Failed to update downstream record.'
+              : 'Failed to create downstream record.')
+          ).toString()
+        );
+      }
+      const saveOperation = (saveResult.meta?.operation || '').toString().trim().toLowerCase();
+      if (item.effectType === 'updateRecord') {
+        if (saveOperation !== 'noop') updated += 1;
+      } else {
+        created += 1;
+      }
+      const savedRecordId = (saveResult.meta?.id || '').toString().trim();
+      if (item.effectType === 'createRecord' && savedRecordId) {
+        generatedRecords.push({
+          effectId: (item.effect as any).id ? (item.effect as any).id.toString() : undefined,
+          targetFormKey: item.targetFormKey,
+          recordId: savedRecordId,
+          values: this.buildGeneratedRecordValuesFromPayload(item.payload, item.targetContext.questions)
+        });
+      }
+      debugLog(`submitEffects.${item.effectType}.ok`, {
+        formKey: args.formKey,
+        recordId: sourceRecord.id || null,
+        effectIndex: item.effectIndex,
+        payloadIndex: item.payloadIndex,
+        targetFormKey: item.targetFormKey,
+        targetRecordId: saveResult.meta?.id || null,
+        mode: 'sequential'
+      });
+    };
+
+    const flushPendingSaves = (): void => {
+      const batches = new Map<
+        string,
+        {
+          context: { form: FormConfig; questions: QuestionConfig[] };
+          dedupRules: DedupRule[];
+          items: SubmitEffectPendingSave[];
+        }
+      >();
+      pendingSaves.forEach(item => {
+        const existing = batches.get(item.targetFormKey);
+        if (existing) {
+          existing.items.push(item);
+          return;
+        }
+        batches.set(item.targetFormKey, {
+          context: item.targetContext,
+          dedupRules: item.targetDedupRules,
+          items: [item]
+        });
+      });
+
+      batches.forEach((batch, targetFormKey) => {
+        const sortedItems = batch.items.slice().sort((a, b) => a.order - b.order);
+        const seenIds = new Set<string>();
+        const canBatch = sortedItems.every(item => {
+          const recordId = ((item.payload as any).id || '').toString().trim();
+          if (!recordId || seenIds.has(recordId)) return false;
+          seenIds.add(recordId);
+          return true;
+        });
+        if (!canBatch) {
+          sortedItems.forEach(saveSequential);
+          return;
+        }
+
+        const startedAt = Date.now();
+        const batchResult = this.saveSubmitEffectBatchWithRetry({
+          formKey: targetFormKey,
+          formObjects: sortedItems.map(item => item.payload),
+          form: batch.context.form,
+          questions: batch.context.questions,
+          dedupRules: batch.dedupRules
+        });
+        if (!batchResult.success) {
+          throw new Error(batchResult.message || 'Failed to save downstream records.');
+        }
+        sortedItems.forEach(item => {
+          const savedRecordId = ((item.payload as any).id || '').toString().trim();
+          const meta = savedRecordId ? batchResult.metaById?.[savedRecordId] : undefined;
+          const saveOperation = (meta?.operation || '').toString().trim().toLowerCase();
+          if (item.effectType === 'updateRecord') {
+            if (saveOperation !== 'noop') updated += 1;
+          } else {
+            created += 1;
+            generatedRecords.push({
+              effectId: (item.effect as any).id ? (item.effect as any).id.toString() : undefined,
+              targetFormKey: item.targetFormKey,
+              recordId: savedRecordId,
+              values: this.buildGeneratedRecordValuesFromPayload(item.payload, item.targetContext.questions)
+            });
+          }
+          debugLog(`submitEffects.${item.effectType}.ok`, {
+            formKey: args.formKey,
+            recordId: sourceRecord.id || null,
+            effectIndex: item.effectIndex,
+            payloadIndex: item.payloadIndex,
+            targetFormKey: item.targetFormKey,
+            targetRecordId: savedRecordId || null,
+            operation: saveOperation || null,
+            mode: 'batch'
+          });
+        });
+        debugLog('submitEffects.batch.ok', {
+          formKey: args.formKey,
+          recordId: sourceRecord.id || null,
+          targetFormKey,
+          payloadCount: sortedItems.length,
+          durationMs: Date.now() - startedAt
+        });
+      });
+    };
 
     debugLog('submitEffects.start', {
       formKey: args.formKey,
@@ -6590,49 +7577,22 @@ export class WebFormService {
             if (effect.type === 'updateRecord' && !((payload as any).id || '').toString().trim()) {
               throw new Error('Follow-up submit effect updateRecord requires a target recordId.');
             }
-            const saveResult = this.saveSubmissionWithIdQueuedDirect({
-              formObject: payload,
-              form: targetContext.form,
-              questions: targetContext.questions,
-              dedupRules: targetDedupRules,
-              reason: `submitEffects.${effect.type}`
-            });
-            if (!saveResult?.success) {
-              throw new Error(
-                (
-                  saveResult?.message ||
-                  (effect.type === 'updateRecord'
-                    ? 'Failed to update downstream record.'
-                    : 'Failed to create downstream record.')
-                ).toString()
-              );
-            }
-            const saveOperation = (saveResult.meta?.operation || '').toString().trim().toLowerCase();
-            if (effect.type === 'updateRecord') {
-              if (saveOperation !== 'noop') updated += 1;
-            } else {
-              created += 1;
-            }
-            const savedRecordId = (saveResult.meta?.id || '').toString().trim();
-            if (effect.type === 'createRecord' && savedRecordId) {
-              generatedRecords.push({
-                effectId: (effect as any).id ? (effect as any).id.toString() : undefined,
-                targetFormKey: effect.targetFormKey,
-                recordId: savedRecordId,
-                values: this.buildGeneratedRecordValuesFromPayload(payload, targetContext.questions)
-              });
-            }
-            debugLog(`submitEffects.${effect.type}.ok`, {
-              formKey: args.formKey,
-              recordId: sourceRecord.id || null,
+            pendingSaves.push({
+              effect,
               effectIndex: index,
               payloadIndex,
+              payload,
+              effectType: effect.type,
               targetFormKey: effect.targetFormKey,
-              targetRecordId: saveResult.meta?.id || null
+              targetContext,
+              targetDedupRules,
+              order: pendingSaveOrder
             });
+            pendingSaveOrder += 1;
           });
         }
       });
+      flushPendingSaves();
     } catch (err: any) {
       const message = (err?.message || err?.toString?.() || 'Submit effects failed.').toString();
       debugLog('submitEffects.error', {
@@ -6770,6 +7730,7 @@ export class WebFormService {
         (payload as any)[fieldId] = payloadValues[fieldId];
       });
       (payload as any).__ckSkipSubmitEffects = '1';
+      (payload as any).__ckNoopIfUnchanged = '1';
       (payload as any).__ckAuditAction =
         resolved.auditAction || `submitEffect:${resolved.type}:${args.sourceRecord.id || 'source'}`;
       if (Object.prototype.hasOwnProperty.call(resolved, 'status')) {
@@ -7008,6 +7969,115 @@ export class WebFormService {
     const scriptApp = (globalThis as any).ScriptApp;
     if (!scriptApp?.deleteTrigger) return;
     this.findAnalyticsPipelineTriggers().forEach(trigger => {
+      const matchesId = (() => {
+        if (!triggerId) return true;
+        try {
+          return (trigger as any)?.getUniqueId?.() === triggerId;
+        } catch {
+          return false;
+        }
+      })();
+      if (!matchesId && triggerId) return;
+      try {
+        scriptApp.deleteTrigger(trigger);
+      } catch {
+        // ignore cleanup failures
+      }
+    });
+  }
+
+  private parseFollowupEmailOutboxQueue(raw: unknown): FollowupEmailOutboxJob[] {
+    if (raw === undefined || raw === null) return [];
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((entry: any) => {
+          const formKey = (entry?.formKey || '').toString().trim();
+          const recordId = (entry?.recordId || '').toString().trim();
+          if (!formKey || !recordId) return null;
+          return {
+            id: (entry?.id || `${formKey}:${recordId}:${entry?.queuedAt || Date.now()}`).toString(),
+            formKey,
+            recordId,
+            queuedAt: (entry?.queuedAt || new Date().toISOString()).toString(),
+            attempts: Math.max(0, Number(entry?.attempts || 0) || 0),
+            lastError: (entry?.lastError || '').toString() || undefined,
+            pdfArtifact: entry?.pdfArtifact && typeof entry.pdfArtifact === 'object' ? entry.pdfArtifact : null
+          } as FollowupEmailOutboxJob;
+        })
+        .filter(Boolean) as FollowupEmailOutboxJob[];
+    } catch {
+      return [];
+    }
+  }
+
+  private readFollowupEmailOutboxQueue(props: GoogleAppsScript.Properties.Properties): FollowupEmailOutboxJob[] {
+    const raw = (props.getProperty(FOLLOWUP_EMAIL_OUTBOX_QUEUE_PROPERTY_KEY) || '').toString().trim();
+    return this.parseFollowupEmailOutboxQueue(raw);
+  }
+
+  private serializeFollowupEmailOutboxQueue(queue: FollowupEmailOutboxJob[]): string {
+    return JSON.stringify(Array.isArray(queue) ? queue : []);
+  }
+
+  private followupEmailOutboxDedupeKey(job: FollowupEmailOutboxJob): string {
+    const fileId = ((job.pdfArtifact as any)?.fileId || '').toString().trim();
+    const url = ((job.pdfArtifact as any)?.url || (job.pdfArtifact as any)?.pdfUrl || '').toString().trim();
+    return [this.normalizeFormKey(job.formKey), job.recordId, fileId || url || ''].join('::');
+  }
+
+  private ensureFollowupEmailOutboxTriggerScheduled(props: GoogleAppsScript.Properties.Properties): void {
+    const existingId = (props.getProperty(FOLLOWUP_EMAIL_OUTBOX_TRIGGER_PROPERTY_KEY) || '').toString().trim();
+    const existingTriggers = this.findFollowupEmailOutboxTriggers();
+    if (existingTriggers.length) {
+      const matched = existingId
+        ? existingTriggers.find(trigger => {
+            try {
+              return (trigger as any)?.getUniqueId?.() === existingId;
+            } catch {
+              return false;
+            }
+          })
+        : existingTriggers[0];
+      if (matched) return;
+    }
+
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.newTrigger) {
+      throw new Error('ScriptApp trigger API is not available.');
+    }
+    const trigger = scriptApp.newTrigger(FOLLOWUP_EMAIL_OUTBOX_TRIGGER_HANDLER).timeBased().after(1_000).create();
+    const uniqueId = (() => {
+      try {
+        return (trigger as any)?.getUniqueId?.()?.toString?.().trim?.() || '';
+      } catch {
+        return '';
+      }
+    })();
+    props.setProperty(FOLLOWUP_EMAIL_OUTBOX_TRIGGER_PROPERTY_KEY, uniqueId || 'scheduled');
+  }
+
+  private findFollowupEmailOutboxTriggers(): GoogleAppsScript.Script.Trigger[] {
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.getProjectTriggers) return [];
+    try {
+      return ((scriptApp.getProjectTriggers() || []) as GoogleAppsScript.Script.Trigger[]).filter(trigger => {
+        try {
+          return trigger.getHandlerFunction() === FOLLOWUP_EMAIL_OUTBOX_TRIGGER_HANDLER;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  private deleteFollowupEmailOutboxTriggers(triggerId?: string): void {
+    const scriptApp = (globalThis as any).ScriptApp;
+    if (!scriptApp?.deleteTrigger) return;
+    this.findFollowupEmailOutboxTriggers().forEach(trigger => {
       const matchesId = (() => {
         if (!triggerId) return true;
         try {

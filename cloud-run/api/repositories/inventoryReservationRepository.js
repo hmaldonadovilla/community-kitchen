@@ -136,6 +136,7 @@ class InventoryReservationRepository {
       __ckSkipSubmitEffects: true,
       __ckAllowClosedUpdate: '1',
       __ckSaveMode: 'draft',
+      __ckNoopIfUnchanged: '1',
       __ckAuditAction: auditAction
     };
     Object.keys(payload.values || {}).forEach(fieldId => {

@@ -141,4 +141,64 @@ describe('FollowupService meal production rendering', () => {
       expect.objectContaining({ ING: 'Broccoli', ALLERGEN: 'None' })
     ]);
   });
+
+  it('caches linked leftover lookups across repeated meal production PDF preparation in one service request', () => {
+    const resolveLinkedRecord = jest.fn((formKey, recordId) => {
+      if (formKey !== 'Config: Leftover Inventory') return null;
+      if (recordId === 'leftover-single') {
+        return {
+          formKey,
+          language: 'EN',
+          id: 'leftover-single',
+          values: {
+            LEFTOVER_KIND: 'Single-ingredient',
+            LEFTOVER_INGREDIENT: 'Basil - fresh',
+            LEFTOVER_CAT: 'Herbs - spices - condiments',
+            LEFTOVER_ALLERGEN: 'None',
+            LEFTOVER_UNIT: 'gr'
+          }
+        } as any;
+      }
+      return null;
+    });
+    const service = new FollowupService({} as any, {} as any, {} as any, resolveLinkedRecord);
+    const buildRecord = (id: string) =>
+      ({
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        id,
+        values: {
+          MP_MEALS_REQUEST: [
+            {
+              MEAL_TYPE: 'Vegetarian',
+              MP_TYPE_LI: [
+                {
+                  PREP_TYPE: 'Single-ingredient',
+                  RECIPE: 'Basil - fresh',
+                  LEFTOVER_KIND: 'Single-ingredient',
+                  LEFTOVER_RECORD_ID: 'leftover-single',
+                  LEFTOVER_USE_QTY: '500',
+                  LEFTOVER_DISPLAY_UNIT: 'gr',
+                  MP_INGREDIENTS_LI: []
+                }
+              ]
+            }
+          ]
+        }
+      } as any);
+    const form = {
+      title: 'Meal Production',
+      configSheet: 'Config: Meal Production'
+    } as any;
+    const followup = {
+      pdfTemplateId: { EN: 'bundle:meal_production.pdf.html' },
+      pdfFolderId: 'folder-1'
+    } as any;
+
+    expect(service.generatePdfArtifact(form, [], buildRecord('meal-record-1'), followup).success).toBe(true);
+    expect(service.generatePdfArtifact(form, [], buildRecord('meal-record-2'), followup).success).toBe(true);
+
+    expect(resolveLinkedRecord).toHaveBeenCalledTimes(1);
+    expect(resolveLinkedRecord).toHaveBeenCalledWith('Config: Leftover Inventory', 'leftover-single');
+  });
 });

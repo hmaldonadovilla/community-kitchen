@@ -485,6 +485,18 @@ export function triggerFollowupActions(formKey: string, recordId: string, action
   return service.triggerFollowupActions(formKey, recordId, actions, options);
 }
 
+export function enqueueFollowupEmail(formKey: string, recordId: string, options?: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.enqueueFollowupEmail(formKey, recordId, options);
+}
+
+export function runQueuedFollowupEmailJobs(options?: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.runQueuedFollowupEmailJobs(options);
+}
+
 export function migrateFormTemplatesToIdPlaceholders(formKey: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

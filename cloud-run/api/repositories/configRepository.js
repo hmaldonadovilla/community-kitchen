@@ -7,6 +7,21 @@ const normalizeKey = value => (value || '').toString().trim().toLowerCase();
 
 const clone = value => JSON.parse(JSON.stringify(value));
 
+const normalizeConfigDefinition = config => {
+  const next = clone(config);
+  if (
+    next &&
+    next.definition &&
+    next.form &&
+    next.form.reservationLifecycle &&
+    typeof next.form.reservationLifecycle === 'object' &&
+    !next.definition.reservationLifecycle
+  ) {
+    next.definition.reservationLifecycle = clone(next.form.reservationLifecycle);
+  }
+  return next;
+};
+
 const createTargetUrl = (form, env) => {
   const appUrl = (form && form.appUrl ? form.appUrl : '').toString().trim();
   if (appUrl) return appUrl;
@@ -62,7 +77,7 @@ class FormConfigRepository {
   fetchFormConfig(formKey) {
     const config = this.findConfig(formKey);
     if (!config) throw new Error(`Form config not found: ${formKey || '__DEFAULT__'}.`);
-    return clone(config);
+    return normalizeConfigDefinition(config);
   }
 
   fetchFormCatalog() {

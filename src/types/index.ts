@@ -5697,6 +5697,8 @@ export interface RecordMetadata {
   dataVersion?: number;
   rowNumber?: number;
   operation?: 'create' | 'update' | 'noop';
+  noop?: boolean;
+  noopReason?: string;
   autoIncrementValues?: Record<string, string>;
   reservationRelease?: {
     success?: boolean;
@@ -5748,6 +5750,9 @@ export interface FollowupActionResult {
   updatedAt?: string;
   dataVersion?: number;
   rowNumber?: number;
+  durationMs?: number;
+  queued?: boolean;
+  jobId?: string;
   reservationReconciliation?: {
     success: boolean;
     sourceRecordId?: string;

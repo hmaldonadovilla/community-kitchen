@@ -23,6 +23,11 @@ const collectTemplateIdsFromMap = map => {
   return Array.from(new Set(out.map(toText).map(item => item.trim()).filter(Boolean)));
 };
 
+const isBundledHtmlPdfTemplate = templateId => {
+  const normalized = toText(templateId).toLowerCase();
+  return normalized.startsWith('bundle:') && normalized.endsWith('.pdf.html');
+};
+
 const collectTemplatePrefetchIds = (form, questions) => {
   const safeForm = form || {};
   const safeQuestions = Array.isArray(questions) ? questions : [];
@@ -31,7 +36,10 @@ const collectTemplatePrefetchIds = (form, questions) => {
   const docIds = [];
   if (safeForm.summaryHtmlTemplateId) htmlIds.push(...collectTemplateIdsFromMap(safeForm.summaryHtmlTemplateId));
   if (safeForm.followupConfig && safeForm.followupConfig.pdfTemplateId) {
-    docIds.push(...collectTemplateIdsFromMap(safeForm.followupConfig.pdfTemplateId));
+    collectTemplateIdsFromMap(safeForm.followupConfig.pdfTemplateId).forEach(id => {
+      if (isBundledHtmlPdfTemplate(id)) htmlIds.push(id);
+      else docIds.push(id);
+    });
   }
   if (safeForm.followupConfig && safeForm.followupConfig.emailTemplateId) {
     docIds.push(...collectTemplateIdsFromMap(safeForm.followupConfig.emailTemplateId));
@@ -52,5 +60,6 @@ const collectTemplatePrefetchIds = (form, questions) => {
 
 module.exports = {
   collectTemplateIdsFromMap,
-  collectTemplatePrefetchIds
+  collectTemplatePrefetchIds,
+  isBundledHtmlPdfTemplate
 };

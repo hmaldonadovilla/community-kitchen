@@ -38,7 +38,16 @@ export interface SubmissionPayload {
 export interface SubmissionResult {
   success: boolean;
   message?: string;
-  meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
+  meta?: {
+    id?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    dataVersion?: number;
+    rowNumber?: number;
+    operation?: 'create' | 'update' | 'noop';
+    noop?: boolean;
+    noopReason?: string;
+  };
 }
 
 export interface UpdateRecordDependencyPreviewResult {
@@ -550,6 +559,8 @@ export const DEFAULT_HYBRID_HTTP_FUNCTIONS = [
   'fetchFormCatalog',
   'fetchAnalyticsDashboard',
   'queueAnalyticsPipelineRun',
+  'enqueueFollowupEmail',
+  'runQueuedFollowupEmailJobs',
   'fetchSubmissions',
   'fetchSubmissionsBatch',
   'fetchSubmissionsSortedBatch',
@@ -838,6 +849,9 @@ export const configureBackendTransport = (transport?: BackendTransport | null): 
   activeTransport = transport || createAppsScriptTransport();
 };
 
+export const isBackendFunctionRoutedToHttp = (fnName: string): boolean =>
+  Boolean(activeTransport.isHttpRouted?.(fnName));
+
 const invokeTransport = <T,>(fnName: string, ...args: any[]): Promise<T> => activeTransport.invoke<T>(fnName, ...args);
 
 const normalizeFollowupAction = (action: any): string => (action ?? '').toString().trim().toUpperCase();
@@ -937,8 +951,8 @@ const runSplitFollowupBatchWithAppsScriptEmail = async (
         }
       : undefined;
     const emailResult = emailOptions
-      ? await runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action, emailOptions)
-      : await runAppsScript<FollowupActionResult>('triggerFollowupAction', formKey, recordId, action);
+      ? await runAppsScript<FollowupActionResult>('enqueueFollowupEmail', formKey, recordId, emailOptions)
+      : await runAppsScript<FollowupActionResult>('enqueueFollowupEmail', formKey, recordId);
     results.push({ action, result: emailResult });
     if (!emailResult?.success) {
       results.push(...buildSkippedFollowupResult(normalizedActions.slice(index + 1), `Skipped because ${action} failed.`));
@@ -1213,6 +1227,16 @@ export const triggerFollowupBatch = (
   actions: string[]
 ): Promise<FollowupBatchResponse> =>
   invokeFollowupTransport<FollowupBatchResponse>('triggerFollowupActions', actions, formKey, recordId, actions);
+
+export const enqueueFollowupEmailApi = (
+  formKey: string,
+  recordId: string,
+  options?: { pdfArtifact?: { success?: boolean; fileId?: string; url?: string; pdfUrl?: string } | null }
+): Promise<FollowupActionResult> =>
+  invokeTransport<FollowupActionResult>('enqueueFollowupEmail', formKey, recordId, options);
+
+export const runQueuedFollowupEmailJobsApi = (options?: { limit?: number }): Promise<any> =>
+  invokeTransport<any>('runQueuedFollowupEmailJobs', options);
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
   invokeDriveUploadTransport<UploadFilesResult>('uploadFiles', files, uploadConfig);

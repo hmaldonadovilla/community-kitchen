@@ -47,28 +47,85 @@ const buildDataUriFromBlob = (blob: GoogleAppsScript.Base.Blob): string => {
   return `data:${contentType};base64,${base64}`;
 };
 
+const MAX_LOGO_CACHE_CHARS = 90_000;
+const LOGO_CACHE_TTL_SECONDS = 60 * 60 * 6;
+
+const getScriptCache = (): GoogleAppsScript.Cache.Cache | null => {
+  try {
+    const svc = (globalThis as any).CacheService;
+    if (!svc || typeof svc.getScriptCache !== 'function') return null;
+    return svc.getScriptCache();
+  } catch {
+    return null;
+  }
+};
+
+const buildLogoCacheKey = (logoUrl: string, fileId: string): string => {
+  const source = fileId || logoUrl;
+  const suffix = source
+    .toString()
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .slice(0, 150);
+  return `ck.mealPdf.logo.v1:${suffix || 'default'}`;
+};
+
+const readCachedLogoDataUri = (cacheKey: string): string => {
+  const cache = getScriptCache();
+  if (!cache) return '';
+  try {
+    const cached = cache.get(cacheKey);
+    return cached && cached.toString().startsWith('data:') ? cached.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const writeCachedLogoDataUri = (cacheKey: string, value: string): void => {
+  const cache = getScriptCache();
+  if (!cache) return;
+  const dataUri = (value || '').toString();
+  if (!dataUri.startsWith('data:') || dataUri.length > MAX_LOGO_CACHE_CHARS) return;
+  try {
+    cache.put(cacheKey, dataUri, LOGO_CACHE_TTL_SECONDS);
+  } catch {
+    // ignore cache quota/size failures
+  }
+};
+
 const resolveLogoDataUri = (logoUrl: string): string => {
   const normalized = normalizeText(logoUrl);
   if (!normalized) return '';
   if (normalized.startsWith('data:')) return normalized;
   const fileId = extractDriveFileId(normalized);
+  const cacheKey = buildLogoCacheKey(normalized, fileId);
+  const cached = readCachedLogoDataUri(cacheKey);
+  if (cached) return cached;
   if (fileId && typeof DriveApp !== 'undefined') {
     try {
       const blob = DriveApp.getFileById(fileId).getBlob();
-      return buildDataUriFromBlob(blob);
-    } catch (err) {
+      const dataUri = buildDataUriFromBlob(blob);
+      writeCachedLogoDataUri(cacheKey, dataUri);
+      return dataUri;
+    } catch {
       // ignore; fallback to fetching the raw URL below.
     }
   }
   if (fileId) {
     const blob = fetchDriveFileBlob(fileId, 'pdf.logo');
-    if (blob) return buildDataUriFromBlob(blob);
+    if (blob) {
+      const dataUri = buildDataUriFromBlob(blob);
+      writeCachedLogoDataUri(cacheKey, dataUri);
+      return dataUri;
+    }
   }
   if (typeof UrlFetchApp !== 'undefined') {
     try {
       const response = UrlFetchApp.fetch(normalized);
-      return buildDataUriFromBlob(response.getBlob());
-    } catch (err) {
+      const dataUri = buildDataUriFromBlob(response.getBlob());
+      writeCachedLogoDataUri(cacheKey, dataUri);
+      return dataUri;
+    } catch {
       return '';
     }
   }
