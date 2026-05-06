@@ -68,7 +68,6 @@ import {
 import { DateInput } from './DateInput';
 import { GroupedPairedFields } from './GroupedPairedFields';
 import { InfoTooltip } from './InfoTooltip';
-import { LineItemTable, type LineItemTableColumn } from './LineItemTable';
 import { SearchableSelect } from './SearchableSelect';
 import { LineItemMultiAddSelect } from './LineItemMultiAddSelect';
 import { NumberStepper } from './NumberStepper';
@@ -190,7 +189,6 @@ import {
   resolveRowFlowActiveFieldMetaAction,
   resolveRowFlowGroupConfigAction
 } from '../../features/lineItems/domain/rowFlowGroupConfig';
-import { resolveTableColumnWidthStyle } from '../../features/lineItems/domain/tableColumnWidths';
 import { LineItemRemoveButton } from '../../features/lineItems/components/LineItemRemoveButton';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
@@ -203,6 +201,7 @@ import {
   LineItemSubgroupHeader,
   LineItemSubgroupToolbar
 } from '../../features/lineItems/components/LineItemSubgroupChrome';
+import { LineItemSubgroupTableRenderer } from '../../features/lineItems/components/LineItemSubgroupTableRenderer';
 import { LineItemSubgroupAddButton } from '../../features/lineItems/components/LineItemSubgroupAddButton';
 import { SourceFirstAllocationList } from '../../features/lineItems/components/SourceFirstAllocationList';
 import { SourceFirstInlineDataSourceRows } from '../../features/lineItems/components/SourceFirstInlineDataSourceRows';
@@ -6326,427 +6325,35 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
                         <div id={`${subKey}-body`}>
                         <div style={isSubTableMode ? { marginTop: 8 } : { marginTop: 8, ...(subListScrollStyle || {}) }}>
                         {isSubTableMode ? (
-                          <div className="ck-line-item-table__scroll" style={subTableScrollStyle}>
-                            <LineItemTable
-                              columns={[
-                                ...((() => {
-                                  const subColumnWidths = (subUi as any)?.tableColumnWidths;
-                                  const resolveSubColumnStyle = (columnId: string): React.CSSProperties | undefined =>
-                                    resolveTableColumnWidthStyle(subColumnWidths, columnId);
-
-                                  const subColumnIdsRaw = Array.isArray((subUi as any)?.tableColumns)
-                                    ? (subUi as any).tableColumns
-                                    : [];
-                                  const subColumnIds = subColumnIdsRaw
-                                    .map((id: any) => (id !== undefined && id !== null ? id.toString().trim() : ''))
-                                    .filter(Boolean);
-                                  const subFields = (sub.fields || []) as any[];
-                                  const visibleFields = (subColumnIds.length ? subColumnIds : subFields.map(f => f.id))
-                                    .map((fid: string) => subFields.find(f => f.id === fid))
-                                    .filter(Boolean) as any[];
-
-                                  const renderSubTableField = (field: any, subRow: any) => {
-                                    const groupCtx: VisibilityContext = {
-                                      getValue: fid => values[fid],
-                                      getLineValue: (_rowId, fid) => subRow.values[fid],
-                                      getLineItems: groupId => lineItems?.[groupId] || [],
-                                      getLineItemKeys: () => Object.keys(lineItems || {})
-                                    };
-                                    const hideField = shouldHideField(field.visibility, groupCtx, { rowId: subRow.id, linePrefix: subKey });
-                                    if (hideField) return <span className="muted">—</span>;
-
-                                    const anchorValue = subAnchorFieldId ? subRow.values[subAnchorFieldId] : undefined;
-                                    if (subHideUntilAnchor && subAnchorFieldId && field.id !== subAnchorFieldId && isEmptyValue(anchorValue as any)) {
-                                      return <span className="muted">—</span>;
-                                    }
-
-                                    ensureLineOptions(subKey, field);
-                                    const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, subKey);
-                                    const dependencyIds = (
-                                      Array.isArray(field.optionFilter?.dependsOn)
-                                        ? field.optionFilter?.dependsOn
-                                        : [field.optionFilter?.dependsOn || '']
-                                    ).filter((dep: unknown): dep is string => typeof dep === 'string' && !!dep);
-                                    const allowedField = computeAllowedOptions(
-                                      field.optionFilter,
-                                      optionSetField,
-                                      dependencyIds.map((dep: string) => toDependencyValue(subRow.values[dep] ?? row.values[dep] ?? values[dep]))
-                                    );
-
-                                    const fieldPath = `${subKey}__${field.id}__${subRow.id}`;
-                                    const renderAsLabel =
-                                      (field as any)?.ui?.renderAsLabel === true || (field as any)?.renderAsLabel === true || (field as any)?.readOnly === true;
-                                    const renderErrors = () => (
-                                      <>
-                                        {errors[fieldPath] && <div className="error">{errors[fieldPath]}</div>}
-                                        {renderWarnings(fieldPath)}
-                                      </>
-                                    );
-
-                                    if (field.type === 'CHOICE') {
-                                      const rawVal = subRow.values[field.id];
-                                      const choiceVal = Array.isArray(rawVal) && rawVal.length ? (rawVal as string[])[0] : (rawVal as string);
-                                      const allowedWithCurrent =
-                                        choiceVal && typeof choiceVal === 'string' && !allowedField.includes(choiceVal)
-                                          ? [...allowedField, choiceVal]
-                                          : allowedField;
-                                      const optsField = buildLocalizedOptions(optionSetField, allowedWithCurrent, language, {
-                                        sort: optionSortFor(field)
-                                      });
-                                      if (renderAsLabel) {
-                                        const selected = optsField.find(opt => opt.value === choiceVal);
-                                        return (
-                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {resolveLineItemTableReadOnlyDisplay({
-                                              baseValue: selected?.label || choiceVal,
-                                              field,
-                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                              language
-                                            })}
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          {renderChoiceControl({
-                                            fieldPath,
-                                            value: choiceVal || '',
-                                            options: optsField,
-                                            required: !!field.required,
-                                            placeholder: resolveFieldHelperText({ ui: (field as any)?.ui, language }).placeholderText || undefined,
-                                            searchEnabled: (field as any)?.ui?.choiceSearchEnabled ?? (subUi as any)?.choiceSearchEnabled,
-                                            override: (field as any)?.ui?.control,
-                                            disabled: isLineFieldInputDisabled(field),
-                                            onChange: next => handleLineFieldChange(targetGroup, subRow.id, field, next)
-                                          })}
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
-
-                                    if (field.type === 'CHECKBOX') {
-                                      const hasAnyOption =
-                                        !!((optionSetField.en && optionSetField.en.length) ||
-                                          ((optionSetField as any).fr && (optionSetField as any).fr.length) ||
-                                          ((optionSetField as any).nl && (optionSetField as any).nl.length));
-                                      const isConsentCheckbox = !(field as any).dataSource && !hasAnyOption;
-                                      const selected = Array.isArray(subRow.values[field.id]) ? (subRow.values[field.id] as string[]) : [];
-                                      const allowedWithSelected = selected.reduce((acc, val) => {
-                                        if (val && !acc.includes(val)) acc.push(val);
-                                        return acc;
-                                      }, [...allowedField]);
-                                      const optsField = buildLocalizedOptions(optionSetField, allowedWithSelected, language, { sort: optionSortFor(field) });
-                                      if (renderAsLabel) {
-                                        const labels = isConsentCheckbox
-                                          ? [
-                                              subRow.values[field.id]
-                                                ? tSystem('common.yes', language, 'Yes')
-                                                : tSystem('common.no', language, 'No')
-                                            ]
-                                          : selected.map(val => optsField.find(opt => opt.value === val)?.label || val).filter(Boolean);
-                                        return (
-                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {resolveLineItemTableReadOnlyDisplay({
-                                              baseValue: labels.length ? labels.join(', ') : '',
-                                              field,
-                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                              language
-                                            })}
-                                          </div>
-                                        );
-                                      }
-                                      if (isConsentCheckbox) {
-                                        return (
-                                          <div className="ck-line-item-table__control ck-line-item-table__control--consent" data-field-path={fieldPath}>
-                                            <label className="inline">
-                                              <input
-                                                type="checkbox"
-                                                className="ck-line-item-table__consent-checkbox"
-                                                checked={!!subRow.values[field.id]}
-                                                aria-label={resolveFieldLabel(field, language, field.id)}
-                                                disabled={isLineFieldInputDisabled(field)}
-                                                onChange={e => {
-                                                  if (isLineFieldInputDisabled(field)) return;
-                                                  handleLineFieldChange(targetGroup, subRow.id, field, e.target.checked);
-                                                }}
-                                              />
-                                              <span style={srOnly}>{resolveFieldLabel(field, language, field.id)}</span>
-                                            </label>
-                                            {renderErrors()}
-                                          </div>
-                                        );
-                                      }
-                                      const controlOverride = ((field as any)?.ui?.control || '').toString().trim().toLowerCase();
-                                      const renderAsMultiSelect = controlOverride === 'select';
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          {renderAsMultiSelect ? (
-                                            <select
-                                              multiple
-                                              value={selected}
-                                              disabled={isLineFieldInputDisabled(field)}
-                                              onChange={e => {
-                                                if (isLineFieldInputDisabled(field)) return;
-                                                const next = Array.from(e.currentTarget.selectedOptions)
-                                                  .map(opt => opt.value)
-                                                  .filter(Boolean);
-                                                handleLineFieldChange(targetGroup, subRow.id, field, next);
-                                              }}
-                                            >
-                                              {optsField.map(opt => (
-                                                <option key={opt.value} value={opt.value}>
-                                                  {opt.label}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          ) : (
-                                            <div className="inline-options">
-                                              {optsField.map(opt => (
-                                                <label key={opt.value} className="inline">
-                                                  <input
-                                                    type="checkbox"
-                                                    checked={selected.includes(opt.value)}
-                                                    disabled={isLineFieldInputDisabled(field)}
-                                                    onChange={e => {
-                                                      if (isLineFieldInputDisabled(field)) return;
-                                                      const next = e.target.checked ? [...selected, opt.value] : selected.filter(v => v !== opt.value);
-                                                      handleLineFieldChange(targetGroup, subRow.id, field, next);
-                                                    }}
-                                                  />
-                                                  <span>{opt.label}</span>
-                                                </label>
-                                              ))}
-                                            </div>
-                                          )}
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
-
-                                    if (field.type === 'FILE_UPLOAD') {
-                                      const items = toUploadItems(subRow.values[field.id]);
-                                      const count = items.length;
-                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                      const helperText = helperCfg.text;
-                                      const helperNode = helperText ? <div className="ck-field-helper">{helperText}</div> : null;
-                                      if (renderAsLabel) {
-                                        return (
-                                          <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                            {resolveLineItemTableReadOnlyDisplay({
-                                              baseValue: count ? `${count}` : '',
-                                              field,
-                                              rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                              language
-                                            })}
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              if (submitting) return;
-                                              openFileOverlay({
-                                                scope: 'line',
-                                                title: resolveFieldLabel(field, language, field.id),
-                                                group: q,
-                                                rowId: subRow.id,
-                                                field,
-                                                fieldPath
-                                              });
-                                            }}
-                                            style={buttonStyles.secondary}
-                                            disabled={submitting}
-                            >
-                              {count ? tSystem('files.view', language, 'View photos') : tSystem('files.add', language, 'Add photo')}
-                            </button>
-                            {helperNode}
-                            {renderErrors()}
-                          </div>
-                      );
-                    }
-
-                                    const mapped = field.valueMap
-                                      ? resolveValueMapValue(field.valueMap, fid => {
-                                          if (subRow.values.hasOwnProperty(fid)) return subRow.values[fid];
-                                          return values[fid];
-                                        }, { language, targetOptions: toOptionSet(field) })
-                                      : undefined;
-                                    const fieldValueRaw = field.valueMap ? mapped : ((subRow.values[field.id] as any) ?? '');
-                                    const fieldValue = field.type === 'DATE' ? toDateInputValue(fieldValueRaw) : fieldValueRaw;
-                                    const numberText =
-                                      field.type === 'NUMBER'
-                                        ? fieldValue === undefined || fieldValue === null
-                                          ? ''
-                                          : (fieldValue as any).toString()
-                                        : '';
-                                    if (renderAsLabel) {
-                                      const display =
-                                        field.type === 'NUMBER'
-                                          ? numberText
-                                          : field.type === 'DATE'
-                                            ? fieldValue
-                                            : fieldValue;
-                                      return (
-                                        <div className="ck-line-item-table__value" data-field-path={fieldPath}>
-                                          {resolveLineItemTableReadOnlyDisplay({
-                                            baseValue: display,
-                                            field,
-                                            rowValues: (subRow.values || {}) as Record<string, FieldValue>,
-                                            language
-                                          })}
-                                        </div>
-                                      );
-                                    }
-                                    const isEditableField =
-                                      !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
-                                      (field as any)?.ui?.renderAsLabel !== true &&
-                                      (field as any)?.renderAsLabel !== true &&
-                                      !!(field as any)?.valueMap === false;
-                                    if (field.type === 'NUMBER') {
-                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                      const placeholder =
-                                        helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField
-                                          ? helperCfg.text
-                                          : undefined;
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          <NumberStepper
-                                            value={numberText}
-                                            disabled={isLineFieldInteractionBlocked(field)}
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                            placeholder={placeholder}
-                                            onInvalidInput={
-                                              isEditableField
-                                                ? ({ reason, value }) => {
-                                                    const numericOnlyMessage = tSystem(
-                                                      'validation.numberOnly',
-                                                      language,
-                                                      'Only numbers are allowed in this field.'
-                                                    );
-                                                    setErrors(prev => {
-                                                      const next = { ...prev };
-                                                      const existing = next[fieldPath];
-                                                      if (existing && existing !== numericOnlyMessage) return prev;
-                                                      if (existing === numericOnlyMessage) return prev;
-                                                      next[fieldPath] = numericOnlyMessage;
-                                                      return next;
-                                                    });
-                                                    onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });
-                                                  }
-                                                : undefined
-                                            }
-                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
-                                          />
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
-                                    if (field.type === 'PARAGRAPH') {
-                                      const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                      const placeholder =
-                                        helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField
-                                          ? helperCfg.text
-                                          : undefined;
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          <textarea
-                                            className="ck-paragraph-input"
-                                            value={fieldValue}
-                                            onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            rows={(field as any)?.ui?.paragraphRows || 3}
-                                            placeholder={placeholder}
-                                          />
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
-                                    if (field.type === 'DATE') {
-                                      return (
-                                        <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                          <DateInput
-                                            value={fieldValue}
-                                            language={language}
-                                            min={(field as any)?.ui?.minDate}
-                                            max={(field as any)?.ui?.maxDate}
-                                            correctionMessages={(field as any)?.ui?.dateCorrectionMessages}
-                                            iosNativeCommitMode="deferWhileFocused"
-                                            readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                            ariaLabel={resolveFieldLabel(field, language, field.id)}
-                                            onChange={next => handleLineFieldChange(targetGroup, subRow.id, field, next)}
-                                          />
-                                          {renderErrors()}
-                                        </div>
-                                      );
-                                    }
-                                    const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                    const placeholder =
-                                      helperCfg.text && helperCfg.placement === 'placeholder' && isEditableField ? helperCfg.text : undefined;
-                                    return (
-                                      <div className="ck-line-item-table__control" data-field-path={fieldPath}>
-                                        <input
-                                          type="text"
-                                          value={fieldValue}
-                                          onChange={e => handleLineFieldChange(targetGroup, subRow.id, field, e.target.value)}
-                                          readOnly={!!field.valueMap || isLineFieldInputDisabled(field)}
-                                          placeholder={placeholder}
-                                        />
-                                        {renderErrors()}
-                                      </div>
-                                    );
-                                  };
-
-                                  return [
-                                    ...visibleFields.map(field => ({
-                                      id: field.id,
-                                      label: (() => {
-                                        const labelText = resolveFieldLabel(field, language, field.id);
-                                        const helperCfg = resolveFieldHelperText({ ui: (field as any)?.ui, language });
-                                        const isEditableField =
-                                          !isLineFieldInteractionBlocked(field) && (field as any)?.readOnly !== true &&
-                                          (field as any)?.ui?.renderAsLabel !== true &&
-                                          (field as any)?.renderAsLabel !== true &&
-                                          !!(field as any)?.valueMap === false;
-                                        if (!helperCfg.text || helperCfg.placement !== 'belowLabel' || !isEditableField) return labelText;
-                                        return (
-                                          <div className="ck-line-item-table__header-wrap">
-                                            <div>{labelText}</div>
-                                            <div className="ck-line-item-table__header-helper">{helperCfg.text}</div>
-                                          </div>
-                                        );
-                                      })(),
-                                      style: resolveSubColumnStyle(field.id),
-                                      renderCell: (subRow: any) => renderSubTableField(field, subRow)
-                                    })),
-                                    ...(subHideRemoveColumn
-                                      ? []
-                                      : [
-                                          {
-                                            id: '__remove',
-                                            label: <span style={srOnly}>{tSystem('lineItems.remove', language, 'Remove')}</span>,
-                                            className: 'ck-line-item-table__actions',
-                                            style: resolveSubColumnStyle('__remove'),
-                                            renderCell: (subRow: any) => {
-                                              const subRowSource = parseRowSource((subRow.values as any)?.[ROW_SOURCE_KEY]);
-                                              const subHideRemoveButton = parseRowHideRemove((subRow.values as any)?.[ROW_HIDE_REMOVE_KEY]);
-                                              const allowRemoveAutoSubRows = (sub as any)?.ui?.allowRemoveAutoRows !== false;
-                                              const canRemoveSubRow = !subHideRemoveButton && (allowRemoveAutoSubRows || subRowSource !== 'auto');
-                                              if (!canRemoveSubRow) return null;
-                                              return <LineItemRemoveButton language={language} onRemove={() => removeLineRow(subKey, subRow.id)} />;
-                                            }
-                                          }
-                                        ])
-                                  ];
-                                })())
-                              ]}
-                              rows={orderedSubRows}
-                              emptyText={tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}
-                              rowClassName={(_row, idx) => (idx % 2 === 0 ? 'ck-line-item-table__row--even' : 'ck-line-item-table__row--odd')}
-                            />
-                          </div>
+                          <LineItemSubgroupTableRenderer
+                            parentQuestion={q}
+                            targetGroup={targetGroup}
+                            sub={sub}
+                            subKey={subKey}
+                            subUi={subUi}
+                            subRows={orderedSubRows}
+                            parentRowValues={row.values as Record<string, FieldValue>}
+                            values={values}
+                            lineItems={lineItems}
+                            optionState={optionState}
+                            language={language}
+                            errors={errors}
+                            submitting={submitting}
+                            tableScrollStyle={subTableScrollStyle}
+                            anchorFieldId={subAnchorFieldId}
+                            hideUntilAnchor={subHideUntilAnchor}
+                            hideRemoveColumn={subHideRemoveColumn}
+                            ensureLineOptions={ensureLineOptions}
+                            renderChoiceControl={renderChoiceControl}
+                            handleLineFieldChange={handleLineFieldChange}
+                            isLineFieldInteractionBlocked={isLineFieldInteractionBlocked}
+                            isLineFieldInputDisabled={isLineFieldInputDisabled}
+                            renderWarnings={renderWarnings}
+                            openFileOverlay={openFileOverlay}
+                            removeLineRow={removeLineRow}
+                            setErrors={setErrors}
+                            onDiagnostic={onDiagnostic}
+                          />
                         ) : (
                         orderedSubRows.map((subRow, subIdx) => {
                           const subCtx: VisibilityContext = {
