@@ -4662,6 +4662,93 @@ describe('WebFormService', () => {
     expect(bumpSpy).not.toHaveBeenCalled();
   });
 
+  test('saveSubmissionWithId status-only close does not overwrite saved record fields', () => {
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-STATUS-ONLY-CLOSE',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([{ __ckRowId: 'ROW-1', LI1: 'Soup', LI2: 2 }]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const fullSaveSpy = jest.spyOn((service as any).submissions, 'saveSubmissionWithId');
+    const closed = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-STATUS-ONLY-CLOSE',
+      values: { status: 'Closed' },
+      status: 'Closed',
+      __ckStatus: 'Closed',
+      __ckStatusOnlyClose: '1',
+      __ckClientDataVersion: created.meta.dataVersion
+    } as any);
+
+    expect(closed.success).toBe(true);
+    expect(closed.meta).toEqual(expect.objectContaining({
+      id: 'REC-STATUS-ONLY-CLOSE',
+      status: 'Closed',
+      statusOnlyClose: true
+    }));
+    expect(fullSaveSpy).not.toHaveBeenCalled();
+
+    const record = service.fetchSubmissionById('Config: Delivery', 'REC-STATUS-ONLY-CLOSE') as any;
+    expect(record.values.Q1).toBe('Alice');
+    expect(record.values.Q4).toBe('ACME');
+    expect(record.status).toBe('Closed');
+    expect(Number(record.dataVersion)).toBeGreaterThan(Number(created.meta.dataVersion));
+    fullSaveSpy.mockRestore();
+  });
+
+  test('saveSubmissionWithId status-only close rejects stale client versions', () => {
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-STATUS-ONLY-STALE',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+    const updated = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-STATUS-ONLY-STALE',
+      Q1: 'Alice Updated',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckClientDataVersion: created.meta.dataVersion
+    } as any);
+    expect(updated.success).toBe(true);
+
+    const closed = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-STATUS-ONLY-STALE',
+      values: { status: 'Closed' },
+      status: 'Closed',
+      __ckStatus: 'Closed',
+      __ckStatusOnlyClose: '1',
+      __ckClientDataVersion: created.meta.dataVersion
+    } as any);
+
+    expect(closed.success).toBe(false);
+    expect(closed.message).toContain('modified by another user');
+    const record = service.fetchSubmissionById('Config: Delivery', 'REC-STATUS-ONLY-STALE') as any;
+    expect(record.values.Q1).toBe('Alice Updated');
+    expect(record.status).toBe('In progress');
+  });
+
   test('saveSubmissionWithId accepts compact values-only payloads', () => {
     const result = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',

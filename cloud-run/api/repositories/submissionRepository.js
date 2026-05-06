@@ -969,6 +969,108 @@ class GoogleSheetsSubmissionRepository {
     return conflict ? { success: true, conflict } : { success: true };
   }
 
+  async saveStatusOnlyWithId(formObject) {
+    const payload = formObject && typeof formObject === 'object' ? formObject : {};
+    const formKey = (payload.formKey || payload.form || '').toString();
+    const recordId = (payload.id || '').toString().trim();
+    const explicitStatus = (payload.__ckStatus || payload.status || '').toString().trim();
+    if (!recordId) {
+      return { success: false, message: 'Record ID is required.', meta: {} };
+    }
+    if (!explicitStatus) {
+      return { success: false, message: 'Status is required.', meta: { id: recordId } };
+    }
+
+    const sheet = await this.loadSheet(formKey);
+    if (sheet.columns.recordId === undefined) {
+      throw new Error(`Destination tab ${sheet.destinationTab} is missing the Record ID header.`);
+    }
+    const existingIndex = this.findRecordDataRowIndex(sheet, recordId);
+    if (existingIndex < 0) {
+      return { success: false, message: 'Record not found.', meta: { id: recordId } };
+    }
+
+    const existingRow = sheet.dataRows[existingIndex] || [];
+    const destinationRowNumber = existingIndex + 2;
+    const previousVersion = toNumber(this.value(existingRow, sheet.columns.dataVersion)) || 0;
+    const clientVersion = payload.__ckClientDataVersion === undefined || payload.__ckClientDataVersion === null
+      ? Number.NaN
+      : Number(payload.__ckClientDataVersion);
+    if (
+      previousVersion > 0 &&
+      Number.isFinite(clientVersion) &&
+      clientVersion > 0 &&
+      clientVersion < previousVersion
+    ) {
+      return {
+        success: false,
+        message: 'This record was modified by another user. Please refresh.',
+        meta: {
+          id: recordId,
+          dataVersion: previousVersion,
+          updatedAt: this.value(existingRow, sheet.columns.updatedAt),
+          rowNumber: destinationRowNumber
+        }
+      };
+    }
+
+    const nextRow = normalizeRowValues(existingRow, sheet.headers.length);
+    const setIf = (idx, value) => {
+      if (idx === undefined) return;
+      nextRow[idx] = value === undefined || value === null ? '' : value;
+    };
+    const statusFieldId = sheet.form.followupConfig && sheet.form.followupConfig.statusFieldId;
+    const statusFieldIdx = statusFieldId ? sheet.columns.fields[statusFieldId] : undefined;
+    const statusIdx = statusFieldIdx !== undefined ? statusFieldIdx : sheet.columns.status;
+    setIf(statusIdx, explicitStatus);
+
+    const now = new Date().toISOString();
+    const createdAt = this.value(existingRow, sheet.columns.createdAt) || now;
+    setIf(sheet.columns.timestamp, now);
+    setIf(sheet.columns.updatedAt, now);
+    setIf(sheet.columns.dataVersion, previousVersion + 1);
+
+    await this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, destinationRowNumber, nextRow);
+
+    const meta = {
+      id: recordId,
+      createdAt,
+      updatedAt: now,
+      dataVersion: previousVersion + 1,
+      rowNumber: destinationRowNumber,
+      operation: 'update',
+      statusOnlyClose: true
+    };
+    try {
+      const candidateRecord = this.buildRecord(sheet, nextRow, destinationRowNumber);
+      const candidateValues = (candidateRecord && candidateRecord.values) || {};
+      const dedupRules = this.getDedupRules(sheet.formKey);
+      const dedupSignatures = {};
+      recordIndexDedupRules(dedupRules).forEach(rule => {
+        const signature = computeDedupSignature(rule, candidateValues);
+        if (!signature) return;
+        dedupSignatures[(rule.id || '').toString()] = signature;
+      });
+      await this.writeRecordIndexRow(sheet, {
+        rowNumber: destinationRowNumber,
+        recordId,
+        dataVersion: previousVersion + 1,
+        updatedAtIso: now,
+        createdAtIso: createdAt,
+        dedupRules,
+        dedupSignatures
+      });
+    } catch {
+      // The destination row is authoritative; index maintenance is best-effort in the Cloud Run adapter.
+    }
+
+    return {
+      success: true,
+      message: 'Record closed.',
+      meta
+    };
+  }
+
   async saveSubmissionWithId(formObject) {
     const payload = formObject && typeof formObject === 'object' ? formObject : {};
     const formKey = (payload.formKey || payload.form || '').toString();

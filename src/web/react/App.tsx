@@ -1326,6 +1326,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const editAt = Date.now();
           lastUserInteractionRef.current = editAt;
           lastLocalRecordMutationAtRef.current = editAt;
+          const activeRecordId =
+            (selectedRecordIdRef.current || selectedRecordSnapshotRef.current?.id || lastSubmissionMetaRef.current?.id || '')
+              .toString()
+              .trim();
+          if (activeRecordId) {
+            completedReservationReconciliationByRecordRef.current.delete(activeRecordId);
+          }
 
           // Mark dirty immediately on user edits so navigation handlers can flush autosave
           // even if the debounced autosave effect hasn't run yet.
@@ -2015,6 +2022,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     >
   >(new Map());
   const pendingFollowupStatusByRecordRef = useRef<Map<string, string>>(new Map());
+  const completedReservationReconciliationByRecordRef = useRef<Map<string, number>>(new Map());
   const applyPendingFollowupStatusesToRecordCache = useCallback(
     (records: Record<string, WebFormSubmission>): Record<string, WebFormSubmission> => {
       const pending = pendingFollowupStatusByRecordRef.current;
@@ -9039,6 +9047,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('followup.batch.error', { action, recordId: args.recordId, message: msg, reason: args.reason });
           continue;
         }
+        if (action === 'RECONCILE_RESERVATIONS') {
+          completedReservationReconciliationByRecordRef.current.set(args.recordId, Date.now());
+        }
         const cachedRecordForMeta =
           selectedRecordSnapshotRef.current?.id === args.recordId
             ? selectedRecordSnapshotRef.current
@@ -9487,6 +9498,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         language?: LangCode;
       };
       force?: boolean;
+      statusOnlyWhenClean?: boolean;
+      skipReservationReconciliationWhenAlreadyDone?: boolean;
     }): Promise<{ success: boolean; response?: any; payload?: any; recordId?: string; message?: string }> => {
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
@@ -9553,38 +9566,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const snapshotLineItems = args.snapshotOverride?.lineItems || lineItemsRef.current;
       const snapshotLanguage = args.snapshotOverride?.language || languageRef.current;
       const localMutationAtSnapshotStart = lastLocalRecordMutationAtRef.current || 0;
-      const payloadSource = applyUploadedFieldOverrides({
-        values: snapshotValues,
-        lineItems: snapshotLineItems
-      });
-      const valuesForPayload = ingredientsFormActive
-        ? applyIngredientActivationSystemFields(payloadSource.values as any)
-        : payloadSource.values;
-      const payload = applyUploadedFieldPayloadOverrides(
-        args.mode === 'submit'
-          ? await buildSubmissionPayload({
-              definition,
-              formKey,
-              language: snapshotLanguage,
-              values: valuesForPayload,
-              lineItems: payloadSource.lineItems,
-              existingRecordId: args.existingRecordId,
-              collapsedRows: args.collapsedRows,
-              collapsedSubgroups: args.collapsedSubgroups
-            })
-          : buildDraftPayload({
-              definition,
-              formKey,
-              language: snapshotLanguage,
-              values: valuesForPayload,
-              lineItems: payloadSource.lineItems,
-              existingRecordId: args.existingRecordId
-            })
-      );
-      if (args.mode === 'draft') {
-        (payload as any).__ckSaveMode = 'draft';
-        (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
-      }
       const nextStatus =
         (args.statusOverride || '').toString().trim() ||
         (args.mode === 'draft'
@@ -9593,6 +9574,84 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 '')
             )
           : '');
+      const baseVersion = recordDataVersionRef.current;
+      const currentStateFingerprint = buildPersistedDraftStateFingerprint({
+        language: snapshotLanguage,
+        values: snapshotValues,
+        lineItems: snapshotLineItems
+      });
+      const canUseStatusOnlyClose =
+        args.mode === 'submit' &&
+        args.statusOnlyWhenClean === true &&
+        !args.snapshotOverride &&
+        !!args.existingRecordId &&
+        !!nextStatus &&
+        !recordStaleRef.current &&
+        !autoSaveDirtyRef.current &&
+        !autoSaveQueuedRef.current &&
+        !autoSaveInFlightRef.current &&
+        !draftSaveRequestInFlightRef.current &&
+        currentStateFingerprint === lastAutoSaveStateFingerprintRef.current;
+
+      let payload: any;
+      if (canUseStatusOnlyClose) {
+        const statusOnlyRecordId = (args.existingRecordId || '').toString();
+        payload = {
+          formKey,
+          language: snapshotLanguage,
+          id: statusOnlyRecordId,
+          values: {
+            status: nextStatus
+          },
+          status: nextStatus,
+          __ckStatus: nextStatus,
+          __ckStatusOnlyClose: '1'
+        };
+        if (
+          args.skipReservationReconciliationWhenAlreadyDone === true &&
+          completedReservationReconciliationByRecordRef.current.has(statusOnlyRecordId)
+        ) {
+          payload.__ckSkipReservationReconciliation = '1';
+        }
+        logEvent('snapshot.save.statusOnlyClose', {
+          reason: args.reason,
+          recordId: statusOnlyRecordId,
+          skipReservationReconciliation: payload.__ckSkipReservationReconciliation === '1'
+        });
+      } else {
+        const payloadSource = applyUploadedFieldOverrides({
+          values: snapshotValues,
+          lineItems: snapshotLineItems
+        });
+        const valuesForPayload = ingredientsFormActive
+          ? applyIngredientActivationSystemFields(payloadSource.values as any)
+          : payloadSource.values;
+        payload = applyUploadedFieldPayloadOverrides(
+          args.mode === 'submit'
+            ? await buildSubmissionPayload({
+                definition,
+                formKey,
+                language: snapshotLanguage,
+                values: valuesForPayload,
+                lineItems: payloadSource.lineItems,
+                existingRecordId: args.existingRecordId,
+                collapsedRows: args.collapsedRows,
+                collapsedSubgroups: args.collapsedSubgroups
+              })
+            : buildDraftPayload({
+                definition,
+                formKey,
+                language: snapshotLanguage,
+                values: valuesForPayload,
+                lineItems: payloadSource.lineItems,
+                existingRecordId: args.existingRecordId
+              })
+        );
+        if (args.mode === 'draft') {
+          (payload as any).__ckSaveMode = 'draft';
+          (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
+        }
+      }
       if (nextStatus) {
         (payload as any).__ckStatus = nextStatus;
         (payload as any).values = {
@@ -9600,7 +9659,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           status: nextStatus
         };
       }
-      const baseVersion = recordDataVersionRef.current;
       if (args.existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
         (payload as any).__ckClientDataVersion = Number(baseVersion);
       }
@@ -9746,6 +9804,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       applySuccessfulSubmissionState,
       applyUploadedFieldPayloadOverrides,
       applyUploadedFieldOverrides,
+      buildPersistedDraftStateFingerprint,
       clearSaveFailureStatusAfterSuccessfulSave,
       definition,
       formKey,
@@ -11236,7 +11295,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reason: `${reason}.primaryClose`,
             mode: 'submit',
             existingRecordId: recordId,
-            statusOverride: closeStatus
+            statusOverride: closeStatus,
+            statusOnlyWhenClean: true,
+            skipReservationReconciliationWhenAlreadyDone: true
           });
           if (!submitResult.success || !submitResult.recordId || !submitResult.response?.success) {
             const message = (
@@ -12541,7 +12602,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         existingRecordId,
         statusOverride: closeStatusForPrimarySubmit || undefined,
         collapsedRows: submitUi?.collapsedRows,
-        collapsedSubgroups: submitUi?.collapsedSubgroups
+        collapsedSubgroups: submitUi?.collapsedSubgroups,
+        statusOnlyWhenClean: closeOnlyPreActions,
+        skipReservationReconciliationWhenAlreadyDone: closeOnlyPreActions
       });
       perfMark(submitRpcEndMark);
       perfMeasure('ck.submit.rpc', submitRpcStartMark, submitRpcEndMark, {

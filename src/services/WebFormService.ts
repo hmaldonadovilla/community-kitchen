@@ -106,6 +106,7 @@ import {
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
 import { HeaderColumns } from './webform/types';
+import { resolveStatusTransitionValue } from '../domain/statusTransitions';
 import {
   shiftIsoDate as shiftLifecycleIsoDate,
   shouldApplyLifecycleStatusDateRule
@@ -118,6 +119,12 @@ const HOME_BOOTSTRAP_CHUNK_SIZE = 95 * 1024; // Keep margin under CacheService ~
 const HOME_BOOTSTRAP_MAX_CHUNKS = 24;
 const HOME_BOOTSTRAP_CACHE_SCHEMA_VERSION = 'v2';
 const HOME_BOOTSTRAP_LIST_MAX_ITEMS = 200;
+
+const isTruthyMutationFlag = (value: any): boolean => {
+  if (value === true || value === 1) return true;
+  const normalized = (value === undefined || value === null ? '' : value.toString()).trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+};
 const FOLLOWUP_LANE_PROPERTY_PREFIX = 'CK_FOLLOWUP_LANE_';
 const FOLLOWUP_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const FOLLOWUP_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
@@ -4684,6 +4691,232 @@ export class WebFormService {
     });
   }
 
+  private isStatusOnlyClosePayload(form: FormConfig, formObject: WebFormSubmission): boolean {
+    if (!isTruthyMutationFlag((formObject as any).__ckStatusOnlyClose)) return false;
+    const recordId = ((formObject as any).id || '').toString().trim();
+    if (!recordId) return false;
+    const requestedStatus = ((formObject as any).__ckStatus || (formObject as any).status || '').toString().trim();
+    if (!requestedStatus) return false;
+    const closeStatus = (
+      resolveStatusTransitionValue(form.followupConfig?.statusTransitions, 'onClose', (formObject as any).language, {
+        includeDefaultOnClose: true
+      }) || 'Closed'
+    ).toString().trim().toLowerCase();
+    return requestedStatus.toLowerCase() === closeStatus;
+  }
+
+  private validateStatusOnlyClientVersion(
+    context: { record?: WebFormSubmission | null },
+    formObject: WebFormSubmission
+  ): { ok: boolean; message?: string; dataVersion?: number; updatedAt?: string } {
+    const clientRaw = (formObject as any).__ckClientDataVersion;
+    const clientVersion = clientRaw === undefined || clientRaw === null ? Number.NaN : Number(clientRaw);
+    const serverVersion = Number((context.record as any)?.dataVersion);
+    if (
+      Number.isFinite(clientVersion) &&
+      clientVersion > 0 &&
+      Number.isFinite(serverVersion) &&
+      serverVersion > 0 &&
+      clientVersion < serverVersion
+    ) {
+      return {
+        ok: false,
+        message: 'This record was modified by another user. Please refresh.',
+        dataVersion: serverVersion,
+        updatedAt: context.record?.updatedAt
+      };
+    }
+    return { ok: true };
+  }
+
+  private saveStatusOnlyCloseWithIdDirect(
+    formObject: WebFormSubmission,
+    form: FormConfig,
+    questions: QuestionConfig[],
+    formKey: string,
+    recordId: string
+  ): { success: boolean; message: string; meta: any } {
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedRecordId) {
+      return {
+        success: false,
+        message: 'Record ID is required.',
+        meta: {}
+      };
+    }
+    const context = this.submissions.getRecordContext(form, questions, normalizedRecordId);
+    if (!context?.record) {
+      return {
+        success: false,
+        message: 'Record not found.',
+        meta: {
+          id: normalizedRecordId
+        }
+      };
+    }
+    const versionCheck = this.validateStatusOnlyClientVersion(context, formObject);
+    if (!versionCheck.ok) {
+      return {
+        success: false,
+        message: versionCheck.message || 'This record was modified by another user. Please refresh.',
+        meta: {
+          id: normalizedRecordId,
+          dataVersion: versionCheck.dataVersion,
+          updatedAt: versionCheck.updatedAt,
+          rowNumber: context.rowIndex
+        }
+      };
+    }
+
+    const closeStartedAt = Date.now();
+    const closeResult = this.followups.triggerFollowupAction(form, questions, normalizedRecordId, 'CLOSE_RECORD');
+    if (!closeResult?.success) {
+      return {
+        success: false,
+        message: closeResult?.message || 'Failed to close record.',
+        meta: {
+          id: normalizedRecordId
+        }
+      };
+    }
+
+    const closeStatus = (
+      closeResult.status ||
+      resolveStatusTransitionValue(form.followupConfig?.statusTransitions, 'onClose', context.record.language, {
+        includeDefaultOnClose: true
+      }) ||
+      'Closed'
+    ).toString().trim();
+    const submitEffectsStartedAt = Date.now();
+    const submitEffectsResult = this.applySubmitEffectsForCurrentRecordState({
+      form,
+      questions,
+      formKey,
+      recordId: normalizedRecordId,
+      operation: 'update',
+      statusOverride: closeStatus,
+      updatedAt: closeResult.updatedAt
+    });
+    if (!submitEffectsResult.success) {
+      return {
+        success: false,
+        message: submitEffectsResult.message || 'Record closed but failed to apply submit effects.',
+        meta: {
+          id: normalizedRecordId,
+          status: closeStatus,
+          updatedAt: closeResult.updatedAt,
+          dataVersion: closeResult.dataVersion,
+          rowNumber: closeResult.rowNumber,
+          submitEffects: submitEffectsResult.meta || undefined,
+          sourceSaved: true,
+          statusOnlyClose: true
+        }
+      };
+    }
+
+    debugLog('saveSubmission.statusOnlyClose.submitEffects.done', {
+      formKey,
+      recordId: normalizedRecordId,
+      durationMs: Date.now() - submitEffectsStartedAt,
+      configured: Number(submitEffectsResult.meta?.configured || 0) || 0,
+      executed: Number(submitEffectsResult.meta?.executed || 0) || 0,
+      created: Number(submitEffectsResult.meta?.created || 0) || 0,
+      updated: Number(submitEffectsResult.meta?.updated || 0) || 0
+    });
+
+    const skipReservationReconciliation = isTruthyMutationFlag((formObject as any).__ckSkipReservationReconciliation);
+    const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, closeStatus);
+    let reservationReconciliation: any = undefined;
+    if (reconcileOnFinalSubmit.enabled) {
+      const reconcileStartedAt = Date.now();
+      if (skipReservationReconciliation) {
+        const skipped = this.buildSkippedReservationReconciliationResult(normalizedRecordId);
+        reservationReconciliation = skipped.reservationReconciliation;
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.skipped', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reason: 'clientKnownReconciled'
+        });
+      } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, normalizedRecordId)) {
+        const skipped = this.buildSkippedReservationReconciliationResult(normalizedRecordId);
+        reservationReconciliation = skipped.reservationReconciliation;
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.skipped', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reason: 'noReservationSelections'
+        });
+      } else {
+        const reconcileResult = this.reconcileInventoryReservations({
+          sourceFormKey: formKey,
+          sourceRecordId: normalizedRecordId,
+          ledgerFormKey: reconcileOnFinalSubmit.ledgerFormKey,
+          refreshMode: reconcileOnFinalSubmit.refreshMode
+        });
+        if (!reconcileResult.success) {
+          return {
+            success: false,
+            message: reconcileResult.message || 'Record closed but failed to reconcile active reservations.',
+            meta: {
+              id: normalizedRecordId,
+              status: closeStatus,
+              updatedAt: closeResult.updatedAt,
+              dataVersion: closeResult.dataVersion,
+              rowNumber: closeResult.rowNumber,
+              reservationReconciliation: {
+                success: false,
+                sourceRecordId: normalizedRecordId
+              },
+              submitEffects: submitEffectsResult.meta || undefined,
+              sourceSaved: true,
+              statusOnlyClose: true
+            }
+          };
+        }
+        reservationReconciliation = {
+          success: true,
+          sourceRecordId: normalizedRecordId,
+          reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
+          consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
+          releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
+          touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
+        };
+        debugLog('saveSubmission.statusOnlyClose.reservationReconcile.done', {
+          formKey,
+          recordId: normalizedRecordId,
+          durationMs: Date.now() - reconcileStartedAt,
+          reconciledReservations: reservationReconciliation.reconciledReservations,
+          touchedInventoryRecords: reservationReconciliation.touchedInventoryRecords
+        });
+      }
+    }
+
+    this.refreshMutationCaches(form, questions, 'saveSubmissionWithId.statusOnlyClose', 'revisionOnly');
+    debugLog('saveSubmission.statusOnlyClose.done', {
+      formKey,
+      recordId: normalizedRecordId,
+      durationMs: Date.now() - closeStartedAt,
+      dataVersion: closeResult.dataVersion || null
+    });
+
+    return {
+      success: true,
+      message: 'Record closed.',
+      meta: {
+        id: normalizedRecordId,
+        status: closeStatus,
+        updatedAt: closeResult.updatedAt,
+        dataVersion: closeResult.dataVersion,
+        rowNumber: closeResult.rowNumber,
+        operation: 'update',
+        reservationReconciliation,
+        submitEffects: submitEffectsResult.meta || undefined,
+        statusOnlyClose: true
+      }
+    };
+  }
+
   public saveSubmissionWithId(formObject: WebFormSubmission): { success: boolean; message: string; meta: any } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const recordId = this.ensureMutationRecordId(formObject);
@@ -4713,6 +4946,9 @@ export class WebFormService {
     const recordId = this.ensureMutationRecordId(formObject);
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
+    if (this.isStatusOnlyClosePayload(form, formObject)) {
+      return this.saveStatusOnlyCloseWithIdDirect(formObject, form, questions, formKey, recordId);
+    }
     const result = this.saveSubmissionRecordWithRetry({
       formKey,
       recordId,
@@ -4775,7 +5011,19 @@ export class WebFormService {
       const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, nextStatus);
       if (savedRecordId && !deleteRecordId && reconcileOnFinalSubmit.enabled) {
         const reconcileStartedAt = Date.now();
-        if (!this.shouldRunReservationReconciliationForRecord(form, formKey, savedRecordId, formObject)) {
+        if (isTruthyMutationFlag((formObject as any).__ckSkipReservationReconciliation)) {
+          const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
+          result.meta = {
+            ...(result.meta || {}),
+            reservationReconciliation: skipped.reservationReconciliation
+          };
+          debugLog('saveSubmission.reservationReconcile.skipped', {
+            formKey,
+            recordId: savedRecordId,
+            durationMs: Date.now() - reconcileStartedAt,
+            reason: 'clientKnownReconciled'
+          });
+        } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, savedRecordId, formObject)) {
           const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
           result.meta = {
             ...(result.meta || {}),
@@ -4841,7 +5089,8 @@ export class WebFormService {
           questions,
           formKey,
           formObject,
-          saveResult: result
+          saveResult: result,
+          refreshMode: 'revisionOnly'
         });
         if (!submitEffectsResult.success) {
           return {
@@ -4935,6 +5184,9 @@ export class WebFormService {
       return 'none';
     }
     if (saveMode === 'draft') {
+      return 'revisionOnly';
+    }
+    if (isTruthyMutationFlag((formObject as any).__ckStatusOnlyClose) || result?.meta?.submitEffects) {
       return 'revisionOnly';
     }
     return 'full';

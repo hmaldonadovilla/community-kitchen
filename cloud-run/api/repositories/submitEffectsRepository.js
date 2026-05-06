@@ -19,6 +19,24 @@ const isPlainObject = value => Boolean(value && typeof value === 'object' && !Ar
 
 const isTruthyFlag = value => value === true || value === 'true' || value === '1' || value === 1;
 
+const resolveLocalizedTextValue = (value, language, fallback = '') => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'string') return value.trim() || fallback;
+  if (typeof value !== 'object' || Array.isArray(value)) return value.toString();
+  const key = (language || 'EN').toString().trim().toLowerCase();
+  return (
+    value[key] ||
+    value[key.toUpperCase()] ||
+    value.en ||
+    value.EN ||
+    value.fr ||
+    value.FR ||
+    value.nl ||
+    value.NL ||
+    fallback
+  );
+};
+
 const normalizeLanguage = raw => {
   const value = Array.isArray(raw) ? raw[raw.length - 1] || raw[0] : raw;
   const language = (value || 'EN').toString().trim().toUpperCase();
@@ -548,6 +566,21 @@ class SubmitEffectsRepository {
     return { enabled: true, ledgerFormKey: toText(ledgerFormKey) || DEFAULT_LEDGER_FORM_KEY, refreshMode };
   }
 
+  isStatusOnlyClosePayload(form, payload) {
+    if (!isTruthyFlag(payload && payload.__ckStatusOnlyClose)) return false;
+    if (!toText(payload && payload.id)) return false;
+    const requestedStatus = toText((payload && payload.__ckStatus) || (payload && payload.status));
+    if (!requestedStatus) return false;
+    const closeStatus =
+      toText(resolveLocalizedTextValue(
+        form && form.followupConfig && form.followupConfig.statusTransitions && form.followupConfig.statusTransitions.onClose,
+        payload && payload.language,
+        ''
+      )) ||
+      'Closed';
+    return requestedStatus.toLowerCase() === closeStatus.toLowerCase();
+  }
+
   inferReservationFieldId(outputKeyFieldId, suffix) {
     const key = toText(outputKeyFieldId);
     const base = key.endsWith('_ID') ? key.slice(0, -3) : key;
@@ -692,6 +725,13 @@ class SubmitEffectsRepository {
           : '';
     const reconcileConfig = this.shouldReconcileReservations(form, nextStatus);
     if (savedRecordId && !deleteRecordId && reconcileConfig.enabled) {
+      if (isTruthyFlag(formObject && formObject.__ckSkipReservationReconciliation)) {
+        result.meta = {
+          ...(result.meta || {}),
+          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
+        };
+        return result;
+      }
       if (!this.recordHasReservationSelections(form, formObject)) {
         result.meta = {
           ...(result.meta || {}),
@@ -729,6 +769,67 @@ class SubmitEffectsRepository {
       };
     }
     return result;
+  }
+
+  async saveStatusOnlyCloseWithId(payload, context) {
+    const recordId = toText(payload && payload.id);
+    const closeStatus = toText((payload && payload.__ckStatus) || (payload && payload.status)) || 'Closed';
+    const sourceRecord = await this.submissionRepository.fetchSubmissionById(context.formKey, recordId);
+    if (!sourceRecord) {
+      return { success: false, message: 'Record not found.', meta: { id: recordId } };
+    }
+    const sourcePayload = {
+      ...sourceRecord,
+      formKey: context.formKey,
+      language: normalizeLanguage(sourceRecord.language),
+      id: recordId,
+      values: cloneJson(sourceRecord.values || {}),
+      status: closeStatus,
+      __ckStatus: closeStatus,
+      __ckStatusOnlyClose: '1',
+      __ckSkipSubmitEffects: '1',
+      __ckClientDataVersion: payload && payload.__ckClientDataVersion
+    };
+    if (isTruthyFlag(payload && payload.__ckSkipReservationReconciliation)) {
+      sourcePayload.__ckSkipReservationReconciliation = '1';
+    }
+    const statusResult = await this.submissionRepository.saveStatusOnlyWithId(sourcePayload);
+    if (!statusResult || !statusResult.success) return statusResult;
+
+    const lifecycleResult = await this.applyReservationLifecycle(
+      context.form,
+      context.formKey,
+      sourcePayload,
+      statusResult
+    );
+    if (!lifecycleResult || !lifecycleResult.success) return lifecycleResult;
+
+    const submitEffectsResult = await this.applySubmitEffects({
+      form: context.form,
+      questions: context.questions,
+      formKey: context.formKey,
+      formObject: sourcePayload,
+      saveResult: lifecycleResult
+    });
+    if (!submitEffectsResult.success) {
+      return {
+        success: false,
+        message: submitEffectsResult.message || lifecycleResult.message,
+        meta: {
+          ...(lifecycleResult.meta || {}),
+          submitEffects: submitEffectsResult.meta || undefined,
+          sourceSaved: true,
+          statusOnlyClose: true
+        }
+      };
+    }
+    lifecycleResult.meta = {
+      ...(lifecycleResult.meta || {}),
+      submitEffects: submitEffectsResult.meta || undefined,
+      status: closeStatus,
+      statusOnlyClose: true
+    };
+    return lifecycleResult;
   }
 
   async applySubmitEffects(args) {
@@ -823,6 +924,9 @@ class SubmitEffectsRepository {
     }
     const formKey = toText(payload.formKey || payload.form);
     const context = this.getFormContext(formKey);
+    if (this.isStatusOnlyClosePayload(context.form, payload)) {
+      return this.saveStatusOnlyCloseWithId(payload, context);
+    }
     const sourcePayload = { ...payload, __ckSkipSubmitEffects: true };
     const result = await this.submissionRepository.saveSubmissionWithId(sourcePayload);
     if (!result || !result.success) return result;
