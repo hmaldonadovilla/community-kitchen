@@ -18,7 +18,6 @@ import {
   LineItemGroupConfigOverride,
   LineItemRowState,
   OptionSet,
-  RowFlowActionRef,
   RowFlowConfig,
   RowFlowOverlayContextHeaderConfig,
   VisibilityContext,
@@ -124,6 +123,7 @@ import { useLineItemAutoAddEffects } from '../../features/lineItems/hooks/useLin
 import { useGuidedStepDataSourceState } from '../../features/lineItems/hooks/useGuidedStepDataSourceState';
 import { useLineItemGroupPresentationState } from '../../features/lineItems/hooks/useLineItemGroupPresentationState';
 import { useLineItemSelectionEffectInit } from '../../features/lineItems/hooks/useLineItemSelectionEffectInit';
+import { useRowFlowGroupOutputState } from '../../features/lineItems/hooks/useRowFlowGroupOutputState';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
   LineItemGroupQuestionProps
@@ -140,7 +140,6 @@ import { applyValueMapsToForm } from '../../app/valueMaps';
 import {
   resolveRowFlowActionPlan,
   resolveRowFlowFieldTarget,
-  resolveRowFlowSegmentActionIds,
   resolveRowFlowState,
   type RowFlowResolvedEffect,
   type RowFlowResolvedSegment,
@@ -2634,79 +2633,25 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
           );
         }
 
-        const outputActionsLayout = rowFlow?.output?.actionsLayout === 'below' ? 'below' : 'inline';
-        const defaultActionScope = rowFlow?.output?.actionsScope === 'group' ? 'group' : 'row';
-        const resolveOutputActionScope = (action: RowFlowActionRef): 'row' | 'group' =>
-          action.scope === 'group' || action.scope === 'row' ? action.scope : defaultActionScope;
-        const hasGroupActions = (rowFlow?.output?.actions || []).some(action => resolveOutputActionScope(action) === 'group');
-        const syntheticGroupRow =
-          rowFlowEnabled && hasGroupActions && parentRows.length === 0
-            ? ({ id: '__rowFlowGroup__', values: {} as Record<string, FieldValue> } as LineItemRowState)
-            : null;
-        const syntheticGroupState =
-          syntheticGroupRow && rowFlow
-            ? resolveRowFlowState({
-                config: rowFlow as RowFlowConfig,
-                groupId: q.id,
-                rowId: syntheticGroupRow.id,
-                rowValues: syntheticGroupRow.values,
-                lineItems,
-                topValues: values,
-                subGroupIds: rowFlowSubGroupIds,
-                activeFieldPath: activeFieldMeta.path,
-                activeFieldType: activeFieldMeta.type
-              })
-            : null;
-        const groupActionRow = hasGroupActions ? parentRows[0] || syntheticGroupRow : null;
-        const groupActionState =
-          groupActionRow && rowFlowEnabled
-            ? parentRows.length
-              ? rowFlowStateByRowId.get(groupActionRow.id) || null
-              : syntheticGroupState
-            : null;
-        if (rowFlowEnabled && hasGroupActions) {
-          const scopeLogKey = `${q.id}::rowFlow::actionsScope`;
-          if (!rowFlowLoggedRef.current.has(scopeLogKey)) {
-            rowFlowLoggedRef.current.add(scopeLogKey);
-            onDiagnostic?.('lineItems.rowFlow.output.actionsScope', { groupId: q.id, scope: 'group' });
-          }
-        }
-        if (rowFlowEnabled && (rowFlow?.output?.segments || []).length) {
-          const segmentLayouts = (rowFlow?.output?.segments || []).map(segment => ({
-            fieldRef: segment?.fieldRef || '',
-            type: (segment?.type || 'field').toString(),
-            layout: (segment?.layout || 'inline').toString()
-          }));
-          const blockSegments = segmentLayouts.filter(segment => segment.layout.toLowerCase() === 'block');
-          if (blockSegments.length) {
-            const layoutLogKey = `${q.id}::rowFlow::segmentLayouts`;
-            if (!rowFlowLoggedRef.current.has(layoutLogKey)) {
-              rowFlowLoggedRef.current.add(layoutLogKey);
-              onDiagnostic?.('lineItems.rowFlow.output.segmentLayouts', {
-                groupId: q.id,
-                blockSegments: blockSegments.length,
-                segmentLayouts
-              });
-            }
-          }
-          const segmentLogKey = `${q.id}::rowFlow::segmentActions`;
-          if (!rowFlowLoggedRef.current.has(segmentLogKey)) {
-            const segmentActions = (rowFlow?.output?.segments || []).map(segment =>
-              resolveRowFlowSegmentActionIds(segment)
-            );
-            const segmentsWithActions = segmentActions.filter(ids => ids.length > 0);
-            if (segmentsWithActions.length) {
-              rowFlowLoggedRef.current.add(segmentLogKey);
-              const multiActionSegments = segmentActions.filter(ids => ids.length > 1).length;
-              onDiagnostic?.('lineItems.rowFlow.output.segmentActions', {
-                groupId: q.id,
-                segmentsWithActions: segmentsWithActions.length,
-                multiActionSegments,
-                segmentLayouts
-              });
-            }
-          }
-        }
+        const {
+          outputActionsLayout,
+          defaultActionScope,
+          resolveOutputActionScope,
+          groupActionRow,
+          groupActionState
+        } = useRowFlowGroupOutputState({
+          groupId: q.id,
+          rowFlow,
+          rowFlowEnabled,
+          parentRows,
+          lineItems,
+          values,
+          rowFlowSubGroupIds,
+          activeFieldMeta,
+          rowFlowStateByRowId,
+          rowFlowLoggedRef,
+          onDiagnostic
+        });
         const hideParentRowsForSourceFirst = sourceFirstPresentationEntries.some(
           entry =>
             (entry.visibleSourceRows.length > 0 || !!entry.emptyStateMessage) &&
