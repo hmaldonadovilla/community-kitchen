@@ -98,7 +98,14 @@ describe('DefinitionBuilder', () => {
           when: { fieldId: 'DATE', isInFuture: true },
           bypassFields: ['COOK']
         }
-      ]
+      ],
+      reservationLifecycle: {
+        ledgerFormKey: 'Config: Inventory Reservation Ledger',
+        reconcileOnFinalSubmit: {
+          enabled: true,
+          refreshMode: 'revisionOnly'
+        }
+      }
     });
     dashboardSheet?.setMockData([
       [],
@@ -154,6 +161,13 @@ describe('DefinitionBuilder', () => {
         bypassFields: ['COOK']
       }
     ]);
+    expect(def.reservationLifecycle).toEqual({
+      ledgerFormKey: 'Config: Inventory Reservation Ledger',
+      reconcileOnFinalSubmit: {
+        enabled: true,
+        refreshMode: 'revisionOnly'
+      }
+    });
     const action = (def.listView?.columns || []).find(c => (c as any).type === 'rule' && (c as any).fieldId === 'action') as any;
     expect(action?.showIn).toEqual(['cards']);
     expect(def.createButtonLabel).toEqual({ en: 'New' });

@@ -1115,6 +1115,88 @@ describe('WebFormService', () => {
     }
   });
 
+  test('queues follow-up email and worker sends it with the generated PDF artifact', () => {
+    const store = new Map<string, string>();
+    const props: any = {
+      getProperty: jest.fn((key: string) => store.get(key) || null),
+      setProperty: jest.fn((key: string, value: string) => {
+        store.set(key, value);
+        return props;
+      }),
+      deleteProperty: jest.fn((key: string) => {
+        store.delete(key);
+        return props;
+      })
+    };
+    const lock = {
+      waitLock: jest.fn(),
+      releaseLock: jest.fn()
+    };
+    const triggers: any[] = [];
+    const previousPropertiesService = (global as any).PropertiesService;
+    const previousLockService = (global as any).LockService;
+    const previousScriptApp = (global as any).ScriptApp;
+    (global as any).PropertiesService = {
+      getScriptProperties: () => props
+    };
+    (global as any).LockService = {
+      getScriptLock: () => lock
+    };
+    (global as any).ScriptApp = {
+      newTrigger: jest.fn((handler: string) => ({
+        timeBased: () => ({
+          after: () => ({
+            create: () => {
+              const trigger = {
+                getHandlerFunction: () => handler,
+                getUniqueId: () => 'email-trigger-1'
+              };
+              triggers.push(trigger);
+              return trigger;
+            }
+          })
+        })
+      })),
+      getProjectTriggers: jest.fn(() => triggers),
+      deleteTrigger: jest.fn((trigger: any) => {
+        const idx = triggers.indexOf(trigger);
+        if (idx >= 0) triggers.splice(idx, 1);
+      })
+    };
+    const sendSpy = jest.spyOn(service, 'triggerFollowupAction').mockReturnValue({
+      success: true,
+      status: 'Final report emailed'
+    } as any);
+
+    try {
+      const queued = service.enqueueFollowupEmail('Config: Delivery', 'REC-EMAIL-QUEUE', {
+        pdfArtifact: { success: true, fileId: 'pdf-file-1', url: 'https://drive.example/pdf-file-1' }
+      });
+
+      expect(queued.success).toBe(true);
+      expect(queued.queued).toBe(true);
+      expect(store.get('CK_FOLLOWUP_EMAIL_OUTBOX_QUEUE')).toContain('REC-EMAIL-QUEUE');
+      expect((global as any).ScriptApp.newTrigger).toHaveBeenCalledWith('runQueuedFollowupEmailJobs');
+
+      const result = service.runQueuedFollowupEmailJobs();
+
+      expect(result).toEqual({ success: true, processed: 1, retried: 0, failed: 0, errors: [] });
+      expect(sendSpy).toHaveBeenCalledWith('Config: Delivery', 'REC-EMAIL-QUEUE', 'SEND_EMAIL', {
+        pdfArtifact: expect.objectContaining({
+          fileId: 'pdf-file-1',
+          url: 'https://drive.example/pdf-file-1'
+        })
+      });
+      expect(store.get('CK_FOLLOWUP_EMAIL_OUTBOX_QUEUE')).toBeUndefined();
+      expect((global as any).ScriptApp.deleteTrigger).toHaveBeenCalledTimes(1);
+    } finally {
+      sendSpy.mockRestore();
+      (global as any).PropertiesService = previousPropertiesService;
+      (global as any).LockService = previousLockService;
+      (global as any).ScriptApp = previousScriptApp;
+    }
+  });
+
   test('triggerFollowupAction sends emails using data source recipients', () => {
     const followups = (service as any).followups || (service as any);
     jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
@@ -1958,6 +2040,73 @@ describe('WebFormService', () => {
     expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
   });
 
+  test('saveSubmissionWithId batches deterministic submit-effect records when target values are fully resolved', () => {
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      submitEffects: [
+        {
+          type: 'createRecord',
+          targetFormKey: 'Config: Inventory Batch',
+          runOn: 'both',
+          recordId: 'batch::{{source.id}}::{{lineItem.rowId}}',
+          forEachLineItem: {
+            groupId: 'Q2',
+            when: {
+              fieldId: 'LI2',
+              greaterThan: 0
+            }
+          },
+          values: {
+            SOURCE_RECORD_ID: '{{source.id}}',
+            SOURCE_NAME: '{{source.Q1}}',
+            LEFTOVER_QTY: '{{row.LI2}}'
+          }
+        }
+      ]
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory Batch', 'Config: Inventory Batch', 'Inventory Batch Data', 'Desc', '', '', '', '']
+    ]);
+
+    const inventoryConfig = ss.insertSheet('Config: Inventory Batch');
+    (inventoryConfig as any).setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Leftover qty', 'Leftover qty', 'Leftover qty', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+
+    const batchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([
+        { __ckRowId: 'ROW-A', LI1: 'Soup', LI2: 2 },
+        { __ckRowId: 'ROW-B', LI1: 'Salad', LI2: 3 }
+      ]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    expect(created.success).toBe(true);
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(2);
+    expect(created.meta?.submitEffects).toEqual(
+      expect.objectContaining({
+        configured: 1,
+        executed: 1,
+        created: 2
+      })
+    );
+  });
+
   test('saveSubmissionWithId can create produced entire-dish and partial leftovers on final close', () => {
     const mealProductionFormKey = 'Config: Test Meal Production Leftovers';
     const inventoryFormKey = 'Config: Produced Leftover Inventory';
@@ -2214,6 +2363,7 @@ describe('WebFormService', () => {
       }
     ];
 
+    const batchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
     const closed = service.saveSubmissionWithId({
       formKey: mealProductionFormKey,
       language: 'EN',
@@ -2226,6 +2376,8 @@ describe('WebFormService', () => {
     } as any);
 
     expect(closed.success).toBe(true);
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(2);
     expect(closed.meta?.submitEffects).toEqual(
       expect.objectContaining({
         configured: 2,
@@ -3779,12 +3931,15 @@ describe('WebFormService', () => {
     });
     expect(reserved.success).toBe(true);
 
+    const reconcileBatchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
+
     const reconciled = service.reconcileInventoryReservations({
       sourceFormKey: 'Config: Delivery',
       sourceRecordId: 'REC-4',
       ledgerFormKey
     });
     expect(reconciled.success).toBe(true);
+    expect(reconcileBatchSpy).toHaveBeenCalledTimes(2);
     expect(reconciled.reconciledReservations).toBe(1);
     const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
     expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
@@ -4599,6 +4754,122 @@ describe('WebFormService', () => {
     expect((reservation?.values as any)?.STATUS).toBe('consumed');
   });
 
+  test('triggerFollowupAction RECONCILE_RESERVATIONS skips when the record has no reservation selections', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const followupJson = JSON.stringify({
+      reservationLifecycle: {
+        ledgerFormKey,
+        reconcileOnFinalSubmit: {
+          enabled: true,
+          ledgerFormKey,
+          refreshMode: 'full'
+        }
+      },
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftovers',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'Q2',
+                dataSourceRows: [
+                  {
+                    outputGroupId: 'LEFTOVER_ROWS',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    reservation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      ledgerFormKey,
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    });
+    (dashboardSheet as any).setMockData([
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
+      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+    ]);
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NO-RESERVATION-SELECTIONS',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([{ __ckRowId: 'ROW-NO-RES', id: 'ROW-NO-RES', LEFTOVER_ROWS: [] }]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-NO-RES',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 5,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const reserved = service.upsertInventoryReservation({
+      resourceFormKey: inventoryFormKey,
+      resourceRecordId: (inventory.meta?.id || '').toString(),
+      resourceItemId: 'LE-NO-RES',
+      resourceKind: 'Entire dish',
+      quantity: 2,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-NO-RESERVATION-SELECTIONS',
+      sourceParentGroupId: 'Q2',
+      sourceParentRowId: 'ROW-NO-RES',
+      sourceOutputGroupId: 'LEFTOVER_ROWS',
+      sourceOutputRowId: 'LEFTOVER-ROW-1',
+      ledgerFormKey
+    });
+    expect(reserved.success).toBe(true);
+
+    const result = service.triggerFollowupAction(
+      'Config: Delivery',
+      'REC-NO-RESERVATION-SELECTIONS',
+      'RECONCILE_RESERVATIONS'
+    );
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('No reservation selections found on the record.');
+    expect(result.reservationReconciliation?.reconciledReservations).toBe(0);
+    let reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('active');
+
+    const closeResult = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NO-RESERVATION-SELECTIONS',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([{ __ckRowId: 'ROW-NO-RES', id: 'ROW-NO-RES', LEFTOVER_ROWS: [] }]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'Closed'
+    } as any);
+    expect(closeResult.success).toBe(true);
+    expect((closeResult.meta as any)?.reservationReconciliation?.reconciledReservations).toBe(0);
+    reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
+    expect((reservation?.values as any)?.STATUS).toBe('active');
+  });
+
   test('triggerFollowupActions batch supports RECONCILE_RESERVATIONS before pdf and email', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -4670,15 +4941,46 @@ describe('WebFormService', () => {
     });
     expect(reserved.success).toBe(true);
 
-    const result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-MILESTONE-2', [
-      'RECONCILE_RESERVATIONS',
-      'CREATE_PDF',
-      'SEND_EMAIL'
-    ]);
+    const laneMocks = installFollowupLaneMocks();
+    const previousScriptApp = (global as any).ScriptApp;
+    const triggers: any[] = [];
+    (global as any).ScriptApp = {
+      newTrigger: jest.fn((handler: string) => ({
+        timeBased: () => ({
+          after: () => ({
+            create: () => {
+              const trigger = {
+                getHandlerFunction: () => handler,
+                getUniqueId: () => 'email-trigger-milestone-2'
+              };
+              triggers.push(trigger);
+              return trigger;
+            }
+          })
+        })
+      })),
+      getProjectTriggers: jest.fn(() => triggers),
+      deleteTrigger: jest.fn()
+    };
+
+    let result: any;
+    try {
+      result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-MILESTONE-2', [
+        'RECONCILE_RESERVATIONS',
+        'CREATE_PDF',
+        'SEND_EMAIL'
+      ]);
+    } finally {
+      laneMocks.restore();
+      (global as any).ScriptApp = previousScriptApp;
+    }
+
     expect(result.success).toBe(true);
     const reconcileEntry = result.results.find((entry: any) => entry.action === 'RECONCILE_RESERVATIONS');
     expect(reconcileEntry?.result?.success).toBe(true);
     expect(reconcileEntry?.result?.reservationReconciliation?.success).toBe(true);
+    const emailEntry = result.results.find((entry: any) => entry.action === 'SEND_EMAIL');
+    expect(emailEntry?.result?.queued).toBe(true);
 
     const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
     expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(0);

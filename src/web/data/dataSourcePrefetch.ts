@@ -75,6 +75,10 @@ export const collectDataSourceConfigsForPrefetch = (definition: WebFormDefinitio
     }
 
     Object.keys(value).forEach(k => {
+      // Follow-up actions execute on the server and resolve their own data-source
+      // dependencies there. Client prefetch should not warm server-only email/PDF
+      // lookup sources just to send the record id back to the backend.
+      if (k === 'followup') return;
       const child = (value as any)[k];
       if (!child) return;
       if (k === 'dataSource' && isLikelyDataSourceConfig(child)) {

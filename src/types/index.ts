@@ -5748,6 +5748,9 @@ export interface FollowupActionResult {
   updatedAt?: string;
   dataVersion?: number;
   rowNumber?: number;
+  durationMs?: number;
+  queued?: boolean;
+  jobId?: string;
   reservationReconciliation?: {
     success: boolean;
     sourceRecordId?: string;

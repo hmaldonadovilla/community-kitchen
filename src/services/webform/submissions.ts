@@ -973,6 +973,33 @@ export class SubmissionService {
         }
 
         const candidateValues: Record<string, any> = {};
+        const autoIncrementValues: Record<string, string> = {};
+        questions.filter(q => q.type !== 'BUTTON').forEach(q => {
+          if (q.type !== 'TEXT' || !q.autoIncrement) return;
+          const currentVal = this.readSubmissionFieldValue(formObject, q.id);
+          if (!currentVal) {
+            const existingAutoIncrementValue = (() => {
+              if (existingRowNumber < 2) return '';
+              const colIdx = columns.fields[q.id];
+              if (!colIdx || !existingRowValues) return '';
+              const raw = existingRowValues[colIdx - 1];
+              return raw === undefined || raw === null ? '' : raw.toString();
+            })();
+            if (existingAutoIncrementValue) {
+              this.writeSubmissionFieldValue(formObject, q.id, existingAutoIncrementValue);
+            } else {
+              const generated = this.generateAutoIncrementValue(form.configSheet, q.id, q.autoIncrement, formObject);
+              if (generated) {
+                this.writeSubmissionFieldValue(formObject, q.id, generated);
+              }
+            }
+          }
+          const resolvedVal = this.readSubmissionFieldValue(formObject, q.id);
+          if (resolvedVal !== undefined && resolvedVal !== null && resolvedVal.toString().trim()) {
+            autoIncrementValues[q.id] = resolvedVal.toString().trim();
+          }
+        });
+
         questions.filter(q => q.type !== 'BUTTON').forEach(q => {
           const colIdx = columns.fields[q.id];
           if (!colIdx) return;
@@ -1030,6 +1057,9 @@ export class SubmissionService {
           rowNumber: destinationRowNumber,
           operation: existingRowNumber >= 2 ? 'update' : 'create'
         };
+        if (Object.keys(autoIncrementValues).length) {
+          meta.autoIncrementValues = autoIncrementValues;
+        }
         metaById[recordId] = meta;
         changedRecords.push({ recordId, rowValues: valuesArray });
 

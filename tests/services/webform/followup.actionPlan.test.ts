@@ -3,7 +3,8 @@ import {
   buildSkippedFollowupActionResults,
   isFollowupBatchSuccess,
   normalizeFollowupAction,
-  normalizeFollowupActions
+  normalizeFollowupActions,
+  resolveParallelReconcileFollowupPlan
 } from '../../../src/services/webform/followup/actionPlan';
 
 describe('follow-up action plan domain', () => {
@@ -30,5 +31,15 @@ describe('follow-up action plan domain', () => {
     ]);
     expect(isFollowupBatchSuccess([{ result: { success: true } }, { result: { success: true } }])).toBe(true);
     expect(isFollowupBatchSuccess([{ result: { success: true } }, { result: { success: false } }])).toBe(false);
+  });
+
+  test('detects the safe reservation and PDF parallel plan', () => {
+    expect(resolveParallelReconcileFollowupPlan(['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'])).toEqual({
+      actions: ['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'],
+      reconcileAction: 'RECONCILE_RESERVATIONS',
+      createPdfAction: 'CREATE_PDF',
+      sendEmailAction: 'SEND_EMAIL'
+    });
+    expect(resolveParallelReconcileFollowupPlan(['RECONCILE_RESERVATIONS', 'CLOSE_RECORD'])).toBeNull();
   });
 });

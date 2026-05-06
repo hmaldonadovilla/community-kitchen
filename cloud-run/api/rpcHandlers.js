@@ -551,10 +551,16 @@ const createRpcHandlers = deps => {
       return submitEffectsRepository.saveSubmissionWithId(args[0]);
     },
     async triggerFollowupAction(...args) {
-      return followupRepository.triggerFollowupAction(args[0], args[1], args[2]);
+      return followupRepository.triggerFollowupAction(args[0], args[1], args[2], args[3]);
     },
     async triggerFollowupActions(...args) {
-      return followupRepository.triggerFollowupActions(args[0], args[1], args[2]);
+      return followupRepository.triggerFollowupActions(args[0], args[1], args[2], args[3]);
+    },
+    async enqueueFollowupEmail(...args) {
+      return followupRepository.enqueueFollowupEmail(args[0], args[1], args[2] || {});
+    },
+    async runQueuedFollowupEmailJobs(...args) {
+      return followupRepository.runQueuedFollowupEmailJobs(args[0] || {});
     },
     async previewUpdateRecordDependencies(...args) {
       const context = await resolveUpdateRecordDependencyContext(args[0], args[1]);

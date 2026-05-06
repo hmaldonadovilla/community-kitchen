@@ -26,6 +26,16 @@ import { renderHtmlFromHtmlTemplate } from './followup/htmlRenderer';
 import { renderMarkdownFromTemplate } from './followup/markdownRenderer';
 import { hydrateMealProductionPrepIngredientsFromLeftovers } from './followup/mealProductionLeftoverIngredients';
 
+const TEMPLATE_HYDRATED_MARKER = '__ckMealProductionTemplateHydrated';
+
+type FollowupRuntimeState = {
+  pdfArtifact?: GeneratedPdfArtifact | null;
+  contextCache?: {
+    key: string;
+    context: RecordContext | null;
+  };
+};
+
 /**
  * Follow-up actions + Doc template rendering (PDF/email/html).
  *
@@ -38,6 +48,7 @@ export class FollowupService {
   private readonly submissionService: SubmissionService;
   private readonly dataSources: DataSourceService;
   private readonly resolveLinkedRecord?: (formKey: string, recordId: string) => WebFormSubmission | null;
+  private readonly linkedRecordCache: Map<string, WebFormSubmission | null>;
 
   constructor(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
@@ -49,6 +60,7 @@ export class FollowupService {
     this.submissionService = submissionService;
     this.dataSources = dataSources;
     this.resolveLinkedRecord = resolveLinkedRecord;
+    this.linkedRecordCache = new Map();
   }
 
   triggerFollowupAction(
@@ -56,7 +68,7 @@ export class FollowupService {
     questions: QuestionConfig[],
     recordId: string,
     action: string,
-    runtime?: { pdfArtifact?: GeneratedPdfArtifact | null }
+    runtime?: FollowupRuntimeState
   ): FollowupActionResult {
     if (!recordId) {
       return { success: false, message: 'Record ID is required.' };
@@ -66,7 +78,7 @@ export class FollowupService {
     if (!followup) {
       return { success: false, message: 'Follow-up actions are not configured for this form.' };
     }
-    const context = this.getRecordContext(form, questions, recordId);
+    const context = this.getCachedRecordContext(form, questions, recordId, runtime);
     if (!context || !context.record) {
       return { success: false, message: 'Record not found.' };
     }
@@ -76,39 +88,54 @@ export class FollowupService {
     }
     switch (normalizedAction) {
       case 'CREATE_PDF':
-        return handleCreatePdfAction({
+        return this.applyResultToCachedContext(
           form,
-          questions,
           recordId,
-          followup,
-          context,
-          submissionService: this.submissionService,
-          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
-          onPdfArtifact: artifact => {
-            if (runtime) runtime.pdfArtifact = artifact;
-          }
-        });
+          runtime,
+          handleCreatePdfAction({
+            form,
+            questions,
+            recordId,
+            followup,
+            context,
+            submissionService: this.submissionService,
+            generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
+            onPdfArtifact: artifact => {
+              if (runtime) runtime.pdfArtifact = artifact;
+            }
+          })
+        );
       case 'SEND_EMAIL':
-        return handleSendEmailAction({
+        return this.applyResultToCachedContext(
           form,
-          questions,
           recordId,
-          followup,
-          context,
-          submissionService: this.submissionService,
-          dataSources: this.dataSources,
-          generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
-          pdfArtifact: runtime?.pdfArtifact || null
-        });
+          runtime,
+          handleSendEmailAction({
+            form,
+            questions,
+            recordId,
+            followup,
+            context,
+            submissionService: this.submissionService,
+            dataSources: this.dataSources,
+            generatePdfArtifact: (...a) => this.generatePdfArtifact(...a),
+            pdfArtifact: runtime?.pdfArtifact || null
+          })
+        );
       case 'CLOSE_RECORD':
-        return handleCloseRecordAction({
+        return this.applyResultToCachedContext(
           form,
-          questions,
           recordId,
-          followup,
-          context,
-          submissionService: this.submissionService
-        });
+          runtime,
+          handleCloseRecordAction({
+            form,
+            questions,
+            recordId,
+            followup,
+            context,
+            submissionService: this.submissionService
+          })
+        );
       default:
         return { success: false, message: `Unsupported follow-up action "${action}".` };
     }
@@ -130,7 +157,7 @@ export class FollowupService {
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
-    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {};
+    const runtime: FollowupRuntimeState = {};
     for (const action of normalizedActions) {
       const result = this.triggerFollowupAction(form, questions, recordId, action, runtime);
       results.push({ action, result });
@@ -291,16 +318,91 @@ export class FollowupService {
     };
   }
 
+  private getCachedRecordContext(
+    form: FormConfig,
+    questions: QuestionConfig[],
+    recordId: string,
+    runtime?: FollowupRuntimeState
+  ): RecordContext | null {
+    const key = `${(form.configSheet || form.title || '').toString().trim()}::${(recordId || '').toString().trim()}`;
+    if (runtime?.contextCache?.key === key) {
+      return runtime.contextCache.context;
+    }
+    const context = this.getRecordContext(form, questions, recordId);
+    if (runtime) {
+      runtime.contextCache = { key, context };
+    }
+    return context;
+  }
+
+  private applyResultToCachedContext(
+    form: FormConfig,
+    recordId: string,
+    runtime: FollowupRuntimeState | undefined,
+    result: FollowupActionResult
+  ): FollowupActionResult {
+    if (!result?.success || !runtime?.contextCache?.context?.record) return result;
+    const key = `${(form.configSheet || form.title || '').toString().trim()}::${(recordId || '').toString().trim()}`;
+    if (runtime.contextCache.key !== key) return result;
+    const record = runtime.contextCache.context.record;
+    runtime.contextCache.context = {
+      ...runtime.contextCache.context,
+      record: {
+        ...record,
+        status: result.status !== undefined ? result.status : record.status,
+        pdfUrl: result.pdfUrl !== undefined ? result.pdfUrl : record.pdfUrl,
+        updatedAt: result.updatedAt !== undefined ? result.updatedAt : record.updatedAt,
+        dataVersion: result.dataVersion !== undefined ? result.dataVersion : record.dataVersion
+      }
+    };
+    return result;
+  }
+
+  private resolveLinkedRecordCached(formKey: string, recordId: string): WebFormSubmission | null {
+    const normalizedFormKey = (formKey || '').toString().trim();
+    const normalizedRecordId = (recordId || '').toString().trim();
+    if (!normalizedFormKey || !normalizedRecordId || !this.resolveLinkedRecord) return null;
+    const cacheKey = `${normalizedFormKey}::${normalizedRecordId}`;
+    if (this.linkedRecordCache.has(cacheKey)) {
+      return this.linkedRecordCache.get(cacheKey) || null;
+    }
+    const record = this.resolveLinkedRecord(normalizedFormKey, normalizedRecordId);
+    this.linkedRecordCache.set(cacheKey, record || null);
+    return record || null;
+  }
+
+  private markTemplateRecordHydrated(record: WebFormSubmission): WebFormSubmission {
+    try {
+      Object.defineProperty(record as any, TEMPLATE_HYDRATED_MARKER, {
+        value: true,
+        enumerable: false,
+        configurable: true
+      });
+    } catch {
+      try {
+        (record as any)[TEMPLATE_HYDRATED_MARKER] = true;
+      } catch {
+        // ignore marker failures
+      }
+    }
+    return record;
+  }
+
   private prepareRecordForTemplateRender(form: FormConfig, record: WebFormSubmission): WebFormSubmission {
     const formKey = (form.configSheet || form.title || '').toString().trim().toLowerCase();
     if (formKey !== 'config: meal production' && formKey !== 'meal production') {
       return record;
     }
-    if (!this.resolveLinkedRecord) {
+    if ((record as any)?.[TEMPLATE_HYDRATED_MARKER]) {
       return record;
     }
-    return hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
-      this.resolveLinkedRecord ? this.resolveLinkedRecord('Config: Leftover Inventory', leftoverRecordId) : null
+    if (!this.resolveLinkedRecord) {
+      return this.markTemplateRecordHydrated(record);
+    }
+    return this.markTemplateRecordHydrated(
+      hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
+        this.resolveLinkedRecordCached('Config: Leftover Inventory', leftoverRecordId)
+      )
     );
   }
 }

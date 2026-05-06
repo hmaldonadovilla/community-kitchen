@@ -65,19 +65,19 @@ upsert_http_job() {
     "--time-zone=${CK_TIMEZONE:-Europe/Brussels}"
     "--uri=${uri}"
     "--http-method=POST"
-    "--headers=Content-Type=application/json,x-ck-scheduler-secret=${CK_SCHEDULER_SECRET}"
     "--message-body=${body}"
   )
+  local headers="Content-Type=application/json,x-ck-scheduler-secret=${CK_SCHEDULER_SECRET}"
 
   if gcloud scheduler jobs describe "${job_name}" \
     --project="${GCP_PROJECT_ID}" \
     --location="${GCP_REGION}" \
     >/dev/null 2>&1; then
     echo "[deploy-cloud-scheduler] Updating ${job_name}"
-    gcloud scheduler jobs update http "${job_name}" "${base_args[@]}"
+    gcloud scheduler jobs update http "${job_name}" "${base_args[@]}" "--update-headers=${headers}"
   else
     echo "[deploy-cloud-scheduler] Creating ${job_name}"
-    gcloud scheduler jobs create http "${job_name}" "${base_args[@]}"
+    gcloud scheduler jobs create http "${job_name}" "${base_args[@]}" "--headers=${headers}"
   fi
 }
 
@@ -123,19 +123,28 @@ if [[ -z "${SERVICE_URL}" ]]; then
 fi
 
 QUEUE_JOB_NAME="${CK_SCHEDULER_QUEUE_JOB_NAME:-${GCP_CLOUD_RUN_SERVICE}-analytics-queue}"
+EMAIL_QUEUE_JOB_NAME="${CK_SCHEDULER_EMAIL_QUEUE_JOB_NAME:-${GCP_CLOUD_RUN_SERVICE}-followup-email-queue}"
 ANALYTICS_JOB_NAME="${CK_SCHEDULER_ANALYTICS_JOB_NAME:-${GCP_CLOUD_RUN_SERVICE}-daily-analytics}"
 LIFECYCLE_JOB_NAME="${CK_SCHEDULER_LIFECYCLE_JOB_NAME:-${GCP_CLOUD_RUN_SERVICE}-daily-lifecycle}"
 
 QUEUE_SCHEDULE="${CK_SCHEDULER_QUEUE_SCHEDULE:-*/5 * * * *}"
+EMAIL_QUEUE_SCHEDULE="${CK_SCHEDULER_EMAIL_QUEUE_SCHEDULE:-* * * * *}"
 ANALYTICS_SCHEDULE="${CK_SCHEDULER_ANALYTICS_SCHEDULE:-0 23 * * *}"
 LIFECYCLE_SCHEDULE="${CK_SCHEDULER_LIFECYCLE_SCHEDULE:-0 2 * * *}"
 QUEUE_LIMIT="${CK_ANALYTICS_QUEUE_BATCH_SIZE:-10}"
+EMAIL_QUEUE_LIMIT="${CK_FOLLOWUP_EMAIL_QUEUE_BATCH_SIZE:-10}"
 
 upsert_http_job \
   "${QUEUE_JOB_NAME}" \
   "${QUEUE_SCHEDULE}" \
   "${SERVICE_URL}/api/jobs/runQueuedAnalyticsPipelineJobs" \
   "{\"limit\":${QUEUE_LIMIT}}"
+
+upsert_http_job \
+  "${EMAIL_QUEUE_JOB_NAME}" \
+  "${EMAIL_QUEUE_SCHEDULE}" \
+  "${SERVICE_URL}/api/jobs/runQueuedFollowupEmailJobs" \
+  "{\"limit\":${EMAIL_QUEUE_LIMIT}}"
 
 upsert_http_job \
   "${ANALYTICS_JOB_NAME}" \

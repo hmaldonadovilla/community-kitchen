@@ -17,6 +17,7 @@ describe('Cloud Run scheduled job domain', () => {
   test('allows only implemented scheduled RPC handlers', () => {
     expect(Array.from(ALLOWED_SCHEDULED_JOBS)).toEqual([
       'runQueuedAnalyticsPipelineJobs',
+      'runQueuedFollowupEmailJobs',
       'runDailyAnalyticsRecompute',
       'runDailyLifecycleRecompute'
     ]);

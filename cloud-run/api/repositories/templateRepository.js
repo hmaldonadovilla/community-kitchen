@@ -400,6 +400,19 @@ class TemplateRepository {
     });
   }
 
+  async getTextTemplateBody(templateId, preferredExportMimeTypes = ['text/plain']) {
+    const id = toText(templateId).trim();
+    if (!id) return '';
+    if (!isBundleTemplateId(id)) {
+      await this.loadDriveTemplate(id, preferredExportMimeTypes);
+      const entry = templateFileCache.get(id);
+      return entry && entry.raw ? entry.raw.toString() : '';
+    }
+    await this.loadDriveTemplate(id, preferredExportMimeTypes);
+    const entry = templateFileCache.get(id);
+    return entry && entry.raw ? entry.raw.toString() : '';
+  }
+
   async loadSelectedTemplate(templateIdMap, record, preferredExportMimeTypes) {
     const templateId = this.renderers.resolveTemplateId(templateIdMap, record);
     if (!templateId) return '';
@@ -577,8 +590,7 @@ class TemplateRepository {
 
   async loadGoogleDocTemplateText(templateId) {
     try {
-      const loaded = await this.fileRepository.readTextFile(templateId, ['text/plain']);
-      return (loaded && loaded.raw ? loaded.raw : '').toString();
+      return await this.getTextTemplateBody(templateId, ['text/plain']);
     } catch {
       return '';
     }
@@ -901,8 +913,11 @@ class TemplateRepository {
       return { requested: unique.length, cacheHit, loaded, skipped, failed };
     };
 
-    const html = await loadMany(htmlIds, ['text/html', 'text/plain']);
-    const markdown = await loadMany(markdownIds, ['text/plain']);
+    const [html, markdown, doc] = await Promise.all([
+      loadMany(htmlIds, ['text/html', 'text/plain']),
+      loadMany(markdownIds, ['text/plain']),
+      loadMany(docIds, ['text/plain'])
+    ]);
     return {
       success: true,
       message: 'Prefetch complete.',
@@ -922,8 +937,8 @@ class TemplateRepository {
         docTextLoaded: 0,
         docTextSkippedCache: 0,
         docTextFailed: 0,
-        docOk: docIds.length,
-        docFailed: 0
+        docOk: doc.loaded + doc.cacheHit,
+        docFailed: doc.failed
       }
     };
   }

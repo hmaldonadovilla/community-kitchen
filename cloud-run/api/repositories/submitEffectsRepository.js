@@ -38,6 +38,14 @@ const parseRows = raw => {
   return [];
 };
 
+const buildReservationSubgroupKey = (parentGroupId, parentRowId, subGroupId) =>
+  `${toText(parentGroupId)}::${toText(parentRowId)}::${toText(subGroupId)}`;
+
+const toFiniteNumber = value => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
 const readPathValue = (root, pathRaw) => {
   const path = toText(pathRaw);
   if (!path) return '';
@@ -540,6 +548,101 @@ class SubmitEffectsRepository {
     return { enabled: true, ledgerFormKey: toText(ledgerFormKey) || DEFAULT_LEDGER_FORM_KEY, refreshMode };
   }
 
+  inferReservationFieldId(outputKeyFieldId, suffix) {
+    const key = toText(outputKeyFieldId);
+    const base = key.endsWith('_ID') ? key.slice(0, -3) : key;
+    return base ? `${base}_${suffix}` : '';
+  }
+
+  collectStepReservationConfigs(form) {
+    const steps = form && form.steps && form.steps.mode === 'guided' && Array.isArray(form.steps.items)
+      ? form.steps.items
+      : [];
+    const configs = [];
+    steps.forEach(step => {
+      (Array.isArray(step && step.include) ? step.include : []).forEach(target => {
+        if (!target || target.kind !== 'lineGroup') return;
+        const parentGroupId = toText(target.id);
+        if (!parentGroupId) return;
+        (Array.isArray(target.dataSourceRows) ? target.dataSourceRows : []).forEach(config => {
+          const reservation = config && config.reservation && typeof config.reservation === 'object' ? config.reservation : null;
+          if (!reservation || reservation.enabled === false) return;
+          if (toText(reservation.commitMode).toLowerCase() !== 'step') return;
+          const outputGroupId = toText(config.outputGroupId);
+          const outputKeyFieldId = toText(config.outputKeyFieldId || config.rowKeyFieldId);
+          const quantityFieldId = toText(config.quantityFieldId);
+          const resourceRecordIdFieldId =
+            toText(reservation.resourceRecordIdFieldId) || this.inferReservationFieldId(outputKeyFieldId, 'RECORD_ID');
+          if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !resourceRecordIdFieldId) return;
+          configs.push({
+            parentGroupId,
+            outputGroupId,
+            outputKeyFieldId,
+            quantityFieldId,
+            resourceRecordIdFieldId
+          });
+        });
+      });
+    });
+    return configs;
+  }
+
+  readRecordValue(record, fieldId) {
+    const key = toText(fieldId);
+    if (!record || !key) return undefined;
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, key)) return record.values[key];
+    if (record.values && Object.prototype.hasOwnProperty.call(record.values, `${key}_json`)) {
+      return record.values[`${key}_json`];
+    }
+    if (Object.prototype.hasOwnProperty.call(record, key)) return record[key];
+    return record[`${key}_json`];
+  }
+
+  readReservationRowValue(row, fieldId) {
+    const key = toText(fieldId);
+    if (!row || !key) return undefined;
+    if (row.values && Object.prototype.hasOwnProperty.call(row.values, key)) return row.values[key];
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
+    return row[`${key}_json`];
+  }
+
+  reservationRowId(row) {
+    return toText(row && (row[ROW_ID_KEY] || row.id));
+  }
+
+  recordHasReservationSelections(form, record) {
+    const configs = this.collectStepReservationConfigs(form);
+    if (!configs.length) return true;
+    if (!record) return false;
+    return configs.some(config => {
+      const parentRows = parseRows(this.readRecordValue(record, config.parentGroupId));
+      return parentRows.some(parentRow => {
+        const parentRowId = this.reservationRowId(parentRow);
+        const nestedRows = parseRows(this.readReservationRowValue(parentRow, config.outputGroupId));
+        const flattenedRows = parentRowId
+          ? parseRows(this.readRecordValue(record, buildReservationSubgroupKey(config.parentGroupId, parentRowId, config.outputGroupId)))
+          : [];
+        return [...nestedRows, ...flattenedRows].some(row => {
+          const resourceRecordId = toText(this.readReservationRowValue(row, config.resourceRecordIdFieldId));
+          const resourceItemId = toText(this.readReservationRowValue(row, config.outputKeyFieldId));
+          const quantity = toFiniteNumber(this.readReservationRowValue(row, config.quantityFieldId));
+          return Boolean(resourceRecordId && resourceItemId && quantity > 0);
+        });
+      });
+    });
+  }
+
+  buildSkippedReservationReconciliationMeta(recordId) {
+    return {
+      success: true,
+      sourceRecordId: recordId,
+      reconciledReservations: 0,
+      consumedReservations: 0,
+      releasedReservations: 0,
+      touchedInventoryRecords: 0
+    };
+  }
+
   async applyReservationLifecycle(form, formKey, formObject, result) {
     if (!this.inventoryReservationRepository || !result || !result.success) return result;
     const savedRecordId = toText(result.meta && result.meta.id) || toText(formObject && formObject.id);
@@ -589,6 +692,13 @@ class SubmitEffectsRepository {
           : '';
     const reconcileConfig = this.shouldReconcileReservations(form, nextStatus);
     if (savedRecordId && !deleteRecordId && reconcileConfig.enabled) {
+      if (!this.recordHasReservationSelections(form, formObject)) {
+        result.meta = {
+          ...(result.meta || {}),
+          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
+        };
+        return result;
+      }
       const reconcileResult = await this.inventoryReservationRepository.reconcile({
         sourceFormKey: formKey,
         sourceRecordId: savedRecordId,

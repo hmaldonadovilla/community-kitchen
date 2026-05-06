@@ -3,6 +3,7 @@
  */
 const ALLOWED_SCHEDULED_JOBS = new Set([
   'runQueuedAnalyticsPipelineJobs',
+  'runQueuedFollowupEmailJobs',
   'runDailyAnalyticsRecompute',
   'runDailyLifecycleRecompute'
 ]);
