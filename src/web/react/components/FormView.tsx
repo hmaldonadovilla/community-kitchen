@@ -112,6 +112,7 @@ import { DateInput } from './form/DateInput';
 import { SearchableSelect } from './form/SearchableSelect';
 import { LineItemMultiAddSelect } from './form/LineItemMultiAddSelect';
 import { buildTopQuestionRenderer } from './form/topQuestionRenderer';
+import { useSingleChoiceDefaults } from './form/useSingleChoiceDefaults';
 import { useChoiceControlRenderer } from './form/useChoiceControlRenderer';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
@@ -7536,137 +7537,18 @@ const FormView: React.FC<FormViewProps> = ({
     overlayOpenActionTargetGroups
   });
 
-  useEffect(() => {
-    const pendingDefaults: Array<{ question: WebQuestionDefinition; value: string }> = [];
-    definition.questions.forEach(q => {
-      if (q.type !== 'CHOICE') return;
-      const optionSet = getOptionStateValue(optionState, q.id) || toOptionSet(q);
-      const allowed = computeAllowedOptions(
-        q.optionFilter,
-        optionSet,
-        (Array.isArray(q.optionFilter?.dependsOn) ? q.optionFilter?.dependsOn : [q.optionFilter?.dependsOn || ''])
-          .filter(Boolean)
-          .map(dep => toDependencyValue(values[dep as string]))
-      );
-      const opts = buildLocalizedOptions(optionSet, allowed, language, { sort: optionSortFor(q) });
-      if (opts.length === 1 && isEmptyValue(values[q.id]) && values[q.id] !== opts[0].value) {
-        pendingDefaults.push({ question: q, value: opts[0].value });
-      }
-    });
-    if (!pendingDefaults.length) return;
-    const applied: typeof pendingDefaults = [];
-                  setValues(prev => {
-      let changed = false;
-      const next = { ...prev };
-      pendingDefaults.forEach(({ question, value }) => {
-        if (isEmptyValue(prev[question.id]) && prev[question.id] !== value) {
-          next[question.id] = value;
-          applied.push({ question, value });
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-    if (!applied.length) return;
-    setErrors(prev => {
-      let changed = false;
-      const next = { ...prev };
-      applied.forEach(({ question }) => {
-        if (next[question.id]) {
-          delete next[question.id];
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-    if (onSelectionEffect) {
-      applied.forEach(({ question, value }) => onSelectionEffect(question, value));
-    }
-  }, [definition, language, optionState, setValues, setErrors, values, onSelectionEffect]);
-
-  useEffect(() => {
-    const pendingLineDefaults: Array<{
-      group: WebQuestionDefinition;
-      field: any;
-      rowId: string;
-      value: string;
-      rowValues: Record<string, FieldValue>;
-    }> = [];
-    definition.questions
-      .filter(q => q.type === 'LINE_ITEM_GROUP')
-      .forEach(group => {
-        const rows = lineItems[group.id] || [];
-        rows.forEach(row => {
-          (group.lineItemConfig?.fields || [])
-            .filter(field => field.type === 'CHOICE')
-            .forEach(field => {
-              const optionSetField: OptionSet = resolveOptionSetForField(optionState, field, group.id);
-                    const dependencyIds = (
-                      Array.isArray(field.optionFilter?.dependsOn)
-                        ? field.optionFilter?.dependsOn
-                        : [field.optionFilter?.dependsOn || '']
-                    ).filter((dep): dep is string => typeof dep === 'string' && !!dep);
-                    const allowedField = computeAllowedOptions(
-                      field.optionFilter,
-                      optionSetField,
-                      dependencyIds.map(dep => toDependencyValue(row.values[dep] ?? values[dep]))
-                    );
-              const optsField = buildLocalizedOptions(optionSetField, allowedField, language, { sort: optionSortFor(field) });
-              const currentValue = row.values[field.id];
-              if (optsField.length === 1 && isEmptyValue(currentValue) && currentValue !== optsField[0].value) {
-                pendingLineDefaults.push({
-                  group,
-                  field,
-                  rowId: row.id,
-                  value: optsField[0].value,
-                  rowValues: { ...(row.values || {}), [field.id]: optsField[0].value }
-                });
-              }
-            });
-        });
-      });
-    if (!pendingLineDefaults.length) return;
-    const applied: typeof pendingLineDefaults = [];
-    setLineItems(prev => {
-      let changed = false;
-      const next: LineItemState = { ...prev };
-      pendingLineDefaults.forEach(({ group, rowId, field, value, rowValues }) => {
-        const rows = next[group.id] || prev[group.id] || [];
-        const rowIdx = rows.findIndex(r => r.id === rowId);
-        if (rowIdx === -1) return;
-        const row = rows[rowIdx];
-        if (row.values[field.id] === value) return;
-        const updatedRow: LineItemRowState = {
-          ...row,
-          values: { ...row.values, [field.id]: value }
-        };
-        const updatedRows = [...rows];
-        updatedRows[rowIdx] = updatedRow;
-        next[group.id] = updatedRows;
-        applied.push({ group, field, rowId, value, rowValues });
-        changed = true;
-      });
-      return changed ? next : prev;
-    });
-    if (!applied.length) return;
-    setErrors(prev => {
-      let changed = false;
-      const next = { ...prev };
-      applied.forEach(({ group, field, rowId }) => {
-        const key = `${group.id}__${field.id}__${rowId}`;
-        if (next[key]) {
-          delete next[key];
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-    if (onSelectionEffect) {
-      applied.forEach(({ field, value, group, rowId, rowValues }) => {
-        onSelectionEffect(field as WebQuestionDefinition, value, { lineItem: { groupId: group.id, rowId, rowValues } });
-      });
-    }
-  }, [definition, language, lineItems, optionState, setErrors, setLineItems, values, onSelectionEffect]);
+  useSingleChoiceDefaults({
+    definitionQuestions: definition.questions,
+    language,
+    optionState,
+    values,
+    lineItems,
+    setValues,
+    setLineItems,
+    setErrors,
+    optionSortFor,
+    onSelectionEffect
+  });
 
   const errorIndex = useMemo(() => buildValidationErrorIndex(errors), [errors]);
 
