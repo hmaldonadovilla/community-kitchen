@@ -289,6 +289,7 @@ import { buildReservationReconciliationFeedback } from './app/reservationReconci
 import {
   areReportFollowupActions,
   buildReconcileFollowupActionResult,
+  resolveOptimisticStatusTransitionForActions,
   resolveParallelReconcileFollowupPlan
 } from './app/followupParallel';
 import {
@@ -10926,20 +10927,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         normalizedBackgroundActions.length === 0 &&
         args.action.runInBackground !== true;
       const resolveOptimisticStatusForActions = (actions: string[]): string => {
-        const normalized = actions.map(entry => (entry || '').toString().trim().toUpperCase()).filter(Boolean);
-        if (!normalized.length) return '';
-        if (normalized.includes('CLOSE_RECORD')) {
+        const transition = resolveOptimisticStatusTransitionForActions(actions);
+        if (transition === 'onClose') {
           return resolveStatusTransitionValue(statusTransitions, 'onClose', languageRef.current, {
             includeDefaultOnClose: true
           }) || 'Closed';
         }
-        if (normalized.includes('SEND_EMAIL')) {
-          return resolveStatusTransitionValue(statusTransitions, 'onEmail', languageRef.current, {
+        if (transition === 'onPdf') {
+          return resolveStatusTransitionValue(statusTransitions, 'onPdf', languageRef.current, {
             includeDefaultOnClose: false
           });
         }
-        if (normalized.includes('CREATE_PDF')) {
-          return resolveStatusTransitionValue(statusTransitions, 'onPdf', languageRef.current, {
+        if (transition === 'onEmail') {
+          return resolveStatusTransitionValue(statusTransitions, 'onEmail', languageRef.current, {
             includeDefaultOnClose: false
           });
         }

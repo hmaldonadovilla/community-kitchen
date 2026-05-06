@@ -26,6 +26,17 @@ export const areReportFollowupActions = (actions: unknown[]): boolean => {
   return normalized.length > 0 && normalized.every(action => REPORT_FOLLOWUP_ACTIONS.has(action));
 };
 
+export const resolveOptimisticStatusTransitionForActions = (
+  actions: unknown[]
+): 'onClose' | 'onPdf' | 'onEmail' | '' => {
+  const normalized = (Array.isArray(actions) ? actions : []).map(normalizeAction).filter(Boolean);
+  if (!normalized.length) return '';
+  if (normalized.includes('CLOSE_RECORD')) return 'onClose';
+  if (normalized.includes('CREATE_PDF')) return 'onPdf';
+  if (normalized.includes('SEND_EMAIL')) return 'onEmail';
+  return '';
+};
+
 export type ParallelReconcileFollowupPlan = {
   reconcileAction: string;
   createPdfAction: string;
