@@ -839,10 +839,15 @@ One-hundred-fifteenth-pass results:
 - Validation for the pass used direct ESLint on touched files, `npx tsc --noEmit --pretty false`, focused ordered-entry/guided/line-item tests, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
+One-hundred-sixteenth-pass results:
+
+- `App.tsx`: extracted guided reservation plan resolution, stale-response guarding, apply failure handling, source-meta adoption, availability cache dispatch, and serialized reservation plan queueing into `useGuidedReservationPlanSync`, keeping live-sync and background-sync callers in the shell while moving the reservation apply workflow into the reservations feature layer. Current size: 14,317 lines.
+- Validation for the pass used focused reservation tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,188 lines.
-- `FormView.tsx`: 10,775 lines.
+- `App.tsx`: 14,317 lines.
+- `FormView.tsx`: 10,791 lines.
 - `LineItemGroupQuestion.tsx`: 869 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
