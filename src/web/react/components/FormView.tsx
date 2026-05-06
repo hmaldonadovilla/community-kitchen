@@ -233,6 +233,7 @@ import {
 import {
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
+  resolveGuidedReservationManagedRowRemovalDetectionScope,
   type GuidedReservationManagedRowRemovalImpact
 } from '../features/reservations/stepReservationPlan';
 
@@ -865,12 +866,18 @@ const FormView: React.FC<FormViewProps> = ({
       return;
     }
 
+    const detectionScope = resolveGuidedReservationManagedRowRemovalDetectionScope(activeGuidedStepId);
+    if (!detectionScope) {
+      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      return;
+    }
+
     const impacts = detectGuidedReservationManagedRowRemovals({
       definition,
-      stepId: activeGuidedStepId || '__all__',
+      stepId: detectionScope.stepId,
       previousLineItems: previousSnapshot.lineItems,
       nextLineItems: nextSnapshot,
-      mode: 'all'
+      mode: detectionScope.mode
     });
 
     guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };

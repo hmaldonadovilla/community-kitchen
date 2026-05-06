@@ -3,7 +3,8 @@ import {
   buildStepInventoryReservationPlan,
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
-  mergeGuidedReservationLineItemsFromSnapshot
+  mergeGuidedReservationLineItemsFromSnapshot,
+  resolveGuidedReservationManagedRowRemovalDetectionScope
 } from '../../../src/web/react/features/reservations/stepReservationPlan';
 
 describe('buildStepInventoryReservationPlan', () => {
@@ -314,6 +315,100 @@ describe('buildStepInventoryReservationPlan', () => {
         removedRowIds: ['OUT-1']
       }
     ]);
+  });
+
+  test('limits managed output-row removal detection to the active guided step', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    id: 'leftoverInventoryRows',
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Inventory' },
+                    reservation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'production',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST'
+              }
+            ]
+          }
+        ]
+      }
+    };
+    const previousLineItems = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegan' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+        {
+          id: 'OUT-1',
+          values: {
+            LEFTOVER_ID: 'LP-21',
+            LEFTOVER_RECORD_ID: 'INV-21',
+            LEFTOVER_USE_QTY: 500
+          }
+        }
+      ]
+    } as any;
+    const nextLineItems = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegan' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': []
+    } as any;
+
+    expect(
+      detectGuidedReservationManagedRowRemovals({
+        definition,
+        stepId: 'production',
+        mode: 'step',
+        previousLineItems,
+        nextLineItems
+      })
+    ).toEqual([]);
+    expect(
+      detectGuidedReservationManagedRowRemovals({
+        definition,
+        stepId: 'leftoverForm',
+        mode: 'step',
+        previousLineItems,
+        nextLineItems
+      })
+    ).toEqual([
+      {
+        stepId: 'leftoverForm',
+        parentGroupId: 'MP_MEALS_REQUEST',
+        parentRowId: 'MEAL-1',
+        outputGroupId: 'MP_TYPE_LI',
+        removedRowIds: ['OUT-1']
+      }
+    ]);
+  });
+
+  test('resolves managed row removal detection from the active guided step only', () => {
+    expect(resolveGuidedReservationManagedRowRemovalDetectionScope(' leftoverForm ')).toEqual({
+      stepId: 'leftoverForm',
+      mode: 'step'
+    });
+    expect(resolveGuidedReservationManagedRowRemovalDetectionScope('')).toBeNull();
   });
 
   test('ignores removed managed rows that never held a reservation selection', () => {

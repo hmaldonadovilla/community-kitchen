@@ -78,6 +78,18 @@ export type GuidedReservationManagedRowRemovalImpact = {
   removedRowIds: string[];
 };
 
+export type GuidedReservationManagedRowRemovalDetectionScope = {
+  stepId: string;
+  mode: 'step';
+};
+
+export const resolveGuidedReservationManagedRowRemovalDetectionScope = (
+  activeStepId: unknown
+): GuidedReservationManagedRowRemovalDetectionScope | null => {
+  const stepId = normalizeStepId(activeStepId);
+  return stepId ? { stepId, mode: 'step' } : null;
+};
+
 export const cloneLineItemStateSnapshot = (lineItems: LineItemState | null | undefined): LineItemState => {
   const source = lineItems || {};
   const snapshot: LineItemState = {};

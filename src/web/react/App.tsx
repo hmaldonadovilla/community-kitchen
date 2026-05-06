@@ -304,6 +304,7 @@ import {
 } from './features/reservations/liveSyncEvents';
 import { applyInventoryAvailabilitySnapshotsToCachedDataSources } from './features/reservations/availabilityCache';
 import { buildRejectedStepReservationEntries } from './features/reservations/rejectedReservations';
+import { shouldApplyReservationPlanResponse } from './features/reservations/reservationResponsePolicy';
 import {
   hasEnteredLineItemValues,
   hasEnteredTopLevelValues,
@@ -365,6 +366,15 @@ type SubmissionMeta = {
 };
 
 type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
+
+type GuidedReservationSyncOutcome = {
+  success: boolean;
+  message?: string;
+  recordId: string;
+  stepId: string;
+  sessionId: number;
+  stale?: boolean;
+};
 
 type FieldChangePending = {
   fieldPath: string;
@@ -1991,9 +2001,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const postPersistAutoSaveSuppressUntilRef = useRef<number>(0);
   const postPersistAutoSavePersistedLocalMutationAtRef = useRef<number>(0);
   const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
-  const reservationSyncPromiseRef = useRef<
-    Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> | null
-  >(null);
+  const reservationSyncPromiseRef = useRef<Promise<GuidedReservationSyncOutcome> | null>(null);
   const reservationSyncEpochRef = useRef<number>(0);
   const invalidGuidedReservationDraftsRef = useRef<
     Record<
@@ -9891,6 +9899,29 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [definition, formKey]
   );
 
+  const resolveCurrentReservationRecordId = useCallback(
+    () =>
+      resolveExistingRecordId({
+        selectedRecordId: selectedRecordIdRef.current,
+        selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+        lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+      }) || '',
+    []
+  );
+
+  const shouldApplyGuidedReservationPlanResponse = useCallback(
+    (args: { requestEpoch?: number; sessionId?: number; recordId: string }) =>
+      shouldApplyReservationPlanResponse({
+        requestEpoch: args.requestEpoch,
+        latestEpoch: reservationSyncEpochRef.current,
+        requestSessionId: args.sessionId,
+        currentSessionId: recordSessionRef.current,
+        requestRecordId: args.recordId,
+        currentRecordId: resolveCurrentReservationRecordId()
+      }),
+    [resolveCurrentReservationRecordId]
+  );
+
   const applyGuidedStepReservationPlan = useCallback(
     async (args: {
       stepId: string;
@@ -9898,13 +9929,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logPrefix: string;
       dialogKind: string;
       plan?: InventoryReservationPlanRequest | null;
-    }): Promise<{ success: boolean; message?: string; applied: boolean }> => {
+      requestEpoch?: number;
+      sessionId?: number;
+    }): Promise<{ success: boolean; message?: string; applied: boolean; stale?: boolean }> => {
       const reservationPlan = args.plan ?? resolveGuidedStepReservationPlan({
         stepId: args.stepId,
         recordId: args.recordId
       });
       if (!reservationPlan) {
         return { success: true, applied: false };
+      }
+      const responseIsCurrent = () =>
+        shouldApplyGuidedReservationPlanResponse({
+          requestEpoch: args.requestEpoch,
+          sessionId: args.sessionId,
+          recordId: args.recordId
+        });
+      if (!responseIsCurrent()) {
+        logEvent(`${args.logPrefix}.reservationPlan.skipped.staleBeforeRequest`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          requestEpoch: args.requestEpoch || null,
+          latestEpoch: reservationSyncEpochRef.current
+        });
+        return { success: true, applied: false, stale: true };
       }
       try {
         logEvent(`${args.logPrefix}.reservationPlan.begin`, {
@@ -9917,6 +9965,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ...reservationPlan,
           clientDataVersion: getCurrentKnownClientDataVersion() || undefined
         });
+        if (!responseIsCurrent()) {
+          logEvent(`${args.logPrefix}.reservationPlan.response.stale`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            success: reservationResult.success === true,
+            requestEpoch: args.requestEpoch || null,
+            latestEpoch: reservationSyncEpochRef.current
+          });
+          return { success: true, applied: true, stale: true };
+        }
         if (!reservationResult.success) {
           const availability = Array.isArray(reservationResult.availability)
             ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
@@ -10085,6 +10143,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         return { success: true, applied: true };
       } catch (err: any) {
+        if (!responseIsCurrent()) {
+          logEvent(`${args.logPrefix}.reservationPlan.exception.stale`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            requestEpoch: args.requestEpoch || null,
+            latestEpoch: reservationSyncEpochRef.current,
+            message: resolveLogMessage(err, 'Stale reservation plan response ignored.')
+          });
+          return { success: true, applied: true, stale: true };
+        }
         const availability = Array.isArray((err as any)?.availability)
           ? ((err as any).availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
           : ((err as any)?.availability ? [((err as any).availability as InventoryAvailabilitySnapshot)] : []);
@@ -10179,7 +10247,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       openConfiguredConfirmDialog,
       refreshGuidedDataSourcesInBackground,
       resolveGuidedStepReservationPlan,
-      resolveLogMessage
+      resolveLogMessage,
+      shouldApplyGuidedReservationPlanResponse
     ]
   );
 
@@ -10190,7 +10259,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       plan: InventoryReservationPlanRequest;
       logPrefix: string;
       dialogKind: string;
-    }): Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }> => {
+    }): Promise<GuidedReservationSyncOutcome> => {
       const sessionId = recordSessionRef.current;
       const fingerprint = buildInventoryReservationPlanFingerprint(args.plan);
       if (
@@ -10210,28 +10279,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
         }
       }
+      const requestEpoch = reservationSyncEpochRef.current + 1;
+      reservationSyncEpochRef.current = requestEpoch;
+      reservationSyncMetaRef.current = {
+        recordId: args.recordId,
+        stepId: args.stepId,
+        sessionId,
+        status: 'running',
+        fingerprint
+      };
       const run = async () => {
-        reservationSyncMetaRef.current = {
-          recordId: args.recordId,
-          stepId: args.stepId,
-          sessionId,
-          status: 'running',
-          fingerprint
-        };
         const result = await applyGuidedStepReservationPlan({
           stepId: args.stepId,
           recordId: args.recordId,
           logPrefix: args.logPrefix,
           dialogKind: args.dialogKind,
-          plan: args.plan
+          plan: args.plan,
+          requestEpoch,
+          sessionId
         });
-        const outcome = {
+        const outcome: GuidedReservationSyncOutcome = {
           success: result.success,
           message: result.message,
           recordId: args.recordId,
           stepId: args.stepId,
-          sessionId
+          sessionId,
+          stale: result.stale || undefined
         };
+        if (result.stale) {
+          logEvent(`${args.logPrefix}.reservationPlan.outcome.stale`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            requestEpoch,
+            latestEpoch: reservationSyncEpochRef.current
+          });
+          return outcome;
+        }
         reservationSyncMetaRef.current = {
           recordId: args.recordId,
           stepId: args.stepId,
@@ -10257,7 +10340,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       };
 
       const prior = reservationSyncPromiseRef.current;
-      let next: Promise<{ success: boolean; message?: string; recordId: string; stepId: string; sessionId: number }>;
+      let next: Promise<GuidedReservationSyncOutcome>;
       next = (prior
         ? prior.catch(() => ({
             success: false,
@@ -10278,7 +10361,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reservationSyncPromiseRef.current = null;
           }
         });
-      reservationSyncEpochRef.current += 1;
       markDataSourceFreshnessServerTouch({
         reason: `${args.logPrefix}.reservationPlan.queued`,
         stepId: args.stepId
@@ -10286,7 +10368,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       reservationSyncPromiseRef.current = next;
       return next;
     },
-    [applyGuidedStepReservationPlan, markDataSourceFreshnessServerTouch]
+    [applyGuidedStepReservationPlan, logEvent, markDataSourceFreshnessServerTouch]
   );
 
   const queueGuidedStepReservationDraftSync = useCallback(
@@ -10415,6 +10497,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             dialogKind: 'guidedStepLiveSync'
           });
           if (recordSessionRef.current !== next.sessionId) continue;
+          if (reservationOutcome.stale) {
+            logEvent('guidedStep.liveSync.skipped.staleReservationOutcome', {
+              stepId: next.stepId,
+              reason: next.reason,
+              recordId
+            });
+            continue;
+          }
           if (!reservationOutcome.success) {
             logEvent('guidedStep.liveSync.blocked.reservationFailed', {
               stepId: next.stepId,
@@ -10626,7 +10716,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const reservationPlan = resolveGuidedStepReservationPlan({
             stepId: next.stepId,
             recordId,
-            mode: 'all'
+            mode: 'step'
           });
           if (!reservationPlan) continue;
           void queueGuidedStepReservationPlan({
