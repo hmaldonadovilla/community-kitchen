@@ -4652,7 +4652,8 @@ describe('WebFormService', () => {
       Q3: [],
       Q4: 'ACME',
       __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
+      __ckStatus: 'In progress',
+      __ckNoopIfUnchanged: '1'
     } as any);
 
     expect(result.success).toBe(true);
@@ -5849,7 +5850,7 @@ describe('WebFormService', () => {
     expect((snapshotRow[snapshotIdx] || '').toString()).toContain('REC-AUDIT-1');
   });
 
-  test('unchanged saves return noop and preserve data version', () => {
+  test('unchanged saves return noop and preserve data version when requested', () => {
     const created = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
       language: 'EN',
@@ -5875,6 +5876,7 @@ describe('WebFormService', () => {
       Q4: 'ACME',
       __ckSaveMode: 'draft',
       __ckStatus: 'In progress',
+      __ckNoopIfUnchanged: '1',
       __ckClientDataVersion: created.meta?.dataVersion
     } as any);
 
@@ -5884,9 +5886,50 @@ describe('WebFormService', () => {
       expect.objectContaining({
         id: 'REC-NOOP-1',
         operation: 'noop',
+        noop: true,
+        noopReason: 'unchanged',
         dataVersion: created.meta?.dataVersion,
         rowNumber: created.meta?.rowNumber,
         updatedAt: created.meta?.updatedAt
+      })
+    );
+  });
+
+  test('unchanged saves without noop contract still write server metadata', () => {
+    const created = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-CONTRACT-ABSENT',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(created.success).toBe(true);
+
+    const second = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-NOOP-CONTRACT-ABSENT',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckClientDataVersion: created.meta?.dataVersion
+    } as any);
+
+    expect(second.success).toBe(true);
+    expect(second.message).toBe('Saved to sheet');
+    expect(second.meta).toEqual(
+      expect.objectContaining({
+        id: 'REC-NOOP-CONTRACT-ABSENT',
+        operation: 'update',
+        dataVersion: Number(created.meta?.dataVersion) + 1,
+        rowNumber: created.meta?.rowNumber
       })
     );
   });
@@ -5952,6 +5995,7 @@ describe('WebFormService', () => {
       __ckSaveMode: 'draft',
       __ckStatus: 'Ready for production',
       __ckAuditAction: 'READY_PROD',
+      __ckNoopIfUnchanged: '1',
       __ckClientDataVersion: changed.meta?.dataVersion
     } as any);
 

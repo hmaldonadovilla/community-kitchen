@@ -114,6 +114,11 @@ export class SubmissionService {
     return raw === true || raw === 'true' || raw === '1' || raw === 1;
   }
 
+  private shouldNoopIfUnchanged(formObject: WebFormSubmission): boolean {
+    const raw = (formObject as any).__ckNoopIfUnchanged;
+    return raw === true || raw === 'true' || raw === '1' || raw === 1;
+  }
+
   private normalizeUploadValueForMeta(raw: any): string {
     if (raw === undefined || raw === null) return '';
     if (Array.isArray(raw)) {
@@ -502,7 +507,7 @@ export class SubmissionService {
       existingRowIdx < 0
         ? true
         : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
-    if (existingRowIdx >= 0 && !hasMeaningfulChanges) {
+    if (existingRowIdx >= 0 && !hasMeaningfulChanges && this.shouldNoopIfUnchanged(formObject)) {
       const meta: Record<string, any> = {
         id: recordId,
         createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
@@ -511,7 +516,9 @@ export class SubmissionService {
           this.readRecordMetadataIso(existingRowValues, columns.createdAt),
         dataVersion: previousVersion || undefined,
         rowNumber: destinationRowNumber,
-        operation: 'noop'
+        operation: 'noop',
+        noop: true,
+        noopReason: 'unchanged'
       };
       if (this.shouldReturnUploadValues(formObject)) {
         meta.uploadValues = this.buildUploadValuesMeta(questions, candidateValues);
@@ -797,7 +804,7 @@ export class SubmissionService {
         existingRowIdx < 0
           ? true
           : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
-      if (existingRowIdx >= 0 && !hasMeaningfulChanges) {
+      if (existingRowIdx >= 0 && !hasMeaningfulChanges && this.shouldNoopIfUnchanged(formObject)) {
         return {
           success: true,
           message: 'No changes to save.',
@@ -809,7 +816,9 @@ export class SubmissionService {
               this.readRecordMetadataIso(existingRowValues, columns.createdAt),
             dataVersion: previousVersion || undefined,
             rowNumber: destinationRowNumber,
-            operation: 'noop'
+            operation: 'noop',
+            noop: true,
+            noopReason: 'unchanged'
           }
         };
       }
@@ -1028,7 +1037,7 @@ export class SubmissionService {
           existingRowNumber < 2
             ? true
             : this.hasMeaningfulRowChanges(existingRowValues || [], valuesArray, columns);
-        if (existingRowNumber >= 2 && !hasMeaningfulChanges) {
+        if (existingRowNumber >= 2 && !hasMeaningfulChanges && this.shouldNoopIfUnchanged(formObject)) {
           metaById[recordId] = {
             id: recordId,
             createdAt: this.readRecordMetadataIso(existingRowValues, columns.createdAt),
@@ -1037,7 +1046,9 @@ export class SubmissionService {
               this.readRecordMetadataIso(existingRowValues, columns.createdAt),
             dataVersion: previousVersion || undefined,
             rowNumber: destinationRowNumber,
-            operation: 'noop'
+            operation: 'noop',
+            noop: true,
+            noopReason: 'unchanged'
           };
           return;
         }

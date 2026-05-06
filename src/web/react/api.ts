@@ -38,7 +38,16 @@ export interface SubmissionPayload {
 export interface SubmissionResult {
   success: boolean;
   message?: string;
-  meta?: { id?: string; createdAt?: string; updatedAt?: string; dataVersion?: number; rowNumber?: number };
+  meta?: {
+    id?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    dataVersion?: number;
+    rowNumber?: number;
+    operation?: 'create' | 'update' | 'noop';
+    noop?: boolean;
+    noopReason?: string;
+  };
 }
 
 export interface UpdateRecordDependencyPreviewResult {

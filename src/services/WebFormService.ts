@@ -7127,6 +7127,7 @@ export class WebFormService {
     (payload as any).__ckSkipSubmitEffects = '1';
     (payload as any).__ckAllowClosedUpdate = '1';
     (payload as any).__ckSaveMode = 'draft';
+    (payload as any).__ckNoopIfUnchanged = '1';
     (payload as any).__ckAuditAction = args.auditAction;
     if (args.status !== undefined) {
       (payload as any).__ckStatus = args.status;
@@ -7293,6 +7294,7 @@ export class WebFormService {
     });
     (payload as any).__ckSaveMode = 'draft';
     (payload as any).__ckAllowClosedUpdate = '1';
+    (payload as any).__ckNoopIfUnchanged = '1';
     (payload as any).__ckStatus = args.record.status === undefined || args.record.status === null ? '' : args.record.status;
     (payload as any).__ckAuditAction = args.auditAction;
     if (Number.isFinite(Number(args.clientDataVersion)) && Number(args.clientDataVersion) > 0) {
@@ -7673,6 +7675,7 @@ export class WebFormService {
         (payload as any)[fieldId] = payloadValues[fieldId];
       });
       (payload as any).__ckSkipSubmitEffects = '1';
+      (payload as any).__ckNoopIfUnchanged = '1';
       (payload as any).__ckAuditAction =
         resolved.auditAction || `submitEffect:${resolved.type}:${args.sourceRecord.id || 'source'}`;
       if (Object.prototype.hasOwnProperty.call(resolved, 'status')) {

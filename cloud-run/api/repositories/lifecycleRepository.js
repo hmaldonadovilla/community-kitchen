@@ -99,6 +99,7 @@ class LifecycleRepository {
       __ckSkipSubmitEffects: true,
       __ckAllowClosedUpdate: '1',
       __ckSaveMode: 'draft',
+      __ckNoopIfUnchanged: '1',
       __ckAuditAction: `lifecycle:${toText(rule.id || rule.type) || 'statusTransition'}`
     };
     Object.keys(values).forEach(fieldId => {

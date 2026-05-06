@@ -111,6 +111,7 @@ import {
   collectValidationWarnings,
   computeUrlOnlyUploadUpdates,
   isSubmissionStaleMessage,
+  markNoopIfUnchanged,
   prepareClientDataVersionDispatch,
   resolveFollowupActionResultMeta,
   resolveReservationPlanSourceMetaAdoption,
@@ -7311,6 +7312,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }) as any
         );
         payload.__ckSaveMode = 'draft';
+        markNoopIfUnchanged(payload);
         payload.__ckStatus = statusForSave;
         payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
         const baseVersion = recordDataVersionRef.current;
@@ -8895,6 +8897,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }) as any
         );
         draft.__ckSaveMode = 'draft';
+        markNoopIfUnchanged(draft);
         draft.__ckStatus = draftStatus;
         draft.__ckCreateFlow = createFlowRef.current ? '1' : '';
         const res = await runCoalescedDraftSaveRequest('ensureDraftRecordId', draft, (nextPayload: any) =>
@@ -9650,6 +9653,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         );
         if (args.mode === 'draft') {
           (payload as any).__ckSaveMode = 'draft';
+          markNoopIfUnchanged(payload as any);
           (payload as any).__ckCreateFlow = createFlowRef.current ? '1' : '';
         }
       }
@@ -11802,6 +11806,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             target
           });
           payload.__ckSaveMode = 'draft';
+          markNoopIfUnchanged(payload);
           payload.__ckStatus = statusForSave;
           payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
           payload.__ckReturnUploadValues = true;

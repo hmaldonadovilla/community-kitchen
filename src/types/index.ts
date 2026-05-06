@@ -5697,6 +5697,8 @@ export interface RecordMetadata {
   dataVersion?: number;
   rowNumber?: number;
   operation?: 'create' | 'update' | 'noop';
+  noop?: boolean;
+  noopReason?: string;
   autoIncrementValues?: Record<string, string>;
   reservationRelease?: {
     success?: boolean;

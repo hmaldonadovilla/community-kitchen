@@ -290,6 +290,7 @@ const buildDependencyMutationSavePayload = args => {
   payload.__ckStatus = !args.record || args.record.status === undefined || args.record.status === null ? '' : args.record.status;
   payload.__ckAuditAction = args.auditAction;
   payload.__ckSkipSubmitEffects = true;
+  payload.__ckNoopIfUnchanged = '1';
   if (Number.isFinite(Number(args.clientDataVersion)) && Number(args.clientDataVersion) > 0) {
     payload.__ckClientDataVersion = Number(args.clientDataVersion);
   }
@@ -300,6 +301,7 @@ const forceSkipSubmitEffects = formObject => {
   const payload = formObject && typeof formObject === 'object' ? { ...formObject } : {};
   if (payload.values && typeof payload.values === 'object') payload.values = cloneJson(payload.values);
   payload.__ckSkipSubmitEffects = true;
+  payload.__ckNoopIfUnchanged = '1';
   return payload;
 };
 

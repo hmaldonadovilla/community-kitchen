@@ -491,6 +491,7 @@ class SubmitEffectsRepository {
         language: sourceRecord.language || 'EN',
         values: payloadValues,
         __ckSkipSubmitEffects: '1',
+        __ckNoopIfUnchanged: '1',
         __ckAuditAction: resolved.auditAction || `submitEffect:${resolved.type}:${sourceRecord.id || 'source'}`
       };
       const recordId = toText(resolved.recordId);

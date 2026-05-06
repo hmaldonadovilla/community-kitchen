@@ -488,6 +488,7 @@ class FollowupRepository {
       __ckSaveMode: 'draft',
       __ckAllowClosedUpdate: '1',
       __ckSkipSubmitEffects: '1',
+      __ckNoopIfUnchanged: '1',
       __ckAuditAction: auditAction
     };
     Object.keys(values || {}).forEach(fieldId => {

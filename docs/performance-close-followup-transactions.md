@@ -56,6 +56,12 @@ This slice targets Meal Production milestone/final close latency, with generic c
   - Follow-up rendering resolves bundled templates before Drive template reads.
   - The frontend does not fetch PDF templates; template warmup is server-side only and runs after home data has loaded.
 
+- Save calls now have an explicit unchanged-row no-op contract.
+  - A caller can set `__ckNoopIfUnchanged: "1"` to declare that no submit effects, audit write, version bump, or metadata timestamp update is needed if the serialized destination row is unchanged.
+  - Apps Script and Cloud Run both compare the existing row to the candidate row server-side before writing.
+  - Draft autosaves, draft snapshot saves, upload draft saves, deterministic submit effects, follow-up metadata updates, inventory reservation internals, lifecycle internals, and dependency-guard internals opt into the contract.
+  - Regular submits without the flag still write and run their side effects even when the payload values match the existing row.
+
 ## Expected impact
 
 - Meal Production `Complete` no longer pays for a separate `triggerFollowupActions(CLOSE_RECORD)` call after saving the final snapshot.
@@ -63,6 +69,7 @@ This slice targets Meal Production milestone/final close latency, with generic c
 - Final follow-up no longer pays for email send latency in the user-visible close request.
 - Reconciliation and PDF generation overlap when the batch contains only `RECONCILE_RESERVATIONS`, `CREATE_PDF`, and optional `SEND_EMAIL`.
 - Records without reservation selections avoid the ledger/inventory reconciliation scan on the final path.
+- No-op-capable draft/internal saves avoid unnecessary Google Sheet metadata writes when the frontend or backend resends an unchanged payload.
 - The batching is conservative: records that require auto-generated ids continue to use the existing sequential code path.
 
 ## Verification

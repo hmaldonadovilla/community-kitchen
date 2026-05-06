@@ -60,6 +60,8 @@ const normalizeLanguage = value => {
 
 const isTruthyFlag = value => value === true || value === 'true' || value === '1' || value === 1;
 
+const isNoopIfUnchangedRequested = payload => isTruthyFlag(payload && payload.__ckNoopIfUnchanged);
+
 const resolveLocalizedText = (value, language, fallback = '') => {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'string') {
@@ -920,7 +922,7 @@ class GoogleSheetsSubmissionRepository {
   }
 
   rowMetadata(sheet, row, rowNumber, recordId, operation) {
-    return {
+    const meta = {
       id: recordId,
       createdAt: this.value(row, sheet.columns.createdAt),
       updatedAt: this.value(row, sheet.columns.updatedAt) || this.value(row, sheet.columns.createdAt),
@@ -928,6 +930,11 @@ class GoogleSheetsSubmissionRepository {
       rowNumber,
       operation
     };
+    if ((operation || '').toString().trim().toLowerCase() === 'noop') {
+      meta.noop = true;
+      meta.noopReason = 'unchanged';
+    }
+    return meta;
   }
 
   async deleteRecordById(sheet, recordId) {
@@ -1120,22 +1127,6 @@ class GoogleSheetsSubmissionRepository {
       spreadsheetId: sheet.spreadsheetId
     });
     const dedupRules = this.getDedupRules(sheet.formKey);
-    const existingRecords = sheet.dataRows
-      .map((row, index) => this.buildRecord(sheet, row, index + 2))
-      .filter(Boolean)
-      .map(record => ({
-        id: record.id,
-        rowNumber: record.rowNumber,
-        values: record.values || {}
-      }));
-    const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existingRecords, language);
-    if (conflict) {
-      return {
-        success: false,
-        message: conflict.message || 'Duplicate record.',
-        meta: { id: recordId }
-      };
-    }
 
     const setIf = (idx, value) => {
       if (idx === undefined) return;
@@ -1188,7 +1179,7 @@ class GoogleSheetsSubmissionRepository {
       };
     }
 
-    if (existingRow && !this.hasMeaningfulChanges(existingRow, nextRow, sheet.columns)) {
+    if (existingRow && isNoopIfUnchangedRequested(payload) && !this.hasMeaningfulChanges(existingRow, nextRow, sheet.columns)) {
       const meta = this.rowMetadata(sheet, existingRow, destinationRowNumber, recordId, 'noop');
       if (this.shouldReturnUploadValues(payload)) {
         meta.uploadValues = this.buildUploadValuesMeta(sheet.questions, candidateValues);
@@ -1197,6 +1188,23 @@ class GoogleSheetsSubmissionRepository {
         success: true,
         message: 'No changes to save.',
         meta
+      };
+    }
+
+    const existingRecords = sheet.dataRows
+      .map((row, index) => this.buildRecord(sheet, row, index + 2))
+      .filter(Boolean)
+      .map(record => ({
+        id: record.id,
+        rowNumber: record.rowNumber,
+        values: record.values || {}
+      }));
+    const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existingRecords, language);
+    if (conflict) {
+      return {
+        success: false,
+        message: conflict.message || 'Duplicate record.',
+        meta: { id: recordId }
       };
     }
 
