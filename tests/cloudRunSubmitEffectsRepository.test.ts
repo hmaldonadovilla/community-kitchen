@@ -170,4 +170,42 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       touchedInventoryRecords: 0
     });
   });
+
+  test('scaleCollection derives produced leftovers from the Cook row ingredient list only', async () => {
+    const repository = new SubmitEffectsRepository({});
+    const result = await repository.resolveComputedValue(
+      {
+        op: 'scaleCollection',
+        collectionPath: 'row.MP_INGREDIENTS_LI',
+        pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+        scaleNumericFields: ['QTY'],
+        multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+        divisorPath: 'row.PREP_QTY'
+      },
+      {
+        parent: {
+          MP_LEFTOVER_PORTIONS_CAPTURE: 3,
+          MP_TYPE_LI: [
+            {
+              PREP_TYPE: 'Single-ingredient',
+              MP_INGREDIENTS_LI: [{ ING: 'Couscous', QTY: 4, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' }]
+            }
+          ]
+        },
+        row: {
+          PREP_TYPE: 'Cook',
+          PREP_QTY: 12,
+          MP_INGREDIENTS_LI: [
+            { ING: 'Couscous', QTY: 8, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+            { ING: 'Carrot', QTY: 4, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+          ]
+        }
+      }
+    );
+
+    expect(result).toEqual([
+      { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+      { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+    ]);
+  });
 });

@@ -765,7 +765,7 @@ describe('meal production leftover selection config', () => {
     expect(openOverlayEffect?.overlaySession).not.toHaveProperty('bulkSelection');
   });
 
-  it('falls back to flattened combined prep ingredients for created multi-ingredient leftovers', () => {
+  it('derives created multi-ingredient leftover ingredients from the Cook row only', () => {
     const exported = getExport();
     const followupEffects = Array.isArray(exported.form?.followupConfig?.submitEffects)
       ? exported.form.followupConfig.submitEffects
@@ -774,26 +774,19 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.values?.DIETARY_APPLICABILITY?.collection).toEqual(
       expect.objectContaining({
-        op: 'ifPresent',
-        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
-        else: expect.objectContaining({
-          op: 'flattenCollection',
-          collectionPath: 'parent.MP_TYPE_LI',
-          nestedCollectionPath: 'MP_INGREDIENTS_LI',
-          pickFields: ['ING']
-        })
+        op: 'filterCollection',
+        collectionPath: 'row.MP_INGREDIENTS_LI',
+        pickFields: ['ING']
       })
     );
     expect(target?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
       expect.objectContaining({
-        op: 'ifPresent',
-        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
-        else: expect.objectContaining({
-          op: 'flattenCollection',
-          collectionPath: 'parent.MP_TYPE_LI',
-          nestedCollectionPath: 'MP_INGREDIENTS_LI',
-          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
-        })
+        op: 'scaleCollection',
+        collectionPath: 'row.MP_INGREDIENTS_LI',
+        pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+        scaleNumericFields: ['QTY'],
+        multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+        divisorPath: 'row.PREP_QTY'
       })
     );
   });

@@ -2455,7 +2455,7 @@ describe('WebFormService', () => {
     expect((partialDishRow.LEFTOVER_ID || '').toString()).toBe('LP-1');
   });
 
-  test('saveSubmissionWithId can flatten combined prep ingredients for produced leftovers when capture rows are absent', () => {
+  test('saveSubmissionWithId scales produced leftover ingredients from the Cook row only', () => {
     const mealProductionFormKey = 'Config: Test Meal Production Combined Leftovers';
     const inventoryFormKey = 'Config: Combined Leftover Inventory';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -2490,45 +2490,12 @@ describe('WebFormService', () => {
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
             LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
             LEFTOVER_INGREDIENTS_LI: {
-              op: 'ifPresent',
-              path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
-              then: {
-                op: 'filterCollection',
-                collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
-                when: {
-                  fieldId: 'ING_SELECTED',
-                  equals: true
-                },
-                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
-              },
-              else: {
-                op: 'flattenCollection',
-                collectionPath: 'parent.MP_TYPE_LI',
-                nestedCollectionPath: 'MP_INGREDIENTS_LI',
-                rowFilter: {
-                  includeWhen: {
-                    any: [
-                      {
-                        fieldId: 'PREP_TYPE',
-                        equals: ['Cook', 'Single-ingredient', 'Part dish']
-                      },
-                      {
-                        all: [
-                          {
-                            fieldId: 'PREP_TYPE',
-                            equals: ['Multi-ingredient', 'Entire dish']
-                          },
-                          {
-                            fieldId: 'PREP_QTY',
-                            equals: 0
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                },
-                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN']
-              }
+              op: 'scaleCollection',
+              collectionPath: 'row.MP_INGREDIENTS_LI',
+              pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+              scaleNumericFields: ['QTY'],
+              multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+              divisorPath: 'row.PREP_QTY'
             }
           }
         }
@@ -2587,8 +2554,12 @@ describe('WebFormService', () => {
           {
             __ckRowId: 'COOK-1',
             PREP_TYPE: 'Cook',
+            PREP_QTY: 12,
             RECIPE: 'Vegetable stew',
-            MP_INGREDIENTS_LI: [{ ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }]
+            MP_INGREDIENTS_LI: [
+              { ING: 'Couscous', QTY: 8, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+              { ING: 'Carrot', QTY: 4, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+            ]
           },
           {
             __ckRowId: 'COMBINE-1',
@@ -2600,8 +2571,8 @@ describe('WebFormService', () => {
           {
             __ckRowId: 'SINGLE-1',
             PREP_TYPE: 'Single-ingredient',
-            RECIPE: 'Rice',
-            MP_INGREDIENTS_LI: [{ ING: 'Rice', QTY: 500, UNIT: 'gr', CAT: 'Dry goods', ALLERGEN: 'None' }]
+            RECIPE: 'Couscous',
+            MP_INGREDIENTS_LI: [{ ING: 'Couscous', QTY: 4, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' }]
           },
           {
             __ckRowId: 'REHEAT-1',
@@ -2640,9 +2611,8 @@ describe('WebFormService', () => {
     expect(savedInventory?.values?.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-COMBINED-1');
     expect(savedInventory?.values?.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
     expect(savedInventory?.values?.LEFTOVER_INGREDIENTS_LI).toEqual([
-      { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' },
-      { ING: 'Courgette - frozen', QTY: 2, UNIT: 'kg', CAT: 'Frozen', ALLERGEN: 'None' },
-      { ING: 'Rice', QTY: 500, UNIT: 'gr', CAT: 'Dry goods', ALLERGEN: 'None' }
+      { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+      { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
     ]);
   });
 

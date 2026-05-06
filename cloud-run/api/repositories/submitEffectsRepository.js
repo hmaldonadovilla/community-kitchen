@@ -64,6 +64,16 @@ const toFiniteNumber = value => {
   return Number.isFinite(number) ? number : 0;
 };
 
+const toOptionalFiniteNumber = value => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const normalizeComputedNumber = value => {
+  const rounded = Math.round(value * 1000000) / 1000000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+};
+
 const readPathValue = (root, pathRaw) => {
   const path = toText(pathRaw);
   if (!path) return '';
@@ -360,6 +370,40 @@ class SubmitEffectsRepository {
     });
   }
 
+  resolveComputedScale(value, vars) {
+    const multiplierRaw = value.multiplierPath ? readPathValue(vars, value.multiplierPath) : value.multiplier;
+    const divisorRaw = value.divisorPath ? readPathValue(vars, value.divisorPath) : value.divisor;
+    const multiplier = multiplierRaw === undefined ? 1 : toOptionalFiniteNumber(multiplierRaw);
+    const divisor = divisorRaw === undefined ? 1 : toOptionalFiniteNumber(divisorRaw);
+    if (multiplier === null) return 0;
+    if (divisor === null || divisor === 0) return 0;
+    return multiplier / divisor;
+  }
+
+  async scaleCollection(value, vars) {
+    const pickFields = Array.isArray(value.pickFields) ? value.pickFields.map(toText).filter(Boolean) : [];
+    const scaleNumericFields = new Set(
+      Array.isArray(value.scaleNumericFields) ? value.scaleNumericFields.map(toText).filter(Boolean) : []
+    );
+    const scale = this.resolveComputedScale(value, vars);
+    const entries = await this.filterCollectionEntries(value, vars);
+    return entries.map(entry => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const out = {};
+      const fieldIds = pickFields.length ? pickFields : Object.keys(entry);
+      fieldIds.forEach(fieldId => {
+        const sourceValue = entry[fieldId];
+        if (!scaleNumericFields.has(fieldId)) {
+          out[fieldId] = sourceValue;
+          return;
+        }
+        const numericValue = toOptionalFiniteNumber(sourceValue);
+        out[fieldId] = numericValue === null ? sourceValue : normalizeComputedNumber(numericValue * scale);
+      });
+      return out;
+    });
+  }
+
   async flattenCollection(value, vars) {
     const parentRows = await this.filterCollectionEntries(value, vars);
     const nestedCollectionPath = toText(value.nestedCollectionPath);
@@ -462,6 +506,7 @@ class SubmitEffectsRepository {
     if (op === 'lookupSetIntersection') return this.resolveLookupSetIntersection(value, vars);
     if (op === 'firstNonEmpty') return this.resolveFirstNonEmpty(value, vars);
     if (op === 'filterCollection') return this.filterCollection(value, vars);
+    if (op === 'scaleCollection') return this.scaleCollection(value, vars);
     if (op === 'flattenCollection') return this.flattenCollection(value, vars);
     if (op === 'ifPresent') return this.resolveIfPresent(value, vars);
     const out = {};

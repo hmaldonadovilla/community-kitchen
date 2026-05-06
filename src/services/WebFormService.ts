@@ -2739,6 +2739,58 @@ export class WebFormService {
     });
   }
 
+  private readComputedNumber(raw: any): number | null {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeComputedNumber(raw: number): number {
+    const rounded = Math.round(raw * 1000000) / 1000000;
+    return Object.is(rounded, -0) ? 0 : rounded;
+  }
+
+  private resolveComputedScale(value: Record<string, any>, vars: Record<string, any>): number {
+    const multiplierRaw = value.multiplierPath
+      ? this.readTemplatePathValue(value.multiplierPath, vars)
+      : value.multiplier;
+    const divisorRaw = value.divisorPath
+      ? this.readTemplatePathValue(value.divisorPath, vars)
+      : value.divisor;
+    const multiplier = multiplierRaw === undefined ? 1 : this.readComputedNumber(multiplierRaw);
+    const divisor = divisorRaw === undefined ? 1 : this.readComputedNumber(divisorRaw);
+    if (multiplier === null) return 0;
+    if (divisor === null || divisor === 0) return 0;
+    return multiplier / divisor;
+  }
+
+  private scaleComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
+    const pickFields = Array.isArray(value.pickFields)
+      ? value.pickFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+      : [];
+    const scaleNumericFields = new Set(
+      Array.isArray(value.scaleNumericFields)
+        ? value.scaleNumericFields.map(entry => `${entry || ''}`.trim()).filter(Boolean)
+        : []
+    );
+    const scale = this.resolveComputedScale(value, vars);
+    return this.filterComputedCollectionEntries(value, vars).map(entry => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const next: Record<string, any> = {};
+      const source = entry as Record<string, any>;
+      const fieldIds = pickFields.length ? pickFields : Object.keys(source);
+      fieldIds.forEach(fieldId => {
+        const sourceValue = source[fieldId];
+        if (!scaleNumericFields.has(fieldId)) {
+          next[fieldId] = sourceValue;
+          return;
+        }
+        const numericValue = this.readComputedNumber(sourceValue);
+        next[fieldId] = numericValue === null ? sourceValue : this.normalizeComputedNumber(numericValue * scale);
+      });
+      return next;
+    });
+  }
+
   private flattenComputedCollection(value: Record<string, any>, vars: Record<string, any>): any[] {
     const parentRows = this.filterComputedCollectionEntries(value, vars);
     if (!parentRows.length) return [];
@@ -2896,6 +2948,9 @@ export class WebFormService {
     }
     if (op === 'filterCollection') {
       return this.filterComputedCollection(value as Record<string, any>, vars);
+    }
+    if (op === 'scaleCollection') {
+      return this.scaleComputedCollection(value as Record<string, any>, vars);
     }
     if (op === 'flattenCollection') {
       return this.flattenComputedCollection(value as Record<string, any>, vars);
