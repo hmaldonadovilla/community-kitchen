@@ -849,10 +849,15 @@ One-hundred-seventeenth-pass results:
 - Moved guided source-first datasource/reservation pure helpers from `src/web/react/components/form` into `src/web/react/features/lineItems/domain`, including source-first presentation projection, row projection, optimistic availability, draft transitions, exclusive selection cleanup, virtual row values, virtual presets, virtual validation context, reservation quantity projection, and datasource row matching. This leaves `components/form` closer to shared form UI and keeps line-item business rules under the line-items feature boundary.
 - Validation for the pass used focused datasource/reservation helper tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-eighteenth-pass results:
+
+- `FormView.tsx`: extracted form configuration diagnostics into `useFormConfigDiagnostics` plus pure diagnostic collectors, moving guided visibility, ordered-entry, selector-overlay, add-overlay copy, non-match warning, dedup, overlay-detail, row-flow, and food-safety diagnostic traversal out of the main renderer. Current size: 10,576 lines.
+- Validation for the pass used focused form diagnostic collector tests and `npx tsc --noEmit --pretty false`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 10,791 lines.
+- `FormView.tsx`: 10,576 lines.
 - `LineItemGroupQuestion.tsx`: 869 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

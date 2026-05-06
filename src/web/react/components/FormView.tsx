@@ -27,7 +27,6 @@ import {
   OptionSet,
   QuestionGroupConfig,
   RowFlowConfig,
-  RowFlowOutputSegmentConfig,
   StepMilestoneActionConfig,
   VisibilityContext,
   WebFormDefinition,
@@ -115,6 +114,7 @@ import { buildTopQuestionRenderer } from './form/topQuestionRenderer';
 import { useOrderedEntryValidationController } from './form/useOrderedEntryValidationController';
 import { useSingleChoiceDefaults } from './form/useSingleChoiceDefaults';
 import { useChoiceControlRenderer } from './form/useChoiceControlRenderer';
+import { useFormConfigDiagnostics } from './form/useFormConfigDiagnostics';
 import { LineItemGroupQuestion } from './form/LineItemGroupQuestion';
 import { LineItemTable } from './form/LineItemTable';
 import { HtmlPreview } from './app/HtmlPreview';
@@ -146,7 +146,6 @@ import { NumberStepper } from './form/NumberStepper';
 import { applyValueMapsToForm, coerceDefaultValue, resolveValueMapValue } from './form/valueMaps';
 import { resolveAddOverlayCopy } from '../features/lineItems/domain/addOverlayCopy';
 import type { OrderedEntryTarget } from './form/orderedEntry';
-import { resolveRowFlowSegmentActionIds } from '../features/steps/domain/rowFlow';
 import {
   buildLineContextId,
   buildSubgroupKey,
@@ -223,7 +222,6 @@ import { resolveTableColumnWidthStyle } from '../features/lineItems/domain/table
 import {
   areFieldValuesEqual,
   areOverlayHeaderFieldsComplete,
-  collectLineItemConfigEntries,
   hasSelectionEffects,
   resolveLineItemDedupMessage,
   resolveLineItemDedupValueToken,
@@ -669,10 +667,6 @@ const FormView: React.FC<FormViewProps> = ({
   const hideLabelLoggedRef = useRef<Set<string>>(new Set());
   const overlayOpenActionLoggedRef = useRef<Set<string>>(new Set());
   const guidedLineGroupOverrideLoggedRef = useRef<Set<string>>(new Set());
-  const foodSafetyDiagnosticLoggedRef = useRef(false);
-  const guidedVisibilityDiagnosticSignatureRef = useRef('');
-  const rowFlowDiagnosticSignatureRef = useRef('');
-  const rowFlowSegmentActionsDiagnosticSignatureRef = useRef('');
   const [overlayOpenActionSuppressed, setOverlayOpenActionSuppressed] = useState<Record<string, boolean>>({});
   const fallbackConfirm = useConfirmDialog({ eventPrefix: 'ui.formConfirm', onDiagnostic });
   const openConfirmDialogResolved = openConfirmDialog || fallbackConfirm.openConfirm;
@@ -965,225 +959,16 @@ const FormView: React.FC<FormViewProps> = ({
       ? Math.min(activeGuidedStepIndex, maxReachableGuidedIndexBase)
       : maxReachableGuidedIndexBase;
 
-  // Emit a one-time diagnostic when guided steps are enabled for this form.
-  useEffect(() => {
-    if (!guidedEnabled) return;
-    onDiagnostic?.('steps.enabled', { mode: 'guided', stepCount: guidedStepIds.length });
-    onDiagnostic?.('steps.validation.noticeMode', { mode: 'fieldOnly' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guidedEnabled]);
-
-  useEffect(() => {
-    if (!guidedEnabled) return;
-    const payload = {
-      visibleStepIds: guidedStepIds,
-      visibleStepCount: guidedStepIds.length,
-      hiddenStepCount: Math.max(0, ((guidedStepsCfg?.items || []) as any[]).length - guidedStepIds.length)
-    };
-    const signature = JSON.stringify(payload);
-    if (guidedVisibilityDiagnosticSignatureRef.current === signature) return;
-    guidedVisibilityDiagnosticSignatureRef.current = signature;
-    onDiagnostic?.('steps.visibility.resolved', payload);
-  }, [guidedEnabled, guidedStepIds, guidedStepsCfg, onDiagnostic]);
-
-  useEffect(() => {
-    if (!orderedEntryEnabled) return;
-    onDiagnostic?.('validation.ordered.enabled', { mode: guidedEnabled ? 'guided' : 'standard' });
-  }, [guidedEnabled, onDiagnostic, orderedEntryEnabled]);
-
-  useEffect(() => {
-    if (!onDiagnostic || foodSafetyDiagnosticLoggedRef.current) return;
-    const stepCfg = (definition.steps?.items || []).find(step => (step?.id || '').toString() === 'foodSafety');
-    if (!stepCfg) return;
-    const group = (definition.questions || []).find(q => q.id === 'MP_MEALS_REQUEST' && q.type === 'LINE_ITEM_GROUP');
-    const fields = (group?.lineItemConfig?.fields || []) as any[];
-    const tempField = fields.find(field => field?.id === 'MP_COOK_TEMP');
-    const leftoverField = fields.find(field => field?.id === 'LEFTOVER_VAL');
-    const hasConsentOptions = Array.isArray(tempField?.options) ? tempField.options.length > 0 : false;
-    const isConsentCheckbox = tempField?.type === 'CHECKBOX' && !tempField?.dataSource && !hasConsentOptions;
-
-    onDiagnostic('form.foodSafety.helperText', {
-      stepId: stepCfg.id,
-      enabled: Boolean(stepCfg.helpText),
-      length: (stepCfg.helpText ? resolveLocalizedString(stepCfg.helpText, language, '') : '').length
-    });
-    onDiagnostic('form.foodSafety.fields', {
-      groupId: group?.id || null,
-      leftoverField: Boolean(leftoverField),
-      tempFieldType: tempField?.type || null,
-      tempConsent: isConsentCheckbox
-    });
-    foodSafetyDiagnosticLoggedRef.current = true;
-  }, [definition.questions, definition.steps, language, onDiagnostic]);
-
-  const selectorOverlayGroups = useMemo(() => {
-    return (definition.questions || [])
-      .filter(q => q.type === 'LINE_ITEM_GROUP')
-      .map(q => ({ id: q.id, addMode: (q.lineItemConfig as any)?.addMode }))
-      .filter(entry => {
-        const mode = (entry.addMode || '').toString().trim().toLowerCase();
-        return mode === 'selectoroverlay' || mode === 'selector-overlay';
-      })
-      .map(entry => entry.id);
-  }, [definition.questions]);
-
-  useEffect(() => {
-    if (!selectorOverlayGroups.length) return;
-    onDiagnostic?.('form.lineItems.selectorOverlay.enabled', { groupIds: selectorOverlayGroups });
-  }, [onDiagnostic, selectorOverlayGroups]);
-
-  const lineItemConfigEntries = useMemo(
-    () => collectLineItemConfigEntries(definition.questions || []),
-    [definition.questions]
-  );
-
-  const selectorOverlayHelperGroups = useMemo(() => {
-    return lineItemConfigEntries
-      .filter(entry => {
-        const selector = entry.config?.sectionSelector;
-        if (!selector) return false;
-        return Boolean(
-          selector.helperText ||
-          selector.helperTextEn ||
-          selector.helperTextFr ||
-          selector.helperTextNl
-        );
-      })
-      .map(entry => entry.id);
-  }, [lineItemConfigEntries]);
-
-  useEffect(() => {
-    if (!selectorOverlayHelperGroups.length) return;
-    onDiagnostic?.('form.lineItems.selectorOverlay.helperText.enabled', { groupIds: selectorOverlayHelperGroups });
-  }, [onDiagnostic, selectorOverlayHelperGroups]);
-
-  const addOverlayCopyGroups = useMemo(() => {
-    return lineItemConfigEntries
-      .filter(entry => {
-        const cfg = entry.config?.addOverlay;
-        return Boolean(cfg && (cfg.title || cfg.helperText || cfg.placeholder));
-      })
-      .map(entry => entry.id);
-  }, [lineItemConfigEntries]);
-
-  useEffect(() => {
-    if (!addOverlayCopyGroups.length) return;
-    onDiagnostic?.('form.lineItems.addOverlayCopy.enabled', { groupIds: addOverlayCopyGroups });
-  }, [addOverlayCopyGroups, onDiagnostic]);
-
-  const nonMatchWarningModeGroups = useMemo(() => {
-    return (definition.questions || [])
-      .filter(q => q.type === 'LINE_ITEM_GROUP')
-      .map(q => {
-        const raw = (q.lineItemConfig?.ui as any)?.nonMatchWarningMode;
-        if (raw === undefined || raw === null || raw === '') return null;
-        const candidate = raw.toString().trim().toLowerCase();
-        const mode =
-          candidate === 'validation' || candidate === 'rules' || candidate === 'rule' || candidate === 'generic'
-            ? 'validation'
-            : candidate === 'both' || candidate === 'all'
-              ? 'both'
-              : 'descriptive';
-        return { id: q.id, mode };
-      })
-      .filter(Boolean) as Array<{ id: string; mode: string }>;
-  }, [definition.questions]);
-
-  useEffect(() => {
-    if (!nonMatchWarningModeGroups.length) return;
-    onDiagnostic?.('form.lineItems.nonMatchWarningMode.enabled', { groups: nonMatchWarningModeGroups });
-  }, [nonMatchWarningModeGroups, onDiagnostic]);
-
-  const lineItemDedupGroups = useMemo(() => {
-    return (definition.questions || [])
-      .filter(q => q.type === 'LINE_ITEM_GROUP')
-      .map(q => {
-        const rules = normalizeLineItemDedupRules((q.lineItemConfig as any)?.dedupRules);
-        if (!rules.length) return null;
-        return {
-          id: q.id,
-          rules: rules.map(rule => rule.fields)
-        };
-      })
-      .filter(Boolean) as Array<{ id: string; rules: string[][] }>;
-  }, [definition.questions]);
-
-  const overlayDetailGroups = useMemo(() => {
-    return (definition.questions || [])
-      .filter(q => q.type === 'LINE_ITEM_GROUP' && (q as any)?.lineItemConfig?.ui?.overlayDetail?.enabled === true)
-      .map(q => q.id);
-  }, [definition.questions]);
-
-  useEffect(() => {
-    if (!lineItemDedupGroups.length) return;
-    onDiagnostic?.('form.lineItems.dedupRules.enabled', { groups: lineItemDedupGroups });
-  }, [lineItemDedupGroups, onDiagnostic]);
-
-  useEffect(() => {
-    if (!overlayDetailGroups.length) return;
-    onDiagnostic?.('form.lineItems.overlayDetail.enabled', { groups: overlayDetailGroups });
-  }, [onDiagnostic, overlayDetailGroups]);
-
-  const rowFlowTargets = useMemo(() => {
-    if (!guidedStepsCfg) return [];
-    const targets: Array<{ stepId: string; groupId: string; mode: string }> = [];
-    guidedVisibleSteps.forEach(step => {
-      const stepId = (step?.id || '').toString();
-      const includes = Array.isArray(step?.include) ? step.include : [];
-      includes.forEach((target: any) => {
-        if (!target || typeof target !== 'object') return;
-        const kind = (target.kind || '').toString().trim();
-        if (kind !== 'lineGroup') return;
-        const groupId = (target.id || '').toString().trim();
-        if (!groupId || !target.rowFlow) return;
-        const mode = (target.rowFlow?.mode || 'progressive').toString();
-        targets.push({ stepId, groupId, mode });
-      });
-    });
-    return targets;
-  }, [guidedStepsCfg, guidedVisibleSteps]);
-
-  const rowFlowSegmentActionTargets = useMemo(() => {
-    if (!guidedStepsCfg) return [];
-    const targets: Array<{ stepId: string; groupId: string; segmentsWithActions: number; multiActionSegments: number }> = [];
-    guidedVisibleSteps.forEach(step => {
-      const stepId = (step?.id || '').toString();
-      const includes = Array.isArray(step?.include) ? step.include : [];
-      includes.forEach((target: any) => {
-        if (!target || typeof target !== 'object') return;
-        const kind = (target.kind || '').toString().trim();
-        if (kind !== 'lineGroup') return;
-        const groupId = (target.id || '').toString().trim();
-        if (!groupId || !target.rowFlow) return;
-        const segments = (target.rowFlow?.output?.segments || []) as RowFlowOutputSegmentConfig[];
-        if (!segments.length) return;
-        const segmentActions: string[][] = segments.map(segment => resolveRowFlowSegmentActionIds(segment));
-        const segmentsWithActions = segmentActions.filter(ids => ids.length > 0);
-        if (!segmentsWithActions.length) return;
-        const multiActionSegments = segmentActions.filter(ids => ids.length > 1).length;
-        targets.push({ stepId, groupId, segmentsWithActions: segmentsWithActions.length, multiActionSegments });
-      });
-    });
-    return targets;
-  }, [guidedStepsCfg, guidedVisibleSteps]);
-
-  useEffect(() => {
-    if (!rowFlowTargets.length) return;
-    const payload = { targets: rowFlowTargets };
-    const signature = JSON.stringify(payload);
-    if (rowFlowDiagnosticSignatureRef.current === signature) return;
-    rowFlowDiagnosticSignatureRef.current = signature;
-    onDiagnostic?.('form.rowFlow.enabled', payload);
-  }, [onDiagnostic, rowFlowTargets]);
-
-  useEffect(() => {
-    if (!rowFlowSegmentActionTargets.length) return;
-    const payload = { targets: rowFlowSegmentActionTargets };
-    const signature = JSON.stringify(payload);
-    if (rowFlowSegmentActionsDiagnosticSignatureRef.current === signature) return;
-    rowFlowSegmentActionsDiagnosticSignatureRef.current = signature;
-    onDiagnostic?.('form.rowFlow.output.segmentActions.enabled', payload);
-  }, [onDiagnostic, rowFlowSegmentActionTargets]);
+  useFormConfigDiagnostics({
+    definition,
+    language,
+    guidedEnabled,
+    guidedStepIds,
+    guidedStepsCfg,
+    guidedVisibleSteps,
+    orderedEntryEnabled,
+    onDiagnostic
+  });
 
   // Initialize/repair the active step when the visible step structure changes.
   // Do not clamp a still-visible step back to the current forward gate; users must be able
