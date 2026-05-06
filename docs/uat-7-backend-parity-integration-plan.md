@@ -864,10 +864,15 @@ One-hundred-twentieth-pass results:
 - `FormView.tsx`: extracted field-disable rule state and ready-for-production unlock behavior into `useFieldDisableRuleState`, moving unlock query resolution, URL scrubbing, active disable-rule matching, bypass diagnostics, and the field-lock predicate behind a focused form hook. Current size: 10,336 lines.
 - Validation for the pass used focused field-disable and ready-for-production unlock tests plus `npx tsc --noEmit --pretty false`.
 
+One-hundred-twenty-first-pass results:
+
+- `FormView.tsx`: extracted visibility/top-value source precedence into pure `formVisibilityValues` helpers and `useFormVisibilityResolvers`, centralizing guided virtual values, data-source counts, direct values, system fields, and line-item scan fallback. Current size: 10,294 lines.
+- Validation for the pass used focused form visibility-value tests plus `npx tsc --noEmit --pretty false`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 10,336 lines.
+- `FormView.tsx`: 10,294 lines.
 - `LineItemGroupQuestion.tsx`: 869 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

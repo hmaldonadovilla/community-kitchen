@@ -128,6 +128,7 @@ import { useFormViewStateRefs } from './form/useFormViewStateRefs';
 import { useFormBlurCoordinator } from './form/useFormBlurCoordinator';
 import { useTopLevelGroupAutoCollapse } from './form/useTopLevelGroupAutoCollapse';
 import { useFieldDisableRuleState } from './form/useFieldDisableRuleState';
+import { useFormVisibilityResolvers } from './form/useFormVisibilityResolvers';
 import { withListRowActionButtonStyle } from '../features/lineItems/components/lineItemActionButtonStyle';
 import { LineFileUploadQuestion } from '../features/uploads/components/LineFileUploadQuestion';
 import { LineFileUploadTableOpenControl } from '../features/uploads/components/LineFileUploadTableOpenControl';
@@ -187,7 +188,7 @@ import { isPrimaryActionLabel } from '../app/buttonTone';
 import {
   computeParagraphDisclaimerUpdates as computeParagraphDisclaimerUpdatesAction,
 } from '../app/paragraphDisclaimer';
-import { getSystemFieldValue, type SystemRecordMeta } from '../../rules/systemFields';
+import type { SystemRecordMeta } from '../../rules/systemFields';
 import { containsLineItemsClause, containsParentLineItemsClause, matchesWhenClause } from '../../rules/visibility';
 import { buildDraftPayload, resolveDraftPayloadFormKey, validateForm, validateUploadCounts } from '../app/submission';
 import { GuidedContentRenderer } from '../features/steps/components/GuidedContentRenderer';
@@ -197,7 +198,7 @@ import {
   type GuidedExternalSyncSignal
 } from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
-import { resolveVirtualStepField, type GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
+import type { GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { resolveGuidedUiStateAction } from '../features/steps/domain/guidedUiState';
 import { useGuidedStepVisibility } from '../features/steps/hooks/useGuidedStepVisibility';
 import {
@@ -5686,67 +5687,24 @@ const FormView: React.FC<FormViewProps> = ({
     runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
   };
 
-  const resolveVisibilityValue = useCallback(
-    (fieldId: string): FieldValue | undefined => {
-      if (guidedVirtualState) {
-        const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
-        if (virtual !== undefined) return virtual as FieldValue;
-      }
-      const dataSourceCount = resolveDataSourceCountValue(fieldId);
-      if (dataSourceCount !== undefined) return dataSourceCount;
-      const direct = values[fieldId];
-      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-      const sys = getSystemFieldValue(fieldId, recordMeta);
-      if (sys !== undefined) return sys as FieldValue;
-      // scan all line item groups for the first non-empty occurrence
-      for (const rows of Object.values(lineItems)) {
-        if (!Array.isArray(rows)) continue;
-        for (const row of rows) {
-          const v = (row as LineItemRowState).values[fieldId];
-          if (v !== undefined && v !== null && v !== '') return v as FieldValue;
-        }
-      }
-      return undefined;
-    },
-    [guidedVirtualState, lineItems, recordMeta, resolveDataSourceCountValue, values]
-  );
-
-  const topVisibilityCtx = useMemo(
-    () => ({
-      getValue: (fieldId: string) => resolveVisibilityValue(fieldId),
-      getLineItems: (groupId: string) => lineItems[groupId] || [],
-      getLineItemKeys: () => Object.keys(lineItems)
-    }),
-    [lineItems, resolveVisibilityValue]
-  );
+  const {
+    resolveVisibilityValue,
+    topVisibilityCtx,
+    resolveTopValueNoScan,
+    getTopValueNoScan
+  } = useFormVisibilityResolvers({
+    values,
+    lineItems,
+    guidedVirtualState,
+    resolveDataSourceCountValue,
+    recordMeta
+  });
   const { isFieldLockedByDedup } = useFieldDisableRuleState({
     fieldDisableRules: definition.fieldDisableRules,
     topVisibilityCtx,
     recordMeta,
     onDiagnostic
   });
-
-  const resolveTopValueNoScan = useCallback(
-    (sourceValues: Record<string, FieldValue>, fieldId: string): FieldValue | undefined => {
-      if (guidedVirtualState) {
-        const virtual = resolveVirtualStepField(fieldId, guidedVirtualState as any);
-        if (virtual !== undefined) return virtual as FieldValue;
-      }
-      const dataSourceCount = resolveDataSourceCountValue(fieldId);
-      if (dataSourceCount !== undefined) return dataSourceCount;
-      const direct = sourceValues[fieldId];
-      if (direct !== undefined && direct !== null && direct !== '') return direct as FieldValue;
-      const sys = getSystemFieldValue(fieldId, recordMeta);
-      if (sys !== undefined) return sys as FieldValue;
-      return undefined;
-    },
-    [guidedVirtualState, recordMeta, resolveDataSourceCountValue]
-  );
-
-  const getTopValueNoScan = useCallback(
-    (fieldId: string): FieldValue | undefined => resolveTopValueNoScan(values, fieldId),
-    [resolveTopValueNoScan, values]
-  );
 
   const lineItemVisibilityTargets = useMemo(() => {
     const questions = definition.questions || [];
