@@ -869,11 +869,16 @@ One-hundred-twenty-first-pass results:
 - `FormView.tsx`: extracted visibility/top-value source precedence into pure `formVisibilityValues` helpers and `useFormVisibilityResolvers`, centralizing guided virtual values, data-source counts, direct values, system fields, and line-item scan fallback. Current size: 10,294 lines.
 - Validation for the pass used focused form visibility-value tests plus `npx tsc --noEmit --pretty false`.
 
+One-hundred-twenty-second-pass results:
+
+- `FormView.tsx`: extracted the full line-item group overlay portal into `LineItemGroupOverlayPortal`, moving line-item overlay header controls, selector/selector-overlay add controls, overlay-detail table/view/edit rendering, bulk overlay-session selection, and overlay-session footer rendering into the line-items feature component layer. Current size: 9,343 lines.
+- Validation for the pass used focused overlay/form tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 10,294 lines.
-- `LineItemGroupQuestion.tsx`: 869 lines.
+- `FormView.tsx`: 9,343 lines.
+- `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
 
