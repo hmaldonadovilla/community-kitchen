@@ -90,6 +90,36 @@ export const resolveGuidedReservationManagedRowRemovalDetectionScope = (
   return stepId ? { stepId, mode: 'step' } : null;
 };
 
+export const buildGuidedReservationManagedRowRemovalFingerprint = (args: {
+  recordId?: unknown;
+  activeStepId?: unknown;
+  impacts: GuidedReservationManagedRowRemovalImpact[];
+}): string => {
+  const impactSignature = (Array.isArray(args.impacts) ? args.impacts : [])
+    .map(impact =>
+      [
+        normalizeStepId(impact?.stepId),
+        normalizeStepId(impact?.parentGroupId),
+        normalizeStepId(impact?.parentRowId),
+        normalizeStepId(impact?.outputGroupId),
+        (Array.isArray(impact?.removedRowIds) ? impact.removedRowIds : [])
+          .map(normalizeStepId)
+          .filter(Boolean)
+          .sort()
+          .join(',')
+      ].join(':')
+    )
+    .filter(Boolean)
+    .sort()
+    .join('|');
+  if (!impactSignature) return '';
+  return [
+    normalizeStepId(args.recordId),
+    normalizeStepId(args.activeStepId),
+    impactSignature
+  ].join('::');
+};
+
 export const cloneLineItemStateSnapshot = (lineItems: LineItemState | null | undefined): LineItemState => {
   const source = lineItems || {};
   const snapshot: LineItemState = {};

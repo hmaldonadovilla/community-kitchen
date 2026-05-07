@@ -16,6 +16,7 @@ import {
 } from '../../../app/sourceFirstAllocations';
 import {
   buildStepDataSourceBootstrapSignature,
+  shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap
 } from '../../../app/stepDataSourceBootstrap';
@@ -196,6 +197,7 @@ export const useGuidedStepDataSourceState = ({
   const stepDataSourceDraftsRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
   const stepDataSourceRecordIdRef = React.useRef<string>('');
   const stepDataSourceBootstrapSignatureRef = React.useRef<string>('');
+  const stepDataSourceBootstrapInFlightSignatureRef = React.useRef<string>('');
   const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
   const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
@@ -389,6 +391,7 @@ export const useGuidedStepDataSourceState = ({
   React.useEffect(() => {
     if (!stepDataSourceRows.length) {
       stepDataSourceBootstrapSignatureRef.current = '';
+      stepDataSourceBootstrapInFlightSignatureRef.current = '';
       return;
     }
     const normalizedRecordId = `${recordId || ''}`.trim();
@@ -412,9 +415,14 @@ export const useGuidedStepDataSourceState = ({
     }
     if (!activeStepDataSourceRows.length) {
       stepDataSourceBootstrapSignatureRef.current = '';
+      stepDataSourceBootstrapInFlightSignatureRef.current = '';
       return;
     }
-    if (!recordChanged && stepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
+    if (!shouldStartStepDataSourceBootstrap({
+      signature: stepDataSourceBootstrapSignature,
+      completedSignature: stepDataSourceBootstrapSignatureRef.current,
+      inFlightSignature: stepDataSourceBootstrapInFlightSignatureRef.current
+    })) {
       return;
     }
     let cancelled = false;
@@ -432,6 +440,7 @@ export const useGuidedStepDataSourceState = ({
       })
       .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
     if (!configEntries.length) return;
+    stepDataSourceBootstrapInFlightSignatureRef.current = stepDataSourceBootstrapSignature;
 
     const runBootstrap = async () => {
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
@@ -536,6 +545,9 @@ export const useGuidedStepDataSourceState = ({
         queueStepDataSourceRefreshTick();
         stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
       } finally {
+        if (stepDataSourceBootstrapInFlightSignatureRef.current === stepDataSourceBootstrapSignature) {
+          stepDataSourceBootstrapInFlightSignatureRef.current = '';
+        }
         endStepDataSourceLoading(loadingEntries);
       }
     };

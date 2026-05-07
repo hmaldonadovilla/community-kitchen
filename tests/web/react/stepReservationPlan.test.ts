@@ -1,4 +1,5 @@
 import {
+  buildGuidedReservationManagedRowRemovalFingerprint,
   buildInventoryReservationPlanFingerprint,
   buildStepInventoryReservationPlan,
   cloneLineItemStateSnapshot,
@@ -409,6 +410,50 @@ describe('buildStepInventoryReservationPlan', () => {
       mode: 'step'
     });
     expect(resolveGuidedReservationManagedRowRemovalDetectionScope('')).toBeNull();
+  });
+
+  test('builds a stable managed row removal queue fingerprint', () => {
+    const impacts = [
+      {
+        stepId: 'leftoverForm',
+        parentGroupId: 'MP_MEALS_REQUEST',
+        parentRowId: 'MEAL-1',
+        outputGroupId: 'MP_TYPE_LI',
+        removedRowIds: ['OUT-2', 'OUT-1']
+      }
+    ];
+
+    expect(
+      buildGuidedReservationManagedRowRemovalFingerprint({
+        recordId: 'REC-1',
+        activeStepId: 'leftoverForm',
+        impacts
+      })
+    ).toBe(
+      buildGuidedReservationManagedRowRemovalFingerprint({
+        recordId: ' REC-1 ',
+        activeStepId: ' leftoverForm ',
+        impacts: [
+          {
+            ...impacts[0],
+            removedRowIds: ['OUT-1', 'OUT-2']
+          }
+        ]
+      })
+    );
+    expect(
+      buildGuidedReservationManagedRowRemovalFingerprint({
+        recordId: 'REC-2',
+        activeStepId: 'leftoverForm',
+        impacts
+      })
+    ).not.toBe(
+      buildGuidedReservationManagedRowRemovalFingerprint({
+        recordId: 'REC-1',
+        activeStepId: 'leftoverForm',
+        impacts
+      })
+    );
   });
 
   test('ignores removed managed rows that never held a reservation selection', () => {

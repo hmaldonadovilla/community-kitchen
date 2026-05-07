@@ -1,5 +1,6 @@
 import {
   buildStepDataSourceBootstrapSignature,
+  shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap
 } from '../../../src/web/react/app/stepDataSourceBootstrap';
@@ -138,5 +139,36 @@ describe('buildStepDataSourceBootstrapSignature', () => {
     expect(shouldWaitForSharedDataMutationsOnBootstrap(undefined)).toBe(false);
     expect(shouldWaitForSharedDataMutationsOnBootstrap({})).toBe(false);
     expect(shouldWaitForSharedDataMutationsOnBootstrap({ waitForSharedDataMutations: true })).toBe(true);
+  });
+
+  it('does not restart a completed or in-flight bootstrap for the same signature', () => {
+    expect(
+      shouldStartStepDataSourceBootstrap({
+        signature: 'record-1:leftoverForm',
+        completedSignature: '',
+        inFlightSignature: ''
+      })
+    ).toBe(true);
+    expect(
+      shouldStartStepDataSourceBootstrap({
+        signature: 'record-1:leftoverForm',
+        completedSignature: 'record-1:leftoverForm',
+        inFlightSignature: ''
+      })
+    ).toBe(false);
+    expect(
+      shouldStartStepDataSourceBootstrap({
+        signature: 'record-1:leftoverForm',
+        completedSignature: '',
+        inFlightSignature: 'record-1:leftoverForm'
+      })
+    ).toBe(false);
+    expect(
+      shouldStartStepDataSourceBootstrap({
+        signature: 'record-2:leftoverForm',
+        completedSignature: 'record-1:leftoverForm',
+        inFlightSignature: ''
+      })
+    ).toBe(true);
   });
 });

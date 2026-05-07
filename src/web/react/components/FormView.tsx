@@ -156,6 +156,7 @@ import { useFormLineItemRows } from '../features/lineItems/hooks/useFormLineItem
 import { useFormFieldChangeHandlers } from '../features/formState/hooks/useFormFieldChangeHandlers';
 import { useOverlayOpenActions } from '../features/lineItems/hooks/useOverlayOpenActions';
 import {
+  buildGuidedReservationManagedRowRemovalFingerprint,
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
   resolveGuidedReservationManagedRowRemovalDetectionScope,
@@ -780,6 +781,7 @@ const FormView: React.FC<FormViewProps> = ({
     recordId: string;
     lineItems: LineItemState | null;
   }>({ recordId: '', lineItems: null });
+  const guidedReservationRemovalSyncFingerprintRef = useRef<string>('');
 
   useLayoutEffect(() => {
     const recordId = `${recordMeta?.id || ''}`.trim();
@@ -788,16 +790,19 @@ const FormView: React.FC<FormViewProps> = ({
     const nextSnapshot = cloneLineItemStateSnapshot(lineItems);
     if (!guidedEnabled || !queueGuidedStepReservationDraftSync || !recordId) {
       guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      guidedReservationRemovalSyncFingerprintRef.current = '';
       return;
     }
     if (!previousSnapshot.lineItems || recordChanged) {
       guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      guidedReservationRemovalSyncFingerprintRef.current = '';
       return;
     }
 
     const detectionScope = resolveGuidedReservationManagedRowRemovalDetectionScope(activeGuidedStepId);
     if (!detectionScope) {
       guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      guidedReservationRemovalSyncFingerprintRef.current = '';
       return;
     }
 
@@ -811,6 +816,19 @@ const FormView: React.FC<FormViewProps> = ({
 
     guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
     if (!impacts.length) return;
+
+    const removalFingerprint = buildGuidedReservationManagedRowRemovalFingerprint({
+      recordId,
+      activeStepId: activeGuidedStepId,
+      impacts
+    });
+    if (
+      removalFingerprint &&
+      guidedReservationRemovalSyncFingerprintRef.current === removalFingerprint
+    ) {
+      return;
+    }
+    guidedReservationRemovalSyncFingerprintRef.current = removalFingerprint;
 
     const stepImpacts = new Map<string, GuidedReservationManagedRowRemovalImpact[]>();
     impacts.forEach(impact => {

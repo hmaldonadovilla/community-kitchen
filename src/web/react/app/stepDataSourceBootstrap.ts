@@ -46,3 +46,15 @@ export const shouldWaitForGuidedReservationSyncOnBootstrap = (
 export const shouldWaitForSharedDataMutationsOnBootstrap = (
   config?: StepDataSourceBootstrapConfig | null
 ): boolean => config?.waitForSharedDataMutations === true;
+
+export const shouldStartStepDataSourceBootstrap = (args: {
+  signature?: string | null;
+  completedSignature?: string | null;
+  inFlightSignature?: string | null;
+}): boolean => {
+  const signature = `${args.signature || ''}`.trim();
+  if (!signature) return false;
+  if (`${args.completedSignature || ''}`.trim() === signature) return false;
+  if (`${args.inFlightSignature || ''}`.trim() === signature) return false;
+  return true;
+};
