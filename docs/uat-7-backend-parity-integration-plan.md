@@ -890,9 +890,14 @@ One-hundred-twenty-fifth-pass results:
 - `FormView.tsx`: extracted top-level and line-item file upload handlers into `useFormFileUploadHandlers` under the uploads feature layer, moving upload validation, immediate-save staging, line-file add/drop/remove/clear behavior, failure announcements, and diagnostics out of the form shell. Current size: 6,628 lines.
 - Validation for the pass used focused upload tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-twenty-sixth-pass results:
+
+- `App.tsx`: extracted template-render target detection and delayed template prefetch retry scheduling into `useAppTemplatePrefetch`, moving template warmup refs and idle/retry side effects out of the app shell while preserving the target flag used by list-record prefetch. Current size: 14,149 lines.
+- Validation for the pass used focused list/report prefetch-adjacent tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,248 lines.
+- `App.tsx`: 14,149 lines.
 - `FormView.tsx`: 6,628 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
