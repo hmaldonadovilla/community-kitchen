@@ -905,10 +905,15 @@ One-hundred-twenty-eighth-pass results:
 - `App.tsx`: extracted option loading and selection-effect execution into `useAppSelectionEffects`, moving async option hydration, async selection-effect pending counts, selection-effect autosave suppression, ancestor reruns, and row-append diagnostics out of the app shell. Current size: 14,048 lines.
 - Validation for the pass used focused selection-effect tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-twenty-ninth-pass results:
+
+- `FormView.tsx`: extracted top-level and line-item field-change orchestration into `useFormFieldChangeHandlers`, moving clear-on-change rebuilds, line-item dedup checks, non-match marker updates, exclusive line selection, recipe-dirty markers, overlay-detail auto-open, and selection-effect reruns into a focused form-state hook. Current size: 5,627 lines.
+- Validation for the pass used focused form/line-item tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,048 lines.
-- `FormView.tsx`: 6,043 lines.
+- `FormView.tsx`: 5,627 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
