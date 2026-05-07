@@ -885,10 +885,15 @@ One-hundred-twenty-fourth-pass results:
 - `FormView.tsx`: removed an unused line-item row-sort import exposed by the overlay portal extraction. Current size: 7,045 lines.
 - Validation for the pass used focused list-view tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-twenty-fifth-pass results:
+
+- `FormView.tsx`: extracted top-level and line-item file upload handlers into `useFormFileUploadHandlers` under the uploads feature layer, moving upload validation, immediate-save staging, line-file add/drop/remove/clear behavior, failure announcements, and diagnostics out of the form shell. Current size: 6,628 lines.
+- Validation for the pass used focused upload tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,248 lines.
-- `FormView.tsx`: 7,045 lines.
+- `FormView.tsx`: 6,628 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
