@@ -897,13 +897,18 @@ One-hundred-twenty-sixth-pass results:
 
 One-hundred-twenty-seventh-pass results:
 
-- `FormView.tsx`: extracted line-item row add/remove orchestration into `useFormLineItemRows`, moving manual add guards, max-row and dedup checks, empty-row reuse, overlay min-row seeding, overlay auto-add reconciliation, cascade removal, and recipe-dirty diagnostics into the line-items feature layer. Current size: 6,005 lines.
+- `FormView.tsx`: extracted line-item row add/remove orchestration into `useFormLineItemRows`, moving manual add guards, max-row and dedup checks, empty-row reuse, overlay min-row seeding, overlay auto-add reconciliation, cascade removal, and recipe-dirty diagnostics into the line-items feature layer. Current size: 6,043 lines.
 - Validation for the pass used focused line-item tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
+One-hundred-twenty-eighth-pass results:
+
+- `App.tsx`: extracted option loading and selection-effect execution into `useAppSelectionEffects`, moving async option hydration, async selection-effect pending counts, selection-effect autosave suppression, ancestor reruns, and row-append diagnostics out of the app shell. Current size: 14,048 lines.
+- Validation for the pass used focused selection-effect tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
 Current large-file counts:
 
-- `App.tsx`: 14,149 lines.
-- `FormView.tsx`: 6,005 lines.
+- `App.tsx`: 14,048 lines.
+- `FormView.tsx`: 6,043 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

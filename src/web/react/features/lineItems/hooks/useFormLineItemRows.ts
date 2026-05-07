@@ -690,7 +690,6 @@ export function useFormLineItemRows({
   };
 
   return {
-    addLineItemRow,
     addLineItemRowManual,
     removeLineRow
   };

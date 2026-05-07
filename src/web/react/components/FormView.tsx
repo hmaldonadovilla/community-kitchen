@@ -4874,7 +4874,6 @@ const FormView: React.FC<FormViewProps> = ({
   );
 
   const {
-    addLineItemRow,
     addLineItemRowManual,
     removeLineRow
   } = useFormLineItemRows({
