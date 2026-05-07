@@ -142,6 +142,49 @@ describe('step data source rows domain', () => {
     });
   });
 
+  test('returns the previous line-item state when a matched output rule is unchanged', () => {
+    const outputKey = 'meals::parent1::reservations';
+    const previousLineItems: any = {
+      [outputKey]: [
+        {
+          id: 'out1',
+          parentId: 'parent1',
+          parentGroupId: 'meals',
+          values: {
+            quantity: 3,
+            mode: 'portion',
+            label: 'Soup',
+            [ROW_ID_KEY]: 'out1',
+            [ROW_SOURCE_KEY]: ROW_SOURCE_AUTO,
+            [ROW_PARENT_GROUP_ID_KEY]: 'meals',
+            [ROW_PARENT_ROW_ID_KEY]: 'parent1',
+            [ROW_SELECTION_EFFECT_ID_KEY]: 'rule1',
+            sourceId: 'item1'
+          }
+        }
+      ]
+    };
+
+    const result = applyStepDataSourceMatchedOutputRuleAction({
+      previousLineItems,
+      nextState: previousLineItems,
+      outputKey,
+      existingOutputRow: previousLineItems[outputKey][0],
+      parentGroupId: 'meals',
+      parentRowId: 'parent1',
+      outputGroupId: 'reservations',
+      outputKeyFieldId: 'sourceId',
+      sourceKey: 'item1',
+      quantityFieldId: 'quantity',
+      modeFieldId: 'mode',
+      rowValues: { quantity: 3, mode: 'portion' },
+      preset: { label: 'Soup' },
+      matchedRule: { id: 'rule1' }
+    });
+
+    expect(result).toBe(previousLineItems);
+  });
+
   test('collects and applies nested preset normalizations for existing output rows', () => {
     const outputKey = 'meals::parent1::reservations';
     const lineItems = {

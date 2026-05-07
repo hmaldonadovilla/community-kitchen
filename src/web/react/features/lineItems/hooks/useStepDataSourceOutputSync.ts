@@ -39,6 +39,10 @@ import {
   fieldByIdSafe,
   normalizeIdValue
 } from '../domain/lineItemPresentation';
+import {
+  areFieldValueRecordsEqual,
+  areLineItemStatesEqual
+} from '../domain/lineItemStateComparison';
 
 type StepDataSourceOutputSyncArgs = {
   config: any;
@@ -354,11 +358,17 @@ export const useStepDataSourceOutputSync = ({
           nextLineItems: recomputed,
           sourceGroupKey: output.key
         });
-        latestValuesRef.current = reconciled.values;
-        setValues(reconciled.values);
-        latestStepDataSourceSyncedLineItemsRef.current = reconciled.lineItems;
-        syncedLineItems = reconciled.lineItems;
-        return reconciled.lineItems;
+        const valuesChanged = !areFieldValueRecordsEqual(latestValues, reconciled.values);
+        const lineItemsChanged = !areLineItemStatesEqual(prev, reconciled.lineItems);
+        const committedValues = valuesChanged ? reconciled.values : latestValues;
+        const committedLineItems = lineItemsChanged ? reconciled.lineItems : prev;
+        latestValuesRef.current = committedValues;
+        if (valuesChanged) {
+          setValues(committedValues);
+        }
+        latestStepDataSourceSyncedLineItemsRef.current = committedLineItems;
+        syncedLineItems = committedLineItems;
+        return lineItemsChanged ? committedLineItems : prev;
       });
       return syncedLineItems;
     },
