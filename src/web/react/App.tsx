@@ -49,13 +49,11 @@ import {
   resolveUserFacingErrorMessage,
   isBackendFunctionRoutedToHttp
 } from './api';
-import FormView from './components/FormView';
-import ListView from './components/ListView';
 import { AppHeader } from './components/app/AppHeader';
 import { AppHeaderStatus } from './components/app/AppHeaderStatus';
 import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
-import { AppRecordLoadingPlaceholder } from './components/app/AppRecordLoadingPlaceholder';
-import { ActionBar } from './components/app/ActionBar';
+import { AppActionBar } from './components/app/AppActionBars';
+import { AppMainViews } from './components/app/AppMainViews';
 import { ValidationHeaderNotice } from './components/app/ValidationHeaderNotice';
 import { useAppHeaderNavigation } from './components/app/useAppHeaderNavigation';
 import { useAppViewportState } from './components/app/useAppViewportState';
@@ -95,7 +93,6 @@ import { useCreateRecordPresetAction } from './components/app/useCreateRecordPre
 import { useDuplicateCurrentRecordAction } from './components/app/useDuplicateCurrentRecordAction';
 import { useUpdateRecordButtonAction } from './components/app/useUpdateRecordButtonAction';
 import { HTML_PREVIEW_STYLES, MARKDOWN_PREVIEW_STYLES } from './components/app/previewStyles';
-import { SummaryView } from './components/app/SummaryView';
 import { FORM_VIEW_STYLES } from './components/form/styles';
 import { FormErrors, LineItemState, OptionState, View } from './types';
 import { useBlockingOverlay } from './features/overlays/useBlockingOverlay';
@@ -14016,6 +14013,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     openSystemActionGateDialog
   });
 
+  const appActionBarCommonProps = {
+    language,
+    view,
+    disabled:
+      submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking,
+    submitDisabled: view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate),
+    submitDisabledTooltip: submitDisabledTooltip || undefined,
+    submitting,
+    readOnly: view === 'form' && isClosedRecord,
+    hideSubmit: submitHiddenByGate,
+    hideEdit: hideEditResolved,
+    createNewEnabled: definition.createNewRecordEnabled !== false,
+    createButtonLabel: definition.createButtonLabel,
+    copyCurrentRecordLabel: definition.copyCurrentRecordLabel,
+    submitLabel: guidedSubmitLabel,
+    summaryLabel: definition.summaryButtonLabel,
+    summaryEnabled: summaryEnabledResolved,
+    copyEnabled: copyEnabledResolved,
+    canCopy: canCopyResolved,
+    customButtons: customButtons as any,
+    actionBars: definition.actionBars,
+    onHome: handleGoHome,
+    onCreateNew: handleSubmitAnother,
+    onCreateCopy: () => {
+      void handleDuplicateCurrent();
+    },
+    onEdit: () => setView('form'),
+    onSummary: handleGoSummary,
+    onSubmit: view === 'summary' ? handleSummarySubmit : requestSubmit,
+    onCustomButton: handleCustomButton,
+    onDiagnostic: logEvent
+  };
+
   return (
     <div
       className={`page${view === 'form' ? ' ck-page-form' : ''}`}
@@ -14064,157 +14094,88 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       {blockLandscape ? <AppOrientationBlocker language={language} /> : null}
 
-      <ActionBar
-        position="top"
-        language={language}
+      <AppActionBar position="top" commonProps={appActionBarCommonProps} notice={topBarNotice} />
+
+      <AppMainViews
         view={view}
-        disabled={
-          submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking
-        }
-        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
-        submitDisabledTooltip={submitDisabledTooltip || undefined}
+        formKey={formKey}
+        definition={definition}
+        language={language}
+        values={values}
+        lineItems={lineItems}
+        optionState={optionState}
+        errors={errors}
         submitting={submitting}
-        readOnly={view === 'form' && isClosedRecord}
-        hideSubmit={submitHiddenByGate}
-        hideEdit={hideEditResolved}
-        createNewEnabled={definition.createNewRecordEnabled !== false}
-        createButtonLabel={definition.createButtonLabel}
-        copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
-        submitLabel={guidedSubmitLabel}
-        summaryLabel={definition.summaryButtonLabel}
-        summaryEnabled={summaryEnabledResolved}
-        copyEnabled={copyEnabledResolved}
-        canCopy={canCopyResolved}
-        customButtons={customButtons as any}
-        actionBars={definition.actionBars}
-        notice={topBarNotice}
-        onHome={handleGoHome}
-        onCreateNew={handleSubmitAnother}
-        onCreateCopy={() => {
-          void handleDuplicateCurrent();
-        }}
-        onEdit={() => setView('form')}
-        onSummary={handleGoSummary}
-        onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}
-        onCustomButton={handleCustomButton}
-        onDiagnostic={logEvent}
+        updateRecordBusyOpen={updateRecordBusyOpen}
+        recordSyncBusyOpen={recordSyncBusyOpen}
+        guidedMilestoneBusyOpen={guidedMilestoneBusy.state.open}
+        isClosedRecord={isClosedRecord}
+        recordLoadingId={recordLoadingId}
+        recordStale={recordStale}
+        showFormRecordLoadingPlaceholder={showFormRecordLoadingPlaceholder}
+        recordLoadError={recordLoadError}
+        recordSessionKey={recordSessionKey}
+        dedupTriggerFieldIdMap={dedupTriggerFieldIdMap}
+        setValuesFromFormView={setValuesFromFormView}
+        setLineItemsFromFormView={setLineItemsFromFormView}
+        handleSubmit={handleSubmit}
+        formSubmitActionRef={formSubmitActionRef}
+        formBackActionRef={formBackActionRef}
+        formNavigateToFieldRef={formNavigateToFieldRef}
+        setErrors={setErrors}
+        status={status}
+        statusLevel={statusLevel}
+        formRecordMeta={formRecordMeta}
+        validationWarnings={validationWarnings}
+        clearStatus={clearStatus}
+        setOptionState={setOptionState}
+        ensureOptions={ensureOptions}
+        ensureLineOptions={ensureLineOptions}
+        externalScrollAnchor={externalScrollAnchor}
+        setExternalScrollAnchor={setExternalScrollAnchor}
+        runSelectionEffects={runSelectionEffects}
+        selectionEffectAsyncPendingCount={selectionEffectAsyncPendingCount}
+        uploadFieldUrls={uploadFieldUrls}
+        handleCustomButton={handleCustomButton}
+        handleReportButtonPointerDown={handleReportButtonPointerDown}
+        reportOverlay={reportOverlay}
+        handleUserEdit={handleUserEdit}
+        handleAutomatedMutation={handleAutomatedMutation}
+        setFormIsValid={setFormIsValid}
+        setGuidedUiState={setGuidedUiState}
+        handleGuidedStepMilestone={handleGuidedStepMilestone}
+        requestedGuidedStepId={requestedGuidedStepId}
+        guidedExternalSyncSignal={guidedExternalSyncSignal}
+        setRequestedGuidedStepId={setRequestedGuidedStepId}
+        dedupNavigationBlocked={dedupNavigationBlocked}
+        submitDisabledByGate={submitDisabledByGate}
+        customConfirm={customConfirm}
+        setAutoSaveHoldFromUi={setAutoSaveHoldFromUi}
+        summarySubmitIntentRef={summarySubmitIntentRef}
+        ensureDraftRecordId={ensureDraftRecordId}
+        queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
+        handleGuidedStepReservationDraftStateChange={handleGuidedStepReservationDraftStateChange}
+        waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
+        waitForPendingSharedDataMutations={waitForPendingSharedDataMutations}
+        handleBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
+        lastSubmissionMeta={lastSubmissionMeta}
+        selectedRecordId={selectedRecordId}
+        currentRecord={currentRecord}
+        prefetchedSummaryHtml={prefetchedSummaryHtml}
+        openReadOnlyFilesOverlay={openReadOnlyFilesOverlay}
+        analyticsSnapshot={analyticsSnapshot}
+        analyticsSnapshotRev={analyticsSnapshotRev}
+        precreateDedupChecking={precreateDedupChecking}
+        listCache={listCache}
+        listRefreshToken={listRefreshToken}
+        listFetch={listFetch}
+        listFetchNotice={listFetchNotice}
+        listLegendItems={listLegendItems}
+        listLegendColumns={listLegendColumns}
+        listLegendColumnWidths={listLegendColumnWidths}
+        handleRecordSelect={handleRecordSelect}
+        logEvent={logEvent}
       />
-
-      {view === 'form' && showFormRecordLoadingPlaceholder ? (
-        <AppRecordLoadingPlaceholder language={language} error={recordLoadError} />
-      ) : null}
-
-      {view === 'form' && !showFormRecordLoadingPlaceholder ? (
-        <FormView
-          key={`record-session:${recordSessionKey}`}
-          formKey={formKey}
-          definition={definition}
-          dedupKeyFieldIdMap={dedupTriggerFieldIdMap}
-          language={language}
-          values={values}
-          setValues={setValuesFromFormView}
-          lineItems={lineItems}
-          setLineItems={setLineItemsFromFormView}
-          onSubmit={handleSubmit}
-          submitActionRef={formSubmitActionRef}
-          guidedBackActionRef={formBackActionRef}
-          navigateToFieldRef={formNavigateToFieldRef}
-          submitting={
-            submitting ||
-            updateRecordBusyOpen ||
-            recordSyncBusyOpen ||
-            guidedMilestoneBusy.state.open ||
-            isClosedRecord ||
-            Boolean(recordLoadingId) ||
-            Boolean(recordStale)
-          }
-          errors={errors}
-          setErrors={setErrors}
-          status={status}
-          statusTone={statusLevel}
-          recordMeta={formRecordMeta}
-          warningTop={validationWarnings.top}
-          warningByField={validationWarnings.byField}
-          showWarningsBanner={false}
-          onStatusClear={clearStatus}
-          optionState={optionState}
-          setOptionState={setOptionState}
-          ensureOptions={ensureOptions}
-          ensureLineOptions={ensureLineOptions}
-          externalScrollAnchor={externalScrollAnchor}
-          onExternalScrollConsumed={() => setExternalScrollAnchor(null)}
-          onSelectionEffect={runSelectionEffects}
-          selectionEffectAsyncPendingCount={selectionEffectAsyncPendingCount}
-          onUploadFiles={uploadFieldUrls}
-          onReportButton={handleCustomButton}
-          onReportButtonPointerDown={handleReportButtonPointerDown}
-          reportBusy={reportOverlay.pdfPhase === 'rendering'}
-          reportBusyId={reportOverlay.buttonId || null}
-          onUserEdit={handleUserEdit}
-          onAutomatedMutation={handleAutomatedMutation}
-          onDiagnostic={logEvent}
-          onFormValidityChange={setFormIsValid}
-          onGuidedUiChange={setGuidedUiState}
-          onGuidedStepMilestone={handleGuidedStepMilestone}
-          requestedGuidedStepId={requestedGuidedStepId}
-          guidedExternalSyncSignal={guidedExternalSyncSignal}
-          recordSessionId={recordSessionKey}
-          onRequestedGuidedStepHandled={() => setRequestedGuidedStepId(null)}
-          dedupNavigationBlocked={dedupNavigationBlocked}
-          guidedForwardNavigationBlocked={submitDisabledByGate}
-          openConfirmDialog={customConfirm.openConfirm}
-          setAutoSaveHold={setAutoSaveHoldFromUi}
-          summarySubmitIntentRef={summarySubmitIntentRef}
-          ensureRecordId={ensureDraftRecordId}
-          queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
-          onGuidedStepReservationDraftStateChange={handleGuidedStepReservationDraftStateChange}
-          waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
-          waitForPendingSharedDataMutations={waitForPendingSharedDataMutations}
-          onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
-        />
-      ) : null}
-
-      {view === 'summary' && (
-        <SummaryView
-          definition={definition}
-          formKey={formKey}
-          language={language}
-          values={values}
-          lineItems={lineItems}
-          lastSubmissionMeta={lastSubmissionMeta}
-          recordLoadError={recordLoadError}
-          selectedRecordId={selectedRecordId}
-          recordLoadingId={recordLoadingId}
-          currentRecord={currentRecord}
-          prefetchedSummaryHtml={prefetchedSummaryHtml?.recordId === selectedRecordId ? prefetchedSummaryHtml.html : null}
-          onOpenFiles={openReadOnlyFilesOverlay}
-          onAction={handleCustomButton}
-          onDiagnostic={logEvent}
-        />
-      )}
-      {view === 'list' && (
-        <ListView
-          formKey={formKey}
-          definition={definition}
-          language={language}
-          analyticsSnapshot={analyticsSnapshot || undefined}
-          analyticsRevision={analyticsSnapshotRev}
-          disabled={precreateDedupChecking}
-          cachedResponse={listCache.response}
-          cachedRecords={listCache.records}
-          refreshToken={listRefreshToken}
-          onDiagnostic={logEvent}
-          autoFetch={false}
-          loading={listFetch.phase === 'loading'}
-          prefetching={listFetch.phase === 'prefetching'}
-          notice={listFetchNotice}
-          error={listFetch.phase === 'error' ? (listFetch.message || 'Failed to load list.') : null}
-          legendItems={listLegendItems}
-          legendColumns={listLegendColumns}
-          legendColumnWidths={listLegendColumnWidths}
-          onSelect={handleRecordSelect}
-        />
-      )}
 
       <AppOverlays
         language={language}
@@ -14271,44 +14232,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         onDiagnostic={logEvent}
       />
 
-      <ActionBar
+      <AppActionBar
         position="bottom"
-        language={language}
-        view={view}
-        disabled={
-          submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || Boolean(recordStale) || precreateDedupChecking
-        }
-        submitDisabled={view === 'form' && (dedupNavigationBlocked || orderedSubmitDisabled || submitDisabledByGate)}
-        submitDisabledTooltip={submitDisabledTooltip || undefined}
-        submitting={submitting}
-        readOnly={view === 'form' && isClosedRecord}
-        hideSubmit={submitHiddenByGate}
-        hideEdit={hideEditResolved}
-        createNewEnabled={definition.createNewRecordEnabled !== false}
-        createButtonLabel={definition.createButtonLabel}
-        copyCurrentRecordLabel={definition.copyCurrentRecordLabel}
-        submitLabel={guidedSubmitLabel}
-        summaryLabel={definition.summaryButtonLabel}
-        summaryEnabled={summaryEnabledResolved}
-        copyEnabled={copyEnabledResolved}
-        canCopy={canCopyResolved}
-        customButtons={customButtons as any}
-        actionBars={definition.actionBars}
+        commonProps={appActionBarCommonProps}
         notice={bottomBarNotice}
         showBackButton={showGuidedBack}
         backLabel={guidedBackLabel}
         backDisabled={guidedBackDisabled}
         onBack={() => formBackActionRef.current?.()}
-        onHome={handleGoHome}
-        onCreateNew={handleSubmitAnother}
-        onCreateCopy={() => {
-          void handleDuplicateCurrent();
-        }}
-        onEdit={() => setView('form')}
-        onSummary={handleGoSummary}
-        onSubmit={view === 'summary' ? handleSummarySubmit : requestSubmit}
-        onCustomButton={handleCustomButton}
-        onDiagnostic={logEvent}
       />
     </div>
   );

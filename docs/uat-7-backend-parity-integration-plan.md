@@ -879,10 +879,16 @@ One-hundred-twenty-third-pass results:
 - `FormView.tsx`: extracted the full subgroup overlay portal into `SubgroupOverlayPortal`, moving subgroup overlay header controls, selector/selector-overlay add controls, table/detail rendering, inline subgroup row rendering, bulk overlay-session selection, and overlay-session footer rendering into the line-items feature component layer. Current size: 7,046 lines.
 - Validation for the pass used focused overlay/form tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-twenty-fourth-pass results:
+
+- `App.tsx`: extracted resolved top/bottom action bar composition into `AppActionBar` and form/list/summary rendering into `AppMainViews`, keeping the app shell focused on state and use-case wiring while moving view composition into app components. Current size: 14,248 lines.
+- `FormView.tsx`: removed an unused line-item row-sort import exposed by the overlay portal extraction. Current size: 7,045 lines.
+- Validation for the pass used focused list-view tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,317 lines.
-- `FormView.tsx`: 7,046 lines.
+- `App.tsx`: 14,248 lines.
+- `FormView.tsx`: 7,045 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through

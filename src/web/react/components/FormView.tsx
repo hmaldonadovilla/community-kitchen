@@ -156,7 +156,6 @@ import {
 
 import { markRecipeIngredientsDirtyForGroupKey } from '../app/recipeIngredientsDirty';
 import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineItemTree';
-import { applyLineItemRowSort } from '../app/lineItemRowSort';
 import {
   isIngredientNameFieldId,
   isIngredientsManagementForm,
