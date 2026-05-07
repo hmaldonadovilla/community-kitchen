@@ -1,5 +1,6 @@
 import {
   buildStepDataSourceBootstrapSignature,
+  createStepDataSourceBootstrapRegistry,
   shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap
@@ -170,5 +171,21 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         inFlightSignature: ''
       })
     ).toBe(true);
+  });
+
+  it('coordinates duplicate bootstrap attempts across remounts', () => {
+    const registry = createStepDataSourceBootstrapRegistry();
+
+    expect(registry.markRunning('record-1:leftoverForm')).toBe(true);
+    expect(registry.getState('record-1:leftoverForm')).toBe('running');
+    expect(registry.markRunning('record-1:leftoverForm')).toBe(false);
+
+    registry.markCompleted('record-1:leftoverForm');
+    expect(registry.getState('record-1:leftoverForm')).toBe('completed');
+    expect(registry.markRunning('record-1:leftoverForm')).toBe(false);
+
+    registry.markFailed('record-1:leftoverForm');
+    expect(registry.getState('record-1:leftoverForm')).toBeNull();
+    expect(registry.markRunning('record-1:leftoverForm')).toBe(true);
   });
 });

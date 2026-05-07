@@ -18,7 +18,8 @@ import {
   buildStepDataSourceBootstrapSignature,
   shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
-  shouldWaitForSharedDataMutationsOnBootstrap
+  shouldWaitForSharedDataMutationsOnBootstrap,
+  stepDataSourceBootstrapRegistry
 } from '../../../app/stepDataSourceBootstrap';
 import { resolveStepDataSourceTargetFormKeys } from '../../../app/sharedDataMutations';
 import type { LineItemState } from '../../../types';
@@ -440,10 +441,12 @@ export const useGuidedStepDataSourceState = ({
       })
       .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
     if (!configEntries.length) return;
+    if (!stepDataSourceBootstrapRegistry.markRunning(stepDataSourceBootstrapSignature)) return;
     stepDataSourceBootstrapInFlightSignatureRef.current = stepDataSourceBootstrapSignature;
 
     const runBootstrap = async () => {
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
+      let bootstrapSucceeded = false;
       beginStepDataSourceLoading(loadingEntries);
       try {
         if (
@@ -461,7 +464,6 @@ export const useGuidedStepDataSourceState = ({
             stepId: currentGuidedStepId || undefined,
             reason: `stepDataSourceBootstrap:${groupId}`
           });
-          if (cancelled) return;
           if (!waitResult.ok) {
             onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.blocked', {
               groupId,
@@ -493,7 +495,6 @@ export const useGuidedStepDataSourceState = ({
               stepId: currentGuidedStepId || undefined,
               reason: `stepDataSourceBootstrap:${groupId}`
             });
-            if (cancelled) return;
             if (!waitResult.ok) {
               onDiagnostic?.('guidedStep.dataSourceBootstrap.sharedDataWait.blocked', {
                 groupId,
@@ -528,10 +529,11 @@ export const useGuidedStepDataSourceState = ({
             queueStepDataSourceRefreshTick();
             stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
           }
+          bootstrapSucceeded = true;
+          stepDataSourceBootstrapRegistry.markCompleted(stepDataSourceBootstrapSignature);
           return;
         }
         const fetchResults = await Promise.all(pendingFetches.map(entry => entry.promise));
-        if (cancelled) return;
         const failedFetches = pendingFetches.filter((_, index) => !fetchResults[index]);
         if (failedFetches.length) {
           onDiagnostic?.('guidedStep.dataSourceBootstrap.fetch.partialFailure', {
@@ -542,9 +544,16 @@ export const useGuidedStepDataSourceState = ({
           });
           return;
         }
-        queueStepDataSourceRefreshTick();
-        stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+        if (!cancelled) {
+          queueStepDataSourceRefreshTick();
+          stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+        }
+        bootstrapSucceeded = true;
+        stepDataSourceBootstrapRegistry.markCompleted(stepDataSourceBootstrapSignature);
       } finally {
+        if (!bootstrapSucceeded) {
+          stepDataSourceBootstrapRegistry.markFailed(stepDataSourceBootstrapSignature);
+        }
         if (stepDataSourceBootstrapInFlightSignatureRef.current === stepDataSourceBootstrapSignature) {
           stepDataSourceBootstrapInFlightSignatureRef.current = '';
         }
@@ -588,6 +597,7 @@ export const useGuidedStepDataSourceState = ({
     );
 
     const handleCacheCleared = () => {
+      stepDataSourceBootstrapRegistry.markFailed(stepDataSourceBootstrapSignature);
       const configs = activeStepDataSourceRows
         .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
         .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
@@ -620,7 +630,14 @@ export const useGuidedStepDataSourceState = ({
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
       window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     };
-  }, [activeStepDataSourceRows, beginStepDataSourceLoading, endStepDataSourceLoading, language, queueStepDataSourceRefreshTick]);
+  }, [
+    activeStepDataSourceRows,
+    beginStepDataSourceLoading,
+    endStepDataSourceLoading,
+    language,
+    queueStepDataSourceRefreshTick,
+    stepDataSourceBootstrapSignature
+  ]);
 
   React.useEffect(() => {
     const pending = pendingStepReservationDraftSyncRef.current;

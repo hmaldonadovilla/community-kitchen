@@ -58,3 +58,54 @@ export const shouldStartStepDataSourceBootstrap = (args: {
   if (`${args.inFlightSignature || ''}`.trim() === signature) return false;
   return true;
 };
+
+type StepDataSourceBootstrapRegistryState = 'running' | 'completed';
+
+export type StepDataSourceBootstrapRegistry = {
+  markRunning: (signature?: string | null) => boolean;
+  markCompleted: (signature?: string | null) => void;
+  markFailed: (signature?: string | null) => void;
+  getState: (signature?: string | null) => StepDataSourceBootstrapRegistryState | null;
+  clear: () => void;
+};
+
+const normalizeBootstrapRegistrySignature = (signature?: string | null): string =>
+  `${signature || ''}`.trim();
+
+/**
+ * Coordinates guided datasource bootstrap across transient component remounts.
+ * The hook still owns local loading state; this registry only suppresses
+ * duplicate work for the same logical record/step/config bootstrap.
+ */
+export const createStepDataSourceBootstrapRegistry = (): StepDataSourceBootstrapRegistry => {
+  const states = new Map<string, StepDataSourceBootstrapRegistryState>();
+  return {
+    markRunning: signature => {
+      const key = normalizeBootstrapRegistrySignature(signature);
+      if (!key) return false;
+      if (states.has(key)) return false;
+      states.set(key, 'running');
+      return true;
+    },
+    markCompleted: signature => {
+      const key = normalizeBootstrapRegistrySignature(signature);
+      if (!key) return;
+      states.set(key, 'completed');
+    },
+    markFailed: signature => {
+      const key = normalizeBootstrapRegistrySignature(signature);
+      if (!key) return;
+      states.delete(key);
+    },
+    getState: signature => {
+      const key = normalizeBootstrapRegistrySignature(signature);
+      if (!key) return null;
+      return states.get(key) || null;
+    },
+    clear: () => {
+      states.clear();
+    }
+  };
+};
+
+export const stepDataSourceBootstrapRegistry = createStepDataSourceBootstrapRegistry();
