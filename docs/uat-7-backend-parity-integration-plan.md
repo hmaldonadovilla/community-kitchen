@@ -895,10 +895,15 @@ One-hundred-twenty-sixth-pass results:
 - `App.tsx`: extracted template-render target detection and delayed template prefetch retry scheduling into `useAppTemplatePrefetch`, moving template warmup refs and idle/retry side effects out of the app shell while preserving the target flag used by list-record prefetch. Current size: 14,149 lines.
 - Validation for the pass used focused list/report prefetch-adjacent tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-twenty-seventh-pass results:
+
+- `FormView.tsx`: extracted line-item row add/remove orchestration into `useFormLineItemRows`, moving manual add guards, max-row and dedup checks, empty-row reuse, overlay min-row seeding, overlay auto-add reconciliation, cascade removal, and recipe-dirty diagnostics into the line-items feature layer. Current size: 6,005 lines.
+- Validation for the pass used focused line-item tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 14,149 lines.
-- `FormView.tsx`: 6,628 lines.
+- `FormView.tsx`: 6,005 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
