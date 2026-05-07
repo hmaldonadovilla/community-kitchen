@@ -915,10 +915,15 @@ One-hundred-thirtieth-pass results:
 - `App.tsx`: extracted dedup dialog and dedup top-notice handlers into `useAppDedupDialogHandlers`, moving dedup state reset, change-fields clearing, cancel-to-home, open-existing, and list precreate dialog actions out of the app shell. Current size: 13,898 lines.
 - Validation for the pass used focused dedup tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-thirty-first-pass results:
+
+- `FormView.tsx`: extracted overlay-open action resolution into `useOverlayOpenActions`, moving subgroup target indexing, configured overlay action matching, override-group construction, flatten placement normalization, target-group collection, and availability diagnostics into the line-items feature layer. Current size: 5,419 lines.
+- Validation for the pass used nearby FormView/line-item focused tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
 - `App.tsx`: 13,898 lines.
-- `FormView.tsx`: 5,627 lines.
+- `FormView.tsx`: 5,419 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 
 ### Stage 3: Backend and Domain Separation Follow-through
