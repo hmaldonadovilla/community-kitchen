@@ -75,7 +75,7 @@ import { useValidationNavigationRequest } from '../features/validation/useValida
 import { resolveFieldLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
-import { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../types';
+import { FormErrors, LineItemState, OptionState } from '../types';
 import { clearLineItemGroupErrors, mergeLineItemGroupErrors } from './form/utils';
 import { InfoOverlay } from './form/overlays/InfoOverlay';
 import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';

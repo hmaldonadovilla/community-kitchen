@@ -910,9 +910,14 @@ One-hundred-twenty-ninth-pass results:
 - `FormView.tsx`: extracted top-level and line-item field-change orchestration into `useFormFieldChangeHandlers`, moving clear-on-change rebuilds, line-item dedup checks, non-match marker updates, exclusive line selection, recipe-dirty markers, overlay-detail auto-open, and selection-effect reruns into a focused form-state hook. Current size: 5,627 lines.
 - Validation for the pass used focused form/line-item tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
+One-hundred-thirtieth-pass results:
+
+- `App.tsx`: extracted dedup dialog and dedup top-notice handlers into `useAppDedupDialogHandlers`, moving dedup state reset, change-fields clearing, cancel-to-home, open-existing, and list precreate dialog actions out of the app shell. Current size: 13,898 lines.
+- Validation for the pass used focused dedup tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+
 Current large-file counts:
 
-- `App.tsx`: 14,048 lines.
+- `App.tsx`: 13,898 lines.
 - `FormView.tsx`: 5,627 lines.
 - `LineItemGroupQuestion.tsx`: 871 lines.
 

@@ -83,6 +83,7 @@ import { useAppReportPreviewActions } from './components/app/useAppReportPreview
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
 import { useAppTemplatePrefetch } from './components/app/useAppTemplatePrefetch';
 import { useAppSelectionEffects } from './components/app/useAppSelectionEffects';
+import { useAppDedupDialogHandlers } from './components/app/useAppDedupDialogHandlers';
 import { usePendingFollowupBatchWait } from './components/app/usePendingFollowupBatchWait';
 import {
   usePendingSharedDataMutations,
@@ -13484,161 +13485,51 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     createFlowRef
   });
 
-  const resetDedupState = useCallback(
-    (reason: string) => {
-      hideDedupProgressDialog();
-      if (dedupCheckTimerRef.current) {
-        globalThis.clearTimeout(dedupCheckTimerRef.current);
-        dedupCheckTimerRef.current = null;
-      }
-      dedupCheckSeqRef.current += 1;
-      lastDedupCheckedSignatureRef.current = '';
-      dedupHoldRef.current = false;
-      dedupCheckingRef.current = false;
-      dedupConflictRef.current = null;
-      setDedupChecking(false);
-      setDedupConflict(null);
-      setDedupNotice(null);
-      autoSaveDirtyRef.current = false;
-      if (autoSaveTimerRef.current) {
-        globalThis.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      setDraftSave({ phase: 'idle' });
-      logEvent('dedup.state.reset', { reason });
-    },
-    [hideDedupProgressDialog, logEvent]
-  );
-
-  const handleDedupChangeFields = useCallback(() => {
-    const conflict = dedupDialogConflict;
-    if (!conflict) return;
-    const fallbackKeys = dedupDialogDetails?.keys || [];
-    const keys = fallbackKeys.length
-      ? fallbackKeys
-      : (() => {
-          const list: string[] = [];
-          const seen = new Set<string>();
-          Object.keys(dedupIdentityFieldIdMap || {}).forEach(key => {
-            const trimmed = (key || '').toString().trim();
-            if (!trimmed) return;
-            const lower = trimmed.toLowerCase();
-            if (seen.has(lower)) return;
-            seen.add(lower);
-            list.push(trimmed);
-          });
-          return list;
-        })();
-    resetDedupState('dedup.dialog.changeFields');
-    if (keys.length) {
-      const baseValues = { ...(valuesRef.current || {}) };
-      keys.forEach(key => {
-        if (!key) return;
-        baseValues[key] = '';
-      });
-      const mapped = applyValueMapsToForm(definition, baseValues, lineItemsRef.current, {
-        mode: 'change',
-        lockedTopFields: keys
-      });
-      setValues(mapped.values);
-      setLineItems(mapped.lineItems);
-      valuesRef.current = mapped.values;
-      lineItemsRef.current = mapped.lineItems;
-      setErrors(prev => {
-        const next = { ...(prev || {}) };
-        keys.forEach(key => {
-          if (key && key in next) delete next[key];
-        });
-        return next;
-      });
-      autoSaveDirtyRef.current = true;
-      setDraftSave({ phase: 'dirty' });
-    }
-    setView('form');
-    logEvent('dedup.dialog.changeFields', {
-      ruleId: conflict.ruleId || null,
-      existingRecordId: conflict.existingRecordId || null,
-      clearedFields: keys
-    });
-  }, [
+  const {
+    handleDedupDialogCancel,
+    handleDedupDialogConfirm,
+    handleListDedupDialogCancel,
+    handleListDedupDialogConfirm,
+    handleDedupTopNoticeOpenExisting
+  } = useAppDedupDialogHandlers({
+    definition,
     dedupDialogConflict,
     dedupDialogDetails,
     dedupIdentityFieldIdMap,
-    definition,
-    logEvent,
-    resetDedupState,
-    setErrors,
-    setLineItems,
+    ingredientCreateDedupDialogMode,
+    dedupConflict,
+    dedupNotice,
+    listDedupPrompt,
+    summaryViewEnabled,
+    dedupCheckTimerRef,
+    dedupCheckSeqRef,
+    lastDedupCheckedSignatureRef,
+    dedupHoldRef,
+    dedupCheckingRef,
+    dedupConflictRef,
+    autoSaveDirtyRef,
+    autoSaveTimerRef,
+    valuesRef,
+    lineItemsRef,
+    createFlowRef,
+    createFlowUserEditedRef,
+    autoSaveUserEditedRef,
+    setDedupChecking,
+    setDedupConflict,
+    setDedupNotice,
+    setDraftSave,
     setValues,
-    setView
-  ]);
-
-  const handleDedupCancelCreationToHome = useCallback(() => {
-    const conflict = dedupDialogConflict as any;
-    resetDedupState('dedup.dialog.cancelCreation');
-    createFlowRef.current = false;
-    createFlowUserEditedRef.current = false;
-    autoSaveUserEditedRef.current = false;
-    dedupHoldRef.current = false;
-    setView('list');
-    setStatus(null);
-    setStatusLevel(null);
-    logEvent('dedup.dialog.cancelCreation.home', {
-      ruleId: conflict?.ruleId || null,
-      existingRecordId: conflict?.existingRecordId || null
-    });
-  }, [dedupDialogConflict, logEvent, resetDedupState]);
-
-  const handleDedupOpenExisting = useCallback(() => {
-    const conflict = dedupDialogConflict as any;
-    const id = (conflict?.existingRecordId || '').toString().trim();
-    if (!id) return;
-    const rowNumberRaw = conflict?.existingRowNumber;
-    const rowNumber =
-      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
-        ? undefined
-        : Number(rowNumberRaw);
-    resetDedupState('dedup.dialog.openExisting');
-    logEvent('dedup.openExisting.click', { existingRecordId: id, source: 'dedupDialog' });
-    void openExistingRecordFromDedup({ recordId: id, rowNumber, source: 'dedupDialog', view: 'form' });
-  }, [dedupDialogConflict, logEvent, openExistingRecordFromDedup, resetDedupState]);
-
-  const handleListDedupDialogConfirm = useCallback(() => {
-    const prompt = listDedupPrompt;
-    if (!prompt) return;
-    setListDedupPrompt(null);
-    const id = (prompt.conflict.existingRecordId || '').toString().trim();
-    if (!id) return;
-    const rowNumberRaw = prompt.conflict.existingRowNumber;
-    const rowNumber =
-      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
-        ? undefined
-        : Number(rowNumberRaw);
-    logEvent('dedup.precreate.openExistingFromList', {
-      source: prompt.source,
-      buttonId: prompt.buttonId,
-      qIdx: prompt.qIdx ?? null,
-      existingRecordId: id,
-      existingRowNumber: rowNumber ?? null
-    });
-    void openExistingRecordFromDedup({ recordId: id, rowNumber, source: prompt.source });
-  }, [listDedupPrompt, logEvent, openExistingRecordFromDedup]);
-
-  const handleListDedupDialogCancel = useCallback(() => {
-    const prompt = listDedupPrompt;
-    if (!prompt) return;
-    setListDedupPrompt(null);
-    logEvent('dedup.precreate.listDialog.cancel', {
-      source: prompt.source,
-      buttonId: prompt.buttonId,
-      qIdx: prompt.qIdx ?? null,
-      existingRecordId: prompt.conflict.existingRecordId || null,
-      existingRowNumber: prompt.conflict.existingRowNumber ?? null
-    });
-  }, [listDedupPrompt, logEvent]);
-
-  const handleDedupDialogConfirm = ingredientCreateDedupDialogMode ? handleDedupCancelCreationToHome : handleDedupOpenExisting;
-  const handleDedupDialogCancel = handleDedupChangeFields;
+    setLineItems,
+    setErrors,
+    setView,
+    setStatus,
+    setStatusLevel,
+    setListDedupPrompt,
+    hideDedupProgressDialog,
+    openExistingRecordFromDedup,
+    loadRecordSnapshot,
+    logEvent
+  });
 
   useEffect(() => {
     if (!dedupDialogConflict) return;
@@ -13657,47 +13548,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
     });
   }, [dedupDialogConflict, definition.dedupDialog, logEvent]);
-
-  const handleDedupTopNoticeOpenExisting = useCallback(() => {
-    const conflictAny = (dedupConflict || dedupNotice) as any;
-    const id = (conflictAny?.existingRecordId || '').toString().trim();
-    const rowNumberRaw = conflictAny?.existingRowNumber;
-    const rowNumber =
-      rowNumberRaw === undefined || rowNumberRaw === null || !Number.isFinite(Number(rowNumberRaw))
-        ? undefined
-        : Number(rowNumberRaw);
-    if (!id) return;
-    // Clear transient dedup state before navigating.
-    if (dedupCheckTimerRef.current) {
-      globalThis.clearTimeout(dedupCheckTimerRef.current);
-      dedupCheckTimerRef.current = null;
-    }
-    dedupCheckSeqRef.current += 1;
-    lastDedupCheckedSignatureRef.current = '';
-    dedupHoldRef.current = false;
-    dedupCheckingRef.current = false;
-    dedupConflictRef.current = null;
-    setDedupChecking(false);
-    setDedupConflict(null);
-    setDedupNotice(null);
-    // Cancel any pending autosave from the now-invalid draft values.
-    autoSaveDirtyRef.current = false;
-    if (autoSaveTimerRef.current) {
-      globalThis.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    setDraftSave({ phase: 'idle' });
-    logEvent('dedup.openExisting.click', { existingRecordId: id });
-    // Prefer row-number fetch when available to avoid fragile ID lookups.
-    const loadPromise = rowNumber && rowNumber >= 2
-      ? loadRecordSnapshot('', rowNumber)
-      : loadRecordSnapshot(id);
-    void loadPromise.then(ok => {
-      if (!ok) return;
-      // Prefer summary when enabled (closed records are read-only).
-      setView(summaryViewEnabled ? 'summary' : 'form');
-    });
-  }, [dedupConflict, dedupNotice, loadRecordSnapshot, logEvent, summaryViewEnabled]);
 
   const dedupTopNotice =
     view === 'form' && (isBlockingDedupConflict(dedupConflict) || !!dedupNotice) && !dedupDialogConflict ? (
