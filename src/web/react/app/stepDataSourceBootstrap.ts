@@ -47,6 +47,22 @@ export const shouldWaitForSharedDataMutationsOnBootstrap = (
   config?: StepDataSourceBootstrapConfig | null
 ): boolean => config?.waitForSharedDataMutations === true;
 
+export const shouldForceRefreshStepDataSourceOnBootstrap = (
+  config: any,
+  recordChanged = false
+): boolean => {
+  if (!config || typeof config !== 'object') return false;
+  return (
+    recordChanged ||
+    config.forceRefreshOnMount === true ||
+    Boolean(config.availability) ||
+    Boolean(config.reservationBehavior)
+  );
+};
+
+export const shouldGateStepDataSourceUntilFresh = (config: any): boolean =>
+  shouldForceRefreshStepDataSourceOnBootstrap(config, false);
+
 export const shouldStartStepDataSourceBootstrap = (args: {
   signature?: string | null;
   completedSignature?: string | null;
@@ -59,53 +75,54 @@ export const shouldStartStepDataSourceBootstrap = (args: {
   return true;
 };
 
-type StepDataSourceBootstrapRegistryState = 'running' | 'completed';
+type StepDataSourceBootstrapCoordinatorState = 'running';
 
-export type StepDataSourceBootstrapRegistry = {
-  markRunning: (signature?: string | null) => boolean;
-  markCompleted: (signature?: string | null) => void;
-  markFailed: (signature?: string | null) => void;
-  getState: (signature?: string | null) => StepDataSourceBootstrapRegistryState | null;
+export type StepDataSourceBootstrapRun<T> = {
+  started: boolean;
+  promise: Promise<T>;
+};
+
+export type StepDataSourceBootstrapCoordinator = {
+  run: <T>(signature: string | null | undefined, task: () => Promise<T>) => StepDataSourceBootstrapRun<T> | null;
+  getState: (signature?: string | null) => StepDataSourceBootstrapCoordinatorState | null;
   clear: () => void;
 };
 
-const normalizeBootstrapRegistrySignature = (signature?: string | null): string =>
+const normalizeBootstrapCoordinatorSignature = (signature?: string | null): string =>
   `${signature || ''}`.trim();
 
 /**
- * Coordinates guided datasource bootstrap across transient component remounts.
- * The hook still owns local loading state; this registry only suppresses
- * duplicate work for the same logical record/step/config bootstrap.
+ * Coordinates guided datasource bootstrap across transient component remounts
+ * while a request is running. Completed runs are intentionally not retained:
+ * source-first inventory steps must force-refresh on every step entry.
  */
-export const createStepDataSourceBootstrapRegistry = (): StepDataSourceBootstrapRegistry => {
-  const states = new Map<string, StepDataSourceBootstrapRegistryState>();
+export const createStepDataSourceBootstrapCoordinator = (): StepDataSourceBootstrapCoordinator => {
+  const running = new Map<string, Promise<unknown>>();
   return {
-    markRunning: signature => {
-      const key = normalizeBootstrapRegistrySignature(signature);
-      if (!key) return false;
-      if (states.has(key)) return false;
-      states.set(key, 'running');
-      return true;
-    },
-    markCompleted: signature => {
-      const key = normalizeBootstrapRegistrySignature(signature);
-      if (!key) return;
-      states.set(key, 'completed');
-    },
-    markFailed: signature => {
-      const key = normalizeBootstrapRegistrySignature(signature);
-      if (!key) return;
-      states.delete(key);
+    run: <T>(signature: string | null | undefined, task: () => Promise<T>): StepDataSourceBootstrapRun<T> | null => {
+      const key = normalizeBootstrapCoordinatorSignature(signature);
+      if (!key) return null;
+      const existing = running.get(key) as Promise<T> | undefined;
+      if (existing) {
+        return { started: false, promise: existing };
+      }
+      const promise = task().finally(() => {
+        if (running.get(key) === promise) {
+          running.delete(key);
+        }
+      });
+      running.set(key, promise);
+      return { started: true, promise };
     },
     getState: signature => {
-      const key = normalizeBootstrapRegistrySignature(signature);
+      const key = normalizeBootstrapCoordinatorSignature(signature);
       if (!key) return null;
-      return states.get(key) || null;
+      return running.has(key) ? 'running' : null;
     },
     clear: () => {
-      states.clear();
+      running.clear();
     }
   };
 };
 
-export const stepDataSourceBootstrapRegistry = createStepDataSourceBootstrapRegistry();
+export const stepDataSourceBootstrapCoordinator = createStepDataSourceBootstrapCoordinator();

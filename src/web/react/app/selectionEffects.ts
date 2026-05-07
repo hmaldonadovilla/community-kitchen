@@ -18,6 +18,7 @@ import {
   resolveSubgroupKey,
   seedSubgroupDefaults
 } from './lineItems';
+import { isLineItemContextSnapshotCurrent } from './lineItemContextSnapshot';
 import { buildSelectionEffectLineItemUpsert } from './selectionEffectLineItemUpsert';
 
 type SelectionEffectOpts = {
@@ -320,6 +321,33 @@ export const runSelectionEffects = (args: {
     }
     return { ...lineItem, rowValues: merged };
   })();
+  const sourceLineItemContext = effectiveLineItem || opts?.lineItem;
+  const shouldApplyLineItemContextMutation = (
+    currentLineItems: LineItemState,
+    contextGuardFieldIds?: string[]
+  ): boolean => {
+    if (!sourceLineItemContext?.groupId || !sourceLineItemContext?.rowId) return true;
+    if (!contextGuardFieldIds?.length) return true;
+    const isCurrent = isLineItemContextSnapshotCurrent({
+      lineItems: currentLineItems,
+      groupKey: sourceLineItemContext.groupId,
+      rowId: sourceLineItemContext.rowId,
+      snapshotValues: (sourceLineItemContext.rowValues || {}) as Record<string, FieldValue>,
+      fieldIds: contextGuardFieldIds
+    });
+    if (!isCurrent) {
+      logEventOnce(
+        `selectionEffects.staleContext.skip::${sourceLineItemContext.groupId}::${sourceLineItemContext.rowId}`,
+        'selectionEffects.staleContext.skip',
+        {
+          groupId: sourceLineItemContext.groupId,
+          rowId: sourceLineItemContext.rowId,
+          fieldIds: contextGuardFieldIds
+        }
+      );
+    }
+    return isCurrent;
+  };
 
   handleSelectionEffects(
     definition,
@@ -337,9 +365,11 @@ export const runSelectionEffects = (args: {
           effectId?: string;
           hideRemoveButton?: boolean;
           replaceExistingByEffectId?: boolean;
+          contextGuardFieldIds?: string[];
         }
       ) => {
         setLineItems(prev => {
+          if (!shouldApplyLineItemContextMutation(prev, meta?.contextGuardFieldIds)) return prev;
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
           const rows = prev[targetKey] || [];
           const sourceGroupId = opts?.lineItem?.groupId;
@@ -494,9 +524,11 @@ export const runSelectionEffects = (args: {
           hideRemoveButton?: boolean;
           preserveManualRows?: boolean;
           replaceAllAutoRows?: boolean;
+          contextGuardFieldIds?: string[];
         }
       ) => {
         setLineItems(prev => {
+          if (!shouldApplyLineItemContextMutation(prev, meta.contextGuardFieldIds)) return prev;
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
           const rows = prev[targetKey] || [];
           const keyFields = (meta.keyFields || []).map(k => k.toString());
@@ -608,12 +640,14 @@ export const runSelectionEffects = (args: {
             const reusableRow = presetKey
               ? (reusableAutoRowsByKey.get(presetKey) || []).shift()
               : reusableAutoRowsByIndex[reusableIndex++];
+            const rowId = reusableRow?.id || `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`;
             const values: Record<string, FieldValue> = { ...preset };
             meta.numericTargets.forEach(fid => {
               if ((preset as any)[fid] !== undefined) {
                 values[fid] = (preset as any)[fid] as FieldValue;
               }
             });
+            values[ROW_ID_KEY] = rowId;
             values[ROW_SOURCE_KEY] = ROW_SOURCE_AUTO;
             if (normalizedEffectId) values[ROW_SELECTION_EFFECT_ID_KEY] = normalizedEffectId;
             if (meta.hideRemoveButton === true) values[ROW_HIDE_REMOVE_KEY] = true;
@@ -622,7 +656,7 @@ export const runSelectionEffects = (args: {
               values[ROW_PARENT_ROW_ID_KEY] = opts.lineItem.rowId;
             }
             return {
-              id: reusableRow?.id || `${rowIdPrefix}_${Math.random().toString(16).slice(2)}`,
+              id: rowId,
               values,
               parentId: opts?.lineItem?.rowId,
               parentGroupId: opts?.lineItem?.groupId,
@@ -724,10 +758,11 @@ export const runSelectionEffects = (args: {
           return recomputed;
         });
       },
-      setValue: ({ fieldId, value, lineItem, skipSelectionEffects }) => {
+      setValue: ({ fieldId, value, lineItem, skipSelectionEffects, contextGuardFieldIds }) => {
         const target = lineItem || opts?.lineItem;
         if (target?.groupId && target?.rowId) {
           setLineItems(prev => {
+            if (!shouldApplyLineItemContextMutation(prev, contextGuardFieldIds)) return prev;
             const groupKey = target.groupId;
             const rows = prev[groupKey] || [];
             const idx = rows.findIndex(r => r.id === target.rowId);
@@ -783,6 +818,82 @@ export const runSelectionEffects = (args: {
         });
       },
       beginAsyncEffect: onAsyncEffectStart,
+      setValues: ({ values: fieldValues, lineItem, skipSelectionEffects, contextGuardFieldIds }) => {
+        const target = lineItem || opts?.lineItem;
+        if (target?.groupId && target?.rowId) {
+          setLineItems(prev => {
+            if (!shouldApplyLineItemContextMutation(prev, contextGuardFieldIds)) return prev;
+            const groupKey = target.groupId;
+            const rows = prev[groupKey] || [];
+            const idx = rows.findIndex(r => r.id === target.rowId);
+            if (idx < 0) return prev;
+            const baseRow = rows[idx];
+            const changedEntries = Object.entries(fieldValues || {}).filter(
+              ([fieldId, nextValue]) => !areFieldValuesEqual((baseRow.values || {})[fieldId], nextValue as FieldValue)
+            );
+            if (!changedEntries.length) return prev;
+            const nextRowValues = { ...(baseRow.values || {}) };
+            changedEntries.forEach(([fieldId, nextValue]) => {
+              nextRowValues[fieldId] = nextValue as FieldValue;
+            });
+            const nextRows = [...rows];
+            nextRows[idx] = { ...baseRow, values: nextRowValues };
+            const nextLineItems = { ...prev, [groupKey]: nextRows };
+            const { values: nextValues, lineItems: recomputed } = applyValueMapsWithBlurDerived(nextLineItems);
+            latestLineItemsSnapshot = recomputed;
+            setValuesIfChanged(nextValues);
+            onLineItemsMutated?.({
+              sourceGroupKey: groupKey,
+              prevLineItems: prev,
+              nextLineItems: recomputed,
+              nextValues
+            });
+            if (!skipSelectionEffects) {
+              changedEntries.forEach(([fieldId, nextValue]) => {
+                scheduleChainedSelectionEffects({
+                  fieldId,
+                  value: nextValue as FieldValue,
+                  groupId: groupKey,
+                  rowId: target.rowId,
+                  nextValues,
+                  nextLineItems: recomputed
+                });
+              });
+            }
+            return recomputed;
+          });
+          return;
+        }
+        setValues(prev => {
+          const changedEntries = Object.entries(fieldValues || {}).filter(
+            ([fieldId, nextValue]) => !areFieldValuesEqual(prev[fieldId], nextValue as FieldValue)
+          );
+          if (!changedEntries.length) return prev;
+          const nextRawValues = { ...prev };
+          changedEntries.forEach(([fieldId, nextValue]) => {
+            nextRawValues[fieldId] = nextValue as FieldValue;
+          });
+          const lockedTopFields = changedEntries.map(([fieldId]) => fieldId);
+          const { values: appliedValues, lineItems: recomputed } = applyValueMapsWithBlurDerivedForValues(
+            nextRawValues,
+            latestLineItemsSnapshot,
+            lockedTopFields
+          );
+          latestLineItemsSnapshot = recomputed;
+          setLineItems(recomputed);
+          if (!skipSelectionEffects) {
+            changedEntries.forEach(([fieldId, nextValue]) => {
+              scheduleChainedSelectionEffects({
+                fieldId,
+                value: nextValue as FieldValue,
+                nextValues: appliedValues,
+                nextLineItems: recomputed
+              });
+            });
+          }
+          return appliedValues;
+        });
+      },
       clearLineItems: (
         groupId: string,
         contextId?: string,
@@ -792,9 +903,11 @@ export const runSelectionEffects = (args: {
           effectId?: string;
           parentGroupId?: string;
           parentRowId?: string;
+          contextGuardFieldIds?: string[];
         }
       ) => {
         setLineItems(prev => {
+          if (!shouldApplyLineItemContextMutation(prev, meta?.contextGuardFieldIds)) return prev;
           const targetKey = resolveTargetGroupKey(groupId, opts?.lineItem);
           const rows = prev[targetKey] || [];
           const preserveManualRows = meta?.preserveManualRows !== false;

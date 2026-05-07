@@ -16,10 +16,12 @@ import {
 } from '../../../app/sourceFirstAllocations';
 import {
   buildStepDataSourceBootstrapSignature,
+  shouldForceRefreshStepDataSourceOnBootstrap,
+  shouldGateStepDataSourceUntilFresh,
   shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap,
-  stepDataSourceBootstrapRegistry
+  stepDataSourceBootstrapCoordinator
 } from '../../../app/stepDataSourceBootstrap';
 import { resolveStepDataSourceTargetFormKeys } from '../../../app/sharedDataMutations';
 import type { LineItemState } from '../../../types';
@@ -199,6 +201,8 @@ export const useGuidedStepDataSourceState = ({
   const stepDataSourceRecordIdRef = React.useRef<string>('');
   const stepDataSourceBootstrapSignatureRef = React.useRef<string>('');
   const stepDataSourceBootstrapInFlightSignatureRef = React.useRef<string>('');
+  const currentStepDataSourceBootstrapSignatureRef = React.useRef<string>('');
+  const mountedRef = React.useRef(true);
   const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
   const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
@@ -219,6 +223,7 @@ export const useGuidedStepDataSourceState = ({
     [dataSourceBootstrap]
   );
   const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
+  const [stepDataSourceBootstrapRetryTick, setStepDataSourceBootstrapRetryTick] = React.useState(0);
   const stepDataSourceBootstrapSignature = React.useMemo(
     () =>
       buildStepDataSourceBootstrapSignature({
@@ -229,6 +234,17 @@ export const useGuidedStepDataSourceState = ({
         bootstrap: dataSourceBootstrap
       }),
     [activeStepDataSourceRows, currentGuidedStepId, dataSourceBootstrap, language, recordId]
+  );
+
+  React.useEffect(() => {
+    currentStepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+  }, [stepDataSourceBootstrapSignature]);
+
+  React.useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -295,9 +311,12 @@ export const useGuidedStepDataSourceState = ({
   const isStepDataSourceLoading = React.useCallback(
     (config: any): boolean => {
       const key = buildStepDataSourceLoadKey(config);
-      return Number(stepDataSourceLoadingCounts[key] || 0) > 0;
+      if (Number(stepDataSourceLoadingCounts[key] || 0) > 0) return true;
+      if (!shouldGateStepDataSourceUntilFresh(config)) return false;
+      if (stepDataSourceBootstrapInFlightSignatureRef.current === stepDataSourceBootstrapSignature) return true;
+      return stepDataSourceBootstrapSignatureRef.current !== stepDataSourceBootstrapSignature;
     },
-    [buildStepDataSourceLoadKey, stepDataSourceLoadingCounts]
+    [buildStepDataSourceLoadKey, stepDataSourceBootstrapSignature, stepDataSourceLoadingCounts]
   );
 
   const queueStepReservationDraftSnapshotSync = React.useCallback(
@@ -426,27 +445,20 @@ export const useGuidedStepDataSourceState = ({
     })) {
       return;
     }
-    let cancelled = false;
     const configEntries = activeStepDataSourceRows
       .map(candidate => {
         if (!candidate || typeof candidate !== 'object') return null;
         const dataSource = (candidate as any).dataSource;
         if (!dataSource || typeof dataSource !== 'object') return null;
-        const shouldForceRefresh =
-          recordChanged ||
-          (candidate as any).forceRefreshOnMount === true ||
-          Boolean((candidate as any).availability) ||
-          Boolean((candidate as any).reservationBehavior);
+        const shouldForceRefresh = shouldForceRefreshStepDataSourceOnBootstrap(candidate, recordChanged);
         return { dataSource, shouldForceRefresh };
       })
       .filter((candidate): candidate is { dataSource: any; shouldForceRefresh: boolean } => Boolean(candidate));
     if (!configEntries.length) return;
-    if (!stepDataSourceBootstrapRegistry.markRunning(stepDataSourceBootstrapSignature)) return;
     stepDataSourceBootstrapInFlightSignatureRef.current = stepDataSourceBootstrapSignature;
 
-    const runBootstrap = async () => {
+    const runBootstrap = async (): Promise<boolean> => {
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
-      let bootstrapSucceeded = false;
       beginStepDataSourceLoading(loadingEntries);
       try {
         if (
@@ -471,7 +483,7 @@ export const useGuidedStepDataSourceState = ({
               recordId: normalizedRecordId,
               message: waitResult.message || null
             });
-            return;
+            return false;
           }
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
             groupId,
@@ -503,7 +515,7 @@ export const useGuidedStepDataSourceState = ({
                 targetFormKeys,
                 message: waitResult.message || null
               });
-              return;
+              return false;
             }
             onDiagnostic?.('guidedStep.dataSourceBootstrap.sharedDataWait.done', {
               groupId,
@@ -525,13 +537,7 @@ export const useGuidedStepDataSourceState = ({
             ).catch(() => null)
           }));
         if (!pendingFetches.length) {
-          if (!cancelled) {
-            queueStepDataSourceRefreshTick();
-            stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
-          }
-          bootstrapSucceeded = true;
-          stepDataSourceBootstrapRegistry.markCompleted(stepDataSourceBootstrapSignature);
-          return;
+          return true;
         }
         const fetchResults = await Promise.all(pendingFetches.map(entry => entry.promise));
         const failedFetches = pendingFetches.filter((_, index) => !fetchResults[index]);
@@ -542,30 +548,41 @@ export const useGuidedStepDataSourceState = ({
             recordId: normalizedRecordId || null,
             dataSourceIds: failedFetches.map(entry => `${entry.config?.id || ''}`.trim()).filter(Boolean)
           });
-          return;
+          return false;
         }
-        if (!cancelled) {
-          queueStepDataSourceRefreshTick();
-          stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
-        }
-        bootstrapSucceeded = true;
-        stepDataSourceBootstrapRegistry.markCompleted(stepDataSourceBootstrapSignature);
+        return true;
       } finally {
-        if (!bootstrapSucceeded) {
-          stepDataSourceBootstrapRegistry.markFailed(stepDataSourceBootstrapSignature);
-        }
-        if (stepDataSourceBootstrapInFlightSignatureRef.current === stepDataSourceBootstrapSignature) {
-          stepDataSourceBootstrapInFlightSignatureRef.current = '';
-        }
         endStepDataSourceLoading(loadingEntries);
       }
     };
 
-    void runBootstrap();
-
-    return () => {
-      cancelled = true;
-    };
+    const bootstrapRun = stepDataSourceBootstrapCoordinator.run(stepDataSourceBootstrapSignature, runBootstrap);
+    if (!bootstrapRun) {
+      stepDataSourceBootstrapInFlightSignatureRef.current = '';
+      return;
+    }
+    if (!bootstrapRun.started) {
+      onDiagnostic?.('guidedStep.dataSourceBootstrap.coalesced', {
+        groupId,
+        stepId: currentGuidedStepId || null,
+        recordId: normalizedRecordId || null
+      });
+    }
+    void bootstrapRun.promise
+      .then(bootstrapSucceeded => {
+        if (!bootstrapSucceeded || !mountedRef.current) return;
+        if (currentStepDataSourceBootstrapSignatureRef.current !== stepDataSourceBootstrapSignature) return;
+        queueStepDataSourceRefreshTick();
+        stepDataSourceBootstrapSignatureRef.current = stepDataSourceBootstrapSignature;
+      })
+      .finally(() => {
+        if (mountedRef.current && currentStepDataSourceBootstrapSignatureRef.current === stepDataSourceBootstrapSignature) {
+          queueStepDataSourceRefreshTick();
+        }
+        if (stepDataSourceBootstrapInFlightSignatureRef.current === stepDataSourceBootstrapSignature) {
+          stepDataSourceBootstrapInFlightSignatureRef.current = '';
+        }
+      });
   }, [
     activeStepDataSourceRows,
     beginStepDataSourceLoading,
@@ -579,6 +596,7 @@ export const useGuidedStepDataSourceState = ({
     shouldWaitForReservationSyncBeforeBootstrap,
     shouldWaitForSharedDataBeforeBootstrap,
     stepDataSourceBootstrapSignature,
+    stepDataSourceBootstrapRetryTick,
     stepDataSourceRows,
     waitForGuidedStepReservationDraftSync,
     waitForPendingSharedDataMutations
@@ -587,7 +605,6 @@ export const useGuidedStepDataSourceState = ({
   React.useEffect(() => {
     if (!activeStepDataSourceRows.length) return;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-    let cancelled = false;
     const watchedDataSourceIds = new Set(
       activeStepDataSourceRows
         .map(candidate =>
@@ -597,23 +614,10 @@ export const useGuidedStepDataSourceState = ({
     );
 
     const handleCacheCleared = () => {
-      stepDataSourceBootstrapRegistry.markFailed(stepDataSourceBootstrapSignature);
-      const configs = activeStepDataSourceRows
-        .map(candidate => (candidate && typeof candidate === 'object' ? (candidate as any).dataSource : null))
-        .filter((candidate): candidate is any => Boolean(candidate && typeof candidate === 'object'));
-      if (!configs.length) {
-        queueStepDataSourceRefreshTick();
-        return;
-      }
-      beginStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
-      Promise.all(configs.map(config => fetchDataSource(config, language, { forceRefresh: true }).catch(() => null)))
-        .then(() => {
-          if (cancelled) return;
-          queueStepDataSourceRefreshTick();
-        })
-        .finally(() => {
-          endStepDataSourceLoading(configs.map(config => ({ dataSource: config, id: config?.id })));
-        });
+      stepDataSourceBootstrapSignatureRef.current = '';
+      stepDataSourceBootstrapInFlightSignatureRef.current = '';
+      queueStepDataSourceRefreshTick();
+      setStepDataSourceBootstrapRetryTick(prev => prev + 1);
     };
 
     const handleCacheUpdated = (event: Event) => {
@@ -626,15 +630,11 @@ export const useGuidedStepDataSourceState = ({
     window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
     window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     return () => {
-      cancelled = true;
       window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheCleared as EventListener);
       window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheUpdated as EventListener);
     };
   }, [
     activeStepDataSourceRows,
-    beginStepDataSourceLoading,
-    endStepDataSourceLoading,
-    language,
     queueStepDataSourceRefreshTick,
     stepDataSourceBootstrapSignature
   ]);

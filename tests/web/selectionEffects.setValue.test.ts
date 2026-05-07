@@ -12,6 +12,7 @@ import {
 import { runSelectionEffects } from '../../src/web/react/app/selectionEffects';
 import {
   buildSubgroupKey,
+  ROW_ID_KEY,
   ROW_PARENT_GROUP_ID_KEY,
   ROW_PARENT_ROW_ID_KEY,
   ROW_SELECTION_EFFECT_ID_KEY,
@@ -1193,12 +1194,149 @@ describe('selectionEffects setValue', () => {
     expect(lineItems[childKey]).toHaveLength(1);
     expect(lineItems[childKey][0].values).toEqual(
       expect.objectContaining({
+        [ROW_ID_KEY]: 'ing_old',
         ING: 'Pasta',
         QTY: '1',
         UNIT: 'kg',
         [ROW_SELECTION_EFFECT_ID_KEY]: 'syncRecipeIngredientsFromSource'
       })
     );
+    expect(lineItems[childKey][0].id).toBe('ing_old');
+    expect(lineItems[childKey][0].effectContextId).toBe('MEALS::meal_1::syncRecipeIngredientsFromSource');
+  });
+
+  it('ignores stale async recipe ingredient responses after the source row changed', async () => {
+    let resolveFetch: (value: any) => void = () => undefined;
+    (fetchDataSource as unknown as jest.Mock).mockReturnValue(
+      new Promise(resolve => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              { id: 'MP_TO_COOK', type: 'NUMBER', label: { en: 'To cook', fr: 'To cook', nl: 'To cook' } }
+            ],
+            subGroups: [
+              {
+                id: 'PREP_ROWS',
+                fields: [
+                  { id: 'RECIPE', type: 'CHOICE', label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' } },
+                  { id: 'PREP_QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' } },
+                  { id: 'PREP_TYPE', type: 'TEXT', label: { en: 'Type', fr: 'Type', nl: 'Type' } }
+                ],
+                subGroups: [
+                  {
+                    id: 'INGREDIENTS',
+                    fields: [
+                      { id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' } },
+                      { id: 'QTY', type: 'NUMBER', label: { en: 'Qty', fr: 'Qty', nl: 'Qty' } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+    const prepKey = buildSubgroupKey('MEALS', 'meal_1', 'PREP_ROWS');
+    const ingredientsKey = buildSubgroupKey(prepKey, 'cook_1', 'INGREDIENTS');
+    let values: Record<string, any> = {};
+    let lineItems: Record<string, any> = {
+      MEALS: [{ id: 'meal_1', values: { MP_TO_COOK: 450 } }],
+      [prepKey]: [{ id: 'cook_1', values: { RECIPE: 'Adassi', PREP_QTY: 450, PREP_TYPE: 'Cook' } }],
+      [ingredientsKey]: []
+    };
+    const setValues = (next: any) => {
+      values = typeof next === 'function' ? next(values) : next;
+    };
+    const setLineItems = (next: any) => {
+      lineItems = typeof next === 'function' ? next(lineItems) : next;
+    };
+
+    runSelectionEffects({
+      definition,
+      question: {
+        id: 'RECIPE',
+        dataSource: { id: 'Recipes Data', formKey: 'Config: Recipes' },
+        selectionEffects: [
+          {
+            id: 'syncRecipeIngredientsFromSource',
+            type: 'addLineItemsFromDataSource',
+            groupId: 'INGREDIENTS',
+            lookupField: 'id',
+            lookupFields: ['id', 'QFTD5RD2EM'],
+            lookupSourceFieldId: 'RECIPE_SOURCE_ID',
+            dataField: 'Q65ILNUSGL',
+            rowMultiplierFieldId: 'PREP_QTY',
+            dataSourceMultiplierField: 'NUM_PORTIONS',
+            scaleNumericFields: ['QTY'],
+            lineItemMapping: { ING: 'ING', QTY: 'QTY' },
+            aggregateBy: ['ING'],
+            aggregateNumericFields: ['QTY'],
+            preserveManualRows: false,
+            when: {
+              all: [
+                { fieldId: 'MP_TO_COOK', greaterThan: 0 },
+                { fieldId: 'PREP_TYPE', equals: ['Cook'] }
+              ]
+            },
+            sourceSync: { refreshOnInit: true, forceRefresh: true }
+          }
+        ]
+      } as any,
+      value: 'Adassi',
+      language: 'EN' as any,
+      values,
+      lineItems,
+      setValues,
+      setLineItems,
+      opts: {
+        contextId: `${prepKey}::cook_1::RECIPE`,
+        lineItem: {
+          groupId: prepKey,
+          rowId: 'cook_1',
+          rowValues: {
+            RECIPE: 'Adassi',
+            PREP_QTY: 450,
+            PREP_TYPE: 'Cook',
+            MP_TO_COOK: 450
+          }
+        },
+        forceContextReset: true
+      }
+    });
+
+    lineItems = {
+      MEALS: [{ id: 'meal_1', values: { MP_TO_COOK: 425 } }],
+      [prepKey]: [{ id: 'cook_1', values: { RECIPE: 'Adassi', PREP_QTY: 425, PREP_TYPE: 'Cook' } }],
+      [ingredientsKey]: []
+    };
+    resolveFetch({
+      items: [
+        {
+          id: 'recipe-1',
+          QFTD5RD2EM: 'Adassi',
+          NUM_PORTIONS: 100,
+          Q65ILNUSGL: [{ ING: 'Carrot', QTY: 10 }]
+        }
+      ]
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(lineItems[ingredientsKey]).toEqual([]);
   });
 
   it('clears values when setValue uses null', () => {

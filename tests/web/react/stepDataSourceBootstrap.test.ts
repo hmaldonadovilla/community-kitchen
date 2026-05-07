@@ -1,6 +1,8 @@
 import {
   buildStepDataSourceBootstrapSignature,
-  createStepDataSourceBootstrapRegistry,
+  createStepDataSourceBootstrapCoordinator,
+  shouldForceRefreshStepDataSourceOnBootstrap,
+  shouldGateStepDataSourceUntilFresh,
   shouldStartStepDataSourceBootstrap,
   shouldWaitForGuidedReservationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap
@@ -173,19 +175,41 @@ describe('buildStepDataSourceBootstrapSignature', () => {
     ).toBe(true);
   });
 
-  it('coordinates duplicate bootstrap attempts across remounts', () => {
-    const registry = createStepDataSourceBootstrapRegistry();
+  it('coordinates duplicate bootstrap attempts only while a request is running', async () => {
+    const coordinator = createStepDataSourceBootstrapCoordinator();
+    let resolveRun: (value: boolean) => void = () => undefined;
+    const task = jest.fn(
+      () =>
+        new Promise<boolean>(resolve => {
+          resolveRun = resolve;
+        })
+    );
 
-    expect(registry.markRunning('record-1:leftoverForm')).toBe(true);
-    expect(registry.getState('record-1:leftoverForm')).toBe('running');
-    expect(registry.markRunning('record-1:leftoverForm')).toBe(false);
+    const first = coordinator.run('record-1:leftoverForm', task);
+    const second = coordinator.run('record-1:leftoverForm', task);
+    expect(first?.started).toBe(true);
+    expect(second?.started).toBe(false);
+    expect(second?.promise).toBe(first?.promise);
+    expect(task).toHaveBeenCalledTimes(1);
+    expect(coordinator.getState('record-1:leftoverForm')).toBe('running');
 
-    registry.markCompleted('record-1:leftoverForm');
-    expect(registry.getState('record-1:leftoverForm')).toBe('completed');
-    expect(registry.markRunning('record-1:leftoverForm')).toBe(false);
+    resolveRun(true);
+    await first?.promise;
+    expect(coordinator.getState('record-1:leftoverForm')).toBeNull();
 
-    registry.markFailed('record-1:leftoverForm');
-    expect(registry.getState('record-1:leftoverForm')).toBeNull();
-    expect(registry.markRunning('record-1:leftoverForm')).toBe(true);
+    const third = coordinator.run('record-1:leftoverForm', async () => true);
+    expect(third?.started).toBe(true);
+    await third?.promise;
+    expect(coordinator.getState('record-1:leftoverForm')).toBeNull();
+  });
+
+  it('classifies freshness-gated source-first datasource configs', () => {
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({ forceRefreshOnMount: true })).toBe(true);
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({ availability: { enabled: true } })).toBe(true);
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({ reservationBehavior: { enabled: true } })).toBe(true);
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({}, true)).toBe(true);
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({})).toBe(false);
+    expect(shouldGateStepDataSourceUntilFresh({ availability: { enabled: true } })).toBe(true);
+    expect(shouldGateStepDataSourceUntilFresh({})).toBe(false);
   });
 });

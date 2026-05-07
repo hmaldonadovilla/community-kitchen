@@ -3,6 +3,7 @@ import { LangCode, VisibilityContext } from '../types';
 import { fetchDataSource, peekCachedDataSource, peekCachedDataSourcesById } from '../data/dataSources';
 import { computeAllowedOptions } from '../rules/filter';
 import { matchesWhenClause } from '../rules/visibility';
+import { resolveSelectionEffectContextGuardFieldIds } from './selectionEffectContextGuard';
 
 interface EffectContext {
   addLineItemRow: (
@@ -14,6 +15,7 @@ interface EffectContext {
       effectId?: string;
       hideRemoveButton?: boolean;
       replaceExistingByEffectId?: boolean;
+      contextGuardFieldIds?: string[];
     }
   ) => void;
   clearLineItems?: (
@@ -25,6 +27,7 @@ interface EffectContext {
       effectId?: string;
       parentGroupId?: string;
       parentRowId?: string;
+      contextGuardFieldIds?: string[];
     }
   ) => void;
   updateAutoLineItems?: (
@@ -38,6 +41,7 @@ interface EffectContext {
       hideRemoveButton?: boolean;
       preserveManualRows?: boolean;
       replaceAllAutoRows?: boolean;
+      contextGuardFieldIds?: string[];
     }
   ) => void;
   deleteLineItemRows?: (
@@ -49,6 +53,13 @@ interface EffectContext {
     value: PresetValue | null;
     lineItem?: SelectionEffectOptions['lineItem'];
     skipSelectionEffects?: boolean;
+    contextGuardFieldIds?: string[];
+  }) => void;
+  setValues?: (args: {
+    values: Record<string, PresetValue | null>;
+    lineItem?: SelectionEffectOptions['lineItem'];
+    skipSelectionEffects?: boolean;
+    contextGuardFieldIds?: string[];
   }) => void;
   beginAsyncEffect?: (meta: Record<string, unknown>) => (() => void) | void;
   logEvent?: (event: string, payload?: Record<string, unknown>) => void;
@@ -986,14 +997,33 @@ function applyParentFieldMapping(args: {
   sourceRow: any;
   ctx: EffectContext;
   lineItem?: SelectionEffectOptions['lineItem'];
+  contextGuardFieldIds?: string[];
 }): void {
   const mapping = (args.effect as any)?.parentFieldMapping;
   if (!mapping || typeof mapping !== 'object' || !args.sourceRow) return;
+  const nextValues: Record<string, PresetValue | null> = {};
   Object.keys(mapping).forEach(fieldId => {
     const sourceField = mapping[fieldId];
     const rawValue = getValueFromSourceRow(args.sourceRow, sourceField);
-    const nextValue = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
-    args.ctx.setValue?.({ fieldId, value: nextValue, lineItem: args.lineItem, skipSelectionEffects: true });
+    nextValues[fieldId] = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
+  });
+  if (args.ctx.setValues) {
+    args.ctx.setValues({
+      values: nextValues,
+      lineItem: args.lineItem,
+      skipSelectionEffects: true,
+      contextGuardFieldIds: args.contextGuardFieldIds
+    });
+    return;
+  }
+  Object.entries(nextValues).forEach(([fieldId, nextValue]) => {
+    args.ctx.setValue?.({
+      fieldId,
+      value: nextValue,
+      lineItem: args.lineItem,
+      skipSelectionEffects: true,
+      contextGuardFieldIds: args.contextGuardFieldIds
+    });
   });
 }
 
@@ -1001,11 +1031,31 @@ function clearParentFieldMapping(args: {
   effect: SelectionEffect;
   ctx: EffectContext;
   lineItem?: SelectionEffectOptions['lineItem'];
+  contextGuardFieldIds?: string[];
 }): void {
   const mapping = (args.effect as any)?.parentFieldMapping;
   if (!mapping || typeof mapping !== 'object') return;
-  Object.keys(mapping).forEach(fieldId => {
-    args.ctx.setValue?.({ fieldId, value: null, lineItem: args.lineItem, skipSelectionEffects: true });
+  const nextValues = Object.keys(mapping).reduce<Record<string, null>>((acc, fieldId) => {
+    acc[fieldId] = null;
+    return acc;
+  }, {});
+  if (args.ctx.setValues) {
+    args.ctx.setValues({
+      values: nextValues,
+      lineItem: args.lineItem,
+      skipSelectionEffects: true,
+      contextGuardFieldIds: args.contextGuardFieldIds
+    });
+    return;
+  }
+  Object.keys(nextValues).forEach(fieldId => {
+    args.ctx.setValue?.({
+      fieldId,
+      value: null,
+      lineItem: args.lineItem,
+      skipSelectionEffects: true,
+      contextGuardFieldIds: args.contextGuardFieldIds
+    });
   });
 }
 
@@ -1404,15 +1454,9 @@ function populateLineItemsFromDataSource({
   const contextMap = getContextMap(cache, contextId, true)!;
   diff.removedSelections.forEach(sel => contextMap.delete(sel));
   const preserveManualRows = effect.preserveManualRows !== false;
+  const contextGuardFieldIds = resolveSelectionEffectContextGuardFieldIds(effect, question);
   if (!normalizedSelections.length) {
     contextMap.clear();
-    if (effect.clearOnNoMatch) {
-      clearParentFieldMapping({
-        effect,
-        ctx,
-        lineItem
-      });
-    }
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] context cleared (no selections)', { questionId: question.id, contextId });
     }
@@ -1425,8 +1469,17 @@ function populateLineItemsFromDataSource({
       debug,
       contextId,
       lineItem,
+      contextGuardFieldIds,
       effectOverrides
     });
+    if (effect.clearOnNoMatch) {
+      clearParentFieldMapping({
+        effect,
+        ctx,
+        lineItem,
+        contextGuardFieldIds
+      });
+    }
     return;
   }
   const missingSelections = normalizedSelections.filter(sel => !contextMap.has(sel));
@@ -1440,6 +1493,7 @@ function populateLineItemsFromDataSource({
       debug,
       contextId,
       lineItem,
+      contextGuardFieldIds,
       effectOverrides
     });
     return;
@@ -1454,7 +1508,8 @@ function populateLineItemsFromDataSource({
       preserveAutoRows: true,
       effectId: normalizeEffectId(effect) || undefined,
       parentGroupId: lineItem?.groupId,
-      parentRowId: lineItem?.rowId
+      parentRowId: lineItem?.rowId,
+      contextGuardFieldIds
     });
   }
 
@@ -1465,13 +1520,6 @@ function populateLineItemsFromDataSource({
       }
       const rows = extractRowsFromDataSourceResponse(res);
       if (!rows.length) {
-        if (effect.clearOnNoMatch) {
-          clearParentFieldMapping({
-            effect,
-            ctx,
-            lineItem
-          });
-        }
         if (debug && typeof console !== 'undefined') {
           console.warn('[SelectionEffects] data-driven effect: no rows returned', {
             questionId: question.id,
@@ -1488,8 +1536,17 @@ function populateLineItemsFromDataSource({
           debug,
           contextId,
           lineItem,
+          contextGuardFieldIds,
           effectOverrides
         });
+        if (effect.clearOnNoMatch) {
+          clearParentFieldMapping({
+            effect,
+            ctx,
+            lineItem,
+            contextGuardFieldIds
+          });
+        }
         return;
       }
       const sampleRow = rows[0];
@@ -1533,6 +1590,7 @@ function populateLineItemsFromDataSource({
           debug,
           contextId,
           lineItem,
+          contextGuardFieldIds,
           effectOverrides
         });
         return;
@@ -1543,6 +1601,8 @@ function populateLineItemsFromDataSource({
         lookupSourceFieldId && lineItem?.rowValues
           ? (lineItem.rowValues as Record<string, any>)[lookupSourceFieldId]
           : undefined;
+      const parentMappingRows: any[] = [];
+      let shouldClearParentMappingAfterRender = false;
       missingSelections.forEach(selectedValue => {
         const lookupCandidates = buildLookupCandidates({
           normalizedSelections: [selectedValue],
@@ -1572,11 +1632,7 @@ function populateLineItemsFromDataSource({
         const matchedEntries = matchField ? dedupedMatchedRows : row ? [row] : [];
         if (!matchedEntries.length) {
           if (effect.clearOnNoMatch) {
-            clearParentFieldMapping({
-              effect,
-              ctx,
-              lineItem
-            });
+            shouldClearParentMappingAfterRender = true;
           }
           if (debug && typeof console !== 'undefined') {
             console.warn('[SelectionEffects] no matching row for selection', {
@@ -1589,12 +1645,7 @@ function populateLineItemsFromDataSource({
           contextMap.delete(selectedValue);
           return;
         }
-        applyParentFieldMapping({
-          effect,
-          sourceRow: matchedEntries[0],
-          ctx,
-          lineItem
-        });
+        parentMappingRows.push(matchedEntries[0]);
         const entries = matchedEntries.flatMap(entryRow => {
           const payload = effect.dataField ? entryRow[effect.dataField] : entryRow;
           return coerceItemsCollection(payload);
@@ -1696,8 +1747,26 @@ function populateLineItemsFromDataSource({
         debug,
         contextId,
         lineItem,
+        contextGuardFieldIds,
         effectOverrides
       });
+      parentMappingRows.forEach(sourceRow => {
+        applyParentFieldMapping({
+          effect,
+          sourceRow,
+          ctx,
+          lineItem,
+          contextGuardFieldIds
+        });
+      });
+      if (shouldClearParentMappingAfterRender) {
+        clearParentFieldMapping({
+          effect,
+          ctx,
+          lineItem,
+          contextGuardFieldIds
+        });
+      }
   };
 
   const cachedResponse = fetchOptions
@@ -2022,6 +2091,7 @@ interface RenderParams {
   debug: boolean;
   contextId: string;
   lineItem?: SelectionEffectOptions['lineItem'];
+  contextGuardFieldIds?: string[];
   effectOverrides?: Record<string, Record<string, PresetValue>>;
 }
 
@@ -2036,7 +2106,18 @@ function resolveAutoRowEffectContextId(baseContextId: string, effect: SelectionE
   return baseContextId ? `${baseContextId}::${effectId}` : effectId;
 }
 
-function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx, debug, contextId, lineItem, effectOverrides }: RenderParams): void {
+function renderAggregatedRows({
+  effect,
+  targetGroupId,
+  targetConfig,
+  cache,
+  ctx,
+  debug,
+  contextId,
+  lineItem,
+  contextGuardFieldIds,
+  effectOverrides
+}: RenderParams): void {
   const entriesForAllSelections: any[] = [];
   const contextMap = getContextMap(cache, contextId);
   if (contextMap) {
@@ -2058,7 +2139,8 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
         preserveManualRows: preserveManualRows ? undefined : false,
         effectId: normalizeEffectId(effect) || undefined,
         parentGroupId: lineItem?.groupId,
-        parentRowId: lineItem?.rowId
+        parentRowId: lineItem?.rowId,
+        contextGuardFieldIds
       });
     }
     if (debug && typeof console !== 'undefined') {
@@ -2082,7 +2164,8 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
       effectId: normalizeEffectId(effect) || undefined,
       hideRemoveButton: hideRemoveButton || undefined,
       preserveManualRows: preserveManualRows ? undefined : false,
-      replaceAllAutoRows: effect.replaceAllAutoRows === true || undefined
+      replaceAllAutoRows: effect.replaceAllAutoRows === true || undefined,
+      contextGuardFieldIds
     });
     return;
   }
@@ -2092,7 +2175,8 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
       preserveManualRows: preserveManualRows ? undefined : false,
       effectId: normalizeEffectId(effect) || undefined,
       parentGroupId: lineItem?.groupId,
-      parentRowId: lineItem?.rowId
+      parentRowId: lineItem?.rowId,
+      contextGuardFieldIds
     });
   }
   mergedPresets.forEach(preset => {
@@ -2100,7 +2184,8 @@ function renderAggregatedRows({ effect, targetGroupId, targetConfig, cache, ctx,
       effectContextId,
       auto: true,
       effectId: normalizeEffectId(effect) || undefined,
-      hideRemoveButton: hideRemoveButton || undefined
+      hideRemoveButton: hideRemoveButton || undefined,
+      contextGuardFieldIds
     });
     if (debug && typeof console !== 'undefined') {
       console.info('[SelectionEffects] addLineItemsFromDataSource dispatched', {
