@@ -9,7 +9,11 @@ import type {
   WebFormDefinition,
   WebQuestionDefinition
 } from '../../../types';
-import type { LineItemOverlaySessionConfig, OverlayCloseConfirmLike } from '../../../../types';
+import type {
+  InventoryReservationPlanScope,
+  LineItemOverlaySessionConfig,
+  OverlayCloseConfirmLike
+} from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
 import type { GuidedReservationSyncWaitResult } from '../../features/reservations/domain/reservationSyncFreshness';
 import type { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
@@ -157,6 +161,7 @@ export interface LineItemGroupQuestionCtx {
     reason: string;
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
+    releaseScopes?: InventoryReservationPlanScope[];
   }) => void;
   onGuidedStepReservationDraftStateChange?: (args: {
     stepId: string;

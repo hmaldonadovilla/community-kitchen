@@ -1,5 +1,6 @@
 import {
   buildGuidedReservationManagedRowRemovalFingerprint,
+  buildGuidedReservationManagedRowRemovalScopes,
   buildInventoryReservationPlanFingerprint,
   buildStepInventoryReservationPlan,
   cloneLineItemStateSnapshot,
@@ -314,6 +315,82 @@ describe('buildStepInventoryReservationPlan', () => {
         parentRowId: 'MEAL-1',
         outputGroupId: 'MP_TYPE_LI',
         removedRowIds: ['OUT-1']
+      }
+    ]);
+  });
+
+  test('detects managed output-row removals when a parent row is cleared by another step', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    id: 'leftoverInventoryRows',
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Inventory' },
+                    reservation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'orderInfo',
+            include: [{ kind: 'lineGroup', id: 'MP_MEALS_REQUEST' }]
+          }
+        ]
+      }
+    };
+
+    const impacts = detectGuidedReservationManagedRowRemovals({
+      definition,
+      stepId: 'orderInfo',
+      mode: 'all',
+      previousLineItems: {
+        MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { ORD_QTY: 50 } }],
+        'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+          {
+            id: 'OUT-1',
+            values: {
+              LEFTOVER_ID: 'SI-6',
+              LEFTOVER_RECORD_ID: 'INV-SI-6',
+              LEFTOVER_USE_QTY: 3
+            }
+          }
+        ]
+      } as any,
+      nextLineItems: {
+        MP_MEALS_REQUEST: []
+      } as any
+    });
+
+    expect(impacts).toEqual([
+      {
+        stepId: 'leftoverForm',
+        parentGroupId: 'MP_MEALS_REQUEST',
+        parentRowId: 'MEAL-1',
+        outputGroupId: 'MP_TYPE_LI',
+        removedRowIds: ['OUT-1']
+      }
+    ]);
+    expect(buildGuidedReservationManagedRowRemovalScopes(impacts)).toEqual([
+      {
+        sourceParentGroupId: 'MP_MEALS_REQUEST',
+        sourceParentRowId: 'MEAL-1',
+        sourceOutputGroupId: 'MP_TYPE_LI'
       }
     ]);
   });

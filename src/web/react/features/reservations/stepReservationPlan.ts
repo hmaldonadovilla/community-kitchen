@@ -120,6 +120,17 @@ export const buildGuidedReservationManagedRowRemovalFingerprint = (args: {
   ].join('::');
 };
 
+export const buildGuidedReservationManagedRowRemovalScopes = (
+  impacts: GuidedReservationManagedRowRemovalImpact[] | undefined | null
+): InventoryReservationPlanScope[] =>
+  dedupeManagedScopes(
+    (Array.isArray(impacts) ? impacts : []).map(impact => ({
+      sourceParentGroupId: impact.parentGroupId,
+      sourceParentRowId: impact.parentRowId,
+      sourceOutputGroupId: impact.outputGroupId
+    }))
+  );
+
 export const cloneLineItemStateSnapshot = (lineItems: LineItemState | null | undefined): LineItemState => {
   const source = lineItems || {};
   const snapshot: LineItemState = {};

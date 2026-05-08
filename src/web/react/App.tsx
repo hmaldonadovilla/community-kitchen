@@ -1982,6 +1982,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     fingerprint: string;
     persistSnapshot: boolean;
     snapshotLineItems?: LineItemState;
+    releaseScopes?: InventoryReservationPlanScope[];
   } | null>(null);
   const guidedStepImmediateSyncActiveFingerprintRef = useRef<string>('');
   const guidedStepImmediateSyncPendingFingerprintRef = useRef<string>('');
@@ -9922,14 +9923,27 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       reason: string;
       persistSnapshot?: boolean;
       snapshotLineItems?: LineItemState;
+      releaseScopes?: InventoryReservationPlanScope[];
     }) => {
       const sessionId = recordSessionRef.current;
       const persistSnapshot = args.persistSnapshot !== false;
       const snapshotLineItems = args.snapshotLineItems || lineItemsRef.current;
+      const releaseScopeSignature = (Array.isArray(args.releaseScopes) ? args.releaseScopes : [])
+        .map(scope =>
+          [
+            (scope?.sourceParentGroupId || '').toString().trim(),
+            (scope?.sourceParentRowId || '').toString().trim(),
+            (scope?.sourceOutputGroupId || '').toString().trim()
+          ].join(':')
+        )
+        .filter(Boolean)
+        .sort()
+        .join('|');
       const queueFingerprint = [
         sessionId,
         args.stepId || '',
         persistSnapshot ? 'persist' : 'planOnly',
+        releaseScopeSignature,
         buildPersistedDraftStateFingerprint({
           language: languageRef.current,
           values: valuesRef.current,
@@ -10022,7 +10036,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             stepId: next.stepId,
             recordId,
             mode: 'step',
-            snapshotLineItems: next.snapshotLineItems
+            snapshotLineItems: next.snapshotLineItems,
+            previousManagedScopes: next.releaseScopes
           });
           if (!reservationPlan) continue;
           const snapshotOverride = {
@@ -10182,7 +10197,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               stepId: guidedStepImmediateSyncPendingRef.current.stepId,
               reason: guidedStepImmediateSyncPendingRef.current.reason,
               persistSnapshot: guidedStepImmediateSyncPendingRef.current.persistSnapshot,
-              snapshotLineItems: guidedStepImmediateSyncPendingRef.current.snapshotLineItems
+              snapshotLineItems: guidedStepImmediateSyncPendingRef.current.snapshotLineItems,
+              releaseScopes: guidedStepImmediateSyncPendingRef.current.releaseScopes
             });
           } else if (!submittingRef.current && (autoSaveDirtyRef.current || autoSaveQueuedRef.current)) {
             scheduleLatestAutoSave('guidedStepLiveSync.release', autoSaveDebounceMs);

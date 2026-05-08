@@ -28,6 +28,7 @@ import {
   WebQuestionDefinition
 } from '../../types';
 import type {
+  InventoryReservationPlanScope,
   LineItemFieldConfig,
   LineItemGroupConfigOverride,
   LineItemOverlaySessionConfig,
@@ -158,6 +159,7 @@ import { useFormFieldChangeHandlers } from '../features/formState/hooks/useFormF
 import { useOverlayOpenActions } from '../features/lineItems/hooks/useOverlayOpenActions';
 import {
   buildGuidedReservationManagedRowRemovalFingerprint,
+  buildGuidedReservationManagedRowRemovalScopes,
   cloneLineItemStateSnapshot,
   detectGuidedReservationManagedRowRemovals,
   resolveGuidedReservationManagedRowRemovalDetectionScope,
@@ -403,6 +405,7 @@ interface FormViewProps {
     reason: string;
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
+    releaseScopes?: InventoryReservationPlanScope[];
   }) => void;
   onGuidedStepReservationDraftStateChange?: (args: {
     stepId: string;
@@ -801,19 +804,24 @@ const FormView: React.FC<FormViewProps> = ({
     }
 
     const detectionScope = resolveGuidedReservationManagedRowRemovalDetectionScope(activeGuidedStepId);
-    if (!detectionScope) {
-      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
-      guidedReservationRemovalSyncFingerprintRef.current = '';
-      return;
-    }
-
-    const impacts = detectGuidedReservationManagedRowRemovals({
-      definition,
-      stepId: detectionScope.stepId,
-      previousLineItems: previousSnapshot.lineItems,
-      nextLineItems: nextSnapshot,
-      mode: detectionScope.mode
-    });
+    const activeStepImpacts = detectionScope
+      ? detectGuidedReservationManagedRowRemovals({
+          definition,
+          stepId: detectionScope.stepId,
+          previousLineItems: previousSnapshot.lineItems,
+          nextLineItems: nextSnapshot,
+          mode: detectionScope.mode
+        })
+      : [];
+    const impacts = activeStepImpacts.length
+      ? activeStepImpacts
+      : detectGuidedReservationManagedRowRemovals({
+          definition,
+          stepId: activeGuidedStepId,
+          previousLineItems: previousSnapshot.lineItems,
+          nextLineItems: nextSnapshot,
+          mode: 'all'
+        });
 
     guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
     if (!impacts.length) return;
@@ -844,19 +852,22 @@ const FormView: React.FC<FormViewProps> = ({
           stepImpactList.flatMap(impact => Array.isArray(impact.removedRowIds) ? impact.removedRowIds : [])
         )
       );
+      const releaseScopes = buildGuidedReservationManagedRowRemovalScopes(stepImpactList);
       onDiagnostic?.('guidedStep.reservationSync.queuedOnManagedRowRemoval', {
         recordId,
         activeStepId: activeGuidedStepId || null,
         stepId,
         impactCount: stepImpactList.length,
         removedRowIds,
+        releaseScopes: releaseScopes.length,
         outputGroups: Array.from(new Set(stepImpactList.map(impact => impact.outputGroupId).filter(Boolean)))
       });
       queueGuidedStepReservationDraftSync({
         stepId,
         reason: `managedRowRemoval:${removedRowIds.join(',') || 'unknown'}`,
         persistSnapshot: true,
-        snapshotLineItems: nextSnapshot
+        snapshotLineItems: nextSnapshot,
+        releaseScopes
       });
     });
   }, [

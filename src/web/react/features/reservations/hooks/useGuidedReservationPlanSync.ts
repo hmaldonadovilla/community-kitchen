@@ -118,6 +118,7 @@ export const useGuidedReservationPlanSync = ({
       recordId: string;
       mode?: 'step' | 'all';
       snapshotLineItems?: LineItemState;
+      previousManagedScopes?: InventoryReservationPlanScope[];
     }) =>
       buildStepInventoryReservationPlan({
         definition,
@@ -126,10 +127,14 @@ export const useGuidedReservationPlanSync = ({
         recordId: args.recordId,
         lineItems: args.snapshotLineItems || lineItemsRef.current,
         mode: args.mode || 'all',
-        previousManagedScopes:
-          reservationManagedScopesRef.current?.recordId === args.recordId
-            ? reservationManagedScopesRef.current.scopes
-            : []
+        previousManagedScopes: [
+          ...(
+            reservationManagedScopesRef.current?.recordId === args.recordId
+              ? reservationManagedScopesRef.current.scopes
+              : []
+          ),
+          ...(Array.isArray(args.previousManagedScopes) ? args.previousManagedScopes : [])
+        ]
       }),
     [definition, formKey, lineItemsRef, reservationManagedScopesRef]
   );

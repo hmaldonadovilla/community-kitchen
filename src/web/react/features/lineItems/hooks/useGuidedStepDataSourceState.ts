@@ -9,7 +9,7 @@ import {
   peekCachedDataSource
 } from '../../../../data/dataSources';
 import type { FieldValue, LangCode, VisibilityContext } from '../../../../types';
-import type { InventoryAvailabilitySnapshot } from '../../../../../types';
+import type { InventoryAvailabilitySnapshot, InventoryReservationPlanScope } from '../../../../../types';
 import {
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstRowSortMode
@@ -40,6 +40,7 @@ type GuidedStepReservationDraftSyncQueue = (args: {
   reason: string;
   persistSnapshot?: boolean;
   snapshotLineItems?: LineItemState;
+  releaseScopes?: InventoryReservationPlanScope[];
 }) => void;
 
 type GuidedStepReservationDraftSyncWaiter = (args: {
