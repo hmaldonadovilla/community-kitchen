@@ -693,6 +693,14 @@ export interface GuidedStepReservationDraftSyncResult {
   timing?: ServerOperationTiming;
 }
 
+export interface SaveSubmissionMutationPlan {
+  reservationPlan?: InventoryReservationPlanRequest;
+  guidedReservationDraftSync?: {
+    stepId?: string;
+    clientMutationSeq?: number;
+  };
+}
+
 export interface ServerOperationTiming {
   totalMs: number;
   steps: Record<string, number>;
@@ -4967,6 +4975,17 @@ export interface WebFormSubmission {
   dataVersion?: number;
   status?: string;
   pdfUrl?: string;
+  /**
+   * Internal lifecycle work to run as part of the saveSubmissionWithId mutation.
+   * Frontend writes should prefer this single mutation boundary over separate
+   * record-save and lifecycle RPCs.
+   */
+  __ckMutationPlan?: SaveSubmissionMutationPlan;
+  /**
+   * Backward-compatible shorthand for __ckMutationPlan.reservationPlan.
+   */
+  __ckReservationPlan?: InventoryReservationPlanRequest;
+  __ckGuidedReservationDraftSync?: SaveSubmissionMutationPlan['guidedReservationDraftSync'];
 }
 
 export interface ListViewFieldColumnConfig {

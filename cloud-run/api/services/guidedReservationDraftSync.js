@@ -25,15 +25,24 @@ const syncGuidedStepReservationDraft = async ({ request, repositories, timing })
     };
   }
 
-  const [saveResult, reservationResult] = await Promise.all([
-    timing.measure('draftSave', () => repositories.submitEffectsRepository.saveSubmissionWithId(draftPayload)),
-    timing.measure('reservationApply', () =>
-      repositories.inventoryReservationRepository.applyPlan({
+  const savePayload = {
+    ...draftPayload,
+    __ckMutationPlan: {
+      ...((draftPayload && draftPayload.__ckMutationPlan) || {}),
+      reservationPlan: {
         ...reservationPlan,
         refreshMode: 'none'
-      })
-    )
-  ]);
+      },
+      guidedReservationDraftSync: {
+        stepId: safeRequest.stepId,
+        clientMutationSeq: safeRequest.clientMutationSeq
+      }
+    }
+  };
+  const saveResult = await timing.measure('saveSubmissionWithId', () =>
+    repositories.submitEffectsRepository.saveSubmissionWithId(savePayload)
+  );
+  const reservationResult = saveResult && saveResult.reservationResult;
   const success = Boolean(saveResult && saveResult.success) && Boolean(reservationResult && reservationResult.success);
   const timingSummary = timing.log({ success, sourceFormKey, sourceRecordId });
   return {

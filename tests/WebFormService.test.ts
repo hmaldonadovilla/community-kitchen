@@ -5530,6 +5530,88 @@ describe('WebFormService', () => {
     expect((reservation?.values as any)?.STATUS).toBe('released');
   });
 
+  test('saveSubmissionWithId applies embedded reservation plan as part of the same mutation', () => {
+    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+    const source = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMBEDDED-PLAN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(source.success).toBe(true);
+
+    const inventory = service.saveSubmissionWithId({
+      formKey: inventoryFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-EMBEDDED',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 8,
+      LEFTOVER_RESERVED_PORTIONS: 0
+    } as any);
+    expect(inventory.success).toBe(true);
+
+    const saved = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMBEDDED-PLAN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckMutationPlan: {
+        reservationPlan: {
+          sourceFormKey: 'Config: Delivery',
+          sourceRecordId: 'REC-EMBEDDED-PLAN',
+          ledgerFormKey,
+          managedScopes: [
+            {
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-EMBEDDED',
+              sourceOutputGroupId: 'MP_TYPE_LI'
+            }
+          ],
+          reservations: [
+            {
+              resourceFormKey: inventoryFormKey,
+              resourceRecordId: (inventory.meta?.id || '').toString(),
+              resourceItemId: 'LE-EMBEDDED',
+              resourceKind: 'Entire dish',
+              quantity: 3,
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-EMBEDDED',
+              sourceOutputGroupId: 'MP_TYPE_LI',
+              sourceOutputRowId: 'MP_TYPE_LI_EMBEDDED',
+              sourceOutputKeyFieldId: 'LEFTOVER_ID',
+              allowedStatuses: ['available']
+            }
+          ],
+          refreshMode: 'revisionOnly'
+        }
+      }
+    } as any);
+
+    expect(saved.success).toBe(true);
+    expect((saved as any).reservationResult).toEqual(expect.objectContaining({
+      success: true,
+      reservationsApplied: 1
+    }));
+    expect((saved.meta as any)?.reservationPlan).toEqual(expect.objectContaining({
+      success: true,
+      reservationsApplied: 1
+    }));
+
+    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
+    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
+  });
+
   test('runDailyLifecycleRecompute releases stale active reservations for configured source forms', () => {
     const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');

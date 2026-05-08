@@ -19,6 +19,36 @@ const isPlainObject = value => Boolean(value && typeof value === 'object' && !Ar
 
 const isTruthyFlag = value => value === true || value === 'true' || value === '1' || value === 1;
 
+const resolveSaveMutationPlan = payload => {
+  const rawPlan = payload && payload.__ckMutationPlan && typeof payload.__ckMutationPlan === 'object'
+    ? payload.__ckMutationPlan
+    : {};
+  const reservationPlan = rawPlan.reservationPlan && typeof rawPlan.reservationPlan === 'object'
+    ? rawPlan.reservationPlan
+    : (payload && payload.__ckReservationPlan && typeof payload.__ckReservationPlan === 'object'
+      ? payload.__ckReservationPlan
+      : null);
+  const guidedReservationDraftSync = rawPlan.guidedReservationDraftSync && typeof rawPlan.guidedReservationDraftSync === 'object'
+    ? rawPlan.guidedReservationDraftSync
+    : (payload && payload.__ckGuidedReservationDraftSync && typeof payload.__ckGuidedReservationDraftSync === 'object'
+      ? payload.__ckGuidedReservationDraftSync
+      : null);
+  return {
+    reservationPlan,
+    guidedReservationDraftSync
+  };
+};
+
+const stripSaveMutationPlanFields = payload => {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (!payload.__ckMutationPlan && !payload.__ckReservationPlan && !payload.__ckGuidedReservationDraftSync) return payload;
+  const stripped = { ...payload };
+  delete stripped.__ckMutationPlan;
+  delete stripped.__ckReservationPlan;
+  delete stripped.__ckGuidedReservationDraftSync;
+  return stripped;
+};
+
 const resolveLocalizedTextValue = (value, language, fallback = '') => {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'string') return value.trim() || fallback;
@@ -966,16 +996,61 @@ class SubmitEffectsRepository {
   async saveSubmissionWithId(formObject) {
     const payload = formObject && typeof formObject === 'object' ? formObject : {};
     if (isTruthyFlag(payload.__ckSkipSubmitEffects)) {
-      return this.submissionRepository.saveSubmissionWithId(payload);
+      return this.submissionRepository.saveSubmissionWithId(stripSaveMutationPlanFields(payload));
     }
     const formKey = toText(payload.formKey || payload.form);
     const context = this.getFormContext(formKey);
     if (this.isStatusOnlyClosePayload(context.form, payload)) {
       return this.saveStatusOnlyCloseWithId(payload, context);
     }
-    const sourcePayload = { ...payload, __ckSkipSubmitEffects: true };
-    const result = await this.submissionRepository.saveSubmissionWithId(sourcePayload);
+    const mutationPlan = resolveSaveMutationPlan(payload);
+    const sourcePayload = stripSaveMutationPlanFields({ ...payload, __ckSkipSubmitEffects: true });
+    let result;
+    let reservationResult = null;
+    if (mutationPlan.reservationPlan && this.inventoryReservationRepository) {
+      [result, reservationResult] = await Promise.all([
+        this.submissionRepository.saveSubmissionWithId(sourcePayload),
+        this.inventoryReservationRepository.applyPlan({
+          ...mutationPlan.reservationPlan,
+          refreshMode: 'none'
+        })
+      ]);
+      if (result) {
+        result.reservationResult = reservationResult;
+        result.availability = reservationResult && reservationResult.availability;
+      }
+    } else {
+      result = await this.submissionRepository.saveSubmissionWithId(sourcePayload);
+    }
     if (!result || !result.success) return result;
+
+    if (reservationResult && !reservationResult.success) {
+      return {
+        success: false,
+        message: reservationResult.message || 'Record saved but failed to update inventory reservations.',
+        reservationResult,
+        availability: reservationResult.availability,
+        meta: {
+          ...(result.meta || {}),
+          sourceSaved: true,
+          reservationPlan: {
+            success: false,
+            sourceRecordId: toText(mutationPlan.reservationPlan && mutationPlan.reservationPlan.sourceRecordId)
+          }
+        }
+      };
+    }
+    if (reservationResult) {
+      result.meta = {
+        ...(result.meta || {}),
+        reservationPlan: {
+          success: true,
+          sourceRecordId: toText(mutationPlan.reservationPlan && mutationPlan.reservationPlan.sourceRecordId),
+          reservationsApplied: Number(reservationResult.reservationsApplied || 0) || 0,
+          reservationsReleased: Number(reservationResult.reservationsReleased || 0) || 0
+        }
+      };
+    }
 
     const operation = toText(result.meta && result.meta.operation).toLowerCase();
     if (operation === 'noop') return result;

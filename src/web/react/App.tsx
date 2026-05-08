@@ -47,7 +47,6 @@ import {
   getRecordVersionApi,
   seedSummaryHtmlTemplateCache,
   resolveUserFacingErrorMessage,
-  syncGuidedStepReservationDraftApi,
   isBackendFunctionRoutedToHttp
 } from './api';
 import { AppHeader } from './components/app/AppHeader';
@@ -317,6 +316,7 @@ import {
   type GuidedReservationSyncMeta,
   type GuidedReservationSyncOutcome
 } from './features/reservations/hooks/useGuidedReservationPlanSync';
+import { saveGuidedReservationDraft } from './features/reservations/services/guidedReservationDraftSave';
 import type {
   GuidedReservationSyncFreshness,
   GuidedReservationSyncWaitResult
@@ -9675,7 +9675,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
         if (args.reservationDraftSync) {
           return submitCurrentRecordMutation(`snapshot:${args.reason}`, payload, (preparedPayload: any) =>
-            syncGuidedStepReservationDraftApi({
+            saveGuidedReservationDraft({
               stepId: args.reservationDraftSync?.stepId,
               clientMutationSeq: args.reservationDraftSync?.requestEpoch,
               reservationPlan: {

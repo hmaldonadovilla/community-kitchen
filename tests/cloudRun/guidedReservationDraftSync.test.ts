@@ -11,26 +11,15 @@ const createDeferred = () => {
 };
 
 describe('syncGuidedStepReservationDraft Cloud Run service', () => {
-  test('runs draft save and reservation apply in parallel', async () => {
-    const events: string[] = [];
+  test('routes compatibility endpoint through saveSubmissionWithId mutation plan', async () => {
     const draftSave = createDeferred();
-    const reservationApply = createDeferred();
     const timing = {
       measure: jest.fn((step: string, fn: () => Promise<any>) => fn()),
       log: jest.fn((extra: any) => ({ totalMs: 12, steps: {}, counts: {}, ...extra }))
     };
     const repositories = {
       submitEffectsRepository: {
-        saveSubmissionWithId: jest.fn(() => {
-          events.push('draftSave.start');
-          return draftSave.promise;
-        })
-      },
-      inventoryReservationRepository: {
-        applyPlan: jest.fn(() => {
-          events.push('reservationApply.start');
-          return reservationApply.promise;
-        })
+        saveSubmissionWithId: jest.fn(() => draftSave.promise)
       }
     };
 
@@ -56,20 +45,33 @@ describe('syncGuidedStepReservationDraft Cloud Run service', () => {
     });
 
     await Promise.resolve();
-    expect(events).toEqual(['draftSave.start', 'reservationApply.start']);
-    expect(repositories.inventoryReservationRepository.applyPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ refreshMode: 'none' })
+    expect(repositories.submitEffectsRepository.saveSubmissionWithId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'meal-1',
+        __ckMutationPlan: expect.objectContaining({
+          reservationPlan: expect.objectContaining({
+            sourceFormKey: 'Config: Meal Production',
+            sourceRecordId: 'meal-1',
+            refreshMode: 'none'
+          }),
+          guidedReservationDraftSync: {
+            stepId: 'leftoverForm',
+            clientMutationSeq: 2
+          }
+        })
+      })
     );
 
-    reservationApply.resolve({
-      success: true,
-      message: 'Inventory reservations updated.',
-      availability: [{ resourceRecordId: 'leftover-1' }]
-    });
     draftSave.resolve({
       success: true,
       message: 'Draft saved.',
-      meta: { id: 'meal-1', dataVersion: 12 }
+      meta: { id: 'meal-1', dataVersion: 12 },
+      reservationResult: {
+        success: true,
+        message: 'Inventory reservations updated.',
+        availability: [{ resourceRecordId: 'leftover-1' }]
+      },
+      availability: [{ resourceRecordId: 'leftover-1' }]
     });
 
     await expect(resultPromise).resolves.toMatchObject({
@@ -79,7 +81,6 @@ describe('syncGuidedStepReservationDraft Cloud Run service', () => {
       meta: { id: 'meal-1', dataVersion: 12 },
       availability: [{ resourceRecordId: 'leftover-1' }]
     });
-    expect(timing.measure).toHaveBeenCalledWith('draftSave', expect.any(Function));
-    expect(timing.measure).toHaveBeenCalledWith('reservationApply', expect.any(Function));
+    expect(timing.measure).toHaveBeenCalledWith('saveSubmissionWithId', expect.any(Function));
   });
 });

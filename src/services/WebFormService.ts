@@ -29,6 +29,7 @@ import {
   InventoryReservationReconciliationResult,
   LifecycleRule,
   RecordMetadata,
+  SaveSubmissionMutationPlan,
   QuestionConfig,
   WebFormDefinition,
   WebFormSubmission,
@@ -3348,6 +3349,44 @@ export class WebFormService {
     }
   }
 
+  private resolveSaveSubmissionMutationPlan(formObject: WebFormSubmission): SaveSubmissionMutationPlan {
+    const rawPlan =
+      (formObject as any).__ckMutationPlan && typeof (formObject as any).__ckMutationPlan === 'object'
+        ? (formObject as any).__ckMutationPlan
+        : {};
+    const reservationPlan =
+      rawPlan.reservationPlan && typeof rawPlan.reservationPlan === 'object'
+        ? rawPlan.reservationPlan
+        : ((formObject as any).__ckReservationPlan && typeof (formObject as any).__ckReservationPlan === 'object'
+          ? (formObject as any).__ckReservationPlan
+          : undefined);
+    const guidedReservationDraftSync =
+      rawPlan.guidedReservationDraftSync && typeof rawPlan.guidedReservationDraftSync === 'object'
+        ? rawPlan.guidedReservationDraftSync
+        : ((formObject as any).__ckGuidedReservationDraftSync && typeof (formObject as any).__ckGuidedReservationDraftSync === 'object'
+          ? (formObject as any).__ckGuidedReservationDraftSync
+          : undefined);
+    return {
+      ...(reservationPlan ? { reservationPlan: reservationPlan as InventoryReservationPlanRequest } : {}),
+      ...(guidedReservationDraftSync ? { guidedReservationDraftSync } : {})
+    };
+  }
+
+  private stripSaveSubmissionMutationPlanFields(formObject: WebFormSubmission): WebFormSubmission {
+    if (
+      !(formObject as any).__ckMutationPlan &&
+      !(formObject as any).__ckReservationPlan &&
+      !(formObject as any).__ckGuidedReservationDraftSync
+    ) {
+      return formObject;
+    }
+    const stripped = { ...(formObject as any) };
+    delete stripped.__ckMutationPlan;
+    delete stripped.__ckReservationPlan;
+    delete stripped.__ckGuidedReservationDraftSync;
+    return stripped as WebFormSubmission;
+  }
+
   public syncGuidedStepReservationDraft(
     request: GuidedStepReservationDraftSyncRequest
   ): GuidedStepReservationDraftSyncResult {
@@ -3376,38 +3415,23 @@ export class WebFormService {
 
     const timing = this.createOperationTiming();
     try {
-      const result = this.measureOperationStep(timing, 'recordMutationQueue', () => this.withQueuedRecordMutation(sourceFormKey, sourceRecordId, 'syncGuidedStepReservationDraft', () =>
-        this.withDocumentTransactionLock('guidedStep.reservationDraftSync', () => {
-          const reservationResult = this.measureOperationStep(timing, 'reservationApply', () => this.applyInventoryReservationPlan({
+      const payload = {
+        ...(draftPayload as WebFormSubmission),
+        __ckMutationPlan: {
+          ...(((draftPayload as any).__ckMutationPlan || {}) as SaveSubmissionMutationPlan),
+          reservationPlan: {
             ...(reservationPlan as InventoryReservationPlanRequest),
             refreshMode: 'none'
-          }));
-          if (!reservationResult.success) {
-            return {
-              success: false,
-              message: reservationResult.message || 'Failed to update inventory reservations.',
-              stepId: request?.stepId,
-              clientMutationSeq: request?.clientMutationSeq,
-              reservationResult,
-              availability: reservationResult.availability
-            };
-          }
-
-          const saveResult = this.measureOperationStep(timing, 'draftSave', () =>
-            this.saveSubmissionWithIdDirect(draftPayload as WebFormSubmission)
-          );
-          return {
-            success: Boolean(saveResult?.success),
-            message: (saveResult?.message || reservationResult.message || '').toString(),
+          },
+          guidedReservationDraftSync: {
             stepId: request?.stepId,
-            clientMutationSeq: request?.clientMutationSeq,
-            reservationResult,
-            saveResult,
-            meta: saveResult?.meta,
-            availability: reservationResult.availability
-          };
-        })
-      ));
+            clientMutationSeq: request?.clientMutationSeq
+          }
+        }
+      } as WebFormSubmission;
+      const result = this.measureOperationStep(timing, 'saveSubmissionWithId', () =>
+        this.saveSubmissionWithId(payload)
+      );
       const timingSnapshot = this.snapshotOperationTiming(timing);
       debugLog('guidedStep.reservationDraftSync.timing', {
         sourceFormKey,
@@ -3416,7 +3440,18 @@ export class WebFormService {
         ...timingSnapshot
       });
       return {
-        ...result,
+        success: Boolean(result?.success),
+        message: result?.message,
+        stepId: request?.stepId,
+        clientMutationSeq: request?.clientMutationSeq,
+        reservationResult: (result as any)?.reservationResult,
+        saveResult: {
+          success: Boolean(result?.success),
+          message: result?.message,
+          meta: result?.meta
+        },
+        meta: result?.meta,
+        availability: (result as any)?.availability,
         timing: timingSnapshot
       };
     } catch (err: any) {
@@ -5129,30 +5164,73 @@ export class WebFormService {
     const recordId = this.ensureMutationRecordId(formObject);
     const { form, questions } = this.getFormContext(formKey);
     const dedupRules = this.resolveDedupRules(formKey, form);
-    if (this.isStatusOnlyClosePayload(form, formObject)) {
-      return this.saveStatusOnlyCloseWithIdDirect(formObject, form, questions, formKey, recordId);
+    const mutationPlan = this.resolveSaveSubmissionMutationPlan(formObject);
+    const savePayload = this.stripSaveSubmissionMutationPlanFields(formObject);
+    if (this.isStatusOnlyClosePayload(form, savePayload)) {
+      return this.saveStatusOnlyCloseWithIdDirect(savePayload, form, questions, formKey, recordId);
     }
     const result = this.saveSubmissionRecordWithRetry({
       formKey,
       recordId,
       reason: 'saveSubmissionWithId',
-      formObject,
+      formObject: savePayload,
       form,
       questions,
       dedupRules
     });
     if (result?.success) {
+      if (mutationPlan.reservationPlan) {
+        const reservationStartedAt = Date.now();
+        const reservationResult = this.applyInventoryReservationPlan({
+          ...(mutationPlan.reservationPlan as InventoryReservationPlanRequest),
+          refreshMode: 'none'
+        });
+        (result as any).reservationResult = reservationResult;
+        (result as any).availability = reservationResult.availability;
+        if (!reservationResult.success) {
+          return {
+            success: false,
+            message: reservationResult.message || 'Record saved but failed to update inventory reservations.',
+            meta: {
+              ...(result.meta || {}),
+              sourceSaved: true,
+              reservationPlan: {
+                success: false,
+                sourceRecordId: mutationPlan.reservationPlan.sourceRecordId || recordId
+              }
+            },
+            reservationResult,
+            availability: reservationResult.availability
+          } as any;
+        }
+        result.meta = {
+          ...(result.meta || {}),
+          reservationPlan: {
+            success: true,
+            sourceRecordId: mutationPlan.reservationPlan.sourceRecordId || recordId,
+            reservationsApplied: Number(reservationResult.reservationsApplied || 0) || 0,
+            reservationsReleased: Number(reservationResult.reservationsReleased || 0) || 0
+          }
+        };
+        debugLog('saveSubmission.reservationPlan.done', {
+          formKey,
+          recordId,
+          durationMs: Date.now() - reservationStartedAt,
+          reservationsApplied: Number(reservationResult.reservationsApplied || 0) || 0,
+          reservationsReleased: Number(reservationResult.reservationsReleased || 0) || 0
+        });
+      }
       const operation = (result.meta?.operation || '').toString().trim().toLowerCase();
       if (operation === 'noop') {
         return result;
       }
       const savedRecordId = (result.meta?.id || (formObject as any).id || '').toString().trim();
       const nextStatus = (
-        (formObject as any).__ckStatus !== undefined && (formObject as any).__ckStatus !== null
-          ? (formObject as any).__ckStatus
-          : ((formObject as any).status !== undefined && (formObject as any).status !== null ? (formObject as any).status : '')
+        (savePayload as any).__ckStatus !== undefined && (savePayload as any).__ckStatus !== null
+          ? (savePayload as any).__ckStatus
+          : ((savePayload as any).status !== undefined && (savePayload as any).status !== null ? (savePayload as any).status : '')
       ).toString().trim();
-      const deleteRecordId = ((formObject as any).__ckDeleteRecordId || '').toString().trim();
+      const deleteRecordId = ((savePayload as any).__ckDeleteRecordId || '').toString().trim();
       const releaseOnDeleteConfig = form.reservationLifecycle?.releaseOnDelete;
       const releaseOnDeleteEnabled =
         releaseOnDeleteConfig === true ||
@@ -5194,7 +5272,7 @@ export class WebFormService {
       const reconcileOnFinalSubmit = this.shouldReconcileReservationsOnFinalSubmit(form, nextStatus);
       if (savedRecordId && !deleteRecordId && reconcileOnFinalSubmit.enabled) {
         const reconcileStartedAt = Date.now();
-        if (isTruthyMutationFlag((formObject as any).__ckSkipReservationReconciliation)) {
+        if (isTruthyMutationFlag((savePayload as any).__ckSkipReservationReconciliation)) {
           const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
           result.meta = {
             ...(result.meta || {}),
@@ -5206,7 +5284,7 @@ export class WebFormService {
             durationMs: Date.now() - reconcileStartedAt,
             reason: 'clientKnownReconciled'
           });
-        } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, savedRecordId, formObject)) {
+        } else if (!this.shouldRunReservationReconciliationForRecord(form, formKey, savedRecordId, savePayload)) {
           const skipped = this.buildSkippedReservationReconciliationResult(savedRecordId);
           result.meta = {
             ...(result.meta || {}),
@@ -5259,7 +5337,7 @@ export class WebFormService {
           });
         }
       }
-      const skipSubmitEffectsRaw = (formObject as any).__ckSkipSubmitEffects;
+      const skipSubmitEffectsRaw = (savePayload as any).__ckSkipSubmitEffects;
       const skipSubmitEffects =
         skipSubmitEffectsRaw === true ||
         skipSubmitEffectsRaw === 'true' ||
@@ -5271,7 +5349,7 @@ export class WebFormService {
           form,
           questions,
           formKey,
-          formObject,
+          formObject: savePayload,
           saveResult: result,
           refreshMode: 'revisionOnly'
         });
@@ -5302,7 +5380,7 @@ export class WebFormService {
           updated: Number(submitEffectsResult.meta?.updated || 0) || 0
         });
       }
-      const refreshMode = this.resolveSaveSubmissionRefreshMode(formObject, result);
+      const refreshMode = this.resolveSaveSubmissionRefreshMode(savePayload, result);
       if (refreshMode !== 'none') {
         this.refreshMutationCaches(form, questions, 'saveSubmissionWithId', refreshMode);
       }

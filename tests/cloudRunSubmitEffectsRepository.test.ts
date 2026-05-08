@@ -1,6 +1,101 @@
 const { SubmitEffectsRepository } = require('../cloud-run/api/repositories/submitEffectsRepository');
 
+const createDeferred = () => {
+  let resolve!: (value: any) => void;
+  const promise = new Promise<any>(next => {
+    resolve = next;
+  });
+  return { promise, resolve };
+};
+
 describe('Cloud Run SubmitEffectsRepository', () => {
+  test('saveSubmissionWithId runs embedded reservation plan and draft save in parallel', async () => {
+    const events: string[] = [];
+    const draftSave = createDeferred();
+    const reservationApply = createDeferred();
+    const saveSubmissionWithId = jest.fn(() => {
+      events.push('draftSave.start');
+      return draftSave.promise;
+    });
+    const applyPlan = jest.fn(() => {
+      events.push('reservationApply.start');
+      return reservationApply.promise;
+    });
+    const repository = new SubmitEffectsRepository({
+      submissionRepository: {
+        getFormContext: jest.fn(() => ({
+          formKey: 'Config: Meal Production',
+          form: {},
+          questions: []
+        })),
+        saveSubmissionWithId
+      },
+      inventoryReservationRepository: {
+        applyPlan
+      }
+    });
+
+    const resultPromise = repository.saveSubmissionWithId({
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'meal-1',
+      values: { status: 'In progress' },
+      __ckSaveMode: 'draft',
+      __ckMutationPlan: {
+        reservationPlan: {
+          sourceFormKey: 'Config: Meal Production',
+          sourceRecordId: 'meal-1',
+          managedScopes: [],
+          reservations: [],
+          refreshMode: 'revisionOnly'
+        }
+      }
+    });
+
+    await Promise.resolve();
+    expect(events).toEqual(['draftSave.start', 'reservationApply.start']);
+    expect(saveSubmissionWithId).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        __ckMutationPlan: expect.anything()
+      })
+    );
+    expect(applyPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceFormKey: 'Config: Meal Production',
+        sourceRecordId: 'meal-1',
+        refreshMode: 'none'
+      })
+    );
+
+    reservationApply.resolve({
+      success: true,
+      message: 'Inventory reservations updated.',
+      reservationsApplied: 1,
+      reservationsReleased: 0,
+      availability: [{ resourceRecordId: 'leftover-1' }]
+    });
+    draftSave.resolve({
+      success: true,
+      message: 'Saved to sheet.',
+      meta: { id: 'meal-1', operation: 'update' }
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: true,
+      reservationResult: {
+        success: true,
+        reservationsApplied: 1
+      },
+      availability: [{ resourceRecordId: 'leftover-1' }],
+      meta: {
+        reservationPlan: {
+          success: true,
+          reservationsApplied: 1
+        }
+      }
+    });
+  });
+
   test('status-only close updates status without saving source payload and uses saved record for submit effects', async () => {
     const saveStatusOnlyWithId = jest.fn(async () => ({
       success: true,
