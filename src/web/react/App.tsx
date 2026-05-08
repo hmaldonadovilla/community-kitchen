@@ -247,7 +247,11 @@ import {
   resolveUploadTransactionTarget,
   splitUploadValue
 } from './app/uploadTransactionState';
-import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from './app/draftSaveFingerprint';
+import {
+  buildCompletedDraftSaveFingerprint,
+  buildDraftSaveFingerprint,
+  buildDraftStateFingerprint
+} from './app/draftSaveFingerprint';
 import { waitForActiveDraftSaveTransactionsAction } from './app/draftSaveActiveWait';
 import { triggerDedupDeleteOnKeyChangeAction } from './app/dedupDeleteOnKeyChange';
 import {
@@ -9767,6 +9771,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         (lastLocalRecordMutationAtRef.current || 0) === localMutationAtSnapshotStart;
       let baselineValues = valuesRef.current;
       let baselineLineItems = lineItemsRef.current;
+      if (args.mode === 'draft') {
+        const completedDraftFingerprint = buildCompletedDraftSaveFingerprint(payload, recordId || args.existingRecordId || null);
+        if (completedDraftFingerprint) {
+          lastCompletedDraftSaveFingerprintRef.current = completedDraftFingerprint;
+          logEvent('snapshot.save.completedFingerprint', {
+            reason: args.reason,
+            recordId: completedDraftFingerprint.recordId
+          });
+        }
+      }
       if (noLocalEditsDuringSnapshot && args.snapshotOverride?.lineItems) {
         const reservationLineItemMerge = mergeGuidedReservationLineItemsFromSnapshot({
           definition,

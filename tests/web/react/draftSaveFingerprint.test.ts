@@ -1,4 +1,8 @@
-import { buildDraftSaveFingerprint, buildDraftStateFingerprint } from '../../../src/web/react/app/draftSaveFingerprint';
+import {
+  buildCompletedDraftSaveFingerprint,
+  buildDraftSaveFingerprint,
+  buildDraftStateFingerprint
+} from '../../../src/web/react/app/draftSaveFingerprint';
 
 describe('buildDraftSaveFingerprint', () => {
   test('returns the same fingerprint for equivalent draft payloads despite volatile client metadata', () => {
@@ -42,6 +46,26 @@ describe('buildDraftSaveFingerprint', () => {
         __ckSaveMode: 'draft'
       })
     ).toBeNull();
+  });
+
+  test('builds a completed draft fingerprint using the server-confirmed record id', () => {
+    const payload = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      values: {
+        status: 'In progress',
+        MP_MEALS_REQUEST_json: '[{"id":"meal-1"}]'
+      },
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    };
+
+    expect(buildCompletedDraftSaveFingerprint(payload, 'meal-production-1')).toEqual(
+      buildDraftSaveFingerprint({
+        ...payload,
+        id: 'meal-production-1'
+      })
+    );
   });
 
   test('buildDraftStateFingerprint stays stable for equivalent form content', () => {

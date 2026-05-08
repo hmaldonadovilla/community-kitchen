@@ -71,6 +71,18 @@ export const buildDraftSaveFingerprint = (payload: any): DraftSaveFingerprint | 
   };
 };
 
+export const buildCompletedDraftSaveFingerprint = (
+  payload: any,
+  recordId?: string | null
+): DraftSaveFingerprint | null => {
+  const completedRecordId = ((recordId || payload?.id || '') as any).toString?.().trim?.() || '';
+  if (!completedRecordId) return null;
+  return buildDraftSaveFingerprint({
+    ...payload,
+    id: completedRecordId
+  });
+};
+
 export const buildDraftStateFingerprint = (args: DraftStateFingerprintArgs): string =>
   fnv1a32(
     stableStringify({
