@@ -3450,7 +3450,11 @@ describe('WebFormService', () => {
     expect(seededReservation.success).toBe(true);
 
     const fetchByCriteriaSpy = jest.spyOn(service as any, 'fetchSubmissionRecordsByFieldCriteria');
+    const bulkFetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionsByRowNumbers');
+    const singleRowFetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionByRowNumber');
     fetchByCriteriaSpy.mockClear();
+    bulkFetchSpy.mockClear();
+    singleRowFetchSpy.mockClear();
 
     const result = service.applyInventoryReservationPlan({
       sourceFormKey: 'Config: Meal Production',
@@ -3503,6 +3507,8 @@ describe('WebFormService', () => {
     expect(
       criteriaCalls.some(criteria => criteria.some(entry => entry.fieldId === 'RESOURCE_FORM_KEY' || entry.fieldId === 'RESOURCE_RECORD_ID'))
     ).toBe(false);
+    expect(bulkFetchSpy).toHaveBeenCalled();
+    expect(singleRowFetchSpy).not.toHaveBeenCalled();
   });
 
   test('applyInventoryReservationPlan batches internal ledger and inventory writes', () => {

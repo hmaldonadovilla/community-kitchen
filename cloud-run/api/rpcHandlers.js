@@ -9,6 +9,7 @@ const { createLifecycleRepository } = require('./repositories/lifecycleRepositor
 const { createSubmissionRepository } = require('./repositories/submissionRepository');
 const { createSubmitEffectsRepository } = require('./repositories/submitEffectsRepository');
 const { createTemplateRepository } = require('./repositories/templateRepository');
+const { createServerTiming } = require('./serverTiming');
 const {
   applyUpdateRecordDependencyMutationsToRecord,
   evaluateUpdateRecordDependencyPreview
@@ -351,6 +352,27 @@ const createRpcHandlers = deps => {
     submissionRepository,
     inventoryReservationRepository
   });
+  const createRequestScopedRepositories = timing => {
+    const scopedSubmissionRepository =
+      submissionRepository && typeof submissionRepository.createRequestScope === 'function'
+        ? submissionRepository.createRequestScope({ timing })
+        : submissionRepository;
+    const scopedInventoryReservationRepository = createInventoryReservationRepository({
+      ...options,
+      submissionRepository: scopedSubmissionRepository,
+      timing
+    });
+    const scopedSubmitEffectsRepository = createSubmitEffectsRepository({
+      ...options,
+      submissionRepository: scopedSubmissionRepository,
+      inventoryReservationRepository: scopedInventoryReservationRepository
+    });
+    return {
+      submissionRepository: scopedSubmissionRepository,
+      inventoryReservationRepository: scopedInventoryReservationRepository,
+      submitEffectsRepository: scopedSubmitEffectsRepository
+    };
+  };
 
   const buildHomeBootstrap = async (formKey, requestOptions = {}) => {
     const config = formConfigRepository.fetchFormConfig(formKey);
@@ -577,14 +599,17 @@ const createRpcHandlers = deps => {
         };
       }
 
+      const timing = createServerTiming('syncGuidedStepReservationDraft');
+      const scoped = createRequestScopedRepositories(timing);
       const [saveResult, reservationResult] = await Promise.all([
-        submitEffectsRepository.saveSubmissionWithId(draftPayload),
-        inventoryReservationRepository.applyPlan({
+        timing.measure('draftSave', () => scoped.submitEffectsRepository.saveSubmissionWithId(draftPayload)),
+        timing.measure('reservationApply', () => scoped.inventoryReservationRepository.applyPlan({
           ...reservationPlan,
           refreshMode: 'none'
-        })
+        }))
       ]);
       const success = Boolean(saveResult && saveResult.success) && Boolean(reservationResult && reservationResult.success);
+      const timingSummary = timing.log({ success, sourceFormKey, sourceRecordId });
       return {
         success,
         message: success
@@ -597,7 +622,8 @@ const createRpcHandlers = deps => {
         reservationResult,
         saveResult,
         meta: saveResult && saveResult.meta,
-        availability: reservationResult && reservationResult.availability
+        availability: reservationResult && reservationResult.availability,
+        timing: timingSummary
       };
     },
     async triggerFollowupAction(...args) {
@@ -711,10 +737,22 @@ const createRpcHandlers = deps => {
       return inventoryReservationRepository.upsert(args[0]);
     },
     async applyInventoryReservationPlan(...args) {
-      return inventoryReservationRepository.applyPlan(args[0]);
+      const timing = createServerTiming('applyInventoryReservationPlan');
+      const scoped = createRequestScopedRepositories(timing);
+      const result = await scoped.inventoryReservationRepository.applyPlan(args[0]);
+      return {
+        ...result,
+        timing: timing.log({ success: Boolean(result && result.success) })
+      };
     },
     async reconcileInventoryReservations(...args) {
-      return inventoryReservationRepository.reconcile(args[0]);
+      const timing = createServerTiming('reconcileInventoryReservations');
+      const scoped = createRequestScopedRepositories(timing);
+      const result = await scoped.inventoryReservationRepository.reconcile(args[0]);
+      return {
+        ...result,
+        timing: timing.log({ success: Boolean(result && result.success) })
+      };
     },
     async fetchDataSource(...args) {
       return dataSourceRepository.fetchDataSource(args[0], args[1], args[2], args[3], args[4]);

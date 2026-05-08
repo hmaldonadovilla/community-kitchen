@@ -31,6 +31,12 @@ const md5Base64 = raw => crypto.createHash('md5').update(raw).digest('base64').r
 class InventoryReservationRepository {
   constructor(options = {}) {
     this.submissionRepository = options.submissionRepository;
+    this.timing = options.timing || null;
+  }
+
+  async measure(label, fn) {
+    if (!this.timing || typeof this.timing.measure !== 'function') return fn();
+    return this.timing.measure(label, fn);
   }
 
   ensureRepository() {
@@ -111,23 +117,23 @@ class InventoryReservationRepository {
 
   async records(formKey) {
     this.ensureRepository();
-    return this.submissionRepository.records(formKey);
+    return this.measure(`reservations.records.${toText(formKey)}`, () => this.submissionRepository.records(formKey));
   }
 
   async fetchById(formKey, recordId) {
     this.ensureRepository();
-    return this.submissionRepository.fetchSubmissionById(formKey, recordId);
+    return this.measure(`reservations.fetchById.${toText(formKey)}`, () => this.submissionRepository.fetchSubmissionById(formKey, recordId));
   }
 
   async activeReservations(ledgerFormKey, criteria = {}) {
-    const records = await this.records(ledgerFormKey);
+    const records = await this.measure(`reservations.activeLedgerScan.${toText(ledgerFormKey)}`, () => this.records(ledgerFormKey));
     return records.filter(record => {
       if (!this.isActiveReservation(record)) return false;
       return Object.entries(criteria).every(([fieldId, expected]) => this.readString(record, fieldId) === toText(expected));
     });
   }
 
-  saveInternal(formKey, recordId, language, status, values, auditAction, options = {}) {
+  buildInternalPayload(formKey, recordId, language, status, values, auditAction, options = {}) {
     const payload = {
       formKey,
       language: toText(language) || 'EN',
@@ -149,6 +155,68 @@ class InventoryReservationRepository {
     const clientDataVersion = Number(options.clientDataVersion);
     if (Number.isFinite(clientDataVersion) && clientDataVersion > 0) {
       payload.__ckClientDataVersion = clientDataVersion;
+    }
+    return payload;
+  }
+
+  enqueueInternalSave(queue, payload) {
+    const formKey = toText(payload && (payload.formKey || payload.form));
+    const recordId = toText(payload && payload.id);
+    if (!queue || !formKey || !recordId) return;
+    if (!queue.has(formKey)) queue.set(formKey, new Map());
+    queue.get(formKey).set(recordId, payload);
+  }
+
+  createInternalSaveQueue() {
+    return new Map();
+  }
+
+  async flushInternalSaves(queue) {
+    const entries = Array.from((queue || new Map()).entries());
+    if (!entries.length) return { success: true, message: 'No internal saves queued.', metaById: {} };
+    const metaById = {};
+    for (const [, payloadsById] of entries) {
+      const payloads = Array.from(payloadsById.values());
+      const result = typeof this.submissionRepository.saveSubmissionBatch === 'function'
+        ? await this.submissionRepository.saveSubmissionBatch(payloads)
+        : await this.saveInternalPayloadsIndividually(payloads);
+      if (!result || !result.success) {
+        return {
+          success: false,
+          message: (result && result.message) || 'Failed to save inventory reservation updates.',
+          metaById
+        };
+      }
+      Object.assign(metaById, result.metaById || {});
+    }
+    if (this.timing && typeof this.timing.increment === 'function') {
+      this.timing.increment('reservationInternalSaveBatches', entries.length);
+      this.timing.increment('reservationInternalRecordsQueued', Object.keys(metaById).length);
+    }
+    return { success: true, message: 'Saved to sheet', metaById };
+  }
+
+  async saveInternalPayloadsIndividually(payloads) {
+    const metaById = {};
+    for (const payload of payloads) {
+      const result = await this.submissionRepository.saveSubmissionWithId(payload);
+      if (!result || !result.success) {
+        return { success: false, message: (result && result.message) || 'Failed to save internal record.', metaById };
+      }
+      if (result.meta && result.meta.id) metaById[result.meta.id] = result.meta;
+    }
+    return { success: true, message: 'Saved to sheet', metaById };
+  }
+
+  saveInternal(formKey, recordId, language, status, values, auditAction, options = {}) {
+    const payload = this.buildInternalPayload(formKey, recordId, language, status, values, auditAction, options);
+    if (options.queue) {
+      this.enqueueInternalSave(options.queue, payload);
+      return Promise.resolve({
+        success: true,
+        message: 'Queued internal record save.',
+        meta: { id: recordId }
+      });
     }
     return this.submissionRepository.saveSubmissionWithId(payload);
   }
@@ -386,7 +454,7 @@ class InventoryReservationRepository {
         requestedQty > 0 ? 'active' : 'released',
         ledgerValues,
         requestedQty > 0 ? 'inventoryReservation:upsert' : 'inventoryReservation:release',
-        { clientDataVersion: currentReservation && currentReservation.dataVersion }
+        { clientDataVersion: currentReservation && currentReservation.dataVersion, queue: options.pendingSaves }
       );
       if (!ledgerResult || !ledgerResult.success) return { success: false, message: (ledgerResult && ledgerResult.message) || 'Failed to save reservation ledger row.' };
     }
@@ -402,7 +470,7 @@ class InventoryReservationRepository {
       fieldIds.statusFieldId ? toText(nextInventoryValues[fieldIds.statusFieldId] || inventoryRecord.status) : inventoryRecord.status,
       nextInventoryValues,
       'inventoryReservation:updateAggregate',
-      { clientDataVersion: inventoryRecord.dataVersion }
+      { clientDataVersion: inventoryRecord.dataVersion, queue: options.pendingSaves }
     );
     if (!inventoryResult || !inventoryResult.success) {
       return { success: false, message: (inventoryResult && inventoryResult.message) || 'Failed to update inventory aggregate reservation.' };
@@ -599,7 +667,9 @@ class InventoryReservationRepository {
     if (!sourceFormKey || !sourceRecordId) return { success: false, message: 'sourceFormKey and sourceRecordId are required.' };
 
     const clientDataVersion = Number(request && request.clientDataVersion);
-    const sourceRecordMetaBefore = await this.sourceRecordMeta(sourceFormKey, sourceRecordId);
+    const sourceRecordMetaBefore = await this.measure('reservationApply.sourceMetaBefore', () =>
+      this.sourceRecordMeta(sourceFormKey, sourceRecordId)
+    );
     const sourceClientDataVersionMatched =
       Number.isFinite(clientDataVersion) &&
       clientDataVersion > 0 &&
@@ -611,7 +681,9 @@ class InventoryReservationRepository {
       activeReservationsByResource: new Map(),
       inventoryRecordsByResource: new Map()
     };
-    const allActiveReservations = await this.activeReservations(ledgerFormKey);
+    const allActiveReservations = await this.measure('reservationApply.activeReservations', () =>
+      this.activeReservations(ledgerFormKey)
+    );
     allActiveReservations.forEach(record => {
       const resourceFormKey = this.readString(record, 'RESOURCE_FORM_KEY');
       const resourceRecordId = this.readString(record, 'RESOURCE_RECORD_ID');
@@ -638,15 +710,18 @@ class InventoryReservationRepository {
       return recordId && !desiredReservationIds.has(recordId);
     });
 
-    const validationFailure = await this.validatePlan(Array.from(desiredByReservationId.values()), releaseCandidates, batchCache);
+    const validationFailure = await this.measure('reservationApply.validatePlan', () =>
+      this.validatePlan(Array.from(desiredByReservationId.values()), releaseCandidates, batchCache)
+    );
     if (validationFailure) return validationFailure;
 
+    const pendingSaves = this.createInternalSaveQueue();
     const availability = [];
     let appliedCount = 0;
     let releasedCount = 0;
 
     for (const record of releaseCandidates) {
-      const result = await this.upsert(this.buildReleaseRequest(record, ledgerFormKey), { batchCache });
+      const result = await this.upsert(this.buildReleaseRequest(record, ledgerFormKey), { batchCache, pendingSaves });
       if (!result.success) {
         return {
           success: false,
@@ -660,7 +735,7 @@ class InventoryReservationRepository {
     }
 
     for (const entry of desiredByReservationId.values()) {
-      const result = await this.upsert(entry, { batchCache });
+      const result = await this.upsert(entry, { batchCache, pendingSaves });
       if (!result.success) {
         return {
           success: false,
@@ -673,13 +748,21 @@ class InventoryReservationRepository {
       if (result.availability) availability.push(result.availability);
     }
 
+    const flushResult = await this.measure('reservationApply.flushInternalSaves', () => this.flushInternalSaves(pendingSaves));
+    if (!flushResult.success) {
+      return {
+        success: false,
+        message: flushResult.message || 'Failed to save inventory reservation updates.'
+      };
+    }
+
     return {
       success: true,
       message: 'Inventory reservations updated.',
       reservationsApplied: appliedCount,
       reservationsReleased: releasedCount,
       availability: this.uniqueAvailability(availability),
-      sourceRecordMeta: (await this.sourceRecordMeta(sourceFormKey, sourceRecordId)) || sourceRecordMetaBefore,
+      sourceRecordMeta: (await this.measure('reservationApply.sourceMetaAfter', () => this.sourceRecordMeta(sourceFormKey, sourceRecordId))) || sourceRecordMetaBefore,
       sourceClientDataVersionMatched
     };
   }
@@ -787,6 +870,7 @@ class InventoryReservationRepository {
     const availability = [];
     let consumedReservations = 0;
     let releasedReservations = 0;
+    const pendingSaves = this.createInternalSaveQueue();
     for (const groupEntry of grouped.values()) {
       if (!groupEntry.inventoryRecord) {
         throw new Error(`Inventory record not found during reconciliation: ${groupEntry.resourceFormKey} / ${groupEntry.resourceRecordId || groupEntry.resourceItemId}.`);
@@ -827,7 +911,7 @@ class InventoryReservationRepository {
         fieldIds.statusFieldId ? toText(nextInventoryValues[fieldIds.statusFieldId]) : groupEntry.inventoryRecord.status,
         nextInventoryValues,
         'inventoryReservation:reconcile',
-        { clientDataVersion: groupEntry.inventoryRecord.dataVersion }
+        { clientDataVersion: groupEntry.inventoryRecord.dataVersion, queue: pendingSaves }
       );
       if (!inventoryResult.success) throw new Error(inventoryResult.message || 'Failed to reconcile inventory reservation.');
       const nextInventoryRecord = {
@@ -855,7 +939,8 @@ class InventoryReservationRepository {
         values.RESOURCE_FORM_KEY = groupEntry.resourceFormKey;
         values.RESOURCE_RECORD_ID = groupEntry.resourceRecordId;
         const result = await this.saveInternal(ledgerFormKey, toText(record.id), record.language || 'EN', 'consumed', values, 'inventoryReservation:consume', {
-          clientDataVersion: record.dataVersion
+          clientDataVersion: record.dataVersion,
+          queue: pendingSaves
         });
         if (!result.success) throw new Error(result.message || 'Failed to close reservation ledger row.');
       }
@@ -865,12 +950,26 @@ class InventoryReservationRepository {
         values.RESOURCE_FORM_KEY = groupEntry.resourceFormKey;
         values.RESOURCE_RECORD_ID = groupEntry.resourceRecordId;
         const result = await this.saveInternal(ledgerFormKey, toText(record.id), record.language || 'EN', 'released', values, 'inventoryReservation:release', {
-          clientDataVersion: record.dataVersion
+          clientDataVersion: record.dataVersion,
+          queue: pendingSaves
         });
         if (!result.success) throw new Error(result.message || 'Failed to close reservation ledger row.');
       }
       consumedReservations += groupEntry.consume.length;
       releasedReservations += groupEntry.release.length;
+    }
+
+    const flushResult = await this.measure('reservationReconcile.flushInternalSaves', () => this.flushInternalSaves(pendingSaves));
+    if (!flushResult.success) {
+      return {
+        success: false,
+        message: flushResult.message || 'Failed to save inventory reservation reconciliation updates.',
+        reconciledReservations: activeReservations.length,
+        consumedReservations,
+        releasedReservations,
+        touchedInventoryRecords: grouped.size,
+        availability
+      };
     }
 
     return {

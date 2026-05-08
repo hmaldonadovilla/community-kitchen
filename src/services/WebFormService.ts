@@ -254,6 +254,12 @@ type InternalRecordSaveQueueEntry = {
 
 type InternalRecordSaveQueue = Map<string, InternalRecordSaveQueueEntry>;
 
+type OperationTimingTracker = {
+  startedAt: number;
+  steps: Record<string, number>;
+  counts: Record<string, number>;
+};
+
 type FollowupEmailOutboxJob = {
   id: string;
   formKey: string;
@@ -3147,10 +3153,13 @@ export class WebFormService {
       };
     }
 
+    const timing = this.createOperationTiming();
     try {
-      return this.withDocumentTransactionLock('inventoryReservation.applyPlan', () => {
+      const result = this.withDocumentTransactionLock('inventoryReservation.applyPlan', () => {
         const clientDataVersion = this.normalizeReservationPlanClientDataVersion(request?.clientDataVersion);
-        const sourceRecordMetaBefore = this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId);
+        const sourceRecordMetaBefore = this.measureOperationStep(timing, 'sourceMetaBefore', () =>
+          this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId)
+        );
         const sourceClientDataVersionMatched =
           clientDataVersion !== null &&
           Number.isFinite(Number(sourceRecordMetaBefore?.dataVersion)) &&
@@ -3169,15 +3178,18 @@ export class WebFormService {
           (request?.ledgerFormKey || normalizedReservations[0]?.ledgerFormKey || 'Config: Inventory Reservation Ledger')
             .toString()
             .trim();
-        const ledgerContext = this.getFormContextLite(ledgerFormKey);
+        const ledgerContext = this.measureOperationStep(timing, 'ledgerContext', () => this.getFormContextLite(ledgerFormKey));
         const batchCache: InventoryReservationBatchCache = {
           ledgerContext,
           activeReservationsByResource: new Map<string, WebFormSubmission[]>(),
           inventoryRecordsByResource: new Map<string, WebFormSubmission>()
         };
-        const allActiveReservations = this.fetchSubmissionRecordsByFieldCriteria(ledgerContext.form, ledgerContext.questions, [
-          { fieldId: 'STATUS', expected: 'active' }
-        ]).filter(record => this.isActiveReservationRecord(record));
+        const allActiveReservations = this.measureOperationStep(timing, 'activeLedgerScan', () =>
+          this.fetchSubmissionRecordsByFieldCriteria(ledgerContext.form, ledgerContext.questions, [
+            { fieldId: 'STATUS', expected: 'active' }
+          ]).filter(record => this.isActiveReservationRecord(record))
+        );
+        this.incrementOperationCount(timing, 'activeReservations', allActiveReservations.length);
         allActiveReservations.forEach(record => {
           const resourceFormKey = this.readRecordFieldString(record, 'RESOURCE_FORM_KEY');
           const resourceRecordId = this.readRecordFieldString(record, 'RESOURCE_RECORD_ID');
@@ -3219,12 +3231,12 @@ export class WebFormService {
           return !!recordId && !desiredReservationIds.has(recordId);
         });
 
-        const validationFailure = this.validateInventoryReservationPlan({
+        const validationFailure = this.measureOperationStep(timing, 'validatePlan', () => this.validateInventoryReservationPlan({
           desiredEntries: Array.from(desiredByReservationId.values()),
           desiredReservationIds,
           releaseCandidates,
           batchCache
-        });
+        }));
         if (validationFailure) {
           return validationFailure;
         }
@@ -3276,7 +3288,9 @@ export class WebFormService {
           if (result.availability) availabilitySnapshots.push(result.availability);
         }
 
-        const flushResult = this.flushInternalRecordSaveQueue(pendingSaves);
+        const flushResult = this.measureOperationStep(timing, 'flushInternalSaves', () =>
+          this.flushInternalRecordSaveQueue(pendingSaves)
+        );
         if (!flushResult.success) {
           return {
             success: false,
@@ -3292,7 +3306,9 @@ export class WebFormService {
         }
 
         const sourceRecordMetaAfter =
-          this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId) || sourceRecordMetaBefore;
+          this.measureOperationStep(timing, 'sourceMetaAfter', () =>
+            this.buildReservationPlanSourceRecordMeta(sourceFormKey, sourceRecordId)
+          ) || sourceRecordMetaBefore;
 
         return {
           success: true,
@@ -3304,10 +3320,30 @@ export class WebFormService {
           sourceClientDataVersionMatched
         };
       });
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('inventoryReservation.applyPlan.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: result.success,
+        ...timingSnapshot
+      });
+      return {
+        ...result,
+        timing: timingSnapshot
+      };
     } catch (err: any) {
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('inventoryReservation.applyPlan.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: false,
+        message: err?.message || err?.toString?.() || 'unknown',
+        ...timingSnapshot
+      });
       return {
         success: false,
-        message: (err?.message || 'Could not acquire the reservation transaction lock. Please retry.').toString()
+        message: (err?.message || 'Could not acquire the reservation transaction lock. Please retry.').toString(),
+        timing: timingSnapshot
       };
     }
   }
@@ -3338,13 +3374,14 @@ export class WebFormService {
       };
     }
 
+    const timing = this.createOperationTiming();
     try {
-      return this.withQueuedRecordMutation(sourceFormKey, sourceRecordId, 'syncGuidedStepReservationDraft', () =>
+      const result = this.measureOperationStep(timing, 'recordMutationQueue', () => this.withQueuedRecordMutation(sourceFormKey, sourceRecordId, 'syncGuidedStepReservationDraft', () =>
         this.withDocumentTransactionLock('guidedStep.reservationDraftSync', () => {
-          const reservationResult = this.applyInventoryReservationPlan({
+          const reservationResult = this.measureOperationStep(timing, 'reservationApply', () => this.applyInventoryReservationPlan({
             ...(reservationPlan as InventoryReservationPlanRequest),
             refreshMode: 'none'
-          });
+          }));
           if (!reservationResult.success) {
             return {
               success: false,
@@ -3356,7 +3393,9 @@ export class WebFormService {
             };
           }
 
-          const saveResult = this.saveSubmissionWithIdDirect(draftPayload as WebFormSubmission);
+          const saveResult = this.measureOperationStep(timing, 'draftSave', () =>
+            this.saveSubmissionWithIdDirect(draftPayload as WebFormSubmission)
+          );
           return {
             success: Boolean(saveResult?.success),
             message: (saveResult?.message || reservationResult.message || '').toString(),
@@ -3368,13 +3407,33 @@ export class WebFormService {
             availability: reservationResult.availability
           };
         })
-      );
+      ));
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('guidedStep.reservationDraftSync.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: result.success,
+        ...timingSnapshot
+      });
+      return {
+        ...result,
+        timing: timingSnapshot
+      };
     } catch (err: any) {
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('guidedStep.reservationDraftSync.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: false,
+        message: err?.message || err?.toString?.() || 'unknown',
+        ...timingSnapshot
+      });
       return {
         success: false,
         message: (err?.message || 'Could not synchronize reservation and draft changes.').toString(),
         stepId: request?.stepId,
-        clientMutationSeq: request?.clientMutationSeq
+        clientMutationSeq: request?.clientMutationSeq,
+        timing: timingSnapshot
       };
     }
   }
@@ -7013,9 +7072,8 @@ export class WebFormService {
   ): WebFormSubmission[] {
     const matchedRows = this.findSubmissionRowNumbersByFieldCriteria(form, questions, criteria);
     if (!matchedRows.length) return [];
-    return matchedRows
-      .map(rowNumber => this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber))
-      .filter((record): record is WebFormSubmission => Boolean(record));
+    const recordsById = this.listing.fetchSubmissionsByRowNumbers(form, questions, matchedRows);
+    return Object.values(recordsById || {}).filter((record): record is WebFormSubmission => Boolean(record));
   }
 
   private resolveInventoryRecordForReservation(
@@ -7117,6 +7175,38 @@ export class WebFormService {
       }
     }
     throw lastError || new Error(busyMessage);
+  }
+
+  private createOperationTiming(): OperationTimingTracker {
+    return {
+      startedAt: Date.now(),
+      steps: {},
+      counts: {}
+    };
+  }
+
+  private measureOperationStep<T>(timing: OperationTimingTracker, label: string, fn: () => T): T {
+    const startedAt = Date.now();
+    try {
+      return fn();
+    } finally {
+      const key = (label || '').toString().trim();
+      if (key) timing.steps[key] = (timing.steps[key] || 0) + Math.max(0, Date.now() - startedAt);
+    }
+  }
+
+  private incrementOperationCount(timing: OperationTimingTracker, label: string, amount = 1): void {
+    const key = (label || '').toString().trim();
+    if (!key) return;
+    timing.counts[key] = (timing.counts[key] || 0) + Math.max(0, Number(amount) || 0);
+  }
+
+  private snapshotOperationTiming(timing: OperationTimingTracker): { totalMs: number; steps: Record<string, number>; counts: Record<string, number> } {
+    return {
+      totalMs: Date.now() - timing.startedAt,
+      steps: { ...timing.steps },
+      counts: { ...timing.counts }
+    };
   }
 
   private resolveReservationFieldIds(args: {

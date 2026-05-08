@@ -2223,6 +2223,25 @@ describe('Cloud Run API server', () => {
       rowsByTab[tabName][rowNumber - 1] = values.slice();
       return { updatedRows: 1 };
     });
+    const parseBatchRange = (range: string) => {
+      const match = /^'((?:[^']|'')+)'!A(\d+):/.exec(range);
+      if (!match) throw new Error(`Unexpected range: ${range}`);
+      return {
+        tabName: match[1].replace(/''/g, "'"),
+        rowNumber: Number(match[2])
+      };
+    };
+    const batchUpdateValues = jest.fn().mockImplementation(async (_spreadsheetId, data) => {
+      (Array.isArray(data) ? data : []).forEach(entry => {
+        const { tabName, rowNumber } = parseBatchRange(entry.range);
+        rowsByTab[tabName][rowNumber - 1] = (entry.values[0] || []).slice();
+      });
+      return { totalUpdatedRows: Array.isArray(data) ? data.length : 0 };
+    });
+    const appendRows = jest.fn().mockImplementation(async (_spreadsheetId, tabName, rows) => {
+      (Array.isArray(rows) ? rows : []).forEach(row => rowsByTab[tabName].push(row.slice()));
+      return { updates: { updatedRows: Array.isArray(rows) ? rows.length : 0 } };
+    });
     const server = createServer({
       env: {
         CK_DATA_BACKEND: 'drive',
@@ -2230,7 +2249,7 @@ describe('Cloud Run API server', () => {
         CK_DEFAULT_SPREADSHEET_ID: 'spreadsheet-1'
       },
       formConfigRepository: new FormConfigRepository({ bundle }),
-      sheetsClient: { getSheetValues, updateRowValues }
+      sheetsClient: { getSheetValues, updateRowValues, batchUpdateValues, appendRows }
     });
     const baseUrl = await listen(server);
 
@@ -2287,6 +2306,8 @@ describe('Cloud Run API server', () => {
       expect(rowsByTab['Inventory Reservation Ledger Data'][1][10]).toBe(3);
       expect(rowsByTab['Inventory Reservation Ledger Data'][1][12]).toBe('active');
       expect(rowsByTab['Inventory Reservation Ledger Data'][1][20]).toMatch(/^reservation::/);
+      expect(appendRows).toHaveBeenCalledWith('spreadsheet-1', 'Inventory Reservation Ledger Data', expect.any(Array));
+      expect(batchUpdateValues).toHaveBeenCalled();
 
       const releaseRes = await fetch(`${baseUrl}/api/rpc`, {
         method: 'POST',

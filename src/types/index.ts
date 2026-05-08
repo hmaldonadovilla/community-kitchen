@@ -658,6 +658,7 @@ export interface InventoryReservationPlanResult {
   reservationsApplied?: number;
   reservationsReleased?: number;
   availability?: InventoryAvailabilitySnapshot[];
+  timing?: ServerOperationTiming;
   /**
    * Latest known source-record metadata after the reservation plan completed.
    */
@@ -689,6 +690,13 @@ export interface GuidedStepReservationDraftSyncResult {
   };
   meta?: RecordMetadata;
   availability?: InventoryAvailabilitySnapshot[];
+  timing?: ServerOperationTiming;
+}
+
+export interface ServerOperationTiming {
+  totalMs: number;
+  steps: Record<string, number>;
+  counts?: Record<string, number>;
 }
 
 export interface InventoryReservationReconciliationRequest {

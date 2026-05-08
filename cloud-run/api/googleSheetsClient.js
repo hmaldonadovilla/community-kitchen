@@ -85,6 +85,27 @@ const createGoogleSheetsClient = (deps = {}) => {
         }
       });
     },
+    async batchUpdateValues(spreadsheetId, data, options = {}) {
+      const id = (spreadsheetId || '').toString().trim();
+      const valueInputOption = (options.valueInputOption || 'USER_ENTERED').toString().trim() || 'USER_ENTERED';
+      const entries = (Array.isArray(data) ? data : [])
+        .filter(entry => entry && entry.range && Array.isArray(entry.values))
+        .map(entry => ({
+          range: entry.range.toString(),
+          majorDimension: entry.majorDimension || 'ROWS',
+          values: entry.values
+        }));
+      if (!id) throw new Error('Google Sheets spreadsheet id is required.');
+      if (!entries.length) return { totalUpdatedRows: 0 };
+      const url = `${SHEETS_API_BASE_URL}/${encodeURIComponent(id)}/values:batchUpdate`;
+      return googleApiClient.request(url, {
+        method: 'POST',
+        body: {
+          valueInputOption,
+          data: entries
+        }
+      });
+    },
     async updateRowValues(spreadsheetId, sheetName, rowNumber, values) {
       const id = (spreadsheetId || '').toString().trim();
       const tab = (sheetName || '').toString().trim();

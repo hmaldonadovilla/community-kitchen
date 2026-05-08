@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const { createGoogleSheetsClient } = require('../googleSheetsClient');
+const { columnName, createGoogleSheetsClient, escapeSheetName } = require('../googleSheetsClient');
 const { normalizeHeaderToken, parseHeaderKey, sanitizeHeaderCellText } = require('./dataSourceUtils');
 
 const MAX_LIST_ROWS = 200;
@@ -287,6 +287,24 @@ class GoogleSheetsSubmissionRepository {
     this.configRepository = options.configRepository;
     this.sheetsClient = options.sheetsClient || createGoogleSheetsClient(options);
     this.fileRepository = options.fileRepository || null;
+    this.sheetCache = options.sheetCache || null;
+    this.timing = options.timing || null;
+  }
+
+  createRequestScope(options = {}) {
+    return new GoogleSheetsSubmissionRepository({
+      env: this.env,
+      configRepository: this.configRepository,
+      sheetsClient: this.sheetsClient,
+      fileRepository: this.fileRepository,
+      sheetCache: new Map(),
+      timing: options.timing || this.timing || null
+    });
+  }
+
+  async measure(label, fn) {
+    if (!this.timing || typeof this.timing.measure !== 'function') return fn();
+    return this.timing.measure(label, fn);
   }
 
   getSpreadsheetId() {
@@ -324,11 +342,22 @@ class GoogleSheetsSubmissionRepository {
     const spreadsheetId = this.getSpreadsheetId();
     if (!spreadsheetId) throw new Error('CK_DEFAULT_SPREADSHEET_ID is required for submission reads and writes.');
     const context = this.getFormContext(formKey);
-    const rows = await this.sheetsClient.getSheetValues(spreadsheetId, context.destinationTab);
-    const headers = (rows[0] || []).map(value => sanitizeHeaderCellText(value));
-    const dataRows = rows.slice(1);
-    const columns = this.buildColumns(headers, context.questions);
-    return { ...context, spreadsheetId, headers, dataRows, columns };
+    const cacheKey = `${spreadsheetId}::${context.destinationTab}`;
+    if (this.sheetCache && this.sheetCache.has(cacheKey)) {
+      if (this.timing && typeof this.timing.increment === 'function') this.timing.increment('sheetCacheHits');
+      return this.sheetCache.get(cacheKey);
+    }
+    const loadPromise = this.measure(`sheets.load.${context.destinationTab}`, async () => {
+      const rows = await this.sheetsClient.getSheetValues(spreadsheetId, context.destinationTab);
+      const headers = (rows[0] || []).map(value => sanitizeHeaderCellText(value));
+      const dataRows = rows.slice(1);
+      const columns = this.buildColumns(headers, context.questions);
+      return { ...context, spreadsheetId, headers, dataRows, columns };
+    });
+    if (this.sheetCache) this.sheetCache.set(cacheKey, loadPromise);
+    const sheet = await loadPromise;
+    if (this.sheetCache) this.sheetCache.set(cacheKey, sheet);
+    return sheet;
   }
 
   buildColumns(headers, questions) {
@@ -426,7 +455,11 @@ class GoogleSheetsSubmissionRepository {
     if (!idx) return;
     const rowNumber = Number(args.rowNumber);
     if (!Number.isFinite(rowNumber) || rowNumber < 2) return;
-    const columns = idx.columns;
+    const rowValues = this.buildRecordIndexRowValues(idx.columns, args, rowNumber);
+    await this.sheetsClient.updateRowValues(sheet.spreadsheetId, idx.sheetName, rowNumber, rowValues);
+  }
+
+  buildRecordIndexRowValues(columns, args, rowNumber) {
     const rowValues = new Array(columns.headerWidth).fill('');
     rowValues[columns.recordId - 1] = (args.recordId || '').toString();
     rowValues[columns.rowNumber - 1] = rowNumber;
@@ -439,7 +472,36 @@ class GoogleSheetsSubmissionRepository {
       if (!col) return;
       rowValues[col - 1] = (signature || '').toString();
     });
-    await this.sheetsClient.updateRowValues(sheet.spreadsheetId, idx.sheetName, rowNumber, rowValues);
+    return rowValues;
+  }
+
+  async writeRecordIndexRows(sheet, entries) {
+    const items = Array.isArray(entries) ? entries.filter(Boolean) : [];
+    if (!items.length) return;
+    const idx = await this.ensureRecordIndexSheet(sheet, items[0].dedupRules || []);
+    if (!idx) return;
+    const data = items
+      .map(args => {
+        const rowNumber = Number(args.rowNumber);
+        if (!Number.isFinite(rowNumber) || rowNumber < 2) return null;
+        const rowValues = this.buildRecordIndexRowValues(idx.columns, args, rowNumber);
+        return {
+          range: `${escapeSheetName(idx.sheetName)}!A${rowNumber}:${columnName(rowValues.length)}${rowNumber}`,
+          values: [rowValues]
+        };
+      })
+      .filter(Boolean);
+    if (!data.length) return;
+    if (typeof this.sheetsClient.batchUpdateValues === 'function') {
+      await this.sheetsClient.batchUpdateValues(sheet.spreadsheetId, data);
+      return;
+    }
+    for (const entry of data) {
+      const rowMatch = /!(?:[A-Z]+)(\d+):/.exec(entry.range);
+      const rowNumber = rowMatch ? Number(rowMatch[1]) : Number.NaN;
+      if (!Number.isFinite(rowNumber)) continue;
+      await this.sheetsClient.updateRowValues(sheet.spreadsheetId, idx.sheetName, rowNumber, entry.values[0]);
+    }
   }
 
   resolveAuditLoggingConfig(value) {
@@ -1037,7 +1099,10 @@ class GoogleSheetsSubmissionRepository {
     setIf(sheet.columns.updatedAt, now);
     setIf(sheet.columns.dataVersion, previousVersion + 1);
 
-    await this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, destinationRowNumber, nextRow);
+    await this.measure(`sheets.updateRow.${sheet.destinationTab}`, () =>
+      this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, destinationRowNumber, nextRow)
+    );
+    sheet.dataRows[existingIndex] = nextRow.slice();
 
     const meta = {
       id: recordId,
@@ -1075,6 +1140,260 @@ class GoogleSheetsSubmissionRepository {
       success: true,
       message: 'Record closed.',
       meta
+    };
+  }
+
+  async saveSubmissionBatch(formObjects) {
+    const records = (Array.isArray(formObjects) ? formObjects : []).filter(record => record && typeof record === 'object');
+    if (!records.length) {
+      return { success: true, message: 'No records to save.', metaById: {} };
+    }
+    const groups = new Map();
+    records.forEach(record => {
+      const formKey = (record.formKey || record.form || '').toString();
+      if (!groups.has(formKey)) groups.set(formKey, []);
+      groups.get(formKey).push(record);
+    });
+
+    const metaById = {};
+    for (const [formKey, group] of groups.entries()) {
+      const result = await this.saveSubmissionBatchForForm(formKey, group);
+      if (!result.success) return result;
+      Object.assign(metaById, result.metaById || {});
+    }
+    return {
+      success: true,
+      message: Object.keys(metaById).length ? 'Saved to sheet' : 'No changes to save.',
+      metaById
+    };
+  }
+
+  async saveSubmissionBatchForForm(formKey, records) {
+    const payloads = (Array.isArray(records) ? records : []).filter(record => record && typeof record === 'object');
+    if (!payloads.length) {
+      return { success: true, message: 'No records to save.', metaById: {} };
+    }
+    const invalidPayload = payloads.find(payload => !isTruthyFlag(payload.__ckSkipSubmitEffects));
+    if (invalidPayload) {
+      return {
+        success: false,
+        message: 'Cloud Run Sheets writes require __ckSkipSubmitEffects=true until submit effects are migrated.',
+        metaById: {}
+      };
+    }
+    if (payloads.some(payload => (payload.__ckDeleteRecordId || '').toString().trim())) {
+      const metaById = {};
+      for (const payload of payloads) {
+        const result = await this.saveSubmissionWithId(payload);
+        if (!result.success) return { success: false, message: result.message, metaById };
+        if (result.meta && result.meta.id) metaById[result.meta.id] = result.meta;
+      }
+      return { success: true, message: 'Saved to sheet', metaById };
+    }
+
+    const sheet = await this.loadSheet(formKey);
+    if (sheet.columns.recordId === undefined) {
+      throw new Error(`Destination tab ${sheet.destinationTab} is missing the Record ID header.`);
+    }
+
+    const dedupRules = this.getDedupRules(sheet.formKey);
+    const existingRecords = () =>
+      sheet.dataRows
+        .map((row, index) => this.buildRecord(sheet, row, index + 2))
+        .filter(Boolean)
+        .map(record => ({
+          id: record.id,
+          rowNumber: record.rowNumber,
+          values: record.values || {}
+        }));
+    const changedRowsByNumber = new Map();
+    const appendRows = [];
+    const metaById = {};
+    const indexEntries = [];
+    const auditEntries = [];
+    const appendBaseRowNumber = sheet.dataRows.length + 2;
+
+    for (const payload of payloads) {
+      const language = normalizeLanguage(payload.language);
+      const recordId = (payload.id || '').toString().trim() || createRecordId();
+      const existingIndex = this.findRecordDataRowIndex(sheet, recordId);
+      const existingRow = existingIndex >= 0 ? sheet.dataRows[existingIndex] || [] : null;
+      const destinationRowNumber = existingIndex >= 0 ? existingIndex + 2 : appendBaseRowNumber + appendRows.length;
+      const nextRow = existingRow ? existingRow.slice() : new Array(sheet.headers.length).fill('');
+      while (nextRow.length < sheet.headers.length) nextRow.push('');
+
+      const candidateValues = await this.buildCandidateValuesForSave(payload, sheet.questions, {
+        spreadsheetId: sheet.spreadsheetId
+      });
+      const setIf = (idx, value) => {
+        if (idx === undefined) return;
+        nextRow[idx] = value === undefined || value === null ? '' : value;
+      };
+
+      setIf(sheet.columns.language, language);
+      setIf(sheet.columns.recordId, recordId);
+      Object.entries(candidateValues).forEach(([fieldId, value]) => {
+        const idx = sheet.columns.fields[fieldId];
+        if (idx === undefined) return;
+        setIf(idx, value);
+      });
+
+      const transitions = sheet.form.followupConfig && sheet.form.followupConfig.statusTransitions;
+      const statusFieldId = sheet.form.followupConfig && sheet.form.followupConfig.statusFieldId;
+      const statusFieldIdx = statusFieldId ? sheet.columns.fields[statusFieldId] : undefined;
+      const statusIdx = statusFieldIdx !== undefined ? statusFieldIdx : sheet.columns.status;
+      const explicitStatus = (payload.__ckStatus || payload.status || '').toString().trim();
+      const saveMode = (payload.__ckSaveMode || '').toString().trim().toLowerCase();
+      if (saveMode === 'draft' || explicitStatus) {
+        const inProgressStatus =
+          resolveStatusTransitionValue(transitions, 'inProgress', language) ||
+          (sheet.form.autoSave && sheet.form.autoSave.status ? sheet.form.autoSave.status.toString() : '') ||
+          'In progress';
+        setIf(statusIdx, explicitStatus || inProgressStatus);
+      }
+      if (payload.pdfUrl !== undefined) setIf(sheet.columns.pdfUrl, payload.pdfUrl);
+
+      const previousVersion = existingRow ? toNumber(this.value(existingRow, sheet.columns.dataVersion)) || 0 : 0;
+      const clientVersion = payload.__ckClientDataVersion === undefined || payload.__ckClientDataVersion === null
+        ? Number.NaN
+        : Number(payload.__ckClientDataVersion);
+      if (
+        existingRow &&
+        previousVersion > 0 &&
+        Number.isFinite(clientVersion) &&
+        clientVersion > 0 &&
+        clientVersion < previousVersion
+      ) {
+        return {
+          success: false,
+          message: 'This record was modified by another user. Please refresh.',
+          metaById
+        };
+      }
+
+      if (existingRow && isNoopIfUnchangedRequested(payload) && !this.hasMeaningfulChanges(existingRow, nextRow, sheet.columns)) {
+        metaById[recordId] = this.rowMetadata(sheet, existingRow, destinationRowNumber, recordId, 'noop');
+        continue;
+      }
+
+      const conflict = findDedupConflict(dedupRules, { id: recordId, values: candidateValues }, existingRecords(), language);
+      if (conflict) {
+        return {
+          success: false,
+          message: conflict.message || 'Duplicate record.',
+          metaById
+        };
+      }
+
+      const now = new Date().toISOString();
+      const createdAt = existingRow ? this.value(existingRow, sheet.columns.createdAt) || now : now;
+      setIf(sheet.columns.timestamp, now);
+      setIf(sheet.columns.createdAt, createdAt);
+      setIf(sheet.columns.updatedAt, now);
+      setIf(sheet.columns.dataVersion, previousVersion + 1);
+
+      if (existingRow) {
+        changedRowsByNumber.set(destinationRowNumber, nextRow);
+        sheet.dataRows[existingIndex] = nextRow.slice();
+      } else {
+        appendRows.push({ rowNumber: destinationRowNumber, values: nextRow });
+        sheet.dataRows.push(nextRow.slice());
+      }
+
+      const meta = {
+        id: recordId,
+        createdAt,
+        updatedAt: now,
+        dataVersion: previousVersion + 1,
+        rowNumber: destinationRowNumber,
+        operation: existingRow ? 'update' : 'create'
+      };
+      metaById[recordId] = meta;
+
+      const dedupSignatures = {};
+      recordIndexDedupRules(dedupRules).forEach(rule => {
+        const signature = computeDedupSignature(rule, candidateValues);
+        if (!signature) return;
+        dedupSignatures[(rule.id || '').toString()] = signature;
+      });
+      indexEntries.push({
+        rowNumber: destinationRowNumber,
+        recordId,
+        dataVersion: previousVersion + 1,
+        updatedAtIso: now,
+        createdAtIso: createdAt,
+        dedupRules,
+        dedupSignatures
+      });
+      auditEntries.push({
+        beforeRowValues: existingRow || undefined,
+        afterRowValues: nextRow,
+        changedAtIso: now,
+        recordId,
+        rowNumber: destinationRowNumber,
+        auditAction: payload.__ckAuditAction,
+        deviceInfo: payload.__ckDeviceInfo
+      });
+    }
+
+    const updateRanges = Array.from(changedRowsByNumber.entries()).map(([rowNumber, row]) => ({
+      range: `${escapeSheetName(sheet.destinationTab)}!A${rowNumber}:${columnName(row.length)}${rowNumber}`,
+      values: [row]
+    }));
+    if (updateRanges.length && typeof this.sheetsClient.batchUpdateValues === 'function') {
+      await this.measure(`sheets.batchUpdateValues.${sheet.destinationTab}`, () =>
+        this.sheetsClient.batchUpdateValues(sheet.spreadsheetId, updateRanges)
+      );
+    } else {
+      for (const [rowNumber, row] of changedRowsByNumber.entries()) {
+        await this.measure(`sheets.updateRow.${sheet.destinationTab}`, () =>
+          this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, rowNumber, row)
+        );
+      }
+    }
+
+    if (appendRows.length) {
+      const rows = appendRows.map(entry => entry.values);
+      if (typeof this.sheetsClient.appendRows === 'function') {
+        await this.measure(`sheets.appendRows.${sheet.destinationTab}`, () =>
+          this.sheetsClient.appendRows(sheet.spreadsheetId, sheet.destinationTab, rows)
+        );
+      } else if (typeof this.sheetsClient.batchUpdateValues === 'function') {
+        const data = appendRows.map(entry => ({
+          range: `${escapeSheetName(sheet.destinationTab)}!A${entry.rowNumber}:${columnName(entry.values.length)}${entry.rowNumber}`,
+          values: [entry.values]
+        }));
+        await this.measure(`sheets.batchAppendFallback.${sheet.destinationTab}`, () =>
+          this.sheetsClient.batchUpdateValues(sheet.spreadsheetId, data)
+        );
+      } else {
+        for (const entry of appendRows) {
+          await this.measure(`sheets.appendFallbackRow.${sheet.destinationTab}`, () =>
+            this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, entry.rowNumber, entry.values)
+          );
+        }
+      }
+    }
+
+    try {
+      await this.writeRecordIndexRows(sheet, indexEntries);
+    } catch {
+      // The response row is authoritative; index maintenance is best-effort in the Cloud Run adapter.
+    }
+    for (const entry of auditEntries) {
+      try {
+        await this.writeAuditRows(sheet, entry);
+      } catch {
+        // Audit logging must not block the primary guarded save path.
+      }
+    }
+    if (this.timing && typeof this.timing.increment === 'function') {
+      this.timing.increment('batchedRecordsSaved', Object.keys(metaById).length);
+    }
+    return {
+      success: true,
+      message: Object.keys(metaById).length ? 'Saved to sheet' : 'No changes to save.',
+      metaById
     };
   }
 
@@ -1215,7 +1534,11 @@ class GoogleSheetsSubmissionRepository {
     setIf(sheet.columns.updatedAt, now);
     setIf(sheet.columns.dataVersion, previousVersion + 1);
 
-    await this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, destinationRowNumber, nextRow);
+    await this.measure(`sheets.updateRow.${sheet.destinationTab}`, () =>
+      this.sheetsClient.updateRowValues(sheet.spreadsheetId, sheet.destinationTab, destinationRowNumber, nextRow)
+    );
+    if (existingIndex >= 0) sheet.dataRows[existingIndex] = nextRow.slice();
+    else sheet.dataRows.push(nextRow.slice());
 
     const meta = {
       id: recordId,
