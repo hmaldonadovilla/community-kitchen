@@ -3,7 +3,10 @@ import React from 'react';
 import { peekCachedDataSource } from '../../../../data/dataSources';
 import type { FieldValue, LineItemRowState } from '../../../../types';
 import type { InventoryAvailabilitySnapshot } from '../../../../../types';
-import { shouldRemoveSourceFirstAllocationOutputWhenExcluded } from '../../../app/sourceFirstAllocations';
+import {
+  shouldPreserveSourceFirstAllocationOutputWhenExcluded,
+  shouldRemoveSourceFirstAllocationOutputWhenExcluded
+} from '../../../app/sourceFirstAllocations';
 import type { LineItemState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
 import {
@@ -250,6 +253,16 @@ export const useStepDataSourceAvailabilityReconciliation = ({
         outputRows.forEach(outputRow => {
           const sourceKey = `${(outputRow?.values as any)?.[outputKeyFieldId] ?? ''}`.trim();
           if (!sourceKey || eligibleSourceKeys.has(sourceKey)) return;
+          if (shouldPreserveSourceFirstAllocationOutputWhenExcluded({ config, outputRow })) {
+            onDiagnostic?.('dataSourceRows.sourceFirst.outputPreservedWhenExcluded', {
+              groupId,
+              stepId: currentGuidedStepId,
+              configId: `${config?.id || ''}`.trim() || null,
+              parentRowId: parentRow.id,
+              sourceKey
+            });
+            return;
+          }
           const staleKey = [`${config?.id || ''}`.trim(), `${parentRow.id || ''}`.trim(), sourceKey].join('::');
           if (seen.has(staleKey)) return;
           seen.add(staleKey);

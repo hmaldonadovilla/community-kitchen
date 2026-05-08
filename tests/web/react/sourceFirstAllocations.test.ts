@@ -5,6 +5,7 @@ import {
   resolveSourceFirstAllocationReservationVisibilityScope,
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstRowSortMode,
+  shouldPreserveSourceFirstAllocationOutputWhenExcluded,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded,
   shouldShowSourceFirstAllocationLabel
 } from '../../../src/web/react/app/sourceFirstAllocations';
@@ -257,5 +258,124 @@ describe('sourceFirstAllocations helpers', () => {
     expect(shouldRemoveSourceFirstAllocationOutputWhenExcluded({ sourceRows: { removeOutputWhenExcluded: true } })).toBe(true);
     expect(shouldRemoveSourceFirstAllocationOutputWhenExcluded({ sourceRows: { removeOutputWhenExcluded: false } })).toBe(false);
     expect(shouldRemoveSourceFirstAllocationOutputWhenExcluded({})).toBe(false);
+  });
+
+  it('preserves active managed reservation outputs when datasource rows become temporarily excluded', () => {
+    const config = {
+      rowKeyFieldId: 'LEFTOVER_ID',
+      outputKeyFieldId: 'LEFTOVER_ID',
+      quantityFieldId: 'LEFTOVER_USE_QTY',
+      selectedFieldId: 'LEFTOVER_SELECTED',
+      reservation: {
+        enabled: true,
+        resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+      }
+    };
+
+    expect(
+      shouldPreserveSourceFirstAllocationOutputWhenExcluded({
+        config,
+        outputRow: {
+          values: {
+            LEFTOVER_ID: 'SI-6',
+            LEFTOVER_RECORD_ID: 'leftover-record-1',
+            LEFTOVER_USE_QTY: 3
+          }
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('prevents post-save datasource exclusion cleanup from releasing an active reservation', () => {
+    const config = {
+      rowKeyFieldId: 'LEFTOVER_ID',
+      outputKeyFieldId: 'LEFTOVER_ID',
+      quantityFieldId: 'LEFTOVER_USE_QTY',
+      selectedFieldId: 'LEFTOVER_SELECTED',
+      sourceRows: { removeOutputWhenExcluded: true },
+      reservation: {
+        enabled: true,
+        resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+      }
+    };
+    const outputRow = {
+      values: {
+        LEFTOVER_ID: 'SI-6',
+        LEFTOVER_RECORD_ID: 'leftover::meal-1::partial::row-1',
+        LEFTOVER_USE_QTY: 3
+      }
+    };
+    const eligibleSourceKeys = new Set<string>();
+    const sourceKey = `${outputRow.values.LEFTOVER_ID}`.trim();
+
+    const wouldCleanupOutput =
+      shouldRemoveSourceFirstAllocationOutputWhenExcluded(config) &&
+      !eligibleSourceKeys.has(sourceKey) &&
+      !shouldPreserveSourceFirstAllocationOutputWhenExcluded({ config, outputRow });
+
+    expect(wouldCleanupOutput).toBe(false);
+  });
+
+  it('infers the reservation record id field for legacy source-first configs', () => {
+    const config = {
+      rowKeyFieldId: 'LEFTOVER_ID',
+      outputKeyFieldId: 'LEFTOVER_ID',
+      quantityFieldId: 'LEFTOVER_USE_QTY',
+      reservation: {
+        enabled: true
+      }
+    };
+
+    expect(
+      shouldPreserveSourceFirstAllocationOutputWhenExcluded({
+        config,
+        outputRow: {
+          values: {
+            LEFTOVER_ID: 'SI-6',
+            LEFTOVER_RECORD_ID: 'leftover-record-1',
+            LEFTOVER_USE_QTY: 3
+          }
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('does not preserve inactive reservation outputs during datasource exclusion cleanup', () => {
+    const config = {
+      rowKeyFieldId: 'LEFTOVER_ID',
+      outputKeyFieldId: 'LEFTOVER_ID',
+      quantityFieldId: 'LEFTOVER_USE_QTY',
+      selectedFieldId: 'LEFTOVER_SELECTED',
+      reservation: {
+        enabled: true,
+        resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+      }
+    };
+
+    expect(
+      shouldPreserveSourceFirstAllocationOutputWhenExcluded({
+        config,
+        outputRow: {
+          values: {
+            LEFTOVER_ID: 'SI-6',
+            LEFTOVER_RECORD_ID: 'leftover-record-1',
+            LEFTOVER_SELECTED: false,
+            LEFTOVER_USE_QTY: 3
+          }
+        }
+      })
+    ).toBe(false);
+    expect(
+      shouldPreserveSourceFirstAllocationOutputWhenExcluded({
+        config,
+        outputRow: {
+          values: {
+            LEFTOVER_ID: 'SI-6',
+            LEFTOVER_RECORD_ID: 'leftover-record-1',
+            LEFTOVER_USE_QTY: 0
+          }
+        }
+      })
+    ).toBe(false);
   });
 });

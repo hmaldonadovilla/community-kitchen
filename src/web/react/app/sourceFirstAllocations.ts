@@ -246,3 +246,46 @@ export const resolveSourceFirstAllocationReservationVisibilityScope = (args: {
 
 export const shouldRemoveSourceFirstAllocationOutputWhenExcluded = (config: any): boolean =>
   Boolean(config?.sourceRows && typeof config.sourceRows === 'object' && (config.sourceRows as any).removeOutputWhenExcluded === true);
+
+const inferSourceFirstReservationFieldId = (outputKeyFieldId: string, suffix: 'RECORD_ID'): string => {
+  const base = outputKeyFieldId.endsWith('_ID') ? outputKeyFieldId.slice(0, -3) : outputKeyFieldId;
+  return base ? `${base}_${suffix}` : '';
+};
+
+/**
+ * Active reservation output rows must survive datasource visibility churn.
+ * A later explicit user deselect removes the row through the normal mutation
+ * path; source-row cleanup must not silently release a server reservation.
+ */
+export const shouldPreserveSourceFirstAllocationOutputWhenExcluded = (args: {
+  config: any;
+  outputRow?: { values?: Record<string, any> } | null;
+}): boolean => {
+  const config = args.config || {};
+  const reservationConfig =
+    config?.reservation && typeof config.reservation === 'object'
+      ? config.reservation
+      : null;
+  if (!reservationConfig || reservationConfig.enabled === false) return false;
+
+  const values = (args.outputRow?.values || {}) as Record<string, any>;
+  const selectedFieldId = normalizeIdValue(config?.selectedFieldId);
+  if (
+    selectedFieldId &&
+    Object.prototype.hasOwnProperty.call(values, selectedFieldId) &&
+    values[selectedFieldId] === false
+  ) {
+    return false;
+  }
+
+  const outputKeyFieldId = normalizeIdValue(config?.outputKeyFieldId || config?.rowKeyFieldId);
+  const quantityFieldId = normalizeIdValue(config?.quantityFieldId);
+  const resourceRecordIdFieldId = normalizeIdValue(
+    reservationConfig.resourceRecordIdFieldId || inferSourceFirstReservationFieldId(outputKeyFieldId, 'RECORD_ID')
+  );
+  const outputKey = outputKeyFieldId ? normalizeIdValue(values[outputKeyFieldId]) : '';
+  const resourceRecordId = resourceRecordIdFieldId ? normalizeIdValue(values[resourceRecordIdFieldId]) : '';
+  const quantity = quantityFieldId ? toFiniteNumberValue(values[quantityFieldId]) : 0;
+
+  return Boolean(outputKey && resourceRecordId && quantity > 0);
+};
