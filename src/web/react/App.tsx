@@ -9674,17 +9674,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           return submitCurrentRecordMutation(`submit:${args.reason}`, payload);
         }
         if (args.reservationDraftSync) {
-          return submitCurrentRecordMutation(`snapshot:${args.reason}`, payload, (preparedPayload: any) =>
-            saveGuidedReservationDraft({
-              stepId: args.reservationDraftSync?.stepId,
-              clientMutationSeq: args.reservationDraftSync?.requestEpoch,
-              reservationPlan: {
-                ...(args.reservationDraftSync?.plan as InventoryReservationPlanRequest),
-                clientDataVersion: resolveCurrentClientDataVersion((preparedPayload as any)?.__ckClientDataVersion) || undefined,
-                refreshMode: 'none'
-              },
-              draftPayload: preparedPayload
-            })
+          return runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
+            submitCurrentRecordMutation(`snapshot:${args.reason}`, nextPayload, (preparedPayload: any) =>
+              saveGuidedReservationDraft({
+                stepId: args.reservationDraftSync?.stepId,
+                clientMutationSeq: args.reservationDraftSync?.requestEpoch,
+                reservationPlan: {
+                  ...(args.reservationDraftSync?.plan as InventoryReservationPlanRequest),
+                  clientDataVersion: resolveCurrentClientDataVersion((preparedPayload as any)?.__ckClientDataVersion) || undefined,
+                  refreshMode: 'none'
+                },
+                draftPayload: preparedPayload
+              })
+            )
           );
         }
         return runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
