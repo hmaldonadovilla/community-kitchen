@@ -311,6 +311,7 @@ import {
   issueReservationRequestEpoch,
   shouldApplyReservationPlanResponse
 } from './features/reservations/reservationResponsePolicy';
+import { shouldSkipReservationDraftSyncForDeleteOnKeyChange } from './features/reservations/domain/reservationDraftSyncGuards';
 import {
   useGuidedReservationPlanSync,
   type GuidedReservationSyncMeta,
@@ -774,61 +775,66 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   const triggerDedupDeleteOnKeyChange = useCallback(
     async (source: string, extra?: Record<string, unknown>): Promise<boolean> => {
-      return triggerDedupDeleteOnKeyChangeAction({
-        source,
-        extra,
-        definition,
-        formKey,
-        submittingRef,
-        selectedRecordIdRef,
-        selectedRecordSnapshotRef,
-        lastSubmissionMetaRef,
-        pendingDeletedRecordIdsRef,
-        dedupDeleteOnKeyChangeInFlightRef,
-        valuesRef,
-        lineItemsRef,
-        dedupKeyFingerprintBaselineRef,
-        dedupHoldRef,
-        autoSaveDirtyRef,
-        autoSaveQueuedRef,
-        autoSaveTimerRef,
-        autoSaveInFlightRef,
-        uploadQueueRef,
-        languageRef,
-        recordDataVersionRef,
-        optimisticClientDataVersionRef,
-        recordRowNumberRef,
-        recordStaleRef,
-        recordSessionRef,
-        createFlowRef,
-        createFlowUserEditedRef,
-        autoSaveUserEditedRef,
-        dedupBaselineSignatureRef,
-        optionStateRef,
-        tooltipStateRef,
-        preloadPromisesRef,
-        homeListLocalCacheKey,
-        setSelectedRecordId,
-        setSelectedRecordSnapshot,
-        setLastSubmissionMeta,
-        setRecordStale,
-        setDraftSave,
-        setPendingDeletedRecordApplyTick,
-        setValues,
-        setLineItems,
-        setErrors,
-        setValidationWarnings,
-        setValidationAttempted,
-        setValidationNoticeHidden,
-        setOptionState,
-        setTooltipState,
-        waitForActiveDraftSaveTransactions,
-        submitCurrentRecordMutation,
-        rememberAutoSaveSeenState,
-        ensureLineOptions,
-        logEvent,
-        resolveLogMessage
-      });
+      dedupDeleteOnKeyChangePendingRef.current = true;
+      try {
+        return await triggerDedupDeleteOnKeyChangeAction({
+          source,
+          extra,
+          definition,
+          formKey,
+          submittingRef,
+          selectedRecordIdRef,
+          selectedRecordSnapshotRef,
+          lastSubmissionMetaRef,
+          pendingDeletedRecordIdsRef,
+          dedupDeleteOnKeyChangeInFlightRef,
+          valuesRef,
+          lineItemsRef,
+          dedupKeyFingerprintBaselineRef,
+          dedupHoldRef,
+          autoSaveDirtyRef,
+          autoSaveQueuedRef,
+          autoSaveTimerRef,
+          autoSaveInFlightRef,
+          uploadQueueRef,
+          languageRef,
+          recordDataVersionRef,
+          optimisticClientDataVersionRef,
+          recordRowNumberRef,
+          recordStaleRef,
+          recordSessionRef,
+          createFlowRef,
+          createFlowUserEditedRef,
+          autoSaveUserEditedRef,
+          dedupBaselineSignatureRef,
+          optionStateRef,
+          tooltipStateRef,
+          preloadPromisesRef,
+          homeListLocalCacheKey,
+          setSelectedRecordId,
+          setSelectedRecordSnapshot,
+          setLastSubmissionMeta,
+          setRecordStale,
+          setDraftSave,
+          setPendingDeletedRecordApplyTick,
+          setValues,
+          setLineItems,
+          setErrors,
+          setValidationWarnings,
+          setValidationAttempted,
+          setValidationNoticeHidden,
+          setOptionState,
+          setTooltipState,
+          waitForActiveDraftSaveTransactions,
+          submitCurrentRecordMutation,
+          rememberAutoSaveSeenState,
+          ensureLineOptions,
+          logEvent,
+          resolveLogMessage
+        });
+      } finally {
+        dedupDeleteOnKeyChangePendingRef.current = false;
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [definition, formKey, logEvent, resolveLogMessage, setSelectedRecordId, waitForActiveDraftSaveTransactions]
@@ -1102,6 +1108,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           sourceFieldId: pending.fieldId
         });
 
+        if (isTopDedupKeyChange) {
+          dedupDeleteOnKeyChangePendingRef.current = true;
+        }
         setValues(mapped.values);
         setLineItems(mapped.lineItems);
         valuesRef.current = mapped.values;
@@ -1191,6 +1200,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           confirmUpdateCount: confirmUpdates.length
         });
       } finally {
+        if (!dedupDeleteOnKeyChangeInFlightRef.current) {
+          dedupDeleteOnKeyChangePendingRef.current = false;
+        }
         destructiveChangeBusy.unlock(lockSeq, { source: 'fieldChangeDialog' });
       }
     },
@@ -3420,6 +3432,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const dedupBaselineSignatureRef = useRef<string>('');
   const dedupKeyFingerprintBaselineRef = useRef<string>('');
   const dedupDeleteOnKeyChangeInFlightRef = useRef<boolean>(false);
+  const dedupDeleteOnKeyChangePendingRef = useRef<boolean>(false);
   const dedupDeleteOnKeyChangeEnabled =
     (definition as any)?.dedupDeleteOnKeyChange === true || (definition as any)?.dedupRecreateOnKeyChange === true;
 
@@ -9942,7 +9955,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const sessionId = recordSessionRef.current;
       const persistSnapshot = args.persistSnapshot !== false;
       const snapshotLineItems = args.snapshotLineItems || lineItemsRef.current;
-      const releaseScopeSignature = (Array.isArray(args.releaseScopes) ? args.releaseScopes : [])
+      const releaseScopes = Array.isArray(args.releaseScopes) ? args.releaseScopes : [];
+      if (
+        shouldSkipReservationDraftSyncForDeleteOnKeyChange({
+          releaseScopeCount: releaseScopes.length,
+          dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
+        })
+      ) {
+        logEvent('guidedStep.liveSync.skipped.deleteOnKeyChange', {
+          stepId: args.stepId,
+          reason: args.reason,
+          releaseScopes: releaseScopes.length,
+          dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
+        });
+        return;
+      }
+      const releaseScopeSignature = releaseScopes
         .map(scope =>
           [
             (scope?.sourceParentGroupId || '').toString().trim(),
