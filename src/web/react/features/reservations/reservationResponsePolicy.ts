@@ -5,6 +5,9 @@ const normalizePositiveNumber = (raw: unknown): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
+export const issueReservationRequestEpoch = (latestEpoch: unknown): number =>
+  normalizePositiveNumber(latestEpoch) + 1;
+
 export const shouldApplyReservationPlanResponse = (args: {
   requestEpoch?: number | null;
   latestEpoch: number;

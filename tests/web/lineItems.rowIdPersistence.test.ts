@@ -1,4 +1,8 @@
-import { buildInitialLineItems } from '../../src/web/react/app/lineItems';
+import {
+  buildInitialLineItems,
+  ROW_SELECTION_EFFECT_ID_KEY,
+  ROW_SOURCE_KEY
+} from '../../src/web/react/app/lineItems';
 import { WebFormDefinition } from '../../src/types';
 
 describe('buildInitialLineItems row id persistence', () => {
@@ -90,5 +94,69 @@ describe('buildInitialLineItems row id persistence', () => {
     expect(Array.isArray((state as any).LINES)).toBe(true);
     expect((state as any).LINES[0].id).toBe('p1');
     expect((state as any)['LINES::p1::TRANSIENT']).toBeUndefined();
+  });
+
+  it('hydrates persisted selection-effect subgroup rows with the named effect context', () => {
+    const definition: WebFormDefinition = {
+      title: 'Test',
+      destinationTab: 'Main',
+      languages: ['EN'] as any,
+      questions: [
+        {
+          id: 'MEALS',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals', fr: 'Meals', nl: 'Meals' },
+          required: false,
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'RECIPE',
+                type: 'CHOICE',
+                label: { en: 'Recipe', fr: 'Recipe', nl: 'Recipe' },
+                required: false,
+                selectionEffects: [
+                  {
+                    id: 'syncRecipeIngredientsFromSource',
+                    type: 'addLineItemsFromDataSource',
+                    groupId: 'INGREDIENTS',
+                    dataField: 'INGREDIENTS',
+                    lineItemMapping: { ING: 'ING' }
+                  }
+                ]
+              }
+            ],
+            subGroups: [
+              {
+                id: 'INGREDIENTS',
+                label: { en: 'Ingredients', fr: 'Ingredients', nl: 'Ingredients' },
+                fields: [{ id: 'ING', type: 'TEXT', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' } }]
+              }
+            ]
+          }
+        } as any
+      ]
+    };
+    const recordValues = {
+      MEALS: [
+        {
+          __ckRowId: 'meal_1',
+          RECIPE: 'Soup',
+          INGREDIENTS: [
+            {
+              __ckRowId: 'ing_1',
+              [ROW_SOURCE_KEY]: 'auto',
+              [ROW_SELECTION_EFFECT_ID_KEY]: 'syncRecipeIngredientsFromSource',
+              ING: 'Carrot'
+            }
+          ]
+        }
+      ]
+    };
+
+    const state = buildInitialLineItems(definition, recordValues as any);
+    const childRows = (state as any)['MEALS::meal_1::INGREDIENTS'];
+
+    expect(childRows).toHaveLength(1);
+    expect(childRows[0].effectContextId).toBe('MEALS::meal_1::syncRecipeIngredientsFromSource');
   });
 });

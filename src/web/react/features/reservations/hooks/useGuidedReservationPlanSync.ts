@@ -5,6 +5,7 @@ import type { LangCode, WebFormDefinition } from '../../../../types';
 import type {
   InventoryAvailabilitySnapshot,
   InventoryReservationPlanRequest,
+  InventoryReservationPlanResult,
   InventoryReservationPlanScope
 } from '../../../../../types';
 import {
@@ -24,11 +25,15 @@ import {
   type GuidedStepReservationAvailabilityEventDetail
 } from '../liveSyncEvents';
 import { buildRejectedStepReservationEntries } from '../rejectedReservations';
-import { shouldApplyReservationPlanResponse } from '../reservationResponsePolicy';
+import { issueReservationRequestEpoch, shouldApplyReservationPlanResponse } from '../reservationResponsePolicy';
 import {
   buildInventoryReservationPlanFingerprint,
   buildStepInventoryReservationPlan
 } from '../stepReservationPlan';
+import {
+  shouldRefreshDataSourcesAfterReservationPlan,
+  type GuidedReservationSyncFreshness
+} from '../domain/reservationSyncFreshness';
 
 export type GuidedReservationSyncOutcome = {
   success: boolean;
@@ -37,6 +42,7 @@ export type GuidedReservationSyncOutcome = {
   stepId: string;
   sessionId: number;
   stale?: boolean;
+  freshness?: GuidedReservationSyncFreshness | null;
 };
 
 export type GuidedReservationSyncMeta = {
@@ -151,6 +157,249 @@ export const useGuidedReservationPlanSync = ({
     [recordSessionRef, reservationSyncEpochRef, resolveCurrentReservationRecordId]
   );
 
+  const adoptGuidedStepReservationPlanResult = React.useCallback(
+    async (args: {
+      stepId: string;
+      recordId: string;
+      logPrefix: string;
+      dialogKind: string;
+      plan: InventoryReservationPlanRequest;
+      reservationResult: InventoryReservationPlanResult;
+      requestEpoch?: number;
+      sessionId?: number;
+    }): Promise<{
+      success: boolean;
+      message?: string;
+      applied: boolean;
+      stale?: boolean;
+      freshness?: GuidedReservationSyncFreshness | null;
+    }> => {
+      const responseIsCurrent = () =>
+        shouldApplyGuidedReservationPlanResponse({
+          requestEpoch: args.requestEpoch,
+          sessionId: args.sessionId,
+          recordId: args.recordId
+        });
+      const reservationResult = args.reservationResult || {
+        success: false,
+        message: tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.')
+      };
+      if (!responseIsCurrent()) {
+        logEvent(`${args.logPrefix}.reservationPlan.response.stale`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          success: reservationResult.success === true,
+          requestEpoch: args.requestEpoch || null,
+          latestEpoch: reservationSyncEpochRef.current
+        });
+        return { success: true, applied: true, stale: true };
+      }
+      if (!reservationResult.success) {
+        const availability = Array.isArray(reservationResult.availability)
+          ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
+          : [];
+        const rejectedReservations = buildRejectedStepReservationEntries({
+          plan: args.plan,
+          availability
+        });
+        if (availability.length) {
+          const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+            dataSourceConfigs: guidedDataSourceConfigs,
+            language,
+            availability
+          });
+          logEvent(`${args.logPrefix}.reservationPlan.rejected.cacheSync`, {
+            stepId: args.stepId,
+            recordId: args.recordId,
+            updatedRows: cacheSync.updatedRows,
+            updatedDataSourceIds: cacheSync.updatedDataSourceIds,
+            rejectedReservations: rejectedReservations.length
+          });
+          if (
+            typeof window !== 'undefined' &&
+            typeof window.dispatchEvent === 'function' &&
+            typeof CustomEvent === 'function'
+          ) {
+            const detail: GuidedStepReservationAvailabilityEventDetail = {
+              stepId: args.stepId,
+              recordId: args.recordId,
+              availability,
+              rejectedReservations
+            };
+            window.dispatchEvent(
+              new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
+                GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+                { detail }
+              )
+            );
+          }
+        }
+        const primaryAvailability =
+          availability.length
+            ? (availability[0] as InventoryAvailabilitySnapshot)
+            : null;
+        const message = buildReservationFailureMessage(
+          resolveUserFacingErrorMessage(
+            reservationResult,
+            reservationResult.message ||
+              tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.')
+          ) || '',
+          tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.'),
+          tSystem(
+            'inventory.reservationUpdateFailedDetail',
+            languageRef.current,
+            "We couldn't update the reservation properly. Please try again."
+          ),
+          {
+            availability: primaryAvailability,
+            itemId: primaryAvailability?.resourceItemId,
+            itemLabel: resolveReservationDisplayLabelFromCachedDataSources({
+              dataSourceConfigs: guidedDataSourceConfigs,
+              language,
+              availability: primaryAvailability
+            })
+          }
+        );
+        logEvent(`${args.logPrefix}.reservationPlan.failed`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          message,
+          conflict: reservationResult.conflict === true
+        });
+        await openConfiguredConfirmDialog({
+          dialog: {
+            title: tSystem('common.notice', languageRef.current, 'Notice'),
+            message,
+            confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
+            showCancel: false,
+            showCloseButton: true,
+            dismissOnBackdrop: true
+          },
+          kind: `${args.dialogKind}.reservationPlan`,
+          refId: args.stepId
+        });
+        return { success: false, message, applied: true };
+      }
+      logEvent(`${args.logPrefix}.reservationPlan.done`, {
+        stepId: args.stepId,
+        recordId: args.recordId,
+        reservationsApplied: reservationResult.reservationsApplied || 0,
+        reservationsReleased: reservationResult.reservationsReleased || 0
+      });
+      const adoptedSourceMeta = resolveReservationPlanSourceMetaAdoption({
+        result: reservationResult,
+        currentRecordId: args.recordId,
+        currentDataVersion: getCurrentKnownClientDataVersion(),
+        fallbackRecordId: args.recordId
+      });
+      if (adoptedSourceMeta) {
+        applySuccessfulSubmissionState({
+          recordId: args.recordId,
+          response: { meta: adoptedSourceMeta }
+        });
+        logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.sync`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          dataVersion: adoptedSourceMeta.dataVersion || null,
+          rowNumber: adoptedSourceMeta.rowNumber || null
+        });
+      } else {
+        logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.skip`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          matched: reservationResult.sourceClientDataVersionMatched === true,
+          sourceDataVersion: Number(reservationResult.sourceRecordMeta?.dataVersion) || null,
+          currentDataVersion: getCurrentKnownClientDataVersion() || null
+        });
+      }
+      markRecordFreshnessServerTouch({ reason: 'record.reservationPlan', recordId: args.recordId });
+      markDataSourceFreshnessServerTouch({ reason: 'datasource.reservationPlan', stepId: args.stepId });
+      const availability = Array.isArray(reservationResult.availability)
+        ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
+        : [];
+      let availabilityCacheUpdatedRows = 0;
+      let availabilityCacheUpdatedDataSourceIds: string[] = [];
+      if (availability.length) {
+        const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+          dataSourceConfigs: guidedDataSourceConfigs,
+          language,
+          availability
+        });
+        availabilityCacheUpdatedRows = cacheSync.updatedRows;
+        availabilityCacheUpdatedDataSourceIds = cacheSync.updatedDataSourceIds;
+        logEvent(`${args.logPrefix}.reservationPlan.cacheSync`, {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          updatedRows: cacheSync.updatedRows,
+          updatedDataSourceIds: cacheSync.updatedDataSourceIds
+        });
+      }
+      if (
+        shouldRefreshDataSourcesAfterReservationPlan({
+          availabilityCount: availability.length,
+          updatedRows: availabilityCacheUpdatedRows,
+          reservationsReleased: Number(reservationResult.reservationsReleased || 0)
+        })
+      ) {
+        refreshGuidedDataSourcesInBackground({
+          reason: `${args.logPrefix}.reservationPlan.refresh`,
+          forceRefresh: true,
+          retryDelaysMs: [0, 1500]
+        });
+      }
+      if (
+        availability.length &&
+        typeof window !== 'undefined' &&
+        typeof window.dispatchEvent === 'function' &&
+        typeof CustomEvent === 'function'
+      ) {
+        const detail: GuidedStepReservationAvailabilityEventDetail = {
+          stepId: args.stepId,
+          recordId: args.recordId,
+          availability
+        };
+        window.dispatchEvent(
+          new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
+            GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+            { detail }
+          )
+        );
+      }
+      reservationManagedScopesRef.current = {
+        recordId: args.recordId,
+        scopes: Array.isArray(args.plan.managedScopes) ? args.plan.managedScopes.slice() : []
+      };
+      const freshness =
+        availability.length > 0 && availabilityCacheUpdatedRows > 0 && availabilityCacheUpdatedDataSourceIds.length > 0
+          ? {
+              recordId: args.recordId,
+              stepId: args.stepId,
+              dataSourceIds: availabilityCacheUpdatedDataSourceIds,
+              updatedRows: availabilityCacheUpdatedRows,
+              availabilityCount: availability.length,
+              completedAtMs: Date.now(),
+              source: args.logPrefix
+            }
+          : null;
+      return { success: true, applied: true, freshness };
+    },
+    [
+      applySuccessfulSubmissionState,
+      getCurrentKnownClientDataVersion,
+      guidedDataSourceConfigs,
+      language,
+      languageRef,
+      logEvent,
+      markDataSourceFreshnessServerTouch,
+      markRecordFreshnessServerTouch,
+      openConfiguredConfirmDialog,
+      refreshGuidedDataSourcesInBackground,
+      reservationManagedScopesRef,
+      reservationSyncEpochRef,
+      shouldApplyGuidedReservationPlanResponse
+    ]
+  );
+
   const applyGuidedStepReservationPlan = React.useCallback(
     async (args: {
       stepId: string;
@@ -160,7 +409,13 @@ export const useGuidedReservationPlanSync = ({
       plan?: InventoryReservationPlanRequest | null;
       requestEpoch?: number;
       sessionId?: number;
-    }): Promise<{ success: boolean; message?: string; applied: boolean; stale?: boolean }> => {
+    }): Promise<{
+      success: boolean;
+      message?: string;
+      applied: boolean;
+      stale?: boolean;
+      freshness?: GuidedReservationSyncFreshness | null;
+    }> => {
       const reservationPlan = args.plan ?? resolveGuidedStepReservationPlan({
         stepId: args.stepId,
         recordId: args.recordId
@@ -194,183 +449,16 @@ export const useGuidedReservationPlanSync = ({
           ...reservationPlan,
           clientDataVersion: getCurrentKnownClientDataVersion() || undefined
         });
-        if (!responseIsCurrent()) {
-          logEvent(`${args.logPrefix}.reservationPlan.response.stale`, {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            success: reservationResult.success === true,
-            requestEpoch: args.requestEpoch || null,
-            latestEpoch: reservationSyncEpochRef.current
-          });
-          return { success: true, applied: true, stale: true };
-        }
-        if (!reservationResult.success) {
-          const availability = Array.isArray(reservationResult.availability)
-            ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
-            : [];
-          const rejectedReservations = buildRejectedStepReservationEntries({
-            plan: reservationPlan,
-            availability
-          });
-          if (availability.length) {
-            const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
-              dataSourceConfigs: guidedDataSourceConfigs,
-              language,
-              availability
-            });
-            logEvent(`${args.logPrefix}.reservationPlan.rejected.cacheSync`, {
-              stepId: args.stepId,
-              recordId: args.recordId,
-              updatedRows: cacheSync.updatedRows,
-              updatedDataSourceIds: cacheSync.updatedDataSourceIds,
-              rejectedReservations: rejectedReservations.length
-            });
-            if (
-              typeof window !== 'undefined' &&
-              typeof window.dispatchEvent === 'function' &&
-              typeof CustomEvent === 'function'
-            ) {
-              const detail: GuidedStepReservationAvailabilityEventDetail = {
-                stepId: args.stepId,
-                recordId: args.recordId,
-                availability,
-                rejectedReservations
-              };
-              window.dispatchEvent(
-                new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
-                  GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-                  { detail }
-                )
-              );
-            }
-          }
-          const primaryAvailability =
-            availability.length
-              ? (availability[0] as InventoryAvailabilitySnapshot)
-              : null;
-          const message = buildReservationFailureMessage(
-            resolveUserFacingErrorMessage(
-              reservationResult,
-              reservationResult.message ||
-                tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.')
-            ) || '',
-            tSystem('inventory.reservationUpdateFailed', languageRef.current, 'Failed to update the reservation.'),
-            tSystem(
-              'inventory.reservationUpdateFailedDetail',
-              languageRef.current,
-              "We couldn't update the reservation properly. Please try again."
-            ),
-            {
-              availability: primaryAvailability,
-              itemId: primaryAvailability?.resourceItemId,
-              itemLabel: resolveReservationDisplayLabelFromCachedDataSources({
-                dataSourceConfigs: guidedDataSourceConfigs,
-                language,
-                availability: primaryAvailability
-              })
-            }
-          );
-          logEvent(`${args.logPrefix}.reservationPlan.failed`, {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            message,
-            conflict: reservationResult.conflict === true
-          });
-          await openConfiguredConfirmDialog({
-            dialog: {
-              title: tSystem('common.notice', languageRef.current, 'Notice'),
-              message,
-              confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
-              showCancel: false,
-              showCloseButton: true,
-              dismissOnBackdrop: true
-            },
-            kind: `${args.dialogKind}.reservationPlan`,
-            refId: args.stepId
-          });
-          return { success: false, message, applied: true };
-        }
-        logEvent(`${args.logPrefix}.reservationPlan.done`, {
+        return adoptGuidedStepReservationPlanResult({
           stepId: args.stepId,
           recordId: args.recordId,
-          reservationsApplied: reservationResult.reservationsApplied || 0,
-          reservationsReleased: reservationResult.reservationsReleased || 0
+          logPrefix: args.logPrefix,
+          dialogKind: args.dialogKind,
+          plan: reservationPlan,
+          reservationResult,
+          requestEpoch: args.requestEpoch,
+          sessionId: args.sessionId
         });
-        const adoptedSourceMeta = resolveReservationPlanSourceMetaAdoption({
-          result: reservationResult,
-          currentRecordId: args.recordId,
-          currentDataVersion: getCurrentKnownClientDataVersion(),
-          fallbackRecordId: args.recordId
-        });
-        if (adoptedSourceMeta) {
-          applySuccessfulSubmissionState({
-            recordId: args.recordId,
-            response: { meta: adoptedSourceMeta }
-          });
-          logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.sync`, {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            dataVersion: adoptedSourceMeta.dataVersion || null,
-            rowNumber: adoptedSourceMeta.rowNumber || null
-          });
-        } else {
-          logEvent(`${args.logPrefix}.reservationPlan.sourceMeta.skip`, {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            matched: reservationResult.sourceClientDataVersionMatched === true,
-            sourceDataVersion: Number(reservationResult.sourceRecordMeta?.dataVersion) || null,
-            currentDataVersion: getCurrentKnownClientDataVersion() || null
-          });
-        }
-        markRecordFreshnessServerTouch({ reason: 'record.reservationPlan', recordId: args.recordId });
-        markDataSourceFreshnessServerTouch({ reason: 'datasource.reservationPlan', stepId: args.stepId });
-        const availability = Array.isArray(reservationResult.availability)
-          ? (reservationResult.availability as InventoryAvailabilitySnapshot[]).filter(Boolean)
-          : [];
-        let availabilityCacheUpdatedRows = 0;
-        if (availability.length) {
-          const cacheSync = applyInventoryAvailabilitySnapshotsToCachedDataSources({
-            dataSourceConfigs: guidedDataSourceConfigs,
-            language,
-            availability
-          });
-          availabilityCacheUpdatedRows = cacheSync.updatedRows;
-          logEvent(`${args.logPrefix}.reservationPlan.cacheSync`, {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            updatedRows: cacheSync.updatedRows,
-            updatedDataSourceIds: cacheSync.updatedDataSourceIds
-          });
-        }
-        if (
-          Number(reservationResult.reservationsReleased || 0) > 0 ||
-          (availability.length > 0 && availabilityCacheUpdatedRows <= 0)
-        ) {
-          refreshGuidedDataSourcesInBackground({
-            reason: `${args.logPrefix}.reservationPlan.refresh`,
-            forceRefresh: true,
-            retryDelaysMs: [0, 1500]
-          });
-        }
-        if (
-          availability.length &&
-          typeof window !== 'undefined' &&
-          typeof window.dispatchEvent === 'function' &&
-          typeof CustomEvent === 'function'
-        ) {
-          const detail: GuidedStepReservationAvailabilityEventDetail = {
-            stepId: args.stepId,
-            recordId: args.recordId,
-            availability
-          };
-          window.dispatchEvent(
-            new CustomEvent<GuidedStepReservationAvailabilityEventDetail>(
-              GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-              { detail }
-            )
-          );
-        }
-        return { success: true, applied: true };
       } catch (err: any) {
         if (!responseIsCurrent()) {
           logEvent(`${args.logPrefix}.reservationPlan.exception.stale`, {
@@ -466,16 +554,13 @@ export const useGuidedReservationPlanSync = ({
       }
     },
     [
-      applySuccessfulSubmissionState,
+      adoptGuidedStepReservationPlanResult,
       getCurrentKnownClientDataVersion,
       guidedDataSourceConfigs,
       language,
       languageRef,
       logEvent,
-      markDataSourceFreshnessServerTouch,
-      markRecordFreshnessServerTouch,
       openConfiguredConfirmDialog,
-      refreshGuidedDataSourcesInBackground,
       reservationSyncEpochRef,
       resolveGuidedStepReservationPlan,
       resolveLogMessage,
@@ -490,6 +575,7 @@ export const useGuidedReservationPlanSync = ({
       plan: InventoryReservationPlanRequest;
       logPrefix: string;
       dialogKind: string;
+      requestEpoch?: number;
     }): Promise<GuidedReservationSyncOutcome> => {
       const sessionId = recordSessionRef.current;
       const fingerprint = buildInventoryReservationPlanFingerprint(args.plan);
@@ -510,8 +596,11 @@ export const useGuidedReservationPlanSync = ({
           });
         }
       }
-      const requestEpoch = reservationSyncEpochRef.current + 1;
-      reservationSyncEpochRef.current = requestEpoch;
+      const providedRequestEpoch = Number(args.requestEpoch);
+      const requestEpoch = Number.isFinite(providedRequestEpoch) && providedRequestEpoch > 0
+        ? providedRequestEpoch
+        : issueReservationRequestEpoch(reservationSyncEpochRef.current);
+      reservationSyncEpochRef.current = Math.max(reservationSyncEpochRef.current, requestEpoch);
       reservationSyncMetaRef.current = {
         recordId: args.recordId,
         stepId: args.stepId,
@@ -535,7 +624,8 @@ export const useGuidedReservationPlanSync = ({
           recordId: args.recordId,
           stepId: args.stepId,
           sessionId,
-          stale: result.stale || undefined
+          stale: result.stale || undefined,
+          freshness: result.freshness || null
         };
         if (result.stale) {
           logEvent(`${args.logPrefix}.reservationPlan.outcome.stale`, {
@@ -614,6 +704,7 @@ export const useGuidedReservationPlanSync = ({
   );
 
   return {
+    adoptGuidedStepReservationPlanResult,
     resolveGuidedStepReservationPlan,
     queueGuidedStepReservationPlan
   };

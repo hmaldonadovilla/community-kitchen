@@ -21,6 +21,7 @@ import {
 } from '../types';
 import type {
   FollowupActionResult,
+  InventoryReservationPlanRequest,
   InventoryReservationPlanScope
 } from '../../types';
 import {
@@ -46,6 +47,7 @@ import {
   getRecordVersionApi,
   seedSummaryHtmlTemplateCache,
   resolveUserFacingErrorMessage,
+  syncGuidedStepReservationDraftApi,
   isBackendFunctionRoutedToHttp
 } from './api';
 import { AppHeader } from './components/app/AppHeader';
@@ -147,6 +149,7 @@ import {
   shouldRealignGuidedStepAfterStaleSync
 } from './app/recordFreshness';
 import { buildRecordSyncComparableFingerprint } from './app/recordSyncReview';
+import { buildSuccessfulSubmissionSnapshot } from './app/submissionSnapshotState';
 import {
   buildDataSourceFreshnessSnapshotSignature,
   primeDataSourceFreshnessWatchBaselines,
@@ -301,10 +304,18 @@ import {
   mergeGuidedReservationLineItemsFromSnapshot
 } from './features/reservations/stepReservationPlan';
 import {
+  issueReservationRequestEpoch,
+  shouldApplyReservationPlanResponse
+} from './features/reservations/reservationResponsePolicy';
+import {
   useGuidedReservationPlanSync,
   type GuidedReservationSyncMeta,
   type GuidedReservationSyncOutcome
 } from './features/reservations/hooks/useGuidedReservationPlanSync';
+import type {
+  GuidedReservationSyncFreshness,
+  GuidedReservationSyncWaitResult
+} from './features/reservations/domain/reservationSyncFreshness';
 import {
   hasEnteredLineItemValues,
   hasEnteredTopLevelValues,
@@ -1962,10 +1973,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const guidedStepBackgroundSyncActiveFingerprintRef = useRef<string>('');
   const guidedStepBackgroundSyncPendingFingerprintRef = useRef<string>('');
   const guidedStepImmediateSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const guidedStepLastReservationSyncFreshnessRef = useRef<GuidedReservationSyncFreshness | null>(null);
   const guidedStepImmediateSyncPendingRef = useRef<{
     stepId: string;
     reason: string;
     sessionId: number;
+    reservationEpoch: number;
     fingerprint: string;
     persistSnapshot: boolean;
     snapshotLineItems?: LineItemState;
@@ -9323,25 +9336,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordRowNumberRef.current = nextRowNumber;
       }
 
-      setSelectedRecordSnapshot(prev => {
-        if (prev && prev.id && prev.id !== recordId) return prev;
-        if (!prev) return prev;
-        const nextSnapshot = {
-          ...prev,
-          id: recordId,
-          createdAt: nextCreatedAt || prev.createdAt,
-          updatedAt: nextUpdatedAt || prev.updatedAt,
-          status: nextStatus || prev.status,
-          pdfUrl: nextPdfUrl || prev.pdfUrl,
-          dataVersion: Number.isFinite(nextDataVersion) ? nextDataVersion : (prev as any).dataVersion,
-          __rowNumber: Number.isFinite(nextRowNumber) ? nextRowNumber : (prev as any).__rowNumber,
-          values: nextPayloadValues && Object.keys(nextPayloadValues).length
-            ? { ...(prev.values || {}), ...nextPayloadValues }
-            : prev.values
-        };
-        selectedRecordSnapshotRef.current = nextSnapshot as WebFormSubmission;
-        return nextSnapshot;
+      const nextSnapshot = buildSuccessfulSubmissionSnapshot({
+        currentSnapshot: selectedRecordSnapshotRef.current,
+        recordId,
+        values: nextPayloadValues,
+        status: nextStatus,
+        createdAt: nextCreatedAt,
+        updatedAt: nextUpdatedAt,
+        pdfUrl: nextPdfUrl,
+        dataVersion: nextDataVersion,
+        rowNumber: nextRowNumber
       });
+      if (nextSnapshot) {
+        selectedRecordSnapshotRef.current = nextSnapshot;
+        setSelectedRecordSnapshot(prev => (prev && prev.id && prev.id !== recordId ? prev : nextSnapshot));
+      }
 
       upsertListCacheRow({
         recordId,
@@ -9454,7 +9463,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       force?: boolean;
       statusOnlyWhenClean?: boolean;
       skipReservationReconciliationWhenAlreadyDone?: boolean;
-    }): Promise<{ success: boolean; response?: any; payload?: any; recordId?: string; message?: string }> => {
+      reservationDraftSync?: {
+        stepId: string;
+        recordId: string;
+        plan: InventoryReservationPlanRequest;
+        requestEpoch: number;
+        sessionId: number;
+      };
+    }): Promise<{
+      success: boolean;
+      response?: any;
+      payload?: any;
+      recordId?: string;
+      message?: string;
+      stale?: boolean;
+    }> => {
       if (autoSaveTimerRef.current) {
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
@@ -9494,7 +9517,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           draftSaveRequestInFlight: draftSaveRequestInFlightRef.current,
           autoSaveDirty: autoSaveDirtyRef.current,
           autoSaveQueued: autoSaveQueuedRef.current,
-          force: args.force
+          force: args.force,
+          reservationDraftSync: Boolean(args.reservationDraftSync)
         })
       ) {
         logEvent('snapshot.save.skipped.cleanDraft', {
@@ -9627,12 +9651,28 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           );
         }
       }
-      const runSnapshotRequest = () =>
-        args.mode === 'draft'
-          ? runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
-              submitCurrentRecordMutation(`snapshot:${args.reason}`, nextPayload)
-            )
-          : submitCurrentRecordMutation(`submit:${args.reason}`, payload);
+      const runSnapshotRequest = () => {
+        if (args.mode !== 'draft') {
+          return submitCurrentRecordMutation(`submit:${args.reason}`, payload);
+        }
+        if (args.reservationDraftSync) {
+          return submitCurrentRecordMutation(`snapshot:${args.reason}`, payload, (preparedPayload: any) =>
+            syncGuidedStepReservationDraftApi({
+              stepId: args.reservationDraftSync?.stepId,
+              clientMutationSeq: args.reservationDraftSync?.requestEpoch,
+              reservationPlan: {
+                ...(args.reservationDraftSync?.plan as InventoryReservationPlanRequest),
+                clientDataVersion: resolveCurrentClientDataVersion((preparedPayload as any)?.__ckClientDataVersion) || undefined,
+                refreshMode: 'none'
+              },
+              draftPayload: preparedPayload
+            })
+          );
+        }
+        return runCoalescedDraftSaveRequest(`snapshot:${args.reason}`, payload, (nextPayload: any) =>
+          submitCurrentRecordMutation(`snapshot:${args.reason}`, nextPayload)
+        );
+      };
       let response: any;
       if (args.mode === 'draft') {
         for (let attemptIndex = 0; attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length; attemptIndex += 1) {
@@ -9686,6 +9726,33 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId,
           message: (response?.message || 'Failed to save the current record.').toString()
         };
+      }
+      if (
+        args.reservationDraftSync &&
+        !shouldApplyReservationPlanResponse({
+          requestEpoch: args.reservationDraftSync.requestEpoch,
+          latestEpoch: reservationSyncEpochRef.current,
+          requestSessionId: args.reservationDraftSync.sessionId,
+          currentSessionId: recordSessionRef.current,
+          requestRecordId: args.reservationDraftSync.recordId,
+          currentRecordId:
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || ''
+        })
+      ) {
+        autoSaveDirtyRef.current = true;
+        autoSaveQueuedRef.current = true;
+        setDraftSave({ phase: 'dirty' });
+        logEvent('snapshot.save.skipped.staleReservationDraftSync', {
+          reason: args.reason,
+          recordId: recordId || args.existingRecordId || null,
+          requestEpoch: args.reservationDraftSync.requestEpoch,
+          latestEpoch: reservationSyncEpochRef.current
+        });
+        return { success: true, response, payload, recordId, stale: true };
       }
       if (recordId) {
         applySuccessfulSubmissionState({
@@ -9820,6 +9887,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const {
+    adoptGuidedStepReservationPlanResult,
     resolveGuidedStepReservationPlan,
     queueGuidedStepReservationPlan
   } = useGuidedReservationPlanSync({
@@ -9879,9 +9947,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return;
       }
 
+      const reservationEpoch = issueReservationRequestEpoch(reservationSyncEpochRef.current);
+      reservationSyncEpochRef.current = reservationEpoch;
       guidedStepImmediateSyncPendingRef.current = {
         ...args,
         sessionId,
+        reservationEpoch,
         fingerprint: queueFingerprint,
         persistSnapshot,
         snapshotLineItems
@@ -9891,7 +9962,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (guidedStepImmediateSyncPromiseRef.current) {
         logEvent('guidedStep.liveSync.queued', {
           stepId: args.stepId,
-          reason: args.reason
+          reason: args.reason,
+          reservationEpoch
         });
         return;
       }
@@ -9902,6 +9974,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           guidedStepImmediateSyncPendingRef.current = null;
           guidedStepImmediateSyncPendingFingerprintRef.current = '';
           guidedStepImmediateSyncActiveFingerprintRef.current = next.fingerprint;
+          guidedStepLastReservationSyncFreshnessRef.current = null;
 
           let recordId =
             resolveExistingRecordId({
@@ -9963,36 +10036,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reason: next.reason,
             recordId,
             reservations: reservationPlan.reservations?.length || 0,
-            managedScopes: reservationPlan.managedScopes?.length || 0
+            managedScopes: reservationPlan.managedScopes?.length || 0,
+            reservationEpoch: next.reservationEpoch
           });
-
-          const reservationOutcome = await queueGuidedStepReservationPlan({
-            stepId: next.stepId,
-            recordId,
-            plan: reservationPlan,
-            logPrefix: 'guidedStep.liveSync',
-            dialogKind: 'guidedStepLiveSync'
-          });
-          if (recordSessionRef.current !== next.sessionId) continue;
-          if (reservationOutcome.stale) {
-            logEvent('guidedStep.liveSync.skipped.staleReservationOutcome', {
-              stepId: next.stepId,
-              reason: next.reason,
-              recordId
-            });
-            continue;
-          }
-          if (!reservationOutcome.success) {
-            logEvent('guidedStep.liveSync.blocked.reservationFailed', {
-              stepId: next.stepId,
-              reason: next.reason,
-              recordId,
-              message: reservationOutcome.message || null
-            });
-            continue;
-          }
 
           if (!next.persistSnapshot) {
+            const reservationOutcome = await queueGuidedStepReservationPlan({
+              stepId: next.stepId,
+              recordId,
+              plan: reservationPlan,
+              logPrefix: 'guidedStep.liveSync',
+              dialogKind: 'guidedStepLiveSync',
+              requestEpoch: next.reservationEpoch
+            });
+            if (recordSessionRef.current !== next.sessionId) continue;
+            if (reservationOutcome.stale) {
+              logEvent('guidedStep.liveSync.skipped.staleReservationOutcome', {
+                stepId: next.stepId,
+                reason: next.reason,
+                recordId,
+                reservationEpoch: next.reservationEpoch
+              });
+              continue;
+            }
+            if (!reservationOutcome.success) {
+              logEvent('guidedStep.liveSync.blocked.reservationFailed', {
+                stepId: next.stepId,
+                reason: next.reason,
+                recordId,
+                message: reservationOutcome.message || null
+              });
+              continue;
+            }
+            guidedStepLastReservationSyncFreshnessRef.current = reservationOutcome.freshness || null;
             logEvent('guidedStep.liveSync.done', {
               stepId: next.stepId,
               reason: next.reason,
@@ -10010,9 +10086,58 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             reason: `${next.reason}.reservationConfirmed`,
             mode: 'draft',
             existingRecordId: recordId,
-            snapshotOverride
+            snapshotOverride,
+            reservationDraftSync: {
+              stepId: next.stepId,
+              recordId,
+              plan: reservationPlan,
+              requestEpoch: next.reservationEpoch,
+              sessionId: next.sessionId
+            }
           });
           if (recordSessionRef.current !== next.sessionId) continue;
+          if (snapshotResult.stale) {
+            logEvent('guidedStep.liveSync.skipped.staleSnapshotOutcome', {
+              stepId: next.stepId,
+              reason: next.reason,
+              recordId,
+              reservationEpoch: next.reservationEpoch
+            });
+            continue;
+          }
+          const reservationResult = snapshotResult.response?.reservationResult;
+          if (reservationResult) {
+            const reservationOutcome = await adoptGuidedStepReservationPlanResult({
+              stepId: next.stepId,
+              recordId,
+              plan: reservationPlan,
+              reservationResult,
+              logPrefix: 'guidedStep.liveSync',
+              dialogKind: 'guidedStepLiveSync',
+              requestEpoch: next.reservationEpoch,
+              sessionId: next.sessionId
+            });
+            if (recordSessionRef.current !== next.sessionId) continue;
+            if (reservationOutcome.stale) {
+              logEvent('guidedStep.liveSync.skipped.staleReservationOutcome', {
+                stepId: next.stepId,
+                reason: next.reason,
+                recordId,
+                reservationEpoch: next.reservationEpoch
+              });
+              continue;
+            }
+            if (!reservationOutcome.success) {
+              logEvent('guidedStep.liveSync.blocked.reservationFailed', {
+                stepId: next.stepId,
+                reason: next.reason,
+                recordId,
+                message: reservationOutcome.message || null
+              });
+              continue;
+            }
+            guidedStepLastReservationSyncFreshnessRef.current = reservationOutcome.freshness || null;
+          }
           if (!snapshotResult.success) {
             const message = (snapshotResult.message || 'Could not save the latest changes.').toString();
             if (isSubmissionStaleMessage(message)) {
@@ -10066,6 +10191,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
     },
     [
+      adoptGuidedStepReservationPlanResult,
       autoSaveDebounceMs,
       buildPersistedDraftStateFingerprint,
       ensureDraftRecordId,
@@ -10238,7 +10364,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async (args: {
       recordId: string;
       reason: string;
-    }): Promise<{ ok: boolean; message?: string }> => {
+    }): Promise<GuidedReservationSyncWaitResult> => {
       const recordId = (args.recordId || '').toString().trim();
       if (!recordId) return { ok: true };
       const meta = reservationSyncMetaRef.current;
@@ -10278,7 +10404,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ),
         recordId,
         stepId: meta.stepId,
-        sessionId: meta.sessionId
+        sessionId: meta.sessionId,
+        freshness: null
       }));
       if (!outcome.success) {
         setRequestedGuidedStepId(outcome.stepId || null);
@@ -10290,10 +10417,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               'inventory.reservationUpdateFailedDetail',
               languageRef.current,
               "We couldn't update the reservation properly. Please try again."
-            )
+          )
         };
       }
-      return { ok: true };
+      return { ok: true, waitedForSync: true, freshness: outcome.freshness || null };
     },
     [logEvent]
   );
@@ -10303,10 +10430,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       recordId: string;
       stepId?: string;
       reason: string;
-    }): Promise<{ ok: boolean; message?: string }> => {
+    }): Promise<GuidedReservationSyncWaitResult> => {
       const recordId = (args.recordId || '').toString().trim();
       if (!recordId) return { ok: true };
+      let waitedForImmediateSync = false;
+      let immediateFreshness: GuidedReservationSyncFreshness | null = null;
       if (guidedStepImmediateSyncPromiseRef.current) {
+        waitedForImmediateSync = true;
         logEvent('guidedStep.liveSync.wait.start', {
           reason: args.reason,
           recordId,
@@ -10318,11 +10448,18 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           recordId,
           stepId: args.stepId || null
         });
+        immediateFreshness = guidedStepLastReservationSyncFreshnessRef.current;
       }
-      return waitForPendingReservationSync({
+      const reservationWait = await waitForPendingReservationSync({
         recordId,
         reason: args.reason
       });
+      if (!reservationWait.ok) return reservationWait;
+      return {
+        ...reservationWait,
+        waitedForSync: reservationWait.waitedForSync || waitedForImmediateSync,
+        freshness: reservationWait.freshness || immediateFreshness || null
+      };
     },
     [logEvent, waitForPendingReservationSync]
   );

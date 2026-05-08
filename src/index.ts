@@ -2,6 +2,7 @@ import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
 import {
+  GuidedStepReservationDraftSyncRequest,
   InventoryReservationPlanRequest,
   InventoryReservationMutationRequest,
   InventoryReservationReconciliationRequest,
@@ -260,6 +261,12 @@ export function applyInventoryReservationPlan(request: InventoryReservationPlanR
   return service.applyInventoryReservationPlan(request);
 }
 
+export function syncGuidedStepReservationDraft(request: GuidedStepReservationDraftSyncRequest): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.syncGuidedStepReservationDraft(request);
+}
+
 export function reconcileInventoryReservations(request: InventoryReservationReconciliationRequest): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
@@ -350,7 +357,7 @@ export function rebuildIndexes(formKey?: string): any {
   try {
     const msg = res?.success ? (res.message || 'Index rebuild complete.') : (res?.message || 'Index rebuild failed.');
     Browser.msgBox('Rebuild Indexes', msg.toString(), Browser.Buttons.OK);
-  } catch (_) {
+  } catch {
     // ignore
   }
   return res;

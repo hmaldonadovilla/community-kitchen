@@ -15,6 +15,8 @@ export const resolveReservationSourceKeyFieldId = (config: any): string =>
   normalizeIdValue(
     config?.availability?.sourceKeyFieldId ||
       config?.dataSource?.rowKeyFieldId ||
+      config?.dataSource?.mapping?.value ||
+      config?.mapping?.value ||
       config?.outputKeyFieldId ||
       config?.rowKeyFieldId
   );

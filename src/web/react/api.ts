@@ -3,6 +3,8 @@ import {
   DataSourceConfig,
   FollowupActionResult,
   FormConfigExport,
+  GuidedStepReservationDraftSyncRequest,
+  GuidedStepReservationDraftSyncResult,
   InventoryReservationPlanRequest,
   InventoryReservationPlanResult,
   InventoryReservationMutationRequest,
@@ -1208,6 +1210,11 @@ export const applyInventoryReservationPlanApi = (
   request: InventoryReservationPlanRequest
 ): Promise<InventoryReservationPlanResult> =>
   invokeTransport<InventoryReservationPlanResult>('applyInventoryReservationPlan', request);
+
+export const syncGuidedStepReservationDraftApi = (
+  request: GuidedStepReservationDraftSyncRequest
+): Promise<GuidedStepReservationDraftSyncResult> =>
+  invokeDriveUploadTransport<GuidedStepReservationDraftSyncResult>('syncGuidedStepReservationDraft', request);
 
 export const reconcileInventoryReservationsApi = (
   request: InventoryReservationReconciliationRequest

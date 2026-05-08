@@ -1,4 +1,7 @@
-import { shouldApplyReservationPlanResponse } from '../../../src/web/react/features/reservations/reservationResponsePolicy';
+import {
+  issueReservationRequestEpoch,
+  shouldApplyReservationPlanResponse
+} from '../../../src/web/react/features/reservations/reservationResponsePolicy';
 
 describe('shouldApplyReservationPlanResponse', () => {
   test('allows the latest response for the same session and record', () => {
@@ -51,5 +54,22 @@ describe('shouldApplyReservationPlanResponse', () => {
         currentRecordId: ''
       })
     ).toBe(true);
+  });
+
+  test('issues a new epoch when a user change is queued before the previous response returns', () => {
+    const inFlightEpoch = issueReservationRequestEpoch(0);
+    const queuedEpoch = issueReservationRequestEpoch(inFlightEpoch);
+
+    expect(queuedEpoch).toBe(2);
+    expect(
+      shouldApplyReservationPlanResponse({
+        requestEpoch: inFlightEpoch,
+        latestEpoch: queuedEpoch,
+        requestSessionId: 9,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: 'record-1'
+      })
+    ).toBe(false);
   });
 });

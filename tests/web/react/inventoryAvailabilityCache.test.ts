@@ -91,6 +91,58 @@ describe('inventory availability cache sync', () => {
     );
   });
 
+  test('uses datasource mapping value as the reservation item key when rowKeyFieldId is not present', async () => {
+    const dataSource = {
+      id: 'Leftover Inventory Data',
+      formKey: 'Config: Leftover Inventory',
+      sheetId: 'sheet-1',
+      mode: 'options',
+      mapping: {
+        value: 'LEFTOVER_ID'
+      }
+    } as any;
+
+    await fetchDataSource(dataSource, 'EN');
+
+    const result = applyInventoryAvailabilitySnapshotsToCachedDataSources({
+      dataSourceConfigs: [dataSource],
+      language: 'EN',
+      availability: [
+        {
+          resourceFormKey: 'Config: Leftover Inventory',
+          resourceRecordId: 'leftover::1',
+          resourceItemId: 'LP-21',
+          quantityFieldId: 'LEFTOVER_QTY',
+          reservedQuantityFieldId: 'LEFTOVER_RESERVED_QTY',
+          statusFieldId: 'LEFTOVER_STATUS',
+          unitFieldId: 'LEFTOVER_UNIT',
+          remainingQuantity: 250,
+          reservedQuantity: 2,
+          freeQuantity: 250,
+          currentReservationQuantity: 2,
+          currentRecordReservedQuantity: 2,
+          unit: 'gr',
+          status: 'available'
+        }
+      ]
+    });
+
+    const cached = peekCachedDataSource(dataSource, 'EN') as any;
+
+    expect(result).toEqual({
+      updatedDataSourceIds: ['Leftover Inventory Data'],
+      updatedRows: 1
+    });
+    expect(cached.items[0]).toEqual(
+      expect.objectContaining({
+        LEFTOVER_QTY: 250,
+        LEFTOVER_RESERVED_QTY: 2,
+        LEFTOVER_STATUS: 'available',
+        __ckCurrentRecordReservedQuantity: 2
+      })
+    );
+  });
+
   test('ignores non-matching datasource configs', async () => {
     const dataSource = {
       id: 'Recipes Data',

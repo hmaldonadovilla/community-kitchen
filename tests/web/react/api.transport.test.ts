@@ -15,6 +15,7 @@ import {
   resolveUserFacingErrorMessage,
   seedSummaryHtmlTemplateCache,
   submit,
+  syncGuidedStepReservationDraftApi,
   triggerFollowup,
   triggerFollowupBatch,
   uploadFilesApi,
@@ -314,6 +315,32 @@ describe('react api transport', () => {
     await applyInventoryReservationPlanApi(payload);
 
     expect(invoke).toHaveBeenCalledWith('applyInventoryReservationPlan', payload);
+  });
+
+  test('routes guided reservation draft sync through the backend transport', async () => {
+    const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
+    configureBackendTransport({ invoke });
+
+    const payload: any = {
+      stepId: 'leftoverForm',
+      clientMutationSeq: 7,
+      reservationPlan: {
+        sourceFormKey: 'Config: Meal Production',
+        sourceRecordId: 'meal-1',
+        managedScopes: [],
+        reservations: []
+      },
+      draftPayload: {
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        id: 'meal-1',
+        values: {}
+      }
+    };
+
+    await syncGuidedStepReservationDraftApi(payload);
+
+    expect(invoke).toHaveBeenCalledWith('syncGuidedStepReservationDraft', payload);
   });
 
   test('routes Cloud Run supported follow-up batches through the configured transport', async () => {

@@ -11,6 +11,7 @@ import type {
 } from '../../../types';
 import type { LineItemOverlaySessionConfig, OverlayCloseConfirmLike } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
+import type { GuidedReservationSyncWaitResult } from '../../features/reservations/domain/reservationSyncFreshness';
 import type { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
 import type { LineOverlayState } from './overlays/LineSelectOverlay';
 
@@ -170,7 +171,7 @@ export interface LineItemGroupQuestionCtx {
     recordId: string;
     stepId?: string;
     reason: string;
-  }) => Promise<{ ok: boolean; message?: string }>;
+  }) => Promise<GuidedReservationSyncWaitResult>;
   waitForPendingSharedDataMutations?: (args: {
     targetFormKeys: string[];
     recordId?: string;

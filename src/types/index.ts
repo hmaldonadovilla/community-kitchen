@@ -669,6 +669,28 @@ export interface InventoryReservationPlanResult {
   sourceClientDataVersionMatched?: boolean;
 }
 
+export interface GuidedStepReservationDraftSyncRequest {
+  stepId?: string;
+  clientMutationSeq?: number;
+  reservationPlan: InventoryReservationPlanRequest;
+  draftPayload: WebFormSubmission;
+}
+
+export interface GuidedStepReservationDraftSyncResult {
+  success: boolean;
+  message?: string;
+  stepId?: string;
+  clientMutationSeq?: number;
+  reservationResult?: InventoryReservationPlanResult;
+  saveResult?: {
+    success: boolean;
+    message?: string;
+    meta?: RecordMetadata;
+  };
+  meta?: RecordMetadata;
+  availability?: InventoryAvailabilitySnapshot[];
+}
+
 export interface InventoryReservationReconciliationRequest {
   sourceFormKey: string;
   sourceRecordId: string;

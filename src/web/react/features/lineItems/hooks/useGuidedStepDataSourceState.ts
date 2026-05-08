@@ -29,6 +29,10 @@ import {
   applyInventoryAvailabilitySnapshotToRow,
   normalizeInventoryAvailabilitySnapshotForDisplay
 } from '../../reservations/availabilitySnapshots';
+import {
+  shouldUseReservationSyncFreshnessForDataSource,
+  type GuidedReservationSyncWaitResult
+} from '../../reservations/domain/reservationSyncFreshness';
 import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
 
 type GuidedStepReservationDraftSyncQueue = (args: {
@@ -42,7 +46,7 @@ type GuidedStepReservationDraftSyncWaiter = (args: {
   recordId: string;
   stepId?: string;
   reason: string;
-}) => Promise<{ ok: boolean; message?: string }>;
+}) => Promise<GuidedReservationSyncWaitResult>;
 
 type PendingSharedDataMutationsWaiter = (args: {
   targetFormKeys: string[];
@@ -461,6 +465,7 @@ export const useGuidedStepDataSourceState = ({
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
       beginStepDataSourceLoading(loadingEntries);
       try {
+        let reservationSyncFreshness: GuidedReservationSyncWaitResult['freshness'] = null;
         if (
           shouldWaitForReservationSyncBeforeBootstrap &&
           normalizedRecordId &&
@@ -485,10 +490,13 @@ export const useGuidedStepDataSourceState = ({
             });
             return false;
           }
+          reservationSyncFreshness = waitResult.freshness || null;
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
             groupId,
             stepId: currentGuidedStepId || null,
-            recordId: normalizedRecordId
+            recordId: normalizedRecordId,
+            freshnessDataSourceIds: reservationSyncFreshness?.dataSourceIds || [],
+            freshnessUpdatedRows: reservationSyncFreshness?.updatedRows || 0
           });
         }
 
@@ -527,15 +535,38 @@ export const useGuidedStepDataSourceState = ({
         }
 
         const pendingFetches = configEntries
-          .filter(({ dataSource, shouldForceRefresh }) => shouldForceRefresh || !peekCachedDataSource(dataSource, language))
-          .map(({ dataSource, shouldForceRefresh }) => ({
-            config: dataSource,
-            promise: fetchDataSource(
-              dataSource,
-              language,
-              shouldForceRefresh ? { forceRefresh: true } : undefined
-            ).catch(() => null)
-          }));
+          .map(({ dataSource, shouldForceRefresh }) => {
+            const cachedDataSource = peekCachedDataSource(dataSource, language);
+            const canUseReservationSyncFreshness =
+              shouldForceRefresh &&
+              shouldUseReservationSyncFreshnessForDataSource({
+                freshness: reservationSyncFreshness,
+                recordId: normalizedRecordId,
+                stepId: currentGuidedStepId,
+                dataSource,
+                cachedDataSource
+              });
+            if (canUseReservationSyncFreshness) {
+              onDiagnostic?.('guidedStep.dataSourceBootstrap.fetch.skippedFreshReservationSync', {
+                groupId,
+                stepId: currentGuidedStepId || null,
+                recordId: normalizedRecordId || null,
+                dataSourceId: `${dataSource?.id || ''}`.trim() || 'default',
+                updatedRows: reservationSyncFreshness?.updatedRows || 0
+              });
+              return null;
+            }
+            if (!shouldForceRefresh && cachedDataSource) return null;
+            return {
+              config: dataSource,
+              promise: fetchDataSource(
+                dataSource,
+                language,
+                shouldForceRefresh ? { forceRefresh: true } : undefined
+              ).catch(() => null)
+            };
+          })
+          .filter((entry): entry is { config: any; promise: Promise<any> } => Boolean(entry));
         if (!pendingFetches.length) {
           return true;
         }

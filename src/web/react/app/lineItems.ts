@@ -494,7 +494,7 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
   const buildPathKey = (rootGroupId: string, path: string[]): string =>
     path.length ? `${rootGroupId}::${path.join('::')}` : rootGroupId;
 
-  const effectFieldLookup: Record<string, string> = {};
+  const effectContextLookup: Record<string, string> = {};
   const collectEffectFields = (rootGroupId: string, groupCfg: any, path: string[]) => {
     const fields = (groupCfg?.lineItemConfig?.fields || groupCfg?.fields || []) as any[];
     const subGroups = (groupCfg?.lineItemConfig?.subGroups || groupCfg?.subGroups || []) as any[];
@@ -503,8 +503,9 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
       effects.forEach((eff: any) => {
         if (!eff || eff.type !== 'addLineItemsFromDataSource' || !eff.groupId) return;
         const key = buildPathKey(rootGroupId, [...path, eff.groupId.toString()]);
-        if (!effectFieldLookup[key]) {
-          effectFieldLookup[key] = field.id?.toString?.() || '';
+        if (!effectContextLookup[key]) {
+          const effectId = normalizeMetaString((eff as any)?.id);
+          effectContextLookup[key] = effectId || field.id?.toString?.() || '';
         }
       });
     });
@@ -605,9 +606,10 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
 
       if (path.length && parentRowId && parentGroupKey) {
         const effectKey = buildPathKey(rootGroupId, path);
-        const effectFieldId = effectFieldLookup[effectKey];
-        if (effectFieldId) {
-          row.effectContextId = buildLineContextId(parentGroupKey, parentRowId, effectFieldId);
+        const rowEffectId = normalizeMetaString((values as any)[ROW_SELECTION_EFFECT_ID_KEY]);
+        const effectContextSegment = rowEffectId || effectContextLookup[effectKey];
+        if (effectContextSegment) {
+          row.effectContextId = buildLineContextId(parentGroupKey, parentRowId, effectContextSegment);
         }
       }
 

@@ -5,8 +5,10 @@ export const shouldSkipCleanDraftSnapshotSave = (args: {
   autoSaveDirty: boolean;
   autoSaveQueued: boolean;
   force?: boolean;
+  reservationDraftSync?: boolean;
 }): boolean => {
   if (args.force) return false;
+  if (args.reservationDraftSync) return false;
   return (
     args.mode === 'draft' &&
     !!args.existingRecordId &&

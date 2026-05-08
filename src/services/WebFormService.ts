@@ -16,6 +16,8 @@ import {
   FormConfigExport,
   DataSourceConfig,
   DedupRule,
+  GuidedStepReservationDraftSyncRequest,
+  GuidedStepReservationDraftSyncResult,
   InventoryAvailabilitySnapshot,
   InventoryReservationPlanEntry,
   InventoryReservationPlanRequest,
@@ -3306,6 +3308,73 @@ export class WebFormService {
       return {
         success: false,
         message: (err?.message || 'Could not acquire the reservation transaction lock. Please retry.').toString()
+      };
+    }
+  }
+
+  public syncGuidedStepReservationDraft(
+    request: GuidedStepReservationDraftSyncRequest
+  ): GuidedStepReservationDraftSyncResult {
+    const reservationPlan = request?.reservationPlan;
+    const draftPayload = request?.draftPayload;
+    const sourceFormKey = (reservationPlan?.sourceFormKey || '').toString().trim();
+    const sourceRecordId = (reservationPlan?.sourceRecordId || '').toString().trim();
+    const draftFormKey = (draftPayload?.formKey || (draftPayload as any)?.form || '').toString().trim();
+    const draftRecordId = (draftPayload?.id || '').toString().trim();
+    if (!sourceFormKey || !sourceRecordId || !draftFormKey || !draftRecordId) {
+      return {
+        success: false,
+        message: 'reservationPlan.sourceFormKey, reservationPlan.sourceRecordId, draftPayload.formKey, and draftPayload.id are required.',
+        stepId: request?.stepId,
+        clientMutationSeq: request?.clientMutationSeq
+      };
+    }
+    if (sourceFormKey !== draftFormKey || sourceRecordId !== draftRecordId) {
+      return {
+        success: false,
+        message: 'Reservation plan source and draft payload must refer to the same record.',
+        stepId: request?.stepId,
+        clientMutationSeq: request?.clientMutationSeq
+      };
+    }
+
+    try {
+      return this.withQueuedRecordMutation(sourceFormKey, sourceRecordId, 'syncGuidedStepReservationDraft', () =>
+        this.withDocumentTransactionLock('guidedStep.reservationDraftSync', () => {
+          const reservationResult = this.applyInventoryReservationPlan({
+            ...(reservationPlan as InventoryReservationPlanRequest),
+            refreshMode: 'none'
+          });
+          if (!reservationResult.success) {
+            return {
+              success: false,
+              message: reservationResult.message || 'Failed to update inventory reservations.',
+              stepId: request?.stepId,
+              clientMutationSeq: request?.clientMutationSeq,
+              reservationResult,
+              availability: reservationResult.availability
+            };
+          }
+
+          const saveResult = this.saveSubmissionWithIdDirect(draftPayload as WebFormSubmission);
+          return {
+            success: Boolean(saveResult?.success),
+            message: (saveResult?.message || reservationResult.message || '').toString(),
+            stepId: request?.stepId,
+            clientMutationSeq: request?.clientMutationSeq,
+            reservationResult,
+            saveResult,
+            meta: saveResult?.meta,
+            availability: reservationResult.availability
+          };
+        })
+      );
+    } catch (err: any) {
+      return {
+        success: false,
+        message: (err?.message || 'Could not synchronize reservation and draft changes.').toString(),
+        stepId: request?.stepId,
+        clientMutationSeq: request?.clientMutationSeq
       };
     }
   }

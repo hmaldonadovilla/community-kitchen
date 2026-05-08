@@ -26,6 +26,19 @@ describe('snapshotSave', () => {
     ).toBe(false);
   });
 
+  it('does not skip reservation draft sync saves for clean records', () => {
+    expect(
+      shouldSkipCleanDraftSnapshotSave({
+        mode: 'draft',
+        existingRecordId: 'rec-1',
+        draftSaveRequestInFlight: false,
+        autoSaveDirty: false,
+        autoSaveQueued: false,
+        reservationDraftSync: true
+      })
+    ).toBe(false);
+  });
+
   it('does not skip submit snapshots', () => {
     expect(
       shouldSkipCleanDraftSnapshotSave({

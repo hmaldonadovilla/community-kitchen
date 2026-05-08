@@ -552,6 +552,54 @@ const createRpcHandlers = deps => {
     async saveSubmissionWithId(...args) {
       return submitEffectsRepository.saveSubmissionWithId(args[0]);
     },
+    async syncGuidedStepReservationDraft(...args) {
+      const request = args[0] && typeof args[0] === 'object' ? args[0] : {};
+      const reservationPlan = request.reservationPlan || {};
+      const draftPayload = request.draftPayload || {};
+      const sourceFormKey = toString(reservationPlan.sourceFormKey).trim();
+      const sourceRecordId = toString(reservationPlan.sourceRecordId).trim();
+      const draftFormKey = toString(draftPayload.formKey || draftPayload.form).trim();
+      const draftRecordId = toString(draftPayload.id).trim();
+      if (!sourceFormKey || !sourceRecordId || !draftFormKey || !draftRecordId) {
+        return {
+          success: false,
+          message: 'reservationPlan.sourceFormKey, reservationPlan.sourceRecordId, draftPayload.formKey, and draftPayload.id are required.',
+          stepId: request.stepId,
+          clientMutationSeq: request.clientMutationSeq
+        };
+      }
+      if (sourceFormKey !== draftFormKey || sourceRecordId !== draftRecordId) {
+        return {
+          success: false,
+          message: 'Reservation plan source and draft payload must refer to the same record.',
+          stepId: request.stepId,
+          clientMutationSeq: request.clientMutationSeq
+        };
+      }
+
+      const [saveResult, reservationResult] = await Promise.all([
+        submitEffectsRepository.saveSubmissionWithId(draftPayload),
+        inventoryReservationRepository.applyPlan({
+          ...reservationPlan,
+          refreshMode: 'none'
+        })
+      ]);
+      const success = Boolean(saveResult && saveResult.success) && Boolean(reservationResult && reservationResult.success);
+      return {
+        success,
+        message: success
+          ? (saveResult.message || reservationResult.message || 'Reservation and draft synchronized.')
+          : ((reservationResult && !reservationResult.success && reservationResult.message) ||
+              (saveResult && saveResult.message) ||
+              'Could not synchronize reservation and draft changes.'),
+        stepId: request.stepId,
+        clientMutationSeq: request.clientMutationSeq,
+        reservationResult,
+        saveResult,
+        meta: saveResult && saveResult.meta,
+        availability: reservationResult && reservationResult.availability
+      };
+    },
     async triggerFollowupAction(...args) {
       return followupRepository.triggerFollowupAction(args[0], args[1], args[2], args[3]);
     },

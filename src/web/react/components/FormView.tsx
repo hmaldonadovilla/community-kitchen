@@ -55,6 +55,7 @@ import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
+import type { GuidedReservationSyncWaitResult } from '../features/reservations/domain/reservationSyncFreshness';
 import {
   resolveGuidedClearOnChangeOrderedFieldIdsAction,
   resolveGuidedOrderedQuestionsAction
@@ -420,7 +421,7 @@ interface FormViewProps {
     recordId: string;
     stepId?: string;
     reason: string;
-  }) => Promise<{ ok: boolean; message?: string }>;
+  }) => Promise<GuidedReservationSyncWaitResult>;
   waitForPendingSharedDataMutations?: (args: {
     targetFormKeys: string[];
     recordId?: string;
@@ -854,7 +855,7 @@ const FormView: React.FC<FormViewProps> = ({
       queueGuidedStepReservationDraftSync({
         stepId,
         reason: `managedRowRemoval:${removedRowIds.join(',') || 'unknown'}`,
-        persistSnapshot: false,
+        persistSnapshot: true,
         snapshotLineItems: nextSnapshot
       });
     });
