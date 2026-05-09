@@ -5,7 +5,8 @@ import {
   buildUploadNonTargetFingerprint,
   extractUploadValueFromMeta,
   resolveUploadTransactionTarget,
-  splitUploadValue
+  splitUploadValue,
+  uploadCompletionMatchesCurrentDraft
 } from '../../../src/web/react/app/uploadTransactionState';
 import { resolveUploadBlockUntilSaved } from '../../../src/web/react/app/uploadTransaction';
 
@@ -161,5 +162,26 @@ describe('upload transaction helpers', () => {
 
     expect(targetChanged).toBe(base);
     expect(otherChanged).not.toBe(base);
+  });
+
+  it('matches completed upload saves against the URL-normalized current draft', () => {
+    expect(
+      uploadCompletionMatchesCurrentDraft({
+        completedDraftFingerprint: { recordId: ' rec-1 ', fingerprint: 'abc' },
+        currentDraftFingerprint: { recordId: 'rec-1', fingerprint: 'abc' }
+      })
+    ).toBe(true);
+    expect(
+      uploadCompletionMatchesCurrentDraft({
+        completedDraftFingerprint: { recordId: 'rec-1', fingerprint: 'abc' },
+        currentDraftFingerprint: { recordId: 'rec-1', fingerprint: 'def' }
+      })
+    ).toBe(false);
+    expect(
+      uploadCompletionMatchesCurrentDraft({
+        completedDraftFingerprint: { recordId: 'rec-1', fingerprint: 'abc' },
+        currentDraftFingerprint: { recordId: 'rec-2', fingerprint: 'abc' }
+      })
+    ).toBe(false);
   });
 });

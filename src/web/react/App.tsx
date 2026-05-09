@@ -244,7 +244,8 @@ import {
   buildUploadNonTargetFingerprint,
   extractUploadValueFromMeta,
   resolveUploadTransactionTarget,
-  splitUploadValue
+  splitUploadValue,
+  uploadCompletionMatchesCurrentDraft
 } from './app/uploadTransactionState';
 import {
   buildCompletedDraftSaveFingerprint,
@@ -919,6 +920,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             dedupDeleteEnabled
         );
 
+        if (isTopDedupKeyChange) {
+          dedupDeleteOnKeyChangePendingRef.current = true;
+          logEvent('dedupDeleteOnKeyChange.pending.armed', {
+            source: 'fieldChangeDialog.confirm',
+            fieldId: topFieldId,
+            fieldPath: pending.fieldPath || null
+          });
+        }
+
         if (shouldApplyClearOnChange || isTopDedupKeyChange) {
           const activeSaveWait = await waitForActiveDraftSaveTransactions(
             `fieldChangeDialog.confirm.${pending.fieldPath || pending.fieldId || 'field'}`
@@ -1111,9 +1121,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           sourceFieldId: pending.fieldId
         });
 
-        if (isTopDedupKeyChange) {
-          dedupDeleteOnKeyChangePendingRef.current = true;
-        }
         setValues(mapped.values);
         setLineItems(mapped.lineItems);
         valuesRef.current = mapped.values;
@@ -1923,6 +1930,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const latestRenderedAutoSaveStateFingerprintRef = useRef<string>('');
   const reservationSyncPromiseRef = useRef<Promise<GuidedReservationSyncOutcome> | null>(null);
   const reservationSyncEpochRef = useRef<number>(0);
+  const lastAppliedGuidedReservationDraftSyncEpochRef = useRef<number>(0);
+  const pendingGuidedReservationDraftSyncRef = useRef<{
+    stepId: string;
+    recordId: string;
+    plan: InventoryReservationPlanRequest;
+    requestEpoch: number;
+    sessionId: number;
+  } | null>(null);
   const invalidGuidedReservationDraftsRef = useRef<
     Record<
       string,
@@ -2443,6 +2458,83 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [getCurrentKnownClientDataVersion]
   );
 
+  const isGuidedReservationDraftSyncEpochApplied = useCallback((requestEpoch?: number | null): boolean => {
+    const epoch = Number(requestEpoch || 0);
+    return Number.isFinite(epoch) && epoch > 0 && lastAppliedGuidedReservationDraftSyncEpochRef.current >= epoch;
+  }, []);
+
+  const attachPendingGuidedReservationDraftSyncToPayload = useCallback(
+    (payload: any, reason: string): any => {
+      const pending = pendingGuidedReservationDraftSyncRef.current;
+      if (!pending || !payload) return payload;
+      if ((payload as any).__ckMutationPlan?.reservationPlan) return payload;
+      if (
+        shouldDeferReservationDraftSyncToDeleteOnKeyChange({
+          dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
+        })
+      ) {
+        return payload;
+      }
+      const payloadRecordId =
+        (((payload as any)?.id || selectedRecordIdRef.current || selectedRecordSnapshotRef.current?.id || '') as any)
+          .toString?.()
+          .trim?.() || '';
+      if (pending.recordId && payloadRecordId && pending.recordId !== payloadRecordId) return payload;
+      const clientDataVersion =
+        resolveCurrentClientDataVersion((payload as any).__ckClientDataVersion) ||
+        resolveCurrentClientDataVersion(getCurrentKnownClientDataVersion());
+      const nextPayload = {
+        ...(payload || {}),
+        __ckMutationPlan: {
+          ...(((payload as any).__ckMutationPlan || {}) as Record<string, any>),
+          reservationPlan: {
+            ...(pending.plan || {}),
+            clientDataVersion: clientDataVersion || undefined,
+            refreshMode: 'none'
+          },
+          guidedReservationDraftSync: {
+            stepId: pending.stepId,
+            clientMutationSeq: pending.requestEpoch
+          }
+        }
+      };
+      logEvent('guidedStep.reservationDraft.attachedToSave', {
+        reason,
+        recordId: pending.recordId || payloadRecordId || null,
+        stepId: pending.stepId,
+        reservationEpoch: pending.requestEpoch
+      });
+      return nextPayload;
+    },
+    [getCurrentKnownClientDataVersion, logEvent]
+  );
+
+  const markGuidedReservationDraftSyncSettledFromPayload = useCallback(
+    (payload: any, response: any, reason: string) => {
+      if (!response?.success) return;
+      const sync = (payload as any)?.__ckMutationPlan?.guidedReservationDraftSync;
+      const requestEpoch = Number(sync?.clientMutationSeq || 0);
+      if (!Number.isFinite(requestEpoch) || requestEpoch <= 0) return;
+      if (!(response as any)?.reservationResult && !(response as any)?.meta?.reservationPlan) return;
+      lastAppliedGuidedReservationDraftSyncEpochRef.current = Math.max(
+        lastAppliedGuidedReservationDraftSyncEpochRef.current,
+        requestEpoch
+      );
+      const pending = pendingGuidedReservationDraftSyncRef.current;
+      if (pending && pending.requestEpoch <= requestEpoch) {
+        pendingGuidedReservationDraftSyncRef.current = null;
+      }
+      logEvent('guidedStep.reservationDraft.settled', {
+        reason,
+        recordId: ((payload?.id || pending?.recordId || '') as any).toString?.().trim?.() || null,
+        stepId: (sync?.stepId || pending?.stepId || '').toString() || null,
+        reservationEpoch: requestEpoch
+      });
+    },
+    [logEvent]
+  );
+
   const runCoalescedDraftSaveRequest = useCallback(
     async <T extends { success?: boolean; meta?: any },>(
       reason: string,
@@ -2483,6 +2575,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (fingerprint && result?.success) {
           lastCompletedDraftSaveFingerprintRef.current = fingerprint;
         }
+        markGuidedReservationDraftSyncSettledFromPayload(payload, result, reason);
         if ((result as any)?.success === false) {
           const message = (((result as any)?.message || 'Failed to save the current record.') as any).toString();
           if (isRetryableRecordBusyMessage(message)) {
@@ -2528,7 +2621,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         }
       }
     },
-    [buildCurrentDraftSaveResponse, isRetryableRecordBusyMessage, logEvent, resolveLogMessage, resolveUiErrorMessage, runDraftSaveRequest]
+    [
+      buildCurrentDraftSaveResponse,
+      isRetryableRecordBusyMessage,
+      logEvent,
+      markGuidedReservationDraftSyncSettledFromPayload,
+      resolveLogMessage,
+      resolveUiErrorMessage,
+      runDraftSaveRequest
+    ]
   );
 
   const submitCurrentRecordMutation = useCallback(
@@ -2549,6 +2650,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         const nextPayload = prepared.payload;
         const nextClientDataVersion = resolveCurrentClientDataVersion((nextPayload as any)?.__ckClientDataVersion);
+        if ((nextPayload as any)?.__ckMutationPlan?.reservationPlan) {
+          (nextPayload as any).__ckMutationPlan = {
+            ...((nextPayload as any).__ckMutationPlan || {}),
+            reservationPlan: {
+              ...((nextPayload as any).__ckMutationPlan.reservationPlan || {}),
+              clientDataVersion: nextClientDataVersion || undefined
+            }
+          };
+        }
         if (previousClientDataVersion !== nextClientDataVersion) {
           logEvent('submit.clientDataVersion.sync', {
             reason,
@@ -7153,7 +7263,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (createFlowRef.current && !createFlowUserEditedRef.current) return;
 
       // If a dedup-key change is being validated (or dedup precheck is running), hold autosave until resolved.
-      if (dedupHoldRef.current || dedupCheckingRef.current) return;
+      if (
+        dedupHoldRef.current ||
+        dedupCheckingRef.current ||
+        dedupDeleteOnKeyChangePendingRef.current ||
+        dedupDeleteOnKeyChangeInFlightRef.current
+      ) {
+        logEvent('autosave.blocked.dedupMutationOwner', {
+          reason,
+          dedupHold: dedupHoldRef.current,
+          dedupChecking: dedupCheckingRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current,
+          dedupDeleteInFlight: dedupDeleteOnKeyChangeInFlightRef.current
+        });
+        return;
+      }
 
       if (!autoSaveDirtyRef.current) {
         logEvent('autosave.skip.clean', { reason });
@@ -9526,6 +9650,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
           dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
         });
+        const pendingReservationDraftSync = pendingGuidedReservationDraftSyncRef.current;
+        if (
+          pendingReservationDraftSync &&
+          pendingReservationDraftSync.requestEpoch <= args.reservationDraftSync.requestEpoch
+        ) {
+          pendingGuidedReservationDraftSyncRef.current = null;
+        }
+        return {
+          success: true,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId,
+          stale: true
+        };
+      }
+      if (args.reservationDraftSync && isGuidedReservationDraftSyncEpochApplied(args.reservationDraftSync.requestEpoch)) {
+        logEvent('snapshot.save.skipped.reservationDraftAlreadyApplied', {
+          reason: args.reason,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId || null,
+          requestEpoch: args.reservationDraftSync.requestEpoch,
+          lastAppliedEpoch: lastAppliedGuidedReservationDraftSyncEpochRef.current
+        });
         return {
           success: true,
           recordId: args.existingRecordId || args.reservationDraftSync.recordId,
@@ -9547,6 +9691,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             message
           };
         }
+      }
+      if (args.reservationDraftSync && isGuidedReservationDraftSyncEpochApplied(args.reservationDraftSync.requestEpoch)) {
+        logEvent('snapshot.save.skipped.reservationDraftAppliedByUpload', {
+          reason: args.reason,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId || null,
+          requestEpoch: args.reservationDraftSync.requestEpoch,
+          lastAppliedEpoch: lastAppliedGuidedReservationDraftSyncEpochRef.current
+        });
+        return {
+          success: true,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId,
+          stale: true
+        };
       }
       if (args.mode === 'draft' && args.existingRecordId) {
         const followupWait = await waitForPendingFollowupBatch({
@@ -9597,9 +9754,31 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         };
       }
-      const snapshotValues = args.snapshotOverride?.values || valuesRef.current;
-      const snapshotLineItems = args.snapshotOverride?.lineItems || lineItemsRef.current;
-      const snapshotLanguage = args.snapshotOverride?.language || languageRef.current;
+      const reservationDraftLineItemMerge =
+        args.reservationDraftSync && args.snapshotOverride?.lineItems
+          ? mergeGuidedReservationLineItemsFromSnapshot({
+              definition,
+              stepId: args.reservationDraftSync.stepId || activeGuidedStepIdRef.current || '',
+              sourceLineItems: args.snapshotOverride.lineItems,
+              targetLineItems: lineItemsRef.current,
+              mode: 'step'
+            })
+          : null;
+      const snapshotValues = args.reservationDraftSync ? valuesRef.current : args.snapshotOverride?.values || valuesRef.current;
+      const snapshotLineItems =
+        reservationDraftLineItemMerge?.lineItems || args.snapshotOverride?.lineItems || lineItemsRef.current;
+      const snapshotLanguage = args.reservationDraftSync ? languageRef.current : args.snapshotOverride?.language || languageRef.current;
+      if (
+        reservationDraftLineItemMerge &&
+        (reservationDraftLineItemMerge.mergedRows > 0 || reservationDraftLineItemMerge.mergedChildGroups > 0)
+      ) {
+        logEvent('snapshot.save.reservationDraftMergedWithLatestState', {
+          reason: args.reason,
+          recordId: args.existingRecordId || args.reservationDraftSync?.recordId || null,
+          rows: reservationDraftLineItemMerge.mergedRows,
+          childGroups: reservationDraftLineItemMerge.mergedChildGroups
+        });
+      }
       const localMutationAtSnapshotStart = lastLocalRecordMutationAtRef.current || 0;
       const nextStatus =
         (args.statusOverride || '').toString().trim() ||
@@ -9901,6 +10080,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       formKey,
       ingredientsFormActive,
       isRetryableRecordBusyMessage,
+      isGuidedReservationDraftSyncEpochApplied,
       logEvent,
       markPostPersistAutoSaveSuppress,
       rememberAutoSaveSeenState,
@@ -10049,6 +10229,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       const reservationEpoch = issueReservationRequestEpoch(reservationSyncEpochRef.current);
       reservationSyncEpochRef.current = reservationEpoch;
+      const queuedRecordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      const queuedReservationPlan = queuedRecordId
+        ? resolveGuidedStepReservationPlan({
+            stepId: args.stepId,
+            recordId: queuedRecordId,
+            mode: 'step',
+            snapshotLineItems,
+            previousManagedScopes: releaseScopes
+          })
+        : null;
+      if (queuedReservationPlan) {
+        pendingGuidedReservationDraftSyncRef.current = {
+          stepId: args.stepId,
+          recordId: queuedRecordId,
+          plan: queuedReservationPlan,
+          requestEpoch: reservationEpoch,
+          sessionId
+        };
+      }
       guidedStepImmediateSyncPendingRef.current = {
         ...args,
         sessionId,
@@ -10118,6 +10322,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             continue;
           }
 
+          if (guidedStepImmediateSyncPendingRef.current) {
+            logEvent('guidedStep.liveSync.supersededBeforePersist', {
+              stepId: next.stepId,
+              reason: next.reason,
+              recordId,
+              reservationEpoch: next.reservationEpoch
+            });
+            continue;
+          }
+
           const reservationPlan = resolveGuidedStepReservationPlan({
             stepId: next.stepId,
             recordId,
@@ -10126,6 +10340,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             previousManagedScopes: next.releaseScopes
           });
           if (!reservationPlan) continue;
+          pendingGuidedReservationDraftSyncRef.current = {
+            stepId: next.stepId,
+            recordId,
+            plan: reservationPlan,
+            requestEpoch: next.reservationEpoch,
+            sessionId: next.sessionId
+          };
           const snapshotOverride = {
             values: valuesRef.current,
             lineItems: next.snapshotLineItems || lineItemsRef.current,
@@ -11570,9 +11791,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           target
         });
         try {
-          if (draftSaveRequestInFlightRef.current) {
+          const existingRecordIdAtUploadStart =
+            resolveExistingRecordId({
+              selectedRecordId: selectedRecordIdRef.current,
+              selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+              lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+            }) || '';
+          if (draftSaveRequestInFlightRef.current && !existingRecordIdAtUploadStart) {
             logEvent('upload.transaction.waitDraftSave', { fieldPath: args.fieldPath });
             await waitForDraftSaveRequest(`upload:${args.fieldPath}`);
+          } else if (draftSaveRequestInFlightRef.current) {
+            logEvent('upload.transaction.queueBehindDraftSave', { fieldPath: args.fieldPath });
           }
 
           if (
@@ -11594,40 +11823,54 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
 
           const existingRecordId =
+            existingRecordIdAtUploadStart ||
             resolveExistingRecordId({
               selectedRecordId: selectedRecordIdRef.current,
               selectedRecordSnapshot: selectedRecordSnapshotRef.current,
               lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-            }) || '';
+            }) ||
+            '';
           const statusRaw =
             ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)?.toString?.() ||
             '';
           const statusForSave = resolveAutoSaveStatus(statusRaw);
-          const uploadDraftState = applyUploadValueToFormState({
-            values: valuesRef.current,
-            lineItems: lineItemsRef.current,
-            target,
-            value: '',
-            items: targetItemsAtStart
-          });
-          const payload = await buildUploadDraftPayload({
-            definition,
-            formKey,
-            language: languageRef.current,
-            values: uploadDraftState.values,
-            lineItems: uploadDraftState.lineItems,
-            existingRecordId,
-            target
-          });
-          payload.__ckSaveMode = 'draft';
-          markNoopIfUnchanged(payload);
-          payload.__ckStatus = statusForSave;
-          payload.__ckCreateFlow = createFlowRef.current ? '1' : '';
-          payload.__ckReturnUploadValues = true;
-          const baseVersion = recordDataVersionRef.current;
-          if (existingRecordId && Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
-            payload.__ckClientDataVersion = Number(baseVersion);
-          }
+          const buildLatestUploadPayloadForDispatch = async (): Promise<any> => {
+            const latestTargetState = readStateItems();
+            const latestTargetItems = latestTargetState.hasValue ? latestTargetState.items : targetItemsAtStart;
+            const uploadDraftState = applyUploadValueToFormState({
+              values: valuesRef.current,
+              lineItems: lineItemsRef.current,
+              target,
+              value: '',
+              items: latestTargetItems.length ? latestTargetItems : targetItemsAtStart
+            });
+            let nextPayload = await buildUploadDraftPayload({
+              definition,
+              formKey,
+              language: languageRef.current,
+              values: uploadDraftState.values,
+              lineItems: uploadDraftState.lineItems,
+              existingRecordId,
+              target
+            });
+            nextPayload.__ckSaveMode = 'draft';
+            markNoopIfUnchanged(nextPayload);
+            nextPayload.__ckStatus = statusForSave;
+            nextPayload.__ckCreateFlow = createFlowRef.current ? '1' : '';
+            nextPayload.__ckReturnUploadValues = true;
+            const dispatchBaseVersion = recordDataVersionRef.current;
+            if (existingRecordId && Number.isFinite(Number(dispatchBaseVersion)) && Number(dispatchBaseVersion) > 0) {
+              nextPayload.__ckClientDataVersion = Number(dispatchBaseVersion);
+            }
+            nextPayload = attachPendingGuidedReservationDraftSyncToPayload(nextPayload, `upload:${args.fieldPath}`);
+            logEvent('upload.transaction.payloadBuiltForDispatch', {
+              fieldPath: args.fieldPath,
+              recordId: existingRecordId || null,
+              hasMutationPlan: Boolean(nextPayload.__ckMutationPlan?.reservationPlan),
+              clientDataVersion: Number(nextPayload.__ckClientDataVersion || 0) || null
+            });
+            return nextPayload;
+          };
 
           logEvent('upload.transaction.start', {
             fieldPath: args.fieldPath,
@@ -11636,6 +11879,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
 
           let response: any;
+          let payload: any = null;
           for (let attemptIndex = 0; attemptIndex < DRAFT_SNAPSHOT_RETRY_DELAYS_MS.length; attemptIndex += 1) {
             const delayMs = DRAFT_SNAPSHOT_RETRY_DELAYS_MS[attemptIndex];
             if (delayMs > 0) {
@@ -11643,9 +11887,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             }
             try {
               setDraftSave({ phase: 'saving' });
-              response = await runDraftSaveRequest(`upload:${args.fieldPath}`, () =>
-                submitCurrentRecordMutation(`upload:${args.fieldPath}`, payload)
-              );
+              response = await runDraftSaveRequest(`upload:${args.fieldPath}`, async () => {
+                payload = await buildLatestUploadPayloadForDispatch();
+                return submitCurrentRecordMutation(`upload:${args.fieldPath}`, payload);
+              });
             } catch (err: any) {
               const message =
                 resolveUiErrorMessage(err, 'Failed to save uploaded photos.') ||
@@ -11681,10 +11926,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (!ok) {
             if (isSubmissionStaleMessage(responseMessage)) {
               const serverVersionRaw = Number((response as any)?.meta?.dataVersion);
+              const cachedVersion =
+                resolveCurrentClientDataVersion((payload as any)?.__ckClientDataVersion) ||
+                resolveCurrentClientDataVersion(recordDataVersionRef.current);
               await synchronizeStaleRecord({
                 reason: 'upload.transaction.rejected.stale',
                 recordId: existingRecordId || selectedRecordIdRef.current || '',
-                cachedVersion: Number.isFinite(Number(baseVersion)) ? Number(baseVersion) : null,
+                cachedVersion: Number.isFinite(Number(cachedVersion)) ? Number(cachedVersion) : null,
                 serverVersion: Number.isFinite(serverVersionRaw) ? serverVersionRaw : null,
                 serverRow: null
               });
@@ -11698,6 +11946,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               message: responseMessage || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')
             };
           }
+          markGuidedReservationDraftSyncSettledFromPayload(payload, response, `upload:${args.fieldPath}`);
 
           const recordId = (((response as any)?.meta?.id) || existingRecordId || '').toString().trim();
           const savedUploadValue =
@@ -11739,9 +11988,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             target,
             value: savedUploadValue
           });
+          const completedUploadPayload = { ...payload, values: payloadValues };
           applySuccessfulSubmissionState({
             recordId,
-            payload: { ...payload, values: payloadValues },
+            payload: completedUploadPayload,
             response,
             statusFallback: statusForSave
           });
@@ -11751,7 +12001,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             lineItems: nextState.lineItems,
             target
           });
-          if (nonTargetFingerprintNow === nonTargetFingerprintAtStart) {
+          const completedUploadFingerprint = buildCompletedDraftSaveFingerprint(completedUploadPayload, recordId);
+          if (completedUploadFingerprint) {
+            lastCompletedDraftSaveFingerprintRef.current = completedUploadFingerprint;
+            logEvent('upload.transaction.completedFingerprint', {
+              fieldPath: args.fieldPath,
+              recordId: completedUploadFingerprint.recordId
+            });
+          }
+          const currentUploadStatePayload = buildDraftPayload({
+            definition,
+            formKey,
+            language: languageRef.current,
+            values: nextState.values,
+            lineItems: nextState.lineItems,
+            existingRecordId: recordId
+          }) as any;
+          currentUploadStatePayload.__ckSaveMode = 'draft';
+          markNoopIfUnchanged(currentUploadStatePayload);
+          currentUploadStatePayload.__ckStatus = statusForSave;
+          currentUploadStatePayload.__ckCreateFlow = createFlowRef.current ? '1' : '';
+          const currentUploadStateFingerprint = buildCompletedDraftSaveFingerprint(currentUploadStatePayload, recordId);
+          const uploadSavedCurrentDraft = uploadCompletionMatchesCurrentDraft({
+            completedDraftFingerprint: completedUploadFingerprint,
+            currentDraftFingerprint: currentUploadStateFingerprint
+          });
+          if (uploadSavedCurrentDraft || nonTargetFingerprintNow === nonTargetFingerprintAtStart) {
             autoSaveDirtyRef.current = false;
             autoSaveQueuedRef.current = false;
             if (autoSaveTimerRef.current) {
@@ -11759,6 +12034,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               autoSaveTimerRef.current = null;
             }
             rememberAutoSaveSeenState(nextState.values, nextState.lineItems);
+            markPostPersistAutoSaveSuppress(lastLocalRecordMutationAtRef.current || 0);
           }
           setDraftSave({
             phase: 'saved',
@@ -11769,7 +12045,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             recordId,
             urls: savedUrls.length,
             preservedPendingLocalFiles: mergedItems.some(item => typeof item !== 'string'),
-            otherChangesDuringUpload: nonTargetFingerprintNow !== nonTargetFingerprintAtStart
+            otherChangesDuringUpload: nonTargetFingerprintNow !== nonTargetFingerprintAtStart,
+            savedCurrentDraft: uploadSavedCurrentDraft
           });
           clearSaveFailureStatusAfterSuccessfulSave('upload.transaction');
           return { success: true, items: savedUrls, value: savedUploadValue };
@@ -11832,6 +12109,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applySuccessfulSubmissionState,
+      attachPendingGuidedReservationDraftSyncToPayload,
       autoSaveDebounceMs,
       clearSaveFailureStatusAfterSuccessfulSave,
       definition,
@@ -11840,6 +12118,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       isClosedRecord,
       language,
       logEvent,
+      markGuidedReservationDraftSyncSettledFromPayload,
+      markPostPersistAutoSaveSuppress,
       rememberAutoSaveSeenState,
       resolveLogMessage,
       resolveAutoSaveStatus,

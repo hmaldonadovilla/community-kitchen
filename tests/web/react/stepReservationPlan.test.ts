@@ -757,4 +757,109 @@ describe('buildStepInventoryReservationPlan', () => {
     ]);
     expect(merged.lineItems['MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI::OUT-OLD::INGREDIENTS']).toBeUndefined();
   });
+
+  test('preserves latest non-reservation rows when merging a stale reservation snapshot', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    id: 'leftoverInventoryRows',
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Inventory' },
+                    reservation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+    const sourceLineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegetarian' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+        {
+          id: 'LEFTOVER-1',
+          values: {
+            LEFTOVER_ID: 'SI-7',
+            LEFTOVER_RECORD_ID: 'INV-7',
+            LEFTOVER_USE_QTY: 3,
+            RECIPE: 'Couscous'
+          }
+        },
+        {
+          id: 'COOK-1',
+          values: {
+            PREP_TYPE: 'Cook',
+            RECIPE: null,
+            RECIPE_SOURCE_ID: null
+          }
+        }
+      ]
+    };
+    const targetLineItems: any = {
+      MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { MEAL_TYPE: 'Vegetarian' } }],
+      'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+        {
+          id: 'LEFTOVER-1',
+          values: {
+            LEFTOVER_ID: 'SI-7',
+            LEFTOVER_RECORD_ID: 'INV-7',
+            LEFTOVER_USE_QTY: 2,
+            RECIPE: 'Couscous'
+          }
+        },
+        {
+          id: 'COOK-1',
+          values: {
+            PREP_TYPE: 'Cook',
+            RECIPE: 'Adassi',
+            RECIPE_SOURCE_ID: 'recipe-1'
+          }
+        }
+      ]
+    };
+
+    const merged = mergeGuidedReservationLineItemsFromSnapshot({
+      definition,
+      stepId: 'leftoverForm',
+      sourceLineItems,
+      targetLineItems,
+      mode: 'step'
+    });
+
+    expect(merged.lineItems['MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI']).toEqual([
+      {
+        id: 'LEFTOVER-1',
+        values: {
+          LEFTOVER_ID: 'SI-7',
+          LEFTOVER_RECORD_ID: 'INV-7',
+          LEFTOVER_USE_QTY: 3,
+          RECIPE: 'Couscous'
+        }
+      },
+      {
+        id: 'COOK-1',
+        values: {
+          PREP_TYPE: 'Cook',
+          RECIPE: 'Adassi',
+          RECIPE_SOURCE_ID: 'recipe-1'
+        }
+      }
+    ]);
+  });
 });

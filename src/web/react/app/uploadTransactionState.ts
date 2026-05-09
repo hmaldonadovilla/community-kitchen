@@ -209,3 +209,21 @@ export const buildUploadNonTargetFingerprint = (args: {
     lineItems: normalizeForFingerprint(lineItems)
   });
 };
+
+export const uploadCompletionMatchesCurrentDraft = (args: {
+  completedDraftFingerprint?: { recordId?: string | null; fingerprint?: string | null } | null;
+  currentDraftFingerprint?: { recordId?: string | null; fingerprint?: string | null } | null;
+}): boolean => {
+  const completedRecordId = normalizeString(args.completedDraftFingerprint?.recordId);
+  const currentRecordId = normalizeString(args.currentDraftFingerprint?.recordId);
+  const completedFingerprint = normalizeString(args.completedDraftFingerprint?.fingerprint);
+  const currentFingerprint = normalizeString(args.currentDraftFingerprint?.fingerprint);
+  return Boolean(
+    completedRecordId &&
+      currentRecordId &&
+      completedRecordId === currentRecordId &&
+      completedFingerprint &&
+      currentFingerprint &&
+      completedFingerprint === currentFingerprint
+  );
+};
