@@ -39,6 +39,20 @@ describe('navigationPendingWork', () => {
     ).toBe(true);
   });
 
+  test('waits before leaving while dedup cleanup is pending or running', () => {
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        dedupDeletePending: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        dedupDeleteInFlight: true
+      })
+    ).toBe(true);
+  });
+
   test('does not wait when there is no pending persistence work', () => {
     expect(shouldWaitBeforeLeavingRecord({})).toBe(false);
   });
@@ -68,6 +82,13 @@ describe('navigationPendingWork', () => {
       shouldWaitBeforeLeavingRecord({
         discardInvalidDraft: true,
         draftSaveInFlight: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldWaitBeforeLeavingRecord({
+        discardInvalidDraft: true,
+        dedupDeleteInFlight: true
       })
     ).toBe(true);
   });

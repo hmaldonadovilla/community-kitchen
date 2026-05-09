@@ -7,6 +7,8 @@ export const shouldWaitBeforeLeavingRecord = (args: {
   draftSaveInFlight?: boolean;
   recordSyncInFlight?: boolean;
   reservationSyncInFlight?: boolean;
+  dedupDeletePending?: boolean;
+  dedupDeleteInFlight?: boolean;
   followupBatchInFlight?: boolean;
   guidedStepLiveSyncInFlight?: boolean;
   guidedStepLiveSyncPending?: boolean;
@@ -19,6 +21,8 @@ export const shouldWaitBeforeLeavingRecord = (args: {
       args.draftSaveInFlight === true ||
       args.recordSyncInFlight === true ||
       args.reservationSyncInFlight === true ||
+      args.dedupDeletePending === true ||
+      args.dedupDeleteInFlight === true ||
       args.followupBatchInFlight === true ||
       args.guidedStepLiveSyncInFlight === true ||
       args.guidedStepLiveSyncPending === true
@@ -32,6 +36,8 @@ export const shouldWaitBeforeLeavingRecord = (args: {
     args.draftSaveInFlight === true ||
     args.recordSyncInFlight === true ||
     args.reservationSyncInFlight === true ||
+    args.dedupDeletePending === true ||
+    args.dedupDeleteInFlight === true ||
     args.followupBatchInFlight === true ||
     args.guidedStepLiveSyncInFlight === true ||
     args.guidedStepLiveSyncPending === true ||

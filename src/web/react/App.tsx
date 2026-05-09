@@ -7969,6 +7969,35 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         return activeSaveWait;
       }
 
+      if (dedupDeleteOnKeyChangePendingRef.current || dedupDeleteOnKeyChangeInFlightRef.current) {
+        logEvent('action.flush.waitDedupDelete.start', {
+          reason,
+          pending: dedupDeleteOnKeyChangePendingRef.current,
+          inFlight: dedupDeleteOnKeyChangeInFlightRef.current
+        });
+        const startedAt = Date.now();
+        while (dedupDeleteOnKeyChangePendingRef.current || dedupDeleteOnKeyChangeInFlightRef.current) {
+          const saveWait = await waitForActiveDraftSaveTransactions(`action.flush:${reason}.dedupDelete`);
+          if (!saveWait.ok) return saveWait;
+          if (!(dedupDeleteOnKeyChangePendingRef.current || dedupDeleteOnKeyChangeInFlightRef.current)) break;
+          if (Date.now() - startedAt > 18_000) {
+            const message = 'Could not save the latest changes.';
+            logEvent('action.flush.waitDedupDelete.timeout', {
+              reason,
+              waitMs: Date.now() - startedAt,
+              pending: dedupDeleteOnKeyChangePendingRef.current,
+              inFlight: dedupDeleteOnKeyChangeInFlightRef.current
+            });
+            return { ok: false, message };
+          }
+          await sleep(80);
+        }
+        logEvent('action.flush.waitDedupDelete.done', {
+          reason,
+          waitMs: Date.now() - startedAt
+        });
+      }
+
       if (guidedStepImmediateSyncPromiseRef.current) {
         logEvent('action.flush.waitGuidedLiveSync.start', { reason });
         const startedAt = Date.now();
@@ -8338,6 +8367,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
         reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        dedupDeletePending: Boolean(dedupDeleteOnKeyChangePendingRef.current),
+        dedupDeleteInFlight: Boolean(dedupDeleteOnKeyChangeInFlightRef.current),
         followupBatchInFlight,
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
@@ -8361,7 +8392,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             )
           : tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
         kind: 'navigateHome',
-        diagnosticMeta: { trigger, recordId: activeRecordId || null, followupBatchInFlight, discardInvalidDraft }
+        diagnosticMeta: {
+          trigger,
+          recordId: activeRecordId || null,
+          followupBatchInFlight,
+          discardInvalidDraft,
+          dedupDeletePending: Boolean(dedupDeleteOnKeyChangePendingRef.current),
+          dedupDeleteInFlight: Boolean(dedupDeleteOnKeyChangeInFlightRef.current)
+        }
       });
       logEvent('navigate.list.wait.start', {
         trigger,
@@ -8372,6 +8410,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draftSaveInFlight: Boolean(draftSaveRequestInFlightRef.current),
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
         reservationSyncInFlight: Boolean(reservationSyncPromiseRef.current),
+        dedupDeletePending: Boolean(dedupDeleteOnKeyChangePendingRef.current),
+        dedupDeleteInFlight: Boolean(dedupDeleteOnKeyChangeInFlightRef.current),
         followupBatchInFlight,
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
         guidedStepLiveSyncPending: Boolean(guidedStepImmediateSyncPendingRef.current),
@@ -8497,64 +8537,87 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           logEvent('navigate.home.dedupIncomplete.cancel');
         },
         onConfirm: async () => {
-          const activeSaveWait = await waitForActiveDraftSaveTransactions('navigate.home.dedupIncomplete.confirm');
-          if (!activeSaveWait.ok) {
-            const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
-            setStatus(message);
-            setStatusLevel('error');
-            logEvent('navigate.home.dedupIncomplete.waitActiveSave.failed', { message });
-            return;
-          }
-          const existingRecordId =
+          const startedAt = Date.now();
+          const initialRecordId =
             resolveExistingRecordId({
               selectedRecordId: selectedRecordIdRef.current,
               selectedRecordSnapshot: selectedRecordSnapshotRef.current,
               lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
             }) || '';
-          const shouldDeleteCurrentRecord = activeHomeLeaveDialog.deleteRecordOnConfirm !== false;
-          if (shouldDeleteCurrentRecord && existingRecordId) {
-            const deleted = await triggerDedupDeleteOnKeyChange('navigate.home.dedupIncomplete.confirm', {
-              force: true,
-              recordId: existingRecordId
-            });
-            if (!deleted) {
-              setStatus(copy.deleteFailedMessage);
+          const busySeq = navigateHomeBusy.lock({
+            title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+            message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
+            kind: 'dedupIncompleteHome',
+            diagnosticMeta: {
+              criteria: homeLeaveCriteria,
+              recordId: initialRecordId || null,
+              incompleteDedupKeys,
+              invalidDedupKeys,
+              incompleteConfiguredFields
+            }
+          });
+          try {
+            const activeSaveWait = await waitForActiveDraftSaveTransactions('navigate.home.dedupIncomplete.confirm');
+            if (!activeSaveWait.ok) {
+              const message = (activeSaveWait.message || 'Could not save the latest changes.').toString();
+              setStatus(message);
               setStatusLevel('error');
-              logEvent('navigate.home.dedupIncomplete.delete.failed', { recordId: existingRecordId });
+              logEvent('navigate.home.dedupIncomplete.waitActiveSave.failed', { message });
               return;
             }
-          } else {
+            const existingRecordId =
+              resolveExistingRecordId({
+                selectedRecordId: selectedRecordIdRef.current,
+                selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+                lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+              }) || initialRecordId;
+            const shouldDeleteCurrentRecord = activeHomeLeaveDialog.deleteRecordOnConfirm !== false;
+            if (shouldDeleteCurrentRecord && existingRecordId) {
+              const deleted = await triggerDedupDeleteOnKeyChange('navigate.home.dedupIncomplete.confirm', {
+                force: true,
+                recordId: existingRecordId
+              });
+              if (!deleted) {
+                setStatus(copy.deleteFailedMessage);
+                setStatusLevel('error');
+                logEvent('navigate.home.dedupIncomplete.delete.failed', { recordId: existingRecordId });
+                return;
+              }
+            } else {
+              dedupHoldRef.current = false;
+              autoSaveDirtyRef.current = false;
+              autoSaveQueuedRef.current = false;
+              if (autoSaveTimerRef.current) {
+                globalThis.clearTimeout(autoSaveTimerRef.current);
+                autoSaveTimerRef.current = null;
+              }
+              setDraftSave({ phase: 'idle' });
+            }
             dedupHoldRef.current = false;
             autoSaveDirtyRef.current = false;
             autoSaveQueuedRef.current = false;
+            autoSaveUserEditedRef.current = false;
+            createFlowRef.current = false;
+            createFlowUserEditedRef.current = false;
+            lastDraftSaveFailureRef.current = null;
             if (autoSaveTimerRef.current) {
               globalThis.clearTimeout(autoSaveTimerRef.current);
               autoSaveTimerRef.current = null;
             }
             setDraftSave({ phase: 'idle' });
+            rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
+            logEvent('navigate.home.dedupIncomplete.confirm', {
+              criteria: homeLeaveCriteria,
+              incompleteDedupKeys,
+              invalidDedupKeys,
+              incompleteConfiguredFields,
+              recordId: existingRecordId || null,
+              deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
+            });
+            await requestNavigateToList('navigate.home.dedupIncomplete.confirm', { discardInvalidDraft: true });
+          } finally {
+            navigateHomeBusy.unlock(busySeq, { durationMs: Date.now() - startedAt });
           }
-          dedupHoldRef.current = false;
-          autoSaveDirtyRef.current = false;
-          autoSaveQueuedRef.current = false;
-          autoSaveUserEditedRef.current = false;
-          createFlowRef.current = false;
-          createFlowUserEditedRef.current = false;
-          lastDraftSaveFailureRef.current = null;
-          if (autoSaveTimerRef.current) {
-            globalThis.clearTimeout(autoSaveTimerRef.current);
-            autoSaveTimerRef.current = null;
-          }
-          setDraftSave({ phase: 'idle' });
-          rememberAutoSaveSeenState(valuesRef.current, lineItemsRef.current);
-          logEvent('navigate.home.dedupIncomplete.confirm', {
-            criteria: homeLeaveCriteria,
-            incompleteDedupKeys,
-            invalidDedupKeys,
-            incompleteConfiguredFields,
-            recordId: existingRecordId || null,
-            deletedRecord: shouldDeleteCurrentRecord && !!existingRecordId
-          });
-          await requestNavigateToList('navigate.home.dedupIncomplete.confirm', { discardInvalidDraft: true });
         }
       });
       logEvent('navigate.home.dedupIncomplete.dialog.open', {
@@ -8570,6 +8633,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     customConfirm,
     definition,
     logEvent,
+    navigateHomeBusy,
     rememberAutoSaveSeenState,
     requestNavigateToList,
     triggerDedupDeleteOnKeyChange,
