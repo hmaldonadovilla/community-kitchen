@@ -310,7 +310,10 @@ import {
   issueReservationRequestEpoch,
   shouldApplyReservationPlanResponse
 } from './features/reservations/reservationResponsePolicy';
-import { shouldSkipReservationDraftSyncForDeleteOnKeyChange } from './features/reservations/domain/reservationDraftSyncGuards';
+import {
+  shouldDeferReservationDraftSyncToDeleteOnKeyChange,
+  shouldSkipReservationDraftSyncForDeleteOnKeyChange
+} from './features/reservations/domain/reservationDraftSyncGuards';
 import {
   useGuidedReservationPlanSync,
   type GuidedReservationSyncMeta,
@@ -9509,6 +9512,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
         await waitForDraftSaveRequest(`snapshot:${args.reason}`);
       }
+      if (
+        args.reservationDraftSync &&
+        shouldDeferReservationDraftSyncToDeleteOnKeyChange({
+          dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
+        })
+      ) {
+        logEvent('snapshot.save.skipped.deleteOnKeyChangePending', {
+          reason: args.reason,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId || null,
+          requestEpoch: args.reservationDraftSync.requestEpoch,
+          dedupDeleteOnKeyChangeInFlight: dedupDeleteOnKeyChangeInFlightRef.current,
+          dedupDeletePending: dedupDeleteOnKeyChangePendingRef.current
+        });
+        return {
+          success: true,
+          recordId: args.existingRecordId || args.reservationDraftSync.recordId,
+          stale: true
+        };
+      }
+      if (args.reservationDraftSync && uploadQueueRef.current.size > 0) {
+        const uploadWait = await waitForBackgroundSaves(`snapshot:${args.reason}.uploads`, 'uploadsOnly');
+        if (!uploadWait.ok) {
+          const message = (uploadWait.message || tSystem('files.error.uploadFailed', languageRef.current, 'Could not add photos.')).toString();
+          logEvent('snapshot.save.blocked.uploadsFailed', {
+            reason: args.reason,
+            recordId: args.existingRecordId || args.reservationDraftSync.recordId || null,
+            message
+          });
+          return {
+            success: false,
+            recordId: args.existingRecordId || args.reservationDraftSync.recordId,
+            message
+          };
+        }
+      }
       if (args.mode === 'draft' && args.existingRecordId) {
         const followupWait = await waitForPendingFollowupBatch({
           recordId: args.existingRecordId,
@@ -9871,6 +9910,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       runCoalescedDraftSaveRequest,
       submitPreviousActionRetryMessage,
       submitCurrentRecordMutation,
+      waitForBackgroundSaves,
       waitForPendingFollowupBatch,
       waitForDraftSaveRequest
     ]

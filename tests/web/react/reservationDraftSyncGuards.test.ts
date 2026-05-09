@@ -1,4 +1,7 @@
-import { shouldSkipReservationDraftSyncForDeleteOnKeyChange } from '../../../src/web/react/features/reservations/domain/reservationDraftSyncGuards';
+import {
+  shouldDeferReservationDraftSyncToDeleteOnKeyChange,
+  shouldSkipReservationDraftSyncForDeleteOnKeyChange
+} from '../../../src/web/react/features/reservations/domain/reservationDraftSyncGuards';
 
 describe('reservationDraftSyncGuards', () => {
   test('skips release-scope draft sync while delete-on-key-change owns the mutation', () => {
@@ -30,5 +33,26 @@ describe('reservationDraftSyncGuards', () => {
         dedupDeletePending: true
       })
     ).toBe(false);
+  });
+
+  test('defers any pending reservation draft sync once delete-on-key-change owns the next save', () => {
+    expect(
+      shouldDeferReservationDraftSyncToDeleteOnKeyChange({
+        dedupDeleteOnKeyChangeInFlight: false,
+        dedupDeletePending: false
+      })
+    ).toBe(false);
+    expect(
+      shouldDeferReservationDraftSyncToDeleteOnKeyChange({
+        dedupDeleteOnKeyChangeInFlight: true,
+        dedupDeletePending: false
+      })
+    ).toBe(true);
+    expect(
+      shouldDeferReservationDraftSyncToDeleteOnKeyChange({
+        dedupDeleteOnKeyChangeInFlight: false,
+        dedupDeletePending: true
+      })
+    ).toBe(true);
   });
 });

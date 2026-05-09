@@ -11,3 +11,7 @@ export const shouldSkipReservationDraftSyncForDeleteOnKeyChange = (
   if (!Number.isFinite(releaseScopeCount) || releaseScopeCount <= 0) return false;
   return args.dedupDeleteOnKeyChangeInFlight === true || args.dedupDeletePending === true;
 };
+
+export const shouldDeferReservationDraftSyncToDeleteOnKeyChange = (
+  args: Pick<ReservationDraftSyncSkipArgs, 'dedupDeleteOnKeyChangeInFlight' | 'dedupDeletePending'>
+): boolean => args.dedupDeleteOnKeyChangeInFlight === true || args.dedupDeletePending === true;
