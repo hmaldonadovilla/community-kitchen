@@ -150,9 +150,11 @@ import {
 import { buildRecordSyncComparableFingerprint } from './app/recordSyncReview';
 import { buildSuccessfulSubmissionSnapshot } from './app/submissionSnapshotState';
 import {
+  buildDataSourceFreshnessBaselineKey,
   buildDataSourceFreshnessSnapshotSignature,
   primeDataSourceFreshnessWatchBaselines,
   resolveActiveDataSourceFreshnessWatches,
+  resolveDataSourceFreshnessBaselineComparison,
   resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
@@ -357,7 +359,6 @@ import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
   DATA_SOURCE_CACHE_UPDATED_EVENT,
   fetchDataSource,
-  peekCachedDataSource,
   prefetchDataSources
 } from '../data/dataSources';
 import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
@@ -1919,6 +1920,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const dataSourceFreshnessCheckPromiseRef = useRef<Promise<void> | null>(null);
   const performDataSourceFreshnessCheckRef = useRef<(reason: string) => Promise<void>>(async () => undefined);
   const lastDataSourceFreshnessServerActivityAtByWatchKeyRef = useRef<Record<string, number>>({});
+  const dataSourceFreshnessSignatureBaselineByKeyRef = useRef<
+    Record<
+      string,
+      {
+        signature: string;
+        recordId: string;
+        stepId: string;
+        sessionId: number;
+      }
+    >
+  >({});
   const lastAutoSaveSeenRef = useRef<{ values: Record<string, FieldValue>; lineItems: LineItemState } | null>(null);
   const lastAutoSaveStateFingerprintRef = useRef<string>('');
   const pendingAutomatedAutoSaveSourceRef = useRef<string>('');
@@ -3110,6 +3122,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     async (reason: string): Promise<void> => {
       const recordId = getCurrentOpenRecordId();
       const stepId = activeGuidedStepIdRef.current;
+      const sessionId = recordSessionRef.current;
       const activeWatches = resolveRunnableDataSourceFreshnessWatches(stepId);
       const delayMs = resolveDataSourceFreshnessTimerDelay({
         watches: activeWatches,
@@ -3258,10 +3271,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 continue;
               }
               const signatureFieldIds = resolveDataSourceFreshnessSignatureFieldIds(config);
-              const beforeSignature = buildDataSourceFreshnessSnapshotSignature(
-                peekCachedDataSource(config, languageRef.current),
-                { fieldIds: signatureFieldIds }
-              );
               const reservationSyncEpochAtFetchStart = reservationSyncEpochRef.current;
               const refreshed = await fetchDataSource(config, languageRef.current, {
                 forceRefresh: true,
@@ -3269,6 +3278,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                   reservationSyncEpochRef.current === reservationSyncEpochAtFetchStart &&
                   !reservationSyncPromiseRef.current
               }).catch(() => null);
+              if (recordSessionRef.current !== sessionId) return;
               if (selectedRecordIdRef.current !== recordId) return;
               if (viewRef.current !== 'form') return;
               if (activeGuidedStepIdRef.current !== stepId) return;
@@ -3302,7 +3312,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               const afterSignature = buildDataSourceFreshnessSnapshotSignature(refreshed, {
                 fieldIds: signatureFieldIds
               });
-              if (beforeSignature !== afterSignature) {
+              const baselineKey = buildDataSourceFreshnessBaselineKey({
+                watchKey: watch.key,
+                dataSourceId
+              });
+              const baselineEntry = baselineKey ? dataSourceFreshnessSignatureBaselineByKeyRef.current[baselineKey] : null;
+              const scopedBaselineSignature =
+                baselineEntry &&
+                baselineEntry.recordId === (recordId || '').toString() &&
+                baselineEntry.stepId === (stepId || '').toString() &&
+                baselineEntry.sessionId === sessionId
+                  ? baselineEntry.signature
+                  : null;
+              const baselineComparison = resolveDataSourceFreshnessBaselineComparison({
+                baselineSignature: scopedBaselineSignature,
+                nextSignature: afterSignature
+              });
+              if (baselineKey && (baselineComparison.shouldPrimeBaseline || baselineComparison.changed)) {
+                dataSourceFreshnessSignatureBaselineByKeyRef.current[baselineKey] = {
+                  signature: afterSignature,
+                  recordId: (recordId || '').toString(),
+                  stepId: (stepId || '').toString(),
+                  sessionId
+                };
+              }
+              if (baselineComparison.shouldPrimeBaseline) {
+                logEvent('datasource.freshness.check.baselinePrimed', {
+                  reason,
+                  recordId,
+                  stepId,
+                  watchKey: watch.key,
+                  dataSourceId,
+                  durationMs: Date.now() - startedAt
+                });
+                continue;
+              }
+              if (baselineComparison.changed) {
                 watchChanged = true;
               }
             }
@@ -3700,6 +3745,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     dataSourceFreshnessWatchesRef.current = resolvedDataSourceFreshnessWatches;
   }, [resolvedDataSourceFreshnessWatches]);
   useEffect(() => {
+    dataSourceFreshnessSignatureBaselineByKeyRef.current = {};
     scheduleDataSourceFreshnessCheck('stateChange');
   }, [guidedUiState?.activeStepId, recordLoadingId, resolvedDataSourceFreshnessWatches, scheduleDataSourceFreshnessCheck, selectedRecordId, view]);
 
@@ -3724,6 +3770,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       pendingDeferredRecordFreshnessSyncRef.current = null;
       dataSourceFreshnessCheckPromiseRef.current = null;
       lastDataSourceFreshnessServerActivityAtByWatchKeyRef.current = {};
+      dataSourceFreshnessSignatureBaselineByKeyRef.current = {};
       lastDraftSaveFailureRef.current = null;
       optimisticClientDataVersionRef.current = null;
       recordSyncPromiseRef.current = null;

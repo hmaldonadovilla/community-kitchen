@@ -158,6 +158,42 @@ export const primeDataSourceFreshnessWatchBaselines = (args: {
   };
 };
 
+export const buildDataSourceFreshnessBaselineKey = (args: {
+  watchKey?: string | null;
+  dataSourceId?: string | null;
+}): string => {
+  const watchKey = normalizeText(args.watchKey);
+  const dataSourceId = normalizeText(args.dataSourceId);
+  return watchKey && dataSourceId ? `${watchKey}::${dataSourceId}` : '';
+};
+
+export const resolveDataSourceFreshnessBaselineComparison = (args: {
+  baselineSignature?: string | null;
+  nextSignature?: string | null;
+}): {
+  changed: boolean;
+  shouldPrimeBaseline: boolean;
+} => {
+  const baselineSignature = normalizeText(args.baselineSignature);
+  const nextSignature = normalizeText(args.nextSignature);
+  if (!nextSignature) {
+    return {
+      changed: false,
+      shouldPrimeBaseline: false
+    };
+  }
+  if (!baselineSignature) {
+    return {
+      changed: false,
+      shouldPrimeBaseline: true
+    };
+  }
+  return {
+    changed: baselineSignature !== nextSignature,
+    shouldPrimeBaseline: false
+  };
+};
+
 const stableStringify = (value: any): string => {
   const seen = new WeakSet<object>();
   const normalize = (input: any): any => {

@@ -1,8 +1,10 @@
 import {
+  buildDataSourceFreshnessBaselineKey,
   buildDataSourceFreshnessSnapshotSignature,
   buildDataSourceFreshnessWatchKey,
   primeDataSourceFreshnessWatchBaselines,
   resolveActiveDataSourceFreshnessWatches,
+  resolveDataSourceFreshnessBaselineComparison,
   resolveDataSourceFreshnessSignatureFieldIds,
   resolveDataSourceFreshnessTimerDelay,
   resolveDataSourceFreshnessWatches
@@ -114,6 +116,47 @@ describe('dataSourceFreshness helpers', () => {
     expect(buildDataSourceFreshnessSnapshotSignature(before)).not.toBe(
       buildDataSourceFreshnessSnapshotSignature(after)
     );
+  });
+
+  test('uses a scoped datasource baseline key per watch and source', () => {
+    expect(
+      buildDataSourceFreshnessBaselineKey({
+        watchKey: 'leftoverForm::Leftover Inventory Data',
+        dataSourceId: 'Leftover Inventory Data'
+      })
+    ).toBe('leftoverForm::Leftover Inventory Data::Leftover Inventory Data');
+  });
+
+  test('primes datasource signature baseline before reporting freshness changes', () => {
+    expect(
+      resolveDataSourceFreshnessBaselineComparison({
+        baselineSignature: '',
+        nextSignature: 'fresh-server-signature'
+      })
+    ).toEqual({
+      changed: false,
+      shouldPrimeBaseline: true
+    });
+
+    expect(
+      resolveDataSourceFreshnessBaselineComparison({
+        baselineSignature: 'fresh-server-signature',
+        nextSignature: 'fresh-server-signature'
+      })
+    ).toEqual({
+      changed: false,
+      shouldPrimeBaseline: false
+    });
+
+    expect(
+      resolveDataSourceFreshnessBaselineComparison({
+        baselineSignature: 'fresh-server-signature',
+        nextSignature: 'changed-server-signature'
+      })
+    ).toEqual({
+      changed: true,
+      shouldPrimeBaseline: false
+    });
   });
 
   test('uses datasource projection fields for freshness comparisons', () => {
