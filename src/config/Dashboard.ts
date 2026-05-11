@@ -1259,14 +1259,36 @@ export class Dashboard {
     const normalizeSystemDialogConfigLocal = (raw: any): SystemActionGateDialogConfig | undefined => {
       if (!raw || typeof raw !== 'object') return undefined;
       const out: Record<string, any> = {};
+      const normalizeActionString = (input: any): string | undefined => {
+        if (input === undefined || input === null) return undefined;
+        const trimmed = input.toString().trim();
+        return trimmed || undefined;
+      };
+      const normalizeDialogAction = (value: any): Record<string, any> | undefined => {
+        if (!value || typeof value !== 'object') return undefined;
+        const type = normalizeActionString((value as any).type);
+        if (type !== 'guidedStepMilestone' && type !== 'formSubmit') return undefined;
+        const action: Record<string, any> = { type };
+        const id = normalizeActionString((value as any).id);
+        if (id) action.id = id;
+        if (type === 'guidedStepMilestone') {
+          const stepId = normalizeActionString((value as any).stepId);
+          if (stepId) action.stepId = stepId;
+        }
+        return action;
+      };
       const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
       const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
+      const confirmAction = normalizeDialogAction((raw as any).confirmAction);
+      const cancelAction = normalizeDialogAction((raw as any).cancelAction);
       if (title) out.title = title;
       if (message) out.message = message;
       if (confirmLabel) out.confirmLabel = confirmLabel;
       if (cancelLabel) out.cancelLabel = cancelLabel;
+      if (confirmAction) out.confirmAction = confirmAction;
+      if (cancelAction) out.cancelAction = cancelAction;
       if ((raw as any).primaryAction === 'confirm' || (raw as any).primaryAction === 'cancel') {
         out.primaryAction = (raw as any).primaryAction;
       }
@@ -1606,14 +1628,36 @@ export class Dashboard {
     const normalizeSystemDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
       if (!raw || typeof raw !== 'object') return undefined;
       const out: Record<string, any> = {};
+      const normalizeActionString = (input: any): string | undefined => {
+        if (input === undefined || input === null) return undefined;
+        const trimmed = input.toString().trim();
+        return trimmed || undefined;
+      };
+      const normalizeDialogAction = (value: any): Record<string, any> | undefined => {
+        if (!value || typeof value !== 'object') return undefined;
+        const type = normalizeActionString((value as any).type);
+        if (type !== 'guidedStepMilestone' && type !== 'formSubmit') return undefined;
+        const action: Record<string, any> = { type };
+        const id = normalizeActionString((value as any).id);
+        if (id) action.id = id;
+        if (type === 'guidedStepMilestone') {
+          const stepId = normalizeActionString((value as any).stepId);
+          if (stepId) action.stepId = stepId;
+        }
+        return action;
+      };
       const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
       const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
+      const confirmAction = normalizeDialogAction((raw as any).confirmAction);
+      const cancelAction = normalizeDialogAction((raw as any).cancelAction);
       if (title) out.title = title;
       if (message) out.message = message;
       if (confirmLabel) out.confirmLabel = confirmLabel;
       if (cancelLabel) out.cancelLabel = cancelLabel;
+      if (confirmAction) out.confirmAction = confirmAction;
+      if (cancelAction) out.cancelAction = cancelAction;
       if ((raw as any).primaryAction === 'confirm' || (raw as any).primaryAction === 'cancel') {
         out.primaryAction = (raw as any).primaryAction;
       }
@@ -2088,14 +2132,31 @@ export class Dashboard {
     const normalizeDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
       if (!raw || typeof raw !== 'object') return undefined;
       const out: Record<string, any> = {};
+      const normalizeDialogAction = (value: any): Record<string, any> | undefined => {
+        if (!value || typeof value !== 'object') return undefined;
+        const type = normalizeString((value as any).type);
+        if (type !== 'guidedStepMilestone' && type !== 'formSubmit') return undefined;
+        const action: Record<string, any> = { type };
+        const id = normalizeString((value as any).id);
+        if (id) action.id = id;
+        if (type === 'guidedStepMilestone') {
+          const stepId = normalizeString((value as any).stepId);
+          if (stepId) action.stepId = stepId;
+        }
+        return action;
+      };
       const title = normalizeLocalized((raw as any).title);
       const message = normalizeLocalized((raw as any).message);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel);
+      const confirmAction = normalizeDialogAction((raw as any).confirmAction);
+      const cancelAction = normalizeDialogAction((raw as any).cancelAction);
       if (title !== undefined) out.title = title;
       if (message !== undefined) out.message = message;
       if (confirmLabel !== undefined) out.confirmLabel = confirmLabel;
       if (cancelLabel !== undefined) out.cancelLabel = cancelLabel;
+      if (confirmAction !== undefined) out.confirmAction = confirmAction;
+      if (cancelAction !== undefined) out.cancelAction = cancelAction;
       if ((raw as any).primaryAction === 'cancel' || (raw as any).primaryAction === 'confirm') {
         out.primaryAction = (raw as any).primaryAction;
       }

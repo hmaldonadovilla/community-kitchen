@@ -53,6 +53,7 @@ import {
   SummaryVisibility,
   StepMilestoneActionConfig,
   StepDataSourceBootstrapConfig,
+  SystemActionGateDialogActionConfig,
   SystemActionGateDialogConfig,
   StepRowFilterConfig,
   WhenClause,
@@ -64,7 +65,7 @@ import {
 } from '../types';
 
 export type LangCode = 'EN' | 'FR' | 'NL' | string;
-export type { SystemActionGateDialogConfig };
+export type { SystemActionGateDialogActionConfig, SystemActionGateDialogConfig };
 export type { LineItemOverlaySessionConfig };
 export type { StepDataSourceBootstrapConfig };
 

@@ -37,6 +37,7 @@ export const ConfirmDialogOverlay: React.FC<{
   onConfirm
 }) => {
   const busyRef = React.useRef(false);
+  const mountedRef = React.useRef(true);
   const [busy, setBusy] = React.useState(false);
   const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
   const actionButtonTextStyle: React.CSSProperties = {
@@ -84,6 +85,13 @@ export const ConfirmDialogOverlay: React.FC<{
     setBusy(false);
   }, [open]);
 
+  React.useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+
   const runGuarded = React.useCallback(async (action: () => void | Promise<void>) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -92,7 +100,9 @@ export const ConfirmDialogOverlay: React.FC<{
       await action();
     } finally {
       busyRef.current = false;
-      setBusy(false);
+      if (mountedRef.current) {
+        setBusy(false);
+      }
     }
   }, []);
 

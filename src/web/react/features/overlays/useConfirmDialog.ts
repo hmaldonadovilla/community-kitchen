@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ConfirmDialogState = {
   open: boolean;
+  dialogKey: number;
   title: string;
   message: string;
   confirmLabel: string;
@@ -27,8 +28,8 @@ export type ConfirmDialogOpenArgs = {
   showCloseButton?: boolean;
   kind?: string;
   refId?: string;
-  onConfirm: () => void;
-  onCancel?: () => void;
+  onConfirm: () => void | Promise<void>;
+  onCancel?: () => void | Promise<void>;
 };
 
 /**
@@ -50,6 +51,7 @@ export const useConfirmDialog = (opts?: {
   const eventPrefix = (opts?.eventPrefix || 'ui.confirmDialog').toString();
   const [state, setState] = useState<ConfirmDialogState>({
     open: false,
+    dialogKey: 0,
     title: '',
     message: '',
     confirmLabel: '',
@@ -62,11 +64,12 @@ export const useConfirmDialog = (opts?: {
     kind: undefined,
     refId: undefined
   });
-  const confirmRef = useRef<(() => void) | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
+  const confirmRef = useRef<(() => void | Promise<void>) | null>(null);
+  const cancelRef = useRef<(() => void | Promise<void>) | null>(null);
   const openedOnKeyRef = useRef<unknown>(undefined);
+  const dialogKeyRef = useRef(0);
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback(async () => {
     const handler = cancelRef.current;
     setState(prev => (prev.open ? { ...prev, open: false } : prev));
     confirmRef.current = null;
@@ -74,13 +77,13 @@ export const useConfirmDialog = (opts?: {
     openedOnKeyRef.current = undefined;
     opts?.onDiagnostic?.(`${eventPrefix}.cancel`, { kind: state.kind || null, refId: state.refId || null });
     try {
-      handler?.();
+      await handler?.();
     } catch (_) {
       // ignore
     }
   }, [eventPrefix, opts, state.kind, state.refId]);
 
-  const confirm = useCallback(() => {
+  const confirm = useCallback(async () => {
     const fn = confirmRef.current;
     const meta = { kind: state.kind || null, refId: state.refId || null };
     setState(prev => (prev.open ? { ...prev, open: false } : prev));
@@ -89,7 +92,7 @@ export const useConfirmDialog = (opts?: {
     openedOnKeyRef.current = undefined;
     opts?.onDiagnostic?.(`${eventPrefix}.confirm`, meta);
     try {
-      fn?.();
+      await fn?.();
     } catch (err: any) {
       opts?.onDiagnostic?.(`${eventPrefix}.confirm.exception`, { ...meta, message: err?.message || err || 'unknown' });
     }
@@ -111,8 +114,10 @@ export const useConfirmDialog = (opts?: {
       confirmRef.current = args?.onConfirm || null;
       cancelRef.current = args?.onCancel || null;
       openedOnKeyRef.current = opts?.closeOnKey;
+      dialogKeyRef.current += 1;
       setState({
         open: true,
+        dialogKey: dialogKeyRef.current,
         title,
         message,
         confirmLabel,
@@ -137,7 +142,7 @@ export const useConfirmDialog = (opts?: {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         opts?.onDiagnostic?.(`${eventPrefix}.escape`, { kind: state.kind || null, refId: state.refId || null });
-        cancel();
+        void cancel();
       }
     };
     globalThis.addEventListener?.('keydown', onKeyDown as any);
@@ -150,7 +155,7 @@ export const useConfirmDialog = (opts?: {
     if (openedOnKeyRef.current === undefined) return;
     if (opts?.closeOnKey === openedOnKeyRef.current) return;
     opts?.onDiagnostic?.(`${eventPrefix}.autoClose`, { kind: state.kind || null, refId: state.refId || null });
-    cancel();
+    void cancel();
   }, [cancel, eventPrefix, opts?.closeOnKey, opts, state.kind, state.open, state.refId]);
 
   return { state, openConfirm, cancel, confirm } as const;

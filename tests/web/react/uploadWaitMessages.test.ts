@@ -5,7 +5,7 @@ describe('resolveUploadWaitMessage', () => {
     const uploadConfig = {
       waitMessages: {
         save: {
-          en: 'Please wait while we save your photo(s)',
+          en: 'Photos are still being saved. Keep this screen open until all photos show `Added`',
           fr: 'Veuillez patienter pendant l’enregistrement de vos photo(s)'
         },
         removeSelected: {

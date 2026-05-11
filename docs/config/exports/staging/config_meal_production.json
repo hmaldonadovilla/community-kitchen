@@ -3001,23 +3001,32 @@
               },
               "feedbackDialog": {
                 "title": {
-                  "en": "Leftovers",
-                  "fr": "Restes",
-                  "nl": "Restanten"
+                  "en": "Leftovers?",
+                  "fr": "Restes ?",
+                  "nl": "Restanten?"
                 },
                 "message": {
-                  "en": "Record any leftovers.\nIf none, click Complete.",
-                  "fr": "Enregistrez les restes.\nS'il n'y en a pas, cliquez sur Terminer.",
-                  "nl": "Registreer eventuele restanten.\nAls er geen zijn, klik op Voltooien."
+                  "en": "Record any leftovers before completing this meal production. If there are none, click Complete.",
+                  "fr": "Enregistrez les restes avant de terminer cette production de repas. S'il n'y en a pas, cliquez sur Terminer.",
+                  "nl": "Registreer eventuele restanten voordat u deze maaltijdproductie voltooit. Als er geen zijn, klik op Voltooien."
                 },
                 "confirmLabel": {
-                  "en": "OK",
-                  "fr": "OK",
-                  "nl": "OK"
+                  "en": "Complete",
+                  "fr": "Terminer",
+                  "nl": "Voltooien"
                 },
-                "showCancel": false,
+                "cancelLabel": {
+                  "en": "Record leftovers",
+                  "fr": "Enregistrer les restes",
+                  "nl": "Restanten registreren"
+                },
+                "primaryAction": "confirm",
+                "showCancel": true,
                 "showCloseButton": false,
-                "dismissOnBackdrop": false
+                "dismissOnBackdrop": false,
+                "confirmAction": {
+                  "type": "formSubmit"
+                }
               }
             }
           },
@@ -7361,7 +7370,7 @@
         },
         "waitMessages": {
           "save": {
-            "en": "Please wait while we save your photo(s)",
+            "en": "Photos are still being saved. Keep this screen open until all photos show `Added`",
             "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
             "nl": "Wacht even terwijl we je foto('s) opslaan"
           },
@@ -7521,7 +7530,7 @@
         },
         "waitMessages": {
           "save": {
-            "en": "Please wait while we save your photo(s)",
+            "en": "Photos are still being saved. Keep this screen open until all photos show `Added`",
             "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
             "nl": "Wacht even terwijl we je foto('s) opslaan"
           },
@@ -11317,7 +11326,7 @@
           },
           "waitMessages": {
             "save": {
-              "en": "Please wait while we save your photo(s)",
+              "en": "Photos are still being saved. Keep this screen open until all photos show `Added`",
               "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
               "nl": "Wacht even terwijl we je foto('s) opslaan"
             },
@@ -11477,7 +11486,7 @@
           },
           "waitMessages": {
             "save": {
-              "en": "Please wait while we save your photo(s)",
+              "en": "Photos are still being saved. Keep this screen open until all photos show `Added`",
               "fr": "Veuillez patienter pendant l’enregistrement de vos photo(s)",
               "nl": "Wacht even terwijl we je foto('s) opslaan"
             },
@@ -14890,23 +14899,32 @@
               },
               "feedbackDialog": {
                 "title": {
-                  "en": "Leftovers",
-                  "fr": "Restes",
-                  "nl": "Restanten"
+                  "en": "Leftovers?",
+                  "fr": "Restes ?",
+                  "nl": "Restanten?"
                 },
                 "message": {
-                  "en": "Record any leftovers.\nIf none, click Complete.",
-                  "fr": "Enregistrez les restes.\nS'il n'y en a pas, cliquez sur Terminer.",
-                  "nl": "Registreer eventuele restanten.\nAls er geen zijn, klik op Voltooien."
+                  "en": "Record any leftovers before completing this meal production. If there are none, click Complete.",
+                  "fr": "Enregistrez les restes avant de terminer cette production de repas. S'il n'y en a pas, cliquez sur Terminer.",
+                  "nl": "Registreer eventuele restanten voordat u deze maaltijdproductie voltooit. Als er geen zijn, klik op Voltooien."
                 },
                 "confirmLabel": {
-                  "en": "OK",
-                  "fr": "OK",
-                  "nl": "OK"
+                  "en": "Complete",
+                  "fr": "Terminer",
+                  "nl": "Voltooien"
                 },
-                "showCancel": false,
+                "cancelLabel": {
+                  "en": "Record leftovers",
+                  "fr": "Enregistrer les restes",
+                  "nl": "Restanten registreren"
+                },
+                "primaryAction": "confirm",
+                "showCancel": true,
                 "showCloseButton": false,
-                "dismissOnBackdrop": false
+                "dismissOnBackdrop": false,
+                "confirmAction": {
+                  "type": "formSubmit"
+                }
               }
             }
           },

@@ -987,9 +987,15 @@ describe('Dashboard', () => {
                   title: { EN: 'Background actions started' },
                   message: { EN: 'You can continue.' },
                   confirmLabel: { EN: 'OK' },
+                  cancelLabel: { EN: 'Stay here' },
+                  primaryAction: 'confirm',
                   showCancel: false,
                   showCloseButton: true,
-                  dismissOnBackdrop: true
+                  dismissOnBackdrop: true,
+                  confirmAction: {
+                    type: 'formSubmit',
+                    id: 'complete'
+                  }
                 },
                 generatedRecordsDialog: {
                   submitEffectIds: ['captureProducedLeftovers'],
@@ -1058,9 +1064,15 @@ describe('Dashboard', () => {
         title: { en: 'Background actions started' },
         message: { en: 'You can continue.' },
         confirmLabel: { en: 'OK' },
+        cancelLabel: { en: 'Stay here' },
+        primaryAction: 'confirm',
         showCancel: false,
         showCloseButton: true,
-        dismissOnBackdrop: true
+        dismissOnBackdrop: true,
+        confirmAction: {
+          type: 'formSubmit',
+          id: 'complete'
+        }
       },
       generatedRecordsDialog: {
         submitEffectIds: ['captureProducedLeftovers'],
@@ -1189,7 +1201,12 @@ describe('Dashboard', () => {
             confirmLabel: { EN: 'OK' },
             showCancel: false,
             showCloseButton: false,
-            dismissOnBackdrop: false
+            dismissOnBackdrop: false,
+            confirmAction: {
+              type: 'guidedStepMilestone',
+              id: 'close',
+              stepId: 'leftovers'
+            }
           },
           generatedRecordsDialog: {
             submitEffectIds: ['captureProducedLeftovers'],
@@ -1248,7 +1265,12 @@ describe('Dashboard', () => {
         confirmLabel: { en: 'OK' },
         showCancel: false,
         showCloseButton: false,
-        dismissOnBackdrop: false
+        dismissOnBackdrop: false,
+        confirmAction: {
+          type: 'guidedStepMilestone',
+          id: 'close',
+          stepId: 'leftovers'
+        }
       },
       generatedRecordsDialog: {
         submitEffectIds: ['captureProducedLeftovers'],

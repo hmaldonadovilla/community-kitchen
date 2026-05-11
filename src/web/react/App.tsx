@@ -13,6 +13,7 @@ import {
   LangCode,
   LocalizedString,
   SelectionEffect,
+  SystemActionGateDialogActionConfig,
   StepMilestoneActionConfig,
   SystemActionGateDialogConfig,
   WebFormDefinition,
@@ -101,6 +102,10 @@ import { FormErrors, LineItemState, OptionState, View } from './types';
 import { useBlockingOverlay } from './features/overlays/useBlockingOverlay';
 import { useConfirmDialog } from './features/overlays/useConfirmDialog';
 import { FieldChangeDialogInputState, useFieldChangeDialog } from './features/fieldChangeDialog/useFieldChangeDialog';
+import {
+  useConfiguredDialogActionRunner,
+  type ConfiguredDialogActionRunner
+} from './features/steps/hooks/useConfiguredDialogActionRunner';
 import { runUpdateRecordAction } from './features/customActions/updateRecord/runUpdateRecordAction';
 import type { GuidedExternalSyncSignal } from './features/steps/domain/guidedExternalSyncSignal';
 import {
@@ -1978,6 +1983,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }>
     >
   >(new Map());
+  const configuredDialogActionRunnerRef = useRef<ConfiguredDialogActionRunner | null>(null);
   const pendingFollowupStatusByRecordRef = useRef<Map<string, string>>(new Map());
   const completedReservationReconciliationByRecordRef = useRef<Map<string, number>>(new Map());
   const applyPendingFollowupStatusesToRecordCache = useCallback(
@@ -10217,6 +10223,36 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       defaultCancelLabel?: string;
     }): Promise<boolean> =>
       new Promise(resolve => {
+        const runButtonAction = async (source: 'confirm' | 'cancel') => {
+          const action =
+            source === 'confirm'
+              ? (args.dialog?.confirmAction as SystemActionGateDialogActionConfig | undefined)
+              : (args.dialog?.cancelAction as SystemActionGateDialogActionConfig | undefined);
+          if (!action) return;
+          const runner = configuredDialogActionRunnerRef.current;
+          if (!runner) {
+            logEvent('configuredDialog.action.skipped.noRunner', {
+              kind: args.kind,
+              refId: args.refId,
+              source,
+              actionType: (action as any)?.type || null,
+              actionId: (action as any)?.id || null
+            });
+            return;
+          }
+          try {
+            await runner(action, { source, kind: args.kind, refId: args.refId });
+          } catch (err: any) {
+            logEvent('configuredDialog.action.exception', {
+              kind: args.kind,
+              refId: args.refId,
+              source,
+              actionType: (action as any)?.type || null,
+              actionId: (action as any)?.id || null,
+              message: err?.message || err?.toString?.() || 'unknown'
+            });
+          }
+        };
         customConfirm.openConfirm({
           title: resolveLocalizedString(
             args.dialog?.title,
@@ -10236,15 +10272,22 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           ),
           primaryAction: args.dialog?.primaryAction,
           showCancel: args.dialog?.showCancel,
+          showConfirm: args.dialog?.showConfirm,
           showCloseButton: args.dialog?.showCloseButton,
           dismissOnBackdrop: args.dialog?.dismissOnBackdrop,
           kind: args.kind,
           refId: args.refId,
-          onConfirm: () => resolve(true),
-          onCancel: () => resolve(false)
+          onConfirm: async () => {
+            await runButtonAction('confirm');
+            resolve(true);
+          },
+          onCancel: async () => {
+            await runButtonAction('cancel');
+            resolve(false);
+          }
         });
       }),
-    [customConfirm, resolveDialogTemplate]
+    [customConfirm, logEvent, resolveDialogTemplate]
   );
 
   const {
@@ -11439,6 +11482,39 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             setStatusLevel('error');
             return { success: false, advanceToNext: false, message };
           }
+          if (recordId && pendingFollowupBatchPromisesRef.current.has(recordId)) {
+            logEvent('guidedStep.milestone.primaryClose.waitPendingFollowup.start', {
+              stepId: args.stepId,
+              recordId
+            });
+            setStatus(
+              tSystem(
+                'submit.waitPreviousAction',
+                languageRef.current,
+                'Please wait while we finish the previous action...'
+              )
+            );
+            setStatusLevel('info');
+            const followupWait = await waitForPendingFollowupBatch({
+              recordId,
+              reason: `${reason}.primaryClose.previousAction`
+            });
+            if (!followupWait.ok) {
+              const message = (followupWait.message || submitPreviousActionRetryMessage()).toString();
+              setStatus(message);
+              setStatusLevel('error');
+              logEvent('guidedStep.milestone.primaryClose.waitPendingFollowup.failed', {
+                stepId: args.stepId,
+                recordId,
+                message
+              });
+              return { success: false, advanceToNext: false, message };
+            }
+            logEvent('guidedStep.milestone.primaryClose.waitPendingFollowup.done', {
+              stepId: args.stepId,
+              recordId
+            });
+          }
           const reservationWait = await waitForCloseReservationSync();
           if (!reservationWait.ok) {
             const message = (reservationWait.message || 'Could not confirm reservation changes.').toString();
@@ -11780,13 +11856,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       runSerializedFollowupBatchRequest,
       scheduleLatestAutoSave,
       statusTransitions,
+      submitPreviousActionRetryMessage,
       trackPendingSharedDataMutation,
       resolveUiErrorMessage,
       waitForActiveDraftSaveTransactions,
+      waitForPendingFollowupBatch,
       waitForPendingReservationSync,
       waitForBackgroundSaves
     ]
   );
+
+  useConfiguredDialogActionRunner({
+    runnerRef: configuredDialogActionRunnerRef,
+    definition,
+    handleGuidedStepMilestone,
+    runFormSubmit: requestSubmit,
+    logEvent,
+    setStatus,
+    setStatusLevel
+  });
 
   const uploadFieldUrls = useCallback(
     async (args: {

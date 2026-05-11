@@ -309,6 +309,7 @@ export const AppOverlays: React.FC<{
     />
 
     <ConfirmDialogOverlay
+      key={customConfirm.state.dialogKey}
       open={customConfirm.state.open}
       title={customConfirm.state.title}
       message={customConfirm.state.message || ''}

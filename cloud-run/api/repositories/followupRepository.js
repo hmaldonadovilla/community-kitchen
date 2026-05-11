@@ -757,13 +757,14 @@ class FollowupRepository {
       return { success: false, message: (artifact && artifact.message) || 'Failed to generate PDF.' };
     }
     if (runtime) runtime.pdfArtifact = artifact;
-    const nextValues = cloneJson(record.values || {});
-    const currentStatus = toText(record.status);
-    const status = this.resolveSafeStatusTransition(followup, currentStatus, record, 'onPdf');
+    const mutationRecord = await this.submissionRepository.fetchSubmissionById(context.formKey, recordId) || record;
+    const nextValues = cloneJson(mutationRecord.values || {});
+    const currentStatus = toText(mutationRecord.status);
+    const status = this.resolveSafeStatusTransition(followup, currentStatus, mutationRecord, 'onPdf');
     const statusFieldId = toText(followup.statusFieldId);
     if (status && statusFieldId) nextValues[statusFieldId] = status;
     const result = await this.submitEffectsRepository.saveSubmissionWithId(
-      this.buildFollowupMutationPayload(context, record, nextValues, status || currentStatus, artifact.url, 'followup.createPdf')
+      this.buildFollowupMutationPayload(context, mutationRecord, nextValues, status || currentStatus, artifact.url, 'followup.createPdf')
     );
     if (!result || !result.success) {
       return { success: false, message: (result && result.message) || 'Failed to save generated PDF metadata.' };
@@ -852,18 +853,20 @@ class FollowupRepository {
       return { success: false, message: err && err.message ? err.message : 'Failed to send follow-up email.' };
     }
 
-    const nextValues = cloneJson(record.values || {});
-    const currentStatus = toText(record.status);
-    const status = this.resolveSafeStatusTransition(followup, currentStatus, record, 'onEmail');
+    const mutationRecord = await this.submissionRepository.fetchSubmissionById(context.formKey, recordId) || record;
+    const nextValues = cloneJson(mutationRecord.values || {});
+    const currentStatus = toText(mutationRecord.status);
+    const status = this.resolveSafeStatusTransition(followup, currentStatus, mutationRecord, 'onEmail');
     const statusFieldId = toText(followup.statusFieldId);
     if (status && statusFieldId) nextValues[statusFieldId] = status;
+    const pdfUrl = pdfArtifact && pdfArtifact.url !== undefined ? pdfArtifact.url : mutationRecord.pdfUrl;
     const result = await this.submitEffectsRepository.saveSubmissionWithId(
       this.buildFollowupMutationPayload(
         context,
-        record,
+        mutationRecord,
         nextValues,
         status || currentStatus,
-        pdfArtifact && pdfArtifact.url !== undefined ? pdfArtifact.url : record.pdfUrl,
+        pdfUrl,
         'followup.sendEmail'
       )
     );
@@ -874,7 +877,7 @@ class FollowupRepository {
     return {
       success: true,
       status: status || currentStatus,
-      pdfUrl: pdfArtifact && pdfArtifact.url !== undefined ? pdfArtifact.url : record.pdfUrl,
+      pdfUrl,
       fileId: pdfArtifact && pdfArtifact.fileId,
       emailMessageId: emailResult && emailResult.id,
       emailThreadId: emailResult && emailResult.threadId,

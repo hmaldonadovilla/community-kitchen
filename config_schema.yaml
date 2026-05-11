@@ -911,7 +911,7 @@ components:
             Optional localized wait messages used when `blockUntilSaved` is true.
 
             Example:
-            - `{ "save": { "en": "Please wait while we save your photo(s)" }, "removeSelected": { "en": "Please wait while we remove selected photo(s)" } }`
+            - `{ "save": { "en": "Photos are still being saved. Keep this screen open until all photos show `Added`" }, "removeSelected": { "en": "Please wait while we remove selected photo(s)" } }`
 
             When omitted, the UI falls back to generic file-based system strings.
         linkLabel:
@@ -4917,7 +4917,39 @@ components:
         dismissOnBackdrop:
           type: boolean
           description: When true, clicking the backdrop dismisses the dialog. Default false.
+        confirmAction:
+          $ref: '#/components/schemas/SystemActionGateDialogActionConfig'
+          description: Optional generic action triggered after the confirm button is selected.
+        cancelAction:
+          $ref: '#/components/schemas/SystemActionGateDialogActionConfig'
+          description: Optional generic action triggered after the cancel/secondary button is selected.
       additionalProperties: true
+
+    SystemActionGateDialogActionConfig:
+      type: object
+      description: |
+        Optional generic action attached to a dialog button.
+
+        Use this to let an acknowledgement dialog continue into another configured workflow
+        without hardcoding form-specific behavior in the React app.
+      properties:
+        type:
+          type: string
+          enum: [guidedStepMilestone, formSubmit]
+          description: |
+            `guidedStepMilestone` runs the configured `navigation.milestoneAction`
+            for the target guided step id.
+            `formSubmit` invokes the same submit flow as the action bar submit
+            button, including submit confirmation, queue waits, follow-up
+            completion handling, and configured navigation.
+        id:
+          type: string
+          description: Optional stable id for diagnostics.
+        stepId:
+          type: string
+          description: Guided step id used by `guidedStepMilestone`.
+      required: [type]
+      additionalProperties: false
 
     DedupIncompleteHomeDialogConfig:
       type: object

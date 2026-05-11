@@ -572,13 +572,18 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.cancelLabel?.en).toBe(
         'No, go back to portioning'
       );
-      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Leftovers');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.title?.en).toBe('Leftovers?');
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.message?.en).toBe(
-        'Record any leftovers.\nIf none, click Complete.'
+        'Record any leftovers before completing this meal production. If there are none, click Complete.'
       );
-      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(false);
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.confirmLabel?.en).toBe('Complete');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.cancelLabel?.en).toBe('Record leftovers');
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCancel).toBe(true);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.showCloseButton).toBe(false);
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.dismissOnBackdrop).toBe(false);
+      expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.confirmAction).toEqual({
+        type: 'formSubmit'
+      });
       expect(leftovers?.navigation?.milestoneAction?.progressDialogCases).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

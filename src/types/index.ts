@@ -813,12 +813,44 @@ export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' |
 
 export type SystemActionGateDialogTrigger = 'onAttempt' | 'onEnable';
 
+export type SystemActionGateDialogActionType = 'guidedStepMilestone' | 'formSubmit';
+
+export interface SystemActionGateDialogActionConfig {
+  /**
+   * Generic action to run when a dialog button is selected.
+   *
+   * `guidedStepMilestone` runs the configured `navigation.milestoneAction`
+   * for the target guided step id.
+   * `formSubmit` invokes the same form submit flow as the action bar submit button.
+   */
+  type: SystemActionGateDialogActionType;
+  /**
+   * Optional stable id for diagnostics.
+   */
+  id?: string;
+  /**
+   * Guided step id used by `guidedStepMilestone`.
+   */
+  stepId?: string;
+}
+
 export interface SystemActionGateDialogConfig extends ButtonConfirmConfig {
+  /**
+   * Controls which action is visually primary / default.
+   * - confirm (default): confirm button uses the primary accent style
+   * - cancel: cancel button uses the primary accent style
+   */
+  primaryAction?: 'confirm' | 'cancel';
   /**
    * When false, hides the cancel button (single-action message dialog).
    * Default: true
    */
   showCancel?: boolean;
+  /**
+   * When false, hides the confirm button.
+   * Default: true
+   */
+  showConfirm?: boolean;
   /**
    * When true, shows the close (×) button.
    * Default: false
@@ -829,6 +861,14 @@ export interface SystemActionGateDialogConfig extends ButtonConfirmConfig {
    * Default: false
    */
   dismissOnBackdrop?: boolean;
+  /**
+   * Optional action triggered after the confirm button is selected.
+   */
+  confirmAction?: SystemActionGateDialogActionConfig;
+  /**
+   * Optional action triggered after the cancel/secondary button is selected.
+   */
+  cancelAction?: SystemActionGateDialogActionConfig;
 }
 
 export interface SystemActionGateRule {

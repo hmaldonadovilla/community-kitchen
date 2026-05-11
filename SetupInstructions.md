@@ -1325,6 +1325,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - show configurable dialogs before/after start (`confirmationDialog`, `confirmationDialogCases[]`, `progressDialog`, `progressDialogCases[]`, `feedbackDialog`)
           - choose the confirmation or progress overlay copy per record state with ordered `confirmationDialogCases[]` / `progressDialogCases[]`
           - show a generated-records dialog after success (`generatedRecordsDialog`) when matching `submitEffects` created downstream records
+          - optionally attach a generic dialog button action with `feedbackDialog.confirmAction` / `feedbackDialog.cancelAction`, supporting `{ "type": "guidedStepMilestone", "stepId": "..." }` to run another step's configured milestone action from the dialog or `{ "type": "formSubmit" }` to invoke the same submit flow as the action bar submit button
       - Read-only labels in steps:
         - Top-level step targets accept `renderAsLabel: true` to show the value as a label instead of an input.
         - Line item + subgroup step targets support **step-scoped label rendering** in two equivalent ways:
@@ -1385,7 +1386,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `progressDialog`: optional blocking-overlay copy shown immediately while submit work is running
       - `progressDialogCases[]`: ordered conditional progress dialogs; first match wins and falls back to `progressDialog`
       - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records; `itemTemplate` supports `{{FIELD_ID}}`, `{{A || B}}` fallbacks, and formatters such as `label`, `appendField`, `pluralize`, and `date`
-      - `feedbackDialog`: optional acknowledgement dialog shown after background actions start
+      - `feedbackDialog`: optional acknowledgement dialog shown after background actions start. Its confirm/cancel buttons may include `confirmAction` or `cancelAction`; use `{ "type": "guidedStepMilestone", "stepId": "leftovers" }` to let a dialog button run the target step's configured milestone action, or `{ "type": "formSubmit" }` when the button should run the same submit flow as the action bar submit button.
       - same-record follow-up batches are serialized on the server, so final-submit `preActions` wait behind any earlier in-flight milestone batch for that record
 
       Example:
