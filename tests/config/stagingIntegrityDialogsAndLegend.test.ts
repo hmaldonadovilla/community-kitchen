@@ -584,18 +584,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.feedbackDialog?.confirmAction).toEqual({
         type: 'formSubmit'
       });
-      expect(leftovers?.navigation?.milestoneAction?.progressDialogCases).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            dialog: expect.objectContaining({
-              title: expect.objectContaining({ en: 'Leftovers' }),
-              message: expect.objectContaining({
-                en: 'Please do not leave the screen and wait for the Leftover ID to be generated'
-              })
-            })
-          })
-        ])
-      );
+      expect(leftovers?.navigation?.milestoneAction).toBeUndefined();
       ['orderInfo', 'deliveryForm'].forEach(stepId => {
         const step = items.find((entry: any) => entry?.id === stepId);
         expect(step?.excludeWhen).toEqual({
@@ -719,61 +708,6 @@ describe('staging integrity dialogs and list legend config', () => {
           fieldId: 'ING'
         })
       );
-      expect(leftovers?.navigation?.milestoneAction?.type).toBe('followupBatch');
-      expect(leftovers?.navigation?.milestoneAction?.preActions).toEqual(['CLOSE_RECORD']);
-      expect(leftovers?.navigation?.milestoneAction?.waitForQueue).toBe('all');
-      expect(leftovers?.navigation?.milestoneAction?.advanceAfterStart).toBe(false);
-      expect(leftovers?.navigation?.milestoneAction?.navigateToAfterSuccess).toBe('list');
-      expect(leftovers?.navigation?.milestoneAction?.confirmationDialogCases).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            when: expect.objectContaining({
-              any: expect.arrayContaining([
-                expect.objectContaining({
-                  lineItems: expect.objectContaining({
-                    groupId: 'MP_MEALS_REQUEST',
-                    subGroupPath: ['MP_TYPE_LI'],
-                    match: 'any',
-                    when: expect.objectContaining({
-                      fieldId: 'MP_LEFTOVER_PORTIONS_CAPTURE',
-                      greaterThan: 0
-                    })
-                  })
-                })
-              ])
-            }),
-            dialog: expect.objectContaining({
-              title: expect.objectContaining({
-                en: 'Leftovers'
-              }),
-              message: expect.objectContaining({
-                en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
-              }),
-              cancelLabel: expect.objectContaining({
-                en: 'No, go back to Leftovers'
-              })
-            })
-          })
-        ])
-      );
-      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Leftovers');
-      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
-        'Please confirm there is no leftover.'
-      );
-      expect(leftovers?.navigation?.milestoneAction?.confirmationDialog?.cancelLabel?.en).toBe('No, go back to Leftovers');
-      expect(leftovers?.navigation?.milestoneAction?.generatedRecordsDialog).toEqual(
-        expect.objectContaining({
-          targetFormKey: 'Config: Leftover Inventory',
-          title: expect.objectContaining({ en: 'Label and store Leftovers' }),
-          message: expect.objectContaining({
-            en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
-          }),
-          itemTemplate: expect.objectContaining({
-            en: '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'
-          })
-        })
-      );
-
       const partialLeftovers = findQuestion(questions || [], 'MP_LEFTOVER_CAPTURE_LI');
       expect(partialLeftovers?.qEn).toBe('Single-ingredient leftovers');
       expect(partialLeftovers?.visibility).toBeUndefined();
