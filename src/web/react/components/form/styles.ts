@@ -1172,6 +1172,23 @@ export const FORM_VIEW_STYLES = `
           color: var(--error);
           text-align: left;
         }
+        .ck-upload-notice {
+          flex: 0 0 100%;
+          width: 100%;
+          margin: 0 0 12px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          font-size: var(--ck-font-helper);
+          font-weight: 500;
+          line-height: 1.35;
+          text-align: left;
+          background: var(--card);
+          color: var(--text);
+        }
+        .ck-upload-notice--error {
+          color: var(--error);
+        }
         .ck-upload-failure__retry {
           appearance: none;
           border: 1px solid var(--border);

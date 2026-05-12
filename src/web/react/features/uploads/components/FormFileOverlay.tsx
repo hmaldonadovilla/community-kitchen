@@ -155,7 +155,7 @@ export const FormFileOverlay: React.FC<{
       field: isLine ? fileOverlay.field : undefined,
       uploadConfig
     };
-    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, saving: true } : prev));
+    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, saving: true, notice: undefined } : prev));
     clearUploadFailureForField(fieldPath);
     if (isTop) {
       handleFileFieldChange(fileOverlay.question!, nextItems);
@@ -219,7 +219,7 @@ export const FormFileOverlay: React.FC<{
       commitImmediateItems([], 'removeAll');
       return;
     }
-    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [] } : prev));
+    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [], notice: undefined } : prev));
     clearUploadFailureForField(fieldPath);
     announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
     onDiagnostic?.('upload.overlay.clear', { fieldPath });
@@ -233,7 +233,7 @@ export const FormFileOverlay: React.FC<{
       commitImmediateItems(nextItems, 'removeOne');
       return;
     }
-    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems } : prev));
+    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, notice: undefined } : prev));
     clearUploadFailureForField(fieldPath);
     announceUpload(
       fieldPath,
@@ -323,6 +323,8 @@ export const FormFileOverlay: React.FC<{
       uploadConfig={uploadConfig}
       dirty={dirty}
       saving={fileOverlay.saving === true}
+      notice={fileOverlay.notice?.message}
+      noticeTone={fileOverlay.notice?.tone}
       saveError={uploadFailures[fieldPath]?.message}
       saveRetrying={uploadFailures[fieldPath]?.retrying}
       onAdd={onAdd}

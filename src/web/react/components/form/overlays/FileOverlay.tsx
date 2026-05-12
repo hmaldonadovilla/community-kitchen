@@ -24,6 +24,8 @@ export type FileOverlayProps = {
   uploadConfig?: UploadConfigLike;
   dirty?: boolean;
   saving?: boolean;
+  notice?: string;
+  noticeTone?: 'warning' | 'error';
   saveError?: string;
   saveRetrying?: boolean;
   onAdd: () => void;
@@ -45,6 +47,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   uploadConfig,
   dirty,
   saving,
+  notice,
+  noticeTone = 'warning',
   saveError,
   saveRetrying,
   onAdd,
@@ -180,6 +184,15 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
             ) : null}
             {maxed ? <span className="muted">{tSystem('files.maxReached', language, 'Required photos added.')}</span> : null}
           </div>
+
+          {notice ? (
+            <div
+              className={`ck-upload-notice ck-upload-notice--${noticeTone}`}
+              role={noticeTone === 'error' ? 'alert' : 'status'}
+            >
+              {notice}
+            </div>
+          ) : null}
 
           {saveError ? (
             <div className="ck-upload-failure" role="alert">

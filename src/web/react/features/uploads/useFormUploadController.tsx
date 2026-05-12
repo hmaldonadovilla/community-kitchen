@@ -22,6 +22,7 @@ export interface FileOverlayState {
   draftItems?: Array<string | File>;
   originalSignature?: string;
   saving?: boolean;
+  notice?: { message: string; tone: 'warning' | 'error' };
 }
 
 export type UploadRetryTarget = {
@@ -188,7 +189,8 @@ export const useFormUploadController = (args: {
         ...next,
         draftItems,
         originalSignature: fileItemsSignature(draftItems),
-        saving: false
+        saving: false,
+        notice: undefined
       });
       onDiagnostic?.('upload.overlay.open', { scope: next.scope, title: next.title });
     },
@@ -417,9 +419,10 @@ export const useFormUploadController = (args: {
       if (fileOverlay.scope !== stageArgs.scope || overlayFieldPath !== stageArgs.fieldPath) return false;
       const uploadField = (stageArgs.question || stageArgs.field || {}) as WebQuestionDefinition;
       const existing = fileOverlay.draftItems || [];
-      const { items, errorMessage } = applyUploadConstraints(uploadField, existing, stageArgs.incoming, language);
+      const { items, errorMessage, warningMessage } = applyUploadConstraints(uploadField, existing, stageArgs.incoming, language);
       const accepted = Math.max(0, items.length - existing.length);
       const blockUntilSaved = resolveUploadBlockUntilSaved((uploadField as any)?.uploadConfig);
+      const constraintMessage = errorMessage || warningMessage;
       setFileOverlay(prev => {
         if (!prev.open) return prev;
         const prevFieldPath =
@@ -429,11 +432,20 @@ export const useFormUploadController = (args: {
               ? prev.fieldPath || ''
               : '';
         if (prev.scope !== stageArgs.scope || prevFieldPath !== stageArgs.fieldPath) return prev;
-        return { ...prev, draftItems: items, saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving };
+        return {
+          ...prev,
+          draftItems: items,
+          saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving,
+          notice: constraintMessage ? { message: constraintMessage, tone: errorMessage ? 'error' : 'warning' } : undefined
+        };
       });
-      if (errorMessage) {
-        announceUpload(stageArgs.fieldPath, errorMessage);
-        onDiagnostic?.('upload.overlay.error', { fieldPath: stageArgs.fieldPath, error: errorMessage, scope: stageArgs.scope });
+      if (constraintMessage) {
+        announceUpload(stageArgs.fieldPath, constraintMessage);
+        onDiagnostic?.(errorMessage ? 'upload.overlay.error' : 'upload.overlay.warning', {
+          fieldPath: stageArgs.fieldPath,
+          message: constraintMessage,
+          scope: stageArgs.scope
+        });
       } else if (accepted > 0) {
         clearUploadFailureForField(stageArgs.fieldPath);
         announceUpload(
@@ -451,6 +463,7 @@ export const useFormUploadController = (args: {
         accepted,
         total: items.length,
         error: Boolean(errorMessage),
+        warning: Boolean(warningMessage),
         scope: stageArgs.scope,
         blockUntilSaved
       });

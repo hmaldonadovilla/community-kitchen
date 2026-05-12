@@ -334,7 +334,7 @@ export const applyUploadConstraints = (
   existing: Array<string | File>,
   incoming: File[],
   language: LangCode
-): { items: Array<string | File>; errorMessage?: string } => {
+): { items: Array<string | File>; errorMessage?: string; warningMessage?: string } => {
   if (!incoming.length) {
     return { items: existing };
   }
@@ -348,7 +348,8 @@ export const applyUploadConstraints = (
     : [];
   const maxBytes = uploadConfig?.maxFileSizeMb ? uploadConfig.maxFileSizeMb * 1024 * 1024 : undefined;
   const next = [...existing];
-  const errors: string[] = [];
+  const errors: Array<{ kind: 'fileType' | 'maxFileSizeMb' | 'maxFiles'; message: string }> = [];
+  let acceptedCount = 0;
 
   const resolveUploadError = (args: {
     custom?: any;
@@ -388,8 +389,9 @@ export const applyUploadConstraints = (
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (!isAllowedType(file)) {
       const allowedDisplay = allowedExtensions.map(e => (e.startsWith('.') ? e : `.${e}`));
-      errors.push(
-        resolveUploadError({
+      errors.push({
+        kind: 'fileType',
+        message: resolveUploadError({
           custom: uploadConfig?.errorMessages?.fileType,
           systemKey: 'files.error.fileType',
           fallback: '{name} is not an allowed photo type.',
@@ -401,34 +403,65 @@ export const applyUploadConstraints = (
             types: allowedMimeTypes.join(', ')
           }
         })
-      );
+      });
       return;
     }
     if (maxBytes && file.size > maxBytes) {
-      errors.push(
-        resolveUploadError({
+      errors.push({
+        kind: 'maxFileSizeMb',
+        message: resolveUploadError({
           custom: uploadConfig?.errorMessages?.maxFileSizeMb,
           systemKey: 'files.error.maxFileSizeMb',
           fallback: '{name} exceeds {mb} MB.',
           vars: { name: file.name, mb: uploadConfig?.maxFileSizeMb ?? '' }
         })
-      );
+      });
       return;
     }
     if (maxFiles && next.length >= maxFiles) {
-      errors.push(
-        resolveUploadError({
+      errors.push({
+        kind: 'maxFiles',
+        message: resolveUploadError({
           custom: uploadConfig?.errorMessages?.maxFiles,
           systemKey: 'files.error.maxFiles',
           fallback: 'Maximum of {max} photo{plural} reached.',
           vars: { max: maxFiles, plural: maxFiles > 1 ? 's' : '' }
         })
-      );
+      });
       return;
     }
     next.push(file);
+    acceptedCount += 1;
   });
-  return { items: next, errorMessage: errors.join(' · ') || undefined };
+  if (!errors.length) return { items: next };
+
+  const uniqueMessages = Array.from(new Set(errors.map(error => error.message).filter(Boolean)));
+  const message = uniqueMessages.join(' · ') || undefined;
+  if (acceptedCount > 0) {
+    const maxOnly = errors.every(error => error.kind === 'maxFiles');
+    return {
+      items: next,
+      warningMessage: maxOnly && maxFiles
+        ? tSystem(
+            'files.warning.maxFilesPartial',
+            language,
+            'Only {accepted} of {attempted} selected photos were added. Maximum: {max}.',
+            { accepted: acceptedCount, attempted: incoming.length, max: maxFiles }
+          )
+        : tSystem(
+            'files.warning.someRejected',
+            language,
+            '{accepted} photo{plural} added. Some selected files were not added: {reason}',
+            {
+              accepted: acceptedCount,
+              plural: acceptedCount === 1 ? '' : 's',
+              reason: message || ''
+            }
+          )
+    };
+  }
+
+  return { items: next, errorMessage: message };
 };
 
 const asScalarString = (raw: unknown): string => {

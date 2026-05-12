@@ -451,6 +451,14 @@
     "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
     "remainingOne": { "en": "You can add 1 more photo.", "fr": "Vous pouvez ajouter 1 photo de plus.", "nl": "Je kunt nog 1 foto toevoegen." },
     "remainingMany": { "en": "You can add {count} more photos.", "fr": "Vous pouvez ajouter encore {count} photos.", "nl": "Je kunt nog {count} foto's toevoegen." },
+    "warning": {
+      "maxFilesPartial": {
+        "en": "Only {accepted} of {attempted} selected photos were added. Maximum: {max}."
+      },
+      "someRejected": {
+        "en": "{accepted} photo{plural} added. Some selected files were not added: {reason}"
+      }
+    },
     "error": {
       "uploadFailed": {
         "en": "Could not add photos.",

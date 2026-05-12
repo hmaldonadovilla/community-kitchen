@@ -117,12 +117,13 @@ export function useFormFileUploadHandlers({
   const processIncomingFiles = (question: WebQuestionDefinition, incoming: File[]) => {
     if (!incoming.length) return;
     const existing = toUploadItems(valuesRef.current[question.id]);
-    const { items, errorMessage } = applyUploadConstraints(question, existing, incoming, language);
+    const { items, errorMessage, warningMessage } = applyUploadConstraints(question, existing, incoming, language);
     handleFileFieldChange(question, items, errorMessage);
     const accepted = Math.max(0, items.length - existing.length);
-    if (errorMessage) {
-      announceUpload(question.id, errorMessage);
-      onDiagnostic?.('upload.error', { questionId: question.id, error: errorMessage });
+    const constraintMessage = errorMessage || warningMessage;
+    if (constraintMessage) {
+      announceUpload(question.id, constraintMessage);
+      onDiagnostic?.(errorMessage ? 'upload.error' : 'upload.warning', { questionId: question.id, message: constraintMessage });
     } else if (accepted > 0) {
       announceUpload(
         question.id,
@@ -138,7 +139,8 @@ export function useFormFileUploadHandlers({
       attempted: incoming.length,
       accepted,
       total: items.length,
-      error: Boolean(errorMessage)
+      error: Boolean(errorMessage),
+      warning: Boolean(warningMessage)
     });
 
     if (onUploadFiles && accepted > 0) {
@@ -288,7 +290,7 @@ export function useFormFileUploadHandlers({
     const currentRow = existingRows.find(row => row.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
     const pseudo = { uploadConfig: field.uploadConfig } as unknown as WebQuestionDefinition;
-    const { items: files, errorMessage } = applyUploadConstraints(pseudo, existingFiles, incoming, language);
+    const { items: files, errorMessage, warningMessage } = applyUploadConstraints(pseudo, existingFiles, incoming, language);
 
     handleLineFieldChange(group, rowId, field, files as unknown as FieldValue);
     setErrors(prev => {
@@ -302,9 +304,10 @@ export function useFormFileUploadHandlers({
     });
 
     const accepted = Math.max(0, files.length - existingFiles.length);
-    if (errorMessage) {
-      announceUpload(fieldPath, errorMessage);
-      onDiagnostic?.('upload.error', { fieldPath, error: errorMessage, scope: 'line' });
+    const constraintMessage = errorMessage || warningMessage;
+    if (constraintMessage) {
+      announceUpload(fieldPath, constraintMessage);
+      onDiagnostic?.(errorMessage ? 'upload.error' : 'upload.warning', { fieldPath, message: constraintMessage, scope: 'line' });
     } else if (accepted > 0) {
       announceUpload(
         fieldPath,
@@ -321,6 +324,7 @@ export function useFormFileUploadHandlers({
       accepted,
       total: files.length,
       error: Boolean(errorMessage),
+      warning: Boolean(warningMessage),
       scope: 'line'
     });
 

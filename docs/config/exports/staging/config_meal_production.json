@@ -7134,7 +7134,7 @@
       "listView": false,
       "ui": {
         "helperText": {
-          "en": "Take a photo of delivery tags before cooking."
+          "en": "You can upload up to 10 photos only."
         },
         "helperPlacement": "belowLabel"
       },
@@ -7195,7 +7195,7 @@
         ],
         "errorMessages": {
           "minFiles": {
-            "en": "Please upload one photo",
+            "en": "Upload at least 1 photo.",
             "fr": "Veuillez télécharger une photo",
             "nl": "Upload een foto"
           },
@@ -11090,7 +11090,7 @@
         "listView": false,
         "ui": {
           "helperText": {
-            "en": "Take a photo of delivery tags before cooking."
+            "en": "You can upload up to 10 photos only."
           },
           "helperPlacement": "belowLabel"
         },
@@ -11151,7 +11151,7 @@
           ],
           "errorMessages": {
             "minFiles": {
-              "en": "Please upload one photo",
+              "en": "Upload at least 1 photo.",
               "fr": "Veuillez télécharger une photo",
               "nl": "Upload een foto"
             },
