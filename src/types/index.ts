@@ -4100,6 +4100,13 @@ export interface StepMilestoneActionConfig {
    */
   runInBackground?: boolean;
   /**
+   * Controls how SEND_EMAIL follow-up actions are completed.
+   * `direct` requires the email send call to succeed before the batch succeeds.
+   * `queued` allows the batch to succeed once the email job is queued for background delivery.
+   * Default preserves the existing route-specific behavior.
+   */
+  emailDispatchMode?: 'direct' | 'queued';
+  /**
    * When true, automatically advance to the next guided step after the action starts successfully.
    * Default: true
    */
@@ -5850,6 +5857,9 @@ export interface FollowupActionResult {
   durationMs?: number;
   queued?: boolean;
   jobId?: string;
+  emailDispatched?: boolean;
+  emailMessageId?: string;
+  emailThreadId?: string;
   reservationReconciliation?: {
     success: boolean;
     sourceRecordId?: string;

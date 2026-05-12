@@ -451,6 +451,137 @@ describe('react api transport', () => {
     });
   });
 
+  test('falls back to direct Apps Script email when direct email dispatch is required', async () => {
+    const invoke = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('Cloud Run SEND_EMAIL requires CK_GMAIL_DELEGATED_USER to be configured for Gmail domain-wide delegation.'));
+    const runner: any = {
+      success: null,
+      failure: null,
+      withSuccessHandler: jest.fn((handler: any) => {
+        runner.success = handler;
+        return runner;
+      }),
+      withFailureHandler: jest.fn((handler: any) => {
+        runner.failure = handler;
+        return runner;
+      }),
+      triggerFollowupActions: jest.fn(() => {
+        runner.success({
+          success: true,
+          results: [
+            {
+              action: 'SEND_EMAIL',
+              result: {
+                success: true,
+                status: 'Final report emailed',
+                emailDispatched: true
+              }
+            }
+          ]
+        });
+      }),
+      enqueueFollowupEmail: jest.fn()
+    };
+    (globalThis as any).google = { script: { run: runner } };
+    configureBackendTransport({
+      invoke,
+      isHttpRouted: fnName => fnName === 'triggerFollowupActions'
+    });
+
+    await expect(
+      triggerFollowupBatch('Config: Meal Production', 'meal-1', ['SEND_EMAIL'], {
+        emailDispatchMode: 'direct'
+      })
+    ).resolves.toEqual({
+      success: true,
+      results: [
+        {
+          action: 'SEND_EMAIL',
+          result: {
+            success: true,
+            status: 'Final report emailed',
+            emailDispatched: true
+          }
+        }
+      ]
+    });
+
+    expect(runner.triggerFollowupActions).toHaveBeenCalledWith('Config: Meal Production', 'meal-1', ['SEND_EMAIL'], {
+      emailDispatchMode: 'direct'
+    });
+    expect(runner.enqueueFollowupEmail).not.toHaveBeenCalled();
+  });
+
+  test('direct email dispatch treats queued email results as incomplete', async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      success: true,
+      results: [
+        {
+          action: 'SEND_EMAIL',
+          result: {
+            success: true,
+            queued: true,
+            message: 'Final report email queued.'
+          }
+        }
+      ]
+    });
+    configureBackendTransport({ invoke });
+
+    await expect(
+      triggerFollowupBatch('Config: Meal Production', 'meal-1', ['SEND_EMAIL'], {
+        emailDispatchMode: 'direct'
+      })
+    ).resolves.toEqual({
+      success: false,
+      results: [
+        {
+          action: 'SEND_EMAIL',
+          result: {
+            success: false,
+            queued: true,
+            message: 'Final report email was queued but not confirmed sent.'
+          }
+        }
+      ]
+    });
+  });
+
+  test('direct email dispatch treats ambiguous send results as incomplete', async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      success: true,
+      results: [
+        {
+          action: 'SEND_EMAIL',
+          result: {
+            success: true,
+            status: 'Final report emailed'
+          }
+        }
+      ]
+    });
+    configureBackendTransport({ invoke });
+
+    await expect(
+      triggerFollowupBatch('Config: Meal Production', 'meal-1', ['SEND_EMAIL'], {
+        emailDispatchMode: 'direct'
+      })
+    ).resolves.toEqual({
+      success: false,
+      results: [
+        {
+          action: 'SEND_EMAIL',
+          result: {
+            success: false,
+            status: 'Final report emailed',
+            message: 'Final report email completed without a confirmed dispatch result.'
+          }
+        }
+      ]
+    });
+  });
+
   test('routes standalone CREATE_PDF follow-up actions to Cloud Run', async () => {
     const invoke = jest.fn().mockResolvedValue({ success: true, fileId: 'pdf-1' });
     configureBackendTransport({

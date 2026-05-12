@@ -947,10 +947,10 @@ describe('Dashboard', () => {
               submitLabel: { EN: 'Create report' },
               milestoneAction: {
                 type: 'followupBatch',
-                preActions: ['RECONCILE_RESERVATIONS'],
-                backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+                preActions: ['RECONCILE_RESERVATIONS', 'SEND_EMAIL'],
                 ensureRecordId: true,
-                runInBackground: true,
+                runInBackground: false,
+                emailDispatchMode: 'direct',
                 validationScope: 'throughCurrentStep',
                 waitForQueue: 'uploadsOnly',
                 advanceAfterStart: true,
@@ -1024,10 +1024,10 @@ describe('Dashboard', () => {
     expect(step?.navigation?.submitLabel).toEqual({ en: 'Create report' });
     expect(step?.navigation?.milestoneAction).toEqual({
       type: 'followupBatch',
-      preActions: ['RECONCILE_RESERVATIONS'],
-      backgroundActions: ['CREATE_PDF', 'SEND_EMAIL'],
+      preActions: ['RECONCILE_RESERVATIONS', 'SEND_EMAIL'],
       ensureRecordId: true,
-      runInBackground: true,
+      runInBackground: false,
+      emailDispatchMode: 'direct',
       validationScope: 'throughCurrentStep',
       waitForQueue: 'uploadsOnly',
       advanceAfterStart: true,

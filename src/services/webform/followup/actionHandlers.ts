@@ -367,6 +367,7 @@ export const handleSendEmailAction = (args: {
     status: statusValue || currentStatus || ctx.record.status,
     pdfUrl: pdfArtifact?.url,
     fileId: pdfArtifact?.fileId,
+    emailDispatched: true,
     updatedAt: revisionMeta.updatedAt || (updatedAt ? updatedAt.toISOString() : ctx.record.updatedAt),
     dataVersion: revisionMeta.dataVersion,
     rowNumber: revisionMeta.rowNumber

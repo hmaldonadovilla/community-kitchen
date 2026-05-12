@@ -55,6 +55,11 @@ The following work may continue after the user has already advanced:
 - email sending
 - plain draft `saveSubmissionWithId` sync for newer in-memory form snapshots
 
+New report gate:
+
+- when a guided milestone requires full report certainty, configure `SEND_EMAIL` as a blocking pre-action with `emailDispatchMode: "direct"`
+- in that mode, queueing an email is not enough; the email send call must succeed and the record must reach the configured emailed status before the user advances
+
 Important dependency:
 
 - if the email must include the generated PDF, `SEND_EMAIL` depends on `CREATE_PDF`
@@ -155,10 +160,9 @@ Examples:
 3. Wait according to the configured queue policy.
 4. Run blocking pre-actions:
    - reservation reconciliation when configured
-5. Advance the UI to `6. Leftovers`.
-6. Launch background actions:
-   - `CREATE_PDF`
-   - `SEND_EMAIL` after PDF if required
+   - direct `SEND_EMAIL` when final report certainty is required
+5. `SEND_EMAIL` generates or reuses the PDF before sending the email.
+6. Advance the UI to `6. Leftovers` only after the emailed status is persisted.
 7. Show a configurable acknowledgement dialog.
 
 ### Final submit from `6. Leftovers`

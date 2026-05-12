@@ -3860,6 +3860,14 @@ components:
         runInBackground:
           type: boolean
           description: When true, the UI continues immediately and follow-up results reconcile later. Default false.
+        emailDispatchMode:
+          type: string
+          enum: [direct, queued]
+          description: |
+            Controls how SEND_EMAIL follow-up actions complete.
+            - `direct`: the email send call must succeed before the follow-up batch succeeds; use this when the user must not advance until the report has been generated and emailed.
+            - `queued`: the batch may succeed once the email job is queued for background delivery.
+            Omit to preserve the existing route-specific behavior.
         validationScope:
           type: string
           enum: [currentStep, throughCurrentStep, fullForm]

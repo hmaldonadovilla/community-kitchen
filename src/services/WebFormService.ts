@@ -80,6 +80,7 @@ import {
   buildFollowupBatchFailureResult,
   buildSkippedFollowupActionResults,
   isFollowupBatchSuccess,
+  normalizeFollowupAction,
   normalizeFollowupActions,
   resolveParallelReconcileFollowupPlan
 } from './webform/followup/actionPlan';
@@ -161,6 +162,12 @@ const IN_MEMORY_BUNDLED_DEFINITION_CACHE = new Map<string, WebFormDefinition>();
 
 type FollowupRuntimeOptions = {
   pdfArtifact?: (Partial<GeneratedPdfArtifact> & { pdfUrl?: string }) | null;
+  emailDispatchMode?: 'direct' | 'queued';
+};
+
+const normalizeFollowupEmailDispatchMode = (value: unknown): 'direct' | 'queued' | '' => {
+  const normalized = (value === undefined || value === null ? '' : value.toString()).trim().toLowerCase();
+  return normalized === 'direct' || normalized === 'queued' ? normalized : '';
 };
 
 const normalizeFollowupRuntimePdfArtifact = (options?: FollowupRuntimeOptions | null): GeneratedPdfArtifact | null => {
@@ -4802,9 +4809,10 @@ export class WebFormService {
     questions: QuestionConfig[],
     recordId: string,
     actions: string[],
-    runtime: { pdfArtifact?: GeneratedPdfArtifact | null },
+    runtime: { pdfArtifact?: GeneratedPdfArtifact | null; emailDispatchMode?: 'direct' | 'queued' | '' },
     touchLaneOwner: () => void
   ): { success: boolean; results: Array<{ action: string; result: FollowupActionResult }> } | null {
+    if (runtime.emailDispatchMode === 'direct') return null;
     const plan = resolveParallelReconcileFollowupPlan(actions);
     if (!plan) return null;
     const resultByAction = new Map<string, { action: string; result: FollowupActionResult }>();
@@ -5928,10 +5936,18 @@ export class WebFormService {
     }
 
     const results: Array<{ action: string; result: FollowupActionResult }> = [];
-    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null } = {
-      pdfArtifact: normalizeFollowupRuntimePdfArtifact(options)
+    const runtime: { pdfArtifact?: GeneratedPdfArtifact | null; emailDispatchMode?: 'direct' | 'queued' | '' } = {
+      pdfArtifact: normalizeFollowupRuntimePdfArtifact(options),
+      emailDispatchMode: normalizeFollowupEmailDispatchMode(options?.emailDispatchMode)
     };
     try {
+      if (runtime.emailDispatchMode === 'direct' && normalizedActions.some(action => normalizeFollowupAction(action) === 'SEND_EMAIL')) {
+        debugLog('followup.batch.emailDispatch.direct', {
+          formKey,
+          recordId: normalizedRecordId,
+          actions: normalizedActions.map(action => normalizeFollowupAction(action))
+        });
+      }
       const plannedResult = this.runReconcilePdfFollowupBatch(
         formKey,
         form,

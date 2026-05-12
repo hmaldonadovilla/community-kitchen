@@ -5224,6 +5224,39 @@ describe('WebFormService', () => {
     }
   });
 
+  test('triggerFollowupActions direct email dispatch bypasses queued report email optimization', () => {
+    const lane = installFollowupLaneMocks();
+    try {
+      jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
+      const enqueueSpy = jest.spyOn(service, 'enqueueFollowupEmail');
+      const actionSpy = jest
+        .spyOn(service as any, 'runFollowupActionWithLifecycle')
+        .mockImplementation((...args: any[]) => ({
+          success: true,
+          status: args[4] === 'SEND_EMAIL' ? 'Final report emailed' : `${args[4]} done`,
+          emailDispatched: args[4] === 'SEND_EMAIL' || undefined,
+          updatedAt: '2026-04-08T10:00:00.000Z'
+        }));
+
+      const result = service.triggerFollowupActions(
+        'Config: Delivery',
+        'REC-DIRECT-EMAIL-1',
+        ['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'],
+        { emailDispatchMode: 'direct' }
+      );
+
+      expect(result.success).toBe(true);
+      expect(actionSpy.mock.calls.map(call => call[4])).toEqual([
+        'RECONCILE_RESERVATIONS',
+        'CREATE_PDF',
+        'SEND_EMAIL'
+      ]);
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    } finally {
+      lane.restore();
+    }
+  });
+
   test('triggerFollowupActions does not block unrelated records on a different lane', () => {
     const lane = installFollowupLaneMocks();
     try {

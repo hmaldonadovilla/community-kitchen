@@ -163,4 +163,47 @@ describe('Cloud Run FollowupRepository', () => {
       expect.objectContaining({ folderId: 'pdf-folder' })
     );
   });
+
+  test('direct email dispatch bypasses queued parallel report email optimization', async () => {
+    const repository = new FollowupRepository({
+      submissionRepository: {
+        getFormContext: jest.fn().mockReturnValue(context),
+        fetchSubmissionById: jest.fn()
+      },
+      submitEffectsRepository: { saveSubmissionWithId: jest.fn() },
+      templateRepository: createTemplateRepository(),
+      gmailClient: {
+        isConfigured: jest.fn().mockReturnValue(true),
+        sendEmail: jest.fn()
+      }
+    });
+    const enqueueSpy = jest.spyOn(repository, 'enqueueFollowupEmail');
+    const reconcileSpy = jest.spyOn(repository, 'runReconcileReservations').mockResolvedValue({
+      success: true,
+      reservationReconciliation: { success: true, sourceRecordId: 'mp-1' }
+    });
+    const pdfSpy = jest.spyOn(repository, 'runCreatePdf').mockResolvedValue({
+      success: true,
+      fileId: 'pdf-1',
+      pdfUrl: 'https://drive.example/pdf-1'
+    });
+    const emailSpy = jest.spyOn(repository, 'runSendEmail').mockResolvedValue({
+      success: true,
+      status: 'Final report emailed',
+      emailDispatched: true
+    });
+
+    const result = await repository.triggerFollowupActions(
+      'Config: Meal Production',
+      'mp-1',
+      ['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'],
+      { emailDispatchMode: 'direct' }
+    );
+
+    expect(result.success).toBe(true);
+    expect(reconcileSpy).toHaveBeenCalled();
+    expect(pdfSpy).toHaveBeenCalled();
+    expect(emailSpy).toHaveBeenCalled();
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
 });

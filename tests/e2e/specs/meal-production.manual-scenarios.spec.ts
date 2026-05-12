@@ -292,7 +292,7 @@ test.describe('Meal Production manual script scenarios', () => {
       await expect(frame.getByText('Please confirm')).toBeVisible({ timeout: 10_000 });
       await confirmDialog(frame, 'Yes, create final report');
       await waitForLoadingToSettle(frame);
-      await expect(frame.getByRole('button', { name: 'Leftovers' })).toBeVisible({ timeout: 15_000 });
+      await expect(frame.getByRole('button', { name: 'Leftovers' })).toBeVisible({ timeout: 60_000 });
     } finally {
       await cleanupMealProductionRecordInFrameBestEffort(frame, lunchKey);
     }

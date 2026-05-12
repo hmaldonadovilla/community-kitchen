@@ -37,6 +37,13 @@ const cloneJson = value => {
 
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
 
+const normalizeEmailDispatchMode = value => {
+  const normalized = toText(value).toLowerCase();
+  return normalized === 'direct' || normalized === 'queued' ? normalized : '';
+};
+
+const isDirectEmailDispatchMode = options => normalizeEmailDispatchMode(options && options.emailDispatchMode) === 'direct';
+
 const isMissingSheetError = err => /Unable to parse range|Google Sheets tab not found|not found|does not exist/i.test(toText(err && err.message));
 
 const buildSubgroupKey = (parentGroupId, parentRowId, subGroupId) =>
@@ -879,6 +886,7 @@ class FollowupRepository {
       status: status || currentStatus,
       pdfUrl,
       fileId: pdfArtifact && pdfArtifact.fileId,
+      emailDispatched: true,
       emailMessageId: emailResult && emailResult.id,
       emailThreadId: emailResult && emailResult.threadId,
       updatedAt: meta.updatedAt,
@@ -932,6 +940,7 @@ class FollowupRepository {
   }
 
   async runParallelReconcilePdfFollowupActions(context, recordId, actions, options) {
+    if (isDirectEmailDispatchMode(options)) return null;
     const plan = resolveParallelReconcileFollowupPlan(actions);
     if (!plan) return null;
     const runtime = {

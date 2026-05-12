@@ -178,6 +178,10 @@ export interface FollowupBatchResponse {
   results: Array<{ action: string; result: FollowupActionResult }>;
 }
 
+export type FollowupBatchOptions = {
+  emailDispatchMode?: 'direct' | 'queued';
+};
+
 // ----------------------------
 // Client-side HTML render cache
 // ----------------------------
@@ -874,6 +878,51 @@ const buildSkippedFollowupResult = (actions: string[], message: string): Array<{
     }
   }));
 
+const normalizeFollowupEmailDispatchMode = (value: any): 'direct' | 'queued' | '' => {
+  const normalized = (value ?? '').toString().trim().toLowerCase();
+  return normalized === 'direct' || normalized === 'queued' ? normalized : '';
+};
+
+const isDirectFollowupEmailDispatch = (options: any): boolean =>
+  normalizeFollowupEmailDispatchMode(options?.emailDispatchMode) === 'direct';
+
+const normalizeFollowupBatchOptions = (options?: FollowupBatchOptions | null): FollowupBatchOptions | undefined => {
+  const emailDispatchMode = normalizeFollowupEmailDispatchMode(options?.emailDispatchMode);
+  return emailDispatchMode ? { emailDispatchMode } : undefined;
+};
+
+const applyDirectEmailDispatchRequirement = (
+  batch: FollowupBatchResponse,
+  actions: any[],
+  options?: FollowupBatchOptions | null
+): FollowupBatchResponse => {
+  if (!isDirectFollowupEmailDispatch(options)) return batch;
+  const normalizedActions = (Array.isArray(actions) ? actions : []).map(normalizeFollowupAction);
+  if (!normalizedActions.includes('SEND_EMAIL')) return batch;
+  const results = (Array.isArray(batch?.results) ? batch.results : []).map(entry => {
+    if (normalizeFollowupAction(entry?.action) !== 'SEND_EMAIL') return entry;
+    const result = entry?.result;
+    if (!result?.success) return entry;
+    if (result.queued !== true && result.emailDispatched === true) return entry;
+    return {
+      ...entry,
+      result: {
+        ...result,
+        success: false,
+        message:
+          result.queued === true
+            ? 'Final report email was queued but not confirmed sent.'
+            : 'Final report email completed without a confirmed dispatch result.'
+      }
+    };
+  });
+  return {
+    ...batch,
+    results,
+    success: results.length > 0 && results.every(entry => Boolean(entry?.result?.success))
+  };
+};
+
 const extractPdfArtifactFromFollowupBatch = (
   batch: FollowupBatchResponse,
   current: { fileId?: string; url?: string } | null
@@ -977,6 +1026,7 @@ const runSplitFollowupBatchWithAppsScriptEmail = async (
 };
 
 const invokeFollowupTransport = async <T,>(fnName: string, actions: any[], ...args: any[]): Promise<T> => {
+  const directEmailDispatch = isDirectFollowupEmailDispatch(args[3]);
   if (activeTransport.isHttpRouted?.(fnName) && !areCloudRunFollowupActions(actions)) {
     logBackendTransportConfig('followup.appsScriptFallback', {
       fnName,
@@ -990,6 +1040,14 @@ const invokeFollowupTransport = async <T,>(fnName: string, actions: any[], ...ar
     if (activeTransport.isHttpRouted?.(fnName) && fnName === 'triggerFollowupActions' && isCloudRunGmailNotConfiguredError(err)) {
       const formKey = (args[0] || '').toString();
       const recordId = (args[1] || '').toString();
+      if (directEmailDispatch) {
+        logBackendTransportConfig('followup.appsScriptDirectEmailFallback', {
+          fnName,
+          actions: (Array.isArray(actions) ? actions : []).map(action => (action ?? '').toString().trim()).filter(Boolean),
+          reason: 'gmailNotConfigured'
+        });
+        return runAppsScript<T>(fnName, ...args);
+      }
       logBackendTransportConfig('followup.splitAppsScriptEmailFallback', {
         fnName,
         actions: (Array.isArray(actions) ? actions : []).map(action => (action ?? '').toString().trim()).filter(Boolean),
@@ -1231,9 +1289,19 @@ export const triggerFollowup = (
 export const triggerFollowupBatch = (
   formKey: string,
   recordId: string,
-  actions: string[]
-): Promise<FollowupBatchResponse> =>
-  invokeFollowupTransport<FollowupBatchResponse>('triggerFollowupActions', actions, formKey, recordId, actions);
+  actions: string[],
+  options?: FollowupBatchOptions
+): Promise<FollowupBatchResponse> => {
+  const normalizedOptions = normalizeFollowupBatchOptions(options);
+  const args = normalizedOptions
+    ? [formKey, recordId, actions, normalizedOptions]
+    : [formKey, recordId, actions];
+  return invokeFollowupTransport<FollowupBatchResponse>(
+    'triggerFollowupActions',
+    actions,
+    ...args
+  ).then(batch => applyDirectEmailDispatchRequirement(batch, actions, options));
+};
 
 export const enqueueFollowupEmailApi = (
   formKey: string,

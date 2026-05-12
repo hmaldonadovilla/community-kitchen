@@ -2431,6 +2431,10 @@ export class Dashboard {
             if ((milestoneActionRaw as any).runInBackground !== undefined) {
               milestoneAction.runInBackground = Boolean((milestoneActionRaw as any).runInBackground);
             }
+            const emailDispatchMode = normalizeString((milestoneActionRaw as any).emailDispatchMode).toLowerCase();
+            if (emailDispatchMode === 'direct' || emailDispatchMode === 'queued') {
+              milestoneAction.emailDispatchMode = emailDispatchMode;
+            }
             if ((milestoneActionRaw as any).advanceAfterStart !== undefined) {
               milestoneAction.advanceAfterStart = Boolean((milestoneActionRaw as any).advanceAfterStart);
             }

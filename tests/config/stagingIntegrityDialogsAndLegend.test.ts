@@ -540,20 +540,19 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(leftovers?.helpText).toBeUndefined();
       expect(leftovers?.navigation?.stepBarAccessWhen).toEqual({
         fieldId: 'status',
-        equals: ['PDF ready', 'Emailed', 'Final report created', 'Final report emailed', 'Closed']
+        equals: ['Final report emailed', 'Closed']
       });
       expect(root?.submitButtonLabel?.en).toBe('Complete');
       expect(root?.actionBars?.bottom?.summary?.primary || []).not.toContain('submit');
       expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([
-        'RECONCILE_RESERVATIONS'
-      ]);
-      expect(portioning?.navigation?.milestoneAction?.backgroundActions).toEqual([
-        'CREATE_PDF',
+        'RECONCILE_RESERVATIONS',
         'SEND_EMAIL'
       ]);
-      expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(true);
+      expect(portioning?.navigation?.milestoneAction?.backgroundActions).toBeUndefined();
+      expect(portioning?.navigation?.milestoneAction?.runInBackground).toBe(false);
+      expect(portioning?.navigation?.milestoneAction?.emailDispatchMode).toBe('direct');
       expect(portioning?.navigation?.milestoneAction?.validationScope).toBe('throughCurrentStep');
       expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('all');
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);

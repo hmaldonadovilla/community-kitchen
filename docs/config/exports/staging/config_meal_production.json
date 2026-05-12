@@ -2762,14 +2762,12 @@
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [
-                "RECONCILE_RESERVATIONS"
-              ],
-              "backgroundActions": [
-                "CREATE_PDF",
+                "RECONCILE_RESERVATIONS",
                 "SEND_EMAIL"
               ],
               "ensureRecordId": true,
-              "runInBackground": true,
+              "runInBackground": false,
+              "emailDispatchMode": "direct",
               "validationScope": "throughCurrentStep",
               "waitForQueue": "all",
               "advanceAfterStart": true,
@@ -2785,6 +2783,14 @@
                 },
                 "cancelLabel": {
                   "en": "No, go back to portioning"
+                }
+              },
+              "progressDialog": {
+                "title": {
+                  "en": ""
+                },
+                "message": {
+                  "en": "Do not leave this screen while we create and send the report."
                 }
               },
               "feedbackDialog": {
@@ -3178,9 +3184,6 @@
             "stepBarAccessWhen": {
               "fieldId": "status",
               "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
                 "Final report emailed",
                 "Closed"
               ]
@@ -13162,14 +13165,12 @@
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [
-                "RECONCILE_RESERVATIONS"
-              ],
-              "backgroundActions": [
-                "CREATE_PDF",
+                "RECONCILE_RESERVATIONS",
                 "SEND_EMAIL"
               ],
               "ensureRecordId": true,
-              "runInBackground": true,
+              "runInBackground": false,
+              "emailDispatchMode": "direct",
               "validationScope": "throughCurrentStep",
               "waitForQueue": "all",
               "advanceAfterStart": true,
@@ -13185,6 +13186,14 @@
                 },
                 "cancelLabel": {
                   "en": "No, go back to portioning"
+                }
+              },
+              "progressDialog": {
+                "title": {
+                  "en": ""
+                },
+                "message": {
+                  "en": "Do not leave this screen while we create and send the report."
                 }
               },
               "feedbackDialog": {
@@ -13578,9 +13587,6 @@
             "stepBarAccessWhen": {
               "fieldId": "status",
               "equals": [
-                "PDF ready",
-                "Emailed",
-                "Final report created",
                 "Final report emailed",
                 "Closed"
               ]

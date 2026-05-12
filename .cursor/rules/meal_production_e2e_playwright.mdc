@@ -90,16 +90,16 @@ Expected result:
 
 - Confirm delivered portions match ordered portions.
 - Default seeded value is usually already `10`.
-- Click `Finish portioning`
+- Click `Create report`
 - In the confirmation dialog, click `Yes, confirmed`
 
 Expected result:
-- Move to `Leftovers`
-- Background actions notice appears
-- `Finish portioning` should not block on a fresh `applyInventoryReservationPlan`
+- Remain blocked until the final report PDF is generated and the report email send call succeeds
+- Move to `Leftovers` only after the record reaches `Final report emailed`
+- `Create report` should not block on a fresh `applyInventoryReservationPlan`, but it must block on report generation/email completion
 - Expected milestone shape:
-  - pre-action: reservation reconciliation only
-  - background actions: PDF + email
+  - pre-actions: reservation reconciliation + direct `SEND_EMAIL`
+  - `SEND_EMAIL` generates or reuses the PDF before sending
 
 ### 6. Leftovers
 
@@ -144,17 +144,17 @@ Watch for:
 - duplicate `saveSubmissionWithId` with identical payloads
 - stale `__ckClientDataVersion`
 
-### Finish portioning
+### Create report
 
 Expected:
 - queue drain
 - draft snapshot save if dirty
 - milestone confirmation
-- follow-up batch start
+- direct follow-up batch completion
 
 Avoid:
 - blocking `applyInventoryReservationPlan`
-- navigation held until PDF/email finish
+- advancing to `Leftovers` after only PDF creation or email queueing
 
 ### Return to list after complete
 
@@ -191,7 +191,7 @@ const text = await frame.locator('body').innerText();
 - Opening a record should not keep background list fetches alive.
 - Uploading a photo should end with `Added` and a saved draft state.
 - `saveSubmissionWithId` must send the latest `__ckClientDataVersion`.
-- `Finish portioning` must advance to `Leftovers` without waiting for PDF/email completion.
+- `Create report` must advance to `Leftovers` only after the final report email is confirmed sent.
 - Completing with no leftovers must return to list cleanly.
 
 ## Notes

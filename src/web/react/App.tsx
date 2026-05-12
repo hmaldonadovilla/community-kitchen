@@ -50,6 +50,7 @@ import {
   resolveUserFacingErrorMessage,
   isBackendFunctionRoutedToHttp
 } from './api';
+import type { FollowupBatchOptions } from './api';
 import { AppHeader } from './components/app/AppHeader';
 import { AppHeaderStatus } from './components/app/AppHeaderStatus';
 import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
@@ -2269,8 +2270,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
 
   const runSerializedFollowupBatchRequest = useCallback(
-    async (args: { recordId: string; actions: string[]; reason: string }): Promise<FollowupBatchResponse> => {
+    async (args: {
+      recordId: string;
+      actions: string[];
+      reason: string;
+      options?: FollowupBatchOptions;
+    }): Promise<FollowupBatchResponse> => {
       return runSerializedSubmissionRequest(`followup:${args.reason}`, async () => {
+        if (args.options?.emailDispatchMode === 'direct') {
+          logEvent('followup.batch.directEmailDispatch', {
+            recordId: args.recordId,
+            reason: args.reason,
+            actions: args.actions
+          });
+          return triggerFollowupBatch(formKey, args.recordId, args.actions, args.options);
+        }
         const parallelPlan = resolveParallelReconcileFollowupPlan({
           definition,
           formKey,
@@ -2278,10 +2292,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           actions: args.actions
         });
         if (!parallelPlan) {
-          return triggerFollowupBatch(formKey, args.recordId, args.actions);
+          return triggerFollowupBatch(formKey, args.recordId, args.actions, args.options);
         }
         if (isBackendFunctionRoutedToHttp('triggerFollowupActions')) {
-          return triggerFollowupBatch(formKey, args.recordId, args.actions);
+          return triggerFollowupBatch(formKey, args.recordId, args.actions, args.options);
         }
 
         const actionErrorMessage = (err: unknown, fallback: string): string =>
@@ -11106,6 +11120,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const normalizedBackgroundActions = effectiveBackgroundActions
         .map(entry => (entry || '').toString().trim().toUpperCase())
         .filter(Boolean);
+      const milestoneEmailDispatchMode =
+        args.action.emailDispatchMode === 'direct' || args.action.emailDispatchMode === 'queued'
+          ? args.action.emailDispatchMode
+          : undefined;
+      const followupBatchOptions: FollowupBatchOptions | undefined = milestoneEmailDispatchMode
+        ? { emailDispatchMode: milestoneEmailDispatchMode }
+        : undefined;
       const closeOnlyPrimarySubmitMilestone =
         normalizedPreActions.length === 1 &&
         normalizedPreActions[0] === 'CLOSE_RECORD' &&
@@ -11325,12 +11346,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               recordId,
               actions,
               runInBackground: batchReason.endsWith('.background') && args.action.runInBackground === true,
+              emailDispatchMode: followupBatchOptions?.emailDispatchMode || null,
               nextStepId: args.nextStepId || null
             });
             const batch = await runSerializedFollowupBatchRequest({
               recordId,
               actions,
-              reason: batchReason
+              reason: batchReason,
+              options: followupBatchOptions
             });
             const batchOutcome = applyFollowupBatchResults({
               recordId,
