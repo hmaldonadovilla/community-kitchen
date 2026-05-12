@@ -104,6 +104,25 @@ export const isLineItemMaxRowsReached = (count: number, maxRows?: number): boole
   return count >= maxRows;
 };
 
+export const resolveLineItemRemoveGuard = (cfg?: any): { minRows: number; message?: unknown; title?: unknown } | null => {
+  const guard = cfg?.removeGuard;
+  if (!guard || typeof guard !== 'object') return null;
+  const parsedMin = Number((guard as any).minRows);
+  const minRows = Number.isFinite(parsedMin) ? Math.max(0, Math.floor(parsedMin)) : 0;
+  if (minRows <= 0) return null;
+  return {
+    minRows,
+    message: (guard as any).message,
+    title: (guard as any).title
+  };
+};
+
+export const shouldBlockLineItemRowRemoval = (args: { guard?: { minRows: number } | null; currentCount: number }): boolean => {
+  const minRows = args.guard?.minRows;
+  if (minRows === undefined || minRows === null || minRows <= 0) return false;
+  return args.currentCount <= minRows;
+};
+
 const normalizeDedupScalar = (raw: unknown): string => {
   if (raw === undefined || raw === null) return '';
   if (Array.isArray(raw)) {

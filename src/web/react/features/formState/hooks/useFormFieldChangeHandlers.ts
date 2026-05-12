@@ -25,6 +25,7 @@ import {
   resolveLineItemDedupMessage,
   resolveLineItemDedupValueToken
 } from '../../lineItems/domain/formViewHelpers';
+import { isLineItemDedupErrorMessage } from '../../lineItems/domain/lineItemDedupErrors';
 
 type UserEditResult = { deferMutation?: boolean; skipSelectionEffects?: boolean };
 
@@ -375,7 +376,7 @@ export function useFormFieldChangeHandlers({
         const next = { ...prev };
         dedupRuleMessages.forEach(entry => {
           const key = `${group.id}__${entry.fieldId}__${rowId}`;
-          if (next[key] === entry.message) delete next[key];
+          if (isLineItemDedupErrorMessage({ rules: dedupRules, language, message: next[key] })) delete next[key];
         });
         next[conflictPath] = conflictMessage;
         return next;
@@ -462,7 +463,7 @@ export function useFormFieldChangeHandlers({
       delete next[`${group.id}__${field.id}__${rowId}`];
       dedupRuleMessages.forEach(entry => {
         const key = `${group.id}__${entry.fieldId}__${rowId}`;
-        if (next[key] === entry.message) delete next[key];
+        if (isLineItemDedupErrorMessage({ rules: dedupRules, language, message: next[key] })) delete next[key];
       });
       return next;
     });

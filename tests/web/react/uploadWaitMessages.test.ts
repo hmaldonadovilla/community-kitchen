@@ -29,8 +29,8 @@ describe('resolveUploadWaitMessage', () => {
     expect(resolveUploadWaitTitle({ waitMessages: { title: { en: '' } } }, 'EN', 'save')).toBe('');
   });
 
-  test('falls back to generic file copy', () => {
-    expect(resolveUploadWaitTitle({}, 'EN', 'save')).toBe('Please wait');
+  test('falls back to generic file copy without a title', () => {
+    expect(resolveUploadWaitTitle({}, 'EN', 'save')).toBe('');
     expect(resolveUploadWaitMessage({}, 'EN', 'save')).toBe('Please wait while we save your file(s)');
     expect(resolveUploadWaitMessage({}, 'EN', 'removeSelected')).toBe('Please wait while we remove selected file(s)');
   });

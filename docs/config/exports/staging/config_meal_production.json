@@ -1530,10 +1530,10 @@
                           "then": {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "required": true,
-                            "min": 0.01
+                            "min": 1
                           },
                           "message": {
-                            "en": "Enter a quantity greater than 0."
+                            "en": "Enter a value between 1 and the maximum available. To use none, deselect this leftover."
                           }
                         },
                         {
@@ -1558,7 +1558,7 @@
                             "maxFieldId": "LEFTOVER_PORTIONS_MAX"
                           },
                           "message": {
-                            "en": "Use a whole number up to the available portions."
+                            "en": "Enter a value between 1 and {MAX_AVAILABLE}. To use none, deselect this leftover."
                           }
                         },
                         {
@@ -1582,7 +1582,7 @@
                             "maxFieldId": "LEFTOVER_QTY_MAX"
                           },
                           "message": {
-                            "en": "Use a quantity up to the available amount."
+                            "en": "Enter a value between 1 and {MAX_AVAILABLE}. To use none, deselect this leftover."
                           }
                         }
                       ],
@@ -1631,7 +1631,7 @@
                             "required": true
                           },
                           "message": {
-                            "en": "Select reheated or combined."
+                            "en": "Select Combine or Reheat"
                           }
                         }
                       ],
@@ -2272,6 +2272,24 @@
                       "en": "View/Edit"
                     },
                     "variant": "button",
+                    "enabledWhen": {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "subGroupId": "MP_TYPE_LI",
+                        "when": {
+                          "all": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": "Cook"
+                            },
+                            {
+                              "fieldId": "RECIPE",
+                              "notEmpty": true
+                            }
+                          ]
+                        }
+                      }
+                    },
                     "effects": [
                       {
                         "type": "openOverlay",
@@ -3163,7 +3181,7 @@
                 "en": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
               },
               "groupOverride": {
                 "totals": []
@@ -6232,6 +6250,15 @@
                   "en": "Add ingredient"
                 },
                 "anchorFieldId": "ING",
+                "removeGuard": {
+                  "minRows": 1,
+                  "title": {
+                    "en": ""
+                  },
+                  "message": {
+                    "en": "At least one ingredient must remain."
+                  }
+                },
                 "dedupRules": [
                   {
                     "fields": [
@@ -6981,7 +7008,8 @@
           "groupTitleSuffix": {
             "en": "last 7 days"
           },
-          "defaultExpanded": false
+          "defaultExpanded": false,
+          "clearSearchOnClose": true
         }
       }
     },
@@ -7016,7 +7044,8 @@
           "groupTitleSuffix": {
             "en": "next 7 days"
           },
-          "defaultExpanded": false
+          "defaultExpanded": false,
+          "clearSearchOnClose": true
         }
       }
     }
@@ -9636,6 +9665,15 @@
                     "en": "Add ingredient"
                   },
                   "anchorFieldId": "ING",
+                  "removeGuard": {
+                    "minRows": 1,
+                    "title": {
+                      "en": ""
+                    },
+                    "message": {
+                      "en": "At least one ingredient must remain."
+                    }
+                  },
                   "dedupRules": [
                     {
                       "fields": [
@@ -10385,7 +10423,8 @@
             "groupTitleSuffix": {
               "en": "last 7 days"
             },
-            "defaultExpanded": false
+            "defaultExpanded": false,
+            "clearSearchOnClose": true
           }
         }
       },
@@ -10420,7 +10459,8 @@
             "groupTitleSuffix": {
               "en": "next 7 days"
             },
-            "defaultExpanded": false
+            "defaultExpanded": false,
+            "clearSearchOnClose": true
           }
         }
       }
@@ -11948,10 +11988,10 @@
                           "then": {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "required": true,
-                            "min": 0.01
+                            "min": 1
                           },
                           "message": {
-                            "en": "Enter a quantity greater than 0."
+                            "en": "Enter a value between 1 and the maximum available. To use none, deselect this leftover."
                           }
                         },
                         {
@@ -11976,7 +12016,7 @@
                             "maxFieldId": "LEFTOVER_PORTIONS_MAX"
                           },
                           "message": {
-                            "en": "Use a whole number up to the available portions."
+                            "en": "Enter a value between 1 and {MAX_AVAILABLE}. To use none, deselect this leftover."
                           }
                         },
                         {
@@ -12000,7 +12040,7 @@
                             "maxFieldId": "LEFTOVER_QTY_MAX"
                           },
                           "message": {
-                            "en": "Use a quantity up to the available amount."
+                            "en": "Enter a value between 1 and {MAX_AVAILABLE}. To use none, deselect this leftover."
                           }
                         }
                       ],
@@ -12049,7 +12089,7 @@
                             "required": true
                           },
                           "message": {
-                            "en": "Select reheated or combined."
+                            "en": "Select Combine or Reheat"
                           }
                         }
                       ],
@@ -12690,6 +12730,24 @@
                       "en": "View/Edit"
                     },
                     "variant": "button",
+                    "enabledWhen": {
+                      "lineItems": {
+                        "groupId": "MP_MEALS_REQUEST",
+                        "subGroupId": "MP_TYPE_LI",
+                        "when": {
+                          "all": [
+                            {
+                              "fieldId": "PREP_TYPE",
+                              "equals": "Cook"
+                            },
+                            {
+                              "fieldId": "RECIPE",
+                              "notEmpty": true
+                            }
+                          ]
+                        }
+                      }
+                    },
                     "effects": [
                       {
                         "type": "openOverlay",
@@ -13581,7 +13639,7 @@
                 "en": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
               },
               "groupOverride": {
                 "totals": []

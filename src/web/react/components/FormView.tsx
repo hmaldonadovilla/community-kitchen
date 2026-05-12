@@ -154,6 +154,7 @@ import {
   resolveOverlayHeaderFields,
   resolveRequiredValue
 } from '../features/lineItems/domain/formViewHelpers';
+import { shouldPreserveLineItemDedupError } from '../features/lineItems/domain/lineItemDedupErrors';
 import { useFormLineItemRows } from '../features/lineItems/hooks/useFormLineItemRows';
 import { useFormFieldChangeHandlers } from '../features/formState/hooks/useFormFieldChangeHandlers';
 import { useOverlayOpenActions } from '../features/lineItems/hooks/useOverlayOpenActions';
@@ -2019,8 +2020,20 @@ const FormView: React.FC<FormViewProps> = ({
             let changed = false;
             const nextRowKeys = Object.keys(nextErrors).filter(key => key.startsWith(rowPrefix) && key.endsWith(rowSuffix));
             const nextRowKeySet = new Set(nextRowKeys);
+            const validationGroup = validationDefinition.questions.find(
+              q => q.id === groupId && q.type === 'LINE_ITEM_GROUP'
+            ) as WebQuestionDefinition | undefined;
             Object.keys(prev).forEach(key => {
               if (key.startsWith(rowPrefix) && key.endsWith(rowSuffix) && !nextRowKeySet.has(key)) {
+                if (
+                  shouldPreserveLineItemDedupError({
+                    groupConfig: validationGroup?.lineItemConfig,
+                    language,
+                    message: prev[key]
+                  })
+                ) {
+                  return;
+                }
                 delete next[key];
                 changed = true;
               }
@@ -4664,6 +4677,7 @@ const FormView: React.FC<FormViewProps> = ({
     setPendingScrollAnchor,
     setSubgroupSelectors,
     ensureLineOptions,
+    openConfirmDialog: openConfirmDialogResolved,
     onSelectionEffect,
     onDiagnostic,
     computeRowNonMatchKeys,

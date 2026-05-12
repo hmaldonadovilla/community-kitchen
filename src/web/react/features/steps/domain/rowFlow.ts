@@ -514,6 +514,28 @@ export const resolveRowFlowState = (args: {
   };
 };
 
+export const resolveRowFlowActionEnabled = (args: {
+  action?: RowFlowActionConfig | null;
+  groupId: string;
+  rowId: string;
+  rowValues: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  topValues?: Record<string, FieldValue>;
+}): boolean => {
+  const { action, groupId, rowId, rowValues, lineItems, topValues } = args;
+  if (!action) return false;
+  const fallbackRow = { groupKey: groupId, rowValues, rowId };
+  const enabledWhen = (action as any).enabledWhen as WhenClause | undefined;
+  if (enabledWhen && !resolveWhenMatch({ when: enabledWhen, target: null, lineItems, topValues, fallbackRow })) {
+    return false;
+  }
+  const disabledWhen = (action as any).disabledWhen as WhenClause | undefined;
+  if (disabledWhen && resolveWhenMatch({ when: disabledWhen, target: null, lineItems, topValues, fallbackRow })) {
+    return false;
+  }
+  return true;
+};
+
 export const resolveRowFlowActionPlan = (args: {
   actionId: string;
   config?: RowFlowConfig;
@@ -534,6 +556,7 @@ export const resolveRowFlowActionPlan = (args: {
   const fallbackRow = { groupKey: groupId, rowValues, rowId };
   const showWhenOk = resolveWhenMatch({ when: action.showWhen, target: null, lineItems, topValues, fallbackRow });
   if (!showWhenOk) return null;
+  if (!resolveRowFlowActionEnabled({ action, groupId, rowId, rowValues, lineItems, topValues })) return null;
 
   const references =
     state?.references ||

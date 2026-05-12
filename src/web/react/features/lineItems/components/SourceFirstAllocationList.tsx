@@ -14,6 +14,7 @@ import {
 } from '../../../components/form/reservationSyncPolicy';
 import {
   buildSourceFirstSelectionTogglePatch,
+  collectSourceFirstSentenceFieldErrorMap,
   collectSourceFirstSentenceFieldErrors,
   resolveSourceFirstAllocationDisplayValue,
   resolveSourceFirstCompactTextParts,
@@ -167,6 +168,7 @@ export const SourceFirstAllocationList: React.FC<{
     fieldById: Map<string, any>;
     selectedFieldId: string;
     sentenceParts: any[];
+    fieldErrors?: Record<string, string>;
   }): React.ReactNode => (
     <SourceFirstSentenceParts
       idBase={args.parentRow.id}
@@ -181,6 +183,7 @@ export const SourceFirstAllocationList: React.FC<{
       resolveIntegerOnly={allowsVirtualIntegerOnly}
       resolveMaxFieldId={resolveVirtualMaxFieldId}
       toFiniteNumber={toFiniteNumber}
+      fieldErrors={args.fieldErrors}
       onNumberChange={({ fieldId, value, virtualValues, sourceRow }) => {
         const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
         const patch = buildReservationFieldPatch({
@@ -469,6 +472,13 @@ export const SourceFirstAllocationList: React.FC<{
                         parentValues: parentRow.values as Record<string, FieldValue>,
                         validateFieldRules: validateVirtualFieldRules
                       });
+                      const sentenceFieldErrorMap = collectSourceFirstSentenceFieldErrorMap({
+                        parts: sentenceParts,
+                        fieldById,
+                        virtualValues,
+                        parentValues: parentRow.values as Record<string, FieldValue>,
+                        validateFieldRules: validateVirtualFieldRules
+                      });
                       const buildSelectionTogglePatch = (checked: boolean): Record<string, any> =>
                         buildSourceFirstSelectionTogglePatch({
                           checked,
@@ -492,7 +502,7 @@ export const SourceFirstAllocationList: React.FC<{
                           allocationLabel={allocationLabel}
                           showSelectionCheckbox={!!selectedFieldId}
                           selected={isSelected}
-                          errors={sentenceFieldErrors}
+                          errors={Object.keys(sentenceFieldErrorMap).length ? [] : sentenceFieldErrors}
                           onSelectionChange={checked =>
                             syncStepDataSourceOutputRowWithReservation({
                               config,
@@ -509,7 +519,8 @@ export const SourceFirstAllocationList: React.FC<{
                             virtualValues,
                             fieldById,
                             selectedFieldId,
-                            sentenceParts
+                            sentenceParts,
+                            fieldErrors: sentenceFieldErrorMap
                           })}
                         </SourceFirstAllocationRow>
                       );

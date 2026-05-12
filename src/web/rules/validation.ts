@@ -43,6 +43,17 @@ const withLimitMessage = (prefix: string, limit: number | string) => ({
   nl: `${prefix} ${limit}.`
 });
 
+const formatValidationMessage = (
+  message: string,
+  vars?: Record<string, number | string | null | undefined>
+): string => {
+  if (!message || !vars) return message;
+  return message.replace(/\{([A-Z0-9_]+)\}/g, (_match, key) => {
+    const raw = vars[key];
+    return raw === undefined || raw === null ? '' : `${raw}`;
+  });
+};
+
 const toFiniteNumber = (raw: unknown): number | null => {
   if (raw === undefined || raw === null) return null;
   const scalar = Array.isArray(raw)
@@ -141,7 +152,12 @@ export function checkRule(
       validationLog('minFieldId.fail', { minSpec, value });
     }
     return (
-      customMessage ||
+      (customMessage
+        ? formatValidationMessage(customMessage, {
+            MIN_AVAILABLE: minSpec.label,
+            MIN: minSpec.label
+          })
+        : '') ||
       resolveLocalizedString(withLimitMessage('Value must be >=', minSpec.label), language, 'Value must be >= ' + minSpec.label + '.')
     );
   }
@@ -152,7 +168,12 @@ export function checkRule(
       validationLog('maxFieldId.fail', { maxSpec, value });
     }
     return (
-      customMessage ||
+      (customMessage
+        ? formatValidationMessage(customMessage, {
+            MAX_AVAILABLE: maxSpec.label,
+            MAX: maxSpec.label
+          })
+        : '') ||
       resolveLocalizedString(withLimitMessage('Value must be <=', maxSpec.label), language, 'Value must be <= ' + maxSpec.label + '.')
     );
   }

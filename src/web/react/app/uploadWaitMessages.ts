@@ -65,6 +65,6 @@ export const resolveUploadWaitTitle = (
         uploadConfig?.wait_remove_selected_title ??
         uploadConfig?.removeWaitTitle ??
         uploadConfig?.remove_wait_title;
-  const fallback = tSystemOptional('navigation.waitTitle', language, 'Please wait');
+  const fallback = tSystemOptional('navigation.waitTitle', language, '');
   return resolveOptionalLocalizedString(custom as LocalizedString | undefined, language, fallback).trim();
 };

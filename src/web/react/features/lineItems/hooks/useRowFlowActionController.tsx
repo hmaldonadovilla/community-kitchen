@@ -38,6 +38,7 @@ import {
 } from '../domain/rowFlowDisplayValue';
 import { RowFlowActionControl } from '../components/RowFlowActionControl';
 import {
+  resolveRowFlowActionEnabled,
   resolveRowFlowActionPlan,
   resolveRowFlowFieldTarget,
   type RowFlowResolvedEffect,
@@ -511,7 +512,15 @@ export const useRowFlowActionController = ({
     (args: { actionId: string; row: LineItemRowState; rowFlowState: RowFlowResolvedState }) => {
       const action = rowFlowActionById.get(args.actionId);
       if (!action) return null;
-      const disabled = submitting;
+      const enabled = resolveRowFlowActionEnabled({
+        action,
+        groupId,
+        rowId: args.row.id,
+        rowValues: args.row.values || {},
+        lineItems,
+        topValues: values
+      });
+      const disabled = submitting || !enabled;
       return (
         <RowFlowActionControl
           key={action.id}
@@ -522,7 +531,7 @@ export const useRowFlowActionController = ({
         />
       );
     },
-    [language, rowFlowActionById, runRowFlowActionWithContext, submitting]
+    [groupId, language, lineItems, rowFlowActionById, runRowFlowActionWithContext, submitting, values]
   );
 
   React.useEffect(() => {

@@ -2,6 +2,7 @@ import {
   filterItemsByWhenClause,
   filterItemsForSearchPreset,
   resolveSearchPresetDateFilter,
+  shouldClearSearchOnOverlayPresetClose,
   shouldShowSearchPresetInMode,
   whenClauseContainsTodayFilter
 } from '../../../src/web/react/app/listViewFilters';
@@ -45,6 +46,12 @@ describe('listViewFilters', () => {
     expect(shouldShowSearchPresetInMode(undefined, 'cards')).toBe(true);
     expect(shouldShowSearchPresetInMode(undefined, 'table')).toBe(false);
     expect(shouldShowSearchPresetInMode({ showIn: ['table'] }, 'table')).toBe(true);
+  });
+
+  it('detects overlay presets that should clear search on close', () => {
+    expect(shouldClearSearchOnOverlayPresetClose({ overlay: { clearSearchOnClose: true } } as any)).toBe(true);
+    expect(shouldClearSearchOnOverlayPresetClose({ overlay: { clearSearchOnClose: false } } as any)).toBe(false);
+    expect(shouldClearSearchOnOverlayPresetClose(null)).toBe(false);
   });
 
   it('filters preset results using lookback days and includeToday false', () => {

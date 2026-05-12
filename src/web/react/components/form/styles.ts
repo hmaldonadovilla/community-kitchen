@@ -1308,11 +1308,11 @@ export const FORM_VIEW_STYLES = `
           width: 100%;
           max-width: none;
           align-items: stretch;
-          gap: 2px;
+          gap: 0;
           padding: 2px;
           border: 1px solid var(--border);
-          border-radius: 12px;
-          background: transparent;
+          border-radius: 8px;
+          background: var(--border);
           min-height: var(--control-height);
           box-sizing: border-box;
         }
@@ -1320,8 +1320,8 @@ export const FORM_VIEW_STYLES = `
           flex: 1 1 0;
           min-height: calc(var(--control-height) - 4px);
           border: none;
-          background: transparent;
-          border-radius: 10px;
+          background: var(--surface);
+          border-radius: 0;
           padding: 10px 12px;
           font-size: var(--ck-font-control);
           font-weight: 600;
@@ -1335,6 +1335,15 @@ export const FORM_VIEW_STYLES = `
           white-space: normal;
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .ck-segmented button:first-child {
+          border-radius: 6px 0 0 6px;
+        }
+        .ck-segmented button:last-child {
+          border-radius: 0 6px 6px 0;
+        }
+        .ck-segmented button + button {
+          border-left: 1px solid var(--border);
         }
         .ck-segmented button.active {
           /* Make the selected segment visually obvious. */

@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { buildLocalizedOptions, toOptionSet } from '../../../../core';
+import { buildLocalizedOptions, matchesWhenClause, toOptionSet } from '../../../../core';
 import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, LineItemRowState } from '../../../../types';
@@ -52,6 +52,7 @@ export const SourceFirstSentenceParts: React.FC<{
   onNumberChange: (event: SentenceFieldEvent) => void;
   onNumberBlur?: (event: SentenceFieldEvent) => void;
   onChoiceChange: (event: SentenceFieldEvent) => void;
+  fieldErrors?: Record<string, string>;
   clustered?: boolean;
   compactChoicePlaceholder?: boolean;
 }> = ({
@@ -70,10 +71,42 @@ export const SourceFirstSentenceParts: React.FC<{
   onNumberChange,
   onNumberBlur,
   onChoiceChange,
+  fieldErrors,
   clustered = false,
   compactChoicePlaceholder = false
 }) => {
   const parentValues = (parentRow.values || {}) as Record<string, FieldValue>;
+  const resolveMinValue = (field: any): number | null => {
+    const rules = Array.isArray(field?.validationRules) ? field.validationRules : [];
+    const fieldId = `${field?.id || ''}`.trim();
+    if (!fieldId) return null;
+    const ctx = {
+      getValue: (fid: string) => {
+        if (Object.prototype.hasOwnProperty.call(virtualValues, fid)) return (virtualValues as any)[fid];
+        if (Object.prototype.hasOwnProperty.call(parentValues, fid)) return (parentValues as any)[fid];
+        return undefined;
+      },
+      getLineItems: () => [],
+      getLineItemKeys: () => []
+    } as any;
+    for (const rule of rules) {
+      const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
+      if (!thenCfg) continue;
+      const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
+      if (targetFieldId !== fieldId) continue;
+      if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) continue;
+      if (thenCfg.min !== undefined) {
+        const parsed = toFiniteNumber(thenCfg.min);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      const minFieldId = (thenCfg.minFieldId || '').toString().trim();
+      if (minFieldId) {
+        const parsed = toFiniteNumber(ctx.getValue(minFieldId));
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+    }
+    return null;
+  };
   return (
     <>
       {sentenceParts.map((part: any, partIndex: number) => {
@@ -103,6 +136,7 @@ export const SourceFirstSentenceParts: React.FC<{
         if (!fieldId) return null;
         const field = fieldById.get(fieldId);
         if (!field) return null;
+        const fieldError = fieldErrors?.[fieldId] || '';
 
         if (field.type === 'NUMBER') {
           const rawValue = virtualValues[fieldId];
@@ -119,13 +153,15 @@ export const SourceFirstSentenceParts: React.FC<{
           const maxFieldId = resolveMaxFieldId(field, virtualValues, parentValues);
           const maxValue =
             maxFieldId && maxFieldId in virtualValues ? toFiniteNumber(virtualValues[maxFieldId]) : null;
+          const minValue = resolveMinValue(field);
           return (
             <span
               key={`field:${idBase}:${fieldId}`}
               style={{
                 display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: fieldError ? 4 : 0,
                 flex: '0 0 auto',
                 whiteSpace: 'nowrap',
                 minWidth: clustered ? 0 : undefined,
@@ -133,81 +169,85 @@ export const SourceFirstSentenceParts: React.FC<{
               }}
               data-compact-cluster={clustered ? 'true' : undefined}
             >
-              <AutoWidthInput
-                className="ck-compact-control ck-compact-control--number"
-                value={valueText}
-                disabled={disabledForField(field)}
-                readOnly={false}
-                inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
-                pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
-                ariaLabel={resolveFieldLabel(field, language, field.id)}
-                selectAllOnFocus
-                sanitize={raw =>
-                  sanitizeNumericDraft(raw, {
-                    integerOnly: allowsIntegerOnly,
-                    maxValue
-                  })
-                }
-                minWidth={minWidth}
-                maxWidth={maxWidth}
-                extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
-                onChange={next => {
-                  const nextValue = next === '' ? null : next;
-                  const currentValue =
-                    virtualValues[fieldId] === undefined || virtualValues[fieldId] === null
-                      ? null
-                      : `${virtualValues[fieldId]}`;
-                  const normalizedNext = nextValue === null || nextValue === undefined ? null : `${nextValue}`;
-                  if (normalizedNext === currentValue) return;
-                  onNumberChange({
-                    field,
-                    fieldId,
-                    value: nextValue,
-                    virtualValues,
-                    parentValues,
-                    sourceRow
-                  });
-                }}
-                onBlur={next => {
-                  if (!onNumberBlur) return;
-                  onNumberBlur({
-                    field,
-                    fieldId,
-                    value: next === '' ? null : next,
-                    virtualValues,
-                    parentValues,
-                    sourceRow
-                  });
-                }}
-                style={clustered ? { flex: '0 0 auto' } : undefined}
-                inputStyle={{
-                  boxSizing: 'border-box',
-                  minHeight: 34,
-                  paddingInlineStart: 8,
-                  paddingInlineEnd: 8,
-                  textAlign: 'center',
-                  fontVariantNumeric: 'tabular-nums',
-                  fontSize: 'var(--ck-font-control)',
-                  fontWeight: 500,
-                  lineHeight: 1
-                }}
-              />
-              {suffixText ? (
-                <span
-                  style={
-                    clustered
-                      ? {
-                          fontSize: 'var(--ck-font-control)',
-                          whiteSpace: 'nowrap',
-                          flex: '0 0 auto',
-                          marginInlineStart: 0
-                        }
-                      : { whiteSpace: 'nowrap' }
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AutoWidthInput
+                  className="ck-compact-control ck-compact-control--number"
+                  value={valueText}
+                  disabled={disabledForField(field)}
+                  readOnly={false}
+                  inputMode={allowsIntegerOnly ? 'numeric' : 'decimal'}
+                  pattern={allowsIntegerOnly ? '[0-9]*' : '[0-9]*[.,]?[0-9]*'}
+                  ariaLabel={resolveFieldLabel(field, language, field.id)}
+                  selectAllOnFocus
+                  sanitize={raw =>
+                    sanitizeNumericDraft(raw, {
+                      integerOnly: allowsIntegerOnly,
+                      minValue,
+                      maxValue
+                    })
                   }
-                >
-                  {suffixText}
-                </span>
-              ) : null}
+                  minWidth={minWidth}
+                  maxWidth={maxWidth}
+                  extraWidth={Math.max(24, Math.ceil(paddingChars * 8))}
+                  onChange={next => {
+                    const nextValue = next === '' ? null : next;
+                    const currentValue =
+                      virtualValues[fieldId] === undefined || virtualValues[fieldId] === null
+                        ? null
+                        : `${virtualValues[fieldId]}`;
+                    const normalizedNext = nextValue === null || nextValue === undefined ? null : `${nextValue}`;
+                    if (normalizedNext === currentValue) return;
+                    onNumberChange({
+                      field,
+                      fieldId,
+                      value: nextValue,
+                      virtualValues,
+                      parentValues,
+                      sourceRow
+                    });
+                  }}
+                  onBlur={next => {
+                    if (!onNumberBlur) return;
+                    onNumberBlur({
+                      field,
+                      fieldId,
+                      value: next === '' ? null : next,
+                      virtualValues,
+                      parentValues,
+                      sourceRow
+                    });
+                  }}
+                  style={clustered ? { flex: '0 0 auto' } : undefined}
+                  inputStyle={{
+                    boxSizing: 'border-box',
+                    minHeight: 34,
+                    paddingInlineStart: 8,
+                    paddingInlineEnd: 8,
+                    textAlign: 'center',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: 'var(--ck-font-control)',
+                    fontWeight: 500,
+                    lineHeight: 1
+                  }}
+                />
+                {suffixText ? (
+                  <span
+                    style={
+                      clustered
+                        ? {
+                            fontSize: 'var(--ck-font-control)',
+                            whiteSpace: 'nowrap',
+                            flex: '0 0 auto',
+                            marginInlineStart: 0
+                          }
+                        : { whiteSpace: 'nowrap' }
+                    }
+                  >
+                    {suffixText}
+                  </span>
+                ) : null}
+              </span>
+              {fieldError ? <span className="error">{fieldError}</span> : null}
             </span>
           );
         }
@@ -239,7 +279,14 @@ export const SourceFirstSentenceParts: React.FC<{
             return (
               <span
                 key={`field:${idBase}:${fieldId}`}
-                style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: 0 }}
+                style={{
+                  display: 'inline-flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: fieldError ? 4 : 0,
+                  flex: '0 0 auto',
+                  minWidth: 0
+                }}
                 data-compact-cluster={clustered ? 'true' : undefined}
               >
                 <div
@@ -281,13 +328,21 @@ export const SourceFirstSentenceParts: React.FC<{
                     );
                   })}
                 </div>
+                {fieldError ? <span className="error">{fieldError}</span> : null}
               </span>
             );
           }
           return (
             <span
               key={`field:${idBase}:${fieldId}`}
-              style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto', minWidth: clustered ? 0 : undefined }}
+              style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: fieldError ? 4 : 0,
+                flex: '0 0 auto',
+                minWidth: clustered ? 0 : undefined
+              }}
               data-compact-cluster={clustered ? 'true' : undefined}
             >
               <AutoWidthSelect
@@ -327,9 +382,10 @@ export const SourceFirstSentenceParts: React.FC<{
                         fontSize: 'var(--ck-font-control)',
                         lineHeight: 1.2,
                         fontWeight: 500
-                      }
+                  }
                 }
               />
+              {fieldError ? <span className="error">{fieldError}</span> : null}
             </span>
           );
         }

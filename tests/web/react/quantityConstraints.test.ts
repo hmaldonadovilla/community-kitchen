@@ -149,6 +149,11 @@ describe('quantityConstraints', () => {
     expect(sanitizeNumericDraft('abc', { maxValue: 20 })).toBe('');
   });
 
+  it('clamps numeric drafts to min when configured', () => {
+    expect(sanitizeNumericDraft('0', { integerOnly: true, minValue: 1 })).toBe('1');
+    expect(sanitizeNumericDraft('', { integerOnly: true, minValue: 1 })).toBe('');
+  });
+
   it('parses finite values safely', () => {
     expect(toFiniteNumberValue('12,5')).toBe(12.5);
     expect(toFiniteNumberValue('')).toBe(0);

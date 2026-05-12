@@ -1114,6 +1114,10 @@ export interface ListViewSearchPresetOverlayConfig {
    * Default: false.
    */
   defaultExpanded?: boolean;
+  /**
+   * When true, closing this preset overlay also clears the active list search so default list filters apply again.
+   */
+  clearSearchOnClose?: boolean;
 }
 
 export interface UpdateRecordButtonConfig {
@@ -2729,6 +2733,21 @@ export interface LineItemDedupRule {
   message?: LocalizedString;
 }
 
+export interface LineItemRemoveGuardConfig {
+  /**
+   * Minimum number of rows that must remain when a row is removed.
+   */
+  minRows?: number;
+  /**
+   * Dialog body shown when removal would violate `minRows`.
+   */
+  message?: LocalizedString | string;
+  /**
+   * Optional dialog title. Use an empty string to suppress the title.
+   */
+  title?: LocalizedString | string;
+}
+
 export interface LineItemGroupConfig {
   id?: string;
   label?: LocalizedString;
@@ -2745,6 +2764,7 @@ export interface LineItemGroupConfig {
   addOverlay?: LineItemAddOverlayConfig;
   sectionSelector?: LineItemSelectorConfig;
   dedupRules?: LineItemDedupRule[];
+  removeGuard?: LineItemRemoveGuardConfig;
   totals?: LineItemTotalConfig[];
   fields: LineItemFieldConfig[];
   subGroups?: LineItemGroupConfig[]; // nested line item groups driven by this header group
@@ -2766,6 +2786,7 @@ export interface LineItemGroupConfigOverride {
   addOverlay?: LineItemAddOverlayConfig;
   sectionSelector?: LineItemSelectorConfig;
   dedupRules?: LineItemDedupRule[];
+  removeGuard?: LineItemRemoveGuardConfig;
   totals?: LineItemTotalConfig[];
   fields?: LineItemFieldConfig[];
   subGroups?: LineItemGroupConfig[];
@@ -4529,6 +4550,8 @@ export interface RowFlowActionConfig {
   variant?: 'button' | 'icon';
   tone?: 'primary' | 'secondary';
   showWhen?: WhenClause;
+  enabledWhen?: WhenClause;
+  disabledWhen?: WhenClause;
   confirm?: RowFlowActionConfirmConfig;
   effects?: RowFlowActionEffect[];
 }

@@ -76,6 +76,7 @@ export function sanitizeNumericDraft(
   raw: string,
   options?: {
     integerOnly?: boolean;
+    minValue?: number | null;
     maxValue?: number | null;
   }
 ): string {
@@ -104,6 +105,10 @@ export function sanitizeNumericDraft(
 
   const parsed = Number(sanitized);
   if (!Number.isFinite(parsed)) return '';
+  const minValue = options?.minValue;
+  if (typeof minValue === 'number' && Number.isFinite(minValue) && parsed < minValue) {
+    return formatNumericConstraintValue(minValue, integerOnly);
+  }
   const maxValue = options?.maxValue;
   if (typeof maxValue === 'number' && Number.isFinite(maxValue) && parsed > maxValue) {
     return formatNumericConstraintValue(maxValue, integerOnly);

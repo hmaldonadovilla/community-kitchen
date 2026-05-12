@@ -238,17 +238,29 @@ export const collectSourceFirstSentenceFieldErrors = (args: {
     parentValues: Record<string, FieldValue>
   ) => string[];
 }): string[] => {
-  const seen = new Set<string>();
-  const messages: string[] = [];
+  return Array.from(new Set(Object.values(collectSourceFirstSentenceFieldErrorMap(args))));
+};
+
+export const collectSourceFirstSentenceFieldErrorMap = (args: {
+  parts: any[];
+  fieldById: Map<string, any>;
+  virtualValues: Record<string, FieldValue>;
+  parentValues: Record<string, FieldValue>;
+  validateFieldRules: (
+    field: any,
+    virtualValues: Record<string, FieldValue>,
+    parentValues: Record<string, FieldValue>
+  ) => string[];
+}): Record<string, string> => {
+  const messages: Record<string, string> = {};
   (args.parts || []).forEach((part: any) => {
     const fieldId = normalizeIdValue(part?.fieldId);
     if (!fieldId) return;
     const field = args.fieldById.get(fieldId);
     if (!field) return;
     const message = args.validateFieldRules(field, args.virtualValues, args.parentValues)[0] || '';
-    if (!message || seen.has(message)) return;
-    seen.add(message);
-    messages.push(message);
+    if (!message) return;
+    messages[fieldId] = message;
   });
   return messages;
 };

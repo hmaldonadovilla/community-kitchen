@@ -4,6 +4,7 @@ import {
   formatLineItemDedupValue,
   isLineItemMaxRowsReached,
   normalizeLineItemDedupRules,
+  resolveLineItemRemoveGuard,
   resolveLineItemRowLimits
 } from '../../src/web/react/app/lineItems';
 
@@ -83,6 +84,15 @@ describe('line item row limits', () => {
     expect(isLineItemMaxRowsReached(2, 2)).toBe(true);
     expect(isLineItemMaxRowsReached(1, 2)).toBe(false);
     expect(isLineItemMaxRowsReached(0, undefined)).toBe(false);
+  });
+
+  it('normalizes remove guards', () => {
+    expect(resolveLineItemRemoveGuard({ removeGuard: { minRows: '1', message: { en: 'Keep one row.' } } })).toEqual({
+      minRows: 1,
+      message: { en: 'Keep one row.' },
+      title: undefined
+    });
+    expect(resolveLineItemRemoveGuard({ removeGuard: { minRows: 0 } })).toBeNull();
   });
 });
 

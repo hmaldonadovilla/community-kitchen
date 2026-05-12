@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, type Dispatch, type SetStateAction } from 'react';
 
 import { toDependencyValue } from '../../../../core';
+import { resolveLocalizedString } from '../../../../i18n';
+import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, LineItemRowState, WebFormDefinition, WebQuestionDefinition } from '../../../../types';
 import type { LineItemAddResult, LineItemState, OptionState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
@@ -13,10 +15,12 @@ import {
   normalizeLineItemDedupRules,
   parseRowSource,
   parseSubgroupKey,
+  resolveLineItemRemoveGuard,
   resolveLineItemRowLimits,
   ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_KEY,
-  seedSubgroupDefaults
+  seedSubgroupDefaults,
+  shouldBlockLineItemRowRemoval
 } from '../../../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../../../app/recipeIngredientsDirty';
 import {
@@ -44,6 +48,7 @@ interface UseFormLineItemRowsArgs {
   setPendingScrollAnchor: Dispatch<SetStateAction<string | null>>;
   setSubgroupSelectors: Dispatch<SetStateAction<Record<string, string>>>;
   ensureLineOptions: (groupId: string, field: any) => void;
+  openConfirmDialog?: (config: any) => void;
   onSelectionEffect?: (
     q: WebQuestionDefinition,
     value: FieldValue,
@@ -102,6 +107,7 @@ export function useFormLineItemRows({
   setPendingScrollAnchor,
   setSubgroupSelectors,
   ensureLineOptions,
+  openConfirmDialog,
   onSelectionEffect,
   onDiagnostic,
   computeRowNonMatchKeys,
@@ -652,6 +658,66 @@ export function useFormLineItemRows({
   ]);
 
   const removeLineRow = (groupId: string, rowId: string) => {
+    const resolveRemovalGuardScope = () => {
+      const subgroupInfo = parseSubgroupKey(groupId);
+      if (subgroupInfo) {
+        const subgroupDefs = resolveSubgroupDefs(groupId);
+        const subConfigBase = subgroupDefs?.sub;
+        const rowFilter = subgroupOverlay.open && subgroupOverlay.subKey === groupId ? subgroupOverlay.rowFilter || null : null;
+        const effectiveConfig =
+          subgroupOverlay.open && subgroupOverlay.subKey === groupId && subgroupOverlay.groupOverride
+            ? applyLineItemGroupOverride(subConfigBase, subgroupOverlay.groupOverride)
+            : subConfigBase;
+        return { effectiveConfig, rowFilter, scope: 'sub' };
+      }
+      const overlayGroup =
+        lineItemGroupOverlay.open && lineItemGroupOverlay.groupId === groupId && lineItemGroupOverlay.group?.type === 'LINE_ITEM_GROUP'
+          ? lineItemGroupOverlay.group
+          : null;
+      const groupQuestion =
+        overlayGroup || definition.questions.find(q => q.id === groupId && q.type === 'LINE_ITEM_GROUP');
+      const rowFilter = lineItemGroupOverlay.open && lineItemGroupOverlay.groupId === groupId ? lineItemGroupOverlay.rowFilter || null : null;
+      return { effectiveConfig: groupQuestion?.lineItemConfig, rowFilter, scope: 'line' };
+    };
+
+    const guardScope = resolveRemovalGuardScope();
+    const guard = resolveLineItemRemoveGuard(guardScope.effectiveConfig);
+    if (guard) {
+      const currentRows = lineItems[groupId] || [];
+      const scopedRows = guardScope.rowFilter
+        ? currentRows.filter(row => matchesOverlayRowFilter(((row as any)?.values || {}) as any, guardScope.rowFilter))
+        : currentRows;
+      const targetInScope = scopedRows.some(row => row.id === rowId);
+      if (targetInScope && shouldBlockLineItemRowRemoval({ guard, currentCount: scopedRows.length })) {
+        const message = resolveLocalizedString(
+          guard.message as any,
+          language,
+          'At least one item must remain.'
+        );
+        const title = resolveLocalizedString(guard.title as any, language, '');
+        onDiagnostic?.('ui.lineItems.remove.blocked', {
+          groupId,
+          rowId,
+          reason: 'removeGuard.minRows',
+          minRows: guard.minRows,
+          currentCount: scopedRows.length,
+          scope: guardScope.scope
+        });
+        openConfirmDialog?.({
+          title,
+          message,
+          confirmLabel: tSystem('common.ok', language, 'OK'),
+          cancelLabel: '',
+          showCancel: false,
+          showCloseButton: false,
+          kind: 'lineItem.removeGuard',
+          refId: `${groupId}::${rowId}`,
+          onConfirm: () => {}
+        });
+        return;
+      }
+    }
+
     if (onSelectionEffect) {
       const groupQuestion = definition.questions.find(q => q.id === groupId);
       const rows = lineItems[groupId] || [];

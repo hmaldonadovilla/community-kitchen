@@ -1266,6 +1266,9 @@ components:
           description: |
             Optional row-level de-duplication rules. Each rule defines the field ids that must be unique together
             within a line-item group or subgroup. Dedup checks run only once all listed fields have values.
+        removeGuard:
+          $ref: '#/components/schemas/LineItemRemoveGuardConfig'
+          description: Optional guard that blocks row removal when it would leave too few rows.
         totals:
           type: array
           items:
@@ -1293,6 +1296,23 @@ components:
           items:
             $ref: '#/components/schemas/LineItemGroupConfig'
       required: [fields]
+
+    LineItemRemoveGuardConfig:
+      type: object
+      properties:
+        minRows:
+          type: integer
+          description: Minimum number of rows that must remain after removal.
+        message:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Dialog body shown when removal would violate `minRows`.
+        title:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: Optional dialog title. Use an empty string to suppress the title.
 
     LineItemCollapsedFieldConfig:
       type: object
@@ -2214,6 +2234,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LineItemDedupRule'
+        removeGuard:
+          $ref: '#/components/schemas/LineItemRemoveGuardConfig'
         totals:
           type: array
           items:
@@ -4603,6 +4625,12 @@ components:
           enum: [primary, secondary]
         showWhen:
           $ref: '#/components/schemas/WhenClause'
+        enabledWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that must match for the action button to be enabled.
+        disabledWhen:
+          $ref: '#/components/schemas/WhenClause'
+          description: Optional condition that disables the action button when it matches.
         confirm:
           $ref: '#/components/schemas/RowFlowActionConfirmConfig'
         effects:
@@ -5718,6 +5746,9 @@ components:
         defaultExpanded:
           type: boolean
           description: When true, grouped-list sections start expanded.
+        clearSearchOnClose:
+          type: boolean
+          description: When true, closing the overlay also clears the active list search so default list filters apply again.
 
     ListViewConfig:
       type: object

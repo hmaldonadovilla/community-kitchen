@@ -34,6 +34,7 @@ import {
   filterItemsByWhenClause,
   filterItemsForSearchPreset,
   resolveSearchPresetDateFilter,
+  shouldClearSearchOnOverlayPresetClose,
   shouldShowSearchPresetInMode,
   whenClauseContainsTodayFilter
 } from '../app/listViewFilters';
@@ -1693,6 +1694,22 @@ const ListView: React.FC<ListViewProps> = ({
     onDiagnostic?.('list.search.clearResults', { mode: listSearchMode });
   }, [advancedSearchEnabled, listSearchMode, onDiagnostic]);
 
+  const closeOverlayPreset = useCallback(() => {
+    const shouldClearSearch = shouldClearSearchOnOverlayPresetClose(overlayPresetButton?.cfg || null);
+    setOverlayPresetButton(null);
+    if (shouldClearSearch) {
+      setSearchInputValue(initialSearchValue);
+      setSearchQueryValue(initialSearchValue);
+      if (advancedSearchEnabled) {
+        setAdvancedFieldFilters({});
+        setAdvancedHasSearched(false);
+        setAdvancedKeyword('');
+        setAdvancedOpen(false);
+      }
+    }
+    onDiagnostic?.('list.search.preset.overlay.close', { clearSearch: shouldClearSearch });
+  }, [advancedSearchEnabled, initialSearchValue, onDiagnostic, overlayPresetButton?.cfg]);
+
   const applyAdvancedSearchNow = useCallback(() => {
     if (!advancedSearchEnabled) return;
     const query = { keyword: searchInputValue, fieldFilters: advancedFieldFilters };
@@ -2798,7 +2815,7 @@ const ListView: React.FC<ListViewProps> = ({
       open={Boolean(overlayPresetButton)}
       title={overlayTitleText || tSystem('list.predefinedSearches', language, 'Quick filters')}
       leftAction={
-        <button type="button" className="secondary" onClick={() => setOverlayPresetButton(null)}>
+        <button type="button" className="secondary" onClick={closeOverlayPreset}>
           {tSystem('common.close', language, 'Close')}
         </button>
       }

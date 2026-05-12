@@ -8,6 +8,7 @@ import { toDateInputValue } from '../../../components/form/utils';
 import type { LineItemState } from '../../../types';
 import {
   buildSourceFirstSelectionTogglePatch,
+  collectSourceFirstSentenceFieldErrorMap,
   collectSourceFirstSentenceFieldErrors,
   getByPath,
   optionSortFor,
@@ -252,6 +253,13 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                 parentValues,
                 validateFieldRules: validateVirtualFieldRules
               });
+              const sentenceFieldErrorMap = collectSourceFirstSentenceFieldErrorMap({
+                parts: sentenceParts,
+                fieldById,
+                virtualValues,
+                parentValues,
+                validateFieldRules: validateVirtualFieldRules
+              });
               const buildSelectionTogglePatch = (checked: boolean): Record<string, any> =>
                 buildSourceFirstSelectionTogglePatch({
                   checked,
@@ -291,7 +299,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                   headline={headlineNodes}
                   actions={actionNodes}
                   showSentence={!!sentenceParts.length && isSelected}
-                  errors={sentenceFieldErrors}
+                  errors={Object.keys(sentenceFieldErrorMap).length ? [] : sentenceFieldErrors}
                   onSelectionChange={checked =>
                     syncStepDataSourceOutputRowWithReservation({
                       config,
@@ -398,6 +406,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                         }
                       })
                     }
+                    fieldErrors={sentenceFieldErrorMap}
                   />
                 </SourceFirstDataSourceRowShell>
               );

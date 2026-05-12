@@ -147,7 +147,7 @@
   },
   "navigation": {
     "waitTitle": {
-      "en": "Please wait"
+      "en": ""
     },
     "waitPhotos": {
       "en": "Please wait while your files finish uploading."
@@ -162,7 +162,7 @@
       "en": "Please wait while we open the forms page..."
     },
     "waitCopyRecord": {
-      "en": "Please wait while we prepare your copied record..."
+      "en": "Do not leave this page while we create your copied record."
     }
   },
   "actions": {

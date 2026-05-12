@@ -662,7 +662,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftoversMeals = leftoversInclude.find((entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST');
       expect(leftoversMeals?.label?.en).toBe('Multi-ingredient leftovers');
       expect(leftoversMeals?.helperText?.en).toBe(
-        'Leave empty if no leftover.\nEnter a value > 0 for multi-ingredient leftovers (reheat or combine).\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.'
+        'Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.'
       );
       expect(leftoversMeals?.groupOverride).toEqual(
         expect.objectContaining({

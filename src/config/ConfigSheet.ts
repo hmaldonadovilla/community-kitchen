@@ -3433,6 +3433,7 @@ export class ConfigSheet {
           addOverlay: parsed.addOverlay,
           sectionSelector,
           dedupRules,
+          removeGuard: parsed.removeGuard,
           totals,
           fields: mergedFields,
           subGroups
@@ -3744,6 +3745,7 @@ export class ConfigSheet {
           addOverlay: entry.addOverlay ?? refCfg.addOverlay,
           sectionSelector: entry.sectionSelector ? this.normalizeLineItemSelector(ss, entry.sectionSelector) : refCfg.sectionSelector,
           dedupRules: entry.dedupRules ? this.normalizeLineItemDedupRules(entry.dedupRules) : refCfg.dedupRules,
+          removeGuard: entry.removeGuard ?? refCfg.removeGuard,
           totals: entry.totals ? this.normalizeLineItemTotals(entry.totals) : refCfg.totals,
           subGroups
         };
@@ -3775,6 +3777,7 @@ export class ConfigSheet {
       addOverlay: entry.addOverlay,
       sectionSelector,
       dedupRules,
+      removeGuard: entry.removeGuard,
       totals,
       fields,
       subGroups

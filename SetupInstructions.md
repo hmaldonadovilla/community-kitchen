@@ -762,6 +762,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Use `showIn: ["table"]` or `showIn: ["cards"]` to control which list-view modes render the preset button.
       - Use `target: "overlay"` to open a full-screen overlay instead of applying the preset inline.
       - Overlay presets can add extra filtering via `when`, rolling past/future date windows via `dateFieldId` + `lookbackDays` / `lookaheadDays` + `includeToday`, and a dedicated column set via `resultColumns`.
+      - Set `overlay.clearSearchOnClose: true` when closing the overlay should reset the current search and restore the Home/List results to the configured default filter.
       - Overlay presets can also render grouped expandable lists:
 
       ```json
@@ -1302,7 +1303,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - `prompts` controls the input order (`completedWhen`, `hideWhenFilled`, `keepVisibleWhenFilled`), allows label overrides via `input.label`, and supports `input.labelLayout` (`stacked` | `inline` | `hidden`).
         - `onCompleteActions` triggers action ids once a prompt becomes complete (useful to auto-open overlays after a selection).
         - `actionsLayout` controls prompt action placement (`below` | `inline`) to keep prompts on a single row.
-        - `actions` can edit values, delete rows (`deleteRow`), add rows, close overlays, or open overlays.
+        - `actions` can edit values, delete rows (`deleteRow`), add rows, close overlays, or open overlays. Use `enabledWhen` / `disabledWhen` on an action to keep the button visible while preventing execution until the row context satisfies the configured condition.
         - `openOverlay` effects accept the same options as `LineItemOverlayOpenActionConfig` (row filters, overrides, flattening, rowFlow override, `hideCloseButton`, `closeButtonLabel`, `closeConfirm`) plus `overlayContextHeader` for per-action headers and `overlayHelperText` for helper copy shown below the overlay list.
         - `rowFlow.overlayContextHeader.fields` shows a default context line in overlays opened from row flow actions.
       - Navigation/back labels and controls:
@@ -1555,6 +1556,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - `ui.allowRemoveAutoRows`: when `false`, hides the **Remove** button for rows marked `__ckRowSource: "auto"`
           - `ui.saveDisabledRows`: when `true`, includes disabled progressive rows in the submitted payload (so they can appear in downstream PDFs)
         - `dedupRules`: optional row-level de-duplication rules for this group or subgroup. Each rule lists field ids that must be unique together; the check runs once all listed fields have values. The `message` supports a `{value}` placeholder (replaced with the first dedup field’s value).
+        - `removeGuard`: optional row-removal guard for this group or subgroup. Use `{ "minRows": 1, "message": { "en": "At least one row must remain." } }` to block deleting the final row and show a dialog.
           Example:
           ```json
           {

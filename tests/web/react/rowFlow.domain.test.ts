@@ -1,4 +1,5 @@
 import {
+  resolveRowFlowActionEnabled,
   resolveRowFlowActionPlan,
   resolveRowFlowSegmentActionIds,
   resolveRowFlowState
@@ -502,5 +503,78 @@ describe('rowFlow domain', () => {
     };
 
     expect(resolveRowFlowSegmentActionIds(segment)).toEqual(['openOverlay', 'deleteRow']);
+  });
+
+  it('keeps a row-flow action visible but disabled until enabledWhen matches', () => {
+    const action: any = {
+      id: 'openCookOverlay',
+      enabledWhen: {
+        lineItems: {
+          groupId: 'MEALS',
+          subGroupId: 'TYPE',
+          when: {
+            all: [
+              { fieldId: 'PREP_TYPE', equals: 'Cook' },
+              { fieldId: 'RECIPE', notEmpty: true }
+            ]
+          }
+        }
+      },
+      effects: [{ type: 'openOverlay', groupId: 'TYPE' }]
+    };
+    const config: any = { actions: [action] };
+    const baseArgs = {
+      config,
+      state: null,
+      groupId: 'MEALS',
+      rowId: 'meal-1',
+      rowValues: {},
+      subGroupIds: ['TYPE']
+    };
+
+    const withoutRecipe = {
+      MEALS: [{ id: 'meal-1', values: {} }],
+      'MEALS::meal-1::TYPE': [{ id: 'type-1', values: { PREP_TYPE: 'Cook', RECIPE: '' } }]
+    } as any;
+    const withRecipe = {
+      MEALS: [{ id: 'meal-1', values: {} }],
+      'MEALS::meal-1::TYPE': [{ id: 'type-1', values: { PREP_TYPE: 'Cook', RECIPE: 'Pasta' } }]
+    } as any;
+
+    expect(
+      resolveRowFlowActionEnabled({
+        action,
+        groupId: 'MEALS',
+        rowId: 'meal-1',
+        rowValues: {},
+        lineItems: withoutRecipe
+      })
+    ).toBe(false);
+    expect(resolveRowFlowActionPlan({ ...baseArgs, actionId: 'openCookOverlay', lineItems: withoutRecipe })).toBeNull();
+    expect(
+      resolveRowFlowActionEnabled({
+        action,
+        groupId: 'MEALS',
+        rowId: 'meal-1',
+        rowValues: {},
+        lineItems: withRecipe
+      })
+    ).toBe(true);
+    expect(resolveRowFlowActionPlan({ ...baseArgs, actionId: 'openCookOverlay', lineItems: withRecipe })?.effects[0]).toEqual({
+      type: 'openOverlay',
+      targetKind: 'sub',
+      key: 'MEALS::meal-1::TYPE',
+      rowFilter: undefined,
+      label: undefined,
+      hideInlineSubgroups: undefined,
+      hideCloseButton: false,
+      closeButtonLabel: undefined,
+      closeConfirm: undefined,
+      groupOverride: undefined,
+      rowFlow: undefined,
+      overlayContextHeader: undefined,
+      overlayHelperText: undefined,
+      overlaySession: undefined
+    });
   });
 });

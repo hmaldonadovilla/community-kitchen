@@ -134,6 +134,10 @@ export const shouldShowSearchPresetInMode = (
   return raw.includes(mode);
 };
 
+export const shouldClearSearchOnOverlayPresetClose = (
+  preset: Pick<ListViewSearchPresetButtonConfig, 'overlay'> | null | undefined
+): boolean => (preset?.overlay as any)?.clearSearchOnClose === true;
+
 export const filterItemsForSearchPreset = (args: {
   items: ListItem[];
   preset: ListViewSearchPresetButtonConfig;
