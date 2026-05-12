@@ -18,6 +18,8 @@ export const BlockingOverlay: React.FC<{
   if (!open) return null;
   const isLoading = mode === 'loading';
   const iconGlyph = mode === 'success' ? '✓' : mode === 'error' ? '!' : '';
+  const titleText = (title || '').toString();
+  const messageText = (message || '').toString();
 
   return (
     <div
@@ -39,7 +41,7 @@ export const BlockingOverlay: React.FC<{
         role="dialog"
         aria-modal="true"
         aria-busy={isLoading}
-        aria-label={title}
+        aria-label={titleText || messageText || 'Please wait'}
         style={{
           width: 'min(560px, 100%)',
           background: 'var(--card)',
@@ -81,10 +83,14 @@ export const BlockingOverlay: React.FC<{
               {iconGlyph}
             </div>
           )}
-          <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0, color: 'var(--text)' }}>{title}</div>
+          {titleText ? (
+            <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0, color: 'var(--text)' }}>
+              {titleText}
+            </div>
+          ) : null}
         </div>
         <div className="muted" style={{ marginTop: 10, fontSize: 'var(--ck-font-label)', fontWeight: 400, lineHeight: 1.35 }}>
-          {(message || '').toString()}
+          {messageText}
         </div>
       </div>
     </div>

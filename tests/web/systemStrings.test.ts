@@ -1,10 +1,10 @@
 import { tSystem } from '../../src/web/systemStrings';
 
 describe('systemStrings', () => {
-  test('tSystem resolves localized strings', () => {
-    expect(tSystem('actions.submit', 'FR', 'Submit')).toBe('Envoyer');
-    expect(tSystem('actions.submit', 'NL', 'Submit')).toBe('Verzenden');
-    expect(tSystem('common.instruction', 'NL', 'Instruction')).toBe('Instructie');
+  test('tSystem falls back to English for unsupported languages', () => {
+    expect(tSystem('actions.submit', 'FR', 'Submit')).toBe('Submit');
+    expect(tSystem('actions.submit', 'NL', 'Submit')).toBe('Submit');
+    expect(tSystem('common.instruction', 'NL', 'Instruction')).toBe('Instruction');
   });
 
   test('tSystem formats templates', () => {

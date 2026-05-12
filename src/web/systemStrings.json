@@ -1,456 +1,677 @@
 {
   "app": {
-    "menu": { "en": "Menu", "fr": "Menu", "nl": "Menu" },
-    "refresh": { "en": "Refresh", "fr": "Actualiser", "nl": "Vernieuwen" },
-    "analytics": { "en": "Analytics", "fr": "Analytique", "nl": "Analyse" },
-    "apps": { "en": "Apps", "fr": "Apps", "nl": "Apps" },
-    "forms": { "en": "Forms", "fr": "Formulaires", "nl": "Formulieren" },
-    "language": { "en": "Language", "fr": "Langue", "nl": "Taal" },
-    "build": { "en": "Build", "fr": "Version", "nl": "Versie" },
-    "bottomActions": { "en": "Bottom actions", "fr": "Actions", "nl": "Acties" },
-    "navigation": { "en": "Navigation", "fr": "Navigation", "nl": "Navigatie" },
-    "openMenu": { "en": "Open menu", "fr": "Ouvrir le menu", "nl": "Menu openen" },
-    "closeMenu": { "en": "Close menu", "fr": "Fermer le menu", "nl": "Menu sluiten" },
-    "selectLanguage": { "en": "Select language", "fr": "Choisir la langue", "nl": "Taal kiezen" },
-    "closedReadOnly": { "en": "Closed (read-only)", "fr": "Fermé (lecture seule)", "nl": "Gesloten (alleen lezen)" },
-    "rotatePortraitTitle": { "en": "Rotate your device", "fr": "Tournez votre appareil", "nl": "Draai je toestel" },
-    "rotatePortraitBody": {
-      "en": "This form works best in portrait mode. Please rotate back.",
-      "fr": "Ce formulaire fonctionne mieux en mode portrait. Veuillez revenir en mode portrait.",
-      "nl": "Dit formulier werkt het best in portretmodus. Draai terug."
+    "menu": {
+      "en": "Menu"
     },
-    "topActions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
+    "refresh": {
+      "en": "Refresh"
+    },
+    "analytics": {
+      "en": "Analytics"
+    },
+    "apps": {
+      "en": "Apps"
+    },
+    "forms": {
+      "en": "Forms"
+    },
+    "language": {
+      "en": "Language"
+    },
+    "build": {
+      "en": "Build"
+    },
+    "bottomActions": {
+      "en": "Bottom actions"
+    },
+    "navigation": {
+      "en": "Navigation"
+    },
+    "openMenu": {
+      "en": "Open menu"
+    },
+    "closeMenu": {
+      "en": "Close menu"
+    },
+    "selectLanguage": {
+      "en": "Select language"
+    },
+    "closedReadOnly": {
+      "en": "Closed (read-only)"
+    },
+    "rotatePortraitTitle": {
+      "en": "Rotate your device"
+    },
+    "rotatePortraitBody": {
+      "en": "This form works best in portrait mode. Please rotate back."
+    },
+    "topActions": {
+      "en": "Actions"
+    },
     "refreshToRetry": {
-      "en": "We could not load this right now. Reload the page to try again.",
-      "fr": "Impossible de charger pour le moment. Rechargez la page pour réessayer.",
-      "nl": "We konden dit nu niet laden. Herlaad de pagina om opnieuw te proberen."
+      "en": "We could not load this right now. Reload the page to try again."
     }
   },
   "analytics": {
     "updated": {
-      "en": "Updated: {value}",
-      "fr": "Mis a jour : {value}",
-      "nl": "Bijgewerkt: {value}"
+      "en": "Updated: {value}"
     },
     "empty": {
-      "en": "No analytics widgets are configured.",
-      "fr": "Aucun widget analytique n'est configure.",
-      "nl": "Er zijn geen analysewidgets geconfigureerd."
+      "en": "No analytics widgets are configured."
     }
   },
   "draft": {
-    "saving": { "en": "Saving draft…", "fr": "Enregistrement du brouillon…", "nl": "Concept opslaan…" },
-    "savingShort": { "en": "Saving…", "fr": "Enregistrement…", "nl": "Opslaan…" },
-    "saved": { "en": "Draft saved.", "fr": "Brouillon enregistré.", "nl": "Concept opgeslagen." },
-    "savedShort": { "en": "Saved", "fr": "Enregistré", "nl": "Opgeslagen" },
+    "saving": {
+      "en": "Saving draft…"
+    },
+    "savingShort": {
+      "en": "Saving…"
+    },
+    "saved": {
+      "en": "Draft saved."
+    },
+    "savedShort": {
+      "en": "Saved"
+    },
     "dirty": {
-      "en": "Draft has unsaved changes.",
-      "fr": "Le brouillon contient des modifications non enregistrées.",
-      "nl": "Concept bevat niet-opgeslagen wijzigingen."
+      "en": "Draft has unsaved changes."
     },
-    "dirtyShort": { "en": "Unsaved changes", "fr": "Modifications non enregistrées", "nl": "Niet-opgeslagen wijzigingen" },
-    "paused": { "en": "Draft autosave paused.", "fr": "Sauvegarde automatique en pause.", "nl": "Automatisch opslaan gepauzeerd." },
-    "pausedShort": { "en": "Autosave paused", "fr": "Sauvegarde en pause", "nl": "Automatisch opslaan gepauzeerd" },
+    "dirtyShort": {
+      "en": "Unsaved changes"
+    },
+    "paused": {
+      "en": "Draft autosave paused."
+    },
+    "pausedShort": {
+      "en": "Autosave paused"
+    },
     "saveFailed": {
-      "en": "Draft save failed: {message}",
-      "fr": "Échec de l'enregistrement du brouillon : {message}",
-      "nl": "Concept opslaan mislukt: {message}"
+      "en": "Draft save failed: {message}"
     },
-    "saveFailedShort": { "en": "Save failed", "fr": "Échec de l’enregistrement", "nl": "Opslaan mislukt" },
-    "unknownError": { "en": "Unknown error", "fr": "Erreur inconnue", "nl": "Onbekende fout" }
+    "saveFailedShort": {
+      "en": "Save failed"
+    },
+    "unknownError": {
+      "en": "Unknown error"
+    }
   },
   "autosaveNotice": {
-    "title": { "en": "Autosave is on", "fr": "La sauvegarde automatique est activée", "nl": "Automatisch opslaan staat aan" },
     "message": {
-      "en": "Changes are saved automatically. You can safely leave and come back later.",
-      "fr": "Les modifications sont sauvegardées automatiquement. Vous pouvez quitter et revenir plus tard.",
-      "nl": "Wijzigingen worden automatisch opgeslagen. Je kunt veilig verlaten en later terugkomen."
+      "en": "Changes are saved automatically. In some cases, you may need to tap Save or keep the screen open until saving is complete."
     },
-    "confirm": { "en": "Got it", "fr": "Compris", "nl": "Begrepen" },
-    "cancel": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" }
+    "confirm": {
+      "en": "OK"
+    }
   },
   "fieldChangeDialog": {
-    "title": { "en": "Confirm change", "fr": "Confirmer la modification", "nl": "Wijziging bevestigen" },
+    "title": {
+      "en": "Confirm change"
+    },
     "message": {
-      "en": "Review this change before continuing.",
-      "fr": "Vérifiez cette modification avant de continuer.",
-      "nl": "Controleer deze wijziging voordat u doorgaat."
+      "en": "Review this change before continuing."
     }
   },
   "dateInput": {
     "correctedToMin": {
-      "en": "This date is no longer allowed. We set the earliest allowed date for you.",
-      "fr": "Cette date n'est plus autorisée. Nous avons défini pour vous la date autorisée la plus proche.",
-      "nl": "Deze datum is niet meer toegestaan. We hebben de eerst toegestane datum voor je ingesteld."
+      "en": "This date is no longer allowed. We set the earliest allowed date for you."
     },
     "correctedToMax": {
-      "en": "This date is no longer allowed. We set the latest allowed date for you.",
-      "fr": "Cette date n'est plus autorisée. Nous avons défini pour vous la dernière date autorisée.",
-      "nl": "Deze datum is niet meer toegestaan. We hebben de laatst toegestane datum voor je ingesteld."
+      "en": "This date is no longer allowed. We set the latest allowed date for you."
     }
   },
   "record": {
     "checking": {
-      "en": "Checking for updates…",
-      "fr": "Vérification des mises à jour…",
-      "nl": "Controleren op updates…"
+      "en": "Checking for updates…"
     },
     "syncingTitle": {
-      "en": "Synchronizing record…",
-      "fr": "Synchronisation de l'enregistrement…",
-      "nl": "Record synchroniseren…"
+      "en": "Synchronizing record…"
     },
     "syncing": {
-      "en": "This record changed at the source. We are synchronizing the latest version now.",
-      "fr": "Cet enregistrement a changé à la source. Nous synchronisons maintenant la dernière version.",
-      "nl": "Dit record is aan de bron gewijzigd. We synchroniseren nu de nieuwste versie."
+      "en": "This record changed at the source. We are synchronizing the latest version now."
     },
     "syncedTitle": {
-      "en": "Record synchronized",
-      "fr": "Enregistrement synchronisé",
-      "nl": "Record gesynchroniseerd"
+      "en": "Record synchronized"
     },
     "synced": {
-      "en": "The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed.",
-      "fr": "Les données source ont changé pendant votre modification. Nous avons chargé la dernière version. Veuillez vérifier et adapter vos modifications si nécessaire.",
-      "nl": "De brongegevens zijn gewijzigd terwijl je aan het bewerken was. We hebben de nieuwste versie geladen. Controleer en pas je wijzigingen aan waar nodig."
+      "en": "The source data changed while you were editing. We loaded the latest version. Please review and adapt your changes as needed."
     },
     "syncFailed": {
-      "en": "We could not synchronize the latest record automatically. Tap Refresh to continue.",
-      "fr": "Nous n'avons pas pu synchroniser automatiquement le dernier enregistrement. Appuyez sur Actualiser pour continuer.",
-      "nl": "We konden het nieuwste record niet automatisch synchroniseren. Tik op Vernieuwen om verder te gaan."
+      "en": "We could not synchronize the latest record automatically. Tap Refresh to continue."
     },
     "stale": {
-      "en": "This record was updated by another user or automatically by the system, tap Refresh to continue.",
-      "fr": "Cet enregistrement a été modifié par un autre utilisateur ou automatiquement par le système, appuyez sur Actualiser pour continuer.",
-      "nl": "Dit record werd door een andere gebruiker gewijzigd of automatisch door het systeem, druk op Vernieuwen om door te gaan."
+      "en": "This record was updated by another user or automatically by the system, tap Refresh to continue."
     },
-    "refresh": { "en": "Refresh record", "fr": "Actualiser l'enregistrement", "nl": "Record vernieuwen" }
+    "refresh": {
+      "en": "Refresh record"
+    }
   },
   "navigation": {
     "waitTitle": {
-      "en": "Please wait",
-      "fr": "Veuillez patienter",
-      "nl": "Even geduld"
+      "en": "Please wait"
     },
     "waitPhotos": {
-      "en": "Please wait while your files finish uploading.",
-      "fr": "Veuillez patienter pendant le téléversement de vos fichiers.",
-      "nl": "Wacht even terwijl je bestanden worden geüpload."
+      "en": "Please wait while your files finish uploading."
     },
     "waitSaving": {
-      "en": "Please wait while we save your changes...",
-      "fr": "Veuillez patienter pendant que nous enregistrons vos modifications...",
-      "nl": "Wacht even terwijl we je wijzigingen opslaan..."
+      "en": "Please wait while we save your changes..."
     },
     "waitForms": {
-      "en": "Please wait while we open the forms page...",
-      "fr": "Veuillez patienter pendant que nous ouvrons la page des formulaires...",
-      "nl": "Wacht even terwijl we de formulierenpagina openen..."
+      "en": "Please wait while we open the forms page..."
     },
     "waitCopyRecord": {
-      "en": "Please wait while we prepare your copied record...",
-      "fr": "Veuillez patienter pendant que nous préparons la copie de votre enregistrement...",
-      "nl": "Wacht even terwijl we je gekopieerde record voorbereiden..."
+      "en": "Please wait while we prepare your copied record..."
     }
   },
   "actions": {
-    "home": { "en": "Home", "fr": "Accueil", "nl": "Start" },
-    "create": { "en": "Create", "fr": "Créer", "nl": "Aanmaken" },
-    "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
-    "summary": { "en": "View", "fr": "Voir", "nl": "Bekijken" },
-    "reports": { "en": "Reports", "fr": "Rapports", "nl": "Rapporten" },
-    "submit": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" },
-    "submitting": { "en": "Submitting…", "fr": "Envoi…", "nl": "Verzenden…" },
-    "submittedClosed": { "en": "Submitted and closed.", "fr": "Envoyé et clôturé.", "nl": "Verzonden en gesloten." },
-    "submitDisabledTooltip": {
-      "en": "Complete all required fields to activate.",
-      "fr": "Complétez tous les champs requis pour activer.",
-      "nl": "Vul alle verplichte velden in om te activeren."
+    "home": {
+      "en": "Home"
     },
-    "newRecord": { "en": "New record", "fr": "Nouvel enregistrement", "nl": "Nieuw record" },
-    "copyCurrentRecord": { "en": "Copy current record", "fr": "Copier l'enregistrement actuel", "nl": "Huidig record kopiëren" },
-    "viewSummary": { "en": "View summary", "fr": "Voir le résumé", "nl": "Samenvatting bekijken" },
-    "missingLink": { "en": "No link found.", "fr": "Aucun lien trouvé.", "nl": "Geen link gevonden." },
-    "closeCreateMenu": { "en": "Close create menu", "fr": "Fermer le menu de création", "nl": "Maakmenu sluiten" },
-    "createMenu": { "en": "Create menu", "fr": "Menu de création", "nl": "Maakmenu" },
-    "closeSummaryMenu": { "en": "Close summary menu", "fr": "Fermer le menu du résumé", "nl": "Samenvattingsmenu sluiten" },
-    "summaryMenu": { "en": "Summary menu", "fr": "Menu du résumé", "nl": "Samenvattingsmenu" },
-    "closeReportsMenu": { "en": "Close reports menu", "fr": "Fermer le menu des rapports", "nl": "Rapportenmenu sluiten" },
-    "reportsMenu": { "en": "Reports menu", "fr": "Menu des rapports", "nl": "Rapportenmenu" }
-    ,
-    "actions": { "en": "Actions", "fr": "Actions", "nl": "Acties" },
-    "actionsMenu": { "en": "Actions menu", "fr": "Menu des actions", "nl": "Actiemenu" },
-    "closeActionsMenu": { "en": "Close actions menu", "fr": "Fermer le menu des actions", "nl": "Actiemenu sluiten" }
+    "create": {
+      "en": "Create"
+    },
+    "edit": {
+      "en": "Edit"
+    },
+    "summary": {
+      "en": "View"
+    },
+    "reports": {
+      "en": "Reports"
+    },
+    "submit": {
+      "en": "Submit"
+    },
+    "submitting": {
+      "en": "Submitting…"
+    },
+    "submittedClosed": {
+      "en": "Submitted and closed."
+    },
+    "submitDisabledTooltip": {
+      "en": "Complete all required fields to activate."
+    },
+    "newRecord": {
+      "en": "New record"
+    },
+    "copyCurrentRecord": {
+      "en": "Copy current record"
+    },
+    "viewSummary": {
+      "en": "View summary"
+    },
+    "missingLink": {
+      "en": "No link found."
+    },
+    "closeCreateMenu": {
+      "en": "Close create menu"
+    },
+    "createMenu": {
+      "en": "Create menu"
+    },
+    "closeSummaryMenu": {
+      "en": "Close summary menu"
+    },
+    "summaryMenu": {
+      "en": "Summary menu"
+    },
+    "closeReportsMenu": {
+      "en": "Close reports menu"
+    },
+    "reportsMenu": {
+      "en": "Reports menu"
+    },
+    "actions": {
+      "en": "Actions"
+    },
+    "actionsMenu": {
+      "en": "Actions menu"
+    },
+    "closeActionsMenu": {
+      "en": "Close actions menu"
+    }
   },
   "submit": {
-    "confirmTitle": { "en": "Confirm submission", "fr": "Confirmer l'envoi", "nl": "Verzenden bevestigen" },
+    "confirmTitle": {
+      "en": "Confirm submission"
+    },
     "confirmMessage": {
-      "en": "Are you ready to submit this record?",
-      "fr": "Êtes-vous prêt à envoyer cet enregistrement ?",
-      "nl": "Ben je klaar om dit record te verzenden?"
+      "en": "Are you ready to submit this record?"
     },
     "waitPreviousAction": {
-      "en": "Please wait while we finish the previous action...",
-      "fr": "Veuillez patienter pendant que nous terminons l'action précédente...",
-      "nl": "Wacht even terwijl we de vorige actie afronden..."
+      "en": "Please wait while we finish the previous action..."
     },
     "previousActionRetry": {
-      "en": "Something went wrong while finishing the previous action. Please click {action} again.",
-      "fr": "Un problème est survenu pendant la finalisation de l'action précédente. Veuillez cliquer à nouveau sur {action}.",
-      "nl": "Er ging iets mis bij het afronden van de vorige actie. Klik opnieuw op {action}."
+      "en": "Something went wrong while finishing the previous action. Please click {action} again."
     },
-    "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
-    "confirm": { "en": "Submit", "fr": "Envoyer", "nl": "Verzenden" }
+    "cancel": {
+      "en": "Cancel"
+    },
+    "confirm": {
+      "en": "Submit"
+    }
   },
   "lineItems": {
-    "expand": { "en": "Expand", "fr": "Ouvrir", "nl": "Openen" },
-    "collapse": { "en": "Collapse", "fr": "Réduire", "nl": "Sluiten" },
-    "locked": { "en": "Locked", "fr": "Verrouillé", "nl": "Vergrendeld" },
-    "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
-    "needsAttention": { "en": "Needs attention", "fr": "À vérifier", "nl": "Aandacht nodig" },
+    "expand": {
+      "en": "Expand"
+    },
+    "collapse": {
+      "en": "Collapse"
+    },
+    "locked": {
+      "en": "Locked"
+    },
+    "row": {
+      "en": "Row"
+    },
+    "needsAttention": {
+      "en": "Needs attention"
+    },
     "lockedUntilComplete": {
-      "en": "Locked until complete · Fill the collapsed fields to unlock expand.",
-      "fr": "Verrouillé jusqu'à complétion · Remplissez les champs repliés pour déverrouiller l'ouverture.",
-      "nl": "Vergrendeld tot voltooid · Vul de ingeklapte velden in om openen te ontgrendelen."
+      "en": "Locked until complete · Fill the collapsed fields to unlock expand."
     },
     "completeRequiredToExpand": {
-      "en": "Complete required fields to expand: {fields}",
-      "fr": "Remplissez les champs obligatoires pour ouvrir : {fields}",
-      "nl": "Vul verplichte velden in om te openen: {fields}"
+      "en": "Complete required fields to expand: {fields}"
     },
-    "remove": { "en": "Remove", "fr": "Supprimer", "nl": "Verwijderen" },
+    "remove": {
+      "en": "Remove"
+    },
     "removeRowsTitle": {
-      "en": "Remove rows?",
-      "fr": "Supprimer les lignes ?",
-      "nl": "Rijen verwijderen?"
+      "en": "Remove rows?"
     },
     "removeRowsMessage": {
-      "en": "This will remove the matching rows.",
-      "fr": "Cela supprimera les lignes correspondantes.",
-      "nl": "Dit verwijdert de overeenkomende rijen."
+      "en": "This will remove the matching rows."
     },
-    "addLine": { "en": "Add line", "fr": "Ajouter une ligne", "nl": "Regel toevoegen" },
-    "addLines": { "en": "Add lines", "fr": "Ajouter des lignes", "nl": "Regels toevoegen" },
-    "addSelected": { "en": "Add selected", "fr": "Ajouter la sélection", "nl": "Selectie toevoegen" },
-    "selectLinesTitle": { "en": "Select lines", "fr": "Sélectionner des lignes", "nl": "Regels selecteren" },
-    "selectLinesSearch": { "en": "Search items", "fr": "Rechercher des éléments", "nl": "Zoek items" },
+    "addLine": {
+      "en": "Add line"
+    },
+    "addLines": {
+      "en": "Add lines"
+    },
+    "addSelected": {
+      "en": "Add selected"
+    },
+    "selectLinesTitle": {
+      "en": "Select lines"
+    },
+    "selectLinesSearch": {
+      "en": "Search items"
+    },
     "selectLinesHelp": {
-      "en": "Search and select one or more items. You can update quantities after you return.",
-      "fr": "Recherchez et sélectionnez un ou plusieurs éléments. Vous pourrez ajuster les quantités ensuite.",
-      "nl": "Zoek en selecteer een of meer items. U kunt de hoeveelheden daarna aanpassen."
+      "en": "Search and select one or more items. You can update quantities after you return."
     },
     "duplicateAdd": {
-      "en": "{value} is already in the list, change the quantity",
-      "fr": "{value} est déjà dans la liste, modifiez la quantité",
-      "nl": "{value} staat al in de lijst, pas de hoeveelheid aan"
+      "en": "{value} is already in the list, change the quantity"
     },
-    "noOptionsAvailable": { "en": "No options available.", "fr": "Aucune option disponible.", "nl": "Geen opties beschikbaar." }
+    "noOptionsAvailable": {
+      "en": "No options available."
+    }
   },
   "common": {
-    "info": { "en": "Info", "fr": "Info", "nl": "Info" },
-    "instruction": { "en": "Instruction", "fr": "Instruction", "nl": "Instructie" },
-    "selectPlaceholder": { "en": "Select…", "fr": "Sélectionner…", "nl": "Selecteer…" },
-    "noMatches": { "en": "No matches.", "fr": "Aucun résultat.", "nl": "Geen resultaten." },
-    "close": { "en": "Close", "fr": "Fermer", "nl": "Sluiten" },
-    "back": { "en": "Back", "fr": "Retour", "nl": "Terug" },
-    "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
-    "tapToOpen": { "en": "Tap to open", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
-    "tapToExpand": { "en": "Tap to expand", "fr": "Appuyez pour ouvrir", "nl": "Tik om te openen" },
-    "tapToCollapse": { "en": "Tap to collapse", "fr": "Appuyez pour réduire", "nl": "Tik om te sluiten" },
-    "download": { "en": "Download", "fr": "Télécharger", "nl": "Downloaden" },
-    "cancel": { "en": "Cancel", "fr": "Annuler", "nl": "Annuleren" },
-    "saveChanges": { "en": "Save changes", "fr": "Enregistrer les modifications", "nl": "Wijzigingen opslaan" },
-    "selectAll": { "en": "Select all", "fr": "Tout sélectionner", "nl": "Alles selecteren" },
-    "deselectAll": { "en": "Deselect all", "fr": "Tout désélectionner", "nl": "Alles deselecteren" },
-    "add": { "en": "Add", "fr": "Ajouter", "nl": "Toevoegen" },
-    "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
-    "noChange": { "en": "No change.", "fr": "Aucun changement.", "nl": "Geen wijziging." },
-    "more": { "en": "+{count} more", "fr": "+{count} de plus", "nl": "+{count} meer" }
+    "info": {
+      "en": "Info"
+    },
+    "instruction": {
+      "en": "Instruction"
+    },
+    "selectPlaceholder": {
+      "en": "Select…"
+    },
+    "noMatches": {
+      "en": "No matches."
+    },
+    "close": {
+      "en": "Close"
+    },
+    "back": {
+      "en": "Back"
+    },
+    "open": {
+      "en": "Open"
+    },
+    "tapToOpen": {
+      "en": "Tap to open"
+    },
+    "tapToExpand": {
+      "en": "Tap to expand"
+    },
+    "tapToCollapse": {
+      "en": "Tap to collapse"
+    },
+    "download": {
+      "en": "Download"
+    },
+    "cancel": {
+      "en": "Cancel"
+    },
+    "saveChanges": {
+      "en": "Save changes"
+    },
+    "selectAll": {
+      "en": "Select all"
+    },
+    "deselectAll": {
+      "en": "Deselect all"
+    },
+    "add": {
+      "en": "Add"
+    },
+    "loading": {
+      "en": "Loading…"
+    },
+    "noChange": {
+      "en": "No change."
+    },
+    "more": {
+      "en": "+{count} more"
+    }
   },
   "values": {
-    "yes": { "en": "Yes", "fr": "Oui", "nl": "Ja" },
-    "no": { "en": "No", "fr": "Non", "nl": "Nee" }
+    "yes": {
+      "en": "Yes"
+    },
+    "no": {
+      "en": "No"
+    }
   },
   "summary": {
-    "loadingRecord": { "en": "Loading record…", "fr": "Chargement de l'enregistrement…", "nl": "Record laden…" },
-    "headerSection": { "en": "Header", "fr": "En-tête", "nl": "Kop" },
-    "pdf": { "en": "PDF", "fr": "PDF", "nl": "PDF" },
-    "openPdf": { "en": "Open PDF", "fr": "Ouvrir le PDF", "nl": "PDF openen" },
-    "show": { "en": "Show", "fr": "Afficher", "nl": "Tonen" },
-    "hide": { "en": "Hide", "fr": "Masquer", "nl": "Verbergen" }
+    "loadingRecord": {
+      "en": "Loading record…"
+    },
+    "headerSection": {
+      "en": "Header"
+    },
+    "pdf": {
+      "en": "PDF"
+    },
+    "openPdf": {
+      "en": "Open PDF"
+    },
+    "show": {
+      "en": "Show"
+    },
+    "hide": {
+      "en": "Hide"
+    }
   },
   "inventory": {
     "reservationUpdateFailed": {
-      "en": "Failed to update the reservation.",
-      "fr": "Impossible de mettre à jour la réservation.",
-      "nl": "De reservering kon niet worden bijgewerkt."
+      "en": "Failed to update the reservation."
     },
     "reservationUpdateFailedDetail": {
-      "en": "We couldn't update the reservation properly. Please try again.",
-      "fr": "Nous n'avons pas pu mettre à jour la réservation correctement. Veuillez réessayer.",
-      "nl": "We konden de reservering niet correct bijwerken. Probeer het opnieuw."
+      "en": "We couldn't update the reservation properly. Please try again."
     },
     "reservationConfirmFailed": {
-      "en": "Could not confirm reservation changes.",
-      "fr": "Impossible de confirmer les modifications de réservation.",
-      "nl": "Kon de reserveringswijzigingen niet bevestigen."
+      "en": "Could not confirm reservation changes."
     },
     "reservationConflict": {
-      "en": "This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?",
-      "fr": "Cet élément a été mis à jour par un autre utilisateur. {availableWithUnit} sont maintenant disponibles pour {itemLabel}. Voulez-vous utiliser la quantité disponible ou annuler cette modification ?",
-      "nl": "Dit item werd bijgewerkt door een andere gebruiker. {availableWithUnit} zijn nu beschikbaar voor {itemLabel}. Wil je de beschikbare hoeveelheid gebruiken of deze wijziging annuleren?"
+      "en": "This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?"
     },
     "useAvailable": {
-      "en": "Use available amount",
-      "fr": "Utiliser la quantité disponible",
-      "nl": "Beschikbare hoeveelheid gebruiken"
+      "en": "Use available amount"
     },
     "cancelAction": {
-      "en": "Cancel action",
-      "fr": "Annuler l'action",
-      "nl": "Actie annuleren"
+      "en": "Cancel action"
     },
     "reservationConsumedSingular": {
-      "en": "{count} reservation consumed",
-      "fr": "{count} réservation consommée",
-      "nl": "{count} reservering verbruikt"
+      "en": "{count} reservation consumed"
     },
     "reservationConsumedPlural": {
-      "en": "{count} reservations consumed",
-      "fr": "{count} réservations consommées",
-      "nl": "{count} reserveringen verbruikt"
+      "en": "{count} reservations consumed"
     },
     "reservationReleasedSingular": {
-      "en": "{count} reservation released",
-      "fr": "{count} réservation libérée",
-      "nl": "{count} reservering vrijgegeven"
+      "en": "{count} reservation released"
     },
     "reservationReleasedPlural": {
-      "en": "{count} reservations released",
-      "fr": "{count} réservations libérées",
-      "nl": "{count} reserveringen vrijgegeven"
+      "en": "{count} reservations released"
     }
   },
   "list": {
-    "title": { "en": "Records", "fr": "Enregistrements", "nl": "Records" },
-    "searchPlaceholder": { "en": "Search records", "fr": "Rechercher", "nl": "Zoeken" },
-    "searchByText": { "en": "🔍", "fr": "🔍", "nl": "🔍" },
-    "searchByDate": { "en": "🔍 by date", "fr": "🔍 par date", "nl": "🔍 op datum" },
-    "search": { "en": "Search", "fr": "Rechercher", "nl": "Zoeken" },
-    "any": { "en": "Any", "fr": "Tous", "nl": "Alle" },
-    "clearSearch": { "en": "Clear", "fr": "Effacer", "nl": "Wissen" },
-    "advancedSearch": { "en": "Advanced search", "fr": "Recherche avancée", "nl": "Geavanceerd zoeken" },
-    "searchToSeeResults": {
-      "en": "Search to see records.",
-      "fr": "Recherchez pour voir les enregistrements.",
-      "nl": "Zoek om records te zien."
+    "title": {
+      "en": "Records"
     },
-    "searchDateLabel": { "en": "Filter by date", "fr": "Filtrer par date", "nl": "Filteren op datum" },
-    "viewToggle": { "en": "View", "fr": "Vue", "nl": "Weergave" },
+    "searchPlaceholder": {
+      "en": "Search records"
+    },
+    "searchByText": {
+      "en": "🔍"
+    },
+    "searchByDate": {
+      "en": "🔍 by date"
+    },
+    "search": {
+      "en": "Search"
+    },
+    "any": {
+      "en": "Any"
+    },
+    "clearSearch": {
+      "en": "Clear"
+    },
+    "advancedSearch": {
+      "en": "Advanced search"
+    },
+    "searchToSeeResults": {
+      "en": "Search to see records."
+    },
+    "searchDateLabel": {
+      "en": "Filter by date"
+    },
+    "viewToggle": {
+      "en": "View"
+    },
     "view": {
-      "table": { "en": "Table", "fr": "Table", "nl": "Tabel" },
-      "cards": { "en": "List", "fr": "Liste", "nl": "Lijst" }
+      "table": {
+        "en": "Table"
+      },
+      "cards": {
+        "en": "List"
+      }
     },
     "meta": {
-      "createdAt": { "en": "Created", "fr": "Créé", "nl": "Aangemaakt" },
-      "updatedAt": { "en": "Updated", "fr": "Mis à jour", "nl": "Bijgewerkt" },
-      "status": { "en": "Status", "fr": "Statut", "nl": "Status" },
-      "pdfUrl": { "en": "PDF URL", "fr": "Lien PDF", "nl": "PDF-link" }
+      "createdAt": {
+        "en": "Created"
+      },
+      "updatedAt": {
+        "en": "Updated"
+      },
+      "status": {
+        "en": "Status"
+      },
+      "pdfUrl": {
+        "en": "PDF URL"
+      }
     },
-    "sortBy": { "en": "Sort by", "fr": "Trier par", "nl": "Sorteer op" },
-    "asc": { "en": "Asc", "fr": "Croissant", "nl": "Oplopend" },
-    "desc": { "en": "Desc", "fr": "Décroissant", "nl": "Aflopend" },
-    "noRecords": { "en": "No records found.", "fr": "Aucun enregistrement trouvé.", "nl": "Geen records gevonden." },
-    "previous": { "en": "Previous", "fr": "Précédent", "nl": "Vorige" },
-    "next": { "en": "Next", "fr": "Suivant", "nl": "Volgende" },
-    "pageOf": { "en": "Page {page} of {total}", "fr": "Page {page} sur {total}", "nl": "Pagina {page} van {total}" },
-    "recordsCountOne": { "en": "{count} record", "fr": "{count} enregistrement", "nl": "{count} record" },
-    "recordsCountMany": { "en": "{count} records", "fr": "{count} enregistrements", "nl": "{count} records" },
+    "sortBy": {
+      "en": "Sort by"
+    },
+    "asc": {
+      "en": "Asc"
+    },
+    "desc": {
+      "en": "Desc"
+    },
+    "noRecords": {
+      "en": "No records found."
+    },
+    "previous": {
+      "en": "Previous"
+    },
+    "next": {
+      "en": "Next"
+    },
+    "pageOf": {
+      "en": "Page {page} of {total}"
+    },
+    "recordsCountOne": {
+      "en": "{count} record"
+    },
+    "recordsCountMany": {
+      "en": "{count} records"
+    },
     "recordsLoadedOfTotal": {
-      "en": "{loaded} / {total} records",
-      "fr": "{loaded} / {total} enregistrements",
-      "nl": "{loaded} / {total} records"
+      "en": "{loaded} / {total} records"
     },
-    "loadingMore": { "en": "Loading more…", "fr": "Chargement supplémentaire…", "nl": "Meer laden…" },
+    "loadingMore": {
+      "en": "Loading more…"
+    },
     "legend": {
-      "title": { "en": "Legend", "fr": "Légende", "nl": "Legenda" },
-      "warning": { "en": "Warning", "fr": "Avertissement", "nl": "Waarschuwing" },
-      "check": { "en": "OK", "fr": "OK", "nl": "OK" },
-      "error": { "en": "Error", "fr": "Erreur", "nl": "Fout" },
-      "info": { "en": "Info", "fr": "Info", "nl": "Info" },
-      "external": { "en": "External link", "fr": "Lien externe", "nl": "Externe link" },
-      "lock": { "en": "Locked", "fr": "Verrouillé", "nl": "Vergrendeld" },
-      "edit": { "en": "Edit", "fr": "Modifier", "nl": "Bewerken" },
-      "view": { "en": "View", "fr": "Voir", "nl": "Bekijken" },
-      "copy": { "en": "Copy", "fr": "Copier", "nl": "Kopieren" }
+      "title": {
+        "en": "Legend"
+      },
+      "warning": {
+        "en": "Warning"
+      },
+      "check": {
+        "en": "OK"
+      },
+      "error": {
+        "en": "Error"
+      },
+      "info": {
+        "en": "Info"
+      },
+      "external": {
+        "en": "External link"
+      },
+      "lock": {
+        "en": "Locked"
+      },
+      "edit": {
+        "en": "Edit"
+      },
+      "view": {
+        "en": "View"
+      },
+      "copy": {
+        "en": "Copy"
+      }
     }
   },
   "overlay": {
-    "row": { "en": "Row", "fr": "Ligne", "nl": "Rij" },
-    "itemsOne": { "en": "Item", "fr": "Élément", "nl": "Item" },
-    "itemsMany": { "en": "Items", "fr": "Éléments", "nl": "Items" },
+    "row": {
+      "en": "Row"
+    },
+    "itemsOne": {
+      "en": "Item"
+    },
+    "itemsMany": {
+      "en": "Items"
+    },
     "detail": {
-      "templateMissing": { "en": "Template not configured.", "fr": "Modèle non configuré.", "nl": "Sjabloon niet geconfigureerd." },
+      "templateMissing": {
+        "en": "Template not configured."
+      },
       "templateBundleRequired": {
-        "en": "Template must be a bundled (bundle:...) HTML template.",
-        "fr": "Le modèle doit être un modèle HTML intégré (bundle:...).",
-        "nl": "Het sjabloon moet een gebundeld (bundle:...) HTML-sjabloon zijn."
+        "en": "Template must be a bundled (bundle:...) HTML template."
       },
-      "templateFailed": { "en": "Unable to render template.", "fr": "Impossible de rendre le modèle.", "nl": "Kan het sjabloon niet weergeven." },
-      "selected": { "en": "Selected", "fr": "Sélectionné", "nl": "Geselecteerd" },
+      "templateFailed": {
+        "en": "Unable to render template."
+      },
+      "selected": {
+        "en": "Selected"
+      },
       "pathUnsupported": {
-        "en": "Nested paths beyond one level are not supported yet.",
-        "fr": "Les chemins imbriqués au-delà d’un niveau ne sont pas encore pris en charge.",
-        "nl": "Geneste paden dieper dan één niveau worden nog niet ondersteund."
+        "en": "Nested paths beyond one level are not supported yet."
       },
-      "subgroupMissing": { "en": "Subgroup configuration not found.", "fr": "Configuration du sous-groupe introuvable.", "nl": "Subgroepconfiguratie niet gevonden." },
-      "selectRow": { "en": "Select a row to view details.", "fr": "Sélectionnez une ligne pour voir les détails.", "nl": "Selecteer een rij om details te bekijken." },
-      "viewModeUnsupported": { "en": "View mode is not supported.", "fr": "Le mode d’affichage n’est pas pris en charge.", "nl": "De weergavemodus wordt niet ondersteund." },
-      "editModeUnsupported": { "en": "Edit mode is not supported.", "fr": "Le mode d’édition n’est pas pris en charge.", "nl": "De bewerkingsmodus wordt niet ondersteund." },
-      "loading": { "en": "Loading…", "fr": "Chargement…", "nl": "Laden…" },
-      "empty": { "en": "No preview available.", "fr": "Aucun aperçu disponible.", "nl": "Geen voorbeeld beschikbaar." },
-      "selectedRow": { "en": "Selected row", "fr": "Ligne sélectionnée", "nl": "Geselecteerde rij" }
+      "subgroupMissing": {
+        "en": "Subgroup configuration not found."
+      },
+      "selectRow": {
+        "en": "Select a row to view details."
+      },
+      "viewModeUnsupported": {
+        "en": "View mode is not supported."
+      },
+      "editModeUnsupported": {
+        "en": "Edit mode is not supported."
+      },
+      "loading": {
+        "en": "Loading…"
+      },
+      "empty": {
+        "en": "No preview available."
+      },
+      "selectedRow": {
+        "en": "Selected row"
+      }
     }
   },
   "files": {
-    "title": { "en": "Photos", "fr": "Photos", "nl": "Foto's" },
-    "fileN": { "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" },
-    "add": { "en": "Add photo", "fr": "Ajouter une photo", "nl": "Foto toevoegen" },
-    "view": { "en": "View photos", "fr": "Voir les photos", "nl": "Foto's bekijken" },
-    "open": { "en": "Open", "fr": "Ouvrir", "nl": "Openen" },
-    "clearAll": { "en": "Remove all", "fr": "Tout supprimer", "nl": "Alles verwijderen" },
-    "clearAllConfirm": { "en": "Remove all photos?", "fr": "Supprimer toutes les photos ?", "nl": "Alle foto's verwijderen?" },
-    "discardChangesConfirm": {
-      "en": "The photos you changed are not saved yet. Close without saving them?",
-      "fr": "Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?",
-      "nl": "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+    "title": {
+      "en": "Photos"
     },
-    "noneSelected": { "en": "No photo added.", "fr": "Aucune photo ajoutée.", "nl": "Geen foto toegevoegd." },
-    "selectedOne": { "en": "1 photo added", "fr": "1 photo ajoutée", "nl": "1 foto toegevoegd" },
-    "selectedMany": { "en": "{count} photos added", "fr": "{count} photos ajoutées", "nl": "{count} foto's toegevoegd" },
+    "fileN": {
+      "en": "Photo {n}"
+    },
+    "add": {
+      "en": "Add photo"
+    },
+    "view": {
+      "en": "View photos"
+    },
+    "open": {
+      "en": "Open"
+    },
+    "clearAll": {
+      "en": "Remove all"
+    },
+    "clearAllConfirm": {
+      "en": "Remove all photos?"
+    },
+    "discardChangesConfirm": {
+      "en": "The photos you changed are not saved yet. Close without saving them?"
+    },
+    "noneSelected": {
+      "en": "No photo added."
+    },
+    "selectedOne": {
+      "en": "1 photo added"
+    },
+    "selectedMany": {
+      "en": "{count} photos added"
+    },
     "waitSave": {
-      "en": "Please wait while we save your file(s)",
-      "fr": "Veuillez patienter pendant l’enregistrement de vos fichier(s)",
-      "nl": "Wacht even terwijl we je bestand(en) opslaan"
+      "en": "Please wait while we save your file(s)"
     },
     "waitRemoveSelected": {
-      "en": "Please wait while we remove selected file(s)",
-      "fr": "Veuillez patienter pendant la suppression des fichier(s) sélectionné(s)",
-      "nl": "Wacht even terwijl we de geselecteerde bestand(en) verwijderen"
+      "en": "Please wait while we remove selected file(s)"
     },
-    "maxSelected": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
-    "maxReached": { "en": "Required photos added.", "fr": "Photos requises ajoutées.", "nl": "Vereiste foto's toegevoegd." },
-    "uploaded": { "en": "Added", "fr": "Ajouté", "nl": "Toegevoegd" },
-    "maxFilesOne": { "en": "1 photo max", "fr": "1 photo max", "nl": "max 1 foto" },
-    "maxFilesMany": { "en": "{count} photos max", "fr": "{count} photos max", "nl": "max {count} foto's" },
-    "minFilesOne": { "en": "1 photo required", "fr": "1 photo requise", "nl": "1 foto vereist" },
-    "minFilesMany": { "en": "{count} photos required", "fr": "{count} photos requises", "nl": "{count} foto's vereist" },
-    "retrySave": { "en": "Try saving photos again", "fr": "Réessayer d'enregistrer les photos", "nl": "Foto's opnieuw opslaan" },
-    "maxSizeEach": { "en": "≤ {mb} MB each", "fr": "≤ {mb} MB chacun", "nl": "≤ {mb} MB elk" },
-    "allowed": { "en": "Allowed: {exts}", "fr": "Autorisés : {exts}", "nl": "Toegestaan: {exts}" },
-    "remainingOne": { "en": "You can add 1 more photo.", "fr": "Vous pouvez ajouter 1 photo de plus.", "nl": "Je kunt nog 1 foto toevoegen." },
-    "remainingMany": { "en": "You can add {count} more photos.", "fr": "Vous pouvez ajouter encore {count} photos.", "nl": "Je kunt nog {count} foto's toevoegen." },
+    "maxSelected": {
+      "en": "Required photos added."
+    },
+    "maxReached": {
+      "en": "Required photos added."
+    },
+    "uploaded": {
+      "en": "Added"
+    },
+    "maxFilesOne": {
+      "en": "1 photo max"
+    },
+    "maxFilesMany": {
+      "en": "{count} photos max"
+    },
+    "minFilesOne": {
+      "en": "1 photo required"
+    },
+    "minFilesMany": {
+      "en": "{count} photos required"
+    },
+    "retrySave": {
+      "en": "Try saving photos again"
+    },
+    "maxSizeEach": {
+      "en": "≤ {mb} MB each"
+    },
+    "allowed": {
+      "en": "Allowed: {exts}"
+    },
+    "remainingOne": {
+      "en": "You can add 1 more photo."
+    },
+    "remainingMany": {
+      "en": "You can add {count} more photos."
+    },
     "warning": {
       "maxFilesPartial": {
         "en": "Only {accepted} of {attempted} selected photos were added. Maximum: {max}."
@@ -461,106 +682,106 @@
     },
     "error": {
       "uploadFailed": {
-        "en": "Could not add photos.",
-        "fr": "Impossible d'ajouter des photos.",
-        "nl": "Kan geen foto's toevoegen."
+        "en": "Could not add photos."
       },
       "saveFailed": {
-        "en": "The photos were not saved. Check the connection and try again.",
-        "fr": "Les photos n'ont pas été enregistrées. Vérifiez la connexion et réessayez.",
-        "nl": "De foto's zijn niet opgeslagen. Controleer de verbinding en probeer opnieuw."
+        "en": "The photos were not saved. Check the connection and try again."
       },
       "minFiles": {
-        "en": "{field} requires at least {min} photo{plural}.",
-        "fr": "{field} nécessite au moins {min} photo{plural}.",
-        "nl": "{field} vereist minimaal {min} foto{plural}."
+        "en": "{field} requires at least {min} photo{plural}."
       },
       "maxFiles": {
-        "en": "Maximum of {max} photo{plural} allowed.",
-        "fr": "Maximum de {max} photo{plural} autorisé.",
-        "nl": "Maximum {max} foto{plural} toegestaan."
+        "en": "Maximum of {max} photo{plural} allowed."
       },
       "maxFileSizeMb": {
-        "en": "{name} exceeds {mb} MB.",
-        "fr": "{name} dépasse {mb} Mo.",
-        "nl": "{name} is groter dan {mb} MB."
+        "en": "{name} exceeds {mb} MB."
       },
       "fileType": {
-        "en": "{name} is not an allowed photo type.",
-        "fr": "{name} n'est pas un type de photo autorisé.",
-        "nl": "{name} is geen toegestaan fototype."
+        "en": "{name} is not an allowed photo type."
       },
       "compressFailed": {
-        "en": "Could not resize {name}. Adding original.",
-        "fr": "Impossible de redimensionner {name}. Ajout de l'original.",
-        "nl": "Kan {name} niet verkleinen. Origineel wordt toegevoegd."
+        "en": "Could not resize {name}. Adding original."
       }
     },
     "emptyHint": {
-      "en": "No photo added.",
-      "fr": "Aucune photo ajoutée.",
-      "nl": "Geen foto toegevoegd."
+      "en": "No photo added."
     }
   },
   "report": {
-    "title": { "en": "Report", "fr": "Rapport", "nl": "Rapport" },
-    "generatingPdf": { "en": "Generating PDF…", "fr": "Génération du PDF…", "nl": "PDF genereren…" },
-    "failedPdf": { "en": "Failed to generate PDF.", "fr": "Échec de génération du PDF.", "nl": "PDF genereren mislukt." },
-    "renderingMarkdown": { "en": "Rendering…", "fr": "Rendu…", "nl": "Weergave…" },
-    "renderingHtml": { "en": "Rendering…", "fr": "Rendu…", "nl": "Weergave…" },
+    "title": {
+      "en": "Report"
+    },
+    "generatingPdf": {
+      "en": "Generating PDF…"
+    },
+    "failedPdf": {
+      "en": "Failed to generate PDF."
+    },
+    "renderingMarkdown": {
+      "en": "Rendering…"
+    },
+    "renderingHtml": {
+      "en": "Rendering…"
+    },
     "failedMarkdown": {
-      "en": "Failed to render preview.",
-      "fr": "Échec du rendu de l'aperçu.",
-      "nl": "Voorbeeld renderen mislukt."
+      "en": "Failed to render preview."
     },
     "failedHtml": {
-      "en": "Failed to render preview.",
-      "fr": "Échec du rendu de l'aperçu.",
-      "nl": "Voorbeeld renderen mislukt."
+      "en": "Failed to render preview."
     },
-    "pdfReady": { "en": "PDF ready. Use Open (or Download) above.", "fr": "PDF prêt. Utilisez Ouvrir (ou Télécharger) ci-dessus.", "nl": "PDF klaar. Gebruik Openen (of Downloaden) hierboven." }
+    "pdfReady": {
+      "en": "PDF ready. Use Open (or Download) above."
+    }
   },
   "validation": {
-    "thisFieldRequired": { "en": "This field is required.", "fr": "Ce champ est requis.", "nl": "Dit veld is verplicht." },
+    "thisFieldRequired": {
+      "en": "This field is required."
+    },
     "numberOnly": {
-      "en": "Only numbers are allowed in this field.",
-      "fr": "Seuls des nombres sont autorisés dans ce champ.",
-      "nl": "Alleen getallen zijn toegestaan in dit veld."
+      "en": "Only numbers are allowed in this field."
     },
     "fixErrors": {
-      "en": "You are almost done. Some required checks are missing. Review the highlighted sections.",
-      "fr": "Vous avez presque terminé. Certaines vérifications obligatoires manquent. Revoyez les sections en surbrillance.",
-      "nl": "Je bent bijna klaar. Sommige verplichte controles ontbreken. Bekijk de gemarkeerde secties."
+      "en": "You are almost done. Some required checks are missing. Review the highlighted sections."
     },
-    "warningsTitle": { "en": "Warnings", "fr": "Avertissements", "nl": "Waarschuwingen" },
+    "warningsTitle": {
+      "en": "Warnings"
+    },
     "optionFilterMismatch": {
-      "en": "Does not satisfy: {keys}",
-      "fr": "Ne respecte pas : {keys}",
-      "nl": "Voldoet niet aan: {keys}"
+      "en": "Does not satisfy: {keys}"
     },
-    "fieldRequired": { "en": "{field} is required.", "fr": "{field} est requis.", "nl": "{field} is verplicht." },
+    "fieldRequired": {
+      "en": "{field} is required."
+    },
     "completeAtLeastOneRowFillCollapsed": {
-      "en": "Complete at least one row (fill the collapsed fields).",
-      "fr": "Complétez au moins une ligne (remplissez les champs repliés).",
-      "nl": "Vul minstens één rij in (vul de ingeklapte velden in)."
+      "en": "Complete at least one row (fill the collapsed fields)."
     },
     "completeAtLeastOneValidRow": {
-      "en": "Complete at least one valid row.",
-      "fr": "Complétez au moins une ligne valide.",
-      "nl": "Vul minstens één geldige rij in."
+      "en": "Complete at least one valid row."
     },
     "atLeastOneLineItemRequired": {
-      "en": "At least one line item is required.",
-      "fr": "Au moins une ligne est requise.",
-      "nl": "Minstens één regel is verplicht."
+      "en": "At least one line item is required."
     }
   },
   "paragraphDisclaimer": {
-    "title": { "en": "Pay attention to:", "fr": "Attention :", "nl": "Let op:" },
+    "title": {
+      "en": "Pay attention to:"
+    },
     "listMessage": {
-      "en": "For {key}, do not use: {items}.",
-      "fr": "Pour {key}, n'utilisez pas : {items}.",
-      "nl": "Voor {key}, gebruik niet: {items}."
+      "en": "For {key}, do not use: {items}."
+    }
+  },
+  "dedupIncompleteHomeDialog": {
+    "title": {
+      "en": "Incomplete record"
+    },
+    "message": {
+      "en": "Some required dedup fields are missing. Continue to leave this page and discard the current record."
+    },
+    "confirmLabel": {
+      "en": "Continue and delete the record"
+    },
+    "cancelLabel": {
+      "en": "Cancel and continue editing"
     }
   }
 }

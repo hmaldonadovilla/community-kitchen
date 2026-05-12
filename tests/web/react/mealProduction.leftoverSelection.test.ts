@@ -66,7 +66,7 @@ describe('meal production leftover selection config', () => {
         quietWindowMs: 30000,
         dialog: expect.objectContaining({
           message: expect.objectContaining({
-            en: 'The leftover inventory changed while you were editing. We loaded the latest availability. Please review your selections before continuing.'
+            en: 'Leftover availability changed while you were editing. Please review your selections before continuing.'
           }),
           showCancel: false
         })

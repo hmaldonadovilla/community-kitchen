@@ -275,7 +275,7 @@ export const AppOverlays: React.FC<{
 
     <BlockingOverlay
       open={guidedStepAdvanceBusy.state.open}
-      title={guidedStepAdvanceBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+      title={guidedStepAdvanceBusy.state.title ?? tSystem('navigation.waitTitle', language, 'Please wait')}
       message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')}
       zIndex={12047}
     />

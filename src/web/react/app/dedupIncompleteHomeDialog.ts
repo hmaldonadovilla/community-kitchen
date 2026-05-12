@@ -1,5 +1,6 @@
 import type { ActionBarsConfig } from '../../../types';
 import { resolveLocalizedString } from '../../i18n';
+import { tSystem } from '../../systemStrings';
 import type { LangCode, LocalizedString } from '../../types';
 
 export type DedupIncompleteHomeDialogConfig = {
@@ -127,14 +128,26 @@ export const resolveDedupIncompleteHomeDialogCopy = (
   language: LangCode
 ): DedupIncompleteHomeDialogCopy => {
   return {
-    title: resolveTitleText(config?.title, language, 'Incomplete record'),
+    title: resolveTitleText(config?.title, language, tSystem('dedupIncompleteHomeDialog.title', language, 'Incomplete record')),
     message: resolveOptionalText(
       config?.message,
       language,
-      'Some required dedup fields are missing. Continue to leave this page and discard the current record.'
+      tSystem(
+        'dedupIncompleteHomeDialog.message',
+        language,
+        'Some required dedup fields are missing. Continue to leave this page and discard the current record.'
+      )
     ),
-    confirmLabel: resolveRequiredText(config?.confirmLabel, language, 'Continue and delete the record'),
-    cancelLabel: resolveRequiredText(config?.cancelLabel, language, 'Cancel and continue editing'),
+    confirmLabel: resolveRequiredText(
+      config?.confirmLabel,
+      language,
+      tSystem('dedupIncompleteHomeDialog.confirmLabel', language, 'Continue and delete the record')
+    ),
+    cancelLabel: resolveRequiredText(
+      config?.cancelLabel,
+      language,
+      tSystem('dedupIncompleteHomeDialog.cancelLabel', language, 'Cancel and continue editing')
+    ),
     primaryAction: config?.primaryAction === 'cancel' ? 'cancel' : 'confirm',
     showCancel: config?.showCancel !== false,
     showCloseButton: config?.showCloseButton === true,

@@ -58,7 +58,7 @@ describe('embed-form-configs env helpers', () => {
     expect(raw).toContain('"logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"');
     expect(raw).toContain('"imageUrl": "https://lh3.googleusercontent.com/d/1_wGMM5C-vCiU4lImejfLb2Uz0BOL9PND=w512"');
     expect(raw).toContain('"sections": []');
-    expect(raw).toContain('"pendingNavigationTitle": "Please wait"');
+    expect(raw).toContain('"pendingNavigationTitle": ""');
     expect(raw).toContain('"pendingNavigationMessage": "Opening forms..."');
     expect(raw).not.toContain('"imageUrl": "data:image/');
   });

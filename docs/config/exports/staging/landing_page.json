@@ -9,7 +9,7 @@
     "refreshLabel": "Refresh",
     "loadingAppsLabel": "Loading apps...",
     "emptyPrimaryAppsLabel": "No primary apps were found.",
-    "pendingNavigationTitle": "Please wait",
+    "pendingNavigationTitle": "",
     "pendingNavigationMessage": "Opening the selected app...",
     "openAppLabel": "Go to app",
     "primarySectionTitle": "Apps for cooks",

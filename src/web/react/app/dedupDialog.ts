@@ -1,5 +1,6 @@
 import { resolveLocalizedString } from '../../i18n';
 import { optionKey, toOptionSet } from '../../core';
+import { tSystem } from '../../systemStrings';
 import type { DedupDialogConfig, FieldValue, LangCode, LocalizedString, WebFormDefinition } from '../../types';
 import type { OptionState } from '../types';
 import { resolveLabel } from '../utils/labels';
@@ -42,7 +43,7 @@ export const resolveDedupDialogCopy = (config: DedupDialogConfig | undefined, la
     outro: resolveOptionalText(config?.outro, language, 'What do you want to do?'),
     openLabel: resolveRequiredText(config?.openLabel, language, 'Open existing record'),
     changeLabel: resolveRequiredText(config?.changeLabel, language, 'Change customer, service or date'),
-    cancelLabel: resolveRequiredText(config?.cancelLabel, language, 'Cancel')
+    cancelLabel: resolveRequiredText(config?.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'))
   };
 };
 

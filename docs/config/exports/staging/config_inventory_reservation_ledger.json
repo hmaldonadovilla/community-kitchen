@@ -7,9 +7,7 @@
     "destinationTab": "Inventory Reservation Ledger Data",
     "description": "Internal reservation ledger used to track quantity-based inventory reservations across records.",
     "languages": [
-      "EN",
-      "FR",
-      "NL"
+      "EN"
     ],
     "defaultLanguage": "EN",
     "languageSelectorEnabled": false,
@@ -18,9 +16,7 @@
     "createNewRecordEnabled": false,
     "createRecordPresetButtonsEnabled": false,
     "listViewTitle": {
-      "en": "Inventory reservation ledger",
-      "fr": "Grand livre des réservations d'inventaire",
-      "nl": "Inventarisreserveringslogboek"
+      "en": "Inventory reservation ledger"
     },
     "listViewMetaColumns": [
       "updatedAt"
@@ -34,14 +30,10 @@
     "listViewHeaderSortEnabled": true,
     "listViewRowClickEnabled": true,
     "submitButtonLabel": {
-      "en": "Save",
-      "fr": "Save",
-      "nl": "Save"
+      "en": "Save"
     },
     "summaryButtonLabel": {
-      "en": "Summary",
-      "fr": "Summary",
-      "nl": "Summary"
+      "en": "Summary"
     },
     "appHeader": {
       "sidebarEnabled": false
@@ -52,173 +44,117 @@
       "id": "RESERVATION_ID",
       "type": "TEXT",
       "qEn": "Reservation ID",
-      "qFr": "Reservation ID",
-      "qNl": "Reservation ID",
       "required": true,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_FORM_KEY",
       "type": "TEXT",
       "qEn": "Resource form key",
-      "qFr": "Clé de formulaire de ressource",
-      "qNl": "Resource form key",
       "required": true,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_RECORD_ID",
       "type": "TEXT",
       "qEn": "Resource record ID",
-      "qFr": "ID d'enregistrement de ressource",
-      "qNl": "Resource record ID",
       "required": true,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_ITEM_ID",
       "type": "TEXT",
       "qEn": "Resource item ID",
-      "qFr": "ID d'élément de ressource",
-      "qNl": "Resource item ID",
       "required": false,
       "readOnly": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_KIND",
       "type": "TEXT",
       "qEn": "Resource kind",
-      "qFr": "Type de ressource",
-      "qNl": "Resource kind",
       "required": false,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_QTY_FIELD_ID",
       "type": "TEXT",
       "qEn": "Resource quantity field ID",
-      "qFr": "ID du champ quantité de ressource",
-      "qNl": "Resource quantity field ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_RESERVED_QTY_FIELD_ID",
       "type": "TEXT",
       "qEn": "Resource reserved quantity field ID",
-      "qFr": "ID du champ quantité réservée de ressource",
-      "qNl": "Resource reserved quantity field ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_STATUS_FIELD_ID",
       "type": "TEXT",
       "qEn": "Resource status field ID",
-      "qFr": "ID du champ statut de ressource",
-      "qNl": "Resource status field ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESOURCE_UNIT_FIELD_ID",
       "type": "TEXT",
       "qEn": "Resource unit field ID",
-      "qFr": "ID du champ unité de ressource",
-      "qNl": "Resource unit field ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESERVED_QTY",
       "type": "NUMBER",
       "qEn": "Reserved quantity",
-      "qFr": "Quantité réservée",
-      "qNl": "Gereserveerde hoeveelheid",
       "required": false,
       "readOnly": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RESERVED_UNIT",
       "type": "TEXT",
       "qEn": "Reserved unit",
-      "qFr": "Unité réservée",
-      "qNl": "Gereserveerde eenheid",
       "required": false,
       "readOnly": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "STATUS",
       "type": "CHOICE",
       "qEn": "Reservation status",
-      "qFr": "Statut de réservation",
-      "qNl": "Reserveringsstatus",
       "required": true,
       "readOnly": true,
       "defaultValue": "active",
       "listView": false,
       "options": [
-        "active",
-        "released",
-        "consumed"
-      ],
-      "optionsFr": [
-        "active",
-        "released",
-        "consumed"
-      ],
-      "optionsNl": [
         "active",
         "released",
         "consumed"
@@ -229,93 +165,65 @@
       "id": "SOURCE_FORM_KEY",
       "type": "TEXT",
       "qEn": "Source form key",
-      "qFr": "Clé du formulaire source",
-      "qNl": "Source form key",
       "required": true,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_RECORD_ID",
       "type": "TEXT",
       "qEn": "Source record ID",
-      "qFr": "ID d'enregistrement source",
-      "qNl": "Source record ID",
       "required": true,
       "readOnly": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_PARENT_GROUP_ID",
       "type": "TEXT",
       "qEn": "Source parent group ID",
-      "qFr": "ID du groupe parent source",
-      "qNl": "Source parent group ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_PARENT_ROW_ID",
       "type": "TEXT",
       "qEn": "Source parent row ID",
-      "qFr": "ID de ligne parent source",
-      "qNl": "Source parent row ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_OUTPUT_GROUP_ID",
       "type": "TEXT",
       "qEn": "Source output group ID",
-      "qFr": "ID du groupe de sortie source",
-      "qNl": "Source output group ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_OUTPUT_ROW_ID",
       "type": "TEXT",
       "qEn": "Source output row ID",
-      "qFr": "ID de ligne de sortie source",
-      "qNl": "Source output row ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "SOURCE_OUTPUT_KEY_FIELD_ID",
       "type": "TEXT",
       "qEn": "Source output key field ID",
-      "qFr": "ID du champ clé de sortie source",
-      "qNl": "Source output key field ID",
       "required": false,
       "readOnly": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     }
   ],

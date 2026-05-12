@@ -37,6 +37,11 @@ const normalizeOptionalText = (value: any): string | undefined => {
   return raw || undefined;
 };
 
+const normalizeOptionalTextAllowEmpty = (value: any): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  return value.toString().trim();
+};
+
 const normalizeRequiredText = (value: any, fallback: string): string => normalizeOptionalText(value) || fallback;
 
 const normalizeSection = (value: any): AnalyticsPageLandingTileSection => {
@@ -61,10 +66,9 @@ const normalizeCopy = (value: any): AnalyticsPageCopyConfig => {
     loadingLabel: normalizeRequiredText(source.loadingLabel, DEFAULT_ANALYTICS_PAGE_CONFIG.copy.loadingLabel),
     emptyLabel: normalizeRequiredText(source.emptyLabel, DEFAULT_ANALYTICS_PAGE_CONFIG.copy.emptyLabel),
     backToLandingLabel: normalizeRequiredText(source.backToLandingLabel, DEFAULT_ANALYTICS_PAGE_CONFIG.copy.backToLandingLabel),
-    pendingNavigationTitle: normalizeRequiredText(
-      source.pendingNavigationTitle,
-      DEFAULT_ANALYTICS_PAGE_CONFIG.copy.pendingNavigationTitle
-    ),
+    pendingNavigationTitle:
+      normalizeOptionalTextAllowEmpty(source.pendingNavigationTitle) ??
+      DEFAULT_ANALYTICS_PAGE_CONFIG.copy.pendingNavigationTitle,
     pendingNavigationMessage: normalizeRequiredText(
       source.pendingNavigationMessage,
       DEFAULT_ANALYTICS_PAGE_CONFIG.copy.pendingNavigationMessage

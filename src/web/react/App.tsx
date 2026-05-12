@@ -11889,7 +11889,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       busyMessage?: string;
     }): Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> => {
       if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
-      if (submittingRef.current) return { success: false, message: 'Submitting.' };
+      if (submittingRef.current) return { success: false, message: tSystem('actions.submitting', languageRef.current, 'Submitting…') };
       if (isClosedRecord) return { success: false, message: tSystem('app.closedReadOnly', language, 'Closed (read-only)') };
       if (recordStaleRef.current) {
         // Block uploads (they require draft saves) until the user refreshes the record.

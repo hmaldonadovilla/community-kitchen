@@ -17,9 +17,7 @@ const findQuestion = (questions: any[], id: string): any => {
 describe('staging integrity dialogs and list legend config', () => {
   const hasNonEmptyEnText = (value: any): boolean => typeof value?.en === 'string' && value.en.trim().length > 0;
   const expectedPhotoDiscardConfirm = {
-    en: 'The photos you changed are not saved yet. Close without saving them?',
-    fr: 'Les photos que vous avez changées ne sont pas encore enregistrées. Fermer sans les enregistrer ?',
-    nl: "De foto's die je hebt aangepast zijn nog niet opgeslagen. Sluiten zonder ze op te slaan?"
+    en: 'The photos you changed are not saved yet. Close without saving them?'
   };
   const collectObjects = (value: any, predicate: (entry: any) => boolean, acc: any[] = []): any[] => {
     if (Array.isArray(value)) {
@@ -135,9 +133,7 @@ describe('staging integrity dialogs and list legend config', () => {
             isInPast: true
           },
           message: {
-            en: 'Dates in the past are not allowed. Please select today or a future date.',
-            fr: "Les dates passées ne sont pas autorisées. Veuillez sélectionner aujourd'hui ou une date future.",
-            nl: 'Datums in het verleden zijn niet toegestaan. Selecteer vandaag of een toekomstige datum.'
+            en: 'Dates in the past are not allowed. Please select today or a future date.'
           }
         }
       ]);
@@ -201,10 +197,10 @@ describe('staging integrity dialogs and list legend config', () => {
       });
       expect(recipe?.changeDialog?.title).toBe('Change recipe?');
       expect(recipe?.changeDialog?.message).toBe(
-        'Changing any recipe will permanently delete any data or photo previously captured. This action cannot be undone.'
+        'Changing the recipe will permanently delete all data and photos captured in later steps. This cannot be undone.'
       );
-      expect(recipe?.changeDialog?.cancelLabel).toBe('Cancel - Keep current recipe');
-      expect(recipe?.changeDialog?.confirmLabel).toBe('Continue - Delete subsequent data');
+      expect(recipe?.changeDialog?.cancelLabel).toBe('No, keep current recipe');
+      expect(recipe?.changeDialog?.confirmLabel).toBe('Yes, delete subsequent data');
       expect(recipe?.changeDialog?.primaryAction).toBe('cancel');
       expect(recipe?.changeDialog?.confirmUpdates).toEqual([
         {
@@ -289,7 +285,8 @@ describe('staging integrity dialogs and list legend config', () => {
           equals: ['Cook']
         });
         const closeConfirmCases = effect?.closeConfirm?.cases || [];
-        expect(closeConfirmCases.length).toBeGreaterThanOrEqual(2);
+        expect(closeConfirmCases.length).toBeGreaterThanOrEqual(1);
+        expect(closeConfirmCases.some((entry: any) => entry?.title?.en === 'Missing quantity/unit')).toBe(true);
         closeConfirmCases.forEach((entry: any) => {
           const lineItemsClause = entry?.when?.lineItems || entry?.when?.not?.lineItems;
           if (!lineItemsClause) return;
@@ -324,7 +321,7 @@ describe('staging integrity dialogs and list legend config', () => {
 
     const assertGuidedStepLayout = (root: any, questions: any[]) => {
       const items = Array.isArray(root?.steps?.items) ? root.steps.items : [];
-      expect(root?.steps?.waitForUploadsDialog?.title?.en).toBe('Please wait');
+      expect(root?.steps?.waitForUploadsDialog?.title?.en).toBe('');
       expect(root?.steps?.waitForUploadsDialog?.message?.en).toBe('Please wait while your photos finish uploading.');
       expect(root?.steps?.waitForUploadsDialog?.showCancel).toBe(false);
       const leftoverBank = items.find((entry: any) => entry?.id === 'leftoverForm');
@@ -476,9 +473,7 @@ describe('staging integrity dialogs and list legend config', () => {
           type: 'sum',
           fieldId: 'ORD_QTY',
           label: {
-            en: 'Total ordered',
-            fr: 'Total commandé',
-            nl: 'Totaal besteld'
+            en: 'Total ordered'
           },
           decimalPlaces: 0
         }
@@ -562,7 +557,7 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.milestoneAction?.validationScope).toBe('throughCurrentStep');
       expect(portioning?.navigation?.milestoneAction?.waitForQueue).toBe('all');
       expect(portioning?.navigation?.milestoneAction?.advanceAfterStart).toBe(true);
-      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Please confirm');
+      expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.title?.en).toBe('Create final report?');
       expect(portioning?.navigation?.milestoneAction?.confirmationDialog?.message?.en).toBe(
         'Confirm that {MP_SERVICE} for {MP_DISTRIBUTOR} on {MP_PREP_DATE} has been produced by {MP_COOK_NAME} in line with the Meal Production procedure and hygiene rules.\n\nAll ordered portions are ready for delivery and Final report can be created.'
       );
@@ -616,10 +611,10 @@ describe('staging integrity dialogs and list legend config', () => {
             }),
             dialog: expect.objectContaining({
               title: expect.objectContaining({
-                en: 'Leftovers'
+                en: 'Leftovers recorded?'
               }),
               message: expect.objectContaining({
-                en: 'Please confirm that all leftovers have been recorded. Remember to label and store leftovers according to storage procedure.'
+                en: 'Confirm that all leftovers have been recorded and will be labelled and stored according to storage procedure.'
               }),
               cancelLabel: expect.objectContaining({
                 en: 'No, go back to Leftovers'
@@ -628,16 +623,16 @@ describe('staging integrity dialogs and list legend config', () => {
           })
         ])
       );
-      expect(root?.submissionAfterSubmit?.confirmationDialog?.title?.en).toBe('Leftovers');
+      expect(root?.submissionAfterSubmit?.confirmationDialog?.title?.en).toBe('No leftovers?');
       expect(root?.submissionAfterSubmit?.confirmationDialog?.message?.en).toBe('Please confirm there is no leftover.');
       expect(root?.submissionAfterSubmit?.confirmationDialog?.cancelLabel?.en).toBe('No, go back to Leftovers');
       expect(root?.submissionAfterSubmit?.progressDialogCases).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             dialog: expect.objectContaining({
-              title: expect.objectContaining({ en: 'Leftovers' }),
+              title: expect.objectContaining({ en: 'Generating leftover ID' }),
               message: expect.objectContaining({
-                en: 'Please do not leave the screen and wait for the Leftover ID to be generated'
+                en: 'Keep this screen open until the Leftover ID is generated.'
               })
             })
           })
@@ -648,7 +643,7 @@ describe('staging integrity dialogs and list legend config', () => {
           targetFormKey: 'Config: Leftover Inventory',
           title: expect.objectContaining({ en: 'Label and store Leftovers' }),
           message: expect.objectContaining({
-            en: 'Use the ID and name below to label leftover container so it can be easily identified later.'
+            en: 'Use the ID and name below to label each leftover container for easy identification later.'
           }),
           itemTemplate: expect.objectContaining({
             en: '{{LEFTOVER_ID}} | {{LEFTOVER_RECIPE || LEFTOVER_INGREDIENT || LEFTOVER_KIND}} | {{LEFTOVER_PORTIONS | pluralize:portion:portions || LEFTOVER_QTY | appendField:LEFTOVER_UNIT}} | {{LEFTOVER_EXP_DATE | date:dd-MMM-yyyy | label:Expires}}'

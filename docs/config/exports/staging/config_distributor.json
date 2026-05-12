@@ -12,19 +12,13 @@
     "followupConfig": {
       "statusTransitions": {
         "inProgress": {
-          "en": "Draft",
-          "fr": "Brouillon",
-          "nl": "Conceptverslag"
+          "en": "Draft"
         },
         "reOpened": {
-          "en": "Disabled",
-          "fr": "Désactivé",
-          "nl": "Uitgeschakeld"
+          "en": "Disabled"
         },
         "onClose": {
-          "en": "Active",
-          "fr": "Actif",
-          "nl": "Actief"
+          "en": "Active"
         }
       }
     },
@@ -38,99 +32,65 @@
       "id": "DIST_NAME",
       "type": "TEXT",
       "qEn": "Name",
-      "qFr": "Name",
-      "qNl": "Name",
       "required": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "NICKNAME",
       "type": "TEXT",
       "qEn": "Nickname",
-      "qFr": "Surnom",
-      "qNl": "Bijnaam",
       "required": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_EMAIL",
       "type": "TEXT",
       "qEn": "Email",
-      "qFr": "Email",
-      "qNl": "Email",
       "required": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_PH",
       "type": "TEXT",
       "qEn": "Phone Number",
-      "qFr": "Phone Number",
-      "qNl": "Phone Number",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_ADDR_1",
       "type": "TEXT",
       "qEn": "Address",
-      "qFr": "Address",
-      "qNl": "Address",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_ADDR_2",
       "type": "TEXT",
       "qEn": "Address Line 2",
-      "qFr": "Address Line 2",
-      "qNl": "Address Line 2",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_CITY",
       "type": "TEXT",
       "qEn": "City",
-      "qFr": "City",
-      "qNl": "City",
       "required": false,
       "listView": false,
       "options": [
         "Clean",
         "Needs Attention"
-      ],
-      "optionsFr": [
-        "Propre",
-        "Nécessite attention"
-      ],
-      "optionsNl": [
-        "Schoon",
-        "Aandacht nodig"
       ],
       "status": "Active"
     },
@@ -138,52 +98,36 @@
       "id": "DIST_REGION",
       "type": "TEXT",
       "qEn": "Region",
-      "qFr": "Region",
-      "qNl": "Region",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_COUNTRY",
       "type": "TEXT",
       "qEn": "Country",
-      "qFr": "Country",
-      "qNl": "Country",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DIST_POST_CODE",
       "type": "TEXT",
       "qEn": "Postal Code",
-      "qFr": "Postal Code",
-      "qNl": "Postal Code",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "RE_OPEN",
       "type": "BUTTON",
       "qEn": "Deactivate",
-      "qFr": "Désactiver",
-      "qNl": "Deactiveren",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "visibility": {
         "showWhen": {
@@ -202,19 +146,13 @@
             "en": "Please confirm"
           },
           "message": {
-            "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?",
-            "fr": "Ce distributeur ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
-            "nl": "Deze distributeur zal niet meer verschijnen in het maaltijdproductieformulier. Wil je dooragaan?"
+            "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?"
           },
           "confirmLabel": {
-            "en": "Yes",
-            "fr": "Oui",
-            "nl": "Ja"
+            "en": "Yes"
           },
           "cancelLabel": {
-            "en": "No",
-            "fr": "Non",
-            "nl": "Nee"
+            "en": "No"
           }
         },
         "placements": [
@@ -229,20 +167,16 @@
     "description": "Capture info about distributors",
     "destinationTab": "Distributor Data",
     "languages": [
-      "EN",
-      "FR",
-      "NL"
+      "EN"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true,
+    "languageSelectorEnabled": false,
     "questions": [
       {
         "id": "DIST_NAME",
         "type": "TEXT",
         "label": {
-          "en": "Name",
-          "fr": "Name",
-          "nl": "Name"
+          "en": "Name"
         },
         "required": true,
         "listView": true
@@ -251,9 +185,7 @@
         "id": "NICKNAME",
         "type": "TEXT",
         "label": {
-          "en": "Nickname",
-          "fr": "Surnom",
-          "nl": "Bijnaam"
+          "en": "Nickname"
         },
         "required": true,
         "listView": true
@@ -262,9 +194,7 @@
         "id": "DIST_EMAIL",
         "type": "TEXT",
         "label": {
-          "en": "Email",
-          "fr": "Email",
-          "nl": "Email"
+          "en": "Email"
         },
         "required": true,
         "listView": false
@@ -273,9 +203,7 @@
         "id": "DIST_PH",
         "type": "TEXT",
         "label": {
-          "en": "Phone Number",
-          "fr": "Phone Number",
-          "nl": "Phone Number"
+          "en": "Phone Number"
         },
         "required": false,
         "listView": false
@@ -284,9 +212,7 @@
         "id": "DIST_ADDR_1",
         "type": "TEXT",
         "label": {
-          "en": "Address",
-          "fr": "Address",
-          "nl": "Address"
+          "en": "Address"
         },
         "required": false,
         "listView": false
@@ -295,9 +221,7 @@
         "id": "DIST_ADDR_2",
         "type": "TEXT",
         "label": {
-          "en": "Address Line 2",
-          "fr": "Address Line 2",
-          "nl": "Address Line 2"
+          "en": "Address Line 2"
         },
         "required": false,
         "listView": false
@@ -306,9 +230,7 @@
         "id": "DIST_CITY",
         "type": "TEXT",
         "label": {
-          "en": "City",
-          "fr": "City",
-          "nl": "City"
+          "en": "City"
         },
         "required": false,
         "listView": false,
@@ -316,14 +238,6 @@
           "en": [
             "Clean",
             "Needs Attention"
-          ],
-          "fr": [
-            "Propre",
-            "Nécessite attention"
-          ],
-          "nl": [
-            "Schoon",
-            "Aandacht nodig"
           ]
         }
       },
@@ -331,9 +245,7 @@
         "id": "DIST_REGION",
         "type": "TEXT",
         "label": {
-          "en": "Region",
-          "fr": "Region",
-          "nl": "Region"
+          "en": "Region"
         },
         "required": false,
         "listView": false
@@ -342,9 +254,7 @@
         "id": "DIST_COUNTRY",
         "type": "TEXT",
         "label": {
-          "en": "Country",
-          "fr": "Country",
-          "nl": "Country"
+          "en": "Country"
         },
         "required": false,
         "listView": false
@@ -353,9 +263,7 @@
         "id": "DIST_POST_CODE",
         "type": "TEXT",
         "label": {
-          "en": "Postal Code",
-          "fr": "Postal Code",
-          "nl": "Postal Code"
+          "en": "Postal Code"
         },
         "required": false,
         "listView": false
@@ -364,9 +272,7 @@
         "id": "RE_OPEN",
         "type": "BUTTON",
         "label": {
-          "en": "Deactivate",
-          "fr": "Désactiver",
-          "nl": "Deactiveren"
+          "en": "Deactivate"
         },
         "required": false,
         "listView": false,
@@ -381,19 +287,13 @@
               "en": "Please confirm"
             },
             "message": {
-              "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?",
-              "fr": "Ce distributeur ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
-              "nl": "Deze distributeur zal niet meer verschijnen in het maaltijdproductieformulier. Wil je dooragaan?"
+              "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?"
             },
             "confirmLabel": {
-              "en": "Yes",
-              "fr": "Oui",
-              "nl": "Ja"
+              "en": "Yes"
             },
             "cancelLabel": {
-              "en": "No",
-              "fr": "Non",
-              "nl": "Nee"
+              "en": "No"
             }
           },
           "placements": [
@@ -414,27 +314,21 @@
         {
           "fieldId": "DIST_NAME",
           "label": {
-            "en": "Name",
-            "fr": "Name",
-            "nl": "Name"
+            "en": "Name"
           },
           "kind": "question"
         },
         {
           "fieldId": "NICKNAME",
           "label": {
-            "en": "Nickname",
-            "fr": "Surnom",
-            "nl": "Bijnaam"
+            "en": "Nickname"
           },
           "kind": "question"
         },
         {
           "fieldId": "updatedAt",
           "label": {
-            "en": "Updated",
-            "fr": "Mis à jour",
-            "nl": "Bijgewerkt"
+            "en": "Updated"
           },
           "kind": "meta"
         }
@@ -452,19 +346,13 @@
     "followup": {
       "statusTransitions": {
         "inProgress": {
-          "en": "Draft",
-          "fr": "Brouillon",
-          "nl": "Conceptverslag"
+          "en": "Draft"
         },
         "reOpened": {
-          "en": "Disabled",
-          "fr": "Désactivé",
-          "nl": "Uitgeschakeld"
+          "en": "Disabled"
         },
         "onClose": {
-          "en": "Active",
-          "fr": "Actif",
-          "nl": "Actief"
+          "en": "Active"
         }
       }
     },

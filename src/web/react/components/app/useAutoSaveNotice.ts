@@ -32,7 +32,7 @@ export const useAutoSaveNotice = (args: {
     return `ck.autosaveNotice.${key}`;
   }, [formKey]);
 
-  const autoSaveNoticeTitle = tSystem('autosaveNotice.title', language, 'Autosave is on');
+  const autoSaveNoticeTitle = tSystem('autosaveNotice.title', language, '');
   const autoSaveNoticeMessage = tSystem(
     'autosaveNotice.message',
     language,

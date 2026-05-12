@@ -221,11 +221,23 @@ export const useAppSubmitDialogConfig = (args: {
     ]
   );
 
+  const resolveOptionalDialogTitle = useCallback(
+    (rawValue: LocalizedString | string | undefined, fallback: string): string => {
+      if (rawValue === undefined || rawValue === null) return fallback;
+      if (typeof rawValue === 'string') return rawValue;
+      if (!rawValue || typeof rawValue !== 'object') return fallback;
+      const key = (languageRef.current || 'EN').toString().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(rawValue, key)) return ((rawValue as any)[key] ?? '').toString();
+      if (Object.prototype.hasOwnProperty.call(rawValue, 'en')) return ((rawValue as any).en ?? '').toString();
+      return fallback;
+    },
+    [languageRef]
+  );
+
   const resolveGuidedUploadWaitDialog = useCallback(
     (rawDialog?: SystemActionGateDialogConfig | null) => ({
-      title: resolveLocalizedString(
+      title: resolveOptionalDialogTitle(
         rawDialog?.title,
-        languageRef.current,
         tSystem('navigation.waitTitle', languageRef.current, 'Please wait')
       ),
       message: resolveDialogTemplate(
@@ -233,7 +245,7 @@ export const useAppSubmitDialogConfig = (args: {
         tSystem('navigation.waitPhotos', languageRef.current, 'Please wait while your files finish uploading.')
       )
     }),
-    [languageRef, resolveDialogTemplate]
+    [languageRef, resolveDialogTemplate, resolveOptionalDialogTitle]
   );
 
   const submitConfirmMessage = useMemo(

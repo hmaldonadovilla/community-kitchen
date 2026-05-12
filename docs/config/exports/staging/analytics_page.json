@@ -15,7 +15,7 @@
     "loadingLabel": "Loading reports...",
     "emptyLabel": "No reports are available.",
     "backToLandingLabel": "Apps",
-    "pendingNavigationTitle": "Please wait",
+    "pendingNavigationTitle": "",
     "pendingNavigationMessage": "Opening forms..."
   },
   "sections": []

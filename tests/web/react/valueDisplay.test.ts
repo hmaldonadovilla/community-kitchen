@@ -20,10 +20,9 @@ describe('valueDisplay', () => {
     expect(toDateInputValue(iso)).toBe('2026-01-03');
   });
 
-  test('formatDisplayText localizes booleans', () => {
-    expect(formatDisplayText(true, { language: 'FR' })).toBe('Oui');
-    expect(formatDisplayText(false, { language: 'NL' })).toBe('Nee');
+  test('formatDisplayText uses English boolean labels for unsupported languages', () => {
+    expect(formatDisplayText(true, { language: 'FR' })).toBe('Yes');
+    expect(formatDisplayText(false, { language: 'NL' })).toBe('No');
   });
 });
-
 

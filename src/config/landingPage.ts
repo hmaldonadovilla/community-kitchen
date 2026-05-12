@@ -37,6 +37,11 @@ const normalizeOptionalText = (value: any): string | undefined => {
   return raw || undefined;
 };
 
+const normalizeOptionalTextAllowEmpty = (value: any): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  return value.toString().trim();
+};
+
 const normalizeRequiredText = (value: any, fallback: string): string => normalizeOptionalText(value) || fallback;
 
 const normalizeSection = (value: any): LandingSectionKey => {
@@ -58,7 +63,8 @@ const normalizeCopy = (value: any): LandingPageCopyConfig => {
     refreshLabel: normalizeRequiredText(source.refreshLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.refreshLabel),
     loadingAppsLabel: normalizeRequiredText(source.loadingAppsLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.loadingAppsLabel),
     emptyPrimaryAppsLabel: normalizeRequiredText(source.emptyPrimaryAppsLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.emptyPrimaryAppsLabel),
-    pendingNavigationTitle: normalizeRequiredText(source.pendingNavigationTitle, DEFAULT_LANDING_PAGE_CONFIG.copy.pendingNavigationTitle),
+    pendingNavigationTitle:
+      normalizeOptionalTextAllowEmpty(source.pendingNavigationTitle) ?? DEFAULT_LANDING_PAGE_CONFIG.copy.pendingNavigationTitle,
     pendingNavigationMessage: normalizeRequiredText(source.pendingNavigationMessage, DEFAULT_LANDING_PAGE_CONFIG.copy.pendingNavigationMessage),
     openAppLabel: normalizeRequiredText(source.openAppLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.openAppLabel),
     primarySectionTitle: normalizeRequiredText(source.primarySectionTitle, DEFAULT_LANDING_PAGE_CONFIG.copy.primarySectionTitle),
