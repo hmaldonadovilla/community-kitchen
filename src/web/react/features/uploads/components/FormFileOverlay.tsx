@@ -3,7 +3,7 @@ import React from 'react';
 import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, WebQuestionDefinition } from '../../../../types';
 import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
-import { resolveUploadWaitMessage } from '../../../app/uploadWaitMessages';
+import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { FileOverlay } from '../../../components/form/overlays/FileOverlay';
 import { describeUploadItem } from '../../../components/form/utils';
 import type {
@@ -145,6 +145,7 @@ export const FormFileOverlay: React.FC<{
 
   const commitImmediateItems = (nextItems: Array<string | File>, action: 'removeOne' | 'removeAll') => {
     if (submitting || readOnly || fileOverlay.saving) return;
+    const waitTitle = resolveUploadWaitTitle(uploadConfig, language, 'removeSelected');
     const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'removeSelected');
     const uploadTarget: UploadRetryTarget = {
       scope: isTop ? 'top' : 'line',
@@ -184,6 +185,7 @@ export const FormFileOverlay: React.FC<{
           fieldId: uploadTarget.scope === 'line' ? uploadTarget.field?.id : undefined,
           items: nextItems,
           uploadConfig,
+          busyTitle: waitTitle,
           busyMessage: waitMessage
         })
       : Promise.resolve({ success: true, items: nextItems.filter((item): item is string => typeof item === 'string') });

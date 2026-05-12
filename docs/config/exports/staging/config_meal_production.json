@@ -547,6 +547,9 @@
         }
       },
       "progressDialog": {
+        "title": {
+          "en": ""
+        },
         "message": {
           "en": "Keep this screen open until no leftovers statement is recorded."
         }
@@ -648,7 +651,7 @@
         "en": "Copy meal production record"
       },
       "message": {
-        "en": "Select a new production date (today or later) to copy this record. Customer, service, responsible cook, ordered portions, and recipes will be copied automatically. Leftovers used, ingredient changes, photos, food safety, portioning, and leftovers will not be copied."
+        "en": "Select a new production date (today or later) to copy this record. Customer, service, responsible cook, ordered portions, and recipes will be copied automatically. Leftovers used, ingredient changes, photos, food safety, portioning, and leftovers recorded will not be copied."
       },
       "confirmLabel": {
         "en": "OK"
@@ -6514,11 +6517,14 @@
           "en": "The photos you changed are not saved yet. Close without saving them?"
         },
         "waitMessages": {
+          "title": {
+            "en": ""
+          },
           "save": {
-            "en": "Photos are still being saved. Keep this screen open until all photos show `Added`"
+            "en": "Do not leave the screen while we save your photo(s)"
           },
           "removeSelected": {
-            "en": "Please wait while we remove selected photo(s)"
+            "en": "Do not leave the screen while we remove selected photo(s)"
           }
         }
       }
@@ -6640,11 +6646,14 @@
           "en": "The photos you changed are not saved yet. Close without saving them?"
         },
         "waitMessages": {
+          "title": {
+            "en": ""
+          },
           "save": {
-            "en": "Photos are still being saved. Keep this screen open until all photos show `Added`"
+            "en": "Do not leave the screen while we save your photo(s)"
           },
           "removeSelected": {
-            "en": "Please wait while we remove selected photo(s)"
+            "en": "Do not leave the screen while we remove selected photo(s)"
           }
         }
       },
@@ -9912,11 +9921,14 @@
             "en": "The photos you changed are not saved yet. Close without saving them?"
           },
           "waitMessages": {
+            "title": {
+              "en": ""
+            },
             "save": {
-              "en": "Photos are still being saved. Keep this screen open until all photos show `Added`"
+              "en": "Do not leave the screen while we save your photo(s)"
             },
             "removeSelected": {
-              "en": "Please wait while we remove selected photo(s)"
+              "en": "Do not leave the screen while we remove selected photo(s)"
             }
           }
         }
@@ -10038,11 +10050,14 @@
             "en": "The photos you changed are not saved yet. Close without saving them?"
           },
           "waitMessages": {
+            "title": {
+              "en": ""
+            },
             "save": {
-              "en": "Photos are still being saved. Keep this screen open until all photos show `Added`"
+              "en": "Do not leave the screen while we save your photo(s)"
             },
             "removeSelected": {
-              "en": "Please wait while we remove selected photo(s)"
+              "en": "Do not leave the screen while we remove selected photo(s)"
             }
           }
         },
@@ -11018,6 +11033,9 @@
         }
       },
       "progressDialog": {
+        "title": {
+          "en": ""
+        },
         "message": {
           "en": "Keep this screen open until no leftovers statement is recorded."
         }
@@ -11081,7 +11099,7 @@
         "en": "Copy meal production record"
       },
       "message": {
-        "en": "Select a new production date (today or later) to copy this record. Customer, service, responsible cook, ordered portions, and recipes will be copied automatically. Leftovers used, ingredient changes, photos, food safety, portioning, and leftovers will not be copied."
+        "en": "Select a new production date (today or later) to copy this record. Customer, service, responsible cook, ordered portions, and recipes will be copied automatically. Leftovers used, ingredient changes, photos, food safety, portioning, and leftovers recorded will not be copied."
       },
       "confirmLabel": {
         "en": "OK"

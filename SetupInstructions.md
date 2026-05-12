@@ -1323,7 +1323,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - retry transient lock-contention failures during reservation upserts and reservation reconciliation before surfacing the error to the user
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - redirect to another view after success (`navigateToAfterSuccess: "current" | "form" | "summary" | "list"`)
-          - show configurable dialogs before/after start (`confirmationDialog`, `confirmationDialogCases[]`, `progressDialog`, `progressDialogCases[]`, `feedbackDialog`)
+          - show configurable dialogs before/after start (`confirmationDialog`, `confirmationDialogCases[]`, `progressDialog`, `progressDialogCases[]`, `feedbackDialog`); set a localized `title` value to `""` to hide the title line instead of using the fallback title
           - choose the confirmation or progress overlay copy per record state with ordered `confirmationDialogCases[]` / `progressDialogCases[]`
           - show a generated-records dialog after success (`generatedRecordsDialog`) when matching `submitEffects` created downstream records
           - optionally attach a generic dialog button action with `feedbackDialog.confirmAction` / `feedbackDialog.cancelAction`, supporting `{ "type": "guidedStepMilestone", "stepId": "..." }` to run another step's configured milestone action from the dialog or `{ "type": "formSubmit" }` to invoke the same submit flow as the action bar submit button
@@ -1384,7 +1384,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `navigateTo`: `auto` | `form` | `summary` | `list`
       - `confirmationDialog`: optional confirmation dialog shown before final submit starts
       - `confirmationDialogCases[]`: ordered conditional confirmation dialogs; first match wins and falls back to `confirmationDialog`
-      - `progressDialog`: optional blocking-overlay copy shown immediately while submit work is running
+      - `progressDialog`: optional blocking-overlay copy shown immediately while submit work is running. Set `title.en` to `""` to hide the title line.
       - `progressDialogCases[]`: ordered conditional progress dialogs; first match wins and falls back to `progressDialog`
       - `generatedRecordsDialog`: optional single-action dialog shown after successful `preActions` when matching submit effects created downstream records; `itemTemplate` supports `{{FIELD_ID}}`, `{{A || B}}` fallbacks, and formatters such as `label`, `appendField`, `pluralize`, and `date`
       - `feedbackDialog`: optional acknowledgement dialog shown after background actions start. Its confirm/cancel buttons may include `confirmAction` or `cancelAction`; use `{ "type": "guidedStepMilestone", "stepId": "leftovers" }` to let a dialog button run the target step's configured milestone action, or `{ "type": "formSubmit" }` when the button should run the same submit flow as the action bar submit button.
@@ -1761,7 +1761,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `allowedExtensions` and/or `allowedMimeTypes`: restrict types (validated client-side)
       - `errorMessages`: optional localized override strings for upload validation errors
       - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
-      - `waitMessages.save` / `waitMessages.removeSelected`: optional localized wait copy for blocking upload and remove transactions when `blockUntilSaved` is true. When omitted, the UI falls back to generic file-based system strings.
+      - `waitMessages.title` / `waitMessages.saveTitle` / `waitMessages.removeSelectedTitle` / `waitMessages.save` / `waitMessages.removeSelected`: optional localized title and wait copy for blocking upload and remove transactions when `blockUntilSaved` is true. Set a title value to `""` to hide the title line. When omitted, the UI falls back to the generic wait title and generic file-based system strings.
       - `linkLabel`: optional localized label template used for file links in Summary/PDF (e.g. `"Photo {n}"`)
       - `discardChangesConfirm`: optional localized confirmation shown when the user closes the photo overlay with unsaved add/remove changes. Use simple wording for field-specific photo flows; when omitted, the UI falls back to `files.discardChangesConfirm`.
       - `ui.variant`: optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`

@@ -1118,7 +1118,7 @@ describe('Dashboard', () => {
       steps: {
         mode: 'guided',
         waitForUploadsDialog: {
-          title: { EN: 'Please wait' },
+          title: { EN: '' },
           message: { EN: 'Please wait while your photos finish uploading.' },
           showCancel: false
         },
@@ -1150,7 +1150,7 @@ describe('Dashboard', () => {
     const steps = forms[0].steps as any;
     const step = steps?.items?.[0];
     expect(steps?.waitForUploadsDialog).toEqual({
-      title: { en: 'Please wait' },
+      title: { en: '' },
       message: { en: 'Please wait while your photos finish uploading.' },
       showCancel: false
     });
@@ -1183,7 +1183,7 @@ describe('Dashboard', () => {
             }
           ],
           progressDialog: {
-            title: { EN: 'Leftovers' },
+            title: { EN: '' },
             message: { EN: 'Please wait while leftover ids are generated.' }
           },
           progressDialogCases: [
@@ -1247,7 +1247,7 @@ describe('Dashboard', () => {
         }
       ],
       progressDialog: {
-        title: { en: 'Leftovers' },
+        title: { en: '' },
         message: { en: 'Please wait while leftover ids are generated.' }
       },
       progressDialogCases: [

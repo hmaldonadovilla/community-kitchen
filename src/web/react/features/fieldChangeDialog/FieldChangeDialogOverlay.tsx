@@ -188,6 +188,7 @@ export const FieldChangeDialogOverlay: React.FC<{
 }) => {
   if (!open) return null;
   const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
+  const titleText = (title || '').toString().trim();
   const actionButtonTextStyle: React.CSSProperties = {
     whiteSpace: 'normal',
     overflowWrap: 'anywhere',
@@ -250,7 +251,7 @@ export const FieldChangeDialogOverlay: React.FC<{
       />
       <dialog
         open
-        aria-label={title}
+        aria-label={titleText || message || 'Confirmation dialog'}
         aria-modal="true"
         style={{
           width: 'min(720px, 100%)',
@@ -270,7 +271,9 @@ export const FieldChangeDialogOverlay: React.FC<{
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.15 }}>{title}</div>
+          {titleText ? (
+            <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.15 }}>{titleText}</div>
+          ) : null}
           {message ? <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4 }}>{message}</div> : null}
         </div>
 

@@ -1,4 +1,4 @@
-import { tSystem } from '../../src/web/systemStrings';
+import { tSystem, tSystemOptional } from '../../src/web/systemStrings';
 
 describe('systemStrings', () => {
   test('tSystem falls back to English for unsupported languages', () => {
@@ -16,5 +16,10 @@ describe('systemStrings', () => {
     expect(tSystem('files.waitSave', 'EN', '')).toContain('file');
     expect(tSystem('files.waitRemoveSelected', 'EN', '')).toContain('file');
     expect(tSystem('navigation.waitPhotos', 'EN', '')).toContain('files');
+  });
+
+  test('optional system strings preserve explicitly blank values', () => {
+    expect(tSystemOptional('navigation.waitSavingTitle', 'EN', 'Saving…')).toBe('');
+    expect(tSystem('navigation.waitSaving', 'EN', '')).toBe('Do not leave this page while your data is being saved');
   });
 });

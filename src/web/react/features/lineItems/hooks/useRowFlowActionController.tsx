@@ -7,7 +7,7 @@ import {
   toDependencyValue,
   toOptionSet
 } from '../../../../core';
-import { resolveLocalizedString } from '../../../../i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type {
   FieldValue,
@@ -449,7 +449,7 @@ export const useRowFlowActionController = ({
         return timing === 'after' ? 'after' : 'before';
       })();
       if (confirm && confirmTiming === 'before' && openConfirmDialog) {
-        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const title = resolveOptionalLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const message = resolveLocalizedString(confirm.body, language, '');
         const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
         const cancelLabel = resolveLocalizedString(confirm.cancelLabel, language, tSystem('common.cancel', language, 'Cancel'));
@@ -467,7 +467,7 @@ export const useRowFlowActionController = ({
       }
       applyEffects();
       if (confirm && confirmTiming === 'after' && openConfirmDialog) {
-        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const title = resolveOptionalLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const message = resolveLocalizedString(confirm.body, language, '');
         const confirmLabel = resolveLocalizedString(confirm.confirmLabel, language, tSystem('common.ok', language, 'OK'));
         openConfirmDialog({

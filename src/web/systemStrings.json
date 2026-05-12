@@ -152,8 +152,11 @@
     "waitPhotos": {
       "en": "Please wait while your files finish uploading."
     },
+    "waitSavingTitle": {
+      "en": ""
+    },
     "waitSaving": {
-      "en": "Please wait while we save your changes..."
+      "en": "Do not leave this page while your data is being saved"
     },
     "waitForms": {
       "en": "Please wait while we open the forms page..."

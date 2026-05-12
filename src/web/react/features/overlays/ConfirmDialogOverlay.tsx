@@ -40,6 +40,7 @@ export const ConfirmDialogOverlay: React.FC<{
   const mountedRef = React.useRef(true);
   const [busy, setBusy] = React.useState(false);
   const primaryAction = primaryActionProp === 'cancel' ? 'cancel' : 'confirm';
+  const titleText = (title || '').toString().trim();
   const actionButtonTextStyle: React.CSSProperties = {
     whiteSpace: 'normal',
     overflowWrap: 'anywhere',
@@ -151,7 +152,7 @@ export const ConfirmDialogOverlay: React.FC<{
       )}
       <dialog
         open
-        aria-label={title || 'Confirmation dialog'}
+        aria-label={titleText || 'Confirmation dialog'}
         aria-modal="true"
         onCancel={e => {
           // Prevent the native <dialog> element from closing itself on Escape.
@@ -213,7 +214,7 @@ export const ConfirmDialogOverlay: React.FC<{
         ) : null}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {title ? <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{title}</div> : null}
+          {titleText ? <div style={{ fontSize: 'var(--ck-font-group-title)', fontWeight: 600, lineHeight: 1.2 }}>{titleText}</div> : null}
           <div style={{ fontSize: 'var(--ck-font-control)', lineHeight: 1.4, whiteSpace: 'pre-line' }}>{message}</div>
         </div>
         <div className="ck-dialog-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 4, flexWrap: 'wrap' }}>

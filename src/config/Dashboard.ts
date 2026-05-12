@@ -492,6 +492,17 @@ export class Dashboard {
       });
       return Object.keys(out).length ? out : undefined;
     };
+    const normalizeOptionalLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') return input.trim();
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        out[k.toLowerCase()] = v.trim();
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
 
     const normalizeBoolean = (input: any): boolean | undefined => {
       if (input === undefined || input === null) return undefined;
@@ -971,7 +982,7 @@ export class Dashboard {
       const rawValue = normalizeJsonObject(copyCurrentRecordDialogRaw) as any;
       if (!rawValue || typeof rawValue !== 'object') return undefined;
 
-      const title = normalizeLocalized(rawValue.title);
+      const title = normalizeOptionalLocalized(rawValue.title);
       const message = normalizeLocalized(rawValue.message);
       const confirmLabel = normalizeLocalized(rawValue.confirmLabel);
       const cancelLabel = normalizeLocalized(rawValue.cancelLabel);
@@ -1277,13 +1288,13 @@ export class Dashboard {
         }
         return action;
       };
-      const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
+      const title = normalizeOptionalLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
       const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
       const confirmAction = normalizeDialogAction((raw as any).confirmAction);
       const cancelAction = normalizeDialogAction((raw as any).cancelAction);
-      if (title) out.title = title;
+      if (title !== undefined) out.title = title;
       if (message) out.message = message;
       if (confirmLabel) out.confirmLabel = confirmLabel;
       if (cancelLabel) out.cancelLabel = cancelLabel;
@@ -1366,14 +1377,14 @@ export class Dashboard {
             if (generatedRecordsDialogRaw && typeof generatedRecordsDialogRaw === 'object') {
               const submitEffectIds = normalizeStringArray((generatedRecordsDialogRaw as any).submitEffectIds);
               const targetFormKey = normalizeString((generatedRecordsDialogRaw as any).targetFormKey);
-              const title = normalizeLocalized((generatedRecordsDialogRaw as any).title);
+              const title = normalizeOptionalLocalized((generatedRecordsDialogRaw as any).title);
               const message = normalizeLocalized((generatedRecordsDialogRaw as any).message ?? (generatedRecordsDialogRaw as any).intro);
               const itemTemplate = normalizeLocalized((generatedRecordsDialogRaw as any).itemTemplate);
               const confirmLabel = normalizeLocalized((generatedRecordsDialogRaw as any).confirmLabel);
               const outDialog: Record<string, any> = {};
               if (submitEffectIds?.length) outDialog.submitEffectIds = submitEffectIds;
               if (targetFormKey) outDialog.targetFormKey = targetFormKey;
-              if (title) outDialog.title = title;
+              if (title !== undefined) outDialog.title = title;
               if (message) outDialog.message = message;
               if (itemTemplate) outDialog.itemTemplate = itemTemplate;
               if (confirmLabel) outDialog.confirmLabel = confirmLabel;
@@ -1410,7 +1421,7 @@ export class Dashboard {
     const dedupDialogObj = dedupDialogRaw && typeof dedupDialogRaw === 'object' ? (dedupDialogRaw as any) : undefined;
     const dedupDialogCandidate: DedupDialogConfig | undefined = dedupDialogObj
       ? {
-          title: normalizeLocalized(dedupDialogObj.title ?? dedupDialogObj.header ?? dedupDialogObj.heading),
+          title: normalizeOptionalLocalized(dedupDialogObj.title ?? dedupDialogObj.header ?? dedupDialogObj.heading),
           intro: normalizeLocalized(
             dedupDialogObj.intro ?? dedupDialogObj.bodyIntro ?? dedupDialogObj.messageIntro ?? dedupDialogObj.bodyStart
           ),
@@ -1624,6 +1635,17 @@ export class Dashboard {
       });
       return Object.keys(out).length ? (out as LocalizedString) : undefined;
     };
+    const normalizeOptionalLocalized = (value: any): LocalizedString | string | undefined => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'string') return value.trim();
+      if (typeof value !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(value).forEach(([key, rawVal]) => {
+        if (typeof rawVal !== 'string') return;
+        out[key.toLowerCase()] = rawVal.trim();
+      });
+      return Object.keys(out).length ? (out as LocalizedString) : undefined;
+    };
 
     const normalizeSystemDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
       if (!raw || typeof raw !== 'object') return undefined;
@@ -1646,13 +1668,13 @@ export class Dashboard {
         }
         return action;
       };
-      const title = normalizeLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
+      const title = normalizeOptionalLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
       const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
       const confirmAction = normalizeDialogAction((raw as any).confirmAction);
       const cancelAction = normalizeDialogAction((raw as any).cancelAction);
-      if (title) out.title = title;
+      if (title !== undefined) out.title = title;
       if (message) out.message = message;
       if (confirmLabel) out.confirmLabel = confirmLabel;
       if (cancelLabel) out.cancelLabel = cancelLabel;
@@ -2006,6 +2028,17 @@ export class Dashboard {
       });
       return Object.keys(out).length ? out : undefined;
     };
+    const normalizeOptionalLocalized = (input: any): any => {
+      if (input === undefined || input === null) return undefined;
+      if (typeof input === 'string') return input.trim();
+      if (typeof input !== 'object') return undefined;
+      const out: Record<string, string> = {};
+      Object.entries(input).forEach(([k, v]) => {
+        if (typeof v !== 'string') return;
+        out[k.toLowerCase()] = v.trim();
+      });
+      return Object.keys(out).length ? out : undefined;
+    };
 
     const normalizeGate = (raw: any): 'free' | 'whenComplete' | 'whenValid' | undefined => {
       const s = normalizeString(raw).toLowerCase();
@@ -2145,7 +2178,7 @@ export class Dashboard {
         }
         return action;
       };
-      const title = normalizeLocalized((raw as any).title);
+      const title = normalizeOptionalLocalized((raw as any).title);
       const message = normalizeLocalized((raw as any).message);
       const confirmLabel = normalizeLocalized((raw as any).confirmLabel);
       const cancelLabel = normalizeLocalized((raw as any).cancelLabel);
@@ -2501,8 +2534,8 @@ export class Dashboard {
               if (submitEffectIds.length) generatedRecordsDialog.submitEffectIds = submitEffectIds;
               const targetFormKey = normalizeString((generatedRecordsDialogRaw as any).targetFormKey);
               if (targetFormKey) generatedRecordsDialog.targetFormKey = targetFormKey;
-              const title = normalizeLocalized((generatedRecordsDialogRaw as any).title);
-              if (title) generatedRecordsDialog.title = title;
+              const title = normalizeOptionalLocalized((generatedRecordsDialogRaw as any).title);
+              if (title !== undefined) generatedRecordsDialog.title = title;
               const message = normalizeLocalized(
                 (generatedRecordsDialogRaw as any).message ??
                   (generatedRecordsDialogRaw as any).intro

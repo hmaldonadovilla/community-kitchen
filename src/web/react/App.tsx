@@ -357,8 +357,8 @@ import {
 import packageJson from '../../../package.json';
 import githubMarkdownCss from 'github-markdown-css/github-markdown-light.css';
 import { resolveLabel } from './utils/labels';
-import { tSystem } from '../systemStrings';
-import { resolveLocalizedString } from '../i18n';
+import { tSystem, tSystemOptional } from '../systemStrings';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../i18n';
 import { isEmptyValue } from './utils/values';
 import {
   clearFetchDataSourceCache,
@@ -856,7 +856,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const pending = fieldChangeActiveRef.current;
       if (!pending) return;
       const lockSeq = destructiveChangeBusy.lock({
-        title: tSystem('common.loading', languageRef.current, 'Loading…'),
+        title: tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
         message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
         kind: 'fieldChangeDialog',
         diagnosticMeta: { fieldPath: pending.fieldPath, fieldId: pending.fieldId }
@@ -1275,7 +1275,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!pending || fieldChangeDialog.state.open) return;
       fieldChangeActiveRef.current = pending;
       const dialogCfg = pending.dialog;
-      const title = resolveLocalizedString(
+      const title = resolveOptionalLocalizedString(
         dialogCfg.title,
         languageRef.current,
         tSystem('fieldChangeDialog.title', languageRef.current, 'Confirm change')
@@ -2061,6 +2061,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   });
   const uploadQueueRef = useRef<Map<string, Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>>>(new Map());
   const uploadQueueBlockingRef = useRef<Map<string, boolean>>(new Map());
+  const uploadQueueBusyTitleRef = useRef<Map<string, string>>(new Map());
   const uploadQueueBusyMessageRef = useRef<Map<string, string>>(new Map());
   const uploadBusySeqRef = useRef<number | null>(null);
   const uploadedFieldValueOverridesRef = useRef<Map<string, UploadedFieldValueOverride>>(new Map());
@@ -2070,10 +2071,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const summarySubmitIntentRef = useRef<boolean>(false);
   const navigateHomeInFlightRef = useRef<boolean>(false);
   const syncUploadQueueSize = useCallback(() => {
-    const { uploadsInFlight, blockingUploadsInFlight, busyMessage } = resolveUploadQueueBusyState({
+    const { uploadsInFlight, blockingUploadsInFlight, busyTitle, busyMessage } = resolveUploadQueueBusyState({
       uploadQueueSize: uploadQueueRef.current.size,
       blockingByKey: uploadQueueBlockingRef.current,
+      busyTitleByKey: uploadQueueBusyTitleRef.current,
       busyMessageByKey: uploadQueueBusyMessageRef.current,
+      defaultBusyTitle: tSystemOptional('navigation.waitTitle', language, 'Please wait'),
       defaultBusyMessage: tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')
     });
     setUploadQueueSize(uploadsInFlight);
@@ -2083,7 +2086,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
     if (transition === 'lock') {
       uploadBusySeqRef.current = uploadBusy.lock({
-        title: tSystem('navigation.waitTitle', language, 'Please wait'),
+        title: busyTitle,
         message: busyMessage,
         kind: 'upload',
         diagnosticMeta: { uploadsInFlight, blockingUploadsInFlight }
@@ -2091,6 +2094,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return;
     }
     if (transition === 'none' && uploadBusySeqRef.current !== null && blockingUploadsInFlight > 0) {
+      uploadBusy.setTitle(uploadBusySeqRef.current, busyTitle);
       uploadBusy.setMessage(uploadBusySeqRef.current, busyMessage);
     }
     if (transition === 'unlock') {
@@ -3404,7 +3408,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           const dialog = changedWatch.dialog;
           await new Promise<void>(resolve => {
             customConfirm.openConfirm({
-              title: resolveLocalizedString(
+              title: resolveOptionalLocalizedString(
                 dialog?.title,
                 languageRef.current,
                 tSystem('common.notice', languageRef.current, 'Notice')
@@ -6017,7 +6021,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     });
     setCopyCurrentRecordDialog({
       open: true,
-      title: resolved.title || tSystem('common.notice', languageRef.current, 'Notice'),
+      title: resolved.title,
       message: resolved.message || '',
       confirmLabel: resolved.confirmLabel || tSystem('common.ok', languageRef.current, 'OK'),
       cancelLabel: resolved.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
@@ -8403,7 +8407,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
       navigateHomeInFlightRef.current = true;
       const seq = navigateHomeBusy.lock({
-        title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+        title: followupBatchInFlight
+          ? tSystem('draft.savingShort', languageRef.current, 'Saving…')
+          : tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
         message: followupBatchInFlight
           ? tSystem(
               'submit.waitPreviousAction',
@@ -8563,9 +8569,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               selectedRecordId: selectedRecordIdRef.current,
               selectedRecordSnapshot: selectedRecordSnapshotRef.current,
               lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
-            }) || '';
+          }) || '';
           const busySeq = navigateHomeBusy.lock({
-            title: tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+            title: tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
             message: tSystem('navigation.waitSaving', languageRef.current, 'Please wait while we save your changes...'),
             kind: 'dedupIncompleteHome',
             diagnosticMeta: {
@@ -10268,7 +10274,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }
         };
         customConfirm.openConfirm({
-          title: resolveLocalizedString(
+          title: resolveOptionalLocalizedString(
             args.dialog?.title,
             languageRef.current,
             args.defaultTitle || tSystem('common.notice', languageRef.current, 'Notice')
@@ -10979,7 +10985,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         })
       ) {
         const seq = guidedStepAdvanceBusy.lock({
-          title: tSystem('draft.savingShort', languageRef.current, 'Saving...'),
+          title: tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
           message: tSystem(
             'navigation.waitSaving',
             languageRef.current,
@@ -11184,7 +11190,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           stepId: args.stepId,
           nextStepId: args.nextStepId || null,
           hasConditionalCases: Array.isArray(args.action.confirmationDialogCases) && args.action.confirmationDialogCases.length > 0,
-          title: resolveLocalizedString(milestoneConfirmationDialog.title, languageRef.current, '') || null
+          title: resolveOptionalLocalizedString(milestoneConfirmationDialog.title, languageRef.current, '') || null
         });
         const confirmed = await openConfiguredConfirmDialog({
           dialog: milestoneConfirmationDialog,
@@ -11203,12 +11209,11 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         args.action.waitForQueue ||
         (args.action.waitForBackgroundSaves ? 'all' : 'none');
       const busySeq = guidedMilestoneBusy.lock({
-        title:
-          resolveLocalizedString(
-            milestoneProgressDialog?.title,
-            languageRef.current,
-            tSystem('draft.savingShort', languageRef.current, 'Saving…')
-          ) || tSystem('draft.savingShort', languageRef.current, 'Saving…'),
+        title: resolveOptionalLocalizedString(
+          milestoneProgressDialog?.title,
+          languageRef.current,
+          tSystem('draft.savingShort', languageRef.current, 'Saving…')
+        ),
         message:
           resolveLocalizedString(
             milestoneProgressDialog?.message,
@@ -11459,7 +11464,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           });
           await openConfiguredConfirmDialog({
             dialog: {
-              title: resolveLocalizedString(
+              title: resolveOptionalLocalizedString(
                 dialogConfig.title,
                 languageRef.current,
                 tSystem('common.notice', languageRef.current, 'Notice')
@@ -11909,6 +11914,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       fieldId?: string;
       items: Array<string | File>;
       uploadConfig?: any;
+      busyTitle?: string;
       busyMessage?: string;
     }): Promise<{ success: boolean; message?: string; items?: string[]; value?: string }> => {
       if (viewRef.current !== 'form') return { success: false, message: 'Not in form view.' };
@@ -12293,10 +12299,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       uploadQueueRef.current.set(queueKey, next);
       uploadQueueBlockingRef.current.set(queueKey, blockUntilSaved);
       if (blockUntilSaved) {
+        if (args.busyTitle !== undefined) {
+          uploadQueueBusyTitleRef.current.set(queueKey, (args.busyTitle ?? '').toString().trim());
+        } else {
+          uploadQueueBusyTitleRef.current.delete(queueKey);
+        }
         const busyMessage = (args.busyMessage || '').toString().trim();
         if (busyMessage) uploadQueueBusyMessageRef.current.set(queueKey, busyMessage);
         else uploadQueueBusyMessageRef.current.delete(queueKey);
       } else {
+        uploadQueueBusyTitleRef.current.delete(queueKey);
         uploadQueueBusyMessageRef.current.delete(queueKey);
       }
       syncUploadQueueSize();
@@ -12305,6 +12317,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           if (uploadQueueRef.current.get(queueKey) === next) {
             uploadQueueRef.current.delete(queueKey);
             uploadQueueBlockingRef.current.delete(queueKey);
+            uploadQueueBusyTitleRef.current.delete(queueKey);
             uploadQueueBusyMessageRef.current.delete(queueKey);
           }
           syncUploadQueueSize();
@@ -12488,13 +12501,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         recordSyncInFlight: args.recordSyncInFlight
       };
       if (!shouldShowSubmitPreparationOverlay(snapshot)) return;
-      const message = resolveSubmitPreparationMessage(resolveSubmitPreparationMessageKey(snapshot));
+      const messageKey = resolveSubmitPreparationMessageKey(snapshot);
+      const title =
+        messageKey === 'navigation.waitSaving'
+          ? tSystemOptional('navigation.waitSavingTitle', languageRef.current, '')
+          : tSystemOptional('navigation.waitTitle', languageRef.current, 'Please wait');
+      const message = resolveSubmitPreparationMessage(messageKey);
       if (submitPreparationBusySeq !== null) {
+        submitPreparationBusy.setTitle(submitPreparationBusySeq, title);
         submitPreparationBusy.setMessage(submitPreparationBusySeq, message);
         return;
       }
       submitPreparationBusySeq = submitPreparationBusy.lock({
-        title: tSystem('navigation.waitTitle', languageRef.current, 'Please wait'),
+        title,
         message,
         kind: 'submitPreparation',
         diagnosticMeta: {
@@ -12775,7 +12794,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       language,
       lineItemGroups: Object.keys(lineItems).length,
       recordId: submitRecordId || null,
-      progressDialogTitle: resolveLocalizedString(submitProgressDialogConfig?.title, languageRef.current, '') || null
+      progressDialogTitle: resolveOptionalLocalizedString(submitProgressDialogConfig?.title, languageRef.current, '') || null
     });
     // Ensure submission messages are immediately visible, even if the user is scrolled deep in the form.
     try {
@@ -12952,7 +12971,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         setSubmitting(false);
         await openConfiguredConfirmDialog({
           dialog: {
-            title: resolveLocalizedString(
+            title: resolveOptionalLocalizedString(
               dialogConfig.title,
               languageRef.current,
               tSystem('common.notice', languageRef.current, 'Notice')
@@ -13691,11 +13710,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const confirmCfg = (cfg?.confirm || cfg?.confirmation || null) as any;
       const confirmMessage = confirmCfg ? resolveLocalizedString(confirmCfg?.message, languageRef.current, '').toString().trim() : '';
       if (!confirmMessage) return false;
-      const confirmTitle = confirmCfg ? resolveLocalizedString(confirmCfg?.title, languageRef.current, '').toString().trim() : '';
+      const confirmTitle = confirmCfg
+        ? resolveOptionalLocalizedString(confirmCfg?.title, languageRef.current, tSystem('common.confirm', languageRef.current, 'Confirm'))
+            .toString()
+            .trim()
+        : '';
       const confirmLabel = confirmCfg ? resolveLocalizedString(confirmCfg?.confirmLabel, languageRef.current, '').toString().trim() : '';
       const cancelLabel = confirmCfg ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim() : '';
       customConfirm.openConfirm({
-        title: confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm'),
+        title: confirmTitle,
         message: confirmMessage,
         confirmLabel: confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
         cancelLabel: cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),

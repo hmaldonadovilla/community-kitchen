@@ -7,7 +7,7 @@ import type {
   WebFormSubmission
 } from '../../types';
 import type { FieldValue, LangCode, LineItemRowState, VisibilityContext } from '../../web/types';
-import { resolveLocalizedString } from '../../web/i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../web/i18n';
 import { matchesWhenClause } from '../../web/rules/visibility';
 import { getSystemFieldValue } from '../../web/rules/systemFields';
 import {
@@ -321,7 +321,7 @@ const resolveDialog = (args: {
 }): ResolvedUpdateRecordDependencyDialog => {
   const dialogResolved = resolveTemplateValue(args.dialog, args.vars) as ButtonConfirmConfig;
   return {
-    title: resolveLocalizedString(dialogResolved?.title, args.language, 'Confirm').toString().trim(),
+    title: resolveOptionalLocalizedString(dialogResolved?.title, args.language, 'Confirm').toString().trim(),
     message: resolveLocalizedString(
       (dialogResolved as any)?.message ?? (dialogResolved as any)?.body,
       args.language,

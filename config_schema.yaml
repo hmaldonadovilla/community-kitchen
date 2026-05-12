@@ -908,19 +908,20 @@ components:
         waitMessages:
           $ref: '#/components/schemas/FileUploadWaitMessages'
           description: |
-            Optional localized wait messages used when `blockUntilSaved` is true.
+            Optional localized wait title/message copy used when `blockUntilSaved` is true.
 
             Example:
-            - `{ "save": { "en": "Photos are still being saved. Keep this screen open until all photos show `Added`" }, "removeSelected": { "en": "Please wait while we remove selected photo(s)" } }`
+            - `{ "title": { "en": "" }, "save": { "en": "Do not leave the screen while we save your photo(s)" }, "removeSelected": { "en": "Do not leave the screen while we remove selected photo(s)" } }`
 
-            When omitted, the UI falls back to generic file-based system strings.
+            Set `title.en` (or `saveTitle.en` / `removeSelectedTitle.en`) to an empty string to hide the wait overlay title.
+            When omitted, the UI falls back to generic file-based system strings and the generic wait title.
         linkLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Optional localized label template for links shown for uploaded items (Summary/PDF).
 
             Example:
-            - `{ "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" }`
+            - `{ "en": "Photo {n}" }`
 
             Variables:
             - `{n}`: 1-based index of the file within this field
@@ -969,6 +970,21 @@ components:
     FileUploadWaitMessages:
       type: object
       properties:
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Shared title shown while a blocking upload/remove transaction is in progress.
+            Set the localized value to an empty string to hide the title line.
+        saveTitle:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Upload-specific title. Falls back to `title`, then the generic wait title.
+            Set the localized value to an empty string to hide the title line.
+        removeSelectedTitle:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Remove-specific title. Falls back to `title`, then the generic wait title.
+            Set the localized value to an empty string to hide the title line.
         save:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -3953,6 +3969,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'
             - type: string
+          description: Optional dialog title. Set the localized value to an empty string to hide the title line instead of using a fallback title.
         message:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'

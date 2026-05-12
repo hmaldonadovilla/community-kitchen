@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import { resolveLocalizedString } from '../../../i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import type { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from '../../../types';
 import {
@@ -119,7 +119,11 @@ export const useUpdateRecordButtonAction = (args: {
           : 'auto';
       const confirmCfg = (cfg?.confirm || cfg?.confirmation || null) as any;
       const confirmMessage = confirmCfg ? resolveLocalizedString(confirmCfg?.message, languageRef.current, '').toString().trim() : '';
-      const confirmTitle = confirmCfg ? resolveLocalizedString(confirmCfg?.title, languageRef.current, '').toString().trim() : '';
+      const confirmTitle = confirmCfg
+        ? resolveOptionalLocalizedString(confirmCfg?.title, languageRef.current, tSystem('common.confirm', languageRef.current, 'Confirm'))
+            .toString()
+            .trim()
+        : '';
       const confirmLabel = confirmCfg
         ? resolveLocalizedString(confirmCfg?.confirmLabel, languageRef.current, '').toString().trim()
         : '';
@@ -211,7 +215,7 @@ export const useUpdateRecordButtonAction = (args: {
 
       const runDefaultFlow = () => {
         if (confirmMessage && !skipConfirm) {
-          const title = confirmTitle || tSystem('common.confirm', languageRef.current, 'Confirm');
+          const title = confirmTitle;
           const okLabel = confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm');
           const cancel = cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel');
           customConfirm.openConfirm({
@@ -291,9 +295,12 @@ export const useUpdateRecordButtonAction = (args: {
           });
 
           if (impactedCount > 0) {
-            const dialog = preview.dialog || { title: '', message: '', confirmLabel: '', cancelLabel: '' };
+            const dialog = preview.dialog || { title: undefined, message: '', confirmLabel: '', cancelLabel: '' };
+            const hasDialogTitle = Boolean(dialog && Object.prototype.hasOwnProperty.call(dialog, 'title'));
             customConfirm.openConfirm({
-              title: dialog.title || tSystem('common.confirm', languageRef.current, 'Confirm'),
+              title: hasDialogTitle
+                ? (dialog.title ?? '').toString().trim()
+                : tSystem('common.confirm', languageRef.current, 'Confirm'),
               message: dialog.message || '',
               confirmLabel: dialog.confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
               cancelLabel: dialog.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),

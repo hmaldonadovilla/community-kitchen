@@ -5,7 +5,7 @@ import { tSystem } from '../../../systemStrings';
 import type { FieldValue, LangCode, WebQuestionDefinition } from '../../../types';
 import { clearUploadFailure, createUploadFailureState, resolveUploadFailureUserMessage, setUploadFailureRetrying, type UploadFailureMap } from '../../app/uploadFailure';
 import { resolveUploadBlockUntilSaved } from '../../app/uploadTransaction';
-import { resolveUploadWaitMessage } from '../../app/uploadWaitMessages';
+import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../app/uploadWaitMessages';
 import type { LineItemState } from '../../types';
 import { applyUploadConstraints, toUploadItems } from '../../components/form/utils';
 import { LineItemUploadFailureNotice } from '../lineItems/components/LineItemUploadFailureNotice';
@@ -62,6 +62,7 @@ export type UploadFilesHandler = (args: {
   fieldId?: string;
   items: Array<string | File>;
   uploadConfig?: any;
+  busyTitle?: string;
   busyMessage?: string;
 }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
 
@@ -319,6 +320,9 @@ export const useFormUploadController = (args: {
           fieldId: target.scope === 'line' ? target.field?.id : undefined,
           items,
           uploadConfig: target.uploadConfig,
+          busyTitle: resolveUploadBlockUntilSaved(target.uploadConfig)
+            ? resolveUploadWaitTitle(target.uploadConfig, language, 'save')
+            : undefined,
           busyMessage: resolveUploadBlockUntilSaved(target.uploadConfig)
             ? resolveUploadWaitMessage(target.uploadConfig, language, 'save')
             : undefined

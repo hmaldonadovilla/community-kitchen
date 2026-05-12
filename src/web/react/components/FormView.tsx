@@ -12,7 +12,7 @@ import {
   toDependencyValue,
   toOptionSet
 } from '../../core';
-import { resolveLocalizedString } from '../../i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../i18n';
 import { tSystem } from '../../systemStrings';
 import {
   FieldValue,
@@ -324,6 +324,7 @@ interface FormViewProps {
     fieldId?: string;
     items: Array<string | File>;
     uploadConfig?: any;
+    busyTitle?: string;
     busyMessage?: string;
   }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
   /**
@@ -2637,7 +2638,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
       if (confirmResolved && openConfirmDialogResolved) {
         const confirm = confirmResolved.confirm;
-        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const title = resolveOptionalLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const baseMessage = resolveLocalizedString(confirm.body, language, '');
         const hint = confirmResolved.highlightFirstError && firstErrorLabel ? ` First issue: ${firstErrorLabel}.` : '';
         const message = `${baseMessage || ''}${hint}`.trim();
@@ -3515,7 +3516,7 @@ const FormView: React.FC<FormViewProps> = ({
       }) => {
         if (!openConfirmDialogResolved) return false;
         const confirm = args.confirm;
-        const title = resolveLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
+        const title = resolveOptionalLocalizedString(confirm.title, language, tSystem('common.confirm', language, 'Confirm'));
         const baseMessage = resolveLocalizedString(confirm.body, language, '');
         const hint = args.highlightFirstError && firstErrorLabel ? ` First issue: ${firstErrorLabel}.` : '';
         const message = `${baseMessage || ''}${hint}`.trim();

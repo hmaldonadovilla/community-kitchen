@@ -1518,15 +1518,15 @@ export interface FileUploadConfig {
    */
   helperText?: FileUploadHelperText;
   /**
-   * Optional localized wait messages used when blockUntilSaved is enabled.
-   * When omitted, the UI falls back to generic file-based system strings.
+   * Optional localized wait title/message copy used when blockUntilSaved is enabled.
+   * When omitted, the UI falls back to the generic wait title and file-based system strings.
    */
   waitMessages?: FileUploadWaitMessages;
   /**
    * Optional localized label template for links shown for uploaded items (Summary/PDF).
    *
    * Example:
-   * - { "en": "Photo {n}", "fr": "Photo {n}", "nl": "Foto {n}" }
+   * - { "en": "Photo {n}" }
    *
    * Variables:
    * - {n}: 1-based index of the file within this field
@@ -1565,6 +1565,21 @@ export interface FileUploadHelperTextConfig {
 }
 
 export interface FileUploadWaitMessages {
+  /**
+   * Shared title shown while a blocking upload/remove transaction is in progress.
+   * Set the localized value to an empty string to hide the title line.
+   */
+  title?: LocalizedString;
+  /**
+   * Upload-specific title. Falls back to `title`, then the generic wait title.
+   * Set the localized value to an empty string to hide the title line.
+   */
+  saveTitle?: LocalizedString;
+  /**
+   * Remove-specific title. Falls back to `title`, then the generic wait title.
+   * Set the localized value to an empty string to hide the title line.
+   */
+  removeSelectedTitle?: LocalizedString;
   /**
    * Message shown while an upload + record-save transaction is in progress.
    */

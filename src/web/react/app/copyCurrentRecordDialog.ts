@@ -1,6 +1,6 @@
 import type { SystemActionGateDialogConfig, WebFormDefinition } from '../../../types';
 import type { LangCode } from '../../types';
-import { resolveLocalizedString } from '../../i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../i18n';
 import { tSystem } from '../../systemStrings';
 
 export type ResolvedCopyCurrentRecordDialog = {
@@ -23,7 +23,7 @@ export const resolveCopyCurrentRecordDialog = (
   const message = resolveLocalizedString(cfg.message, language, '').toString().trim();
   if (!message) return null;
 
-  const title = resolveLocalizedString(cfg.title, language, tSystem('common.notice', language, 'Notice')).toString();
+  const title = resolveOptionalLocalizedString(cfg.title, language, tSystem('common.notice', language, 'Notice')).toString();
   const confirmLabel = resolveLocalizedString(cfg.confirmLabel, language, tSystem('common.ok', language, 'OK')).toString();
   const cancelLabel = resolveLocalizedString(cfg.cancelLabel, language, tSystem('common.cancel', language, 'Cancel')).toString();
 

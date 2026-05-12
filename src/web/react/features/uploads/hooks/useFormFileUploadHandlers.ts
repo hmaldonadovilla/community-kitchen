@@ -5,7 +5,7 @@ import { tSystem } from '../../../../systemStrings';
 import { resolveFieldLabel } from '../../../utils/labels';
 import { validateUploadCounts } from '../../../app/submission';
 import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
-import { resolveUploadWaitMessage } from '../../../app/uploadWaitMessages';
+import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { applyUploadConstraints, describeUploadItem, toUploadItems } from '../../../components/form/utils';
 import type { FileUploadOrderedEntryCheckArgs, UploadRetryTarget } from '../useFormUploadController';
 
@@ -18,6 +18,7 @@ type UploadFilesHandler = (args: {
   fieldId?: string;
   items: Array<string | File>;
   uploadConfig?: any;
+  busyTitle?: string;
   busyMessage?: string;
 }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
 
@@ -158,6 +159,9 @@ export function useFormFileUploadHandlers({
         questionId: question.id,
         items,
         uploadConfig: uploadTarget.uploadConfig,
+        busyTitle: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitTitle(uploadTarget.uploadConfig, language, 'save')
+          : undefined,
         busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
           ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
           : undefined
@@ -219,6 +223,7 @@ export function useFormFileUploadHandlers({
           };
           handleFileFieldChange(question, items);
           clearUploadFailureForField(question.id);
+          const waitTitle = resolveUploadWaitTitle(uploadConfig, language, 'save');
           const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
           announceUpload(question.id, waitMessage);
           onDiagnostic?.('upload.overlay.immediateSave.start', {
@@ -233,6 +238,7 @@ export function useFormFileUploadHandlers({
                 questionId: question.id,
                 items,
                 uploadConfig,
+                busyTitle: waitTitle,
                 busyMessage: waitMessage
               })
             : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });
@@ -347,6 +353,9 @@ export function useFormFileUploadHandlers({
         fieldId: field.id,
         items: files,
         uploadConfig: uploadTarget.uploadConfig,
+        busyTitle: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
+          ? resolveUploadWaitTitle(uploadTarget.uploadConfig, language, 'save')
+          : undefined,
         busyMessage: resolveUploadBlockUntilSaved(uploadTarget.uploadConfig)
           ? resolveUploadWaitMessage(uploadTarget.uploadConfig, language, 'save')
           : undefined
@@ -415,6 +424,7 @@ export function useFormFileUploadHandlers({
           };
           handleLineFieldChange(group, rowId, field, items as unknown as FieldValue);
           clearUploadFailureForField(fieldPath);
+          const waitTitle = resolveUploadWaitTitle(uploadConfig, language, 'save');
           const waitMessage = resolveUploadWaitMessage(uploadConfig, language, 'save');
           announceUpload(fieldPath, waitMessage);
           onDiagnostic?.('upload.overlay.immediateSave.start', { fieldPath, scope: 'line', total: items.length });
@@ -427,6 +437,7 @@ export function useFormFileUploadHandlers({
                 fieldId: field.id,
                 items,
                 uploadConfig,
+                busyTitle: waitTitle,
                 busyMessage: waitMessage
               })
             : Promise.resolve({ success: true, items: items.filter((item): item is string => typeof item === 'string') });

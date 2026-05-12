@@ -1,4 +1,4 @@
-import { resolveLocalizedString } from './i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from './i18n';
 import type { LangCode, LocalizedString } from './types';
 import systemStrings from './systemStrings.json';
 
@@ -28,4 +28,9 @@ export function tSystem(key: string, language: LangCode, fallback?: string, vars
   return formatTemplate(resolved || fallback || '', vars);
 }
 
+export function tSystemOptional(key: string, language: LangCode, fallback?: string, vars?: Vars): string {
+  const raw = getByPath(systemStrings as any, key) as LocalizedString | undefined;
+  const resolved = resolveOptionalLocalizedString(raw, language, fallback || '');
+  return formatTemplate(resolved, vars);
+}
 

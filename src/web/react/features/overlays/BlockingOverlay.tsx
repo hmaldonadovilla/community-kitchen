@@ -18,7 +18,7 @@ export const BlockingOverlay: React.FC<{
   if (!open) return null;
   const isLoading = mode === 'loading';
   const iconGlyph = mode === 'success' ? '✓' : mode === 'error' ? '!' : '';
-  const titleText = (title || '').toString();
+  const titleText = (title || '').toString().trim();
   const messageText = (message || '').toString();
 
   return (
@@ -58,6 +58,8 @@ export const BlockingOverlay: React.FC<{
               style={{
                 width: 44,
                 height: 44,
+                flex: '0 0 44px',
+                boxSizing: 'border-box',
                 borderRadius: 999,
                 border: '5px solid var(--border)',
                 borderTopColor: 'var(--text)',
@@ -70,6 +72,8 @@ export const BlockingOverlay: React.FC<{
               style={{
                 width: 44,
                 height: 44,
+                flex: '0 0 44px',
+                boxSizing: 'border-box',
                 borderRadius: 999,
                 border: '1px solid var(--border)',
                 display: 'flex',
@@ -87,11 +91,17 @@ export const BlockingOverlay: React.FC<{
             <div style={{ fontWeight: 600, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0, color: 'var(--text)' }}>
               {titleText}
             </div>
+          ) : messageText ? (
+            <div className="muted" style={{ minWidth: 0, fontSize: 'var(--ck-font-label)', fontWeight: 400, lineHeight: 1.35 }}>
+              {messageText}
+            </div>
           ) : null}
         </div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 'var(--ck-font-label)', fontWeight: 400, lineHeight: 1.35 }}>
-          {messageText}
-        </div>
+        {titleText && messageText ? (
+          <div className="muted" style={{ marginTop: 10, fontSize: 'var(--ck-font-label)', fontWeight: 400, lineHeight: 1.35 }}>
+            {messageText}
+          </div>
+        ) : null}
       </div>
     </div>
   );

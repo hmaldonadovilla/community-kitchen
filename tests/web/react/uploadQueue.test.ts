@@ -20,17 +20,24 @@ describe('uploadQueue helpers', () => {
       ['record:1:PHOTO_C', 'Wait for photo C'],
       ['record:1:PHOTO_B', 'Wait for photo B']
     ]);
+    const busyTitleByKey = new Map([
+      ['record:1:PHOTO_C', 'Photo C'],
+      ['record:1:PHOTO_B', '']
+    ]);
 
     expect(
       resolveUploadQueueBusyState({
         uploadQueueSize: 3,
         blockingByKey,
+        busyTitleByKey,
         busyMessageByKey,
+        defaultBusyTitle: 'Default title',
         defaultBusyMessage: 'Default wait'
       })
     ).toEqual({
       uploadsInFlight: 3,
       blockingUploadsInFlight: 2,
+      busyTitle: '',
       busyMessage: 'Wait for photo B'
     });
   });
@@ -40,12 +47,15 @@ describe('uploadQueue helpers', () => {
       resolveUploadQueueBusyState({
         uploadQueueSize: 1,
         blockingByKey: new Map([['record:1:PHOTO', true]]),
+        busyTitleByKey: new Map(),
         busyMessageByKey: new Map(),
+        defaultBusyTitle: 'Please wait',
         defaultBusyMessage: 'Please wait'
       })
     ).toEqual({
       uploadsInFlight: 1,
       blockingUploadsInFlight: 1,
+      busyTitle: 'Please wait',
       busyMessage: 'Please wait'
     });
   });

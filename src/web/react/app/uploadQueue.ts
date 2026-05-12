@@ -9,6 +9,7 @@
 export type UploadQueueBusyState = {
   uploadsInFlight: number;
   blockingUploadsInFlight: number;
+  busyTitle: string;
   busyMessage: string;
 };
 
@@ -21,13 +22,23 @@ export const buildUploadQueueKey = (args: { sessionId: number | string; fieldPat
 export const resolveUploadQueueBusyState = (args: {
   uploadQueueSize?: number | null;
   blockingByKey?: ReadonlyMap<string, boolean> | null;
+  busyTitleByKey?: ReadonlyMap<string, string> | null;
   busyMessageByKey?: ReadonlyMap<string, string> | null;
+  defaultBusyTitle: string;
   defaultBusyMessage: string;
 }): UploadQueueBusyState => {
   const uploadsInFlight = Number.isFinite(Number(args.uploadQueueSize))
     ? Math.max(0, Number(args.uploadQueueSize))
     : 0;
   const blockingEntries = Array.from(args.blockingByKey?.entries?.() || []).filter(([, blocking]) => Boolean(blocking));
+  const busyTitle = (() => {
+    for (const [key] of blockingEntries) {
+      if (args.busyTitleByKey?.has(key)) {
+        return (args.busyTitleByKey.get(key) ?? '').toString().trim();
+      }
+    }
+    return args.defaultBusyTitle;
+  })();
   const busyMessage =
     blockingEntries
       .map(([key]) => (args.busyMessageByKey?.get(key) || '').toString().trim())
@@ -36,6 +47,7 @@ export const resolveUploadQueueBusyState = (args: {
   return {
     uploadsInFlight,
     blockingUploadsInFlight: blockingEntries.length,
+    busyTitle,
     busyMessage
   };
 };

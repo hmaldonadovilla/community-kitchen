@@ -147,7 +147,7 @@ export const AppOverlays: React.FC<{
     <FieldChangeDialogOverlay
       open={fieldChangeDialog.state.open}
       busy={fieldChangeDialog.state.busy}
-      title={fieldChangeDialog.state.title || tSystem('common.confirm', language, 'Confirm')}
+      title={fieldChangeDialog.state.title}
       message={fieldChangeDialog.state.message || ''}
       confirmLabel={fieldChangeDialog.state.confirmLabel || tSystem('common.confirm', language, 'Confirm')}
       cancelLabel={fieldChangeDialog.state.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
@@ -199,7 +199,7 @@ export const AppOverlays: React.FC<{
 
     <ConfirmDialogOverlay
       open={systemActionGateDialog.open}
-      title={systemActionGateDialog.title || tSystem('common.notice', language, 'Notice')}
+      title={systemActionGateDialog.title}
       message={systemActionGateDialog.message || ''}
       confirmLabel={systemActionGateDialog.confirmLabel || tSystem('common.ok', language, 'OK')}
       cancelLabel={systemActionGateDialog.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
@@ -227,7 +227,7 @@ export const AppOverlays: React.FC<{
 
     <ConfirmDialogOverlay
       open={copyCurrentRecordDialog.open}
-      title={copyCurrentRecordDialog.title || tSystem('common.notice', language, 'Notice')}
+      title={copyCurrentRecordDialog.title}
       message={copyCurrentRecordDialog.message || ''}
       confirmLabel={copyCurrentRecordDialog.confirmLabel || tSystem('common.ok', language, 'OK')}
       cancelLabel={copyCurrentRecordDialog.cancelLabel || tSystem('common.cancel', language, 'Cancel')}
@@ -247,7 +247,7 @@ export const AppOverlays: React.FC<{
 
     <BlockingOverlay
       open={submitPreparationBusy.state.open && !submitting}
-      title={submitPreparationBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+      title={submitPreparationBusy.state.title}
       message={submitPreparationBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
       zIndex={12039}
     />
@@ -261,42 +261,42 @@ export const AppOverlays: React.FC<{
 
     <BlockingOverlay
       open={destructiveChangeBusy.state.open}
-      title={destructiveChangeBusy.state.title || tSystem('common.loading', language, 'Loading…')}
+      title={destructiveChangeBusy.state.title}
       message={destructiveChangeBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
       zIndex={12045}
     />
 
     <BlockingOverlay
       open={guidedMilestoneBusy.state.open}
-      title={guidedMilestoneBusy.state.title || tSystem('draft.savingShort', language, 'Saving…')}
+      title={guidedMilestoneBusy.state.title}
       message={guidedMilestoneBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
       zIndex={12046}
     />
 
     <BlockingOverlay
       open={guidedStepAdvanceBusy.state.open}
-      title={guidedStepAdvanceBusy.state.title ?? tSystem('navigation.waitTitle', language, 'Please wait')}
+      title={guidedStepAdvanceBusy.state.title}
       message={guidedStepAdvanceBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')}
       zIndex={12047}
     />
 
     <BlockingOverlay
       open={uploadBusy.state.open}
-      title={uploadBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+      title={uploadBusy.state.title}
       message={uploadBusy.state.message || tSystem('navigation.waitPhotos', language, 'Please wait while your files finish uploading.')}
       zIndex={12047}
     />
 
     <BlockingOverlay
       open={copyRecordBusy.state.open}
-      title={copyRecordBusy.state.title || tSystem('navigation.waitTitle', language, 'Please wait')}
+      title={copyRecordBusy.state.title}
       message={copyRecordBusy.state.message || tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...')}
       zIndex={12048}
     />
 
     <BlockingOverlay
       open={recordSyncBusy.state.open}
-      title={recordSyncBusy.state.title || tSystem('record.syncingTitle', language, 'Synchronizing record…')}
+      title={recordSyncBusy.state.title}
       message={
         recordSyncBusy.state.message ||
         tSystem(
@@ -326,13 +326,13 @@ export const AppOverlays: React.FC<{
 
     <BlockingOverlay
       open={updateRecordBusy.state.open}
-      title={updateRecordBusy.state.title || tSystem('common.loading', language, 'Loading…')}
+      title={updateRecordBusy.state.title}
       message={updateRecordBusy.state.message || tSystem('draft.savingShort', language, 'Saving…')}
     />
 
     <BlockingOverlay
       open={navigateHomeBusy.state.open}
-      title={navigateHomeBusy.state.title || tSystem('draft.savingShort', language, 'Saving…')}
+      title={navigateHomeBusy.state.title}
       message={navigateHomeBusy.state.message || tSystem('navigation.waitSaving', language, 'Please wait while we save your changes...')}
       zIndex={12050}
     />

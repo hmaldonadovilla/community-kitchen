@@ -1,5 +1,5 @@
 import type { InventoryAvailabilitySnapshot, LocalizedString } from '../../../../types';
-import { resolveLocalizedString } from '../../../i18n';
+import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../../i18n';
 import type { LangCode } from '../../../types';
 
 export interface ReservationConflictDialogConfig {
@@ -80,7 +80,7 @@ export const buildReservationConflictDialogCopy = (args: {
   const availableWithUnit = [available, unit].filter(Boolean).join(' ').trim();
 
   const messageTemplate = resolveLocalizedString(args.dialog?.message, args.language, args.fallbackMessage).trim();
-  const title = resolveLocalizedString(args.dialog?.title, args.language, args.fallbackTitle).trim() || args.fallbackTitle;
+  const title = resolveOptionalLocalizedString(args.dialog?.title, args.language, args.fallbackTitle).trim();
   const confirmLabel =
     resolveLocalizedString(args.dialog?.confirmLabel, args.language, args.fallbackConfirmLabel).trim() ||
     args.fallbackConfirmLabel;
