@@ -4,6 +4,7 @@ import type { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from 
 import type { LineItemState, OptionState } from '../types';
 import { invalidateClientSharedDataCaches } from '../api';
 import { clearHomeListLocalCache } from './homeListLocalCache';
+import { clearDateSearchLocalCacheFamily } from './dateSearchLocalCache';
 import {
   buildDraftPayload,
   resolveExistingRecordId
@@ -370,6 +371,7 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
         includeHtmlRenderCache: true
       });
       clearHomeListLocalCache(homeListLocalCacheKey);
+      clearDateSearchLocalCacheFamily({ formKey, listView: definition.listView });
       setOptionState({});
       setTooltipState({});
       optionStateRef.current = {};

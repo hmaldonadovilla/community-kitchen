@@ -85,6 +85,8 @@ interface AppMainViewsProps {
   listLegendColumns: number;
   listLegendColumnWidths: [number, number] | null;
   handleRecordSelect: any;
+  handleReadListViewDateSearchCache: any;
+  handleListViewCache: any;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -166,6 +168,8 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
   listLegendColumns,
   listLegendColumnWidths,
   handleRecordSelect,
+  handleReadListViewDateSearchCache,
+  handleListViewCache,
   logEvent
 }) => (
   <>
@@ -281,6 +285,8 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
         legendItems={listLegendItems}
         legendColumns={listLegendColumns}
         legendColumnWidths={listLegendColumnWidths}
+        onReadDateSearchCache={handleReadListViewDateSearchCache}
+        onCache={handleListViewCache}
         onSelect={handleRecordSelect}
       />
     )}

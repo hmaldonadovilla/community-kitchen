@@ -59,6 +59,15 @@ export const resolveOldestPrefetchedIsoDate = (items: Array<Record<string, any>>
   return oldest;
 };
 
+export const isPastIsoDate = (value: any, now: Date = new Date()): boolean => {
+  const queryDate = normalizeToIsoDateLocal(value);
+  const today = normalizeToIsoDateLocal(now);
+  return Boolean(queryDate && today && queryDate < today);
+};
+
+export const shouldHydrateRecordsForServerDateSearch = (queryDate: any, now: Date = new Date()): boolean =>
+  isPastIsoDate(queryDate, now);
+
 export const shouldUseServerDateSearch = (args: {
   queryDate: string | null | undefined;
   fieldId: string | null | undefined;
@@ -70,6 +79,20 @@ export const shouldUseServerDateSearch = (args: {
   const queryDate = normalizeToIsoDateLocal(args.queryDate);
   const fieldId = (args.fieldId || '').toString().trim();
   return Boolean(queryDate && fieldId);
+};
+
+export const shouldHideBaseItemsForServerDateSearch = (args: {
+  dateSearchEnabled: boolean;
+  dateSearchUsesServer: boolean;
+  queryDate: string | null | undefined;
+  serverQueryDate: string | null | undefined;
+  hasServerResponse: boolean;
+}): boolean => {
+  if (!args.dateSearchEnabled || !args.dateSearchUsesServer) return false;
+  const queryDate = normalizeToIsoDateLocal(args.queryDate);
+  if (!queryDate) return false;
+  const serverQueryDate = normalizeToIsoDateLocal(args.serverQueryDate);
+  return serverQueryDate !== queryDate || !args.hasServerResponse;
 };
 
 export const resolveInitialListSearchValue = (

@@ -35,7 +35,9 @@
               "NICKNAME",
               "DIST_EMAIL",
               "DIST_NAME"
-            ]
+            ],
+            "cachePolicy": "versioned",
+            "prefetchOnHome": true
           }
         }
       ],
@@ -2438,7 +2440,9 @@
                                   "Active"
                                 ],
                                 "formKey": "Config: Recipes",
-                                "statusFieldId": "status"
+                                "statusFieldId": "status",
+                                "cachePolicy": "versioned",
+                                "prefetchOnHome": true
                               },
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",
@@ -3778,7 +3782,9 @@
         "limit": 100,
         "mapping": {
           "value": "NICKNAME"
-        }
+        },
+        "cachePolicy": "versioned",
+        "prefetchOnHome": true
       },
       "changeDialog": {
         "when": {
@@ -4265,7 +4271,9 @@
                 "Active"
               ],
               "formKey": "Config: Recipes",
-              "statusFieldId": "status"
+              "statusFieldId": "status",
+              "cachePolicy": "versioned",
+              "prefetchOnHome": true
             },
             "optionFilter": {
               "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -4572,7 +4580,9 @@
                 "SUPPLIER"
               ],
               "formKey": "Config: Ingredients Management",
-              "statusFieldId": "STATUS"
+              "statusFieldId": "STATUS",
+              "cachePolicy": "versioned",
+              "prefetchOnHome": true
             }
           },
           {
@@ -4728,7 +4738,9 @@
                     "CATEGORY"
                   ],
                   "formKey": "Config: Ingredients Management",
-                  "statusFieldId": "STATUS"
+                  "statusFieldId": "STATUS",
+                  "cachePolicy": "versioned",
+                  "prefetchOnHome": true
                 },
                 "optionFilter": {
                   "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -5682,7 +5694,9 @@
                     "en": "Instructions"
                   },
                   "formKey": "Config: Recipes",
-                  "statusFieldId": "status"
+                  "statusFieldId": "status",
+                  "cachePolicy": "versioned",
+                  "prefetchOnHome": true
                 },
                 "selectionEffects": [
                   {
@@ -6034,7 +6048,9 @@
                         "STATUS"
                       ],
                       "formKey": "Config: Ingredients Management",
-                      "statusFieldId": "STATUS"
+                      "statusFieldId": "STATUS",
+                      "cachePolicy": "versioned",
+                      "prefetchOnHome": true
                     },
                     "selectionEffects": [
                       {
@@ -6828,6 +6844,7 @@
         "templateId": {
           "EN": "bundle:procedure_meal_production.html"
         },
+        "cacheScope": "template",
         "placements": [
           "topBarList"
         ]
@@ -6846,6 +6863,7 @@
         "templateId": {
           "EN": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz"
         },
+        "cacheScope": "template",
         "placements": [
           "topBarList"
         ]
@@ -7098,7 +7116,9 @@
           "limit": 100,
           "mapping": {
             "value": "NICKNAME"
-          }
+          },
+          "cachePolicy": "versioned",
+          "prefetchOnHome": true
         },
         "changeDialog": {
           "when": {
@@ -7585,7 +7605,9 @@
                   "Active"
                 ],
                 "formKey": "Config: Recipes",
-                "statusFieldId": "status"
+                "statusFieldId": "status",
+                "cachePolicy": "versioned",
+                "prefetchOnHome": true
               },
               "optionFilter": {
                 "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -7892,7 +7914,9 @@
                   "SUPPLIER"
                 ],
                 "formKey": "Config: Ingredients Management",
-                "statusFieldId": "STATUS"
+                "statusFieldId": "STATUS",
+                "cachePolicy": "versioned",
+                "prefetchOnHome": true
               }
             },
             {
@@ -8048,7 +8072,9 @@
                       "CATEGORY"
                     ],
                     "formKey": "Config: Ingredients Management",
-                    "statusFieldId": "STATUS"
+                    "statusFieldId": "STATUS",
+                    "cachePolicy": "versioned",
+                    "prefetchOnHome": true
                   },
                   "optionFilter": {
                     "dependsOn": "LEFTOVER_MEAL_TYPE",
@@ -9086,7 +9112,9 @@
                       "en": "Instructions"
                     },
                     "formKey": "Config: Recipes",
-                    "statusFieldId": "status"
+                    "statusFieldId": "status",
+                    "cachePolicy": "versioned",
+                    "prefetchOnHome": true
                   },
                   "selectionEffects": [
                     {
@@ -9438,7 +9466,9 @@
                           "STATUS"
                         ],
                         "formKey": "Config: Ingredients Management",
-                        "statusFieldId": "STATUS"
+                        "statusFieldId": "STATUS",
+                        "cachePolicy": "versioned",
+                        "prefetchOnHome": true
                       },
                       "selectionEffects": [
                         {
@@ -10232,6 +10262,7 @@
           "templateId": {
             "EN": "bundle:procedure_meal_production.html"
           },
+          "cacheScope": "template",
           "placements": [
             "topBarList"
           ]
@@ -10250,6 +10281,7 @@
           "templateId": {
             "EN": "1BZoGddKAGoUat3rZWxkPlW3f2v9wIpOz"
           },
+          "cacheScope": "template",
           "placements": [
             "topBarList"
           ]
@@ -10668,7 +10700,9 @@
               "NICKNAME",
               "DIST_EMAIL",
               "DIST_NAME"
-            ]
+            ],
+            "cachePolicy": "versioned",
+            "prefetchOnHome": true
           }
         }
       ],
@@ -12856,7 +12890,9 @@
                                   "Active"
                                 ],
                                 "formKey": "Config: Recipes",
-                                "statusFieldId": "status"
+                                "statusFieldId": "status",
+                                "cachePolicy": "versioned",
+                                "prefetchOnHome": true
                               },
                               "optionFilter": {
                                 "dependsOn": "MEAL_TYPE",

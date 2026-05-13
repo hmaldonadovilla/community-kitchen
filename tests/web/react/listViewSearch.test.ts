@@ -1,8 +1,11 @@
 import {
+  isPastIsoDate,
   normalizeToIsoDateLocal,
   resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
+  shouldHydrateRecordsForServerDateSearch,
   shouldClearAppliedQueryOnInputClear,
+  shouldHideBaseItemsForServerDateSearch,
   shouldUseServerDateSearch
 } from '../../../src/web/react/app/listViewSearch';
 
@@ -48,6 +51,14 @@ describe('listViewSearch', () => {
         'MP_PREP_DATE'
       )
     ).toBe('2026-02-27');
+  });
+
+  it('detects past date searches for local record hydration', () => {
+    const now = new Date(2026, 4, 12);
+    expect(isPastIsoDate('2026-05-11', now)).toBe(true);
+    expect(isPastIsoDate('2026-05-12', now)).toBe(false);
+    expect(isPastIsoDate('2026-05-13', now)).toBe(false);
+    expect(shouldHydrateRecordsForServerDateSearch('2026-05-11', now)).toBe(true);
   });
 
   it('uses server date search when the full dataset is already loaded', () => {
@@ -112,6 +123,40 @@ describe('listViewSearch', () => {
         completeData: false
       })
     ).toBe(true);
+  });
+
+  it('hides base list rows while an uncached server date search is awaiting results', () => {
+    expect(
+      shouldHideBaseItemsForServerDateSearch({
+        dateSearchEnabled: true,
+        dateSearchUsesServer: true,
+        queryDate: '2026-05-12',
+        serverQueryDate: '',
+        hasServerResponse: false
+      })
+    ).toBe(true);
+
+    expect(
+      shouldHideBaseItemsForServerDateSearch({
+        dateSearchEnabled: true,
+        dateSearchUsesServer: true,
+        queryDate: '2026-05-12',
+        serverQueryDate: '2026-05-12',
+        hasServerResponse: false
+      })
+    ).toBe(true);
+  });
+
+  it('allows server date rows once the matching response is available', () => {
+    expect(
+      shouldHideBaseItemsForServerDateSearch({
+        dateSearchEnabled: true,
+        dateSearchUsesServer: true,
+        queryDate: '2026-05-12',
+        serverQueryDate: '2026-05-12',
+        hasServerResponse: true
+      })
+    ).toBe(false);
   });
 
   it('resolves a relative today initial value for date search', () => {

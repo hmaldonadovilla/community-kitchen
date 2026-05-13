@@ -232,6 +232,7 @@ export type ButtonOutput = 'pdf';
 
 export type ButtonPreviewMode = 'pdf' | 'live';
 export type ButtonTone = 'primary' | 'secondary';
+export type ButtonTemplateRenderCacheScope = 'record' | 'template' | 'none';
 
 /**
  * UI-only button field.
@@ -958,6 +959,13 @@ export interface RenderMarkdownTemplateButtonConfig {
    * Google Drive file id (or language map) for the Markdown template.
    */
   templateId: TemplateIdMap;
+  /**
+   * Client render-result cache scope.
+   * - record: safest default; cache per record id + draft values + record meta.
+   * - template: use only for static templates; cache per form/language/button/template id.
+   * - none: bypass the client render-result cache.
+   */
+  cacheScope?: ButtonTemplateRenderCacheScope;
   placements?: ButtonPlacement[];
   /**
    * Optional tone override for inline button rendering in the form view.
@@ -977,6 +985,13 @@ export interface RenderHtmlTemplateButtonConfig {
    * Google Drive file id (or language map) for the HTML template.
    */
   templateId: TemplateIdMap;
+  /**
+   * Client render-result cache scope.
+   * - record: safest default; cache per record id + draft values + record meta.
+   * - template: use only for static templates; cache per form/language/button/template id.
+   * - none: bypass the client render-result cache.
+   */
+  cacheScope?: ButtonTemplateRenderCacheScope;
   placements?: ButtonPlacement[];
   /**
    * Optional tone override for inline button rendering in the form view.
@@ -3375,6 +3390,23 @@ export interface DataSourceConfig {
   id: string;
   ref?: string; // optional reference key used by backend
   mode?: 'options' | 'prefill' | 'list';
+  /**
+   * Optional home/list prefetch override. Stable lookup sources can opt into session-start
+   * prefetch; transactional sources normally stay lazy unless explicitly needed.
+   */
+  prefetchOnHome?: boolean;
+  /**
+   * Client persistence policy for the datasource response.
+   * - ttl: default short-lived localStorage persistence.
+   * - versioned: persist across refreshes until the app/server cache version changes.
+   * - none: keep only in-memory session cache.
+   */
+  cachePolicy?: 'ttl' | 'versioned' | 'none';
+  /**
+   * Optional localStorage max age override for ttl/versioned datasource cache entries.
+   */
+  persistMaxAgeMs?: number;
+  persistMaxAgeMinutes?: number;
   formKey?: string; // optional form key when sourcing from another form's submissions
   sheetId?: string; // optional sheet id when sourcing from another file
   tabName?: string; // tab name for the source table
@@ -4847,6 +4879,17 @@ export interface WebFormDefinition {
    * Optional background freshness behavior for existing records in the web edit view.
    */
   recordFreshness?: RecordFreshnessConfig;
+  /**
+   * Optional local record snapshot cache for read-heavy historical records.
+   * By default it uses `listView.search.dateFieldId` and stores only records whose date is before today.
+   * Historical date-search list responses are cached separately under the same app/server cache version.
+   */
+  recordLocalCache?: {
+    enabled?: boolean;
+    dateFieldId?: string;
+    maxAgeDays?: number;
+    maxEntries?: number;
+  };
   /**
    * Optional reservation lifecycle hooks for source forms that own inventory reservations.
    */

@@ -53,6 +53,7 @@ describe('web dataSources persistence', () => {
     jest.resetModules();
     delete (globalThis as any).google;
     delete (globalThis as any).window;
+    delete (globalThis as any).__CK_CACHE_VERSION__;
   });
 
   it('prunes older persisted variants for the same datasource id and language', async () => {
@@ -106,7 +107,7 @@ describe('web dataSources persistence', () => {
 
     await fetchDataSource(nonEmpty, 'EN', { forceRefresh: true });
     localStorage.setItem(
-      'ck.ds.Leftover%20Inventory%20Data.EN.v3.empty',
+      'ck.ds.Leftover%20Inventory%20Data.EN.v4.default.empty',
       JSON.stringify({
         savedAtMs: Date.now() + 1000,
         response: { items: [] }
@@ -140,14 +141,14 @@ describe('web dataSources persistence', () => {
   it('clears persisted dataSource entries on clearFetchDataSourceCache()', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };
-    localStorage.setItem('ck.ds.one.EN.v3.abc', '{"items":[1]}');
+    localStorage.setItem('ck.ds.one.EN.v4.default.abc', '{"items":[1]}');
     localStorage.setItem('ck.ds.two.EN.v3.def', '{"items":[2]}');
     localStorage.setItem('unrelated.key', 'keep');
 
     const { clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    expect(localStorage.getItem('ck.ds.one.EN.v3.abc')).toBeNull();
+    expect(localStorage.getItem('ck.ds.one.EN.v4.default.abc')).toBeNull();
     expect(localStorage.getItem('ck.ds.two.EN.v3.def')).toBeNull();
     expect(localStorage.getItem('unrelated.key')).toBe('keep');
   });
@@ -251,18 +252,22 @@ describe('web dataSources persistence', () => {
     const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    const staleSavedAtMs = Date.now() - 10 * 60 * 1000;
+    const cfg = { id: 'Leftover Inventory Data', persistMaxAgeMinutes: 1 } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    const key = localStorage.__keys().find(k => k.startsWith('ck.ds.Leftover%20Inventory%20Data.EN.v4.default.'));
+    expect(key).toBeTruthy();
     localStorage.setItem(
-      'ck.ds.Leftover%20Inventory%20Data.EN.v3.test',
+      key!,
       JSON.stringify({
-        savedAtMs: staleSavedAtMs,
+        savedAtMs: Date.now() - 10 * 60 * 1000,
         response: { items: [{ id: 'stale' }] }
       })
     );
+    clearFetchDataSourceCache({ includePersisted: false });
 
-    const result = await fetchDataSource({ id: 'Leftover Inventory Data', persistMaxAgeMinutes: 1 } as any, 'EN');
+    const result = await fetchDataSource(cfg, 'EN');
 
-    expect(tracker.getCallCount()).toBe(1);
+    expect(tracker.getCallCount()).toBe(2);
     expect(result?.items?.[0]?.id).toBe('Leftover Inventory Data');
   });
 
@@ -274,11 +279,37 @@ describe('web dataSources persistence', () => {
     const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    localStorage.setItem('ck.ds.Recipes%20Data.EN.v3.test', JSON.stringify({ items: [{ id: 'legacy' }] }));
+    const cfg = { id: 'Recipes Data' } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    const key = localStorage.__keys().find(k => k.startsWith('ck.ds.Recipes%20Data.EN.v4.default.'));
+    expect(key).toBeTruthy();
+    localStorage.setItem(key!, JSON.stringify({ items: [{ id: 'legacy' }] }));
+    clearFetchDataSourceCache({ includePersisted: false });
 
-    const result = await fetchDataSource({ id: 'Recipes Data' } as any, 'EN');
+    const result = await fetchDataSource(cfg, 'EN');
 
-    expect(tracker.getCallCount()).toBe(1);
+    expect(tracker.getCallCount()).toBe(2);
     expect(result?.items?.[0]?.id).toBe('Recipes Data');
+  });
+
+  it('misses persisted datasource entries when the client cache version changes', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage, __CK_CACHE_VERSION__: 'cache-a' };
+    const tracker = installGoogleScriptRunMock(cfg => ({ items: [{ id: cfg?.id || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const cfg = { id: 'Recipes Data', cachePolicy: 'versioned' } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    expect(localStorage.__keys().some(k => k.includes('.cache-a.'))).toBe(true);
+
+    (globalThis as any).window.__CK_CACHE_VERSION__ = 'cache-b';
+    clearFetchDataSourceCache({ includePersisted: false });
+    await fetchDataSource(cfg, 'EN');
+
+    expect(tracker.getCallCount()).toBe(2);
+    expect(localStorage.__keys().some(k => k.includes('.cache-b.'))).toBe(true);
+    expect(localStorage.__keys().some(k => k.includes('.cache-a.'))).toBe(false);
   });
 });

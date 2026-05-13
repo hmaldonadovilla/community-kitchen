@@ -4,11 +4,15 @@ import { SYSTEM_FONT_STACK } from '../../../../constants/typography';
 import { tSystem } from '../../../systemStrings';
 import type { FieldValue, LangCode, WebFormDefinition } from '../../../types';
 import {
+  fetchDataSourceApi,
+  peekHtmlTemplateCache,
+  peekMarkdownTemplateCache,
   renderDocTemplatePdfPreviewApi,
   renderHtmlTemplateApi,
   renderMarkdownTemplateApi
 } from '../../api';
-import { isBundledHtmlTemplateId } from '../../app/bundledHtmlClientRenderer';
+import type { TemplateRenderCacheOptions } from '../../api';
+import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
 import { buildDraftPayload, resolveExistingRecordId } from '../../app/submission';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import type { LineItemState } from '../../types';
@@ -34,6 +38,11 @@ const resolveTemplateIdForClient = (template: any, language: string): string | u
   const firstPick = firstKey ? pick((template as any)[firstKey]) : '';
   return firstPick || undefined;
 };
+
+const buildButtonRenderCacheOptions = (cfg: any, resolvedTemplateId?: string | null): TemplateRenderCacheOptions => ({
+  cacheScope: cfg?.cacheScope ?? cfg?.renderCacheScope ?? cfg?.templateCacheScope ?? 'record',
+  templateId: resolvedTemplateId || null
+});
 
 const base64ToPdfObjectUrl = (pdfBase64: string, mimeType: string) => {
   const raw = (pdfBase64 || '').toString();
@@ -277,6 +286,7 @@ export const useAppReportPreviewActions = (args: {
         indexed && indexed.type === 'BUTTON' && indexed.id === baseId
           ? indexed
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const cfg: any = btn ? (btn as any).button : null;
       const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
 
       setReportOverlay(prev => ({
@@ -316,7 +326,19 @@ export const useAppReportPreviewActions = (args: {
           existingRecordId
         });
 
-        const res = await renderMarkdownTemplateApi(draft, buttonId);
+        const templateIdMap = btn ? (btn as any)?.button?.templateId : undefined;
+        const resolvedTemplateId = resolveTemplateIdForRecord(templateIdMap, draft.values || {}, draft.language) || templateIdResolved;
+        const cacheOptions = buildButtonRenderCacheOptions(cfg, resolvedTemplateId);
+        const cached = peekMarkdownTemplateCache(draft, buttonId, cacheOptions);
+        if (cached?.success && cached?.markdown) {
+          logEvent('report.markdownPreview.cacheHit', {
+            buttonId: baseId,
+            qIdx: qIdx ?? null,
+            cacheScope: cacheOptions.cacheScope || 'record',
+            markdownLength: (cached.markdown || '').toString().length
+          });
+        }
+        const res = await renderMarkdownTemplateApi(draft, buttonId, cacheOptions);
         if (seq !== reportPdfSeqRef.current) return;
         if (!res?.success || !res?.markdown) {
           const msg = (res?.message || 'Failed to render preview.').toString();
@@ -395,6 +417,7 @@ export const useAppReportPreviewActions = (args: {
         indexed && indexed.type === 'BUTTON' && indexed.id === baseId
           ? indexed
           : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const cfg: any = btn ? (btn as any).button : null;
       const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Preview');
 
       setReportOverlay(prev => ({
@@ -450,11 +473,30 @@ export const useAppReportPreviewActions = (args: {
 
         const templateIdMap = btn ? (btn as any)?.button?.templateId : undefined;
         const resolved = resolveTemplateIdForRecord(templateIdMap, draft.values || {}, draft.language);
+        const cacheOptions = buildButtonRenderCacheOptions(cfg, resolved || templateIdResolved);
         const useBundled = isBundledHtmlTemplateId(resolved || '');
         if (useBundled) {
           logEvent('report.htmlPreview.bundle.start', { buttonId: baseId, qIdx: qIdx ?? null });
         }
-        const res = await renderHtmlTemplateApi(draft, buttonId);
+        const cached = useBundled ? null : peekHtmlTemplateCache(draft, buttonId, cacheOptions);
+        if (cached?.success && cached?.html) {
+          logEvent('report.htmlPreview.cacheHit', {
+            buttonId: baseId,
+            qIdx: qIdx ?? null,
+            cacheScope: cacheOptions.cacheScope || 'record',
+            htmlLength: (cached.html || '').toString().length
+          });
+        }
+        const res = useBundled
+          ? await renderBundledHtmlTemplateClient({
+              definition,
+              payload: draft,
+              templateIdMap,
+              buttonId,
+              fetchDataSource: fetchDataSourceApi,
+              onDiagnostic: logEvent
+            })
+          : await renderHtmlTemplateApi(draft, buttonId, cacheOptions);
         if (seq !== reportPdfSeqRef.current) return;
         if (!res?.success || !res?.html) {
           const msg = (res?.message || 'Failed to render preview.').toString();

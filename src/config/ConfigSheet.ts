@@ -1448,11 +1448,15 @@ export class ConfigSheet {
         cfgRaw.mdTemplateId ??
         cfgRaw.mdId;
       if (!templateId) return undefined;
+      const cacheScope = cfgRaw.cacheScope ?? cfgRaw.renderCacheScope ?? cfgRaw.templateCacheScope;
       const config: ButtonConfig = {
         action: 'renderMarkdownTemplate',
         templateId: templateId as any
       } as any;
       if (placements.length) (config as any).placements = placements as any;
+      if (cacheScope !== undefined && cacheScope !== null && cacheScope.toString().trim()) {
+        (config as any).cacheScope = cacheScope.toString().trim();
+      }
       return config;
     }
 
@@ -1466,11 +1470,15 @@ export class ConfigSheet {
         cfgRaw.templateHtml ??
         cfgRaw.templateIdHtml;
       if (!templateId) return undefined;
+      const cacheScope = cfgRaw.cacheScope ?? cfgRaw.renderCacheScope ?? cfgRaw.templateCacheScope;
       const config: ButtonConfig = {
         action: 'renderHtmlTemplate',
         templateId: templateId as any
       } as any;
       if (placements.length) (config as any).placements = placements as any;
+      if (cacheScope !== undefined && cacheScope !== null && cacheScope.toString().trim()) {
+        (config as any).cacheScope = cacheScope.toString().trim();
+      }
       return config;
     }
 

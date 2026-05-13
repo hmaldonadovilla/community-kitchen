@@ -20,7 +20,9 @@ import {
   normalizeToIsoDateLocal,
   resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
+  shouldHydrateRecordsForServerDateSearch,
   shouldClearAppliedQueryOnInputClear,
+  shouldHideBaseItemsForServerDateSearch,
   shouldUseServerDateSearch
 } from '../app/listViewSearch';
 import { resolveListViewLayout } from '../app/listViewLayout';
@@ -45,6 +47,7 @@ import { resolveLabel } from '../utils/labels';
 import { buildListViewAnalyticsMetrics } from '../analytics/model';
 import { fetchFilteredSortedPages } from '../app/listViewServerFetch';
 import { collectListViewWhenFieldIds } from '../features/conditions/domain/conditionDependencies';
+import type { DateSearchCacheDescriptor, DateSearchLocalCacheEntry } from '../app/dateSearchLocalCache';
 import {
   encodeClientPageToken,
   isListResponseComplete,
@@ -67,7 +70,12 @@ interface ListViewProps {
   cachedResponse?: ListResponse | null;
   cachedRecords?: Record<string, WebFormSubmission>;
   refreshToken?: number;
-  onCache?: (payload: { response: ListResponse; records: Record<string, WebFormSubmission> }) => void;
+  onCache?: (payload: {
+    response: ListResponse;
+    records: Record<string, WebFormSubmission>;
+    dateSearch?: DateSearchCacheDescriptor;
+  }) => void;
+  onReadDateSearchCache?: (descriptor: DateSearchCacheDescriptor) => DateSearchLocalCacheEntry | null;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   /**
    * When false, ListView becomes presentational only and will NOT issue list fetch requests.
@@ -95,6 +103,7 @@ const ListView: React.FC<ListViewProps> = ({
   cachedRecords,
   refreshToken = 0,
   onCache,
+  onReadDateSearchCache,
   onDiagnostic,
   autoFetch = true,
   loading: loadingProp,
@@ -836,6 +845,46 @@ const ListView: React.FC<ListViewProps> = ({
     return normalizeToIsoDateLocal(searchQueryValue);
   }, [dateSearchEnabled, searchQueryValue]);
 
+  const dateSearchCacheDescriptor = useMemo<DateSearchCacheDescriptor | null>(() => {
+    if (!dateSearchEnabled || !dateSearchQueryNormalized || !dateSearchFieldId) return null;
+    return {
+      dateFieldId: dateSearchFieldId,
+      dateEquals: dateSearchQueryNormalized,
+      projection: projection.length ? projection : undefined,
+      sortField: defaultSortField,
+      sortDirection: defaultSortDirection
+    };
+  }, [dateSearchEnabled, dateSearchFieldId, dateSearchQueryNormalized, defaultSortDirection, defaultSortField, projection]);
+
+  const localDateSearchCacheEntry = useMemo(() => {
+    void refreshToken;
+    if (!dateSearchCacheDescriptor) return null;
+    if (!shouldHydrateRecordsForServerDateSearch(dateSearchCacheDescriptor.dateEquals)) return null;
+    return onReadDateSearchCache?.(dateSearchCacheDescriptor) || null;
+  }, [dateSearchCacheDescriptor, onReadDateSearchCache, refreshToken]);
+
+  useEffect(() => {
+    if (!dateSearchCacheDescriptor) return;
+    if (!shouldHydrateRecordsForServerDateSearch(dateSearchCacheDescriptor.dateEquals)) return;
+    if (!localDateSearchCacheEntry?.response) {
+      onDiagnostic?.('list.search.date.localCache.miss', {
+        queryDate: dateSearchCacheDescriptor.dateEquals,
+        dateFieldId: dateSearchCacheDescriptor.dateFieldId
+      });
+      return;
+    }
+    const cachedRecords = localDateSearchCacheEntry.records || {};
+    if (Object.keys(cachedRecords).length) {
+      setRecords(prev => ({ ...prev, ...cachedRecords }));
+    }
+    onDiagnostic?.('list.search.date.localCache.hit', {
+      queryDate: dateSearchCacheDescriptor.dateEquals,
+      dateFieldId: dateSearchCacheDescriptor.dateFieldId,
+      items: localDateSearchCacheEntry.response.items?.length || 0,
+      records: Object.keys(cachedRecords).length
+    });
+  }, [dateSearchCacheDescriptor, localDateSearchCacheEntry, onDiagnostic]);
+
   const cachedResponseMatchesDateSearch = useMemo(() => {
     if (!dateSearchEnabled || !dateSearchQueryNormalized || !dateSearchFieldId) return false;
     const raw = (cachedResponse || {}) as any;
@@ -872,6 +921,7 @@ const ListView: React.FC<ListViewProps> = ({
   const dateSearchUsesServer = useMemo(() => {
     if (!dateSearchEnabled || !dateSearchQueryNormalized) return false;
     if (cachedResponseMatchesDateSearch) return false;
+    if (localDateSearchCacheEntry?.response) return false;
     if (uiNotice || uiError) return true;
     return shouldUseServerDateSearch({
       queryDate: dateSearchQueryNormalized,
@@ -889,6 +939,7 @@ const ListView: React.FC<ListViewProps> = ({
     dateSearchQueryNormalized,
     guaranteedPrefetchedItemCount,
     guaranteedPrefetchedItems,
+    localDateSearchCacheEntry?.response,
     totalCount,
     uiError,
     uiNotice
@@ -912,6 +963,7 @@ const ListView: React.FC<ListViewProps> = ({
     const seq = ++serverDateSearchSeqRef.current;
     let cancelled = false;
     const fetchPageSize = 50;
+    const hydratePageRecords = shouldHydrateRecordsForServerDateSearch(dateSearchQueryNormalized);
 
     setServerDateSearch({
       query: dateSearchQueryNormalized,
@@ -924,7 +976,8 @@ const ListView: React.FC<ListViewProps> = ({
       oldestPrefetchedDate,
       loadedCount: (allItems || []).length,
       guaranteedLoadedCount: guaranteedPrefetchedItemCount,
-      totalCount
+      totalCount,
+      hydratePageRecords
     });
 
     void (async () => {
@@ -933,7 +986,7 @@ const ListView: React.FC<ListViewProps> = ({
           formKey,
           projection: projection.length ? projection : undefined,
           pageSize: fetchPageSize,
-          includePageRecords: false,
+          includePageRecords: hydratePageRecords,
           sortField: defaultSortField,
           sortDirection: defaultSortDirection,
           dateFieldId: dateSearchFieldId,
@@ -955,21 +1008,31 @@ const ListView: React.FC<ListViewProps> = ({
         if (Object.keys(result.records).length) {
           setRecords(prev => ({ ...prev, ...result.records }));
         }
+        const nextResponse = {
+          ...(result.response || ({ items: [], totalCount: 0 } as ListResponse)),
+          items: result.items,
+          nextPageToken: undefined
+        } as ListResponse;
         setServerDateSearch({
           query: dateSearchQueryNormalized,
-          response: {
-            ...(result.response || ({ items: [], totalCount: 0 } as ListResponse)),
-            items: result.items,
-            nextPageToken: undefined
-          },
+          response: nextResponse,
           loading: false,
           error: null
         });
+        if (hydratePageRecords) {
+          onCache?.({
+            response: nextResponse,
+            records: result.records,
+            dateSearch: dateSearchCacheDescriptor || undefined
+          });
+        }
         onDiagnostic?.('list.search.date.server.ok', {
           queryDate: dateSearchQueryNormalized,
           pages: result.pages,
           items: result.items.length,
-          totalCount: (result.response as any)?.totalCount || result.items.length
+          totalCount: (result.response as any)?.totalCount || result.items.length,
+          hydratePageRecords,
+          hydratedRecords: Object.keys(result.records).length
         });
       } catch (err: any) {
         if (cancelled || seq !== serverDateSearchSeqRef.current) return;
@@ -993,11 +1056,13 @@ const ListView: React.FC<ListViewProps> = ({
   }, [
     dateSearchEnabled,
     dateSearchFieldId,
+    dateSearchCacheDescriptor,
     dateSearchQueryNormalized,
     dateSearchUsesServer,
     defaultSortDirection,
     defaultSortField,
     formKey,
+    onCache,
     onDiagnostic,
     projection,
     totalCount,
@@ -1007,17 +1072,35 @@ const ListView: React.FC<ListViewProps> = ({
   ]);
 
   const activeDateSearchResponse =
+    dateSearchEnabled && dateSearchQueryNormalized && localDateSearchCacheEntry?.response
+      ? localDateSearchCacheEntry.response
+      : dateSearchEnabled && dateSearchUsesServer && dateSearchQueryNormalized && serverDateSearch.query === dateSearchQueryNormalized
+        ? serverDateSearch.response
+        : cachedResponseMatchesDateSearch
+          ? cachedResponse
+          : null;
+  const hasActiveDateSearchResponse = Boolean(dateSearchEnabled && dateSearchQueryNormalized && activeDateSearchResponse);
+  const serverDateSearchMatchesQuery = Boolean(
     dateSearchEnabled && dateSearchUsesServer && dateSearchQueryNormalized && serverDateSearch.query === dateSearchQueryNormalized
-      ? serverDateSearch.response
-      : null;
+  );
+  const hideBaseItemsForServerDateSearch = shouldHideBaseItemsForServerDateSearch({
+    dateSearchEnabled,
+    dateSearchUsesServer,
+    queryDate: dateSearchQueryNormalized,
+    serverQueryDate: serverDateSearch.query,
+    hasServerResponse: Boolean(serverDateSearchMatchesQuery && serverDateSearch.response)
+  });
   const activeTotalCount = activeDateSearchResponse?.totalCount || 0;
   const effectiveItems = useMemo(
-    () => (dateSearchEnabled && dateSearchUsesServer ? activeDateSearchResponse?.items || [] : allItems || []),
-    [activeDateSearchResponse?.items, allItems, dateSearchEnabled, dateSearchUsesServer]
+    () => (hasActiveDateSearchResponse ? activeDateSearchResponse?.items || [] : hideBaseItemsForServerDateSearch ? [] : allItems || []),
+    [activeDateSearchResponse?.items, allItems, hasActiveDateSearchResponse, hideBaseItemsForServerDateSearch]
   );
-  const effectiveTotalCount = dateSearchEnabled && dateSearchUsesServer ? activeTotalCount : totalCount;
-  const effectiveUiLoading = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.loading : uiLoading || pageDemandLoading;
-  const effectiveUiError = dateSearchEnabled && dateSearchUsesServer ? serverDateSearch.error : uiError;
+  const effectiveTotalCount = hasActiveDateSearchResponse ? activeTotalCount : hideBaseItemsForServerDateSearch ? 0 : totalCount;
+  const effectiveUiLoading =
+    dateSearchEnabled && dateSearchUsesServer
+      ? !serverDateSearchMatchesQuery || serverDateSearch.loading
+      : uiLoading || pageDemandLoading;
+  const effectiveUiError = dateSearchEnabled && dateSearchUsesServer ? (serverDateSearchMatchesQuery ? serverDateSearch.error : null) : uiError;
   const effectiveUiNotice = dateSearchEnabled && dateSearchUsesServer ? null : uiNotice;
 
   useEffect(() => {
@@ -1367,6 +1450,15 @@ const ListView: React.FC<ListViewProps> = ({
     return urls[0] || '';
   };
 
+  const resolveCachedRecordForRow = useCallback(
+    (row: ListItem): WebFormSubmission | undefined => {
+      const id = (row?.id || '').toString().trim();
+      if (!id) return undefined;
+      return records[id] || localDateSearchCacheEntry?.records?.[id] || undefined;
+    },
+    [localDateSearchCacheEntry?.records, records]
+  );
+
   const renderSingleRuleAction = (
     row: ListItem,
     col: ListViewRuleColumnConfig,
@@ -1463,7 +1555,7 @@ const ListView: React.FC<ListViewProps> = ({
             openButtonId: openView === 'button' ? openButtonId : null,
             text: ariaLabel
           });
-          onSelect(row, row?.id ? records[row.id] : undefined, {
+          onSelect(row, resolveCachedRecordForRow(row), {
             openView,
             openButtonId: openView === 'button' ? openButtonId : undefined
           });
@@ -1642,7 +1734,7 @@ const ListView: React.FC<ListViewProps> = ({
         onDiagnostic?.('list.row.click.disabled', { recordId: row.id });
         return;
       }
-      const record = row?.id ? records[row.id] : undefined;
+      const record = resolveCachedRecordForRow(row);
       const rowOpen = (() => {
         for (const col of ruleColumns) {
           const cell = evaluateListViewRuleColumnCell(col, row);
@@ -1670,7 +1762,7 @@ const ListView: React.FC<ListViewProps> = ({
         onSelect(row, record);
       }
     },
-    [onDiagnostic, onSelect, records, rowClickEnabled, ruleColumns, uiDisabled]
+    [onDiagnostic, onSelect, resolveCachedRecordForRow, rowClickEnabled, ruleColumns, uiDisabled]
   );
 
   const clearSearchInputOnly = useCallback(() => {

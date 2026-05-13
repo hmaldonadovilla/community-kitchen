@@ -1,5 +1,34 @@
 import { resolveTemplateIdForRecord } from '../../../src/web/react/app/templateId';
 
+const createMemoryStorage = (): Storage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    }
+  } as Storage;
+};
+
+const installWindowStorage = () => {
+  const win = {
+    localStorage: createMemoryStorage(),
+    sessionStorage: createMemoryStorage(),
+    addEventListener: jest.fn(),
+    dispatchEvent: jest.fn()
+  };
+  (globalThis as any).window = win;
+  return win;
+};
+
 describe('resolveTemplateIdForRecord', () => {
   it('resolves language map', () => {
     const id = resolveTemplateIdForRecord({ EN: 'A', FR: 'B' }, {}, 'FR');
@@ -24,6 +53,10 @@ describe('resolveTemplateIdForRecord', () => {
 
 describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
   afterEach(() => {
+    const win = (globalThis as any).window;
+    win?.localStorage?.clear?.();
+    win?.sessionStorage?.clear?.();
+    delete (globalThis as any).window;
     jest.resetModules();
   });
 
@@ -97,6 +130,57 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(res.success).toBe(true);
     expect(res.html).toContain('Rue Example 1');
     expect(fetchDataSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses persisted datasource cache for projection placeholders before fetching', async () => {
+    const win = installWindowStorage();
+    win.localStorage.setItem(
+      'ck.ds.DS_CACHE.EN.v4.default.cached',
+      JSON.stringify({
+        savedAtMs: Date.now(),
+        response: {
+          items: [{ DIST_NAME: 'Croix', DIST_ADDR_1: 'Rue Cached 7' }]
+        }
+      })
+    );
+    const diagnostics: Array<[string, Record<string, any> | undefined]> = [];
+    const fetchDataSource = jest.fn(async () => ({
+      items: [{ DIST_NAME: 'Croix', DIST_ADDR_1: 'Rue Server 9' }]
+    }));
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'F',
+      destinationTab: 'T',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MP_DISTRIBUTOR',
+          type: 'CHOICE',
+          label: { en: 'Distributor', fr: 'Distributor', nl: 'Distributor' },
+          required: false,
+          dataSource: { id: 'DS_CACHE', mapping: { DIST_NAME: 'value' }, projection: ['DIST_NAME'] }
+        }
+      ]
+    };
+
+    const payload: any = { formKey: 'F', language: 'EN', id: 'R1', values: { MP_DISTRIBUTOR: 'Croix' } };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: 'bundle:test.html',
+      fetchDataSource,
+      parseBundledTemplateId: () => 'test.html',
+      getBundledTemplateRaw: () => '<div>{{MP_DISTRIBUTOR.DIST_ADDR_1}}</div>',
+      onDiagnostic: (event, payload) => diagnostics.push([event, payload])
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Rue Cached 7');
+    expect(res.html).not.toContain('Rue Server 9');
+    expect(fetchDataSource).not.toHaveBeenCalled();
+    expect(diagnostics.some(([event]) => event === 'htmlTemplate.dataSourceDetails.cache.hit')).toBe(true);
   });
 
   it('fetches projection dataSource details in parallel for bundled templates', async () => {

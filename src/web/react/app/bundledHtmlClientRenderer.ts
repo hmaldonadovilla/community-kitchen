@@ -18,6 +18,10 @@ import {
 } from '../../../services/webform/followup/utils';
 import { getBundledHtmlTemplateRaw, parseBundledHtmlTemplateId } from '../../../services/webform/followup/bundledHtmlTemplates';
 import { extractScriptTags, restoreScriptTags, stripScriptTags } from '../../../services/webform/followup/scriptTags';
+import {
+  fetchDataSource as fetchCachedDataSource,
+  peekCachedDataSourcesById
+} from '../../data/dataSources';
 
 type HtmlRenderCacheEntry = { result: RenderHtmlTemplateResult; cachedAtMs: number };
 type DiagnosticFn = (event: string, payload?: Record<string, any>) => void;
@@ -232,7 +236,11 @@ const forEachPersistedDataSourceEntry = (
           if (!raw) continue;
           const parsed = JSON.parse(raw);
           if (!parsed) continue;
-          if (fn(parsed)) return true;
+          const entry =
+            parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'response')
+              ? (parsed as any).response
+              : parsed;
+          if (entry && fn(entry)) return true;
         } catch (_) {
           // ignore parse errors; keep scanning
         }
@@ -280,7 +288,10 @@ const lookupDataSourceDetailsClient = async (args: {
   onDiagnostic?: DiagnosticFn;
 }): Promise<Record<string, string> | null> => {
   const { dataSource, selectedValue, language, limit } = args;
-  const fetcher = args.fetchDataSource || fetchDataSourceApi;
+  const fetcher =
+    args.fetchDataSource ||
+    ((req: Parameters<typeof fetchDataSourceApi>[0]) =>
+      fetchCachedDataSource(req.source, (req.locale || language || 'EN') as any, { forceRefresh: false }));
   const rawSelected = (selectedValue || '').toString().trim();
   const normalized = normalizeMatchValue(rawSelected);
   if (!normalized) return null;
@@ -300,73 +311,82 @@ const lookupDataSourceDetailsClient = async (args: {
   const inflight = dsDetailsInflight.get(dsKey);
   if (inflight) return inflight;
 
-	  const promise = (async () => {
-	    try {
-	      const lookupFields = buildLookupFields(dataSource);
-	      const isRecord = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
-	      const toDetails = (item: Record<string, any>): Record<string, string> => {
-	        const out: Record<string, string> = {};
-	        Object.entries(item).forEach(([k, v]) => {
-	          if (v === undefined || v === null) return;
-	          const text = stringifyAny(v);
-	          if (!text) return;
-	          const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
-	          out[sanitizedKey] = text;
-	        });
-	        return out;
-	      };
+  const promise = (async () => {
+    try {
+      const lookupFields = buildLookupFields(dataSource);
+      const isRecord = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+      const toDetails = (item: Record<string, any>): Record<string, string> => {
+        const out: Record<string, string> = {};
+        Object.entries(item).forEach(([k, v]) => {
+          if (v === undefined || v === null) return;
+          const text = stringifyAny(v);
+          if (!text) return;
+          const sanitizedKey = k.split(/\s+/).join('_').toUpperCase();
+          out[sanitizedKey] = text;
+        });
+        return out;
+      };
 
-	      const resolveFromRows = (inputRows: Record<string, any>[]): Record<string, string> | null => {
-	        let fallback: Record<string, any> | null = null;
-	        for (const item of inputRows) {
-	          const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
-	          if (matchField && normalizeMatchValue(item[matchField]) === normalized) {
-	            return toDetails(item);
-	          }
-	          if (!fallback) {
-	            const values = Object.values(item);
-	            if (values.some(val => normalizeMatchValue(val) === normalized)) {
-	              fallback = item;
-	            }
-	          }
-	        }
-	        if (fallback) return toDetails(fallback);
-	        return null;
-	      };
+      const resolveFromRows = (inputRows: Record<string, any>[]): Record<string, string> | null => {
+        let fallback: Record<string, any> | null = null;
+        for (const item of inputRows) {
+          const matchField = lookupFields.find(f => Object.prototype.hasOwnProperty.call(item, f));
+          if (matchField && normalizeMatchValue(item[matchField]) === normalized) {
+            return toDetails(item);
+          }
+          if (!fallback) {
+            const values = Object.values(item);
+            if (values.some(val => normalizeMatchValue(val) === normalized)) {
+              fallback = item;
+            }
+          }
+        }
+        if (fallback) return toDetails(fallback);
+        return null;
+      };
 
-	      // Fast path: attempt to resolve from already-persisted dataSource caches.
-	      // The main data source cache uses versioned keys with signatures; older builds used a simpler v1 key.
-	      // Safari/iOS can fail to resolve details if `google.script.run` isn't ready yet, but options data is often
-	      // already cached in localStorage. Scanning persisted entries avoids network calls and fixes that race.
-	      let persistedDetails: Record<string, string> | null = null;
-	      forEachPersistedDataSourceEntry({ id: dataSource.id || 'default', language, maxEntries: 40 }, entry => {
-	        const items = Array.isArray((entry as any)?.items)
-	          ? (entry as any).items
-	          : Array.isArray(entry)
-	            ? entry
-	            : [];
-	        if (!items.length) return false;
-	        const rows = items.filter(isRecord);
-	        if (!rows.length) return false;
-	        const hit = resolveFromRows(rows);
-	        if (!hit) return false;
-	        persistedDetails = hit;
-	        return true;
-	      });
-	      if (persistedDetails) {
-	        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.persisted.hit', {
-	          dataSourceId: dataSource.id,
-	          selectedValue: rawSelected
-	        });
-	        dsDetailsCache.set(dsKey, persistedDetails);
-	        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
-	        return persistedDetails;
-	      }
+      const resolveFromCacheEntry = (entry: any): Record<string, string> | null => {
+        const items = Array.isArray((entry as any)?.items) ? (entry as any).items : Array.isArray(entry) ? entry : [];
+        if (!items.length) return null;
+        const rows = items.filter(isRecord);
+        if (!rows.length) return null;
+        return resolveFromRows(rows);
+      };
 
-	      const detailsSource: any = { ...(dataSource as any) };
-	      // Mirror server placeholder lookup behavior: allow any projection key by reading full row details.
-	      detailsSource.projection = undefined;
-	      detailsSource.mapping = undefined;
+      // Fast path: resolve projection placeholder details from the shared dataSource cache.
+      // The data source cache can contain several signatures for the same id; any full-row
+      // cached response can satisfy FIELD.PROJECTION placeholders without a server call.
+      let cachedDetails: Record<string, string> | null = null;
+      for (const entry of peekCachedDataSourcesById(dataSource.id || 'default', language as any)) {
+        const hit = resolveFromCacheEntry(entry);
+        if (!hit) continue;
+        cachedDetails = hit;
+        break;
+      }
+      if (!cachedDetails) {
+        // Legacy fallback for cache entries written before the shared dataSource cache exposed
+        // candidate scanning, and for sessionStorage-only experiments.
+        forEachPersistedDataSourceEntry({ id: dataSource.id || 'default', language, maxEntries: 40 }, entry => {
+          const hit = resolveFromCacheEntry(entry);
+          if (!hit) return false;
+          cachedDetails = hit;
+          return true;
+        });
+      }
+      if (cachedDetails) {
+        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.cache.hit', {
+          dataSourceId: dataSource.id,
+          selectedValue: rawSelected
+        });
+        dsDetailsCache.set(dsKey, cachedDetails);
+        pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
+        return cachedDetails;
+      }
+
+      const detailsSource: any = { ...(dataSource as any) };
+      // Mirror server placeholder lookup behavior: allow any projection key by reading full row details.
+      detailsSource.projection = undefined;
+      detailsSource.mapping = undefined;
       const req: any = {
         source: detailsSource,
         locale: (language || 'EN').toString().toUpperCase() as any,
@@ -376,33 +396,33 @@ const lookupDataSourceDetailsClient = async (args: {
       const retryDelayMs = typeof window === 'undefined' ? 0 : 150;
       const maxAttempts = typeof window === 'undefined' ? 2 : 20;
 
-	      let res: any = null;
-	      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-	        try {
-	          // Safari/iOS can invoke template rendering before `google.script.run` becomes available.
-	          // Retry so projection lookups don't permanently fall back to DEFAULT(...) placeholders.
-	          res = await fetcher(req);
-	          break;
-	        } catch (err) {
-	          if (!isRunnerUnavailableError(err) || attempt === maxAttempts) throw err;
-	          if (attempt === 1) {
-	            args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.defer', {
-	              dataSourceId: dataSource.id,
-	              selectedValue: rawSelected
-	            });
-	          }
-	          await sleepMs(retryDelayMs);
-	        }
-	      }
+      let res: any = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          // Safari/iOS can invoke template rendering before `google.script.run` becomes available.
+          // Retry so projection lookups don't permanently fall back to DEFAULT(...) placeholders.
+          res = await fetcher(req);
+          break;
+        } catch (err) {
+          if (!isRunnerUnavailableError(err) || attempt === maxAttempts) throw err;
+          if (attempt === 1) {
+            args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.defer', {
+              dataSourceId: dataSource.id,
+              selectedValue: rawSelected
+            });
+          }
+          await sleepMs(retryDelayMs);
+        }
+      }
 
-	      const items = Array.isArray((res as any)?.items) ? (res as any).items : [];
-	      const rows = items.filter(isRecord);
+      const items = Array.isArray((res as any)?.items) ? (res as any).items : [];
+      const rows = items.filter(isRecord);
 
-	      const resolved = resolveFromRows(rows);
-	      if (resolved) {
-	        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.hit', {
-	          dataSourceId: dataSource.id,
-	          selectedValue: rawSelected
+      const resolved = resolveFromRows(rows);
+      if (resolved) {
+        args.onDiagnostic?.('htmlTemplate.dataSourceDetails.fetch.hit', {
+          dataSourceId: dataSource.id,
+          selectedValue: rawSelected
         });
         dsDetailsCache.set(dsKey, resolved);
         pruneMap(dsDetailsCache as any, MAX_DS_DETAILS_CACHE_ENTRIES);
