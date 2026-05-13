@@ -301,14 +301,14 @@ export function buildWebFormHtml(
       }
       .ck-app-back-btn {
         appearance: none;
-        border: 1px solid var(--border);
-        background: transparent;
-        color: var(--text);
-        min-height: calc(var(--control-height) * 0.62);
-        padding: 0 16px;
-        border-radius: 999px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: var(--accentText);
+        min-height: calc(var(--control-height) * 0.78);
+        padding: 0 22px;
+        border-radius: var(--radius-control);
         font-weight: 600;
-        font-size: calc(var(--ck-font-label) * 0.82);
+        font-size: var(--ck-font-pill);
         line-height: 1;
         white-space: nowrap;
         cursor: pointer;
@@ -672,21 +672,13 @@ export function buildWebFormHtml(
       .ck-section-instruction {
         width: 100%;
         margin: 8px 0 14px;
-        padding: 10px 12px;
+        padding: 12px 14px;
         border: 1px solid var(--border);
         border-radius: 8px;
-        background: var(--bg);
-        background: color-mix(in srgb, var(--text) 3%, var(--bg));
+        background: #EAF4FF;
         color: var(--text);
         box-sizing: border-box;
         text-align: left;
-      }
-      .ck-section-instruction__label {
-        margin: 0 0 4px;
-        color: var(--muted);
-        font-size: var(--ck-font-helper);
-        line-height: 1.35;
-        font-weight: 500;
       }
       .ck-section-instruction__text {
         margin: 0;

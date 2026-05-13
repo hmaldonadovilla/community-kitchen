@@ -21,7 +21,7 @@ const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Reports are available from the dashboard below.',
+    adminSectionNote: '',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',
@@ -69,7 +69,8 @@ const normalizeCopy = (value: any): LandingPageCopyConfig => {
     openAppLabel: normalizeRequiredText(source.openAppLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.openAppLabel),
     primarySectionTitle: normalizeRequiredText(source.primarySectionTitle, DEFAULT_LANDING_PAGE_CONFIG.copy.primarySectionTitle),
     adminSectionTitle: normalizeRequiredText(source.adminSectionTitle, DEFAULT_LANDING_PAGE_CONFIG.copy.adminSectionTitle),
-    adminSectionNote: normalizeRequiredText(source.adminSectionNote, DEFAULT_LANDING_PAGE_CONFIG.copy.adminSectionNote),
+    adminSectionNote:
+      normalizeOptionalTextAllowEmpty(source.adminSectionNote) ?? DEFAULT_LANDING_PAGE_CONFIG.copy.adminSectionNote,
     overflowTitle: normalizeRequiredText(source.overflowTitle, DEFAULT_LANDING_PAGE_CONFIG.copy.overflowTitle),
     overflowShowLabel: normalizeRequiredText(source.overflowShowLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.overflowShowLabel),
     overflowHideLabel: normalizeRequiredText(source.overflowHideLabel, DEFAULT_LANDING_PAGE_CONFIG.copy.overflowHideLabel),

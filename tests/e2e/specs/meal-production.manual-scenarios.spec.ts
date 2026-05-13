@@ -438,7 +438,7 @@ test.describe('Meal Production manual script scenarios', () => {
         mealProductionFixtures.mealTypes.vegetarian
       ]);
     } finally {
-      await cleanupMealProductionRecordBestEffort(page, orderKey);
+      await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);
     }
   });
 
@@ -464,7 +464,7 @@ test.describe('Meal Production manual script scenarios', () => {
         mealProductionFixtures.mealTypes.vegan
       ]);
     } finally {
-      await cleanupMealProductionRecordBestEffort(page, orderKey);
+      await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);
     }
   });
 

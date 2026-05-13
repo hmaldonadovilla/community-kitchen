@@ -12,8 +12,8 @@ describe('FORM_VIEW_STYLES', () => {
     expect(FORM_VIEW_STYLES).toContain('.ck-section-instruction');
     expect(FORM_VIEW_STYLES).toContain('border: 1px solid var(--border);');
     expect(FORM_VIEW_STYLES).toContain('border-radius: 8px;');
-    expect(FORM_VIEW_STYLES).toContain('.ck-section-instruction__label');
-    expect(FORM_VIEW_STYLES).toContain('font-weight: 500;');
+    expect(FORM_VIEW_STYLES).toContain('background: #EAF4FF;');
+    expect(FORM_VIEW_STYLES).not.toContain('.ck-section-instruction__label');
     expect(FORM_VIEW_STYLES).toContain('.ck-section-instruction__text');
     expect(FORM_VIEW_STYLES).toContain('font-size: var(--ck-font-label);');
   });

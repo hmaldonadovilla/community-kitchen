@@ -20,13 +20,14 @@ import {
 
 const LANDING_PAGE_STYLES = `
   .ck-landing-page.page {
-    max-width: 1180px;
-    gap: 30px;
+    max-width: 980px;
+    gap: 18px;
+    font-size: var(--ck-font-label);
   }
   .ck-landing-shell {
     display: flex;
     flex-direction: column;
-    gap: 34px;
+    gap: 18px;
   }
   .ck-landing-header {
     display: flex;
@@ -80,13 +81,13 @@ const LANDING_PAGE_STYLES = `
   .ck-landing-pill {
     display: inline-flex;
     align-items: center;
-    min-height: 44px;
-    padding: 0 14px;
+    min-height: calc(var(--control-height) * 0.62);
+    padding: 0 18px;
     border-radius: 999px;
     border: 1px solid rgba(107, 117, 128, 0.28);
     background: transparent;
     color: var(--text);
-    font-size: calc(var(--ck-font-label) * 0.5);
+    font-size: calc(var(--ck-font-label) * 0.85);
     font-weight: 500;
     line-height: 1;
   }
@@ -96,14 +97,14 @@ const LANDING_PAGE_STYLES = `
   }
   .ck-landing-hero {
     display: grid;
-    gap: 16px;
-    padding-top: 10px;
+    gap: 8px;
+    padding-top: 0;
   }
   .ck-landing-hero-title {
     margin: 0;
     max-width: 14ch;
-    font-size: clamp(42px, calc(var(--ck-font-group-title) * 1.45), 62px);
-    line-height: 0.98;
+    font-size: clamp(34px, calc(var(--ck-font-group-title) * 1.18), 48px);
+    line-height: 1;
     font-weight: 600;
     letter-spacing: -0.04em;
   }
@@ -111,7 +112,7 @@ const LANDING_PAGE_STYLES = `
     margin: 0;
     max-width: 35rem;
     color: var(--muted);
-    font-size: clamp(18px, calc(var(--ck-font-label) * 0.6), 22px);
+    font-size: clamp(16px, calc(var(--ck-font-label) * 0.5), 19px);
     line-height: 1.45;
   }
   .ck-landing-status {
@@ -153,17 +154,17 @@ const LANDING_PAGE_STYLES = `
   }
   .ck-landing-grid {
     display: grid;
-    gap: 22px;
+    gap: 12px;
   }
   .ck-landing-grid--primary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
   .ck-landing-grid--admin {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
   .ck-landing-card {
     position: relative;
-    border-radius: 28px;
+    border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.24);
     background: rgba(255, 255, 255, 0.94);
     color: var(--text);
@@ -188,28 +189,28 @@ const LANDING_PAGE_STYLES = `
     outline-offset: 3px;
   }
   .ck-landing-card--primary {
-    min-height: 332px;
-    padding: 28px;
+    min-height: 108px;
+    padding: 12px 16px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
-      'copy copy'
-      'action visual';
-    gap: 28px 24px;
-    align-items: start;
+      'copy copy copy'
+      'visual . action';
+    gap: 6px 16px;
+    align-items: end;
   }
   .ck-landing-card--admin {
-    min-height: 232px;
-    padding: 24px;
+    min-height: 108px;
+    padding: 12px 16px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
-      'copy visual'
-      'action action';
-    gap: 18px 20px;
-    align-items: start;
+      'copy copy copy'
+      'visual . action';
+    gap: 6px 16px;
+    align-items: end;
   }
   .ck-landing-card-copy {
     min-width: 0;
@@ -225,17 +226,20 @@ const LANDING_PAGE_STYLES = `
   .ck-landing-card-copy--primary {
     grid-area: copy;
     align-self: start;
-    max-width: 22rem;
+    max-width: none;
   }
   .ck-landing-card-title {
     margin: 0;
-    font-size: clamp(24px, calc(var(--ck-font-group-title) * 0.82), 34px);
+    font-size: calc(var(--ck-font-label) * 0.86);
     line-height: 1.12;
     font-weight: 600;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .ck-landing-card--admin .ck-landing-card-title {
-    font-size: clamp(22px, calc(var(--ck-font-group-title) * 0.72), 30px);
+    font-size: calc(var(--ck-font-label) * 0.86);
   }
   .ck-landing-card-description {
     margin: 0;
@@ -246,54 +250,51 @@ const LANDING_PAGE_STYLES = `
   .ck-landing-card-visual {
     display: flex;
     align-items: end;
-    justify-content: end;
+    justify-content: start;
     color: var(--accent);
   }
   .ck-landing-card--primary .ck-landing-card-visual {
     grid-area: visual;
     align-self: end;
-    justify-self: end;
+    justify-self: start;
   }
   .ck-landing-card--admin .ck-landing-card-visual {
     grid-area: visual;
-    align-self: start;
-    justify-self: end;
+    align-self: end;
+    justify-self: start;
     align-items: center;
     justify-content: center;
-    width: 72px;
-    height: 72px;
-    border-radius: 18px;
-    background: rgba(11, 87, 208, 0.05);
   }
   .ck-landing-visual {
-    width: 180px;
-    max-width: 100%;
-    height: auto;
+    width: 74px;
+    height: 60px;
     display: block;
   }
   .ck-landing-visual-image {
-    width: 180px;
+    width: 74px;
     max-width: 100%;
-    max-height: 156px;
-    height: auto;
+    height: 60px;
+    max-height: 60px;
     display: block;
     object-fit: contain;
   }
   .ck-landing-card--admin .ck-landing-visual {
-    width: 56px;
+    width: 74px;
+    height: 60px;
   }
   .ck-landing-card--admin .ck-landing-visual-image {
-    width: 56px;
-    max-height: 56px;
+    width: 74px;
+    height: 60px;
+    max-height: 60px;
   }
   .ck-landing-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 54px;
-    padding: 0 22px;
-    border-radius: 16px;
-    font-size: clamp(17px, calc(var(--ck-font-label) * 0.54), 20px);
+    min-height: calc(var(--control-height) * 0.68);
+    padding: 0 20px;
+    border-radius: var(--radius-control);
+    font-size: calc(var(--ck-font-pill) * 0.86);
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
@@ -309,14 +310,12 @@ const LANDING_PAGE_STYLES = `
   }
   .ck-landing-card--admin .ck-landing-action {
     grid-area: action;
-    justify-self: start;
-    min-height: 46px;
-    padding: 0 18px;
-    font-size: calc(var(--ck-font-label) * 0.48);
+    justify-self: end;
+    align-self: end;
   }
   .ck-landing-card--primary .ck-landing-action {
     grid-area: action;
-    justify-self: start;
+    justify-self: end;
     align-self: end;
   }
   .ck-landing-overflow-panel {
@@ -416,27 +415,30 @@ const LANDING_PAGE_STYLES = `
       justify-content: flex-start;
     }
     .ck-landing-card--primary {
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
       grid-template-areas:
-        'copy copy'
-        'action visual';
-      min-height: 0;
-      gap: 22px 16px;
+        'copy copy copy'
+        'visual . action';
+      min-height: 104px;
+      gap: 6px 12px;
     }
     .ck-landing-card--primary .ck-landing-visual {
-      width: 128px;
+      width: 68px;
+      height: 56px;
     }
     .ck-landing-card--primary .ck-landing-visual-image {
-      width: 128px;
-      max-height: 112px;
+      width: 68px;
+      height: 56px;
+      max-height: 56px;
     }
     .ck-landing-card--admin {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto auto auto;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr) auto;
       grid-template-areas:
-        'visual'
-        'copy'
-        'action';
+        'copy copy copy'
+        'visual . action';
+      min-height: 104px;
+      gap: 6px 12px;
     }
     .ck-landing-card--admin .ck-landing-card-visual {
       justify-self: start;
@@ -454,7 +456,7 @@ const resolveAdminEnabled = (): boolean => {
     const params = (globalAny?.__WEB_FORM_REQUEST_PARAMS__ || {}) as Record<string, any>;
     if (Object.prototype.hasOwnProperty.call(params, 'admin-true')) return true;
     if (isTruthyParam(params.admin)) return true;
-  } catch (_) {
+  } catch {
     // ignore
   }
   try {
@@ -462,7 +464,7 @@ const resolveAdminEnabled = (): boolean => {
     const qs = new URLSearchParams(search || '');
     if (qs.has('admin-true')) return true;
     if (isTruthyParam(qs.get('admin'))) return true;
-  } catch (_) {
+  } catch {
     // ignore
   }
   return false;
@@ -474,7 +476,7 @@ const resolveEnvTag = (): string | null => {
     const raw = globalAny?.__WEB_FORM_BOOTSTRAP__?.envTag ?? globalAny?.__CK_ENV_TAG__ ?? '';
     const trimmed = raw.toString().trim();
     return trimmed || null;
-  } catch (_) {
+  } catch {
     return null;
   }
 };
@@ -487,18 +489,18 @@ const navigateToTopLevel = (targetUrl: string): void => {
       globalThis.open(resolved, '_top');
       return;
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
   try {
     globalThis.location.assign(resolved);
     return;
-  } catch (_) {
+  } catch {
     // ignore
   }
   try {
     globalThis.location.href = resolved;
-  } catch (_) {
+  } catch {
     // ignore
   }
 };
@@ -507,7 +509,7 @@ const logEvent = (event: string, payload?: Record<string, unknown>): void => {
   if (typeof console === 'undefined' || typeof console.info !== 'function') return;
   try {
     console.info('[ReactForm][Landing]', event, payload || {});
-  } catch (_) {
+  } catch {
     // ignore
   }
 };
@@ -687,7 +689,7 @@ const LandingActionCard: React.FC<{
   onOpen: (item: LandingAppItem) => void;
 }> = ({ item, variant, actionLabel, onOpen }) => {
   const targetUrl = (item.targetUrl || '').toString().trim();
-  const actionTone = variant === 'primary' ? 'primary' : 'secondary';
+  const actionTone = 'primary';
   const isAdmin = variant === 'admin';
 
   return (
@@ -705,11 +707,10 @@ const LandingActionCard: React.FC<{
           <h3 className="ck-landing-card-title">{item.displayTitle}</h3>
         </div>
       </div>
-      {!isAdmin ? <span className={`ck-landing-action ck-landing-action--${actionTone}`}>{actionLabel}</span> : null}
       <div className="ck-landing-card-visual">
         <LandingIllustration kind={item.illustration} imageUrl={item.imageUrl} />
       </div>
-      {isAdmin ? <span className={`ck-landing-action ck-landing-action--${actionTone}`}>{actionLabel}</span> : null}
+      <span className={`ck-landing-action ck-landing-action--${actionTone}`}>{actionLabel}</span>
     </a>
   );
 };
@@ -758,6 +759,10 @@ const LandingPage: React.FC = () => {
     () =>
       appendLandingSpecialItems(buildLandingCatalogLayout(catalogItems, adminEnabled, LANDING_PAGE_CONFIG), adminEnabled, [analyticsLandingItem]),
     [adminEnabled, analyticsLandingItem, catalogItems]
+  );
+  const visibleLandingApps = useMemo(
+    () => [...landingLayout.primaryApps, ...(adminEnabled ? landingLayout.adminApps : [])],
+    [adminEnabled, landingLayout.adminApps, landingLayout.primaryApps]
   );
 
   React.useEffect(() => {
@@ -808,8 +813,7 @@ const LandingPage: React.FC = () => {
     };
   }, [adminEnabled, bootstrappedCatalog, bundledItems, hasBootstrappedCatalog]);
 
-  const showPrimaryApps = !loading && !error && landingLayout.primaryApps.length > 0;
-  const showAdminSection = !loading && !error && adminEnabled && landingLayout.adminApps.length > 0;
+  const showLandingApps = !loading && !error && visibleLandingApps.length > 0;
 
   return (
     <div className="ck-landing-page page">
@@ -847,13 +851,9 @@ const LandingPage: React.FC = () => {
         </section>
 
         <section className="ck-landing-section" style={{ animationDelay: '120ms' }}>
-          <div className="ck-landing-section-head">
-            <h2 className="ck-landing-section-title">{landingCopy.primarySectionTitle}</h2>
-          </div>
-
-          {showPrimaryApps ? (
+          {showLandingApps ? (
             <div className="ck-landing-grid ck-landing-grid--primary">
-              {landingLayout.primaryApps.map(item => (
+              {visibleLandingApps.map(item => (
                 <LandingActionCard
                   key={item.formKey}
                   item={item}
@@ -867,35 +867,10 @@ const LandingPage: React.FC = () => {
             </div>
           ) : null}
 
-          {!loading && !error && !landingLayout.primaryApps.length ? (
+          {!loading && !error && !visibleLandingApps.length ? (
             <p className="ck-landing-empty">{landingCopy.emptyPrimaryAppsLabel}</p>
           ) : null}
         </section>
-
-        {showAdminSection ? <hr className="ck-landing-divider" /> : null}
-
-        {showAdminSection ? (
-          <section className="ck-landing-section" style={{ animationDelay: '200ms' }}>
-            <div className="ck-landing-section-head">
-              <h2 className="ck-landing-section-title">{landingCopy.adminSectionTitle}</h2>
-              {landingCopy.adminSectionNote ? <p className="muted ck-landing-section-note">{landingCopy.adminSectionNote}</p> : null}
-            </div>
-
-            <div className="ck-landing-grid ck-landing-grid--admin">
-              {landingLayout.adminApps.map(item => (
-                <LandingActionCard
-                  key={item.formKey}
-                  item={item}
-                  variant="admin"
-                  actionLabel={landingCopy.openAppLabel}
-                  onOpen={nextItem =>
-                    openLandingItem(nextItem, setPendingNavigation, landingCopy.pendingNavigationTitle, landingCopy.pendingNavigationMessage)
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
       </div>
     </div>
   );

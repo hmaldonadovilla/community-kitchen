@@ -9,6 +9,7 @@ import { runAppsScript, runAppsScriptWithTimeout } from './appsScript';
 import { openMealProductionHome } from './navigation';
 
 const DUPLICATE_CHECK_COPY = 'Checking duplicates…';
+const AUTOSAVE_REMINDER_COPY = 'Changes are saved automatically.';
 
 type MealProductionRecordKey = {
   customerValue: string;
@@ -46,6 +47,13 @@ export async function dismissIntroIfPresent(frame: Frame): Promise<void> {
   }
 }
 
+export async function dismissAutosaveReminderIfPresent(frame: Frame): Promise<void> {
+  const reminder = frame.getByText(AUTOSAVE_REMINDER_COPY);
+  if (!(await reminder.isVisible().catch(() => false))) return;
+  await frame.getByRole('button', { name: 'OK' }).click();
+  await expect(reminder).toBeHidden({ timeout: 10_000 });
+}
+
 export async function waitForDuplicateCheckToFinish(frame: Frame): Promise<void> {
   await expect
     .poll(
@@ -76,9 +84,11 @@ export async function setProductionDate(frame: Frame, dateValue = today()): Prom
   await input.fill(dateValue);
   await input.dispatchEvent('change');
   await waitForDuplicateCheckToFinish(frame);
+  await dismissAutosaveReminderIfPresent(frame);
 }
 
 export async function selectService(frame: Frame, service: string): Promise<void> {
+  await dismissAutosaveReminderIfPresent(frame);
   await frame.locator(`button[title="${service}"]`).click();
   await waitForDuplicateCheckToFinish(frame);
 }

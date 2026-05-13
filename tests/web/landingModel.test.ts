@@ -28,7 +28,7 @@ const landingConfigFixture: LandingPageConfig = {
     openAppLabel: 'Go to app',
     primarySectionTitle: 'Apps for cooks',
     adminSectionTitle: 'Administrator apps',
-    adminSectionNote: 'Reports are available from the dashboard below.',
+    adminSectionNote: '',
     overflowTitle: 'More Admin Forms',
     overflowShowLabel: 'Show forms',
     overflowHideLabel: 'Hide forms',

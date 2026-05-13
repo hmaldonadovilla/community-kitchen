@@ -730,7 +730,7 @@ describe('meal production leftover selection config', () => {
             id: 'editIngredients',
             label: expect.objectContaining({ en: 'Edit ingredients' }),
             variant: 'button',
-            tone: 'secondary',
+            tone: 'primary',
             effects: expect.arrayContaining([
               expect.objectContaining({
                 type: 'seedLineItemsFromReference',

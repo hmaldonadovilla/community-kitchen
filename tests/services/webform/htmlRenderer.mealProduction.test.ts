@@ -154,6 +154,28 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('ck-category-row');
   });
 
+  it('renders the summary ingredients action as a primary button', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:meal_production.summary.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('data-ck-action="ING_PREVIEW"');
+    expect(res.html).toContain('background: var(--accent, #0b57d0)');
+    expect(res.html).toContain('color: var(--accentText, #fff)');
+  });
+
   it('renders nested ingredients in bundle:ingredients_needed.html from buildDraftPayload output', () => {
     const lineItems = buildInitialLineItems(definition, recordValues as any);
     const payload = buildDraftPayload({

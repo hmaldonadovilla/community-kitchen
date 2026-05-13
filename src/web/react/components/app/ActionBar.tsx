@@ -37,6 +37,7 @@ const PRIMARY_ACTION_LABELS = new Set([
   'view/edit',
   'ingredients needed',
   'view/edit ingredients',
+  'edit ingredients',
   'back to production',
   'back',
   '+add ingredient',

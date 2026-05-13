@@ -3110,7 +3110,7 @@
                       "en": "Edit ingredients"
                     },
                     "variant": "button",
-                    "tone": "secondary",
+                    "tone": "primary",
                     "effects": [
                       {
                         "type": "seedLineItemsFromReference",
@@ -6453,6 +6453,7 @@
         "templateId": {
           "EN": "bundle:ingredients_needed.html"
         },
+        "tone": "primary",
         "placements": [
           "form"
         ]
@@ -9882,6 +9883,7 @@
           "templateId": {
             "EN": "bundle:ingredients_needed.html"
           },
+          "tone": "primary",
           "placements": [
             "form"
           ]
@@ -13600,7 +13602,7 @@
                       "en": "Edit ingredients"
                     },
                     "variant": "button",
-                    "tone": "secondary",
+                    "tone": "primary",
                     "effects": [
                       {
                         "type": "seedLineItemsFromReference",

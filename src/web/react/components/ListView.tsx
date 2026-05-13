@@ -1631,6 +1631,9 @@ const ListView: React.FC<ListViewProps> = ({
     })();
     const title = dateText ? `${raw}` : text;
     const textClassName = rowClickEnabled ? 'truncate-link' : 'truncate-text';
+    const textStyle = dateText
+      ? ({ whiteSpace: 'nowrap' } as React.CSSProperties)
+      : ({ whiteSpace: 'normal', wordBreak: 'break-word' } as React.CSSProperties);
     if (typeof value === 'string') {
       const urls = splitUrlList(value).filter(u => /^https?:\/\//i.test(u));
       if (urls.length > 1) {
@@ -1719,7 +1722,7 @@ const ListView: React.FC<ListViewProps> = ({
       );
     }
     return (
-      <span className={textClassName} title={title} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+      <span className={textClassName} title={title} style={textStyle}>
         {text}
       </span>
     );
@@ -2291,6 +2294,35 @@ const ListView: React.FC<ListViewProps> = ({
       })
       .filter(Boolean) as ListViewColumnConfig[];
   }, [columnsAll, columnsForTable, overlayPresetButton]);
+
+  const isOverlayDateColumn = (col: ListViewColumnConfig): boolean => {
+    if (isRuleColumn(col)) return false;
+    const fieldId = (col.fieldId || '').toString();
+    const fieldType = fieldId === 'createdAt' || fieldId === 'updatedAt' ? 'DATETIME' : (questionTypeById[fieldId] || '');
+    return fieldType === 'DATE' || fieldType === 'DATETIME';
+  };
+
+  const resolveOverlayColumnWidth = (col: ListViewColumnConfig, columnCount: number): string => {
+    if (columnCount === 3) {
+      if (isOverlayDateColumn(col)) return '48%';
+      if (isRuleColumn(col)) return '22%';
+      return '30%';
+    }
+    if (isOverlayDateColumn(col)) return '34%';
+    if (isRuleColumn(col)) return '22%';
+    return `${Math.max(18, Math.floor(100 / Math.max(1, columnCount)))}%`;
+  };
+
+  const resolveOverlayCellStyle = (col: ListViewColumnConfig, columnCount: number): React.CSSProperties => {
+    const dateColumn = isOverlayDateColumn(col);
+    return {
+      maxWidth: 'none',
+      width: resolveOverlayColumnWidth(col, columnCount),
+      whiteSpace: dateColumn ? 'nowrap' : 'normal',
+      wordBreak: dateColumn ? 'normal' : 'break-word',
+      verticalAlign: 'top'
+    };
+  };
 
   const overlayTitleText = useMemo(() => {
     if (!overlayPresetButton) return '';
@@ -2940,6 +2972,11 @@ const ListView: React.FC<ListViewProps> = ({
                   <div style={{ padding: '0 14px 14px' }}>
                     <div className="list-table-wrapper">
                       <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                        <colgroup>
+                          {group.columns.map(col => (
+                            <col key={`${group.key}-col-${col.fieldId}`} style={{ width: resolveOverlayColumnWidth(col, group.columns.length) }} />
+                          ))}
+                        </colgroup>
                         <tbody>
                           {group.items.length ? (
                             group.items.map(row => (
@@ -2947,7 +2984,7 @@ const ListView: React.FC<ListViewProps> = ({
                                 {group.columns.map(col => (
                                   <td
                                     key={`${group.key}-${row.id}-${col.fieldId}`}
-                                    style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                                    style={resolveOverlayCellStyle(col, group.columns.length)}
                                   >
                                     {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
                                   </td>
@@ -2974,13 +3011,18 @@ const ListView: React.FC<ListViewProps> = ({
         ) : overlayPresetError || overlayUiState.showLoadingStatus ? null : (
           <div className="list-table-wrapper">
             <table className="list-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                {overlayColumns.map(col => (
+                  <col key={`overlay-col-${col.fieldId}`} style={{ width: resolveOverlayColumnWidth(col, overlayColumns.length) }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
                   {overlayColumns.map(col => (
                     <th
                       key={col.fieldId}
                       scope="col"
-                      style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word', background: 'var(--card)' }}
+                      style={{ ...resolveOverlayCellStyle(col, overlayColumns.length), background: 'var(--card)' }}
                     >
                       {resolveLocalizedString(col.label, language, col.fieldId)}
                     </th>
@@ -2994,7 +3036,7 @@ const ListView: React.FC<ListViewProps> = ({
                       {overlayColumns.map(col => (
                         <td
                           key={col.fieldId}
-                          style={{ maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word', verticalAlign: 'top' }}
+                          style={resolveOverlayCellStyle(col, overlayColumns.length)}
                         >
                           {isRuleColumn(col) ? renderRuleCell(row, col) : renderCellValue(row, col.fieldId)}
                         </td>

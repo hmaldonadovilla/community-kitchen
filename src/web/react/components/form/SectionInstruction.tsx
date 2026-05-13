@@ -25,7 +25,6 @@ export const SectionInstruction: React.FC<{
   if (!bodyText) return null;
 
   const normalizedId = id ? normalizeDomIdPart(id) : '';
-  const labelId = normalizedId ? `${normalizedId}-label` : undefined;
   const labelText = (label || tSystem('common.instruction', language, 'Instruction')).toString().trim();
   const classes = ['ck-section-instruction', className].filter(Boolean).join(' ');
 
@@ -34,12 +33,8 @@ export const SectionInstruction: React.FC<{
       id={normalizedId || undefined}
       className={classes}
       role="note"
-      aria-labelledby={labelId}
-      aria-label={labelId ? undefined : labelText}
+      aria-label={labelText}
     >
-      <div id={labelId} className="ck-section-instruction__label">
-        {labelText}
-      </div>
       <p className="ck-section-instruction__text">{bodyText}</p>
     </div>
   );

@@ -46,21 +46,13 @@ export const FORM_VIEW_STYLES = `
         .ck-section-instruction {
           width: 100%;
           margin: 8px 0 14px;
-          padding: 10px 12px;
+          padding: 12px 14px;
           border: 1px solid var(--border);
           border-radius: 8px;
-          background: var(--bg);
-          background: color-mix(in srgb, var(--text) 3%, var(--bg));
+          background: #EAF4FF;
           color: var(--text);
           box-sizing: border-box;
           text-align: left;
-        }
-        .ck-section-instruction__label {
-          margin: 0 0 4px;
-          color: var(--muted);
-          font-size: var(--ck-font-helper);
-          line-height: 1.35;
-          font-weight: 500;
         }
         .ck-section-instruction__text {
           margin: 0;

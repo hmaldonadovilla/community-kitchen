@@ -1,9 +1,13 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { buttonStyles, withDisabled } from '../ui';
 import { fileNameFromUrl, formatFileSize, isFileInstance, isHttpUrl } from '../utils';
 import { FullPageOverlay } from './FullPageOverlay';
 import type { LangCode } from '../../../../types';
 import { tSystem } from '../../../../systemStrings';
+import {
+  buildExistingFileThumbnailCandidates,
+  buildLocalFileThumbnailKey
+} from './fileOverlayThumbnails';
 
 export type UploadConfigLike = {
   minFiles?: number;
@@ -36,6 +40,33 @@ export type FileOverlayProps = {
   onClose: () => void;
 };
 
+const ThumbnailImage: React.FC<{
+  alt: string;
+  candidates: string[];
+  fallback: React.ReactNode;
+}> = ({ alt, candidates, fallback }) => {
+  const signature = candidates.join('\n');
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [signature]);
+
+  const src = candidates[candidateIndex];
+  if (!src) return <>{fallback}</>;
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      loading="eager"
+      decoding="async"
+      onError={() => setCandidateIndex(current => current + 1)}
+    />
+  );
+};
+
 export const FileOverlay: React.FC<FileOverlayProps> = ({
   open,
   language,
@@ -64,27 +95,60 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const locked = submitting || saving === true || saveRetrying === true || readOnly === true;
   const canSave = Boolean(onSave) && !!dirty && !locked;
 
-  const driveIdFromUrl = (url: string): string | null => {
-    const m1 = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(url);
-    if (m1?.[1]) return m1[1];
-    const m2 = /[?&]id=([a-zA-Z0-9_-]+)/.exec(url);
-    if (m2?.[1]) return m2[1];
-    const m3 = /\/uc\?id=([a-zA-Z0-9_-]+)/.exec(url);
-    if (m3?.[1]) return m3[1];
-    return null;
-  };
-
-  const isLikelyImageName = (name: string): boolean => /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
-
   const objectThumbSignature = useMemo(() => {
     if (!open) return '';
     return items
       .map((it, idx) => {
         if (!isFileInstance(it)) return `url:${idx}:${it}`;
-        return `file:${idx}:${it.name}:${it.size}:${it.lastModified}:${it.type || ''}`;
+        return buildLocalFileThumbnailKey(it, idx);
       })
       .join('||');
   }, [items, open]);
+
+  const [dataThumbs, setDataThumbs] = useState<Map<string, string>>(() => new Map());
+
+  useEffect(() => {
+    if (!open) {
+      setDataThumbs(new Map());
+      return;
+    }
+    const imageFiles = items
+      .map((it, idx) => (isFileInstance(it) && it.type?.startsWith('image/') ? { file: it, key: buildLocalFileThumbnailKey(it, idx) } : null))
+      .filter(Boolean) as Array<{ file: File; key: string }>;
+
+    if (!imageFiles.length || typeof FileReader === 'undefined') {
+      setDataThumbs(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all(
+      imageFiles.map(
+        entry =>
+          new Promise<[string, string | null]>(resolve => {
+            try {
+              const reader = new FileReader();
+              reader.onload = () => resolve([entry.key, typeof reader.result === 'string' ? reader.result : null]);
+              reader.onerror = () => resolve([entry.key, null]);
+              reader.readAsDataURL(entry.file);
+            } catch {
+              resolve([entry.key, null]);
+            }
+          })
+      )
+    ).then(results => {
+      if (cancelled) return;
+      const next = new Map<string, string>();
+      results.forEach(([key, value]) => {
+        if (value) next.set(key, value);
+      });
+      setDataThumbs(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, objectThumbSignature, open]);
 
   const objectThumbs = useMemo(() => {
     if (!open) return new Map<string, string>();
@@ -96,7 +160,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       if (!isFileInstance(it)) return;
       const file = it;
       if (!file.type?.startsWith('image/')) return;
-      const key = `file-${idx}-${file.name}-${file.size}-${file.lastModified}`;
+      const key = buildLocalFileThumbnailKey(file, idx);
       map.set(key, URL.createObjectURL(file));
     });
     return map;
@@ -229,30 +293,25 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                   meta = formatFileSize(item.size || 0);
                 }
                 const thumbSize = 194;
-                const thumbUrl = (() => {
+                const thumbCandidates = (() => {
                   if (isExisting && href) {
-                    const driveId = driveIdFromUrl(href);
-                    if (driveId) return `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`;
-                    if (isLikelyImageName(name)) return href;
-                    return null;
+                    return buildExistingFileThumbnailCandidates(href, name);
                   }
                   if (!isExisting && item.type?.startsWith('image/')) {
-                    const key = `file-${idx}-${item.name}-${item.size}-${item.lastModified}`;
-                    return objectThumbs.get(key) || null;
+                    const key = buildLocalFileThumbnailKey(item, idx);
+                    return [dataThumbs.get(key), objectThumbs.get(key)].filter(Boolean) as string[];
                   }
-                  return null;
+                  return [];
                 })();
-                const thumbInner = thumbUrl ? (
-                  <img
-                    src={thumbUrl}
-                    alt={name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    loading="lazy"
-                  />
-                ) : (
+                const thumbFallback = (
                   <span className="muted" style={{ fontSize: 'var(--ck-font-control)', fontWeight: 600 }}>
                     {isExisting ? '↗' : '⧉'}
                   </span>
+                );
+                const thumbInner = thumbCandidates.length ? (
+                  <ThumbnailImage alt={name} candidates={thumbCandidates} fallback={thumbFallback} />
+                ) : (
+                  thumbFallback
                 );
                 const thumbNode = href ? (
                   <a
