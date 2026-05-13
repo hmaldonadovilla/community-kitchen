@@ -198,6 +198,37 @@ This repo includes a deploy workflow using `clasp`, so you can deploy from GitHu
   - Optionally add `CLASP_DEPLOYMENT_ID` to update a specific web app deployment.
   - Run the **Deploy Apps Script** workflow (manual trigger).
 
+### Optional: Firebase Hosting for React JS assets
+
+The default build still embeds the React web bundle inside Apps Script. For deployments that are approaching Apps Script size limits, you can move only the static JS assets to Firebase Hosting while keeping Apps Script as the web app shell and data server.
+
+Target architecture:
+
+- Apps Script serves the initial HTML shell, boot globals, and all `google.script.run` endpoints.
+- Firebase Hosting serves immutable hashed files under `dist/firebase-hosting/assets/`.
+- The Apps Script shell points at the hosted JS when `CK_WEB_ASSET_MODE=external` and `CK_WEB_ASSET_BASE_URL` is configured.
+- If external mode is not configured, the shell falls back to the existing Apps Script `?bundle=react` route.
+
+Setup and deploy:
+
+```bash
+cp .env.firebase.example .env.firebase.staging
+# edit FIREBASE_PROJECT_ID (or reuse GCP_PROJECT_ID), FIREBASE_HOSTING_SITE_ID, and CK_WEB_ASSET_BASE_URL
+DEPLOY_ENV=staging npm run firebase:setup
+DEPLOY_ENV=staging npm run deploy:firebase-hosting
+DEPLOY_ENV=staging npm run deploy:apps-script
+```
+
+The Firebase setup account must be able to add Firebase to the GCP project and create Hosting sites. If an owner/admin already enabled Firebase, rerun setup with `SKIP_FIREBASE_PROJECT_ENABLE=1`.
+
+For a combined asset + Apps Script deployment, use:
+
+```bash
+DEPLOY_ENV=staging npm run deploy:firebase-web-app
+```
+
+The Firebase setup writes a local `.firebaserc` target mapping, which is intentionally ignored because the site id is environment-specific. To roll back while keeping `.env.firebase` in place, run `CK_WEB_ASSET_MODE_OVERRIDE=embedded npm run deploy:apps-script`; otherwise set `CK_WEB_ASSET_MODE=embedded` or remove the Firebase env file, then redeploy Apps Script.
+
 ### Optional: Cloud Run multi-backend API bootstrap
 
 The project includes optional backend-preparation scripts for a Cloud Run API, using env-specific files in the same style as the existing `clasp` flow.

@@ -85,7 +85,61 @@ CI (GitHub Actions):
    - Optional: `CLASP_DEPLOYMENT_ID` to update a specific web app deployment
 2. Run the **Deploy Apps Script** workflow (manual `workflow_dispatch`).
 
-## 2d. Optional: Backfill Data Source Identity Fields
+## 2d. Optional: Firebase Hosting for React JS Assets
+
+Use this when the Apps Script bundle is approaching size limits. Apps Script still serves the HTML shell and backend calls; Firebase Hosting serves the static React JS files.
+
+1. Create an env file:
+
+   ```bash
+   cp .env.firebase.example .env.firebase.staging
+   ```
+
+2. Update `.env.firebase.<env>`:
+   - `DEPLOY_ENV=staging|prod`
+   - `FIREBASE_PROJECT_ID=<gcp-project-id>` (or rely on `GCP_PROJECT_ID` from `.env.gcp.<env>`)
+   - `FIREBASE_HOSTING_SITE_ID=<unique-hosting-site-id>`
+   - `FIREBASE_HOSTING_TARGET=web-assets`
+   - `CK_WEB_ASSET_MODE=external`
+   - `CK_WEB_ASSET_BASE_URL=https://<site-id>.web.app` or your Firebase custom domain
+
+3. Authenticate Firebase CLI once:
+
+   ```bash
+   npx firebase-tools@latest login
+   ```
+
+   The signed-in account needs permission to add Firebase to the GCP project (`firebase.projects.update`, `resourcemanager.projects.get`, `serviceusage.services.enable`, and `serviceusage.services.get`) and Firebase Hosting Admin access to create/deploy the Hosting site. If Firebase has already been added by an owner/admin, you can rerun setup with `SKIP_FIREBASE_PROJECT_ENABLE=1`.
+
+4. Provision the Firebase Hosting site and local target mapping:
+
+   ```bash
+   DEPLOY_ENV=staging npm run firebase:setup
+   ```
+
+5. Deploy the hashed JS assets:
+
+   ```bash
+   DEPLOY_ENV=staging npm run deploy:firebase-hosting
+   ```
+
+6. Deploy Apps Script after the assets are live:
+
+   ```bash
+   DEPLOY_ENV=staging npm run deploy:apps-script
+   ```
+
+   `deploy:apps-script` loads `.env.firebase` / `.env.firebase.<env>` automatically, so the Apps Script bundle is built as a small HTML/backend shell that points to Firebase Hosting.
+
+For a single local command that deploys assets first and then Apps Script:
+
+```bash
+DEPLOY_ENV=staging npm run deploy:firebase-web-app
+```
+
+Rollback: run `CK_WEB_ASSET_MODE_OVERRIDE=embedded npm run deploy:apps-script` to force an embedded build even when `.env.firebase` exists. You can also set `CK_WEB_ASSET_MODE=embedded` or remove the Firebase env file, then rerun `npm run deploy:apps-script`. The existing Apps Script bundle route remains available in embedded builds.
+
+## 2e. Optional: Backfill Data Source Identity Fields
 
 When datasource-backed fields gain hidden identity columns such as
 `*_SOURCE_ID` or `*_SOURCE_UPDATED_AT`, historical rows may need a one-time
@@ -116,7 +170,7 @@ The runner performs a dry-run preflight, commits in batches, writes audit rows,
 and performs a post-check dry-run. Delete the script property after the one-off
 commit run. Full procedure: `docs/data-source-id-backfill.md`.
 
-## 2e. Optional: Cloud Run multi-backend API bootstrap
+## 2f. Optional: Cloud Run multi-backend API bootstrap
 
 Use this only as optional backend preparation so a Cloud Run API can be provisioned and deployed from the CLI in the same env-driven style as `clasp`.
 
@@ -257,7 +311,7 @@ Important positioning:
 
 11. Keep using `npm run deploy:apps-script` for the public Apps Script web app. The Cloud Run deploy is an optional backend-preparation step and does not replace the existing staging Apps Script deployment flow.
 
-## 2e. Performance measurement baseline
+## 2g. Performance measurement baseline
 
 Use the performance scripts together so you capture both web-vitals metrics and the concrete initial-load buckets visible in browser DevTools.
 
