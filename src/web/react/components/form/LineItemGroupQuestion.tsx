@@ -24,6 +24,7 @@ import {
 import {
   applyLineItemRowSort
 } from '../../app/lineItemRowSort';
+import { collectSourceFirstSentenceFieldErrorMap } from '../../features/lineItems/domain/lineItemPresentation';
 import { LineItemUploadFailureNotice } from '../../features/lineItems/components/LineItemUploadFailureNotice';
 import { LineItemTotals } from '../../features/lineItems/components/LineItemTotals';
 import { RowFlowGroupOutputActions } from '../../features/lineItems/components/RowFlowGroupOutputActions';
@@ -51,6 +52,8 @@ import type {
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
   getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
+
+const SOURCE_FIRST_STEP_ERROR_PREFIX = 'ckSourceFirstStep';
 
 export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
   q,
@@ -318,6 +321,135 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
         text={supplementalHelperTextTrimmed}
       />
     ) : null;
+
+  const sourceFirstValidationErrorPrefix = React.useMemo(
+    () => `${SOURCE_FIRST_STEP_ERROR_PREFIX}:${currentGuidedStepId || 'unguided'}:${q.id}:`,
+    [currentGuidedStepId, q.id]
+  );
+
+  const sourceFirstValidationErrors = React.useMemo(() => {
+    const next: Record<string, string> = {};
+    if (!sourceFirstPresentationEntries.length) return next;
+
+    sourceFirstPresentationEntries.forEach((entry: any, entryIndex: number) => {
+      const config = entry?.config || {};
+      const fields = Array.isArray(config?.fields) ? (config.fields as any[]) : [];
+      const fieldById = new Map<string, any>();
+      fields.forEach(field => {
+        const id = field?.id ? field.id.toString() : '';
+        if (id) fieldById.set(id, field);
+      });
+      if (!fieldById.size) return;
+
+      const uiCfg = config?.ui && typeof config.ui === 'object' ? config.ui : {};
+      const compactSentenceRows = Array.isArray(uiCfg.compactSentenceRows) ? (uiCfg.compactSentenceRows as any[]) : [];
+      if (!compactSentenceRows.length) return;
+
+      const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
+      const rowKeyFieldId = `${config?.rowKeyFieldId || ''}`.trim();
+      const outputKeyFieldId = `${config?.outputKeyFieldId || rowKeyFieldId}`.trim();
+      const configId = `${config?.id || entryIndex}`.trim() || `${entryIndex}`;
+
+      (entry.visibleSourceRows || []).forEach((visible: any) => {
+        const sourceRow = (visible?.sourceRow || {}) as Record<string, any>;
+        const sourceKey = `${sourceRow?.[rowKeyFieldId] ?? ''}`.trim();
+        if (!sourceKey) return;
+
+        (visible?.eligibleParents || []).forEach((parentRow: any) => {
+          const parentRowId = `${parentRow?.id || ''}`.trim();
+          if (!parentRowId) return;
+
+          const output = resolveDataSourceOutputGroup(config, parentRowId);
+          const outputRows = output ? lineItems[output.key] || [] : [];
+          const existingOutputRow =
+            outputRows.find((candidate: any) => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}`.trim() === sourceKey) || null;
+          const draftKey = buildStepDataSourceDraftKey(config, parentRowId, sourceKey);
+          const virtualValues = buildVirtualDataSourceRowValues({
+            config,
+            sourceRow,
+            outputRow: existingOutputRow,
+            draftValues: stepDataSourceDrafts[draftKey] || null,
+            parentRowId
+          });
+          const isSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
+          if (!isSelected) return;
+
+          const parentValues = (parentRow.values || {}) as Record<string, FieldValue>;
+          const sentenceRule = compactSentenceRows.find(
+            (rule: any) =>
+              !rule?.when ||
+              matchesWhenClause(
+                rule.when as any,
+                resolveVirtualRowWhenContext({
+                  rowValues: virtualValues,
+                  parentValues
+                })
+              )
+          );
+          const sentenceParts = Array.isArray(sentenceRule?.parts) ? (sentenceRule.parts as any[]) : [];
+          if (!sentenceParts.length) return;
+
+          const fieldErrors = collectSourceFirstSentenceFieldErrorMap({
+            parts: sentenceParts,
+            fieldById,
+            virtualValues,
+            parentValues,
+            validateFieldRules: validateVirtualFieldRules
+          });
+
+          Object.entries(fieldErrors).forEach(([fieldId, message]) => {
+            if (!message) return;
+            next[`${sourceFirstValidationErrorPrefix}${configId}:${parentRowId}:${sourceKey}:${fieldId}`] = message;
+          });
+        });
+      });
+    });
+
+    return next;
+  }, [
+    buildStepDataSourceDraftKey,
+    buildVirtualDataSourceRowValues,
+    lineItems,
+    resolveDataSourceOutputGroup,
+    resolveVirtualRowWhenContext,
+    sourceFirstPresentationEntries,
+    sourceFirstValidationErrorPrefix,
+    stepDataSourceDrafts,
+    validateVirtualFieldRules
+  ]);
+
+  React.useEffect(() => {
+    setErrors((prev: Record<string, string>) => {
+      const next = { ...(prev || {}) };
+      let changed = false;
+      Object.keys(next).forEach(key => {
+        if (key.startsWith(sourceFirstValidationErrorPrefix)) {
+          delete next[key];
+          changed = true;
+        }
+      });
+      Object.entries(sourceFirstValidationErrors).forEach(([key, message]) => {
+        if (next[key] !== message) {
+          next[key] = message;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+    return () => {
+      setErrors((prev: Record<string, string>) => {
+        const next = { ...(prev || {}) };
+        let changed = false;
+        Object.keys(next).forEach(key => {
+          if (key.startsWith(sourceFirstValidationErrorPrefix)) {
+            delete next[key];
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    };
+  }, [setErrors, sourceFirstValidationErrorPrefix, sourceFirstValidationErrors]);
 
   const {
     syncStepDataSourceOutputRow,

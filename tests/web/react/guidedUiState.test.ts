@@ -98,4 +98,31 @@ describe('guided UI state helper', () => {
       stepSubmitLabel: undefined
     });
   });
+
+  test('marks forward gate unsatisfied when active step validation has errors', () => {
+    expect(
+      resolveGuidedUiStateAction({
+        enabled: true,
+        stepsConfig: {},
+        stepIds: ['leftovers', 'production'],
+        visibleSteps: [{ id: 'leftovers' }, { id: 'production' }],
+        activeStepId: 'leftovers',
+        activeStepIndex: 0,
+        statuses: [
+          {
+            id: 'leftovers',
+            index: 0,
+            complete: true,
+            valid: true,
+            missingRequiredCount: 0,
+            missingValidCount: 0,
+            errorCount: 0
+          }
+        ],
+        defaultForwardGate: 'whenValid',
+        activeStepErrorCount: 1,
+        language: 'EN'
+      })?.forwardGateSatisfied
+    ).toBe(false);
+  });
 });

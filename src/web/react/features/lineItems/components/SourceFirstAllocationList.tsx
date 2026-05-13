@@ -21,6 +21,7 @@ import {
   resolveSourceFirstListScrollStyle,
   sortSourceFirstVisibleSourceRows
 } from '../domain/lineItemPresentation';
+import { shouldKeepInvalidSourceFirstQuantityDraft } from '../domain/sourceFirstReservationDraftDecision';
 import { SourceFirstAllocationRow } from './SourceFirstAllocationRow';
 import { SourceFirstSentenceParts } from './SourceFirstSentenceParts';
 
@@ -250,11 +251,6 @@ export const SourceFirstAllocationList: React.FC<{
       }}
       onNumberBlur={({ fieldId, value, virtualValues, sourceRow }) => {
         const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-        const quantityNumber = Number(value);
-        const shouldReleaseQuantity =
-          !!quantityFieldId &&
-          fieldId === quantityFieldId &&
-          (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
         const patch = buildReservationFieldPatch({
           fieldId,
           value,
@@ -262,9 +258,6 @@ export const SourceFirstAllocationList: React.FC<{
           selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
           quantityFieldId
         }) as Record<string, FieldValue>;
-        if (shouldReleaseQuantity && args.selectedFieldId) {
-          patch[args.selectedFieldId] = false;
-        }
         const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
         if (!sourceKey) {
           scheduleDeferredStepReservationAutoSaveHoldRelease();
@@ -275,7 +268,21 @@ export const SourceFirstAllocationList: React.FC<{
           selectedFieldId: args.selectedFieldId,
           quantityFieldId
         });
-        if (!shouldReleaseQuantity && !deferReservation) return;
+        if (!deferReservation) return;
+        if (
+          shouldKeepInvalidSourceFirstQuantityDraft({
+            fieldId,
+            quantityFieldId,
+            value: value as FieldValue
+          })
+        ) {
+          cancelDeferredStepReservationSync({
+            parentRowId: args.parentRow.id,
+            sourceKey
+          });
+          scheduleDeferredStepReservationAutoSaveHoldRelease();
+          return;
+        }
         if (deferReservation) {
           if (!hasPendingDeferredReservationChange({
             config: args.config,

@@ -66,7 +66,7 @@ type LineItemInlineSubgroupsRendererProps = {
   setOverlay: (overlay: any) => void;
   setCollapsedSubgroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setSubgroupSelectors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  addLineItemRowManual: (groupId: string, preset?: Record<string, FieldValue>, options?: any) => void;
+  addLineItemRowManual: (groupId: string, preset?: Record<string, FieldValue>, options?: any) => any;
   removeLineRow: (groupId: string, rowId: string) => void;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   toggleGroupCollapsed: (key: string) => void;
@@ -363,7 +363,19 @@ export const LineItemInlineSubgroupsRenderer: React.FC<LineItemInlineSubgroupsRe
                         if (!subSelectorOverlayAnchorFieldId) return;
                         const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
                         if (!deduped.length) return;
-                        deduped.forEach(val => addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }));
+                        const duplicateValues: string[] = [];
+                        let duplicateMessage = '';
+                        deduped.forEach(val => {
+                          const result = addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val });
+                          if (result?.status === 'duplicate') {
+                            duplicateValues.push(val);
+                            if (!duplicateMessage && result.message) duplicateMessage = result.message;
+                          }
+                        });
+                        if (duplicateValues.length) {
+                          return { duplicateValues, message: duplicateMessage };
+                        }
+                        return { addedValues: deduped };
                       }
                     }
                   : undefined

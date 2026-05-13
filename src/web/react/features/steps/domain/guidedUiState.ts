@@ -31,6 +31,7 @@ export const resolveGuidedUiStateAction = (args: {
   statuses: GuidedStepStatus[];
   defaultForwardGate: GuidedForwardGate;
   dedupNavigationBlocked?: boolean;
+  activeStepErrorCount?: number;
   language: LangCode;
 }): GuidedUiState | null => {
   if (!args.enabled || !args.stepsConfig || !args.stepIds.length) return null;
@@ -42,7 +43,7 @@ export const resolveGuidedUiStateAction = (args: {
     gate: forwardGate,
     status: stepStatus,
     navigationBlocked: args.dedupNavigationBlocked
-  });
+  }) && Math.max(0, Number(args.activeStepErrorCount || 0)) === 0;
   const allowBack = (stepConfig?.navigation?.allowBack ?? stepConfig?.allowBack) !== false;
   const showBackGlobal = args.stepsConfig?.showBackButton !== false;
   const showBackStep = (stepConfig?.navigation?.showBackButton ?? stepConfig?.showBackButton) !== false;

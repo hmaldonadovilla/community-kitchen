@@ -368,7 +368,19 @@ export const useLineItemGroupControls = ({
               if (!selectorOverlayAnchorFieldId) return;
               const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
               if (!deduped.length) return;
-              deduped.forEach(val => addLineItemRowManual(q.id, { [selectorOverlayAnchorFieldId]: val }));
+              const duplicateValues: string[] = [];
+              let duplicateMessage = '';
+              deduped.forEach(val => {
+                const result = addLineItemRowManual(q.id, { [selectorOverlayAnchorFieldId]: val });
+                if (result?.status === 'duplicate') {
+                  duplicateValues.push(val);
+                  if (!duplicateMessage && result.message) duplicateMessage = result.message;
+                }
+              });
+              if (duplicateValues.length) {
+                return { duplicateValues, message: duplicateMessage };
+              }
+              return { addedValues: deduped };
             }}
           />
         ) : useSelectorSearch ? (

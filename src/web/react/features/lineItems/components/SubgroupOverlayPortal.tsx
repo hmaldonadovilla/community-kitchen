@@ -68,6 +68,7 @@ import { matchesWhenClause } from '../../../../rules/visibility';
 import { LineFileUploadQuestion } from '../../uploads/components/LineFileUploadQuestion';
 import { LineFileUploadTableOpenControl } from '../../uploads/components/LineFileUploadTableOpenControl';
 import { resolveAddOverlayCopy } from '../domain/addOverlayCopy';
+import { hasLineItemDedupErrorInScope } from '../domain/lineItemDedupErrors';
 import { resolveTableColumnWidthStyle } from '../domain/tableColumnWidths';
 import { withListRowActionButtonStyle } from './lineItemActionButtonStyle';
 import type { LineOverlayState } from '../../../components/form/overlays/LineSelectOverlay';
@@ -309,6 +310,12 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
       tSystem('common.cancel', language, 'Cancel')
     );
     const overlaySessionFillAvailableHeight = subgroupOverlay.overlaySession?.fillAvailableHeight === true;
+    const dedupOverlayActionsDisabled = hasLineItemDedupErrorInScope({
+      errors,
+      groupKey: subKey,
+      groupConfig: subConfig,
+      language
+    });
     const overlaySessionBulkSelectionFieldId = (
       subgroupOverlay.overlaySession?.bulkSelection?.fieldId || ''
     )
@@ -711,7 +718,12 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
 	              {!overlayHideCloseButton ? (
-	                <button type="button" onClick={() => attemptCloseSubgroupOverlay('button')} style={buttonStyles.primary}>
+	                <button
+	                  type="button"
+	                  onClick={() => attemptCloseSubgroupOverlay('button')}
+	                  disabled={dedupOverlayActionsDisabled}
+	                  style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+	                >
 	                  {overlayCloseButtonLabel}
 	                </button>
 	              ) : null}
@@ -832,9 +844,19 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                                             applied: allowed.length
                                           });
                                         }
-                                        allowed.forEach(val =>
-                                          addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }, subAddRowOptions)
-                                        );
+                                        const duplicateValues: string[] = [];
+                                        let duplicateMessage = '';
+                                        allowed.forEach(val => {
+                                          const result = addLineItemRowManual(subKey, { [subSelectorOverlayAnchorFieldId]: val }, subAddRowOptions);
+                                          if (result?.status === 'duplicate') {
+                                            duplicateValues.push(val);
+                                            if (!duplicateMessage && result.message) duplicateMessage = result.message;
+                                          }
+                                        });
+                                        if (duplicateValues.length) {
+                                          return { duplicateValues, message: duplicateMessage };
+                                        }
+                                        return { addedValues: allowed };
                                       }}
                                     />
                                   ) : subSelectorOptions.length >= 20 ? (
@@ -1645,7 +1667,12 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                               )}
                             </button>
                           ) : null}
-                          <button type="button" style={buttonStyles.primary} onClick={handleDetailSave}>
+                          <button
+                            type="button"
+                            style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+                            disabled={dedupOverlayActionsDisabled}
+                            onClick={handleDetailSave}
+                          >
                             {tSystem('common.saveChanges', language, 'Save changes')}
                           </button>
                           {!overlayDetailCanView ? (
@@ -2568,7 +2595,12 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
             <button type="button" style={buttonStyles.secondary} onClick={handleSubgroupOverlaySessionCancel}>
               {overlaySessionCancelLabel}
             </button>
-            <button type="button" style={buttonStyles.primary} onClick={handleSubgroupOverlaySessionSave}>
+            <button
+              type="button"
+              style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+              disabled={dedupOverlayActionsDisabled}
+              onClick={handleSubgroupOverlaySessionSave}
+            >
               {overlaySessionSaveLabel}
             </button>
           </div>

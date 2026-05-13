@@ -7,7 +7,6 @@ import { reconcileAutoAddModeGroups, reconcileAutoAddModeSubgroups } from '../..
 import { applyValueMapsToForm } from '../../../app/valueMaps';
 import {
   buildLineContextId,
-  findLineItemDedupConflict,
   normalizeLineItemDedupRules,
   parseRowNonMatchOptions,
   parseSubgroupKey,
@@ -25,7 +24,11 @@ import {
   resolveLineItemDedupMessage,
   resolveLineItemDedupValueToken
 } from '../../lineItems/domain/formViewHelpers';
-import { isLineItemDedupErrorMessage } from '../../lineItems/domain/lineItemDedupErrors';
+import { resolveLineItemDedupChange } from '../../lineItems/domain/lineItemDedupChange';
+import {
+  applyLineItemDedupConflictErrors,
+  isLineItemDedupErrorMessage
+} from '../../lineItems/domain/lineItemDedupErrors';
 
 type UserEditResult = { deferMutation?: boolean; skipSelectionEffects?: boolean };
 
@@ -357,35 +360,49 @@ export function useFormFieldChangeHandlers({
         };
       })
       .filter(Boolean) as Array<{ fieldId: string; message: string; fields: string[] }>;
-    const dedupConflict = findLineItemDedupConflict({
-      rules: dedupRules,
+    const dedupChange = resolveLineItemDedupChange({
       rows: existingRows,
+      rowId,
+      fieldId: field.id,
+      value: nextRowValues[field.id],
       rowValues: nextRowValues,
-      excludeRowId: rowId
+      rules: dedupRules,
+      language
     });
-    if (dedupConflict) {
-      const conflictFieldId = dedupConflict.fields[0];
-      const valueToken = resolveLineItemDedupValueToken(nextRowValues, conflictFieldId);
-      const conflictMessage = resolveLineItemDedupMessage(
-        dedupConflict.rule,
-        language,
-        valueToken ? { value: valueToken } : undefined
+    nextRowValues = dedupChange.nextRowValues;
+    if (dedupChange.conflict) {
+      const nextLineItems = { ...currentLineItems, [group.id]: dedupChange.nextRows };
+      const { values: nextValues, lineItems: finalLineItems } = applyValueMapsToForm(
+        definition,
+        currentValues,
+        nextLineItems,
+        {
+          mode: 'change'
+        }
       );
-      const conflictPath = `${group.id}__${conflictFieldId}__${rowId}`;
-      setErrors(prev => {
-        const next = { ...prev };
-        dedupRuleMessages.forEach(entry => {
-          const key = `${group.id}__${entry.fieldId}__${rowId}`;
-          if (isLineItemDedupErrorMessage({ rules: dedupRules, language, message: next[key] })) delete next[key];
-        });
-        next[conflictPath] = conflictMessage;
-        return next;
-      });
+      setLineItems(finalLineItems);
+      setValues(nextValues);
+      valuesRef.current = nextValues;
+      lineItemsRef.current = finalLineItems;
+      setErrors(prev =>
+        applyLineItemDedupConflictErrors({
+          errors: prev,
+          groupId: group.id,
+          rowId,
+          changedFieldId: field.id,
+          conflictFieldId: dedupChange.conflict!.fieldId,
+          conflictFields: dedupChange.conflict!.fields,
+          conflictMessage: dedupChange.conflict!.message,
+          dedupErrorFieldIds: dedupRuleMessages.map(entry => entry.fieldId),
+          rules: dedupRules,
+          language
+        })
+      );
       onDiagnostic?.('lineItems.dedup.blocked', {
         groupId: group.id,
         rowId,
-        fields: dedupConflict.fields,
-        matchRowId: dedupConflict.matchRow.id
+        fields: dedupChange.conflict.fields,
+        matchRowId: dedupChange.conflict.matchRowId
       });
       return;
     }

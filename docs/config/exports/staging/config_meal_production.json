@@ -1036,7 +1036,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
               },
               "rows": {
                 "includeWhen": {
@@ -1987,7 +1987,7 @@
                           {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffixFieldId": "LEFTOVER_UNIT",
-                            "minWidth": 44,
+                            "minWidth": 96,
                             "maxWidth": 185,
                             "paddingChars": 1.8
                           }
@@ -2007,14 +2007,14 @@
                             "suffix": {
                               "en": "portions"
                             },
-                            "minWidth": 44,
+                            "minWidth": 96,
                             "maxWidth": 185,
                             "paddingChars": 1.8
                           },
                           {
                             "fieldId": "LEFTOVER_USAGE_MODE",
-                            "minWidth": 196,
-                            "maxWidth": 312,
+                            "minWidth": 380,
+                            "maxWidth": 420,
                             "paddingChars": 9
                           }
                         ]
@@ -11512,7 +11512,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
               },
               "rows": {
                 "includeWhen": {
@@ -12445,7 +12445,7 @@
                           {
                             "fieldId": "LEFTOVER_USE_QTY",
                             "suffixFieldId": "LEFTOVER_UNIT",
-                            "minWidth": 44,
+                            "minWidth": 96,
                             "maxWidth": 185,
                             "paddingChars": 1.8
                           }
@@ -12465,14 +12465,14 @@
                             "suffix": {
                               "en": "portions"
                             },
-                            "minWidth": 44,
+                            "minWidth": 96,
                             "maxWidth": 185,
                             "paddingChars": 1.8
                           },
                           {
                             "fieldId": "LEFTOVER_USAGE_MODE",
-                            "minWidth": 196,
-                            "maxWidth": 312,
+                            "minWidth": 380,
+                            "maxWidth": 420,
                             "paddingChars": 9
                           }
                         ]

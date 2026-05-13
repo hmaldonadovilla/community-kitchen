@@ -10977,6 +10977,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           selectedRecordSnapshot: selectedRecordSnapshotRef.current,
           lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
         }) || '';
+      const invalidReservationDrafts = resolveInvalidGuidedReservationDraftsForStep(args.stepId);
+      if (invalidReservationDrafts.length) {
+        logEvent('guidedStep.advance.blocked.invalidReservationDraft', {
+          stepId: args.stepId,
+          nextStepId: args.nextStepId || null,
+          trigger: args.trigger,
+          blockers: invalidReservationDrafts.map(entry => ({
+            groupId: entry.groupId,
+            parentRowId: entry.parentRowId,
+            sourceKey: entry.sourceKey,
+            reason: entry.reason
+          }))
+        });
+        return { success: false };
+      }
       if (
         guidedStepRequiresPersistedRecord({
           currentStepIndex: args.stepIndex,
@@ -11095,6 +11110,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       guidedStepAdvanceBusy,
       logEvent,
       queueGuidedStepBackgroundSync,
+      resolveInvalidGuidedReservationDraftsForStep,
       waitForActiveDraftSaveTransactions,
       waitForGuidedStepAdvance
     ]

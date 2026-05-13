@@ -41,6 +41,19 @@ describe('WebFormTemplate', () => {
     expect(html).toContain('window.__CK_SERVICE_URL__ = "https://script.google.com/macros/s/example-deployment/exec"');
   });
 
+  test('uses the public Apps Script path for the React bundle when the service URL is domain-scoped', () => {
+    (globalThis as any).ScriptApp = {
+      getService: () => ({
+        getUrl: () => 'https://script.google.com/a/communitykitchen.be/macros/s/example-deployment/exec'
+      })
+    };
+
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('src="https://script.google.com/macros/s/example-deployment/exec?bundle=react&app=meal-production');
+    expect(html).not.toContain('src="https://script.google.com/a/communitykitchen.be/macros/s/example-deployment/exec?bundle=react');
+  });
+
   test('starts early home bootstrap prefetch for bundled screens without embedded home data', () => {
     const html = buildWebFormHtml({ title: 'Config: Test', questions: [] } as any, 'Config: Test', { homeRev: 4 }, 'meal-production');
 

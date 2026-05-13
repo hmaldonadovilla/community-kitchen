@@ -131,6 +131,18 @@ describe('quantityConstraints', () => {
     ).toBe(2);
   });
 
+  it('does not inflate editable max when a manual draft exceeds available stock', () => {
+    expect(
+      computeOptimisticRowMaxQuantity({
+        remainingQuantity: 5,
+        reservedQuantity: 5,
+        serverCurrentRecordReservedQuantity: 5,
+        localCurrentRecordReservedQuantity: 6,
+        currentRowQuantity: 6
+      })
+    ).toBe(5);
+  });
+
   it('keeps editable max at least equal to the current row quantity', () => {
     expect(ensureEditableMaxIncludesCurrentValue(0, 2)).toBe(2);
     expect(ensureEditableMaxIncludesCurrentValue(1, '3')).toBe(3);

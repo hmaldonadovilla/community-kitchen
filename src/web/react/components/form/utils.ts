@@ -167,21 +167,37 @@ export const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-export const clearLineItemGroupErrors = (errors: FormErrors, groupId: string): FormErrors => {
+export type LineItemGroupErrorPreserve = (key: string, value: string) => boolean;
+
+export const clearLineItemGroupErrors = (
+  errors: FormErrors,
+  groupId: string,
+  options?: { preserve?: LineItemGroupErrorPreserve }
+): FormErrors => {
   if (!groupId) return errors;
   const prefix = `${groupId}__`;
   const subPrefix = `${groupId}::`;
   const next: FormErrors = {};
+  const preserve = options?.preserve;
   Object.entries(errors || {}).forEach(([key, value]) => {
-    if (key === groupId) return;
-    if (key.startsWith(prefix) || key.startsWith(subPrefix)) return;
+    if (key === groupId || key.startsWith(prefix) || key.startsWith(subPrefix)) {
+      if (preserve?.(key, value)) {
+        next[key] = value;
+      }
+      return;
+    }
     next[key] = value;
   });
   return next;
 };
 
-export const mergeLineItemGroupErrors = (errors: FormErrors, groupId: string, nextErrors: FormErrors): FormErrors => {
-  const cleared = clearLineItemGroupErrors(errors || {}, groupId);
+export const mergeLineItemGroupErrors = (
+  errors: FormErrors,
+  groupId: string,
+  nextErrors: FormErrors,
+  options?: { preserve?: LineItemGroupErrorPreserve }
+): FormErrors => {
+  const cleared = clearLineItemGroupErrors(errors || {}, groupId, options);
   const overlay = nextErrors || {};
   return { ...cleared, ...overlay };
 };

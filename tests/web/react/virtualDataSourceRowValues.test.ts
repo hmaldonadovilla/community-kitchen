@@ -99,4 +99,39 @@ describe('virtual data source row value helpers', () => {
     expect(values.displayFreeQuantity).toBe(4);
     expect(values.maxQuantity).toBe(9);
   });
+
+  test('keeps max at true availability when the current draft exceeds available stock', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourceQuantityFieldId: 'remaining',
+          sourceReservedQuantityFieldId: 'reserved',
+          targetQuantityFieldId: 'freeQuantity',
+          targetMaxQuantityFieldId: 'maxQuantity'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'leftover-1',
+        remaining: 5,
+        reserved: 5,
+        __ckServerCurrentRecordReservedQuantity: 5
+      },
+      outputRow: {
+        id: 'row-1',
+        values: {
+          selected: true,
+          quantity: '6'
+        }
+      } as any,
+      parentRowId: 'parent-1',
+      resolveCurrentReservationStateForSource: () => ({ totalReservedQuantity: 6, currentRowQuantity: 6 }),
+      resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 5, currentRowQuantity: 5 })
+    });
+
+    expect(values.freeQuantity).toBe(0);
+    expect(values.maxQuantity).toBe(5);
+  });
 });

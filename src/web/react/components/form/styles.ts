@@ -1309,18 +1309,19 @@ export const FORM_VIEW_STYLES = `
           max-width: none;
           align-items: stretch;
           gap: 0;
-          padding: 2px;
+          padding: 0;
           border: 1px solid var(--border);
           border-radius: 8px;
-          background: var(--border);
+          background: var(--card);
           min-height: var(--control-height);
           box-sizing: border-box;
+          overflow: hidden;
         }
         .ck-segmented button {
           flex: 1 1 0;
-          min-height: calc(var(--control-height) - 4px);
+          min-height: var(--control-height);
           border: none;
-          background: var(--surface);
+          background: var(--card);
           border-radius: 0;
           padding: 10px 12px;
           font-size: var(--ck-font-control);
@@ -1331,18 +1332,20 @@ export const FORM_VIEW_STYLES = `
           align-items: center;
           justify-content: center;
           min-width: 0;
-          /* Allow long labels (e.g., Customer) to wrap instead of truncating */
           white-space: normal;
-          overflow-wrap: anywhere;
-          word-break: break-word;
+          overflow-wrap: normal;
+          word-break: normal;
         }
         .ck-segmented button:first-child {
-          border-radius: 6px 0 0 6px;
+          border-radius: 7px 0 0 7px;
         }
         .ck-segmented button:last-child {
-          border-radius: 0 6px 6px 0;
+          border-radius: 0 7px 7px 0;
         }
         .ck-segmented button + button {
+          border-left: 0;
+        }
+        .ck-segmented button:not(.active) + button:not(.active) {
           border-left: 1px solid var(--border);
         }
         .ck-segmented button.active {
@@ -1352,7 +1355,7 @@ export const FORM_VIEW_STYLES = `
           box-shadow: none;
         }
         .ck-segmented button:not(.active) {
-          color: var(--muted);
+          color: var(--text);
         }
         .ck-segmented button:focus-visible {
           outline: 2px solid var(--text);
@@ -1742,6 +1745,18 @@ export const FORM_VIEW_STYLES = `
           font-weight: 400;
           line-height: 1.35;
           text-align: left;
+        }
+        .ck-line-item-multiadd__feedback,
+        .form-card .ck-line-item-multiadd__feedback,
+        .webform-overlay .ck-line-item-multiadd__feedback {
+          margin: 4px 0 0;
+          color: var(--danger);
+          font-size: var(--ck-font-helper);
+          font-weight: 600;
+          line-height: 1.35;
+          text-align: left;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .ck-line-item-multiadd__footer,
         .form-card .ck-line-item-multiadd__footer,

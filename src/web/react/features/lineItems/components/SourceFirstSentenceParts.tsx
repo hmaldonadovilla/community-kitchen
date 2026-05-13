@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { buildLocalizedOptions, matchesWhenClause, toOptionSet } from '../../../../core';
+import { buildLocalizedOptions, toOptionSet } from '../../../../core';
 import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, LineItemRowState } from '../../../../types';
@@ -18,6 +18,17 @@ type SentenceFieldEvent = {
   virtualValues: Record<string, FieldValue>;
   parentValues: Record<string, FieldValue>;
   sourceRow: Record<string, any>;
+};
+
+const compactFieldErrorStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  lineHeight: 1.25,
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
+  wordBreak: 'normal'
 };
 
 /**
@@ -66,8 +77,6 @@ export const SourceFirstSentenceParts: React.FC<{
   disabledForField,
   resolveDisplayValue,
   resolveIntegerOnly,
-  resolveMaxFieldId,
-  toFiniteNumber,
   onNumberChange,
   onNumberBlur,
   onChoiceChange,
@@ -76,37 +85,6 @@ export const SourceFirstSentenceParts: React.FC<{
   compactChoicePlaceholder = false
 }) => {
   const parentValues = (parentRow.values || {}) as Record<string, FieldValue>;
-  const resolveMinValue = (field: any): number | null => {
-    const rules = Array.isArray(field?.validationRules) ? field.validationRules : [];
-    const fieldId = `${field?.id || ''}`.trim();
-    if (!fieldId) return null;
-    const ctx = {
-      getValue: (fid: string) => {
-        if (Object.prototype.hasOwnProperty.call(virtualValues, fid)) return (virtualValues as any)[fid];
-        if (Object.prototype.hasOwnProperty.call(parentValues, fid)) return (parentValues as any)[fid];
-        return undefined;
-      },
-      getLineItems: () => [],
-      getLineItemKeys: () => []
-    } as any;
-    for (const rule of rules) {
-      const thenCfg = rule?.then && typeof rule.then === 'object' ? rule.then : null;
-      if (!thenCfg) continue;
-      const targetFieldId = (thenCfg.fieldId || fieldId).toString().trim();
-      if (targetFieldId !== fieldId) continue;
-      if (rule?.when && !matchesWhenClause(rule.when as any, ctx)) continue;
-      if (thenCfg.min !== undefined) {
-        const parsed = toFiniteNumber(thenCfg.min);
-        return Number.isFinite(parsed) ? parsed : null;
-      }
-      const minFieldId = (thenCfg.minFieldId || '').toString().trim();
-      if (minFieldId) {
-        const parsed = toFiniteNumber(ctx.getValue(minFieldId));
-        return Number.isFinite(parsed) ? parsed : null;
-      }
-    }
-    return null;
-  };
   return (
     <>
       {sentenceParts.map((part: any, partIndex: number) => {
@@ -150,10 +128,6 @@ export const SourceFirstSentenceParts: React.FC<{
               ? resolveDisplayValue(fieldById.get(`${part.suffixFieldId || ''}`.trim()), virtualValues, parentValues)
               : '';
           const allowsIntegerOnly = resolveIntegerOnly(field, virtualValues, parentValues);
-          const maxFieldId = resolveMaxFieldId(field, virtualValues, parentValues);
-          const maxValue =
-            maxFieldId && maxFieldId in virtualValues ? toFiniteNumber(virtualValues[maxFieldId]) : null;
-          const minValue = resolveMinValue(field);
           return (
             <span
               key={`field:${idBase}:${fieldId}`}
@@ -162,8 +136,9 @@ export const SourceFirstSentenceParts: React.FC<{
                 flexDirection: 'column',
                 alignItems: 'flex-start',
                 gap: fieldError ? 4 : 0,
-                flex: '0 0 auto',
+                flex: fieldError ? (clustered ? '1 1 100%' : '1 1 240px') : '0 0 auto',
                 whiteSpace: 'nowrap',
+                maxWidth: fieldError ? '100%' : undefined,
                 minWidth: clustered ? 0 : undefined,
                 flexWrap: clustered ? 'nowrap' : undefined
               }}
@@ -181,9 +156,7 @@ export const SourceFirstSentenceParts: React.FC<{
                   selectAllOnFocus
                   sanitize={raw =>
                     sanitizeNumericDraft(raw, {
-                      integerOnly: allowsIntegerOnly,
-                      minValue,
-                      maxValue
+                      integerOnly: allowsIntegerOnly
                     })
                   }
                   minWidth={minWidth}
@@ -247,7 +220,11 @@ export const SourceFirstSentenceParts: React.FC<{
                   </span>
                 ) : null}
               </span>
-              {fieldError ? <span className="error">{fieldError}</span> : null}
+              {fieldError ? (
+                <span className="error" style={compactFieldErrorStyle}>
+                  {fieldError}
+                </span>
+              ) : null}
             </span>
           );
         }
@@ -275,6 +252,7 @@ export const SourceFirstSentenceParts: React.FC<{
           const paddingChars = Number.isFinite(Number(part.paddingChars)) ? Number(part.paddingChars) : 2.8;
           const minWidth = Number.isFinite(Number(part.minWidth)) ? Number(part.minWidth) : (clustered ? 76 : 72);
           const maxWidth = Number.isFinite(Number(part.maxWidth)) ? Number(part.maxWidth) : (clustered ? 156 : 220);
+          const requestedWidth = Math.min(minWidth, maxWidth);
           if (controlDecision.variant === 'segmented') {
             return (
               <span
@@ -284,8 +262,10 @@ export const SourceFirstSentenceParts: React.FC<{
                   flexDirection: 'column',
                   alignItems: 'flex-start',
                   gap: fieldError ? 4 : 0,
-                  flex: '0 0 auto',
-                  minWidth: 0
+                  flex: clustered ? '1 1 196px' : '0 0 auto',
+                  width: clustered ? undefined : `min(100%, ${requestedWidth}px)`,
+                  minWidth: 0,
+                  maxWidth: '100%'
                 }}
                 data-compact-cluster={clustered ? 'true' : undefined}
               >
@@ -293,7 +273,12 @@ export const SourceFirstSentenceParts: React.FC<{
                   className="ck-choice-control ck-segmented"
                   role="radiogroup"
                   aria-label={resolveFieldLabel(field, language, field.id)}
-                  style={{ width: 'auto', maxWidth: 'none', flex: '0 0 auto' }}
+                  style={{
+                    width: '100%',
+                    minWidth: clustered ? `min(100%, ${Math.min(minWidth, maxWidth)}px)` : undefined,
+                    maxWidth: `${maxWidth}px`,
+                    flex: '1 1 auto'
+                  }}
                 >
                   {options.map(option => {
                     const active = valueText === option.value;
@@ -317,10 +302,13 @@ export const SourceFirstSentenceParts: React.FC<{
                           });
                         }}
                         style={{
-                          flex: '0 0 auto',
-                          minWidth: '8.25ch',
-                          paddingInline: 16,
-                          whiteSpace: 'nowrap'
+                          flex: '1 1 0',
+                          minWidth: 0,
+                          boxSizing: 'border-box',
+                          paddingInline: 6,
+                          whiteSpace: 'nowrap',
+                          overflowWrap: 'normal',
+                          wordBreak: 'normal'
                         }}
                       >
                         {option.label}
@@ -328,7 +316,11 @@ export const SourceFirstSentenceParts: React.FC<{
                     );
                   })}
                 </div>
-                {fieldError ? <span className="error">{fieldError}</span> : null}
+                {fieldError ? (
+                  <span className="error" style={compactFieldErrorStyle}>
+                    {fieldError}
+                  </span>
+                ) : null}
               </span>
             );
           }
@@ -340,7 +332,8 @@ export const SourceFirstSentenceParts: React.FC<{
                 flexDirection: 'column',
                 alignItems: 'flex-start',
                 gap: fieldError ? 4 : 0,
-                flex: '0 0 auto',
+                flex: fieldError ? '1 1 220px' : '0 0 auto',
+                maxWidth: fieldError ? '100%' : undefined,
                 minWidth: clustered ? 0 : undefined
               }}
               data-compact-cluster={clustered ? 'true' : undefined}
@@ -385,7 +378,11 @@ export const SourceFirstSentenceParts: React.FC<{
                   }
                 }
               />
-              {fieldError ? <span className="error">{fieldError}</span> : null}
+              {fieldError ? (
+                <span className="error" style={compactFieldErrorStyle}>
+                  {fieldError}
+                </span>
+              ) : null}
             </span>
           );
         }

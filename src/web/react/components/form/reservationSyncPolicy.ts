@@ -99,6 +99,29 @@ export const shouldBlockDataSourceFreshnessForInvalidStepReservation = (args: {
   return !shouldImmediatelySyncStepReservationChange(args);
 };
 
+export const resolveStepReservationDraftStateDecision = (args: {
+  patch: Record<string, any>;
+  selectedFieldId?: string;
+  quantityFieldId?: string;
+  selectedValue?: unknown;
+  quantityValue?: unknown;
+  hasValidationErrors?: boolean;
+  notifyWhenValid?: boolean;
+  validReason?: string;
+}): { pendingInvalid: boolean; reason: string } | null => {
+  const pendingInvalid = shouldBlockDataSourceFreshnessForInvalidStepReservation(args);
+  if (pendingInvalid) return { pendingInvalid: true, reason: 'invalidReservationDraft' };
+
+  if (shouldImmediatelySyncStepReservationChange(args) || args.notifyWhenValid === true) {
+    return {
+      pendingInvalid: false,
+      reason: (args.validReason || 'reservationSyncQueued').toString()
+    };
+  }
+
+  return null;
+};
+
 export const buildReservationFailureMessage = (
   rawMessage: string,
   fallback: string,

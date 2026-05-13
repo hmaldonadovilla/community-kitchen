@@ -24,7 +24,7 @@ import { SearchableSelect } from '../../../components/form/SearchableSelect';
 import { HtmlPreview } from '../../../components/app/HtmlPreview';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from '../../../components/form/lineItemSelectors';
 import { clearLineItemGroupErrors, toDateInputValue, toUploadItems } from '../../../components/form/utils';
-import { buttonStyles, EyeIcon, PencilIcon, PlusIcon, RequiredStar, srOnly, TrashIcon } from '../../../components/form/ui';
+import { buttonStyles, EyeIcon, PencilIcon, PlusIcon, RequiredStar, srOnly, TrashIcon, withDisabled } from '../../../components/form/ui';
 import { resolveFieldLabel, resolveLabel } from '../../../utils/labels';
 import { applyValueMapsToForm } from '../../../components/form/valueMaps';
 import { isPrimaryActionLabel } from '../../../app/buttonTone';
@@ -39,6 +39,7 @@ import {
   ROW_SOURCE_KEY
 } from '../../../app/lineItems';
 import { resolveAddOverlayCopy } from '../domain/addOverlayCopy';
+import { hasLineItemDedupErrorInScope } from '../domain/lineItemDedupErrors';
 import { resolveTableColumnWidthStyle } from '../domain/tableColumnWidths';
 import { withListRowActionButtonStyle } from './lineItemActionButtonStyle';
 import type { LineOverlayState } from '../../../components/form/overlays/LineSelectOverlay';
@@ -82,6 +83,7 @@ interface LineItemGroupOverlayPortalProps {
   optionState: OptionState;
   setOptionState: React.Dispatch<React.SetStateAction<OptionState>>;
   submitting: boolean;
+  errors: FormErrors;
   setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   overlayDetailSelection: OverlayDetailSelectionState | null;
   setOverlayDetailSelection: React.Dispatch<React.SetStateAction<OverlayDetailSelectionState | null>>;
@@ -137,6 +139,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
   optionState,
   setOptionState,
   submitting,
+  errors,
   setErrors,
   overlayDetailSelection,
   setOverlayDetailSelection,
@@ -244,6 +247,12 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
       tSystem('common.cancel', language, 'Cancel')
     );
     const overlaySessionFillAvailableHeight = lineItemGroupOverlay.overlaySession?.fillAvailableHeight === true;
+    const dedupOverlayActionsDisabled = hasLineItemDedupErrorInScope({
+      errors,
+      groupKey: groupId,
+      groupConfig: groupCfg,
+      language
+    });
     const overlaySessionBulkSelectionFieldId = (
       lineItemGroupOverlay.overlaySession?.bulkSelection?.fieldId || ''
     )
@@ -620,7 +629,12 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
 	              {!overlayHideCloseButton ? (
-	                <button type="button" onClick={() => attemptCloseLineItemGroupOverlay('button')} style={buttonStyles.primary}>
+	                <button
+	                  type="button"
+	                  onClick={() => attemptCloseLineItemGroupOverlay('button')}
+	                  disabled={dedupOverlayActionsDisabled}
+	                  style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+	                >
 	                  {overlayCloseButtonLabel}
 	                </button>
 	              ) : null}
@@ -752,9 +766,19 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                               applied: allowed.length
                             });
                           }
-                          allowed.forEach(val =>
-                            addLineItemRowManual(groupId, { [selectorOverlayAnchorFieldId]: val }, groupAddRowOptions)
-                          );
+                          const duplicateValues: string[] = [];
+                          let duplicateMessage = '';
+                          allowed.forEach(val => {
+                            const result = addLineItemRowManual(groupId, { [selectorOverlayAnchorFieldId]: val }, groupAddRowOptions);
+                            if (result?.status === 'duplicate') {
+                              duplicateValues.push(val);
+                              if (!duplicateMessage && result.message) duplicateMessage = result.message;
+                            }
+                          });
+                          if (duplicateValues.length) {
+                            return { duplicateValues, message: duplicateMessage };
+                          }
+                          return { addedValues: allowed };
                         }}
                       />
                     ) : selectorOptions.length >= 20 ? (
@@ -1085,7 +1109,12 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                            <button type="button" style={buttonStyles.primary} onClick={handleDetailSave}>
+                            <button
+                              type="button"
+                              style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+                              disabled={dedupOverlayActionsDisabled}
+                              onClick={handleDetailSave}
+                            >
                               {tSystem('common.saveChanges', language, 'Save changes')}
                             </button>
                             <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
@@ -1143,7 +1172,12 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
             <button type="button" style={buttonStyles.secondary} onClick={handleLineItemGroupOverlaySessionCancel}>
               {overlaySessionCancelLabel}
             </button>
-            <button type="button" style={buttonStyles.primary} onClick={handleLineItemGroupOverlaySessionSave}>
+            <button
+              type="button"
+              style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+              disabled={dedupOverlayActionsDisabled}
+              onClick={handleLineItemGroupOverlaySessionSave}
+            >
               {overlaySessionSaveLabel}
             </button>
           </div>

@@ -31,6 +31,7 @@ import {
   resolveLineItemDedupMessage,
   resolveLineItemDedupValueToken
 } from '../domain/formViewHelpers';
+import { clearErrorsForRemovedLineItemRows } from '../domain/lineItemRowErrors';
 
 interface UseFormLineItemRowsArgs {
   definition: WebFormDefinition;
@@ -44,6 +45,7 @@ interface UseFormLineItemRowsArgs {
   subgroupOverlay: any;
   setValues: Dispatch<SetStateAction<Record<string, FieldValue>>>;
   setLineItems: Dispatch<SetStateAction<LineItemState>>;
+  setErrors: Dispatch<SetStateAction<Record<string, string>>>;
   setCollapsedSubgroups: Dispatch<SetStateAction<Record<string, boolean>>>;
   setPendingScrollAnchor: Dispatch<SetStateAction<string | null>>;
   setSubgroupSelectors: Dispatch<SetStateAction<Record<string, string>>>;
@@ -103,6 +105,7 @@ export function useFormLineItemRows({
   subgroupOverlay,
   setValues,
   setLineItems,
+  setErrors,
   setCollapsedSubgroups,
   setPendingScrollAnchor,
   setSubgroupSelectors,
@@ -752,6 +755,13 @@ export function useFormLineItemRows({
     });
     setValues(nextValues);
     setLineItems(recomputed);
+    setErrors(prev =>
+      clearErrorsForRemovedLineItemRows({
+        errors: prev,
+        removedRows: cascade.removed,
+        removedGroupKeys: cascade.removedSubgroupKeys
+      })
+    );
     runSelectionEffectsForAncestorRows(groupId, prevLineItems, recomputed, { mode: 'init', topValues: nextValues });
   };
 

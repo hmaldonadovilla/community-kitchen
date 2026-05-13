@@ -32,10 +32,10 @@ describe('meal production leftover selection config', () => {
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
     expect(target?.helperText?.en).toBe(
-      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
     expect(formTarget?.helperText?.en).toBe(
-      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
     expect(target?.dataSourceBootstrap).toEqual({
       waitForGuidedReservationSync: true,

@@ -50,11 +50,12 @@ export const useAppActionBarState = (args: {
   const showGuidedBack = view === 'form' && !!guidedUiState?.backVisible;
   const guidedBackLabel = guidedUiState?.backLabel || tSystem('actions.back', language, 'Back');
   const guidedBackDisabled = guidedUiState ? !guidedUiState.backAllowed : false;
+  const guidedNextDisabled = view === 'form' && guidedUiState && !guidedUiState.isFinal ? !guidedUiState.forwardGateSatisfied : false;
   const orderedSubmitDisabled = orderedEntryEnabled
     ? guidedUiState && !guidedUiState.isFinal
-      ? !guidedUiState.forwardGateSatisfied
+      ? guidedNextDisabled
       : !formIsValid
-    : false;
+    : guidedNextDisabled;
   const submitDisabledTooltip =
     view === 'form' && orderedEntryEnabled && orderedSubmitDisabled && !dedupNavigationBlocked
       ? tSystem('actions.submitDisabledTooltip', language, 'Complete all required fields to activate.')

@@ -2,7 +2,10 @@ import React from 'react';
 
 import { tSystem } from '../../../../systemStrings';
 import type { LangCode } from '../../../../types';
-import { LineItemMultiAddSelect } from '../../../components/form/LineItemMultiAddSelect';
+import {
+  LineItemMultiAddSelect,
+  type LineItemMultiAddResult
+} from '../../../components/form/LineItemMultiAddSelect';
 import { SearchableSelect } from '../../../components/form/SearchableSelect';
 import { RequiredStar } from '../../../components/form/ui';
 import {
@@ -32,7 +35,7 @@ type LineItemSectionSelectorControlProps = {
     enabled: boolean;
     options: SelectorOption[];
     diagnosticPayload: Record<string, unknown>;
-    onAddSelected: (valuesToAdd: string[]) => void;
+    onAddSelected: (valuesToAdd: string[]) => LineItemMultiAddResult;
   };
 };
 

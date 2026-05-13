@@ -3,7 +3,7 @@ import { resolveSourceFirstAllocationDisplayFreeQuantity } from '../../../app/so
 import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
 import { hasAvailabilityPairValue } from './lineItemPresentation';
 import {
-  ensureEditableMaxIncludesCurrentValue,
+  computeOptimisticRowMaxQuantity,
   resolveServerCurrentRecordReservedQuantity,
   toFiniteNumberValue
 } from '../../../app/quantityConstraints';
@@ -73,7 +73,6 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
     });
   }
   const selectedFieldId = (args.config?.selectedFieldId || '').toString().trim();
-  const quantityFieldId = (args.config?.quantityFieldId || '').toString().trim();
   if (selectedFieldId) {
     if (args.draftValues && Object.prototype.hasOwnProperty.call(args.draftValues, selectedFieldId)) {
       next[selectedFieldId] = Boolean((args.draftValues as any)[selectedFieldId]);
@@ -125,7 +124,13 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
       })
     : 0;
   if (sourceQuantityFieldId && resolvedQuantityMaxFieldId) {
-    next[resolvedQuantityMaxFieldId] = Math.max(0, resolvedQuantityFreeValue + currentRowQuantity);
+    next[resolvedQuantityMaxFieldId] = computeOptimisticRowMaxQuantity({
+      remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+      reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
+      serverCurrentRecordReservedQuantity,
+      localCurrentRecordReservedQuantity,
+      currentRowQuantity
+    });
   }
   if (sourceQuantityFieldId && resolvedQuantityDisplayFieldId) {
     next[resolvedQuantityDisplayFieldId] = resolvedQuantityFreeValue;
@@ -152,7 +157,13 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
       })
     : 0;
   if (sourcePortionsFieldId && resolvedPortionsMaxFieldId) {
-    next[resolvedPortionsMaxFieldId] = Math.max(0, resolvedPortionsFreeValue + currentRowQuantity);
+    next[resolvedPortionsMaxFieldId] = computeOptimisticRowMaxQuantity({
+      remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+      reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
+      serverCurrentRecordReservedQuantity,
+      localCurrentRecordReservedQuantity,
+      currentRowQuantity
+    });
   }
   if (sourcePortionsFieldId && resolvedPortionsDisplayFieldId) {
     next[resolvedPortionsDisplayFieldId] = resolvedPortionsFreeValue;
@@ -164,21 +175,6 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   const targetFreePortionsFieldId = `${availabilityConfig.targetFreePortionsFieldId || ''}`.trim();
   if (sourcePortionsFieldId && targetFreePortionsFieldId) {
     next[targetFreePortionsFieldId] = resolvedPortionsFreeValue;
-  }
-  if (quantityFieldId) {
-    const currentQuantity = next[quantityFieldId];
-    if (resolvedQuantityMaxFieldId) {
-      next[resolvedQuantityMaxFieldId] = ensureEditableMaxIncludesCurrentValue(
-        next[resolvedQuantityMaxFieldId],
-        currentQuantity
-      );
-    }
-    if (resolvedPortionsMaxFieldId) {
-      next[resolvedPortionsMaxFieldId] = ensureEditableMaxIncludesCurrentValue(
-        next[resolvedPortionsMaxFieldId],
-        currentQuantity
-      );
-    }
   }
   return next;
 };

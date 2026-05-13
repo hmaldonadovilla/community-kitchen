@@ -40,17 +40,26 @@ export const SourceFirstAllocationRow: React.FC<{
         <SourceFirstSelectionCheckbox checked={selected} variant="allocation" onChange={onSelectionChange} />
       ) : null}
       {selected ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: errors.length ? 4 : 0, minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: errors.length ? 4 : 0,
+            minWidth: 0,
+            maxWidth: '100%',
+            flex: '1 1 220px'
+          }}
+        >
           <div
             style={{
               display: 'flex',
-              flexWrap: 'nowrap',
-              alignItems: 'center',
+              flexWrap: 'wrap',
+              alignItems: 'flex-start',
               columnGap: 6,
               rowGap: 6,
               minWidth: 0,
               lineHeight: 1.35,
-              overflowX: 'auto'
+              overflowX: 'visible'
             }}
           >
             {children}

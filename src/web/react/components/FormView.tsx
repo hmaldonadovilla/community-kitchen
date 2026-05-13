@@ -78,7 +78,10 @@ import { resolveFieldLabel } from '../utils/labels';
 import { resolveStatusPillKey } from '../utils/statusPill';
 import { peekInlineHtmlTemplateCache, renderInlineHtmlTemplateApi } from '../api';
 import { FormErrors, LineItemState, OptionState } from '../types';
-import { clearLineItemGroupErrors, mergeLineItemGroupErrors } from './form/utils';
+import {
+  clearLineItemGroupErrors as clearLineItemGroupErrorsBase,
+  mergeLineItemGroupErrors as mergeLineItemGroupErrorsBase
+} from './form/utils';
 import { InfoOverlay } from './form/overlays/InfoOverlay';
 import { LineOverlayState, LineSelectOverlay } from './form/overlays/LineSelectOverlay';
 import { buildTopQuestionRenderer } from './form/topQuestionRenderer';
@@ -1830,6 +1833,44 @@ const FormView: React.FC<FormViewProps> = ({
     selectGuidedStep
   ]);
 
+  const activeGuidedStepErrorCount = useMemo(() => {
+    if (!guidedEnabled || !guidedStepsCfg || !guidedStepIds.length || !activeGuidedStepId) return 0;
+    const syntheticStepErrorPrefix = `ckSourceFirstStep:${activeGuidedStepId}:`;
+    const syntheticStepErrorCount = Object.keys(errors || {}).filter(key =>
+      key.startsWith(syntheticStepErrorPrefix)
+    ).length;
+    const stepDefinition = buildGuidedStepDefinition(activeGuidedStepId);
+    if (!stepDefinition) return syntheticStepErrorCount;
+    try {
+      return syntheticStepErrorCount + Object.keys(
+        validateForm({
+          definition: stepDefinition,
+          language,
+          values,
+          lineItems,
+          collapsedRows,
+          collapsedSubgroups,
+          virtualState: guidedVirtualState
+        })
+      ).length;
+    } catch {
+      return syntheticStepErrorCount;
+    }
+  }, [
+    activeGuidedStepId,
+    buildGuidedStepDefinition,
+    collapsedRows,
+    collapsedSubgroups,
+    errors,
+    guidedEnabled,
+    guidedStepIds.length,
+    guidedStepsCfg,
+    guidedVirtualState,
+    language,
+    lineItems,
+    values
+  ]);
+
   useEffect(() => {
     if (!onGuidedUiChange) return;
     onGuidedUiChange(
@@ -1843,12 +1884,14 @@ const FormView: React.FC<FormViewProps> = ({
         statuses: guidedStatus.steps,
         defaultForwardGate: guidedDefaultForwardGate,
         dedupNavigationBlocked,
+        activeStepErrorCount: activeGuidedStepErrorCount,
         language
       })
     );
   }, [
     activeGuidedStepId,
     activeGuidedStepIndex,
+    activeGuidedStepErrorCount,
     dedupNavigationBlocked,
     guidedDefaultForwardGate,
     guidedEnabled,
@@ -2233,6 +2276,31 @@ const FormView: React.FC<FormViewProps> = ({
       } as WebQuestionDefinition;
     },
     [definition.questions, resolveSubgroupDefs]
+  );
+
+  const preserveLineItemGroupErrorRef = useRef<(groupKey: string, key: string, value: string) => boolean>(() => false);
+  preserveLineItemGroupErrorRef.current = (groupKey: string, _key: string, value: string) => {
+    const group = resolveLineItemGroupForKey(groupKey);
+    return shouldPreserveLineItemDedupError({
+      groupConfig: group?.lineItemConfig,
+      language,
+      message: value
+    });
+  };
+
+  const clearLineItemGroupErrors = useCallback((errors: FormErrors, groupKey: string): FormErrors => {
+    return clearLineItemGroupErrorsBase(errors, groupKey, {
+      preserve: (key, value) => preserveLineItemGroupErrorRef.current(groupKey, key, value)
+    });
+  }, []);
+
+  const mergeLineItemGroupErrors = useCallback(
+    (errors: FormErrors, groupKey: string, nextErrors: FormErrors): FormErrors => {
+      return mergeLineItemGroupErrorsBase(errors, groupKey, nextErrors, {
+        preserve: (key, value) => preserveLineItemGroupErrorRef.current(groupKey, key, value)
+      });
+    },
+    []
   );
 
   const matchesOverlayRowFilter = useCallback((rowValues: Record<string, FieldValue>, filter?: any): boolean => {
@@ -2815,6 +2883,7 @@ const FormView: React.FC<FormViewProps> = ({
 	    [
 	      buildSubgroupOverlayValidationDefinition,
 	      closeSubgroupOverlay,
+	      clearLineItemGroupErrors,
 	      collapsedRows,
 	      collapsedSubgroups,
 	      definition,
@@ -2822,6 +2891,7 @@ const FormView: React.FC<FormViewProps> = ({
 	      language,
 	      lineItems,
 	      lineItemsRef,
+	      mergeLineItemGroupErrors,
 	      onDiagnostic,
 	      onSelectionEffect,
 	      openConfirmDialogResolved,
@@ -3049,9 +3119,11 @@ const FormView: React.FC<FormViewProps> = ({
       return true;
     },
     [
+      clearLineItemGroupErrors,
       lineItemGroupOverlay.groupId,
       lineItemGroupOverlay.open,
       lineItemsRef,
+      mergeLineItemGroupErrors,
       onDiagnostic,
       setErrors,
       setOverlayDetailSelection,
@@ -3302,6 +3374,7 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       clearSelectionEffectsForRow,
+      clearLineItemGroupErrors,
       definition,
       lineItemsRef,
       onDiagnostic,
@@ -3347,7 +3420,9 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     applyOverlaySessionSaveEffects,
     clearOverlaySessionSnapshot,
+    clearLineItemGroupErrors,
     closeSubgroupOverlay,
+    mergeLineItemGroupErrors,
     onDiagnostic,
     setErrors,
     subgroupOverlay.open,
@@ -3402,7 +3477,9 @@ const FormView: React.FC<FormViewProps> = ({
   }, [
     applyOverlaySessionSaveEffects,
     clearOverlaySessionSnapshot,
+    clearLineItemGroupErrors,
     closeLineItemGroupOverlay,
+    mergeLineItemGroupErrors,
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
     lineItemGroupOverlay.overlaySession,
@@ -3690,6 +3767,7 @@ const FormView: React.FC<FormViewProps> = ({
     },
     [
       closeLineItemGroupOverlay,
+      clearLineItemGroupErrors,
       clearSelectionEffectsForRow,
       definition,
       language,
@@ -3698,6 +3776,7 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemGroupOverlay.closeConfirm,
       lineItemGroupOverlay.overlaySession?.enabled,
       lineItemsRef,
+      mergeLineItemGroupErrors,
       openConfirmDialogResolved,
       onDiagnostic,
       onSelectionEffect,
@@ -3734,8 +3813,10 @@ const FormView: React.FC<FormViewProps> = ({
     requestValidationNavigation({ scope: 'lineItemOverlayReopen' });
     onDiagnostic?.('lineItemGroup.overlay.reopen.validate', { groupId, errorCount: keys.length });
   }, [
+    clearLineItemGroupErrors,
     lineItemGroupOverlay.groupId,
     lineItemGroupOverlay.open,
+    mergeLineItemGroupErrors,
     onDiagnostic,
     requestValidationNavigation,
     setErrors,
@@ -4673,6 +4754,7 @@ const FormView: React.FC<FormViewProps> = ({
     subgroupOverlay,
     setValues,
     setLineItems,
+    setErrors,
     setCollapsedSubgroups,
     setPendingScrollAnchor,
     setSubgroupSelectors,
@@ -5302,6 +5384,7 @@ const FormView: React.FC<FormViewProps> = ({
       optionState={optionState}
       setOptionState={setOptionState}
       submitting={submitting}
+      errors={errors}
       setErrors={setErrors}
       overlayDetailSelection={overlayDetailSelection}
       setOverlayDetailSelection={setOverlayDetailSelection}

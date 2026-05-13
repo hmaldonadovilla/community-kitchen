@@ -11,6 +11,34 @@ export type LineItemMultiAddOption = {
   searchText?: string;
 };
 
+export type LineItemMultiAddResult = {
+  addedValues?: string[];
+  duplicateValues?: string[];
+  message?: string;
+  blocked?: boolean;
+} | void;
+
+export const resolveLineItemMultiAddFeedback = (args: {
+  result: LineItemMultiAddResult;
+  language: LangCode;
+  optionLabelByValue: Map<string, string>;
+}): { duplicateValues: string[]; message: string } => {
+  const duplicateValues = Array.isArray(args.result?.duplicateValues)
+    ? args.result.duplicateValues.map(val => (val || '').toString()).filter(Boolean)
+    : [];
+  const fallbackValue = duplicateValues.length
+    ? args.optionLabelByValue.get(duplicateValues[0]) || duplicateValues[0]
+    : '';
+  const message =
+    (args.result?.message || '').toString().trim() ||
+    (duplicateValues.length
+      ? tSystem('lineItems.duplicateAdd', args.language, '{value} is already in the list, change the quantity', {
+          value: fallbackValue
+        })
+      : '');
+  return { duplicateValues, message };
+};
+
 export const LineItemMultiAddSelect: React.FC<{
   label: string;
   language: LangCode;
@@ -19,7 +47,7 @@ export const LineItemMultiAddSelect: React.FC<{
   placeholder?: string;
   helperText?: string;
   emptyText?: string;
-  onAddSelected: (values: string[]) => void;
+  onAddSelected: (values: string[]) => LineItemMultiAddResult;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   diagnosticMeta?: Record<string, unknown>;
 }> = ({ label, language, options, disabled, placeholder, helperText, emptyText, onAddSelected, onDiagnostic, diagnosticMeta }) => {
@@ -29,6 +57,7 @@ export const LineItemMultiAddSelect: React.FC<{
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
   const [menuLayout, setMenuLayout] = useState<{ top: number; left: number; right: number } | null>(null);
 
   const selectedCount = selected.length;
@@ -50,6 +79,11 @@ export const LineItemMultiAddSelect: React.FC<{
   }, [hasQuery, normalizedQuery, options]);
 
   const visibleOptions = filtered;
+  const optionLabelByValue = useMemo(() => {
+    const labels = new Map<string, string>();
+    options.forEach(opt => labels.set(opt.value, opt.label || opt.value));
+    return labels;
+  }, [options]);
 
   const updateMenuLayout = useCallback(() => {
     const el = inputWrapRef.current;
@@ -113,6 +147,7 @@ export const LineItemMultiAddSelect: React.FC<{
   }, [open]);
 
   const toggleSelected = (value: string, checked: boolean) => {
+    setFeedbackMessage('');
     setSelected(prev => {
       const next = new Set(prev);
       if (checked) {
@@ -129,8 +164,18 @@ export const LineItemMultiAddSelect: React.FC<{
     const allowed = new Set(options.map(opt => opt.value));
     const nextValues = selected.filter(val => allowed.has(val));
     if (!nextValues.length) return;
-    onAddSelected(nextValues);
+    const result = onAddSelected(nextValues);
     onDiagnostic?.('ui.lineItems.selectorOverlay.addSelected', mergeDiagnostic({ count: nextValues.length }));
+    const { duplicateValues, message } = resolveLineItemMultiAddFeedback({ result, language, optionLabelByValue });
+    if (message) {
+      setFeedbackMessage(message);
+      if (duplicateValues.length) {
+        setSelected(Array.from(new Set(duplicateValues)));
+      }
+      setOpen(true);
+      return;
+    }
+    setFeedbackMessage('');
     setSelected([]);
     setQuery('');
     setOpen(false);
@@ -179,6 +224,7 @@ export const LineItemMultiAddSelect: React.FC<{
                 }).length
               : 0;
             setQuery(next);
+            setFeedbackMessage('');
             setOpen(true);
             onDiagnostic?.('ui.lineItems.selectorOverlay.search', mergeDiagnostic({
               queryLength: next.trim().length,
@@ -192,6 +238,7 @@ export const LineItemMultiAddSelect: React.FC<{
               e.preventDefault();
               setOpen(false);
               setQuery('');
+              setFeedbackMessage('');
             }
             if (e.key === 'Enter' && selectedCount > 0) {
               e.preventDefault();
@@ -210,6 +257,7 @@ export const LineItemMultiAddSelect: React.FC<{
             onClick={() => {
               if (disabled) return;
               setQuery('');
+              setFeedbackMessage('');
               setOpen(true);
               onDiagnostic?.('ui.lineItems.selectorOverlay.clear', mergeDiagnostic());
               inputRef.current?.focus();
@@ -220,6 +268,11 @@ export const LineItemMultiAddSelect: React.FC<{
         ) : null}
       </div>
       {resolvedHelperText ? <div className="ck-line-item-multiadd__helper">{resolvedHelperText}</div> : null}
+      {feedbackMessage ? (
+        <div className="ck-line-item-multiadd__feedback" role="alert">
+          {feedbackMessage}
+        </div>
+      ) : null}
       {open ? (
         <div
           className={`ck-line-item-multiadd__menu${menuLayout ? ' ck-line-item-multiadd__menu--modal' : ''}`}

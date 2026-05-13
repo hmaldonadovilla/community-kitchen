@@ -179,9 +179,18 @@ export const RowFlowPromptRenderer: React.FC<RowFlowPromptRendererProps> = ({
             const deduped = Array.from(new Set(valuesToAdd.filter(Boolean)));
             if (!deduped.length) return;
             const addRowOptions = promptGroupOverride ? { configOverride: effectiveTargetConfig } : undefined;
-            deduped.forEach(value =>
-              addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: value }, addRowOptions)
-            );
+            const duplicateValues: string[] = [];
+            let duplicateMessage = '';
+            deduped.forEach(value => {
+              const result = addLineItemRowManual(targetInfo.groupId, { [anchorFieldId]: value }, addRowOptions) as any;
+              if (result?.status === 'duplicate') {
+                duplicateValues.push(value);
+                if (!duplicateMessage && result.message) duplicateMessage = result.message;
+              }
+            });
+            if (duplicateValues.length) {
+              return { duplicateValues, message: duplicateMessage };
+            }
             const shouldOpenOverlay = !!promptGroupOverride && !!(effectiveTargetConfig as any)?.ui?.openInOverlay;
             if (shouldOpenOverlay) {
               const promptCloseButtonLabel = resolveLocalizedString(
@@ -217,6 +226,7 @@ export const RowFlowPromptRenderer: React.FC<RowFlowPromptRendererProps> = ({
               promptId: prompt.id,
               count: deduped.length
             });
+            return { addedValues: deduped };
           }}
         />
         {helperText && !helperOverride ? (

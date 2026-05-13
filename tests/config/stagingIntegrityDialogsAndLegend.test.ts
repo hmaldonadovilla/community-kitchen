@@ -352,7 +352,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+        "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
       );
       expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverInventoryRows?.presentationWhen).toEqual({

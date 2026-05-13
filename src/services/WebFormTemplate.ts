@@ -49,6 +49,9 @@ const resolveCacheVersion = (): string => {
   }
 };
 
+const normalizeBundleServiceUrl = (baseUrl: string): string =>
+  baseUrl.replace(/^(https:\/\/script\.google\.com)\/a\/[^/]+(\/macros\/)/, '$1$2');
+
 const buildBundleSrc = (
   bundleTarget?: string,
   requestParams?: Record<string, string>,
@@ -66,8 +69,9 @@ const buildBundleSrc = (
   const query = `bundle=react${appParam}${versionParam}${tsParam}`;
   const baseUrl = serviceUrlOverride !== undefined ? serviceUrlOverride : resolveServiceUrl();
   if (!baseUrl) return `?${query}`;
-  const sep = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${sep}${query}`;
+  const publicBundleBaseUrl = normalizeBundleServiceUrl(baseUrl);
+  const sep = publicBundleBaseUrl.includes('?') ? '&' : '?';
+  return `${publicBundleBaseUrl}${sep}${query}`;
 };
 
 export function buildWebFormHtml(

@@ -2,6 +2,7 @@ import {
   buildReservationFieldPatch,
   buildReservationFailureMessage,
   getReservationCommitMode,
+  resolveStepReservationDraftStateDecision,
   shouldBlockDataSourceFreshnessForInvalidStepReservation,
   shouldImmediatelySyncStepReservationChange,
   shouldDeferReservationSync
@@ -153,6 +154,38 @@ describe('reservationSyncPolicy', () => {
         hasValidationErrors: true
       })
     ).toBe(true);
+  });
+
+  test('reports invalid deferred step reservation quantity drafts', () => {
+    expect(
+      resolveStepReservationDraftStateDecision({
+        patch: {
+          LEFTOVER_USE_QTY: '51'
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: true,
+        quantityValue: '51',
+        hasValidationErrors: true
+      })
+    ).toEqual({ pendingInvalid: true, reason: 'invalidReservationDraft' });
+  });
+
+  test('reports corrected deferred step reservation quantity drafts as valid', () => {
+    expect(
+      resolveStepReservationDraftStateDecision({
+        patch: {
+          LEFTOVER_USE_QTY: '50'
+        },
+        selectedFieldId: 'LEFTOVER_SELECTED',
+        quantityFieldId: 'LEFTOVER_USE_QTY',
+        selectedValue: true,
+        quantityValue: '50',
+        hasValidationErrors: false,
+        notifyWhenValid: true,
+        validReason: 'reservationDraftValid'
+      })
+    ).toEqual({ pendingInvalid: false, reason: 'reservationDraftValid' });
   });
 
   test('does not block datasource freshness for invalid reservation edits that still sync a release', () => {

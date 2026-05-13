@@ -21,7 +21,7 @@ import {
 import {
   buildReservationFailureMessage,
   isStepReservationCommitEnabled,
-  shouldBlockDataSourceFreshnessForInvalidStepReservation,
+  resolveStepReservationDraftStateDecision,
   shouldImmediatelySyncStepReservationChange
 } from '../../../components/form/reservationSyncPolicy';
 import { applyStepDataSourceDraftUpdateAction } from '../domain/stepDataSourceDrafts';
@@ -473,18 +473,7 @@ export const useStepDataSourceOutputSync = ({
 
       const syncedLineItems = syncStepDataSourceOutputRow(args);
 
-      if (options?.skipReservation) return;
       if (!canManageReservation) return;
-
-      if (patchTouchesReservation) {
-        updateStepDataSourceAvailabilityOptimistically(args.config, {
-          sourceRow: args.sourceRow,
-          sourceKey,
-          parentRowId: args.parentRow.id,
-          serverCurrentRecordReservedQuantity: optimisticServerCurrentRecordReservedQuantity,
-          localCurrentRecordReservedQuantity: optimisticLocalCurrentRecordReservedQuantity
-        });
-      }
 
       const resolvedVirtualValues = virtualValues || {};
       if (!reservationCommittedValuesRef.current[draftKey]) {
@@ -504,25 +493,57 @@ export const useStepDataSourceOutputSync = ({
         (modeField
           ? validateVirtualFieldRules(modeField, resolvedNextVirtualValues, args.parentRow.values as Record<string, FieldValue>).length > 0
           : false);
+      const stepReservationDraftStateArgs = {
+        patch: args.patch,
+        selectedFieldId,
+        quantityFieldId,
+        selectedValue: selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] : true,
+        quantityValue: resolvedNextVirtualValues[quantityFieldId],
+        hasValidationErrors
+      };
+      if (options?.skipReservation) {
+        if (isStepReservationCommitEnabled(reservationConfig) && patchTouchesReservation) {
+          const draftStateDecision = resolveStepReservationDraftStateDecision({
+            ...stepReservationDraftStateArgs,
+            notifyWhenValid: true,
+            validReason: 'reservationDraftValid'
+          });
+          if (draftStateDecision) {
+            onGuidedStepReservationDraftStateChange?.({
+              stepId: currentGuidedStepId,
+              groupId,
+              parentRowId: args.parentRow.id,
+              sourceKey,
+              pendingInvalid: draftStateDecision.pendingInvalid,
+              reason: draftStateDecision.reason,
+              patchFields: Object.keys(args.patch || {}).sort()
+            });
+          }
+        }
+        return;
+      }
+
+      if (patchTouchesReservation) {
+        updateStepDataSourceAvailabilityOptimistically(args.config, {
+          sourceRow: args.sourceRow,
+          sourceKey,
+          parentRowId: args.parentRow.id,
+          serverCurrentRecordReservedQuantity: optimisticServerCurrentRecordReservedQuantity,
+          localCurrentRecordReservedQuantity: optimisticLocalCurrentRecordReservedQuantity
+        });
+      }
+
       if (isStepReservationCommitEnabled(reservationConfig)) {
-        const syncArgs = {
-          patch: args.patch,
-          selectedFieldId,
-          quantityFieldId,
-          selectedValue: selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] : true,
-          quantityValue: resolvedNextVirtualValues[quantityFieldId],
-          hasValidationErrors
-        };
-        const shouldSyncImmediately = shouldImmediatelySyncStepReservationChange(syncArgs);
-        const pendingInvalid = shouldBlockDataSourceFreshnessForInvalidStepReservation(syncArgs);
-        if (pendingInvalid || shouldSyncImmediately) {
+        const shouldSyncImmediately = shouldImmediatelySyncStepReservationChange(stepReservationDraftStateArgs);
+        const draftStateDecision = resolveStepReservationDraftStateDecision(stepReservationDraftStateArgs);
+        if (draftStateDecision) {
           onGuidedStepReservationDraftStateChange?.({
             stepId: currentGuidedStepId,
             groupId,
             parentRowId: args.parentRow.id,
             sourceKey,
-            pendingInvalid,
-            reason: pendingInvalid ? 'invalidReservationDraft' : 'reservationSyncQueued',
+            pendingInvalid: draftStateDecision.pendingInvalid,
+            reason: draftStateDecision.reason,
             patchFields: Object.keys(args.patch || {}).sort()
           });
         }
