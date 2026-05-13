@@ -3,13 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { ANALYTICS_PAGE_CONFIG } from '../../../config/analyticsPage';
 import { LANDING_PAGE_CONFIG } from '../../../config/landingPage';
 import type { LandingIllustrationKey } from '../../../config/landingPageTypes';
-import { BUNDLED_FORM_CONFIGS } from '../../../config/bundledFormConfigs';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
 import { buildAnalyticsUrl, resolveServiceUrl } from '../app/headerNavigation';
 import { BlockingOverlay } from '../features/overlays/BlockingOverlay';
 import {
   appendLandingSpecialItems,
-  buildBundledLandingCatalog,
   buildLandingCatalogLayout,
   filterNavigableLandingItems,
   isTruthyParam,
@@ -716,7 +714,6 @@ const LandingActionCard: React.FC<{
 };
 
 const LandingPage: React.FC = () => {
-  const bundledItems = useMemo(() => buildBundledLandingCatalog(BUNDLED_FORM_CONFIGS as any), []);
   const adminEnabled = useMemo(() => resolveAdminEnabled(), []);
   const envTag = useMemo(() => resolveEnvTag(), []);
   const serviceUrl = useMemo(() => resolveServiceUrl(), []);
@@ -730,17 +727,9 @@ const LandingPage: React.FC = () => {
   const [pendingNavigation, setPendingNavigation] = useState<{ targetUrl: string; title: string; message: string } | null>(null);
   const landingCopy = LANDING_PAGE_CONFIG.copy;
   const catalogItems = useMemo(() => resolveLandingCatalogItems(items, adminEnabled), [adminEnabled, items]);
-  const headerLogoItems = useMemo(() => {
-    const itemMap = new Map<string, FormCatalogItem>();
-    bundledItems.forEach(item => itemMap.set((item.formKey || '').toString().trim(), item));
-    catalogItems.forEach(item =>
-      itemMap.set((item.formKey || '').toString().trim(), { ...(itemMap.get((item.formKey || '').toString().trim()) || {}), ...item })
-    );
-    return Array.from(itemMap.values());
-  }, [bundledItems, catalogItems]);
   const headerLogoUrl = useMemo(
-    () => resolveLandingLogoUrl(LANDING_PAGE_CONFIG.appHeader?.logoUrl, LANDING_PAGE_CONFIG.appHeader?.logoFormKey, headerLogoItems),
-    [headerLogoItems]
+    () => resolveLandingLogoUrl(LANDING_PAGE_CONFIG.appHeader?.logoUrl, LANDING_PAGE_CONFIG.appHeader?.logoFormKey, catalogItems),
+    [catalogItems]
   );
   const analyticsLandingItem = useMemo(() => {
     const targetUrl = buildAnalyticsUrl(serviceUrl, adminEnabled);
@@ -781,7 +770,7 @@ const LandingPage: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    logEvent('catalog.fetch.start', { adminEnabled, bundledCount: bundledItems.length });
+    logEvent('catalog.fetch.start', { adminEnabled });
     fetchFormCatalogApi()
       .then(response => {
         if (cancelled) return;
@@ -811,7 +800,7 @@ const LandingPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [adminEnabled, bootstrappedCatalog, bundledItems, hasBootstrappedCatalog]);
+  }, [adminEnabled, bootstrappedCatalog, hasBootstrappedCatalog]);
 
   const showLandingApps = !loading && !error && visibleLandingApps.length > 0;
 
