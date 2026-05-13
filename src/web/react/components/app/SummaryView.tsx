@@ -4,7 +4,7 @@ import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { buildDraftPayload } from '../../app/submission';
 import { peekSummaryHtmlTemplateCache, renderSummaryHtmlTemplateApi } from '../../api';
-import { isBundledHtmlTemplateId } from '../../app/bundledHtmlClientRenderer';
+import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
 import { shouldShowSummaryLoadingCard } from '../../app/recordOpenState';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import { HtmlPreview } from './HtmlPreview';
@@ -142,6 +142,7 @@ export const SummaryView: React.FC<{
       return;
     }
     if (cachedSummary?.success && cachedSummary?.html) {
+      setSummaryHtml({ phase: 'ready', html: cachedSummary.html, allowScripts: isBundled });
       onDiagnostic?.('summary.htmlTemplate.cacheHit', {
         recordId: existingRecordId || null,
         htmlLength: (cachedSummary.html || '').toString().length
@@ -152,7 +153,16 @@ export const SummaryView: React.FC<{
     onDiagnostic?.(isBundled ? 'summary.htmlTemplate.bundle.render.start' : 'summary.htmlTemplate.render.start', {
       recordId: existingRecordId || null
     });
-    renderSummaryHtmlTemplateApi(draft)
+    const renderPromise = isBundled
+      ? renderBundledHtmlTemplateClient({
+          definition,
+          payload: draft,
+          templateIdMap: definition.summaryHtmlTemplateId,
+          fetchDataSource: undefined,
+          onDiagnostic
+        })
+      : renderSummaryHtmlTemplateApi(draft);
+    renderPromise
       .then(res => {
         if (seq !== seqRef.current) return;
         if (!res?.success || !res?.html) {

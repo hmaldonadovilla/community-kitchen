@@ -28,6 +28,7 @@ const RUNNER_MAX_ATTEMPTS = 20;
 const OPTIONS_AUTO_PAGE_MAX_PAGES = 80;
 const OPTIONS_AUTO_PAGE_MAX_ITEMS = 20000;
 const DEFAULT_PERSIST_MAX_AGE_MS = 5 * 60 * 1000;
+const VERSIONED_PERSIST_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
 export type DataSourceFetchRequest = {
   source: DataSourceConfig;
@@ -47,7 +48,7 @@ export const configureDataSourceFetcher = (fetcher?: DataSourceFetcher | null): 
 
 // Optional lightweight persistence for stable data sources. This is intentionally
 // conservative: only used when localStorage is available and JSON parsing succeeds.
-const PERSIST_VERSION = '3';
+const PERSIST_VERSION = '4';
 
 const hashToBase36 = (input: string): string => {
   let hash = 5381;
@@ -55,6 +56,18 @@ const hashToBase36 = (input: string): string => {
     hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
   }
   return (hash >>> 0).toString(36);
+};
+
+const encodeKeyPart = (value: any): string => encodeURIComponent((value || 'default').toString()).replace(/\./g, '%2E');
+
+const resolveClientCacheVersion = (): string => {
+  try {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    const raw = (win?.__CK_CACHE_VERSION__ || (globalThis as any)?.__CK_CACHE_VERSION__ || 'default').toString().trim();
+    return raw || 'default';
+  } catch {
+    return 'default';
+  }
 };
 
 const normalizeStringArray = (value: any): string[] => {
@@ -88,23 +101,39 @@ const normalizeDataSourceSignature = (config: DataSourceConfig): string => {
 };
 
 const getPersistKey = (config: DataSourceConfig, lang: LangCode): string => {
-  const idPart = encodeURIComponent((config?.id || 'default').toString());
+  const idPart = encodeKeyPart((config?.id || 'default').toString());
   const langPart = (lang || 'EN').toString().toUpperCase();
+  const cacheVersionPart = encodeKeyPart(resolveClientCacheVersion());
   const sig = normalizeDataSourceSignature(config);
-  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.${sig}`;
+  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.${cacheVersionPart}.${sig}`;
 };
 
 const getPersistKeyPrefix = (config: DataSourceConfig, lang: LangCode): string => {
-  const idPart = encodeURIComponent((config?.id || 'default').toString());
+  const idPart = encodeKeyPart((config?.id || 'default').toString());
   const langPart = (lang || 'EN').toString().toUpperCase();
-  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.`;
+  return `ck.ds.${idPart}.${langPart}.v${PERSIST_VERSION}.${encodeKeyPart(resolveClientCacheVersion())}.`;
 };
+
+const getPersistFamilyPrefix = (config: DataSourceConfig, lang: LangCode): string => {
+  const idPart = encodeKeyPart((config?.id || 'default').toString());
+  const langPart = (lang || 'EN').toString().toUpperCase();
+  return `ck.ds.${idPart}.${langPart}.`;
+};
+
+const resolveDataSourceCachePolicy = (config: DataSourceConfig): 'ttl' | 'versioned' | 'none' => {
+  const raw = ((config as any)?.cachePolicy || '').toString().trim().toLowerCase();
+  if (raw === 'versioned' || raw === 'none') return raw;
+  return 'ttl';
+};
+
+const shouldUsePersistedCache = (config: DataSourceConfig): boolean => resolveDataSourceCachePolicy(config) !== 'none';
 
 const resolvePersistMaxAgeMs = (config: DataSourceConfig): number => {
   const explicitMs = Number((config as any)?.persistMaxAgeMs);
   if (Number.isFinite(explicitMs) && explicitMs >= 0) return explicitMs;
   const explicitMinutes = Number((config as any)?.persistMaxAgeMinutes);
   if (Number.isFinite(explicitMinutes) && explicitMinutes >= 0) return explicitMinutes * 60 * 1000;
+  if (resolveDataSourceCachePolicy(config) === 'versioned') return VERSIONED_PERSIST_MAX_AGE_MS;
   return DEFAULT_PERSIST_MAX_AGE_MS;
 };
 
@@ -200,6 +229,7 @@ const loadPersistedEnvelope = (
   config: DataSourceConfig,
   language: LangCode
 ): { response: any; savedAtMs: number | null } | null => {
+  if (!shouldUsePersistedCache(config)) return null;
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
     const targetKey = getPersistKey(config, language);
@@ -241,10 +271,11 @@ const loadPersisted = (config: DataSourceConfig, language: LangCode): any | null
   loadPersistedEnvelope(config, language)?.response ?? null;
 
 const savePersisted = (config: DataSourceConfig, language: LangCode, value: any): void => {
+  if (!shouldUsePersistedCache(config)) return;
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
     const targetKey = getPersistKey(config, language);
-    const prefix = getPersistKeyPrefix(config, language);
+    const prefix = getPersistFamilyPrefix(config, language);
     prunePersistedSiblingKeys(window.localStorage, prefix, targetKey);
     window.localStorage.setItem(
       targetKey,
@@ -262,19 +293,20 @@ function key(config: DataSourceConfig, lang: LangCode): string {
   const idPart = (config?.id || 'default').toString();
   const langPart = (lang || 'EN').toString().toUpperCase();
   const sig = normalizeDataSourceSignature(config);
-  return `${idPart}::${langPart}::${sig}`;
+  return `${idPart}::${langPart}::${resolveClientCacheVersion()}::${sig}`;
 }
 
 const parsePersistStorageKey = (
   storageKey: string
-): { id: string; language: LangCode; signature: string } | null => {
-  const match = /^ck\.ds\.(.+)\.([A-Z]{2,})\.v\d+\.(.+)$/.exec((storageKey || '').trim());
+): { id: string; language: LangCode; cacheVersion: string; signature: string } | null => {
+  const match = /^ck\.ds\.(.+)\.([A-Z]{2,})\.v\d+\.([^.]*)\.(.+)$/.exec((storageKey || '').trim());
   if (!match) return null;
   try {
     return {
       id: decodeURIComponent(match[1]),
       language: match[2] as LangCode,
-      signature: match[3]
+      cacheVersion: decodeURIComponent(match[3]),
+      signature: match[4]
     };
   } catch {
     return null;
@@ -284,9 +316,11 @@ const parsePersistStorageKey = (
 const clearSiblingInMemoryCacheEntries = (args: {
   id: string;
   language: LangCode;
+  cacheVersion?: string | null;
   keepCacheKey?: string | null;
 }): void => {
-  const cacheKeyPrefix = `${(args.id || '').toString()}::${(args.language || 'EN').toString().toUpperCase()}::`;
+  const cacheVersion = (args.cacheVersion || resolveClientCacheVersion()).toString();
+  const cacheKeyPrefix = `${(args.id || '').toString()}::${(args.language || 'EN').toString().toUpperCase()}::${cacheVersion}::`;
   if (!cacheKeyPrefix.trim()) return;
   Array.from(cache.keys()).forEach(candidateKey => {
     if (!candidateKey.startsWith(cacheKeyPrefix)) return;
@@ -308,10 +342,11 @@ const ensureStorageSyncListener = (): void => {
       const parsedKey = parsePersistStorageKey(event.key);
       if (!parsedKey) return;
 
-      const exactCacheKey = `${parsedKey.id}::${parsedKey.language}::${parsedKey.signature}`;
+      const exactCacheKey = `${parsedKey.id}::${parsedKey.language}::${parsedKey.cacheVersion}::${parsedKey.signature}`;
       clearSiblingInMemoryCacheEntries({
         id: parsedKey.id,
         language: parsedKey.language,
+        cacheVersion: parsedKey.cacheVersion,
         keepCacheKey: event.newValue ? exactCacheKey : null
       });
 
@@ -447,6 +482,12 @@ export async function fetchDataSource(
       const hasMore = autoPage && typeof (persisted as any)?.nextPageToken === 'string' && !!(persisted as any)?.nextPageToken;
       if (!hasMore) {
         setInMemoryCache(cacheKey, persisted, persistedEnvelope.savedAtMs);
+        emitLog('info', '[DataSource] persisted cache hit', {
+          id: config.id,
+          cacheVersion: resolveClientCacheVersion(),
+          cachePolicy: resolveDataSourceCachePolicy(config),
+          itemCount: resolveCachedItemCount(persisted) ?? 0
+        });
         return persisted;
       }
       // Fall through: complete pagination so we don't get stuck returning only the first page.
@@ -562,7 +603,9 @@ export async function fetchDataSource(
       itemCount: Array.isArray((finalRes as any)?.items) ? (finalRes as any).items.length : Array.isArray(finalRes) ? finalRes.length : 0,
       pages: autoPage ? pages : 1,
       resumedFromPersisted: Boolean(shouldSeed),
-      refreshed: Boolean(opts?.forceRefresh)
+      refreshed: Boolean(opts?.forceRefresh),
+      cacheVersion: resolveClientCacheVersion(),
+      cachePolicy: resolveDataSourceCachePolicy(config)
     });
 
     let shouldCommit = opts?.commit !== false;
@@ -607,7 +650,8 @@ const collectCachedDataSourceCandidates = (id: string, language?: LangCode): any
   const idPart = (id || 'default').toString();
   if (!idPart) return [];
   const preferredLang = (language || '').toString().trim().toUpperCase();
-  const exactPrefix = preferredLang ? `${idPart}::${preferredLang}::` : '';
+  const cacheVersion = resolveClientCacheVersion();
+  const exactPrefix = preferredLang ? `${idPart}::${preferredLang}::${cacheVersion}::` : '';
   const anyPrefix = `${idPart}::`;
   const candidates: any[] = [];
   const seen = new Set<any>();
@@ -626,24 +670,23 @@ const collectCachedDataSourceCandidates = (id: string, language?: LangCode): any
   for (const [candidateKey, candidateValue] of cache.entries()) {
     if (!candidateKey.startsWith(anyPrefix)) continue;
     if (exactPrefix && candidateKey.startsWith(exactPrefix)) continue;
+    const parts = candidateKey.split('::');
+    if (parts[2] !== cacheVersion) continue;
     push(candidateValue);
   }
 
   if (typeof window === 'undefined' || !window.localStorage) return candidates;
 
   try {
-    const encodedId = encodeURIComponent(idPart);
-    const exactPersistPrefix = preferredLang ? `ck.ds.${encodedId}.${preferredLang}.v${PERSIST_VERSION}.` : '';
-    const anyPersistPrefix = `ck.ds.${encodedId}.`;
     const exactPersisted: Array<{ savedAtMs: number; response: any }> = [];
     const fallbackPersisted: Array<{ savedAtMs: number; response: any }> = [];
 
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const candidateKey = window.localStorage.key(i);
       if (!candidateKey) continue;
-      const matchesExact = !!exactPersistPrefix && candidateKey.startsWith(exactPersistPrefix);
-      const matchesAny = candidateKey.startsWith(anyPersistPrefix);
-      if (!matchesExact && !matchesAny) continue;
+      const parsedKey = parsePersistStorageKey(candidateKey);
+      if (!parsedKey || parsedKey.id !== idPart || parsedKey.cacheVersion !== cacheVersion) continue;
+      const matchesExact = !!preferredLang && parsedKey.language === preferredLang;
       const raw = window.localStorage.getItem(candidateKey);
       if (!raw) continue;
       const parsed = parsePersistEnvelope(raw);
@@ -681,7 +724,7 @@ const resolveCachedItemCount = (cached: any): number | null => {
 const getSiblingCachedDataSourceItemCount = (config: DataSourceConfig, language: LangCode): number | null => {
   const idPart = (config?.id || 'default').toString();
   const langPart = (language || 'EN').toString().toUpperCase();
-  const cacheKeyPrefix = `${idPart}::${langPart}::`;
+  const cacheKeyPrefix = `${idPart}::${langPart}::${resolveClientCacheVersion()}::`;
   let newestCount: number | null = null;
   let positiveCount: number | null = null;
 

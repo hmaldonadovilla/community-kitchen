@@ -1781,7 +1781,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         { "dataSource": { "id": "RECIPES", "mode": "options", "statusAllowList": ["Active"] } }
         ```
 
-      - **Home/list datasource prefetch override (optional)**: Datasources with `statusAllowList` or `backfill` are skipped by default during home/list prefetch because they are often transactional. If a datasource-backed count/visibility rule must already be available before the form opens, set `dataSource.prefetchOnHome: true` on the specific datasource config that should drive that check.
+      - **Datasource cache policy (optional)**: Stable lookup sources such as customers, ingredients, recipes, and template lookup tables can set `dataSource.cachePolicy: "versioned"` so the browser reuses the persisted datasource cache across refreshes until the app/server cache version changes. Use the default short TTL for transactional data, or `cachePolicy: "none"` when local persistence should be disabled.
+      - **Home/list datasource prefetch override (optional)**: Datasources with `statusAllowList` or `backfill` are skipped by default during home/list prefetch because they are often transactional. If a datasource-backed count/visibility rule must already be available before the form opens, set `dataSource.prefetchOnHome: true` on the specific datasource config that should drive that check. Stable `versioned` datasources can also set `prefetchOnHome: true` so customer/recipe/ingredient lookups are warmed once at the start of the session.
 
         ```json
         {
@@ -1792,6 +1793,20 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             "statusFieldId": "LEFTOVER_STATUS",
             "statusAllowList": ["available"],
             "prefetchOnHome": true
+          }
+        }
+        ```
+
+      - **HTML render cache**: Summary, inline, and button HTML render results are cached locally by form, record, payload signature, and app/server cache version. Reopening the same record/template with unchanged values can reuse rendered HTML immediately after a browser refresh; changing the cache version invalidates old entries.
+      - **Past-record local cache (optional)**: Date-search list views hydrate full record snapshots when the searched date is before today and store those snapshots in the browser under the current app/server cache version. The exact historical date-search response is cached too, so repeating that search can render rows immediately before any server call. Opening the same past record later reuses the cached snapshot, and the normal record version check still runs in the background when `dataVersion` is available. Override with top-level `recordLocalCache` when needed:
+
+        ```json
+        {
+          "recordLocalCache": {
+            "enabled": true,
+            "dateFieldId": "MP_PREP_DATE",
+            "maxAgeDays": 365,
+            "maxEntries": 250
           }
         }
         ```
@@ -3163,6 +3178,10 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
   
   HTML templates also support an icon placeholder for photo/attachment fields:
   - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).
+- **Browser render-result cache**: successful Markdown/HTML button renders are cached locally under the current app/server cache version.
+  - Default `cacheScope` is `record`, which includes record id, draft values, and record metadata in the key.
+  - For static help/procedure templates that do not depend on record placeholders, set `button.cacheScope: "template"` so repeat opens reuse one cache entry across records and draft changes.
+  - Set `button.cacheScope: "none"` only when a template must always render through the backend.
 - **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
 - **Update the current record** (`action: "updateRecord"`): draft-save specific top-level fields and/or status changes on the current record, optionally show a confirmation dialog, optionally navigate to another view, and optionally run a reusable `dependencyGuard` against another form before saving.
   - Set `ensureRecordId: true` when the button can be pressed before the current draft has been persisted yet. The client will block, wait for dedup/autosave to settle, create the draft record if needed, and only then apply the requested update.
@@ -3265,6 +3284,7 @@ Recommended steps after deploying a new bundle:
   "button": {
     "action": "renderMarkdownTemplate",
     "templateId": { "EN": "MARKDOWN_FILE_ID_EN", "FR": "MARKDOWN_FILE_ID_FR", "NL": "MARKDOWN_FILE_ID_NL" },
+    "cacheScope": "template",
     "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
   }
 }
@@ -3277,6 +3297,7 @@ Recommended steps after deploying a new bundle:
   "button": {
     "action": "renderHtmlTemplate",
     "templateId": { "EN": "bundle:checklist_am.summary.html" },
+    "cacheScope": "template",
     "placements": ["form", "formSummaryMenu", "summaryBar", "topBarSummary"]
   }
 }

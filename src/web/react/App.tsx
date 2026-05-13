@@ -33,6 +33,7 @@ import {
   triggerFollowupBatch,
   enqueueFollowupEmailApi,
   clearHtmlRenderClientCache,
+  clearMarkdownRenderClientCache,
   invalidateClientSharedDataCaches,
   consumePrefetchedHomeBootstrapApi,
   fetchHomeBootstrapApi,
@@ -195,6 +196,17 @@ import {
   resolveGlobalCacheVersion,
   writeHomeListLocalCache
 } from './app/homeListLocalCache';
+import {
+  clearDateSearchLocalCacheFamily,
+  readDateSearchLocalCache,
+  writeDateSearchLocalCache,
+  type DateSearchCacheDescriptor
+} from './app/dateSearchLocalCache';
+import {
+  readCachedRecordSnapshot,
+  writeCachedRecordSnapshot,
+  writeCachedRecordSnapshots
+} from './app/recordLocalCache';
 import { annotateListResponseWithInitialDateFilter } from './app/homeListResponse';
 import { hasIncompleteRejectDedupKeys } from './app/dedupKeyUtils';
 import {
@@ -3880,6 +3892,34 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [logEvent]);
 
   const homeListCacheVersion = useMemo(() => resolveGlobalCacheVersion(), []);
+  const persistPastRecordSnapshot = useCallback(
+    (record: WebFormSubmission | null | undefined, source: string) => {
+      if (!record) return;
+      writeCachedRecordSnapshot({
+        definition,
+        formKey,
+        record,
+        cacheVersion: homeListCacheVersion,
+        onDiagnostic: logEvent,
+        source
+      });
+    },
+    [definition, formKey, homeListCacheVersion, logEvent]
+  );
+  const persistPastRecordSnapshots = useCallback(
+    (records: Record<string, WebFormSubmission> | null | undefined, source: string) => {
+      if (!records || !Object.keys(records).length) return;
+      writeCachedRecordSnapshots({
+        definition,
+        formKey,
+        records,
+        cacheVersion: homeListCacheVersion,
+        onDiagnostic: logEvent,
+        source
+      });
+    },
+    [definition, formKey, homeListCacheVersion, logEvent]
+  );
   const homeListLocalCacheKey = useMemo(
     () => buildHomeListLocalCacheKey(formKey, definition.listView, homeListCacheVersion),
     [definition.listView, formKey, homeListCacheVersion]
@@ -4339,8 +4379,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         prev
       )
     );
+    clearDateSearchLocalCacheFamily({ formKey, listView: definition.listView });
     logEvent('list.cache.remove.deletedRecord', { recordIds: ids, count: ids.length });
-  }, [logEvent, pendingDeletedRecordApplyTick]);
+  }, [definition.listView, formKey, logEvent, pendingDeletedRecordApplyTick]);
 
   useEffect(() => {
     if (homeFirstDataReadyAtMs <= 0) return;
@@ -4399,17 +4440,50 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const id = ((row as any)?.id || '').toString().trim();
       return !!id && !listRecordsRef.current[id];
     });
+    const recordsFromLocalCache: Record<string, WebFormSubmission> = {};
+    missingTopRows.forEach(row => {
+      const id = ((row as any)?.id || '').toString().trim();
+      if (!id) return;
+      const cached = readCachedRecordSnapshot({
+        definition,
+        formKey,
+        recordId: id,
+        cacheVersion: homeListCacheVersion,
+        onDiagnostic: logEvent,
+        source: 'list.records.prefetch'
+      });
+      if (cached) recordsFromLocalCache[id] = cached;
+    });
+    const localCacheRecordCount = Object.keys(recordsFromLocalCache).length;
+    const rowsNeedingServerPrefetch = localCacheRecordCount
+      ? missingTopRows.filter(row => {
+          const id = ((row as any)?.id || '').toString().trim();
+          return !id || !recordsFromLocalCache[id];
+        })
+      : missingTopRows;
+    if (localCacheRecordCount > 0) {
+      setListCache(prev => ({
+        response: prev.response,
+        records: mergeListRecordSnapshotCache(prev.records, recordsFromLocalCache)
+      }));
+      logEvent('list.records.prefetch.localCache.hit', {
+        formKey,
+        topCount,
+        requested: missingTopRows.length,
+        records: localCacheRecordCount
+      });
+    }
 
     const etag = (listCache.response?.etag || '').toString().trim();
     const key = `${formKey}::${etag || `rows:${items.length}`}::top:${topCount}`;
     if (listRecordSnapshotPrefetchKeyRef.current === key) return;
     listRecordSnapshotPrefetchKeyRef.current = key;
 
-    if (!missingTopRows.length) {
+    if (!rowsNeedingServerPrefetch.length) {
       logEvent('list.records.prefetch.skip', {
         formKey,
         topCount,
-        reason: 'alreadyCached',
+        reason: localCacheRecordCount > 0 ? 'localStorageCached' : 'alreadyCached',
         etag: etag || null
       });
       return;
@@ -4417,7 +4491,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
     const rowHints = Array.from(
       new Set(
-        missingTopRows
+        rowsNeedingServerPrefetch
           .map(row => Number((row as any)?.__rowNumber))
           .filter(v => Number.isFinite(v) && v >= 2)
           .map(v => Math.floor(v))
@@ -4427,7 +4501,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent('list.records.prefetch.skip', {
         formKey,
         topCount,
-        missingCount: missingTopRows.length,
+        missingCount: rowsNeedingServerPrefetch.length,
         reason: 'missingRowHints',
         etag: etag || null
       });
@@ -4447,7 +4521,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         formKey,
         phase: 'batch',
         topCount,
-        missingCount: missingTopRows.length,
+        missingCount: rowsNeedingServerPrefetch.length,
+        localCacheRecords: localCacheRecordCount,
         rowHintCount: rowHints.length,
         etag: etag || null
       });
@@ -4470,6 +4545,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         perfMark(endMark);
         const receivedIds = prefetchedRecords ? Object.keys(prefetchedRecords) : [];
         if (receivedIds.length) {
+          persistPastRecordSnapshots(prefetchedRecords, 'list.records.prefetch');
           setListCache(prev => ({
             response: prev.response,
             records: mergeListRecordSnapshotCache(prev.records, prefetchedRecords)
@@ -4480,7 +4556,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           phase: 'batch',
           requested: topCount,
           requestedRows: rowHints.length,
-          missing: missingTopRows.length,
+          missing: rowsNeedingServerPrefetch.length,
           received: receivedIds.length
         });
         logEvent('list.records.prefetch.ok', {
@@ -4488,7 +4564,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           phase: 'batch',
           requested: topCount,
           requestedRows: rowHints.length,
-          missing: missingTopRows.length,
+          missing: rowsNeedingServerPrefetch.length,
+          localCacheRecords: localCacheRecordCount,
           received: receivedIds.length,
           durationMs: Date.now() - startedAt
         });
@@ -4499,7 +4576,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           phase: 'batch',
           requested: topCount,
           requestedRows: rowHints.length,
-          missing: missingTopRows.length,
+          missing: rowsNeedingServerPrefetch.length,
           failed: true
         });
         const msg = (err?.message || err?.toString?.() || 'failed').toString();
@@ -4508,7 +4585,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           phase: 'batch',
           requested: topCount,
           requestedRows: rowHints.length,
-          missing: missingTopRows.length,
+          missing: rowsNeedingServerPrefetch.length,
           message: msg,
           durationMs: Date.now() - startedAt
         });
@@ -4535,10 +4612,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     formKey,
     hasTemplateRenderTargets,
     homeFirstDataReadyAtMs,
+    definition,
+    homeListCacheVersion,
     listCache.response?.etag,
     listCache.response?.items,
     perfMark,
     perfMeasure,
+    persistPastRecordSnapshots,
     view,
     logEvent
   ]);
@@ -5151,6 +5231,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const mergeRecordSnapshotIntoListCache = useCallback((snapshot: WebFormSubmission | null | undefined) => {
     const recordId = (snapshot?.id || '').toString().trim();
     if (!snapshot || !recordId) return;
+    persistPastRecordSnapshot(snapshot, 'record.mergeListCache');
     setListCache(prev => {
       const records = applyPendingFollowupStatusesToRecordCache(
         mergeListRecordSnapshotCache(prev.records, { [recordId]: snapshot })
@@ -5164,7 +5245,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           : prev.response;
       return { response, records };
     });
-  }, [applyPendingFollowupStatusesToRecordCache]);
+  }, [applyPendingFollowupStatusesToRecordCache, persistPastRecordSnapshot]);
+
+  const handleReadListViewDateSearchCache = useCallback(
+    (descriptor: DateSearchCacheDescriptor) =>
+      readDateSearchLocalCache({
+        formKey,
+        listView: definition.listView,
+        cacheVersion: homeListCacheVersion,
+        descriptor
+      }),
+    [definition.listView, formKey, homeListCacheVersion]
+  );
+
+  const handleListViewCache = useCallback(
+    (payload: { response: ListResponse; records: Record<string, WebFormSubmission>; dateSearch?: DateSearchCacheDescriptor }) => {
+      const records = payload.records || {};
+      const recordCount = Object.keys(records).length;
+      if (payload.dateSearch) {
+        writeDateSearchLocalCache({
+          formKey,
+          listView: definition.listView,
+          cacheVersion: homeListCacheVersion,
+          descriptor: payload.dateSearch,
+          response: payload.response,
+          records
+        });
+        logEvent('list.search.date.localCache.write', {
+          formKey,
+          queryDate: payload.dateSearch.dateEquals,
+          dateFieldId: payload.dateSearch.dateFieldId,
+          items: payload.response?.items?.length || 0,
+          records: recordCount
+        });
+      }
+      if (!recordCount) return;
+      persistPastRecordSnapshots(records, 'list.cache');
+      setListCache(prev => ({
+        response: prev.response,
+        records: mergeListRecordSnapshotCache(prev.records, records)
+      }));
+    },
+    [definition.listView, formKey, homeListCacheVersion, logEvent, persistPastRecordSnapshots]
+  );
 
   useEffect(() => {
     const unlockRecordId = (readyForProductionUnlockResolution.unlockRecordId || '').toString().trim();
@@ -5451,6 +5574,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           response: prev.response,
           records: { ...prev.records, [id]: snapshot }
         }));
+        persistPastRecordSnapshot(snapshot, 'record.snapshot.metaOnly');
         try {
           upsertListCacheRow({
             recordId: id,
@@ -5584,6 +5708,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         response: prev.response,
         records: { ...prev.records, [id]: snapshot }
       }));
+      persistPastRecordSnapshot(snapshot, 'record.snapshot.applied');
       // Also update any cached list row so navigating back to the list reflects this snapshot without refetching.
       try {
         upsertListCacheRow({
@@ -5620,6 +5745,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       getCurrentKnownClientDataVersion,
       getCurrentOpenRecordId,
       logEvent,
+      persistPastRecordSnapshot,
       applyLiveAnalyticsRecordDelta,
       rememberAutoSaveSeenState,
       resetFieldChangeTransientState,
@@ -5811,11 +5937,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   ]);
 
   const handleGlobalRefresh = useCallback(async () => {
-    // Clear client caches (data sources + rendered HTML) to avoid stale derived content without requiring a full reload.
+    // Clear client caches (data sources + rendered templates) to avoid stale derived content without requiring a full reload.
     try {
       clearFetchDataSourceCache();
       clearBundledHtmlClientCaches();
       clearHtmlRenderClientCache();
+      clearMarkdownRenderClientCache();
+      clearDateSearchLocalCacheFamily({ formKey, listView: definition.listView });
       setOptionState({});
       setTooltipState({});
       optionStateRef.current = {};
@@ -5829,7 +5957,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     requestListRefresh({ clearResponse: false });
     if (!selectedRecordId) return;
     await loadRecordSnapshot(selectedRecordId);
-  }, [loadRecordSnapshot, logEvent, requestListRefresh, selectedRecordId]);
+  }, [definition.listView, formKey, loadRecordSnapshot, logEvent, requestListRefresh, selectedRecordId]);
 
   const synchronizeStaleRecord = useCallback<SynchronizeStaleRecordFn>(
     async args => {
@@ -13591,7 +13719,26 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
     bumpRecordSession({ reason: 'list.recordSelect', nextRecordId: row.id });
     clearActiveRecordContext();
-    const sourceRecord = fullRecord || listCache.records[row.id] || null;
+    let sourceRecord = fullRecord || listCache.records[row.id] || null;
+    let sourceRecordSource = fullRecord ? 'fullRecord' : sourceRecord ? 'listCache' : '';
+    if (!sourceRecord) {
+      const persistedRecord = readCachedRecordSnapshot({
+        definition,
+        formKey,
+        recordId: row.id,
+        cacheVersion: homeListCacheVersion,
+        onDiagnostic: logEvent,
+        source: 'list.recordSelect'
+      });
+      if (persistedRecord) {
+        sourceRecord = persistedRecord;
+        sourceRecordSource = 'localStorage';
+        setListCache(prev => ({
+          response: prev.response,
+          records: mergeListRecordSnapshotCache(prev.records, { [row.id]: persistedRecord })
+        }));
+      }
+    }
     setStatus(null);
     setStatusLevel(null);
     setRecordLoadError(null);
@@ -13814,7 +13961,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     // Re-check the server version in the background when we have a cached version; refetch if stale.
     if (sourceRecord) {
       if (shouldCopy) {
-        fetchFullSnapshotThenCopy('copy.fetchedFromListCache', openCopyBusy());
+        fetchFullSnapshotThenCopy(
+          sourceRecordSource === 'localStorage' ? 'copy.fetchedFromRecordLocalCache' : 'copy.fetchedFromListCache',
+          openCopyBusy()
+        );
         return;
       }
       applyRecordSnapshot(sourceRecord);
@@ -13824,9 +13974,15 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         triggerOpenButtonIfNeeded();
       }
       if (shouldSubmit) {
-        logEvent('list.openView.submit', { recordId: row.id, source: 'cached' });
+        logEvent('list.openView.submit', {
+          recordId: row.id,
+          source: sourceRecordSource === 'localStorage' ? 'localRecordCache' : 'cached'
+        });
         setView('form');
-        scheduleListOpenSubmit({ recordId: row.id, source: 'cached' });
+        scheduleListOpenSubmit({
+          recordId: row.id,
+          source: sourceRecordSource === 'localStorage' ? 'localRecordCache' : 'cached'
+        });
         return;
       }
       // Version check is async; do not block navigation.
@@ -13912,6 +14068,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             }
           })();
         }
+      } else if (sourceRecordSource === 'localStorage') {
+        void loadRecordSnapshot(row.id, hintedRow, { background: true });
       }
     } else {
       // No cached record (or no cached version): fetch the full snapshot.
@@ -14604,6 +14762,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         listLegendColumns={listLegendColumns}
         listLegendColumnWidths={listLegendColumnWidths}
         handleRecordSelect={handleRecordSelect}
+        handleReadListViewDateSearchCache={handleReadListViewDateSearchCache}
+        handleListViewCache={handleListViewCache}
         logEvent={logEvent}
       />
 

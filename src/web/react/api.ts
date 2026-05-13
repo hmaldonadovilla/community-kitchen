@@ -173,6 +173,18 @@ export interface FetchSummaryRecordResult extends RenderHtmlTemplateResult {
   record?: WebFormSubmission | null;
 }
 
+export type TemplateRenderCacheScope = 'record' | 'template' | 'none';
+
+export interface TemplateRenderCacheOptions {
+  /**
+   * record: include record id + draft values + record meta in the cache key.
+   * template: include only form/language/button/template id; use only for static templates.
+   * none: bypass the client render-result cache.
+   */
+  cacheScope?: TemplateRenderCacheScope | string | null;
+  templateId?: string | null;
+}
+
 export interface FollowupBatchResponse {
   success: boolean;
   results: Array<{ action: string; result: FollowupActionResult }>;
@@ -186,14 +198,44 @@ export type FollowupBatchOptions = {
 // Client-side HTML render cache
 // ----------------------------
 // Goal: avoid re-calling Apps Script when reopening the same record/template with the same values.
-// This is intentionally in-memory only (per browser session) to keep invalidation simple and safe.
+// Successful renders are also persisted under the app cache version so browser refreshes can reuse them safely.
 
 type HtmlRenderCacheEntry = { result: RenderHtmlTemplateResult; cachedAtMs: number };
+type MarkdownRenderCacheEntry = { result: RenderMarkdownTemplateResult; cachedAtMs: number };
 
 const MAX_HTML_RENDER_CACHE_ENTRIES = 40;
+const HTML_RENDER_PERSIST_PREFIX = 'ck.htmlRender.v1';
+const HTML_RENDER_PERSIST_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+const MAX_MARKDOWN_RENDER_CACHE_ENTRIES = 40;
+const MARKDOWN_RENDER_PERSIST_PREFIX = 'ck.markdownRender.v1';
+const MARKDOWN_RENDER_PERSIST_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
 const htmlRenderCache = new Map<string, HtmlRenderCacheEntry>();
 const htmlRenderInflight = new Map<string, Promise<RenderHtmlTemplateResult>>();
+const markdownRenderCache = new Map<string, MarkdownRenderCacheEntry>();
+const markdownRenderInflight = new Map<string, Promise<RenderMarkdownTemplateResult>>();
+
+const encodeHtmlCacheKeyPart = (value: any): string => encodeURIComponent((value || 'default').toString()).replace(/\./g, '%2E');
+
+const resolveHtmlRenderCacheVersion = (): string => {
+  try {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    const raw = (win?.__CK_CACHE_VERSION__ || (globalThis as any)?.__CK_CACHE_VERSION__ || 'default').toString().trim();
+    return raw || 'default';
+  } catch {
+    return 'default';
+  }
+};
+
+const resolveHtmlRenderStorage = (): Storage | null => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+    const storage = (globalThis as any)?.localStorage;
+    return storage || null;
+  } catch {
+    return null;
+  }
+};
 
 const pruneHtmlRenderCache = () => {
   if (htmlRenderCache.size <= MAX_HTML_RENDER_CACHE_ENTRIES) return;
@@ -202,6 +244,17 @@ const pruneHtmlRenderCache = () => {
   let evicted = 0;
   for (const key of htmlRenderCache.keys()) {
     htmlRenderCache.delete(key);
+    evicted += 1;
+    if (evicted >= toEvict) break;
+  }
+};
+
+const pruneMarkdownRenderCache = () => {
+  if (markdownRenderCache.size <= MAX_MARKDOWN_RENDER_CACHE_ENTRIES) return;
+  const toEvict = markdownRenderCache.size - MAX_MARKDOWN_RENDER_CACHE_ENTRIES;
+  let evicted = 0;
+  for (const key of markdownRenderCache.keys()) {
+    markdownRenderCache.delete(key);
     evicted += 1;
     if (evicted >= toEvict) break;
   }
@@ -234,7 +287,7 @@ const stableStringifyForCacheKey = (value: any): string => {
     // Fallback for functions/symbols/bigints (should not happen in payloads)
     try {
       return String(v);
-    } catch (_) {
+    } catch {
       return '';
     }
   };
@@ -248,6 +301,275 @@ const fnv1a32 = (str: string): string => {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(16);
+};
+
+const buildPersistedHtmlRenderCacheKey = (key: string, cacheVersion = resolveHtmlRenderCacheVersion()): string =>
+  `${HTML_RENDER_PERSIST_PREFIX}.${encodeHtmlCacheKeyPart(cacheVersion)}.${fnv1a32(key)}`;
+
+const buildPersistedMarkdownRenderCacheKey = (key: string, cacheVersion = resolveHtmlRenderCacheVersion()): string =>
+  `${MARKDOWN_RENDER_PERSIST_PREFIX}.${encodeHtmlCacheKeyPart(cacheVersion)}.${fnv1a32(key)}`;
+
+const normalizeTemplateRenderCacheScope = (value: any): TemplateRenderCacheScope => {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (normalized === 'template' || normalized === 'static') return 'template';
+  if (normalized === 'none' || normalized === 'off' || normalized === 'disabled') return 'none';
+  return 'record';
+};
+
+const shouldUseTemplateRenderCache = (options?: TemplateRenderCacheOptions | null): boolean =>
+  normalizeTemplateRenderCacheScope(options?.cacheScope) !== 'none';
+
+const buildTemplateScopedButtonCacheKey = (
+  kind: 'html' | 'markdown',
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): string => {
+  const templateId = (options?.templateId || '').toString().trim();
+  const templateSig = templateId ? fnv1a32(templateId) : 'notemplate';
+  return `button|${kind}|template|${payload.formKey}|${payload.language}|${buttonId}|${templateSig}`;
+};
+
+const prunePersistedHtmlRenderCache = (storage: Storage, cacheVersion = resolveHtmlRenderCacheVersion()): void => {
+  const activePrefix = `${HTML_RENDER_PERSIST_PREFIX}.${encodeHtmlCacheKeyPart(cacheVersion)}.`;
+  const entries: Array<{ key: string; savedAtMs: number }> = [];
+  const removeKeys: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const candidate = storage.key(i);
+    if (!candidate || !candidate.startsWith(`${HTML_RENDER_PERSIST_PREFIX}.`)) continue;
+    if (!candidate.startsWith(activePrefix)) {
+      removeKeys.push(candidate);
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(storage.getItem(candidate) || '');
+      const savedAtMs = Number(parsed?.cachedAtMs || 0);
+      if (!Number.isFinite(savedAtMs) || savedAtMs <= 0 || Date.now() - savedAtMs > HTML_RENDER_PERSIST_MAX_AGE_MS) {
+        removeKeys.push(candidate);
+        continue;
+      }
+      entries.push({ key: candidate, savedAtMs });
+    } catch {
+      removeKeys.push(candidate);
+    }
+  }
+  entries
+    .sort((a, b) => b.savedAtMs - a.savedAtMs)
+    .slice(MAX_HTML_RENDER_CACHE_ENTRIES)
+    .forEach(entry => removeKeys.push(entry.key));
+  removeKeys.forEach(candidate => {
+    try {
+      storage.removeItem(candidate);
+    } catch {
+      // ignore
+    }
+  });
+};
+
+const readPersistedHtmlRenderCache = (key: string): HtmlRenderCacheEntry | null => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return null;
+  const storageKey = buildPersistedHtmlRenderCacheKey(key);
+  try {
+    const raw = storage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.key !== key) return null;
+    const cachedAtMs = Number(parsed.cachedAtMs || 0);
+    if (!Number.isFinite(cachedAtMs) || cachedAtMs <= 0 || Date.now() - cachedAtMs > HTML_RENDER_PERSIST_MAX_AGE_MS) {
+      storage.removeItem(storageKey);
+      return null;
+    }
+    const result = parsed.result as RenderHtmlTemplateResult | null;
+    if (!result?.success || !result.html) return null;
+    return { result, cachedAtMs };
+  } catch {
+    try {
+      storage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+};
+
+const writePersistedHtmlRenderCache = (key: string, entry: HtmlRenderCacheEntry): void => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return;
+  try {
+    prunePersistedHtmlRenderCache(storage);
+    storage.setItem(
+      buildPersistedHtmlRenderCacheKey(key),
+      JSON.stringify({
+        key,
+        cachedAtMs: entry.cachedAtMs,
+        cacheVersion: resolveHtmlRenderCacheVersion(),
+        result: entry.result
+      })
+    );
+  } catch {
+    // ignore storage quota/private-mode failures
+  }
+};
+
+const removePersistedHtmlRenderCache = (): void => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const candidate = storage.key(i);
+      if (candidate?.startsWith(`${HTML_RENDER_PERSIST_PREFIX}.`)) keys.push(candidate);
+    }
+    keys.forEach(candidate => {
+      try {
+        storage.removeItem(candidate);
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+};
+
+const prunePersistedMarkdownRenderCache = (storage: Storage, cacheVersion = resolveHtmlRenderCacheVersion()): void => {
+  const activePrefix = `${MARKDOWN_RENDER_PERSIST_PREFIX}.${encodeHtmlCacheKeyPart(cacheVersion)}.`;
+  const entries: Array<{ key: string; savedAtMs: number }> = [];
+  const removeKeys: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const candidate = storage.key(i);
+    if (!candidate || !candidate.startsWith(`${MARKDOWN_RENDER_PERSIST_PREFIX}.`)) continue;
+    if (!candidate.startsWith(activePrefix)) {
+      removeKeys.push(candidate);
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(storage.getItem(candidate) || '');
+      const savedAtMs = Number(parsed?.cachedAtMs || 0);
+      if (!Number.isFinite(savedAtMs) || savedAtMs <= 0 || Date.now() - savedAtMs > MARKDOWN_RENDER_PERSIST_MAX_AGE_MS) {
+        removeKeys.push(candidate);
+        continue;
+      }
+      entries.push({ key: candidate, savedAtMs });
+    } catch {
+      removeKeys.push(candidate);
+    }
+  }
+  entries
+    .sort((a, b) => b.savedAtMs - a.savedAtMs)
+    .slice(MAX_MARKDOWN_RENDER_CACHE_ENTRIES)
+    .forEach(entry => removeKeys.push(entry.key));
+  removeKeys.forEach(candidate => {
+    try {
+      storage.removeItem(candidate);
+    } catch {
+      // ignore
+    }
+  });
+};
+
+const readPersistedMarkdownRenderCache = (key: string): MarkdownRenderCacheEntry | null => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return null;
+  const storageKey = buildPersistedMarkdownRenderCacheKey(key);
+  try {
+    const raw = storage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.key !== key) return null;
+    const cachedAtMs = Number(parsed.cachedAtMs || 0);
+    if (!Number.isFinite(cachedAtMs) || cachedAtMs <= 0 || Date.now() - cachedAtMs > MARKDOWN_RENDER_PERSIST_MAX_AGE_MS) {
+      storage.removeItem(storageKey);
+      return null;
+    }
+    const result = parsed.result as RenderMarkdownTemplateResult | null;
+    if (!result?.success || !result.markdown) return null;
+    return { result, cachedAtMs };
+  } catch {
+    try {
+      storage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+};
+
+const writePersistedMarkdownRenderCache = (key: string, entry: MarkdownRenderCacheEntry): void => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return;
+  try {
+    prunePersistedMarkdownRenderCache(storage);
+    storage.setItem(
+      buildPersistedMarkdownRenderCacheKey(key),
+      JSON.stringify({
+        key,
+        cachedAtMs: entry.cachedAtMs,
+        cacheVersion: resolveHtmlRenderCacheVersion(),
+        result: entry.result
+      })
+    );
+  } catch {
+    // ignore storage quota/private-mode failures
+  }
+};
+
+const removePersistedMarkdownRenderCache = (): void => {
+  const storage = resolveHtmlRenderStorage();
+  if (!storage) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const candidate = storage.key(i);
+      if (candidate?.startsWith(`${MARKDOWN_RENDER_PERSIST_PREFIX}.`)) keys.push(candidate);
+    }
+    keys.forEach(candidate => {
+      try {
+        storage.removeItem(candidate);
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+};
+
+const getHtmlRenderCacheEntry = (key: string): HtmlRenderCacheEntry | null => {
+  const memoryHit = htmlRenderCache.get(key);
+  if (memoryHit?.result?.success && memoryHit.result.html) return memoryHit;
+  const persistedHit = readPersistedHtmlRenderCache(key);
+  if (!persistedHit) return null;
+  htmlRenderCache.set(key, persistedHit);
+  pruneHtmlRenderCache();
+  return persistedHit;
+};
+
+const setHtmlRenderCacheEntry = (key: string, result: RenderHtmlTemplateResult): void => {
+  if (!result?.success || !result.html) return;
+  const entry = { result, cachedAtMs: Date.now() };
+  htmlRenderCache.set(key, entry);
+  pruneHtmlRenderCache();
+  writePersistedHtmlRenderCache(key, entry);
+};
+
+const getMarkdownRenderCacheEntry = (key: string): MarkdownRenderCacheEntry | null => {
+  const memoryHit = markdownRenderCache.get(key);
+  if (memoryHit?.result?.success && memoryHit.result.markdown) return memoryHit;
+  const persistedHit = readPersistedMarkdownRenderCache(key);
+  if (!persistedHit) return null;
+  markdownRenderCache.set(key, persistedHit);
+  pruneMarkdownRenderCache();
+  return persistedHit;
+};
+
+const setMarkdownRenderCacheEntry = (key: string, result: RenderMarkdownTemplateResult): void => {
+  if (!result?.success || !result.markdown) return;
+  const entry = { result, cachedAtMs: Date.now() };
+  markdownRenderCache.set(key, entry);
+  pruneMarkdownRenderCache();
+  writePersistedMarkdownRenderCache(key, entry);
 };
 
 const buildValuesSignature = (values: Record<string, any> | undefined | null): string => {
@@ -278,11 +600,32 @@ const buildSummaryHtmlCacheKey = (payload: SubmissionPayload): string => {
   return `summary|${payload.formKey}|${payload.language}|${recordId}|${valuesSig}|${metaSig}`;
 };
 
-const buildButtonHtmlCacheKey = (payload: SubmissionPayload, buttonId: string): string => {
+const buildButtonHtmlCacheKey = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): string => {
+  if (normalizeTemplateRenderCacheScope(options?.cacheScope) === 'template') {
+    return buildTemplateScopedButtonCacheKey('html', payload, buttonId, options);
+  }
   const recordId = (payload.id || '').toString();
   const valuesSig = buildValuesSignature(payload.values);
   const metaSig = buildMetaSignature(payload);
   return `button|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}|${metaSig}`;
+};
+
+const buildButtonMarkdownCacheKey = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): string => {
+  if (normalizeTemplateRenderCacheScope(options?.cacheScope) === 'template') {
+    return buildTemplateScopedButtonCacheKey('markdown', payload, buttonId, options);
+  }
+  const recordId = (payload.id || '').toString();
+  const valuesSig = buildValuesSignature(payload.values);
+  const metaSig = buildMetaSignature(payload);
+  return `button|markdown|${payload.formKey}|${payload.language}|${recordId}|${buttonId}|${valuesSig}|${metaSig}`;
 };
 
 const buildInlineHtmlCacheKey = (
@@ -303,7 +646,7 @@ const buildInlineHtmlCacheKey = (
 
 export const peekSummaryHtmlTemplateCache = (payload: SubmissionPayload): RenderHtmlTemplateResult | null => {
   const key = buildSummaryHtmlCacheKey(payload);
-  const hit = htmlRenderCache.get(key);
+  const hit = getHtmlRenderCacheEntry(key);
   if (!hit?.result?.success || !hit?.result?.html) return null;
   return hit.result;
 };
@@ -315,14 +658,30 @@ export const seedSummaryHtmlTemplateCache = (
   if (!result?.success || !result?.html) return;
   const key = buildSummaryHtmlCacheKey(payload);
   htmlRenderInflight.delete(key);
-  htmlRenderCache.set(key, { result, cachedAtMs: Date.now() });
-  pruneHtmlRenderCache();
+  setHtmlRenderCacheEntry(key, result);
 };
 
-export const peekHtmlTemplateCache = (payload: SubmissionPayload, buttonId: string): RenderHtmlTemplateResult | null => {
-  const key = buildButtonHtmlCacheKey(payload, buttonId);
-  const hit = htmlRenderCache.get(key);
+export const peekHtmlTemplateCache = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): RenderHtmlTemplateResult | null => {
+  if (!shouldUseTemplateRenderCache(options)) return null;
+  const key = buildButtonHtmlCacheKey(payload, buttonId, options);
+  const hit = getHtmlRenderCacheEntry(key);
   if (!hit?.result?.success || !hit?.result?.html) return null;
+  return hit.result;
+};
+
+export const peekMarkdownTemplateCache = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): RenderMarkdownTemplateResult | null => {
+  if (!shouldUseTemplateRenderCache(options)) return null;
+  const key = buildButtonMarkdownCacheKey(payload, buttonId, options);
+  const hit = getMarkdownRenderCacheEntry(key);
+  if (!hit?.result?.success || !hit?.result?.markdown) return null;
   return hit.result;
 };
 
@@ -332,7 +691,7 @@ export const peekInlineHtmlTemplateCache = (
   cacheKeySuffix?: string
 ): RenderHtmlTemplateResult | null => {
   const key = buildInlineHtmlCacheKey(payload, templateIdMap, cacheKeySuffix);
-  const hit = htmlRenderCache.get(key);
+  const hit = getHtmlRenderCacheEntry(key);
   if (!hit?.result?.success || !hit?.result?.html) return null;
   return hit.result;
 };
@@ -346,6 +705,13 @@ export const peekInlineHtmlTemplateCache = (
 export const clearHtmlRenderClientCache = (): void => {
   htmlRenderCache.clear();
   htmlRenderInflight.clear();
+  removePersistedHtmlRenderCache();
+};
+
+export const clearMarkdownRenderClientCache = (): void => {
+  markdownRenderCache.clear();
+  markdownRenderInflight.clear();
+  removePersistedMarkdownRenderCache();
 };
 
 export const invalidateClientSharedDataCaches = (opts?: {
@@ -355,6 +721,7 @@ export const invalidateClientSharedDataCaches = (opts?: {
   clearFetchDataSourceCache({ includePersisted: opts?.includePersistedDataSources !== false });
   if (opts?.includeHtmlRenderCache) {
     clearHtmlRenderClientCache();
+    clearMarkdownRenderClientCache();
   }
 };
 
@@ -414,7 +781,7 @@ const perfMarkIfEnabled = (enabled: boolean, name: string): void => {
     if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
       performance.mark(name);
     }
-  } catch (_) {
+  } catch {
     // ignore mark failures
   }
 };
@@ -435,7 +802,7 @@ const perfMeasureIfEnabled = (enabled: boolean, name: string, startMark: string,
       }
       return typeof duration === 'number' ? duration : null;
     }
-  } catch (_) {
+  } catch {
     // ignore measure failures
   }
   return null;
@@ -1328,12 +1695,45 @@ export const renderDocTemplatePdfPreviewApi = (
 export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
   invokeDriveArtifactTransport<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
 
-export const renderMarkdownTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderMarkdownTemplateResult> =>
-  invokeTransport<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
+export const renderMarkdownTemplateApi = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): Promise<RenderMarkdownTemplateResult> => {
+  if (!shouldUseTemplateRenderCache(options)) {
+    return invokeTransport<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId);
+  }
+  const key = buildButtonMarkdownCacheKey(payload, buttonId, options);
+  const cached = getMarkdownRenderCacheEntry(key);
+  if (cached?.result?.success && cached?.result?.markdown) {
+    return Promise.resolve(cached.result);
+  }
+  const inflight = markdownRenderInflight.get(key);
+  if (inflight) return inflight;
+  const promise = invokeTransport<RenderMarkdownTemplateResult>('renderMarkdownTemplate', payload, buttonId)
+    .then(res => {
+      if (res?.success && res?.markdown) {
+        setMarkdownRenderCacheEntry(key, res);
+      }
+      return res;
+    })
+    .finally(() => {
+      markdownRenderInflight.delete(key);
+    });
+  markdownRenderInflight.set(key, promise);
+  return promise;
+};
 
-export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderHtmlTemplateResult> => {
-  const key = buildButtonHtmlCacheKey(payload, buttonId);
-  const cached = htmlRenderCache.get(key);
+export const renderHtmlTemplateApi = (
+  payload: SubmissionPayload,
+  buttonId: string,
+  options?: TemplateRenderCacheOptions | null
+): Promise<RenderHtmlTemplateResult> => {
+  if (!shouldUseTemplateRenderCache(options)) {
+    return invokeTransport<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId);
+  }
+  const key = buildButtonHtmlCacheKey(payload, buttonId, options);
+  const cached = getHtmlRenderCacheEntry(key);
   if (cached?.result?.success && cached?.result?.html) {
     return Promise.resolve(cached.result);
   }
@@ -1342,8 +1742,7 @@ export const renderHtmlTemplateApi = (payload: SubmissionPayload, buttonId: stri
   const promise = invokeTransport<RenderHtmlTemplateResult>('renderHtmlTemplate', payload, buttonId)
     .then(res => {
       if (res?.success && res?.html) {
-        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
-        pruneHtmlRenderCache();
+        setHtmlRenderCacheEntry(key, res);
       }
       return res;
     })
@@ -1360,7 +1759,7 @@ export const renderInlineHtmlTemplateApi = (
   cacheKeySuffix?: string
 ): Promise<RenderHtmlTemplateResult> => {
   const key = buildInlineHtmlCacheKey(payload, templateIdMap, cacheKeySuffix);
-  const cached = htmlRenderCache.get(key);
+  const cached = getHtmlRenderCacheEntry(key);
   if (cached?.result?.success && cached?.result?.html) {
     return Promise.resolve(cached.result);
   }
@@ -1369,8 +1768,7 @@ export const renderInlineHtmlTemplateApi = (
   const promise = invokeTransport<RenderHtmlTemplateResult>('renderInlineHtmlTemplate', payload, templateIdMap)
     .then(res => {
       if (res?.success && res?.html) {
-        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
-        pruneHtmlRenderCache();
+        setHtmlRenderCacheEntry(key, res);
       }
       return res;
     })
@@ -1389,7 +1787,7 @@ export const renderSubmissionReportHtmlApi = (payload: SubmissionPayload): Promi
 
 export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promise<RenderHtmlTemplateResult> => {
   const key = buildSummaryHtmlCacheKey(payload);
-  const cached = htmlRenderCache.get(key);
+  const cached = getHtmlRenderCacheEntry(key);
   if (cached?.result?.success && cached?.result?.html) {
     return Promise.resolve(cached.result);
   }
@@ -1398,8 +1796,7 @@ export const renderSummaryHtmlTemplateApi = (payload: SubmissionPayload): Promis
   const promise = invokeTransport<RenderHtmlTemplateResult>('renderSummaryHtmlTemplate', payload)
     .then(res => {
       if (res?.success && res?.html) {
-        htmlRenderCache.set(key, { result: res, cachedAtMs: Date.now() });
-        pruneHtmlRenderCache();
+        setHtmlRenderCacheEntry(key, res);
       }
       return res;
     })

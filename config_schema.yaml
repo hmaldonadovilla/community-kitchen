@@ -271,6 +271,14 @@ components:
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Drive file id config (string, language map, or `cases` selector) for the Markdown template.
+            cacheScope:
+              type: string
+              enum: [record, template, none]
+              description: |
+                Optional client render-result cache scope.
+                - `record` (default): safest behavior; cache by record id, draft values, and record metadata.
+                - `template`: for static templates only; cache by form/language/button/template id so repeat opens do not call the server even if the current draft changes.
+                - `none`: bypass the browser render-result cache.
             placements:
               type: array
               items:
@@ -313,6 +321,14 @@ components:
             templateId:
               $ref: '#/components/schemas/TemplateIdMap'
               description: Google Drive file id config (string, language map, or `cases` selector) for the HTML template.
+            cacheScope:
+              type: string
+              enum: [record, template, none]
+              description: |
+                Optional client render-result cache scope.
+                - `record` (default): safest behavior; cache by record id, draft values, and record metadata.
+                - `template`: for static templates only; cache by form/language/button/template id so repeat opens do not call the server even if the current draft changes.
+                - `none`: bypass the browser render-result cache.
             placements:
               type: array
               items:
@@ -2911,6 +2927,21 @@ components:
             By default, record-like data sources with `statusAllowList` or `backfill` are not prefetched on the home/list
             screen because they are often transactional. Set `prefetchOnHome: true` only when a datasource-backed visibility
             or count check must be ready before the form opens, such as `__ckDataSourceCount.Some Data Source`.
+        cachePolicy:
+          type: string
+          enum: [ttl, versioned, none]
+          description: |
+            Optional client persistence policy for datasource responses.
+
+            - `ttl` (default): keep a short-lived persisted cache, controlled by `persistMaxAgeMs` or `persistMaxAgeMinutes`.
+            - `versioned`: keep stable lookup data across browser refreshes until the app/server cache version changes.
+            - `none`: keep only the in-memory session cache.
+        persistMaxAgeMs:
+          type: number
+          description: Optional persisted datasource cache max age in milliseconds.
+        persistMaxAgeMinutes:
+          type: number
+          description: Optional persisted datasource cache max age in minutes.
         sheetId:
           type: string
           description: Optional sheet id when sourcing from another spreadsheet file.
@@ -3449,6 +3480,28 @@ components:
                     description: |
                       Which local state the client should compare against before deciding that the
                       newer server version only changed metadata.
+        recordLocalCache:
+          type: object
+          description: |
+            Optional browser-local cache for historical record snapshots.
+
+            The React app stores only records whose configured date is before today. Date-search list views also persist
+            exact historical search responses, so repeating the same past-date search can render rows immediately from
+            local storage. Cache keys include the app/server cache version, so a browser refresh automatically reads the
+            current version and ignores older snapshots.
+          properties:
+            enabled:
+              type: boolean
+              description: Enable local caching of past-date record snapshots. Defaults to true when a date field is available.
+            dateFieldId:
+              type: string
+              description: Record date field used to decide whether a snapshot is historical. Defaults to `listView.search.dateFieldId`.
+            maxAgeDays:
+              type: number
+              description: Maximum age for persisted historical record snapshots. Default 365.
+            maxEntries:
+              type: integer
+              description: Maximum snapshots retained per form/cache version. Default 250.
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'
           description: |
@@ -7570,6 +7623,19 @@ components:
                   compareAgainst:
                     type: string
                     enum: [currentDraft, lastAppliedSnapshot]
+          additionalProperties: true
+        recordLocalCache:
+          type: object
+          description: Browser-local cache for historical record snapshots (dashboard-level).
+          properties:
+            enabled:
+              type: boolean
+            dateFieldId:
+              type: string
+            maxAgeDays:
+              type: number
+            maxEntries:
+              type: integer
           additionalProperties: true
         auditLogging:
           $ref: '#/components/schemas/AuditLoggingConfig'

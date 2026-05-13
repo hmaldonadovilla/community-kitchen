@@ -900,6 +900,7 @@ describe('ConfigSheet', () => {
           "button": {
             "action": "renderMarkdownTemplate",
             "templateId": { "EN": "drive-file-id-en", "FR": "drive-file-id-fr" },
+            "cacheScope": "template",
             "placements": ["form", "topBar", "unknownPlacement"]
           }
         }`,
@@ -916,6 +917,7 @@ describe('ConfigSheet', () => {
     expect((questions[0] as any).button).toEqual({
       action: 'renderMarkdownTemplate',
       templateId: { EN: 'drive-file-id-en', FR: 'drive-file-id-fr' },
+      cacheScope: 'template',
       placements: ['form', 'topBar']
     });
   });
