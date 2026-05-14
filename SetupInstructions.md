@@ -601,8 +601,10 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - accepts a past start date from the analytics page UI
         - filters closed source records between that date and today
         - aggregates nested ingredient rows by ingredient + unit
+        - can convert `Tbsp` to `gr` with `report.tablespoonGramsLookupColumn`, then converts `gr` to `kg` when the quantity is greater than 1000
         - exports the results as `.xlsx`
         - queues the work server-side and emails the attachment to the configured recipients
+        - resolves `{{START_DATE}}` and `{{END_DATE}}` in email/file templates as `EEE,dd-mmm-yyyy`; use `{{START_DATE_ISO}}` / `{{END_DATE_ISO}}` for ISO dates
 
       Example:
 
@@ -642,7 +644,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
                 "quantityFieldId": "QTY",
                 "unitFieldId": "UNIT",
                 "categoryFieldId": "CAT",
-                "supplierLookupColumn": "SUPPLIER"
+                "tablespoonGramsLookupColumn": "TBSP_GRAMS"
               }
             }
           ]

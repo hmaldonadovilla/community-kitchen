@@ -3361,7 +3361,8 @@
             "quantityFieldId": "QTY",
             "unitFieldId": "UNIT",
             "categoryFieldId": "CAT",
-            "supplierLookupColumn": "SUPPLIER"
+            "tablespoonGramsLookupColumn": "TBSP_GRAMS",
+            "categoryLookupColumn": "CATEGORY"
           }
         },
         {
@@ -4594,6 +4595,7 @@
                 "DIETARY_APPLICABILITY",
                 "ALLOWED_UNIT",
                 "ALLERGEN",
+                "TBSP_GRAMS",
                 "STATUS",
                 "SUPPLIER"
               ],
@@ -4751,6 +4753,7 @@
                     "DIETARY_APPLICABILITY",
                     "ALLOWED_UNIT",
                     "ALLERGEN",
+                    "TBSP_GRAMS",
                     "STATUS",
                     "SUPPLIER",
                     "CATEGORY"
@@ -6063,6 +6066,7 @@
                         "ALLOWED_UNIT",
                         "CATEGORY",
                         "ALLERGEN",
+                        "TBSP_GRAMS",
                         "STATUS"
                       ],
                       "formKey": "Config: Ingredients Management",
@@ -7940,6 +7944,7 @@
                   "DIETARY_APPLICABILITY",
                   "ALLOWED_UNIT",
                   "ALLERGEN",
+                  "TBSP_GRAMS",
                   "STATUS",
                   "SUPPLIER"
                 ],
@@ -8097,6 +8102,7 @@
                       "DIETARY_APPLICABILITY",
                       "ALLOWED_UNIT",
                       "ALLERGEN",
+                      "TBSP_GRAMS",
                       "STATUS",
                       "SUPPLIER",
                       "CATEGORY"
@@ -9493,6 +9499,7 @@
                           "ALLOWED_UNIT",
                           "CATEGORY",
                           "ALLERGEN",
+                          "TBSP_GRAMS",
                           "STATUS"
                         ],
                         "formKey": "Config: Ingredients Management",

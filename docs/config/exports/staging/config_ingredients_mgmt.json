@@ -474,6 +474,20 @@
       }
     },
     {
+      "id": "TBSP_GRAMS",
+      "type": "NUMBER",
+      "qEn": "Grams per Tbsp",
+      "required": false,
+      "listView": false,
+      "status": "Active",
+      "ui": {
+        "helperText": {
+          "en": "Enter grams per Tbsp when Tbsp is an allowed unit."
+        },
+        "helperPlacement": "belowLabel"
+      }
+    },
+    {
       "id": "DIETARY_APPLICABILITY",
       "type": "CHECKBOX",
       "qEn": "Dietary applicability",

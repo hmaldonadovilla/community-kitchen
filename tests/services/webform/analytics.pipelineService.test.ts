@@ -162,7 +162,10 @@ describe('AnalyticsPipelineService', () => {
                   PREP_TYPE: 'Cook',
                   MP_INGREDIENTS_LI: [
                     { ING: 'Beans', QTY: '2', UNIT: 'kg', CAT: 'Legumes' },
-                    { ING: 'Beans', QTY: '1.5', UNIT: 'kg', CAT: 'Legumes' }
+                    { ING: 'Beans', QTY: '1.5', UNIT: 'kg', CAT: 'Legumes' },
+                    { ING: 'Salt', QTY: '100', UNIT: 'Tbsp' },
+                    { ING: 'Sugar', QTY: '20', UNIT: 'Tbsp' },
+                    { ING: 'Rice', QTY: '1500', UNIT: 'gr' }
                   ]
                 },
                 {
@@ -209,9 +212,13 @@ describe('AnalyticsPipelineService', () => {
       buildSubmissionRecord: jest.fn((_formKey: string, _questions: any[], _columns: any, row: any[]) => records[row[0]])
     };
     const dataSources = {
-      lookupDataSourceDetails: jest.fn((_question: any, ingredient: string) =>
-        ingredient === 'Beans' ? { SUPPLIER: 'Vendor A', CATEGORY: 'Legumes' } : null
-      )
+      lookupDataSourceDetails: jest.fn((_question: any, ingredient: string) => {
+        if (ingredient === 'Beans') return { CATEGORY: 'Legumes' };
+        if (ingredient === 'Salt') return { CATEGORY: 'Herbs', TBSP_GRAMS: '18' };
+        if (ingredient === 'Sugar') return { CATEGORY: 'Herbs', TBSP_GRAMS: '12.5' };
+        if (ingredient === 'Rice') return { CATEGORY: 'Dry carbohydrates' };
+        return null;
+      })
     };
 
     const service = new AnalyticsPipelineService({ getId: () => 'active-spreadsheet-id' } as any, submissions as any, dataSources as any);
@@ -251,7 +258,7 @@ describe('AnalyticsPipelineService', () => {
       email: {
         recipients: ['ops@example.com'],
         subject: 'Ingredients usage {{START_DATE}} to {{END_DATE}}',
-        message: 'Rows: {{ROW_COUNT}}'
+        message: 'Rows: {{ROW_COUNT}} from {{START_DATE}}'
       },
       attachment: {
         fileNameTemplate: 'Ingredients usage {{START_DATE}} to {{END_DATE}}.xlsx',
@@ -268,7 +275,8 @@ describe('AnalyticsPipelineService', () => {
         quantityFieldId: 'QTY',
         unitFieldId: 'UNIT',
         categoryFieldId: 'CAT',
-        supplierLookupColumn: 'SUPPLIER'
+        categoryLookupColumn: 'CATEGORY',
+        tablespoonGramsLookupColumn: 'TBSP_GRAMS'
       }
     };
 
@@ -285,19 +293,26 @@ describe('AnalyticsPipelineService', () => {
       startDate: '2026-04-20',
       endDate: '2026-04-23',
       recordCount: 1,
-      rowCount: 1,
-      attachmentName: 'Ingredients usage 2026-04-20 to 2026-04-23.xlsx',
+      rowCount: 4,
+      attachmentName: 'Ingredients usage Mon,20-Apr-2026 to Thu,23-Apr-2026.xlsx',
       attachmentFileId: 'xlsx-file-1'
     });
+    expect(writtenValues).toEqual([
+      ['Ingredients', 'Quantity', 'Unit', 'Category'],
+      ['Beans', 3.5, 'kg', 'Legumes'],
+      ['Rice', 1.5, 'kg', 'Dry carbohydrates'],
+      ['Salt', 1.8, 'kg', 'Herbs'],
+      ['Sugar', 250, 'gr', 'Herbs']
+    ]);
     expect(createFile).toHaveBeenCalledTimes(1);
     expect((global as any).SpreadsheetApp.openById).toHaveBeenCalledWith('temp-spreadsheet-id');
     expect((global as any).SpreadsheetApp.flush).toHaveBeenCalled();
     expect((global as any).Utilities.sleep).toHaveBeenCalledWith(1500);
     expect((global as any).GmailApp.sendEmail).toHaveBeenCalledTimes(1);
     const [, subject, body, options] = (global as any).GmailApp.sendEmail.mock.calls[0];
-    expect(subject).toBe('Ingredients usage 2026-04-20 to 2026-04-23');
-    expect(body).toBe('Rows: 1');
-    expect(options.attachments[0].getName()).toBe('Ingredients usage 2026-04-20 to 2026-04-23.xlsx');
+    expect(subject).toBe('Ingredients usage Mon,20-Apr-2026 to Thu,23-Apr-2026');
+    expect(body).toBe('Rows: 4 from Mon,20-Apr-2026');
+    expect(options.attachments[0].getName()).toBe('Ingredients usage Mon,20-Apr-2026 to Thu,23-Apr-2026.xlsx');
   });
 
   test('runPipeline writes completed meal production rows for record table reports', () => {
@@ -452,12 +467,12 @@ describe('AnalyticsPipelineService', () => {
           includeWhen: { fieldId: 'ORD_QTY', greaterThan: 0 }
         },
         columns: [
-          { header: 'Date', source: 'recordField', fieldId: 'MP_PREP_DATE' },
+          { source: 'recordField', fieldId: 'MP_PREP_DATE' },
           { header: 'Customer', source: 'recordField', fieldId: 'MP_DISTRIBUTOR' },
           { header: 'Service', source: 'recordField', fieldId: 'MP_SERVICE' },
           { header: 'Responsible cook', source: 'recordField', fieldId: 'MP_COOK_NAME' },
           { header: 'Dietary type', source: 'lineItemField', fieldId: 'MEAL_TYPE' },
-          { header: 'Number of portions delivered', source: 'lineItemField', fieldId: 'FINAL_QTY' },
+          { source: 'lineItemField', fieldId: 'FINAL_QTY' },
           {
             header: 'Leftover used',
             source: 'hasLineItem',
@@ -478,7 +493,19 @@ describe('AnalyticsPipelineService', () => {
     const result = service.runPipeline({
       ownerForm: form as any,
       sourceForm: form as any,
-      sourceQuestions: [],
+      sourceQuestions: [
+        { id: 'MP_PREP_DATE', type: 'DATE', qEn: 'Date' },
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              { id: 'MEAL_TYPE', labelEn: 'Dietary type' },
+              { id: 'FINAL_QTY', labelEn: 'Number of portions delivered' }
+            ]
+          }
+        }
+      ] as any,
       pipeline: pipeline as any,
       startDate: '2026-04-20'
     });
@@ -489,7 +516,7 @@ describe('AnalyticsPipelineService', () => {
       endDate: '2026-04-23',
       recordCount: 1,
       rowCount: 2,
-      attachmentName: 'Meals produced and delivered report since 2026-04-20.xlsx'
+      attachmentName: 'Meals produced and delivered report since Mon,20-Apr-2026.xlsx'
     });
     expect(writtenValues).toEqual([
       ['Date', 'Customer', 'Service', 'Responsible cook', 'Dietary type', 'Number of portions delivered', 'Leftover used'],
@@ -497,9 +524,9 @@ describe('AnalyticsPipelineService', () => {
       ['2026-04-21', 'Belliard', 'Lunch', 'Akkara', 'Vegetarian', '3', 'No']
     ]);
     const [, subject, body, options] = (global as any).GmailApp.sendEmail.mock.calls[0];
-    expect(subject).toBe('Meals produced and delivered report since 2026-04-20');
-    expect(body).toBe('Please find attached the Meals produced and delivered report since 2026-04-20.');
-    expect(options.attachments[0].getName()).toBe('Meals produced and delivered report since 2026-04-20.xlsx');
+    expect(subject).toBe('Meals produced and delivered report since Mon,20-Apr-2026');
+    expect(body).toBe('Please find attached the Meals produced and delivered report since Mon,20-Apr-2026.');
+    expect(options.attachments[0].getName()).toBe('Meals produced and delivered report since Mon,20-Apr-2026.xlsx');
   });
 
   test('runPipeline adds missing expected cleaning and storage check rows', () => {

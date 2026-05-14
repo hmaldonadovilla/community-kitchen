@@ -5474,6 +5474,8 @@ export interface AnalyticsPipelineAttachmentConfig {
    * - `{{PIPELINE_TITLE}}`
    * - `{{START_DATE}}`
    * - `{{END_DATE}}`
+   * - `{{START_DATE_ISO}}`
+   * - `{{END_DATE_ISO}}`
    * - `{{RECORD_COUNT}}`
    * - `{{ROW_COUNT}}`
    */
@@ -5536,11 +5538,19 @@ export interface AnalyticsIngredientUsagePipelineReportConfig {
   categoryFieldId?: string;
   supplierFieldId?: string;
   /**
+   * Optional field on the ingredient row containing grams per Tbsp.
+   */
+  tablespoonGramsFieldId?: string;
+  /**
    * Optional datasource detail columns resolved from the ingredient selector datasource.
    * Useful when the source rows do not persist all descriptive fields.
    */
   categoryLookupColumn?: string;
   supplierLookupColumn?: string;
+  /**
+   * Optional datasource detail column containing grams per Tbsp for Tbsp conversions.
+   */
+  tablespoonGramsLookupColumn?: string;
 }
 
 export interface AnalyticsIngredientUsagePipelineConfig {

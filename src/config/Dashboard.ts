@@ -3436,10 +3436,18 @@ export class Dashboard {
       if (categoryFieldId) out.categoryFieldId = categoryFieldId;
       const supplierFieldId = ((raw as any).supplierFieldId ?? '').toString().trim();
       if (supplierFieldId) out.supplierFieldId = supplierFieldId;
+      const tablespoonGramsFieldId = ((raw as any).tablespoonGramsFieldId ?? (raw as any).tbspGramsFieldId ?? '').toString().trim();
+      if (tablespoonGramsFieldId) out.tablespoonGramsFieldId = tablespoonGramsFieldId;
       const categoryLookupColumn = ((raw as any).categoryLookupColumn ?? '').toString().trim();
       if (categoryLookupColumn) out.categoryLookupColumn = categoryLookupColumn;
       const supplierLookupColumn = ((raw as any).supplierLookupColumn ?? '').toString().trim();
       if (supplierLookupColumn) out.supplierLookupColumn = supplierLookupColumn;
+      const tablespoonGramsLookupColumn = (
+        (raw as any).tablespoonGramsLookupColumn ??
+        (raw as any).tbspGramsLookupColumn ??
+        ''
+      ).toString().trim();
+      if (tablespoonGramsLookupColumn) out.tablespoonGramsLookupColumn = tablespoonGramsLookupColumn;
       return out;
     };
 

@@ -6223,7 +6223,8 @@ components:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Optional email subject. Supports placeholders like
-            `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+            `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{START_DATE_ISO}}`, `{{END_DATE_ISO}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+            `{{START_DATE}}` and `{{END_DATE}}` render as `EEE,dd-mmm-yyyy`.
         message:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -6247,7 +6248,8 @@ components:
           type: string
           description: |
             Optional attachment file name template.
-            Supports placeholders like `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+            Supports placeholders like `{{PIPELINE_TITLE}}`, `{{START_DATE}}`, `{{END_DATE}}`, `{{START_DATE_ISO}}`, `{{END_DATE_ISO}}`, `{{ROW_COUNT}}`, and `{{RECORD_COUNT}}`.
+            `{{START_DATE}}` and `{{END_DATE}}` render as `EEE,dd-mmm-yyyy`.
         sheetName:
           type: string
           description: Optional sheet/tab name used when building spreadsheet-backed exports.
@@ -6305,12 +6307,18 @@ components:
         supplierFieldId:
           type: string
           description: Optional supplier field id copied into the export rows.
+        tablespoonGramsFieldId:
+          type: string
+          description: Optional field id on the ingredient row containing grams per Tbsp for Tbsp conversions.
         categoryLookupColumn:
           type: string
           description: Optional datasource detail column resolved from the ingredient selector datasource.
         supplierLookupColumn:
           type: string
           description: Optional datasource detail column resolved from the ingredient selector datasource.
+        tablespoonGramsLookupColumn:
+          type: string
+          description: Optional datasource detail column containing grams per Tbsp for Tbsp conversions.
       required:
         - dateFieldId
         - mealGroupId

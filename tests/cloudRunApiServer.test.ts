@@ -663,7 +663,7 @@ describe('Cloud Run API server', () => {
 
       expect(res.status).toBe(200);
       expect(body.result).toMatchObject({ success: true, processed: 1, errors: [] });
-      expect(createSpreadsheet).toHaveBeenCalledWith('Meals 2026-04-30', { sheetName: 'Meals' });
+      expect(createSpreadsheet).toHaveBeenCalledWith('Meals Thu,30-Apr-2026', { sheetName: 'Meals' });
       expect(updateValuesRange).toHaveBeenCalledWith('temp-report-sheet', "'Meals'!A1:B2", [
         ['Date', 'Customer'],
         ['2026-04-30', 'Belliard']
@@ -674,7 +674,7 @@ describe('Cloud Run API server', () => {
       );
       expect(createFile).toHaveBeenCalledWith(
         {
-          name: 'Meals 2026-04-30.xlsx',
+          name: 'Meals Thu,30-Apr-2026.xlsx',
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           buffer: Buffer.from('xlsx-bytes', 'utf8')
         },
@@ -683,11 +683,11 @@ describe('Cloud Run API server', () => {
       expect(sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: ['ops@example.test'],
-          subject: 'Meals since 2026-04-30',
+          subject: 'Meals since Thu,30-Apr-2026',
           textBody: 'Rows: 1',
           attachments: [
             {
-              fileName: 'Meals 2026-04-30.xlsx',
+              fileName: 'Meals Thu,30-Apr-2026.xlsx',
               mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
               buffer: Buffer.from('xlsx-bytes', 'utf8')
             }

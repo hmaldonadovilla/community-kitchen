@@ -43,8 +43,8 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-header-title {
     margin: 0;
-    font-size: 48px;
-    line-height: 1.1;
+    font-size: var(--ck-font-group-title);
+    line-height: 1.15;
     font-weight: 600;
     letter-spacing: 0;
   }
@@ -60,21 +60,25 @@ const ANALYTICS_PAGE_STYLES = `
     font-size: calc(var(--ck-font-label) * 0.94);
     font-weight: 500;
     line-height: 1;
+    white-space: nowrap;
   }
   .ck-analytics-back {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 44px;
-    padding: 0 16px;
+    min-height: 48px;
+    min-width: 150px;
+    padding: 0 18px;
     border-radius: 8px;
-    border: 1px solid rgba(107, 117, 128, 0.28);
-    background: transparent;
-    color: var(--text);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    -webkit-text-fill-color: #fff;
     text-decoration: none;
-    font-size: calc(var(--ck-font-label) * 0.94);
+    font-size: calc(var(--ck-font-label) * 0.95);
     font-weight: 500;
     line-height: 1;
+    white-space: nowrap;
   }
   .ck-analytics-hero {
     display: grid;
@@ -120,8 +124,8 @@ const ANALYTICS_PAGE_STYLES = `
   }
   .ck-analytics-section-title {
     margin: 0;
-    font-size: clamp(30px, calc(var(--ck-font-group-title) * 1.55), 40px);
-    line-height: 1.04;
+    font-size: var(--ck-font-group-title);
+    line-height: 1.15;
     font-weight: 600;
     letter-spacing: 0;
   }
@@ -158,15 +162,15 @@ const ANALYTICS_PAGE_STYLES = `
   .ck-analytics-card-title {
     margin: 0;
     color: var(--text);
-    font-size: 32px;
+    font-size: var(--ck-font-label);
     line-height: 1.12;
     font-weight: 600;
     letter-spacing: 0;
   }
   .ck-analytics-card-value {
     margin: 0;
-    font-size: 48px;
-    line-height: 1;
+    font-size: var(--ck-font-group-title);
+    line-height: 1.15;
     font-weight: 600;
     letter-spacing: 0;
     word-break: break-word;
@@ -191,18 +195,24 @@ const ANALYTICS_PAGE_STYLES = `
     border-radius: 8px;
     border: 1px solid rgba(107, 117, 128, 0.36);
     background: rgba(255, 255, 255, 0.94);
-    padding: 22px;
-    display: grid;
-    gap: 16px;
-    min-height: 220px;
-  }
-  .ck-analytics-pipeline-form {
+    padding: 18px;
     display: grid;
     gap: 14px;
   }
+  .ck-analytics-pipeline-form {
+    display: grid;
+    gap: 12px;
+  }
   .ck-analytics-field {
     display: grid;
-    gap: 8px;
+    gap: 10px;
+  }
+  .ck-analytics-date-action-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
   }
   .ck-analytics-field-label,
   .ck-analytics-notice,
@@ -236,11 +246,20 @@ const ANALYTICS_PAGE_STYLES = `
     inline-size: 100%;
     box-sizing: border-box;
     text-align: left;
+    overflow: hidden;
   }
   .ck-analytics-date-field {
     position: relative;
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    padding-right: 50px;
+  }
+  .ck-analytics-date-field,
+  .ck-analytics-submit {
+    min-inline-size: 0;
   }
   .ck-analytics-date-input.ck-analytics-date-input--display {
     color: transparent;
@@ -275,7 +294,7 @@ const ANALYTICS_PAGE_STYLES = `
     font-family: inherit;
   }
   .ck-analytics-submit {
-    min-height: 48px;
+    min-height: 46px;
     border: 0;
     border-radius: 8px;
     background: rgba(11, 87, 208, 0.96);
@@ -283,7 +302,10 @@ const ANALYTICS_PAGE_STYLES = `
     font-size: calc(var(--ck-font-label) * 0.95);
     font-family: inherit;
     font-weight: 500;
-    padding: 0 18px;
+    padding: 0 14px;
+    flex: 0 0 auto;
+    min-width: 132px;
+    white-space: nowrap;
   }
   .ck-analytics-submit[disabled] {
     opacity: 0.6;
@@ -298,7 +320,70 @@ const ANALYTICS_PAGE_STYLES = `
   }
   @media (max-width: 620px) {
     .ck-analytics-header {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "back env"
+        "title title";
+      gap: 10px 12px;
+    }
+    .ck-analytics-header-title {
+      font-size: calc(var(--ck-font-group-title) * 0.92);
+    }
+    .ck-analytics-header-slot--start {
+      grid-area: back;
+      justify-content: flex-start;
+    }
+    .ck-analytics-header-slot--center {
+      grid-area: title;
+      justify-content: center;
+    }
+    .ck-analytics-header-slot--end {
+      grid-area: env;
+      justify-content: flex-end;
+    }
+    .ck-analytics-back {
+      min-width: 0;
+      min-height: 46px;
+      padding: 0 14px;
+    }
+    .ck-analytics-pill {
+      min-height: 42px;
+      padding: 0 12px;
+    }
+    .ck-analytics-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .ck-analytics-page.page {
+      gap: 18px;
+    }
+    .ck-analytics-shell {
+      gap: 18px;
+    }
+    .ck-analytics-pipeline-grid {
+      gap: 12px;
+    }
+    .ck-analytics-pipeline-card {
+      padding: 16px;
+    }
+    .ck-analytics-date-action-row {
+      flex-direction: column;
+    }
+    .ck-analytics-date-field {
+      flex: none;
+      width: 100%;
+    }
+    .ck-analytics-submit {
+      width: 100%;
+      padding: 0 14px;
+    }
+  }
+  @media (max-width: 340px) {
+    .ck-analytics-header {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "back"
+        "title"
+        "env";
       justify-items: stretch;
     }
     .ck-analytics-header-slot {
@@ -308,10 +393,17 @@ const ANALYTICS_PAGE_STYLES = `
       justify-content: flex-start;
     }
     .ck-analytics-header-slot--end {
-      justify-content: center;
+      justify-content: flex-start;
     }
-    .ck-analytics-grid {
-      grid-template-columns: minmax(0, 1fr);
+    .ck-analytics-back,
+    .ck-analytics-pill {
+      width: fit-content;
+    }
+    .ck-analytics-date-action-row {
+      flex-direction: column;
+    }
+    .ck-analytics-submit {
+      width: 100%;
     }
   }
 `;
@@ -607,46 +699,48 @@ const AnalyticsPage: React.FC = () => {
                         >
                           {pipeline.dateLabel || 'Date'}
                         </label>
-                        <div className="ck-analytics-date-field">
-                          <input
-                            id={resolvePipelineDateInputId(pipeline.dashboardPipelineId)}
-                            className={`ck-analytics-date-input${showFormattedPipelineDate ? ' ck-analytics-date-input--display' : ''}`}
-                            type="date"
-                            max={todayIso}
-                            value={pipelineDateValue}
-                            onFocus={() => setFocusedPipelineId(pipeline.dashboardPipelineId)}
-                            onBlur={() =>
-                              setFocusedPipelineId(current =>
-                                current === pipeline.dashboardPipelineId ? null : current
-                              )
-                            }
-                            onChange={event => {
-                              const value = event.currentTarget.value;
-                              setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: value }));
-                              if (pipelineErrors[pipeline.dashboardPipelineId]) {
-                                setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+                        <div className="ck-analytics-date-action-row">
+                          <div className="ck-analytics-date-field">
+                            <input
+                              id={resolvePipelineDateInputId(pipeline.dashboardPipelineId)}
+                              className={`ck-analytics-date-input${showFormattedPipelineDate ? ' ck-analytics-date-input--display' : ''}`}
+                              type="date"
+                              max={todayIso}
+                              value={pipelineDateValue}
+                              onFocus={() => setFocusedPipelineId(pipeline.dashboardPipelineId)}
+                              onBlur={() =>
+                                setFocusedPipelineId(current =>
+                                  current === pipeline.dashboardPipelineId ? null : current
+                                )
                               }
-                            }}
-                          />
-                          {pipelineDateDisplay ? (
-                            <div className="ck-analytics-date-overlay" aria-hidden="true">
-                              {pipelineDateDisplay}
-                            </div>
-                          ) : null}
+                              onChange={event => {
+                                const value = event.currentTarget.value;
+                                setPipelineDates(prev => ({ ...prev, [pipeline.dashboardPipelineId]: value }));
+                                if (pipelineErrors[pipeline.dashboardPipelineId]) {
+                                  setPipelineErrors(prev => ({ ...prev, [pipeline.dashboardPipelineId]: '' }));
+                                }
+                              }}
+                            />
+                            {pipelineDateDisplay ? (
+                              <div className="ck-analytics-date-overlay" aria-hidden="true">
+                                {pipelineDateDisplay}
+                              </div>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            className="ck-analytics-submit"
+                            disabled={pending}
+                            onPointerDown={() => handlePipelineSubmitPointerDown(pipeline)}
+                            onClick={() => handlePipelineSubmitClick(pipeline)}
+                          >
+                            {pending ? pipeline.pendingLabel || 'Sending...' : pipeline.submitLabel || 'Send report'}
+                          </button>
                         </div>
                         {pipeline.dateHelperText ? (
                           <p className="ck-analytics-pipeline-helper">{pipeline.dateHelperText}</p>
                         ) : null}
                       </div>
-                      <button
-                        type="button"
-                        className="ck-analytics-submit"
-                        disabled={pending}
-                        onPointerDown={() => handlePipelineSubmitPointerDown(pipeline)}
-                        onClick={() => handlePipelineSubmitClick(pipeline)}
-                      >
-                        {pending ? pipeline.pendingLabel || 'Sending...' : pipeline.submitLabel || 'Send report'}
-                      </button>
                       {pipelineErrors[pipeline.dashboardPipelineId] ? (
                         <p className="ck-analytics-error" role="alert">
                           {pipelineErrors[pipeline.dashboardPipelineId]}

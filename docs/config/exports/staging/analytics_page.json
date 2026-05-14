@@ -1,6 +1,6 @@
 {
   "pageTitle": "Reports",
-  "pageDescription": "Send operational reports to the Operations Manager.",
+  "pageDescription": "",
   "appHeader": {
     "logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"
   },
@@ -14,7 +14,7 @@
   "copy": {
     "loadingLabel": "Loading reports...",
     "emptyLabel": "No reports are available.",
-    "backToLandingLabel": "Apps",
+    "backToLandingLabel": "← Apps",
     "pendingNavigationTitle": "",
     "pendingNavigationMessage": "Opening forms..."
   },

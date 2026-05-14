@@ -19,6 +19,8 @@ const QUEUE_HEADERS = [
   'Summary JSON'
 ];
 const DEFAULT_QUEUED_NOTICE = "Report request sent. We'll email it to the Operations Manager.";
+const REPORT_WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const REPORT_MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
 
@@ -103,6 +105,67 @@ const toNumber = raw => {
 
 const replaceTemplateTokens = (template, placeholders) =>
   (template || '').toString().replace(/{{\s*([A-Za-z0-9_]+)\s*}}/g, (_match, token) => placeholders[`{{${token}}}`] ?? '');
+
+const parseIsoDateParts = value => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toText(value));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return { year, monthIndex: month - 1, day };
+};
+
+const formatReportDateToken = value => {
+  const text = toText(value);
+  const parts = parseIsoDateParts(text);
+  if (!parts) return text;
+  const date = new Date(Date.UTC(parts.year, parts.monthIndex, parts.day));
+  return `${REPORT_WEEKDAY_LABELS[date.getUTCDay()]},${`${parts.day}`.padStart(2, '0')}-${REPORT_MONTH_LABELS[parts.monthIndex]}-${parts.year}`;
+};
+
+const buildReportPlaceholders = args => ({
+  '{{PIPELINE_TITLE}}': args.title,
+  '{{START_DATE}}': formatReportDateToken(args.startDate),
+  '{{END_DATE}}': formatReportDateToken(args.endDate),
+  '{{START_DATE_ISO}}': args.startDate,
+  '{{END_DATE_ISO}}': args.endDate,
+  '{{RECORD_COUNT}}': `${args.recordCount}`,
+  '{{ROW_COUNT}}': `${args.rowCount}`,
+  '{{ATTACHMENT_NAME}}': args.attachmentName || '',
+  '{{SOURCE_FORM}}': args.sourceForm || ''
+});
+
+const isTablespoonUnit = unit => {
+  const normalized = toText(unit).toLowerCase();
+  return normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons';
+};
+
+const isGramUnit = unit => {
+  const normalized = toText(unit).toLowerCase();
+  return normalized === 'gr' || normalized === 'g' || normalized === 'gram' || normalized === 'grams';
+};
+
+const normalizeIngredientUsageQuantity = args => {
+  let quantity = args.quantity;
+  let unit = toText(args.unit);
+  if (isTablespoonUnit(unit)) {
+    const gramsPerTablespoon = args.tablespoonGrams;
+    if (typeof gramsPerTablespoon === 'number' && Number.isFinite(gramsPerTablespoon) && gramsPerTablespoon > 0) {
+      quantity *= gramsPerTablespoon;
+      unit = 'gr';
+    }
+  }
+  if (isGramUnit(unit) && quantity > 1000) {
+    quantity /= 1000;
+    unit = 'kg';
+  }
+  return {
+    quantity: Math.round(quantity * 1000000) / 1000000,
+    unit
+  };
+};
 
 const isMissingSheetError = err => /Unable to parse range|Google Sheets tab not found|not found|does not exist/i.test(toText(err && err.message));
 
@@ -332,7 +395,10 @@ class AnalyticsPipelineRepository {
         return {
           recordCount: aggregation.recordCount,
           rowCount: aggregation.rows.length,
-          values: [['ING', 'UNIT', 'QTY', 'CAT', 'SUPPLIER'], ...aggregation.rows.map(row => [row.ING, row.UNIT, row.QTY, row.CAT, row.SUPPLIER])],
+          values: [
+            ['Ingredients', 'Quantity', 'Unit', 'Category'],
+            ...aggregation.rows.map(row => [row.ingredient, row.quantity, row.unit, row.category])
+          ],
           defaultSheetName: 'Ingredients'
         };
       }
@@ -507,15 +573,16 @@ class AnalyticsPipelineRepository {
               (args.pipeline.report.categoryFieldId ? ingredientRow[args.pipeline.report.categoryFieldId] : undefined) ||
               (args.pipeline.report.categoryLookupColumn && details ? details[args.pipeline.report.categoryLookupColumn.toUpperCase()] : undefined) ||
               '';
-            const supplier =
-              (args.pipeline.report.supplierFieldId ? ingredientRow[args.pipeline.report.supplierFieldId] : undefined) ||
-              (args.pipeline.report.supplierLookupColumn && details ? details[args.pipeline.report.supplierLookupColumn.toUpperCase()] : undefined) ||
-              '';
-            const key = `${ingredient.toLowerCase()}::${unit.toLowerCase()}`;
-            const current = grouped.get(key) || { ING: ingredient, UNIT: unit, QTY: 0, CAT: '', SUPPLIER: '' };
-            current.QTY += quantity;
-            if (!current.CAT && category) current.CAT = toText(category);
-            if (!current.SUPPLIER && supplier) current.SUPPLIER = toText(supplier);
+            const tablespoonGrams =
+              (args.pipeline.report.tablespoonGramsFieldId ? toNumber(ingredientRow[args.pipeline.report.tablespoonGramsFieldId]) : null) ??
+              (args.pipeline.report.tablespoonGramsLookupColumn && details
+                ? toNumber(details[args.pipeline.report.tablespoonGramsLookupColumn.toUpperCase()])
+                : null);
+            const normalized = normalizeIngredientUsageQuantity({ quantity, unit, tablespoonGrams });
+            const key = `${ingredient.toLowerCase()}::${normalized.unit.toLowerCase()}`;
+            const current = grouped.get(key) || { ingredient, unit: normalized.unit, quantity: 0, category: '' };
+            current.quantity += normalized.quantity;
+            if (!current.category && category) current.category = toText(category);
             grouped.set(key, current);
           }
         }
@@ -523,7 +590,7 @@ class AnalyticsPipelineRepository {
     }
 
     return {
-      rows: Array.from(grouped.values()).sort((left, right) => left.ING.localeCompare(right.ING) || left.UNIT.localeCompare(right.UNIT)),
+      rows: Array.from(grouped.values()).sort((left, right) => left.ingredient.localeCompare(right.ingredient) || left.unit.localeCompare(right.unit)),
       recordCount
     };
   }
@@ -542,7 +609,7 @@ class AnalyticsPipelineRepository {
   aggregateRecordTable(args) {
     const report = args.pipeline.report || {};
     const columns = Array.isArray(report.columns) ? report.columns : [];
-    const headers = columns.map(column => toText(column.header) || 'Column');
+    const headers = columns.map(column => this.resolveRecordTableColumnHeader({ report, questions: args.questions, column }));
     const includeStatuses = new Set(normalizeStringList(report.includeStatuses).map(normalizeStatusToken));
     const excludeStatuses = new Set(normalizeStringList(report.excludeStatuses).map(normalizeStatusToken));
     const contexts = [];
@@ -647,6 +714,28 @@ class AnalyticsPipelineRepository {
     return '';
   }
 
+  resolveRecordTableColumnHeader(args) {
+    const configured = toText(args.column && args.column.header);
+    if (configured) return configured;
+    const fieldId = toText(args.column && args.column.fieldId);
+    const source = toText(args.column && args.column.source) || (fieldId ? 'recordField' : '');
+    if (source === 'recordField' && fieldId) {
+      const question = (args.questions || []).find(entry => entry && entry.id === fieldId);
+      return resolveDisplayText(question && (question.qEn || question.labelEn || question.label), fieldId);
+    }
+    if (source === 'lineItemField' && fieldId) {
+      const lineItem = args.report && args.report.lineItem;
+      const field = lineItem && lineItem.groupId
+        ? this.findNestedFieldConfig(args.questions, lineItem.groupId, normalizePathList(lineItem.subGroupPath), fieldId)
+        : null;
+      return resolveDisplayText(field && (field.qEn || field.labelEn || field.label), fieldId);
+    }
+    if (source === 'recordStatus' || source === 'completionStatus') return 'Status';
+    if (source === 'firstMissingStep') return 'First missing step';
+    if (source === 'missingSteps') return 'Missing steps';
+    return fieldId || 'Column';
+  }
+
   collectColumnLineItemRows(context, column) {
     const groupId = toText(column.groupId);
     if (!groupId) return [];
@@ -715,13 +804,16 @@ class AnalyticsPipelineRepository {
 
   resolveAttachmentFileName(args) {
     const template = toText(args.attachmentConfig && args.attachmentConfig.fileNameTemplate) || '{{PIPELINE_TITLE}} {{START_DATE}} to {{END_DATE}}.xlsx';
-    const text = replaceTemplateTokens(template, {
-      '{{PIPELINE_TITLE}}': args.title,
-      '{{START_DATE}}': args.startDate,
-      '{{END_DATE}}': args.endDate,
-      '{{RECORD_COUNT}}': `${args.recordCount}`,
-      '{{ROW_COUNT}}': `${args.rowCount}`
-    })
+    const text = replaceTemplateTokens(
+      template,
+      buildReportPlaceholders({
+        title: args.title,
+        startDate: args.startDate,
+        endDate: args.endDate,
+        recordCount: args.recordCount,
+        rowCount: args.rowCount
+      })
+    )
       .replace(/[\\/:*?"<>|]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -793,15 +885,15 @@ class AnalyticsPipelineRepository {
   }
 
   async sendPipelineEmail(args) {
-    const placeholders = {
-      '{{PIPELINE_TITLE}}': resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Report',
-      '{{START_DATE}}': args.startDate,
-      '{{END_DATE}}': args.endDate,
-      '{{RECORD_COUNT}}': `${args.recordCount}`,
-      '{{ROW_COUNT}}': `${args.rowCount}`,
-      '{{ATTACHMENT_NAME}}': args.artifact.fileName,
-      '{{SOURCE_FORM}}': toText(args.sourceForm.title || args.sourceForm.configSheet)
-    };
+    const placeholders = buildReportPlaceholders({
+      title: resolveDisplayText(args.pipeline.title) || args.sourceForm.title || 'Report',
+      startDate: args.startDate,
+      endDate: args.endDate,
+      recordCount: args.recordCount,
+      rowCount: args.rowCount,
+      attachmentName: args.artifact.fileName,
+      sourceForm: toText(args.sourceForm.title || args.sourceForm.configSheet)
+    });
     const email = args.pipeline.email || {};
     const to = this.resolveRecipients(email.recipients, placeholders);
     if (!to.length) throw new Error('Resolved report recipients are empty.');

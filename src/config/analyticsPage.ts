@@ -14,11 +14,11 @@ import type {
 
 const DEFAULT_ANALYTICS_PAGE_CONFIG: AnalyticsPageConfig = {
   pageTitle: 'Reports',
-  pageDescription: 'Send operational reports to the Operations Manager.',
+  pageDescription: '',
   copy: {
     loadingLabel: 'Loading reports...',
     emptyLabel: 'No reports are available.',
-    backToLandingLabel: 'Apps',
+    backToLandingLabel: '← Apps',
     pendingNavigationTitle: 'Please wait',
     pendingNavigationMessage: 'Opening forms...'
   },
@@ -127,7 +127,7 @@ const normalizeAnalyticsPageConfig = (value: any): AnalyticsPageConfig => {
   const source = value && typeof value === 'object' ? value : {};
   return {
     pageTitle: normalizeRequiredText(source.pageTitle, DEFAULT_ANALYTICS_PAGE_CONFIG.pageTitle),
-    pageDescription: normalizeOptionalText(source.pageDescription) || DEFAULT_ANALYTICS_PAGE_CONFIG.pageDescription,
+    pageDescription: normalizeOptionalTextAllowEmpty(source.pageDescription) ?? DEFAULT_ANALYTICS_PAGE_CONFIG.pageDescription,
     appHeader: normalizeHeader(source.appHeader),
     landingTile: normalizeLandingTile(source.landingTile),
     copy: normalizeCopy(source.copy),

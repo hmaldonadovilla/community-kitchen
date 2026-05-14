@@ -65,19 +65,22 @@ For `ingredientUsageReport`:
 - traverse `mealGroupId -> prepGroupId -> ingredientGroupId`
 - keep prep rows whose `prepTypeFieldId` matches the configured values
 - group ingredient rows by ingredient + unit
+- convert `Tbsp` quantities to `gr` when `tablespoonGramsLookupColumn` resolves a grams-per-Tbsp value
+- convert `gr` quantities to `kg` when the aggregated value is greater than 1000
 - sum quantity
-- enrich category/supplier from row fields and/or ingredient datasource lookup columns
+- enrich category from row fields and/or ingredient datasource lookup columns
 
 ### Output
 
 Generate a temporary Google Spreadsheet, fill it with:
-- `ING`
-- `UNIT`
-- `QTY`
-- `CAT`
-- `SUPPLIER`
+- `Ingredients`
+- `Unit`
+- `Quantity`
+- `Category`
 
 Export that spreadsheet as `.xlsx`, save it to the configured/default Drive folder, attach it to the email, and trash the temporary spreadsheet.
+
+Report filename, email subject, and email body date placeholders use `EEE,dd-mmm-yyyy` values for `{{START_DATE}}` and `{{END_DATE}}`. ISO values remain available as `{{START_DATE_ISO}}` and `{{END_DATE_ISO}}` for integrations that need them.
 
 ## Implementation slices
 

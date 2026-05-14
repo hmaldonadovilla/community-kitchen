@@ -450,7 +450,8 @@ describe('Dashboard', () => {
               quantityFieldId: 'QTY',
               unitFieldId: 'UNIT',
               categoryFieldId: 'CAT',
-              supplierLookupColumn: 'SUPPLIER'
+              supplierLookupColumn: 'SUPPLIER',
+              tablespoonGramsLookupColumn: 'TBSP_GRAMS'
             }
           },
           {
@@ -519,7 +520,8 @@ describe('Dashboard', () => {
             quantityFieldId: 'QTY',
             unitFieldId: 'UNIT',
             categoryFieldId: 'CAT',
-            supplierLookupColumn: 'SUPPLIER'
+            supplierLookupColumn: 'SUPPLIER',
+            tablespoonGramsLookupColumn: 'TBSP_GRAMS'
           }
         },
         {
