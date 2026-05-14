@@ -274,6 +274,9 @@ export function buildWebFormHtml(
         align-items: center;
         gap: 16px;
       }
+      .ck-app-header[data-layout="home"][data-title-right-priority="1"] {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+      }
       .ck-app-header[data-layout="detail"] {
         display: flex;
         align-items: center;
@@ -366,6 +369,10 @@ export function buildWebFormHtml(
         color: var(--text);
         font: inherit;
       }
+      .ck-app-header[data-title-right-priority="1"] .ck-app-title-btn {
+        width: 100%;
+        max-width: 100%;
+      }
       .ck-app-title {
         font-weight: 600;
         font-size: var(--ck-font-group-title);
@@ -381,6 +388,9 @@ export function buildWebFormHtml(
       }
       .ck-app-header[data-layout="detail"] .ck-app-title {
         text-align: left;
+      }
+      .ck-app-title-row .ck-app-title {
+        flex: 1 1 auto;
       }
       .ck-app-title-row {
         flex: 1 1 auto;
@@ -404,6 +414,11 @@ export function buildWebFormHtml(
         color: var(--muted);
         white-space: nowrap;
         overflow: hidden;
+        line-height: 1.2;
+      }
+      .ck-app-title-right[data-priority="1"] {
+        flex: 0 0 auto;
+        max-width: min(68%, 560px);
       }
       .ck-app-title-right [data-tone="error"] {
         color: var(--danger);
@@ -416,6 +431,20 @@ export function buildWebFormHtml(
       }
       .ck-app-title-right [data-tone="paused"] {
         color: var(--muted);
+      }
+      .ck-app-title-right .ck-app-save-status {
+        flex: 0 0 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--accent);
+        font-weight: 600;
+        font-size: var(--ck-font-group-title);
+        line-height: 1.15;
+      }
+      .ck-app-title-right .ck-app-save-status[data-tone="error"] {
+        color: var(--danger);
       }
       .ck-env-tag {
         display: inline-flex;

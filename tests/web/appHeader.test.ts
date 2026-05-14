@@ -24,11 +24,14 @@ describe('AppHeader', () => {
         ...baseProps,
         layout: 'home',
         drawerEnabled: true,
-        titleRight: React.createElement('span', null, 'Saved')
+        titleRight: React.createElement('span', null, 'Saved'),
+        titleRightPriority: true
       })
     );
 
     expect(html).toContain('data-layout="home"');
+    expect(html).toContain('data-title-right-priority="1"');
+    expect(html).toContain('data-priority="1"');
     expect(html).toContain('ck-app-back-btn');
     expect(html).toContain('← Apps');
     expect(html).not.toContain('ck-app-avatar-btn');

@@ -18,6 +18,7 @@ export const AppHeader: React.FC<{
    * Optional content rendered on the right side of the title row (e.g. autosave status).
    */
   titleRight?: React.ReactNode;
+  titleRightPriority?: boolean;
   layout?: HeaderLayout;
   backLabel: string;
   onBack: () => void;
@@ -34,6 +35,7 @@ export const AppHeader: React.FC<{
 }> = ({
   title,
   titleRight,
+  titleRightPriority,
   layout = 'home',
   backLabel,
   onBack,
@@ -218,7 +220,12 @@ export const AppHeader: React.FC<{
 
   return (
     <>
-      <header className="ck-app-header" data-mobile={isMobile ? '1' : '0'} data-layout={layout}>
+      <header
+        className="ck-app-header"
+        data-mobile={isMobile ? '1' : '0'}
+        data-layout={layout}
+        data-title-right-priority={titleRightPriority ? '1' : '0'}
+      >
         {layout === 'home' ? (
           <>
             <div className="ck-app-header-slot ck-app-header-slot--start">
@@ -235,7 +242,11 @@ export const AppHeader: React.FC<{
             </div>
             <div className="ck-app-header-slot ck-app-header-slot--center">{titleNode}</div>
             <div className="ck-app-header-slot ck-app-header-slot--end">
-              {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
+              {titleRight ? (
+                <div className="ck-app-title-right" data-priority={titleRightPriority ? '1' : '0'}>
+                  {titleRight}
+                </div>
+              ) : null}
             </div>
           </>
         ) : (
@@ -254,7 +265,11 @@ export const AppHeader: React.FC<{
             )}
             <div className="ck-app-title-row">
               <div className="ck-app-title">{title || 'Form'}</div>
-              {titleRight ? <div className="ck-app-title-right">{titleRight}</div> : null}
+              {titleRight ? (
+                <div className="ck-app-title-right" data-priority={titleRightPriority ? '1' : '0'}>
+                  {titleRight}
+                </div>
+              ) : null}
             </div>
           </>
         )}

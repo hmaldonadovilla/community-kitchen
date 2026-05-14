@@ -3,7 +3,19 @@ import React, { useMemo } from 'react';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
 
-type HeaderDraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
+export type HeaderDraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
+
+export const shouldRenderAppHeaderSaveNotice = (args: {
+  view: string;
+  autoSaveEnabled: boolean;
+  draftSavePhase: HeaderDraftSavePhase;
+  isClosedRecord: boolean;
+}): boolean => {
+  if (args.isClosedRecord) return false;
+  if (!args.autoSaveEnabled) return false;
+  if (args.draftSavePhase === 'idle') return false;
+  return args.view === 'form' || args.draftSavePhase === 'saving';
+};
 
 /**
  * Owner: app header UI.
@@ -25,14 +37,13 @@ export const AppHeaderStatus: React.FC<{
 
     if (isClosedRecord) {
       return (
-        <output aria-live="polite" data-tone="paused">
+        <output className="ck-app-record-status" aria-live="polite" data-tone="paused">
           {tSystem('app.closedReadOnly', language, 'Closed (read-only)')}
         </output>
       );
     }
 
-    if (!autoSaveEnabled) return null;
-    if (draftSavePhase === 'idle') return null;
+    if (!shouldRenderAppHeaderSaveNotice({ view, autoSaveEnabled, draftSavePhase, isClosedRecord })) return null;
 
     const byPhase: Partial<Record<HeaderDraftSavePhase, { key: string; fallback: string; tone: string }>> = {
       saving: { key: 'draft.savingShort', fallback: 'Saving…', tone: 'saving' },
@@ -47,7 +58,7 @@ export const AppHeaderStatus: React.FC<{
     const text =
       draftSavePhase === 'paused' ? (draftSaveMessage || tSystem(def.key, language, def.fallback)) : tSystem(def.key, language, def.fallback);
     return (
-      <output aria-live="polite" data-tone={def.tone}>
+      <output className="ck-app-save-status" aria-live="polite" data-tone={def.tone}>
         {text}
       </output>
     );

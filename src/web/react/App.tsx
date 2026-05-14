@@ -49,7 +49,7 @@ import {
 } from './api';
 import type { FollowupBatchOptions } from './api';
 import { AppHeader } from './components/app/AppHeader';
-import { AppHeaderStatus } from './components/app/AppHeaderStatus';
+import { AppHeaderStatus, shouldRenderAppHeaderSaveNotice } from './components/app/AppHeaderStatus';
 import { AppOrientationBlocker } from './components/app/AppOrientationBlocker';
 import { AppActionBar } from './components/app/AppActionBars';
 import { AppMainViews } from './components/app/AppMainViews';
@@ -14154,6 +14154,16 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       />
     );
   }, [autoSaveEnabled, draftSave.message, draftSave.phase, envTag, isClosedRecord, language, view]);
+  const headerRightPriority = useMemo(
+    () =>
+      shouldRenderAppHeaderSaveNotice({
+        view,
+        autoSaveEnabled,
+        draftSavePhase: draftSave.phase,
+        isClosedRecord
+      }),
+    [autoSaveEnabled, draftSave.phase, isClosedRecord, view]
+  );
   const {
     drawerEnabled: headerDrawerEnabled,
     layout: headerLayout,
@@ -14419,6 +14429,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       <AppHeader
         title={definition.title || 'Form'}
         titleRight={headerRight}
+        titleRightPriority={headerRightPriority}
         layout={headerLayout}
         backLabel={headerBackLabel}
         onBack={handleHeaderBack}

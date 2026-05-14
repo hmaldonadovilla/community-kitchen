@@ -55,6 +55,15 @@ describe('WebFormTemplate', () => {
     expect(html).toContain('Please keep this page open. This may take a few seconds.');
   });
 
+  test('includes high-visibility header autosave notice styles', () => {
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('.ck-app-save-status');
+    expect(html).toContain('font-size: var(--ck-font-group-title);');
+    expect(html).toContain('color: var(--accent);');
+    expect(html).toContain('data-title-right-priority="1"');
+  });
+
   test('uses the public Apps Script path for the React bundle when the service URL is domain-scoped', () => {
     (globalThis as any).ScriptApp = {
       getService: () => ({

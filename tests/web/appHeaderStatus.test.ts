@@ -1,8 +1,9 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const { AppHeaderStatus } = require('../../src/web/react/components/app/AppHeaderStatus.tsx') as {
+const { AppHeaderStatus, shouldRenderAppHeaderSaveNotice } = require('../../src/web/react/components/app/AppHeaderStatus.tsx') as {
   AppHeaderStatus: typeof import('../../src/web/react/components/app/AppHeaderStatus').AppHeaderStatus;
+  shouldRenderAppHeaderSaveNotice: typeof import('../../src/web/react/components/app/AppHeaderStatus').shouldRenderAppHeaderSaveNotice;
 };
 
 describe('AppHeaderStatus', () => {
@@ -25,6 +26,7 @@ describe('AppHeaderStatus', () => {
     );
 
     expect(html).toContain('ck-env-tag');
+    expect(html).toContain('ck-app-save-status');
     expect(html).toContain('Environment: staging');
     expect(html).toContain('Saving');
     expect(html).toContain('data-tone="saving"');
@@ -39,7 +41,44 @@ describe('AppHeaderStatus', () => {
     );
 
     expect(html).toContain('Closed (read-only)');
+    expect(html).toContain('ck-app-record-status');
+    expect(html).not.toContain('ck-app-save-status');
     expect(html).toContain('data-tone="paused"');
+  });
+
+  it('marks only active autosave phases as header save notices', () => {
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'form',
+        autoSaveEnabled: true,
+        draftSavePhase: 'saving',
+        isClosedRecord: false
+      })
+    ).toBe(true);
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'list',
+        autoSaveEnabled: true,
+        draftSavePhase: 'saving',
+        isClosedRecord: false
+      })
+    ).toBe(true);
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'form',
+        autoSaveEnabled: true,
+        draftSavePhase: 'idle',
+        isClosedRecord: false
+      })
+    ).toBe(false);
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'form',
+        autoSaveEnabled: true,
+        draftSavePhase: 'saving',
+        isClosedRecord: true
+      })
+    ).toBe(false);
   });
 
   it('renders no markup when there is no header status', () => {
