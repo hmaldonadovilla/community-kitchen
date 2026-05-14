@@ -186,6 +186,7 @@ import { getPerfNow } from './app/perfClock';
 import { collectListViewRuleColumnDependencies } from './app/listViewRuleColumns';
 import { collectListViewMetricDependencies } from './app/listViewMetric';
 import { resolveInitialListSearchValue } from './app/listViewSearch';
+import { isHiddenHtmlTemplateUpdateRecordAction } from './app/htmlTemplateActionGate';
 import {
   buildHomeListLocalCacheKey,
   readHomeListLocalCache,
@@ -6676,7 +6677,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   });
 
   const handleCustomButton = useCallback(
-    (buttonId: string, opts?: { skipConfirm?: boolean }) => {
+    (
+      buttonId: string,
+      opts?: {
+        skipConfirm?: boolean;
+        source?: string;
+        runtimeValues?: Record<string, any>;
+      }
+    ) => {
       const parsedRef = parseButtonRef(buttonId || '');
       const baseId = parsedRef.id;
       const qIdx = parsedRef.qIdx;
@@ -6688,6 +6696,32 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const cfg: any = btn ? (btn as any).button : null;
       const action = (cfg?.action || '').toString().trim();
       logEvent('ui.customButton.click', { buttonId: baseId, qIdx: qIdx ?? null, action: action || null });
+
+      const hiddenTemplateAction = isHiddenHtmlTemplateUpdateRecordAction({
+        button: btn || null,
+        action,
+        source: opts?.source || null,
+        values: valuesRef.current,
+        lineItems: lineItemsRef.current,
+        recordMeta: {
+          id: selectedRecordIdRef.current || selectedRecordSnapshotRef.current?.id || lastSubmissionMetaRef.current?.id,
+          createdAt: selectedRecordSnapshotRef.current?.createdAt || lastSubmissionMetaRef.current?.createdAt,
+          updatedAt: selectedRecordSnapshotRef.current?.updatedAt || lastSubmissionMetaRef.current?.updatedAt,
+          status: selectedRecordSnapshotRef.current?.status || lastSubmissionMetaRef.current?.status || null,
+          pdfUrl: selectedRecordSnapshotRef.current?.pdfUrl || undefined
+        }
+      });
+      if (hiddenTemplateAction) {
+        const message = tSystem('actions.notAvailable', languageRef.current, 'Action is not available.');
+        setStatus(message);
+        setStatusLevel('error');
+        logEvent('ui.customButton.blocked.hiddenTemplateAction', {
+          buttonId: baseId,
+          qIdx: qIdx ?? null,
+          action
+        });
+        return;
+      }
 
       if (action === 'renderDocTemplate') {
         const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
@@ -6730,7 +6764,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           qIdx,
           btn,
           cfg,
-          skipConfirm: opts?.skipConfirm === true
+          skipConfirm: opts?.skipConfirm === true,
+          runtimeValues: opts?.runtimeValues
         });
         return;
       }

@@ -108,9 +108,21 @@ export const useUpdateRecordButtonAction = (args: {
       btn: any;
       cfg: any;
       skipConfirm?: boolean;
+      runtimeValues?: Record<string, any>;
     }) => {
-      const { buttonId, baseId, qIdx, btn, cfg, skipConfirm = false } = actionArgs;
-      const setObj = (cfg?.set || cfg?.patch || cfg?.update || {}) as any;
+      const { buttonId, baseId, qIdx, btn, cfg, skipConfirm = false, runtimeValues } = actionArgs;
+      const configuredSetObj = (cfg?.set || cfg?.patch || cfg?.update || {}) as any;
+      const runtimeValuePatch =
+        runtimeValues && typeof runtimeValues === 'object' && !Array.isArray(runtimeValues) ? (runtimeValues as Record<string, any>) : null;
+      const setObj = runtimeValuePatch
+        ? {
+            ...(configuredSetObj || {}),
+            values: {
+              ...((configuredSetObj || {}).values || {}),
+              ...runtimeValuePatch
+            }
+          }
+        : configuredSetObj;
       const dependencyGuardCfg = (cfg?.dependencyGuard || null) as any;
       const navigateToRaw = (cfg?.navigateTo || cfg?.targetView || cfg?.openView || 'auto').toString().trim().toLowerCase();
       const navigateTo =
@@ -225,6 +237,11 @@ export const useUpdateRecordButtonAction = (args: {
             cancelLabel: cancel,
             kind: 'updateRecord',
             refId: buttonId,
+            primaryAction: confirmCfg?.primaryAction,
+            showCancel: confirmCfg?.showCancel,
+            showConfirm: confirmCfg?.showConfirm,
+            showCloseButton: confirmCfg?.showCloseButton,
+            dismissOnBackdrop: confirmCfg?.dismissOnBackdrop,
             onConfirm: () => run('default')
           });
           logEvent('button.updateRecord.confirm.open', { buttonId: baseId, qIdx: qIdx ?? null, navigateTo });

@@ -108,6 +108,32 @@ describe('derivedValue', () => {
     expect(values.EXP).toBe('2025-01-03');
   });
 
+  it('addDays uses a configured override field before computing from the base date', () => {
+    const definition: any = {
+      questions: [
+        { id: 'BASE', type: 'DATE' },
+        { id: 'EXP_OVERRIDE', type: 'DATE' },
+        {
+          id: 'EXP',
+          type: 'DATE',
+          derivedValue: {
+            op: 'addDays',
+            dependsOn: 'BASE',
+            offsetDays: 2,
+            overrideFieldId: 'EXP_OVERRIDE'
+          }
+        }
+      ]
+    };
+
+    const { values } = applyValueMapsToForm(
+      definition,
+      { BASE: '2025-01-01', EXP_OVERRIDE: '2025-01-10', EXP: '' } as any,
+      {} as any
+    );
+    expect(values.EXP).toBe('2025-01-10');
+  });
+
   it('addMonths still applies always by default', () => {
     const definition: any = {
       questions: [

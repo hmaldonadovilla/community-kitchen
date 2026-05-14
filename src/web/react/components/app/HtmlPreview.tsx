@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { resolveHtmlPreviewActionContext } from './htmlPreviewActionContext';
+import type { HtmlPreviewActionContext } from './htmlPreviewActionContext';
 
 export const HtmlPreview: React.FC<{
   html: string;
@@ -18,7 +20,7 @@ export const HtmlPreview: React.FC<{
   /**
    * Called when a data-ck-action element is clicked inside the HTML.
    */
-  onAction?: (actionId: string) => void;
+  onAction?: (actionId: string, context?: HtmlPreviewActionContext) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }> = ({ html, allowScripts, hideTabTargets, onOpenFiles, onAction, onDiagnostic }) => {
   const htmlText = useMemo(() => (html || '').toString(), [html]);
@@ -109,6 +111,7 @@ export const HtmlPreview: React.FC<{
     (e: React.MouseEvent) => {
       try {
         const target = e.target as HTMLElement | null;
+        const root = contentRef.current;
         if (!target) return;
         const fileBtn = target.closest?.('[data-ck-file-field]') as HTMLElement | null;
         if (fileBtn) {
@@ -130,8 +133,38 @@ export const HtmlPreview: React.FC<{
           e.stopPropagation();
           const actionId = (actionEl.getAttribute('data-ck-action') || '').toString().trim();
           if (!actionId) return;
-          onDiagnostic?.('htmlPreview.action.click', { actionId });
-          onAction?.(actionId);
+          const readValue = (selector: string): string | undefined => {
+            const sourceSelector = (selector || '').toString().trim();
+            let valueEl: HTMLElement | null = actionEl;
+            if (sourceSelector && root) {
+              try {
+                valueEl = root.querySelector(sourceSelector) as HTMLElement | null;
+              } catch {
+                valueEl = null;
+              }
+              if (!valueEl) return '';
+            }
+            if ('value' in (valueEl as any)) {
+              return ((valueEl as any).value ?? '').toString();
+            }
+            return (valueEl.textContent || '').toString();
+          };
+          const context = resolveHtmlPreviewActionContext({
+            getAttribute: name => actionEl.getAttribute(name),
+            readValue
+          });
+          if (context?.missingRequiredValues?.length) {
+            onDiagnostic?.('htmlPreview.action.blockedMissingValue', {
+              actionId,
+              fields: context.missingRequiredValues
+            });
+            return;
+          }
+          onDiagnostic?.('htmlPreview.action.click', {
+            actionId,
+            valueFieldCount: Object.keys(context?.values || {}).length
+          });
+          onAction?.(actionId, context);
           return;
         }
 

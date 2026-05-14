@@ -226,7 +226,8 @@ export type ButtonPlacement =
   | 'topBarList'
   | 'topBarForm'
   | 'topBarSummary'
-  | 'listBar';
+  | 'listBar'
+  | 'htmlTemplate';
 
 export type ButtonOutput = 'pdf';
 
@@ -268,6 +269,32 @@ export interface ButtonConfirmConfig {
    * Optional cancel button label.
    */
   cancelLabel?: LocalizedString | string;
+  /**
+   * When false, hides the cancel button for a single-action acknowledgement dialog.
+   * Default: true.
+   */
+  showCancel?: boolean;
+  /**
+   * When false, hides the confirm button.
+   * Default: true.
+   */
+  showConfirm?: boolean;
+  /**
+   * When true, shows the close (x) button.
+   * Default: false.
+   */
+  showCloseButton?: boolean;
+  /**
+   * When true, clicking the backdrop dismisses the dialog.
+   * Default: false.
+   */
+  dismissOnBackdrop?: boolean;
+  /**
+   * Controls which action is visually primary / default.
+   * - confirm (default): confirm button uses the primary accent style
+   * - cancel: cancel button uses the primary accent style
+   */
+  primaryAction?: 'confirm' | 'cancel';
 }
 
 export interface DataSourceFreshnessDialogConfig extends ButtonConfirmConfig {
@@ -2023,6 +2050,13 @@ export interface DerivedValueAddDaysConfig {
    */
   offsetDays?: number;
   /**
+   * Optional field ID whose non-empty value overrides the computed date while
+   * keeping this derived field as the effective value for templates/outputs.
+   */
+  overrideFieldId?: string;
+  manualOverrideFieldId?: string;
+  valueOverrideFieldId?: string;
+  /**
    * When to apply the derived value:
    * - always: recompute on every change (default for addDays)
    * - empty: only set when the target field is empty (allows user overrides)
@@ -2045,6 +2079,13 @@ export interface DerivedValueAddMonthsConfig {
    * Number of months to add (can be negative).
    */
   offsetMonths?: number;
+  /**
+   * Optional field ID whose non-empty value overrides the computed date while
+   * keeping this derived field as the effective value for templates/outputs.
+   */
+  overrideFieldId?: string;
+  manualOverrideFieldId?: string;
+  valueOverrideFieldId?: string;
   /**
    * When to apply the derived value:
    * - always: recompute on every change (default for addMonths)

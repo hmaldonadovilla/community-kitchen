@@ -231,7 +231,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -242,6 +242,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -283,7 +284,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -294,6 +295,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -333,7 +335,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -344,6 +346,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -369,7 +372,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -380,6 +383,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -541,6 +545,22 @@ components:
                       additionalProperties:
                         type: string
                   description: Optional cancel button label.
+                showCancel:
+                  type: boolean
+                  description: When false, hide the cancel button for a single-action acknowledgement dialog.
+                showConfirm:
+                  type: boolean
+                  description: When false, hide the confirm button.
+                showCloseButton:
+                  type: boolean
+                  description: When true, show the close button.
+                dismissOnBackdrop:
+                  type: boolean
+                  description: When true, clicking the backdrop dismisses the dialog.
+                primaryAction:
+                  type: string
+                  enum: [confirm, cancel]
+                  description: Which dialog action should receive the primary style.
               required: [message]
             dependencyGuard:
               $ref: '#/components/schemas/UpdateRecordDependencyGuardConfig'
@@ -564,7 +584,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -575,6 +595,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -607,7 +628,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar]
+                enum: [form, formSummaryMenu, summaryBar, topBar, topBarList, topBarForm, topBarSummary, listBar, htmlTemplate]
               description: |
                 Where the button should surface in the web UI.
                 - `form`: render inline as a normal field in the form view.
@@ -618,6 +639,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
             tone:
               type: string
               enum: [primary, secondary]
@@ -931,6 +953,22 @@ components:
           $ref: '#/components/schemas/LocalizedString'
         cancelLabel:
           $ref: '#/components/schemas/LocalizedString'
+        showCancel:
+          type: boolean
+          description: When false, hide the cancel button for a single-action acknowledgement dialog.
+        showConfirm:
+          type: boolean
+          description: When false, hide the confirm button.
+        showCloseButton:
+          type: boolean
+          description: When true, show the close button.
+        dismissOnBackdrop:
+          type: boolean
+          description: When true, clicking the backdrop dismisses the dialog.
+        primaryAction:
+          type: string
+          enum: [confirm, cancel]
+          description: Which dialog action should receive the primary style.
       required: [message]
 
     FileUploadConfig:
@@ -2766,6 +2804,9 @@ components:
             offsetDays:
               type: integer
               description: Number of days to add (can be negative).
+            overrideFieldId:
+              type: string
+              description: Optional field id whose non-empty value overrides the computed result while this field remains the effective value for templates and outputs.
             when:
               type: string
               enum: [always, empty]
@@ -2790,6 +2831,9 @@ components:
             offsetMonths:
               type: integer
               description: Number of months to add (can be negative).
+            overrideFieldId:
+              type: string
+              description: Optional field id whose non-empty value overrides the computed result while this field remains the effective value for templates and outputs.
             when:
               type: string
               enum: [always, empty]

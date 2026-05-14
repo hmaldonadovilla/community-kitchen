@@ -8,6 +8,7 @@ import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../
 import { shouldShowSummaryLoadingCard } from '../../app/recordOpenState';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import { HtmlPreview } from './HtmlPreview';
+import type { HtmlPreviewActionContext } from './htmlPreviewActionContext';
 import { ReportLivePreview } from './ReportLivePreview';
 
 export type SubmissionMeta = {
@@ -30,7 +31,7 @@ export const SummaryView: React.FC<{
   currentRecord: WebFormSubmission | null;
   prefetchedSummaryHtml?: string | null;
   onOpenFiles?: (fieldId: string) => void;
-  onAction?: (actionId: string) => void;
+  onAction?: (actionId: string, context?: HtmlPreviewActionContext) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }> = ({
   definition,

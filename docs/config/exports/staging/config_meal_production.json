@@ -4036,7 +4036,26 @@
         "op": "addDays",
         "dependsOn": "MP_PREP_DATE",
         "offsetDays": 3,
-        "hidden": true
+        "hidden": true,
+        "overrideFieldId": "MP_EXP_DATE_OVERRIDE"
+      }
+    },
+    {
+      "id": "MP_EXP_DATE_OVERRIDE",
+      "type": "DATE",
+      "qEn": "Expiration Date Override",
+      "required": false,
+      "ui": {
+        "summaryVisibility": "never"
+      },
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "MP_SERVICE",
+          "equals": "Ski"
+        }
       }
     },
     {
@@ -6752,6 +6771,64 @@
       }
     },
     {
+      "id": "MP_OVERRIDE_EXP_DATE",
+      "type": "BUTTON",
+      "qEn": "Override",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "all": [
+            {
+              "fieldId": "__ckRequestParam_admin",
+              "equals": [
+                "true",
+                "1",
+                "yes",
+                "on"
+              ]
+            },
+            {
+              "fieldId": "status",
+              "notEquals": [
+                "Final report emailed",
+                "Final report sent",
+                "Closed"
+              ]
+            }
+          ]
+        }
+      },
+      "button": {
+        "action": "updateRecord",
+        "placements": [
+          "htmlTemplate"
+        ],
+        "set": {
+          "values": {
+            "MP_EXP_DATE_OVERRIDE": ""
+          }
+        },
+        "navigateTo": "summary",
+        "confirm": {
+          "title": {
+            "en": "Reminder"
+          },
+          "message": {
+            "en": "Remember to indicate this new expiration date on individual portion containers."
+          },
+          "confirmLabel": {
+            "en": "OK"
+          },
+          "showCancel": false,
+          "showCloseButton": false,
+          "dismissOnBackdrop": false
+        }
+      }
+    },
+    {
       "id": "BELL_BTN",
       "type": "BUTTON",
       "qEn": "Belliard",
@@ -7375,7 +7452,26 @@
           "op": "addDays",
           "dependsOn": "MP_PREP_DATE",
           "offsetDays": 3,
-          "hidden": true
+          "hidden": true,
+          "overrideFieldId": "MP_EXP_DATE_OVERRIDE"
+        }
+      },
+      {
+        "id": "MP_EXP_DATE_OVERRIDE",
+        "type": "DATE",
+        "qEn": "Expiration Date Override",
+        "required": false,
+        "ui": {
+          "summaryVisibility": "never"
+        },
+        "listView": false,
+        "options": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "MP_SERVICE",
+            "equals": "Ski"
+          }
         }
       },
       {
@@ -10172,6 +10268,64 @@
           "placements": [
             "summaryBar"
           ]
+        }
+      },
+      {
+        "id": "MP_OVERRIDE_EXP_DATE",
+        "type": "BUTTON",
+        "qEn": "Override",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "all": [
+              {
+                "fieldId": "__ckRequestParam_admin",
+                "equals": [
+                  "true",
+                  "1",
+                  "yes",
+                  "on"
+                ]
+              },
+              {
+                "fieldId": "status",
+                "notEquals": [
+                  "Final report emailed",
+                  "Final report sent",
+                  "Closed"
+                ]
+              }
+            ]
+          }
+        },
+        "button": {
+          "action": "updateRecord",
+          "placements": [
+            "htmlTemplate"
+          ],
+          "set": {
+            "values": {
+              "MP_EXP_DATE_OVERRIDE": ""
+            }
+          },
+          "navigateTo": "summary",
+          "confirm": {
+            "title": {
+              "en": "Reminder"
+            },
+            "message": {
+              "en": "Remember to indicate this new expiration date on individual portion containers."
+            },
+            "confirmLabel": {
+              "en": "OK"
+            },
+            "showCancel": false,
+            "showCloseButton": false,
+            "dismissOnBackdrop": false
+          }
         }
       },
       {

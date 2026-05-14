@@ -55,6 +55,27 @@ const questions: QuestionConfig[] = [
   { id: 'MP_DISTRIBUTOR', type: 'TEXT', qEn: 'Distributor', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'MP_SERVICE', type: 'TEXT', qEn: 'Service', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'MP_PREP_DATE', type: 'DATE', qEn: 'Prep Date', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
+  {
+    id: 'MP_EXP_DATE',
+    type: 'DATE',
+    qEn: 'Expiration Date',
+    required: false,
+    status: 'Active',
+    options: [],
+    optionsFr: [],
+    optionsNl: [],
+    derivedValue: { op: 'addDays', dependsOn: 'MP_PREP_DATE', offsetDays: 3, overrideFieldId: 'MP_EXP_DATE_OVERRIDE' }
+  } as any,
+  {
+    id: 'MP_EXP_DATE_OVERRIDE',
+    type: 'DATE',
+    qEn: 'Expiration Date Override',
+    required: false,
+    status: 'Active',
+    options: [],
+    optionsFr: [],
+    optionsNl: []
+  } as any,
   { id: 'MP_ID', type: 'TEXT', qEn: 'Meal Production ID', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'ING_EVD', type: 'FILE_UPLOAD', qEn: 'Evidence', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'MP_COOK_TEMP', type: 'CHECKBOX', qEn: 'All pots ≥63°C: Confirm', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
@@ -85,6 +106,8 @@ const recordValues = {
   MP_DISTRIBUTOR: 'Belliard',
   MP_SERVICE: 'Dinner',
   MP_PREP_DATE: '2026-03-20',
+  MP_EXP_DATE: '2026-03-23',
+  MP_EXP_DATE_OVERRIDE: '',
   MP_ID: 'MP-AA000818',
   ING_EVD: 'https://example.com/photo-1',
   MP_COOK_TEMP: true,
@@ -172,6 +195,9 @@ describe('meal production bundled HTML rendering', () => {
 
     expect(res.success).toBe(true);
     expect(res.html).toContain('data-ck-action="ING_PREVIEW"');
+    expect(res.html).toContain('data-ck-action="MP_OVERRIDE_EXP_DATE"');
+    expect(res.html).toContain('data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"');
+    expect(res.html).toContain('(*) manually entered');
     expect(res.html).toContain('background: var(--accent, #0b57d0)');
     expect(res.html).toContain('color: var(--accentText, #fff)');
   });
