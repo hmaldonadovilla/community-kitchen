@@ -21,8 +21,14 @@ test-results/
 .env
 .env.deploy
 .env.deploy.*
+.env.firebase
+.env.firebase.*
+!.env.firebase.example
 .env.gcp
 .env.gcp.*
+.firebaserc
+firebase-debug.log
+.firebase/
 .clasp.staging.json
 .clasp.prod.json
 .clasp.stage-2.json

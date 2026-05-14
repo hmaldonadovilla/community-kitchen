@@ -8,7 +8,7 @@ describe('WebFormTemplate', () => {
   let scriptProperties: Record<string, string>;
 
   beforeEach(() => {
-    scriptProperties = {};
+    scriptProperties = { CK_WEB_ASSET_MODE: 'embedded' };
     (globalThis as any).ScriptApp = {
       getService: () => ({
         getUrl: () => 'https://script.google.com/macros/s/example-deployment/exec'
@@ -52,6 +52,34 @@ describe('WebFormTemplate', () => {
 
     expect(html).toContain('src="https://script.google.com/macros/s/example-deployment/exec?bundle=react&app=meal-production');
     expect(html).not.toContain('src="https://script.google.com/a/communitykitchen.be/macros/s/example-deployment/exec?bundle=react');
+  });
+
+  test('uses Firebase-hosted React assets when external web assets are configured', () => {
+    scriptProperties = {
+      CK_WEB_ASSET_MODE: 'external',
+      CK_WEB_ASSET_BASE_URL: 'https://assets.example.test/static/'
+    };
+
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production', { ts: '1741513400' });
+
+    expect(html).toMatch(
+      /src="https:\/\/assets\.example\.test\/static\/assets\/webform-react(?:-meal-production)?\.[a-f0-9]{12}\.js\?ts=1741513400"/
+    );
+    expect(html).not.toContain('bundle=react');
+    expect(html).toContain('window.__CK_WEB_ASSET__ = {"src":"https://assets.example.test/static/assets/');
+    expect(html).toContain('"mode":"external"');
+  });
+
+  test('falls back to the Apps Script bundle route when the external asset base URL is unsafe', () => {
+    scriptProperties = {
+      CK_WEB_ASSET_MODE: 'external',
+      CK_WEB_ASSET_BASE_URL: 'http://assets.example.test'
+    };
+
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('src="https://script.google.com/macros/s/example-deployment/exec?bundle=react&app=meal-production');
+    expect(html).toContain('"mode":"embedded"');
   });
 
   test('starts early home bootstrap prefetch for bundled screens without embedded home data', () => {

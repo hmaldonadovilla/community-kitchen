@@ -79,6 +79,7 @@ detect_single_env_name() {
 }
 
 load_env_file ".env.deploy" || true
+load_env_file ".env.firebase" || true
 
 ENV_NAME="$(normalize_env_name "${DEPLOY_ENV:-${CK_ENV:-${CK_CONFIG_ENV:-}}}")"
 if [[ -z "${ENV_NAME}" ]]; then
@@ -87,6 +88,12 @@ fi
 
 if [[ -n "${ENV_NAME}" ]]; then
   load_env_file ".env.deploy.${ENV_NAME}" || true
+  load_env_file ".env.firebase.${ENV_NAME}" || true
+fi
+
+if [[ -n "${CK_WEB_ASSET_MODE_OVERRIDE:-}" ]]; then
+  export CK_WEB_ASSET_MODE="${CK_WEB_ASSET_MODE_OVERRIDE}"
+  echo "[deploy-apps-script] Overriding CK_WEB_ASSET_MODE=${CK_WEB_ASSET_MODE}"
 fi
 
 ENV_NAME="$(normalize_env_name "${DEPLOY_ENV:-${CK_ENV:-${CK_CONFIG_ENV:-${ENV_NAME}}}}")"

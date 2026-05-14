@@ -1322,7 +1322,25 @@ describe('Cloud Run API server', () => {
       }
     ];
     const targetQuestions = [
+      {
+        id: 'LEFTOVER_ID',
+        type: 'TEXT',
+        qEn: 'Leftover ID',
+        status: 'Active',
+        autoIncrement: {
+          padLength: 0,
+          prefixByValue: {
+            fieldId: 'LEFTOVER_KIND',
+            map: {
+              'Multi-ingredient': 'MI-',
+              'Single-ingredient': 'SI-'
+            },
+            defaultPrefix: 'LX-'
+          }
+        }
+      },
       { id: 'LEFTOVER_STATUS', type: 'TEXT', qEn: 'Status', status: 'Active' },
+      { id: 'LEFTOVER_KIND', type: 'TEXT', qEn: 'Kind', status: 'Active' },
       { id: 'LEFTOVER_MEAL_TYPE', type: 'TEXT', qEn: 'Meal type', status: 'Active' },
       { id: 'LEFTOVER_RECIPE', type: 'TEXT', qEn: 'Recipe', status: 'Active' },
       { id: 'LEFTOVER_PORTIONS', type: 'NUMBER', qEn: 'Portions', status: 'Active' },
@@ -1375,6 +1393,7 @@ describe('Cloud Run API server', () => {
                   },
                   values: {
                     LEFTOVER_STATUS: 'available',
+                    LEFTOVER_KIND: 'Multi-ingredient',
                     LEFTOVER_MEAL_TYPE: '{{parent.MEAL_TYPE}}',
                     LEFTOVER_RECIPE: { op: 'firstNonEmpty', values: ['{{parent.MISSING_RECIPE}}', '{{row.RECIPE}}'] },
                     LEFTOVER_PORTIONS: '{{row.MP_LEFTOVER_PORTIONS_CAPTURE}}',
@@ -1442,7 +1461,9 @@ describe('Cloud Run API server', () => {
     const leftoverRows = [
       [
         'Language',
+        'Leftover ID [LEFTOVER_ID]',
         'Status [LEFTOVER_STATUS]',
+        'Kind [LEFTOVER_KIND]',
         'Meal type [LEFTOVER_MEAL_TYPE]',
         'Recipe [LEFTOVER_RECIPE]',
         'Portions [LEFTOVER_PORTIONS]',
@@ -1542,6 +1563,8 @@ describe('Cloud Run API server', () => {
                 recordId: 'leftover::meal-submit-1::cook-standard',
                 values: expect.objectContaining({
                   LEFTOVER_MEAL_TYPE: 'Standard',
+                  LEFTOVER_ID: 'MI-1',
+                  LEFTOVER_KIND: 'Multi-ingredient',
                   LEFTOVER_RECIPE: 'Chili',
                   LEFTOVER_PORTIONS: 2,
                   DIETARY_APPLICABILITY: 'Vegan, Gluten-free',
@@ -1552,13 +1575,15 @@ describe('Cloud Run API server', () => {
           }
         }
       });
-      expect(leftoverRows[1][1]).toBe('available');
-      expect(leftoverRows[1][2]).toBe('Standard');
-      expect(leftoverRows[1][3]).toBe('Chili');
-      expect(leftoverRows[1][4]).toBe(2);
-      expect(leftoverRows[1][5]).toBe('Vegan, Gluten-free');
-      expect(JSON.parse(leftoverRows[1][6])).toEqual([{ ING: 'Beans', QTY: 1 }]);
-      expect(leftoverRows[1][8]).toBe('leftover::meal-submit-1::cook-standard');
+      expect(leftoverRows[1][1]).toBe('MI-1');
+      expect(leftoverRows[1][2]).toBe('available');
+      expect(leftoverRows[1][3]).toBe('Multi-ingredient');
+      expect(leftoverRows[1][4]).toBe('Standard');
+      expect(leftoverRows[1][5]).toBe('Chili');
+      expect(leftoverRows[1][6]).toBe(2);
+      expect(leftoverRows[1][7]).toBe('Vegan, Gluten-free');
+      expect(JSON.parse(leftoverRows[1][8])).toEqual([{ ING: 'Beans', QTY: 1 }]);
+      expect(leftoverRows[1][10]).toBe('leftover::meal-submit-1::cook-standard');
     } finally {
       await closeServer(server);
     }
@@ -3743,5 +3768,86 @@ describe('GoogleSheetsSubmissionRepository', () => {
       }
     });
     expect(updateRowValues.mock.calls.filter((call: any[]) => call[1] === 'Recipes Data')).toHaveLength(1);
+  });
+
+  test('saveSubmissionWithId generates and persists auto-increment text fields', async () => {
+    const rows = [
+      ['Language', 'Leftover ID [LEFTOVER_ID]', 'Kind [LEFTOVER_KIND]', 'Record ID', 'Data Version', 'Created At', 'Updated At', 'Status'],
+      ['EN', 'MI-8', 'Multi-ingredient', 'leftover-existing-mi', '1', '2026-04-29T10:00:00Z', '2026-04-29T10:00:00Z', 'available'],
+      ['EN', 'SI-3', 'Single-ingredient', 'leftover-existing-si', '1', '2026-04-29T10:00:00Z', '2026-04-29T10:00:00Z', 'available']
+    ];
+    const repository = new GoogleSheetsSubmissionRepository({
+      env: { CK_DEFAULT_SPREADSHEET_ID: 'spreadsheet-1' },
+      configRepository: new FormConfigRepository({
+        bundle: {
+          forms: [
+            {
+              formKey: 'Config: Leftover Inventory',
+              form: {
+                title: 'Leftover Inventory',
+                configSheet: 'Config: Leftover Inventory',
+                destinationTab: 'Leftover Inventory Data',
+                followupConfig: { statusFieldId: 'LEFTOVER_STATUS' }
+              },
+              questions: [
+                {
+                  id: 'LEFTOVER_ID',
+                  type: 'TEXT',
+                  qEn: 'Leftover ID',
+                  status: 'Active',
+                  autoIncrement: {
+                    padLength: 0,
+                    prefixByValue: {
+                      fieldId: 'LEFTOVER_KIND',
+                      map: {
+                        'Multi-ingredient': 'MI-',
+                        'Single-ingredient': 'SI-'
+                      },
+                      defaultPrefix: 'LX-'
+                    }
+                  }
+                },
+                { id: 'LEFTOVER_KIND', type: 'TEXT', qEn: 'Kind', status: 'Active' }
+              ],
+              definition: { questions: [] },
+              dedupRules: []
+            }
+          ]
+        }
+      }),
+      sheetsClient: {
+        getSheetValues: jest.fn().mockImplementation(async () => rows.map(row => row.slice())),
+        updateRowValues: jest.fn().mockImplementation(async (_spreadsheetId, _tabName, rowNumber, values) => {
+          while (rows.length < rowNumber) rows.push([]);
+          rows[rowNumber - 1] = values.slice();
+          return { updatedRows: 1 };
+        })
+      }
+    });
+
+    const result = await repository.saveSubmissionWithId({
+      formKey: 'Config: Leftover Inventory',
+      language: 'EN',
+      id: 'leftover-new-si',
+      values: {
+        LEFTOVER_KIND: 'Single-ingredient'
+      },
+      __ckSkipSubmitEffects: true,
+      __ckSaveMode: 'draft',
+      __ckStatus: 'available'
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      meta: {
+        id: 'leftover-new-si',
+        operation: 'create',
+        autoIncrementValues: {
+          LEFTOVER_ID: 'SI-4'
+        }
+      }
+    });
+    expect(rows[3][1]).toBe('SI-4');
+    expect(rows[3][2]).toBe('Single-ingredient');
   });
 });

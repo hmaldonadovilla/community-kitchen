@@ -2,10 +2,10 @@ import { WebFormDefinition } from '../types';
 import { SYSTEM_FONT_STACK } from '../constants/typography';
 import { getBackendRuntimeConfig } from './webform/backendConfig';
 import { CACHE_VERSION_PROPERTY_KEY, DEFAULT_CACHE_VERSION, getDocumentProperties } from './webform/cache';
-import { getReactBundleCacheKey } from './webform/bundles';
 import { isDebugEnabled } from './webform/debug';
 import { getUiEnvTag } from './webform/envTag';
 import { ServerTimingRecorder } from './webform/serverTiming';
+import { resolveReactBundleScript } from './webform/staticAssets';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
@@ -49,31 +49,6 @@ const resolveCacheVersion = (): string => {
   }
 };
 
-const normalizeBundleServiceUrl = (baseUrl: string): string =>
-  baseUrl.replace(/^(https:\/\/script\.google\.com)\/a\/[^/]+(\/macros\/)/, '$1$2');
-
-const buildBundleSrc = (
-  bundleTarget?: string,
-  requestParams?: Record<string, string>,
-  cacheVersionOverride?: string,
-  serviceUrlOverride?: string | null
-): string => {
-  const target = (bundleTarget || '').toString().trim();
-  const appParam = target ? `&app=${encodeURIComponent(target)}` : '';
-  const cacheVersion = (cacheVersionOverride || resolveCacheVersion() || '').toString().trim();
-  const bundleCacheKey = getReactBundleCacheKey(target);
-  const versionKey = [cacheVersion, bundleCacheKey].filter(Boolean).join('.');
-  const versionParam = versionKey ? `&v=${encodeURIComponent(versionKey)}` : '';
-  const tsParamRaw = (requestParams?.ts || requestParams?.t || '').toString().trim();
-  const tsParam = tsParamRaw ? `&ts=${encodeURIComponent(tsParamRaw)}` : '';
-  const query = `bundle=react${appParam}${versionParam}${tsParam}`;
-  const baseUrl = serviceUrlOverride !== undefined ? serviceUrlOverride : resolveServiceUrl();
-  if (!baseUrl) return `?${query}`;
-  const publicBundleBaseUrl = normalizeBundleServiceUrl(baseUrl);
-  const sep = publicBundleBaseUrl.includes('?') ? '&' : '?';
-  return `${publicBundleBaseUrl}${sep}${query}`;
-};
-
 export function buildWebFormHtml(
   def: WebFormDefinition | null,
   formKey: string,
@@ -88,9 +63,11 @@ export function buildWebFormHtml(
     ? serverTiming.measure('template.resolveBackendConfigMs', () => getBackendRuntimeConfig())
     : getBackendRuntimeConfig();
   const serviceUrl = serverTiming?.measure('template.resolveServiceUrlMs', () => resolveServiceUrl()) ?? resolveServiceUrl();
-  const bundleSrc =
-    serverTiming?.measure('template.buildBundleSrcMs', () => buildBundleSrc(bundleTarget, requestParams, cacheVersion, serviceUrl)) ??
-    buildBundleSrc(bundleTarget, requestParams, cacheVersion, serviceUrl);
+  const bundleScript =
+    serverTiming?.measure('template.resolveReactBundleScriptMs', () =>
+      resolveReactBundleScript(bundleTarget, requestParams, cacheVersion, serviceUrl)
+    ) ?? resolveReactBundleScript(bundleTarget, requestParams, cacheVersion, serviceUrl);
+  const bundleSrc = bundleScript.src;
   const serialized =
     serverTiming?.measure('template.serializeGlobalsMs', () => {
       const bootstrapPayload = (() => {
@@ -115,7 +92,8 @@ export function buildWebFormHtml(
         requestParamsJson: escapeJsonForScript(requestParamsPayload),
         cacheVersionJson: escapeJsonForScript(cacheVersion),
         envTagJson: escapeJsonForScript(envTag || null),
-        serviceUrlJson: escapeJsonForScript(serviceUrl || null)
+        serviceUrlJson: escapeJsonForScript(serviceUrl || null),
+        webAssetJson: escapeJsonForScript(bundleScript)
       };
     }) ?? {
       defJson: escapeJsonForScript(def || null),
@@ -135,10 +113,21 @@ export function buildWebFormHtml(
       ),
       cacheVersionJson: escapeJsonForScript(cacheVersion),
       envTagJson: escapeJsonForScript(envTag || null),
-      serviceUrlJson: escapeJsonForScript(serviceUrl || null)
+      serviceUrlJson: escapeJsonForScript(serviceUrl || null),
+      webAssetJson: escapeJsonForScript(bundleScript)
     };
   const serverTimingsJson = escapeJsonForScript(serverTiming?.snapshot() || null);
-  const { defJson, keyJson, debugJson, bootstrapJson, requestParamsJson, cacheVersionJson, envTagJson, serviceUrlJson } = serialized;
+  const {
+    defJson,
+    keyJson,
+    debugJson,
+    bootstrapJson,
+    requestParamsJson,
+    cacheVersionJson,
+    envTagJson,
+    serviceUrlJson,
+    webAssetJson
+  } = serialized;
 
   return `<!DOCTYPE html>
 <html>
@@ -1506,6 +1495,7 @@ export function buildWebFormHtml(
         window.__CK_ENV_TAG__ = ${envTagJson};
         window.__CK_SERVICE_URL__ = ${serviceUrlJson};
         window.__CK_SERVER_TIMINGS__ = ${serverTimingsJson};
+        window.__CK_WEB_ASSET__ = ${webAssetJson};
 
         var log = function (event, payload) {
           try {
@@ -1515,6 +1505,7 @@ export function buildWebFormHtml(
             // ignore
           }
         };
+        log('assets.bundle', window.__CK_WEB_ASSET__ || {});
 
         var shouldRouteBootFunctionToHttp = function (fnName) {
           try {
