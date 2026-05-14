@@ -2219,6 +2219,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - Supported ops:
             - `addDays`: date math in days (offset can be negative). Defaults to `"when": "always"` (recomputes when dependencies change).
             - `addMonths`: date math in months (offset can be negative). Defaults to `"when": "always"` and is useful for retention or freezer-expiry rules such as “6 months from prep date”.
+              - Optional: `"overrideFieldId": "FIELD_ID"` lets a separate non-empty field override the computed DATE while the derived field remains the effective value for summaries, PDFs, and submit effects.
             - `today`: prefill a DATE field with today’s local date. Defaults to `"when": "empty"` (only sets when the target is empty).
             - `timeOfDayMap`: map time-of-day to a value via thresholds. Defaults to `"when": "empty"`.
             - `copy`: copy another field’s value into the target. Defaults to `"when": "empty"` (behaves like a default; allows user overrides) and applies on `"applyOn": "blur"` (so it doesn’t change mid-typing).
@@ -2238,6 +2239,20 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
             ```json
             { "derivedValue": { "op": "addMonths", "dependsOn": "MP_PREP_DATE", "offsetMonths": 6, "hidden": true } }
+            ```
+
+          - Example: allow a hidden manual override field to replace an otherwise computed expiration date:
+
+            ```json
+            {
+              "derivedValue": {
+                "op": "addDays",
+                "dependsOn": "MP_PREP_DATE",
+                "offsetDays": 3,
+                "overrideFieldId": "MP_EXP_DATE_OVERRIDE",
+                "hidden": true
+              }
+            }
             ```
 
           - Example: map time-of-day to a label (uses current time):
@@ -3172,6 +3187,7 @@ Recommended steps after deploying a new bundle:
   - `topBarForm`: appear in the top action bar on the Form (edit) view.
   - `topBarSummary`: appear in the top action bar on the Summary view.
   - `listBar`: appear in the List view bottom action bar (menu if multiple).
+  - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
 
 ## UI Navigation & Shell
 
@@ -3327,6 +3343,7 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
     - a **bundled** template key: `bundle:<filename>` (loads `/docs/templates/<filename>` embedded into the deployment bundle at build time; rendered client-side; may fetch dataSource projections as needed)
   - `summaryHtmlTemplateId` supports the same structure as other template id configs (string, language map, or `cases` selector).
   - When set, the Summary view renders the HTML template (with placeholders) instead of the built-in Summary UI.
+  - Bundled Summary HTML can invoke a template-only `BUTTON` by setting `data-ck-action="<BUTTON_ID>"` on a button/control. For `updateRecord` actions, add `data-ck-action-value-field="<FIELD_ID>"` and `data-ck-action-value-source="<selector>"` to pass a runtime top-level scalar value patch from an input in the template; use `data-ck-action-value-required="true"` to block empty selections client-side.
   - If template rendering fails, the app shows an error and falls back to the built-in Summary view.
 
 - **Optional: portrait-only mode (avoid landscape)**:

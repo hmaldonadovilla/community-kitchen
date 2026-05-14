@@ -193,6 +193,40 @@
     cursor: pointer;
   }
 
+  .ck-action-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .ck-expiration-override-controls {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ck-date-input {
+    min-height: 32px;
+    padding: 5px 8px;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-control, 8px);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+
+  .ck-date-input:disabled {
+    opacity: 0.65;
+  }
+
+  .ck-manual-marker {
+    font-weight: 400;
+  }
+
+  .ck-summary-legend {
+    font-size: var(--ck-font-label);
+  }
+
   .ck-hidden {
     display: none;
   }
@@ -224,7 +258,19 @@
       </div>
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
         <span class="ck-label">{{LABEL(MP_EXP_DATE)}}:</span>
-        <span class="ck-value">{{MP_EXP_DATE}}</span>
+        <span class="ck-value" data-expiration-date-value>{{MP_EXP_DATE}}</span>
+        <span class="ck-manual-marker ck-hidden" data-expiration-manual-marker>(*)</span>
+        <span class="ck-expiration-override-controls ck-hidden" data-expiration-override-controls>
+          <input type="date" class="ck-date-input" data-expiration-override-date aria-label="Override expiration date" />
+          <button
+            type="button"
+            class="ck-action-button"
+            data-ck-action="MP_OVERRIDE_EXP_DATE"
+            data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"
+            data-ck-action-value-source="[data-expiration-override-date]"
+            data-ck-action-value-required="true"
+          >Override</button>
+        </span>
       </div>
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
         <span class="ck-label">{{LABEL(MP_ID)}}:</span>
@@ -241,6 +287,7 @@
       <div class="ck-meta-item ck-meta-item--full ck-notes ck-value">{{MP_NOTES}}</div>
       <div class="ck-hidden" data-record-status>{{STATUS}}</div>
       <div class="ck-hidden" data-record-status-key>{{STATUS_KEY}}</div>
+      <div class="ck-hidden" data-expiration-override-value>{{MP_EXP_DATE_OVERRIDE}}</div>
     </div>
   </div>
 
@@ -315,6 +362,7 @@
     </div>
   </div>
   <div class="ck-hidden" data-generated-leftovers-json>{{__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON}}</div>
+  <div class="ck-section ck-summary-legend ck-hidden" data-manual-expiration-legend>(*) manually entered</div>
 </div>
 
 <script>
@@ -369,17 +417,14 @@
     var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
     var statusRaw = toText((root.querySelector('[data-record-status]') || {}).textContent || '');
     var isClosedStatus = normalize(statusKeyRaw) === 'onclose' || normalize(statusRaw) === 'closed';
+    var isFinalReportSentStatus =
+      normalize(statusKeyRaw) === 'onemail' ||
+      isClosedStatus ||
+      ['final report emailed', 'final report sent'].indexOf(normalize(statusRaw)) >= 0;
     var deliveredRow = root.querySelector('[data-total-delivered-row]');
     if (deliveredRow && !isClosedStatus) {
       deliveredRow.classList.add('ck-hidden');
     }
-
-    var listContainer = root.querySelector('[data-ck-meal-list]');
-    var generatedJsonNode = root.querySelector('[data-generated-leftovers-json]');
-    var generatedSection = root.querySelector('[data-generated-leftovers-section]');
-    var generatedList = root.querySelector('[data-generated-leftovers-list]');
-    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
-    if (!listContainer || !dataTables.length) return;
 
     var isTemplateToken = function (value) {
       var text = toText(value);
@@ -391,6 +436,109 @@
       if (isTemplateToken(text)) return false;
       return true;
     };
+    var parseRequestParamFromObject = function (source, key) {
+      if (!source || typeof source !== 'object') return '';
+      var normalizedKey = normalize(key);
+      var keys = Object.keys(source);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (normalize(keys[i]) !== normalizedKey) continue;
+        return toText(source[keys[i]]);
+      }
+      return '';
+    };
+    var parseRequestParamFromQuery = function (raw, key) {
+      var text = toText(raw);
+      if (!text) return '';
+      try {
+        var body = text.charAt(0) === '?' || text.charAt(0) === '#' ? text.slice(1) : text;
+        var queryIndex = body.indexOf('?');
+        if (queryIndex >= 0) body = body.slice(queryIndex + 1);
+        var params = new URLSearchParams(body);
+        var normalizedKey = normalize(key);
+        var result = '';
+        params.forEach(function (value, rawKey) {
+          if (result || normalize(rawKey) !== normalizedKey) return;
+          result = toText(value);
+        });
+        return result;
+      } catch (_) {
+        return '';
+      }
+    };
+    var resolveRequestParam = function (key) {
+      var globalAny = window || {};
+      return (
+        parseRequestParamFromObject(globalAny.__WEB_FORM_REQUEST_PARAMS__, key) ||
+        parseRequestParamFromObject((globalAny.__WEB_FORM_BOOTSTRAP__ || {}).requestParams, key) ||
+        parseRequestParamFromQuery((globalAny.location || {}).search || '', key) ||
+        parseRequestParamFromQuery((globalAny.location || {}).hash || '', key)
+      );
+    };
+    var parseDisplayDateToIso = function (value) {
+      var text = toText(value);
+      if (!hasMeaningfulValue(text)) return '';
+      var ymd = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (ymd) return ymd[1] + '-' + ymd[2] + '-' + ymd[3];
+      var display = text.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+      if (!display) return '';
+      var months = {
+        jan: '01',
+        feb: '02',
+        mar: '03',
+        apr: '04',
+        may: '05',
+        jun: '06',
+        jul: '07',
+        aug: '08',
+        sep: '09',
+        oct: '10',
+        nov: '11',
+        dec: '12'
+      };
+      var mon = months[normalize(display[2])];
+      if (!mon) return '';
+      var day = display[1].padStart(2, '0');
+      return display[3] + '-' + mon + '-' + day;
+    };
+    var expirationValueNode = root.querySelector('[data-expiration-date-value]');
+    var expirationOverrideNode = root.querySelector('[data-expiration-override-value]');
+    var manualMarker = root.querySelector('[data-expiration-manual-marker]');
+    var manualLegend = root.querySelector('[data-manual-expiration-legend]');
+    var expirationControls = root.querySelector('[data-expiration-override-controls]');
+    var expirationDateInput = root.querySelector('[data-expiration-override-date]');
+    var expirationOverrideButton = root.querySelector('[data-ck-action="MP_OVERRIDE_EXP_DATE"]');
+    var overrideText = toText(expirationOverrideNode ? expirationOverrideNode.textContent : '');
+    var hasManualExpiration = hasMeaningfulValue(overrideText);
+    if (hasManualExpiration && expirationValueNode) {
+      expirationValueNode.textContent = overrideText;
+    }
+    if (manualMarker) manualMarker.classList.toggle('ck-hidden', !hasManualExpiration);
+    if (manualLegend) manualLegend.classList.toggle('ck-hidden', !hasManualExpiration);
+    if (expirationDateInput) {
+      var inputSourceText = hasManualExpiration ? overrideText : toText(expirationValueNode ? expirationValueNode.textContent : '');
+      expirationDateInput.value = parseDisplayDateToIso(inputSourceText);
+    }
+    var adminValue = normalize(resolveRequestParam('admin'));
+    var isAdminRequest = ['true', '1', 'yes', 'on'].indexOf(adminValue) >= 0;
+    var canOverrideExpiration = isAdminRequest && !isFinalReportSentStatus;
+    if (expirationControls) {
+      expirationControls.classList.toggle('ck-hidden', !isAdminRequest);
+    }
+    if (expirationDateInput) {
+      expirationDateInput.disabled = !canOverrideExpiration;
+    }
+    if (expirationOverrideButton) {
+      expirationOverrideButton.disabled = !canOverrideExpiration;
+      expirationOverrideButton.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
+    }
+
+    var listContainer = root.querySelector('[data-ck-meal-list]');
+    var generatedJsonNode = root.querySelector('[data-generated-leftovers-json]');
+    var generatedSection = root.querySelector('[data-generated-leftovers-section]');
+    var generatedList = root.querySelector('[data-generated-leftovers-list]');
+    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
+    if (!listContainer || !dataTables.length) return;
+
     var isConfirmedValue = function (value) {
       var text = normalize(value);
       return text === 'true' || text === 'yes' || text === '1' || text === '✔' || text === '✅';

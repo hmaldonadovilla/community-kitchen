@@ -541,6 +541,20 @@ const computeCopyValue = (args: { config: any; current: FieldValue; source: Fiel
   return source;
 };
 
+const resolveDerivedOverrideValue = (config: any, getter: (fieldId: string) => FieldValue): FieldValue | undefined => {
+  const overrideFieldId = (
+    config?.overrideFieldId ??
+    config?.manualOverrideFieldId ??
+    config?.valueOverrideFieldId ??
+    ''
+  )
+    .toString()
+    .trim();
+  if (!overrideFieldId) return undefined;
+  const overrideValue = getter(overrideFieldId);
+  return isEmptyValue(overrideValue) ? undefined : overrideValue;
+};
+
 export const resolveValueMapValue = (valueMap: ValueMapConfig, getValue: (fieldId: string) => FieldValue): string => {
   if (!valueMap?.optionMap || !valueMap.dependsOn) return '';
   const dependsOn = Array.isArray(valueMap.dependsOn) ? valueMap.dependsOn : [valueMap.dependsOn];
@@ -578,6 +592,8 @@ const shouldPreserveExistingValueMapValue = (
 export const resolveDerivedValue = (config: any, getter: (fieldId: string) => FieldValue): FieldValue => {
   if (!config) return undefined;
   if (config.op === 'addDays') {
+    const overrideValue = resolveDerivedOverrideValue(config, getter);
+    if (overrideValue !== undefined) return overrideValue;
     const base = getter(config.dependsOn);
     const baseDate = parseDateValue(base);
     if (!baseDate) return '';
@@ -588,6 +604,8 @@ export const resolveDerivedValue = (config: any, getter: (fieldId: string) => Fi
     return formatLocalYmd(result);
   }
   if (config.op === 'addMonths') {
+    const overrideValue = resolveDerivedOverrideValue(config, getter);
+    if (overrideValue !== undefined) return overrideValue;
     const base = getter(config.dependsOn);
     const baseDate = parseDateValue(base);
     if (!baseDate) return '';

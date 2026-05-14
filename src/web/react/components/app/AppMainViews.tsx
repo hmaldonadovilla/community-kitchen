@@ -261,7 +261,12 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
         currentRecord={currentRecord}
         prefetchedSummaryHtml={prefetchedSummaryHtml?.recordId === selectedRecordId ? prefetchedSummaryHtml.html : null}
         onOpenFiles={openReadOnlyFilesOverlay}
-        onAction={handleCustomButton}
+        onAction={(actionId, context) =>
+          handleCustomButton(actionId, {
+            source: 'htmlTemplate',
+            runtimeValues: context?.values
+          })
+        }
         onDiagnostic={logEvent}
       />
     )}
