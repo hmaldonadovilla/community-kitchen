@@ -19,6 +19,9 @@ describe('staging integrity dialogs and list legend config', () => {
   const expectedPhotoDiscardConfirm = {
     en: 'The photos you changed are not saved yet. Close without saving them?'
   };
+  const expectedMealProductionUploadPartialWarning = {
+    en: 'Maximum 10 photos allowed extra selected photos were not added, please review your photos.'
+  };
   const collectObjects = (value: any, predicate: (entry: any) => boolean, acc: any[] = []): any[] => {
     if (Array.isArray(value)) {
       value.forEach(entry => collectObjects(entry, predicate, acc));
@@ -108,6 +111,17 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(dialog?.showCloseButton).toBe(false);
       expect(dialog?.dismissOnBackdrop).toBe(false);
       expect(dialog?.deleteRecordOnConfirm).toBe(true);
+    };
+
+    const assertAutoSaveDedupWait = (root: any) => {
+      expect(root?.autoSave?.dedupTriggerFields).toEqual(['MP_DISTRIBUTOR', 'MP_SERVICE', 'MP_PREP_DATE']);
+      expect(root?.autoSave?.dedupCheckDialog).toEqual({
+        checkingTitle: { en: '' },
+        checkingMessage: { en: 'Do not leave this page while we check for duplicate' },
+        availableTitle: { en: '' },
+        availableMessage: { en: '' },
+        availableAutoCloseMs: 0
+      });
     };
 
     const assertChangeDialogs = (questions: any[]) => {
@@ -891,6 +905,8 @@ describe('staging integrity dialogs and list legend config', () => {
 
     assertMainHomeDialog(cfg.form);
     assertMainHomeDialog(cfg.definition);
+    assertAutoSaveDedupWait(cfg.form);
+    assertAutoSaveDedupWait(cfg.definition);
     assertChangeDialogs(cfg.questions);
     assertChangeDialogs(cfg.definition?.questions || []);
     assertClosedListActions(cfg.form);
@@ -908,6 +924,15 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(cfg.form?.reservationLifecycle?.reconcileOnFinalSubmit?.refreshMode).toBe('revisionOnly');
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
+
+    const maxPhotoUploadFields = collectObjects(
+      cfg,
+      (entry: any) => entry?.type === 'FILE_UPLOAD' && entry?.uploadConfig?.maxFiles === 10
+    );
+    expect(maxPhotoUploadFields.length).toBeGreaterThanOrEqual(4);
+    maxPhotoUploadFields.forEach((field: any) => {
+      expect(field?.uploadConfig?.warningMessages?.maxFilesPartial).toEqual(expectedMealProductionUploadPartialWarning);
+    });
 
     const recipeIngredientEffects = collectObjects(
       cfg,

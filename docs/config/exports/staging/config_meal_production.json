@@ -391,7 +391,27 @@
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
-      "status": "In progress"
+      "status": "In progress",
+      "dedupTriggerFields": [
+        "MP_DISTRIBUTOR",
+        "MP_SERVICE",
+        "MP_PREP_DATE"
+      ],
+      "dedupCheckDialog": {
+        "checkingTitle": {
+          "en": ""
+        },
+        "checkingMessage": {
+          "en": "Do not leave this page while we check for duplicate"
+        },
+        "availableTitle": {
+          "en": ""
+        },
+        "availableMessage": {
+          "en": ""
+        },
+        "availableAutoCloseMs": 0
+      }
     },
     "recordFreshness": {
       "enabled": true,
@@ -6520,6 +6540,11 @@
             "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)."
           }
         },
+        "warningMessages": {
+          "maxFilesPartial": {
+            "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+          }
+        },
         "helperText": {
           "remainingOne": {
             "en": "You need to add {count} more photo"
@@ -6647,6 +6672,11 @@
           },
           "maxFileSizeMb": {
             "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)."
+          }
+        },
+        "warningMessages": {
+          "maxFilesPartial": {
+            "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
           }
         },
         "helperText": {
@@ -9933,6 +9963,11 @@
               "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)."
             }
           },
+          "warningMessages": {
+            "maxFilesPartial": {
+              "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+            }
+          },
           "helperText": {
             "remainingOne": {
               "en": "You need to add {count} more photo"
@@ -10060,6 +10095,11 @@
             },
             "maxFileSizeMb": {
               "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode)."
+            }
+          },
+          "warningMessages": {
+            "maxFilesPartial": {
+              "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
             }
           },
           "helperText": {
@@ -10918,7 +10958,27 @@
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
-      "status": "In progress"
+      "status": "In progress",
+      "dedupTriggerFields": [
+        "MP_DISTRIBUTOR",
+        "MP_SERVICE",
+        "MP_PREP_DATE"
+      ],
+      "dedupCheckDialog": {
+        "checkingTitle": {
+          "en": ""
+        },
+        "checkingMessage": {
+          "en": "Do not leave this page while we check for duplicate"
+        },
+        "availableTitle": {
+          "en": ""
+        },
+        "availableMessage": {
+          "en": ""
+        },
+        "availableAutoCloseMs": 0
+      }
     },
     "recordFreshness": {
       "enabled": true,

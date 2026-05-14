@@ -1525,6 +1525,11 @@ export interface FileUploadConfig {
    */
   errorMessages?: FileUploadErrorMessages;
   /**
+   * Optional localized override messages for non-blocking upload warnings.
+   * Templates may include variables like {accepted}, {attempted}, {rejected}, and {max}.
+   */
+  warningMessages?: FileUploadWarningMessages;
+  /**
    * Optional client-side compression settings (applied before uploading to Drive).
    * Note: Video compression is not performed by default (see docs).
    */
@@ -1574,6 +1579,11 @@ export interface FileUploadErrorMessages {
   maxFileSizeMb?: LocalizedString;
   fileType?: LocalizedString;
   compressFailed?: LocalizedString;
+}
+
+export interface FileUploadWarningMessages {
+  maxFilesPartial?: LocalizedString;
+  someRejected?: LocalizedString;
 }
 
 export type FileUploadHelperText = LocalizedString | FileUploadHelperTextConfig;

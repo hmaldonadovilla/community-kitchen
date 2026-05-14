@@ -13,7 +13,8 @@ import {
   shouldSuppressAutomatedAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur,
-  isBlockingDedupConflict
+  isBlockingDedupConflict,
+  shouldShowDedupProgressDialogState
 } from '../../../src/web/react/app/autoSaveDedup';
 
 describe('autoSaveDedup helpers', () => {
@@ -337,6 +338,32 @@ describe('autoSaveDedup helpers', () => {
     expect(copy.checkingMessage).toBe('Checking...');
     expect(copy.availableAutoCloseMs).toBe(1300);
     expect(copy.duplicateAutoCloseMs).toBe(900);
+  });
+
+  it('preserves explicit blank dedup dialog copy and suppresses blank states', () => {
+    const copy = resolveDedupCheckDialogCopy(
+      {
+        checkingTitle: { en: '' },
+        checkingMessage: { en: 'Do not leave this page while we check for duplicate' },
+        availableTitle: { en: '' },
+        availableMessage: { en: '' },
+        availableAutoCloseMs: 0
+      },
+      'EN',
+      {
+        checkingTitle: 'Checking duplicates',
+        availableTitle: 'Available',
+        availableMessage: 'Continue'
+      }
+    );
+
+    expect(copy.checkingTitle).toBe('');
+    expect(copy.checkingMessage).toBe('Do not leave this page while we check for duplicate');
+    expect(copy.availableTitle).toBe('');
+    expect(copy.availableMessage).toBe('');
+    expect(copy.availableAutoCloseMs).toBe(0);
+    expect(shouldShowDedupProgressDialogState({ title: copy.checkingTitle, message: copy.checkingMessage })).toBe(true);
+    expect(shouldShowDedupProgressDialogState({ title: copy.availableTitle, message: copy.availableMessage })).toBe(false);
   });
 
   it('does not treat operational dedup check failures as blocking conflicts', () => {

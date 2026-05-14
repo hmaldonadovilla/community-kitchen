@@ -1,6 +1,6 @@
 import type { FieldValue, LangCode, LocalizedString, WebQuestionDefinition } from '../../types';
 import type { LineItemState } from '../types';
-import { resolveLocalizedString } from '../../i18n';
+import { resolveOptionalLocalizedString } from '../../i18n';
 import { isEmptyValue } from '../utils/values';
 
 const normalizeStringId = (raw: any): string => (raw === undefined || raw === null ? '' : raw.toString().trim());
@@ -286,7 +286,7 @@ export const resolveDedupCheckDialogCopy = (
   defaults?: Partial<DedupCheckDialogCopy>
 ): DedupCheckDialogCopy => {
   const resolveText = (value: LocalizedString | string | undefined, fallback: string): string =>
-    resolveLocalizedString(value as any, language, fallback).toString();
+    resolveOptionalLocalizedString(value as any, language, fallback).toString();
 
   const availableAutoCloseMsRaw = Number(cfg?.availableAutoCloseMs);
   const duplicateAutoCloseMsRaw = Number(cfg?.duplicateAutoCloseMs);
@@ -322,3 +322,6 @@ export const resolveDedupCheckDialogCopy = (
     duplicateAutoCloseMs
   };
 };
+
+export const shouldShowDedupProgressDialogState = (args: { title?: string; message?: string }): boolean =>
+  Boolean((args.title || '').toString().trim() || (args.message || '').toString().trim());

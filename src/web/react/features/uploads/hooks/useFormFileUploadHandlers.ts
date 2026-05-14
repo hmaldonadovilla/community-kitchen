@@ -8,6 +8,7 @@ import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
 import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { applyUploadConstraints, describeUploadItem, toUploadItems } from '../../../components/form/utils';
 import type { FileUploadOrderedEntryCheckArgs, UploadRetryTarget } from '../useFormUploadController';
+import type { ConfirmDialogOpenArgs } from '../../overlays/useConfirmDialog';
 
 type UploadFilesHandler = (args: {
   scope: 'top' | 'line';
@@ -28,7 +29,10 @@ interface StageFilesInOverlayArgs {
   question?: WebQuestionDefinition;
   field?: any;
   incoming: File[];
-  onCommitBlockUntilSaved: (items: Array<string | File>) => void;
+  onCommitBlockUntilSaved: (
+    items: Array<string | File>,
+    warning?: { warningMessage?: string; warningKind?: 'maxFilesPartial' | 'someRejected' }
+  ) => void;
 }
 
 interface UpdateFileOverlayAfterImmediateActionArgs {
@@ -48,6 +52,7 @@ interface UseFormFileUploadHandlersArgs {
   setErrors: Dispatch<SetStateAction<FormErrors>>;
   onStatusClear?: () => void;
   onUploadFiles?: UploadFilesHandler;
+  openConfirmDialog?: (args: ConfirmDialogOpenArgs) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   fileUploadOrderedEntryGateRef: MutableRefObject<(args: FileUploadOrderedEntryCheckArgs) => boolean>;
   stageFilesInOverlay: (args: StageFilesInOverlayArgs) => boolean;
@@ -74,6 +79,7 @@ export function useFormFileUploadHandlers({
   setErrors,
   onStatusClear,
   onUploadFiles,
+  openConfirmDialog,
   onDiagnostic,
   fileUploadOrderedEntryGateRef,
   stageFilesInOverlay,
@@ -115,10 +121,35 @@ export function useFormFileUploadHandlers({
     });
   };
 
+  const showMaxFilesPartialDialog = (
+    fieldPath: string,
+    warningMessage: string | undefined,
+    warningKind: 'maxFilesPartial' | 'someRejected' | undefined,
+    source: string
+  ) => {
+    const message = (warningMessage || '').toString().trim();
+    if (!message || warningKind !== 'maxFilesPartial' || !openConfirmDialog) return;
+    openConfirmDialog({
+      title: '',
+      message,
+      confirmLabel: tSystem('common.ok', language, 'OK'),
+      cancelLabel: '',
+      showCancel: false,
+      showConfirm: true,
+      primaryAction: 'confirm',
+      dismissOnBackdrop: false,
+      showCloseButton: false,
+      kind: 'uploadMaxFilesPartial',
+      refId: fieldPath,
+      onConfirm: () => undefined
+    });
+    onDiagnostic?.('upload.warningDialog.open', { fieldPath, source, kind: warningKind });
+  };
+
   const processIncomingFiles = (question: WebQuestionDefinition, incoming: File[]) => {
     if (!incoming.length) return;
     const existing = toUploadItems(valuesRef.current[question.id]);
-    const { items, errorMessage, warningMessage } = applyUploadConstraints(question, existing, incoming, language);
+    const { items, errorMessage, warningMessage, warningKind } = applyUploadConstraints(question, existing, incoming, language);
     handleFileFieldChange(question, items, errorMessage);
     const accepted = Math.max(0, items.length - existing.length);
     const constraintMessage = errorMessage || warningMessage;
@@ -174,11 +205,14 @@ export function useFormFileUploadHandlers({
           }
           clearUploadFailureForField(question.id);
           announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
+          showMaxFilesPartialDialog(question.id, warningMessage, warningKind, 'top.uploadSuccess');
         })
         .catch((err: any) => {
           const message = recordUploadFailure(uploadTarget, err?.message);
           announceUpload(question.id, message);
         });
+    } else if (accepted > 0) {
+      showMaxFilesPartialDialog(question.id, warningMessage, warningKind, 'top.noUploadHandler');
     }
   };
 
@@ -213,7 +247,7 @@ export function useFormFileUploadHandlers({
         fieldPath: question.id,
         question,
         incoming: Array.from(list),
-        onCommitBlockUntilSaved: items => {
+        onCommitBlockUntilSaved: (items, warning) => {
           const uploadConfig = (question as any)?.uploadConfig || {};
           const uploadTarget: UploadRetryTarget = {
             scope: 'top',
@@ -255,6 +289,12 @@ export function useFormFileUploadHandlers({
                 : items.filter((item): item is string => typeof item === 'string');
               clearUploadFailureForField(question.id);
               announceUpload(question.id, tSystem('files.uploaded', language, 'Added'));
+              showMaxFilesPartialDialog(
+                question.id,
+                warning?.warningMessage,
+                warning?.warningKind,
+                'top.overlayImmediateSaveSuccess'
+              );
               updateFileOverlayAfterImmediateAction({
                 scope: 'top',
                 fieldPath: question.id,
@@ -296,7 +336,12 @@ export function useFormFileUploadHandlers({
     const currentRow = existingRows.find(row => row.id === rowId);
     const existingFiles = toUploadItems((currentRow?.values || {})[field.id] as any);
     const pseudo = { uploadConfig: field.uploadConfig } as unknown as WebQuestionDefinition;
-    const { items: files, errorMessage, warningMessage } = applyUploadConstraints(pseudo, existingFiles, incoming, language);
+    const {
+      items: files,
+      errorMessage,
+      warningMessage,
+      warningKind
+    } = applyUploadConstraints(pseudo, existingFiles, incoming, language);
 
     handleLineFieldChange(group, rowId, field, files as unknown as FieldValue);
     setErrors(prev => {
@@ -368,11 +413,14 @@ export function useFormFileUploadHandlers({
           }
           clearUploadFailureForField(fieldPath);
           announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+          showMaxFilesPartialDialog(fieldPath, warningMessage, warningKind, 'line.uploadSuccess');
         })
         .catch((err: any) => {
           const message = recordUploadFailure(uploadTarget, err?.message);
           announceUpload(fieldPath, message);
         });
+    } else if (accepted > 0) {
+      showMaxFilesPartialDialog(fieldPath, warningMessage, warningKind, 'line.noUploadHandler');
     }
   };
 
@@ -412,7 +460,7 @@ export function useFormFileUploadHandlers({
         fieldPath,
         field,
         incoming: Array.from(list),
-        onCommitBlockUntilSaved: items => {
+        onCommitBlockUntilSaved: (items, warning) => {
           const uploadConfig = field.uploadConfig || {};
           const uploadTarget: UploadRetryTarget = {
             scope: 'line',
@@ -454,6 +502,12 @@ export function useFormFileUploadHandlers({
                 : items.filter((item): item is string => typeof item === 'string');
               clearUploadFailureForField(fieldPath);
               announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
+              showMaxFilesPartialDialog(
+                fieldPath,
+                warning?.warningMessage,
+                warning?.warningKind,
+                'line.overlayImmediateSaveSuccess'
+              );
               updateFileOverlayAfterImmediateAction({
                 scope: 'line',
                 fieldPath,

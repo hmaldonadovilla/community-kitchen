@@ -166,7 +166,7 @@ export const useDuplicateCurrentRecordAction = (args: {
       const busySeq = duplicateArgs?.busyAlreadyOpen
         ? null
         : copyRecordBusy.lock({
-            title: tSystem('navigation.waitTitle', language, 'Please wait'),
+            title: '',
             message: tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...'),
             diagnosticMeta: {}
           });

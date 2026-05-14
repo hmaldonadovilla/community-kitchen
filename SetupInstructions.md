@@ -1541,7 +1541,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
     - Want draft autosave while editing? Add `"autoSave": { "enabled": true, "debounceMs": 2000, "status": "In progress" }` to the same dashboard JSON column. Draft saves run in the background without validation and update the record’s `Updated At` + `Status`. Records with `Status = Closed` are treated as read-only and are not auto-saved. The first time a user opens Create/Edit/Copy, they’ll see a one-time autosave explainer overlay (copy lives in `autosaveNotice.*` in `src/web/systemStrings.json`).
       - Optional decoupling: use `autoSave.enableWhenFields` for autosave enablement gates and `autoSave.dedupTriggerFields` for dedup trigger fields.
-      - Optional dedup popup copy: use `autoSave.dedupCheckDialog` to configure the checking/available/duplicate modal text and auto-close timings.
+      - Optional dedup popup copy: use `autoSave.dedupCheckDialog` to configure the checking/available/duplicate modal text and auto-close timings. Set a title value to `""` to hide the title line; set both `availableTitle` and `availableMessage` to `""` to skip the success popup after the check completes.
       - The web app fingerprints draft payloads and coalesces repeated autosave / ensure-draft / explicit draft-save requests for the same unchanged record before calling `saveSubmissionWithId`.
     - Want dedup-key edits to delete the current record instead of mutating it? Add `"dedupDeleteOnKeyChange": true` in the same dashboard JSON column. When enabled, if a user changes a top-level field that participates in a reject dedup rule, the current record is deleted immediately (after confirm/blur + selection effects). Then standard create-flow dedup/autosave rules apply.
     - Want a confirmation dialog when users press **Home** with incomplete required data? Add:
@@ -1818,6 +1818,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `maxFileSizeMb`: per-file max size (rejected client-side)
       - `allowedExtensions` and/or `allowedMimeTypes`: restrict types (validated client-side)
       - `errorMessages`: optional localized override strings for upload validation errors
+      - `warningMessages.maxFilesPartial`: optional localized popup shown after a successful blocking upload when only the first `maxFiles` selected files were added
       - `helperText`: optional localized helper text shown under the upload control (falls back to system strings)
       - `waitMessages.title` / `waitMessages.saveTitle` / `waitMessages.removeSelectedTitle` / `waitMessages.save` / `waitMessages.removeSelected`: optional localized title and wait copy for blocking upload and remove transactions when `blockUntilSaved` is true. Set a title value to `""` to hide the title line. When omitted, the UI falls back to the generic wait title and generic file-based system strings.
       - `linkLabel`: optional localized label template used for file links in Summary/PDF (e.g. `"Photo {n}"`)
@@ -2852,7 +2853,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
  - `autoSave` (optional): enables draft autosave while editing in the web app (no validation). On any change, the app saves in the background after `debounceMs` and writes `autoSave.status` (or `statusTransitions.inProgress`, default `In progress`). If the record’s status matches `statusTransitions.onClose`, the edit view becomes read-only and autosave stops. If the record was modified by another user (Data Version changed), autosave is blocked and the UI synchronizes the latest snapshot before the user continues. The first time a user opens Create/Edit/Copy, a one-time autosave explainer overlay is shown (customize via `autosaveNotice.*` in `src/web/systemStrings.json`).
    - `enableWhenFields` (optional): top-level field ids that must be non-empty before create-flow autosave is allowed.
    - `dedupTriggerFields` (optional): top-level field ids that trigger create-flow dedup prechecks.
-   - `dedupCheckDialog` (optional): form-level non-dismissible dedup progress popup copy (`checking*`, `available*`, `duplicate*`) plus `availableAutoCloseMs` and `duplicateAutoCloseMs`.
+   - `dedupCheckDialog` (optional): form-level non-dismissible dedup progress popup copy (`checking*`, `available*`, `duplicate*`) plus `availableAutoCloseMs` and `duplicateAutoCloseMs`. Set a title value to `""` to hide the title line; set both `availableTitle` and `availableMessage` to `""` to skip the success popup after the check completes.
  - `recordFreshness` (optional): lightweight background freshness checks for existing records in the React edit view. Defaults to enabled with a `30000ms` quiet window, so open records are revalidated when there has been no successful record-related server activity for 30 seconds.
    - `enabled` (optional): set to `false` to disable background freshness checks for the form.
    - `quietWindowMs` (optional): wait this long after the last successful record-related server activity before calling `getRecordVersion`. Minimum `5000`, maximum `600000`.

@@ -5117,6 +5117,7 @@ const FormView: React.FC<FormViewProps> = ({
     setErrors,
     onStatusClear,
     onUploadFiles,
+    openConfirmDialog: openConfirmDialogResolved,
     onDiagnostic,
     fileUploadOrderedEntryGateRef,
     stageFilesInOverlay,

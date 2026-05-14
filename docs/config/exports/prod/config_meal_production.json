@@ -272,7 +272,27 @@
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
-      "status": "In progress"
+      "status": "In progress",
+      "dedupTriggerFields": [
+        "MP_DISTRIBUTOR",
+        "MP_SERVICE",
+        "MP_PREP_DATE"
+      ],
+      "dedupCheckDialog": {
+        "checkingTitle": {
+          "en": ""
+        },
+        "checkingMessage": {
+          "en": "Do not leave this page while we check for duplicate"
+        },
+        "availableTitle": {
+          "en": ""
+        },
+        "availableMessage": {
+          "en": ""
+        },
+        "availableAutoCloseMs": 0
+      }
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
@@ -3318,6 +3338,11 @@
                   "nl": "De maximale bestandsgrootte is {mb}MB"
                 }
               },
+              "warningMessages": {
+                "maxFilesPartial": {
+                  "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+                }
+              },
               "helperText": {
                 "remainingOne": {
                   "en": "You need to add {count} more photo",
@@ -4101,6 +4126,11 @@
             "en": "The selected photo(s) exceed the {mb}MB limit. Please take other photo(s) using normal camera mode (avoid zoom, no filters, no HD mode).",
             "fr": "La taille maximale de la photo est de {mb}MB",
             "nl": "De maximale bestandsgrootte is {mb}MB"
+          }
+        },
+        "warningMessages": {
+          "maxFilesPartial": {
+            "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
           }
         },
         "helperText": {
@@ -5745,6 +5775,11 @@
                     "nl": "De maximale bestandsgrootte is {mb}MB"
                   }
                 },
+                "warningMessages": {
+                  "maxFilesPartial": {
+                    "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+                  }
+                },
                 "helperText": {
                   "remainingOne": {
                     "en": "You need to add {count} more photo",
@@ -6531,6 +6566,11 @@
               "nl": "De maximale bestandsgrootte is {mb}MB"
             }
           },
+          "warningMessages": {
+            "maxFilesPartial": {
+              "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+            }
+          },
           "helperText": {
             "remainingOne": {
               "en": "You need to add {count} more photo",
@@ -7224,7 +7264,27 @@
     "autoSave": {
       "enabled": true,
       "debounceMs": 2000,
-      "status": "In progress"
+      "status": "In progress",
+      "dedupTriggerFields": [
+        "MP_DISTRIBUTOR",
+        "MP_SERVICE",
+        "MP_PREP_DATE"
+      ],
+      "dedupCheckDialog": {
+        "checkingTitle": {
+          "en": ""
+        },
+        "checkingMessage": {
+          "en": "Do not leave this page while we check for duplicate"
+        },
+        "availableTitle": {
+          "en": ""
+        },
+        "availableMessage": {
+          "en": ""
+        },
+        "availableAutoCloseMs": 0
+      }
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {

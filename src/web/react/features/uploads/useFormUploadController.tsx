@@ -411,7 +411,10 @@ export const useFormUploadController = (args: {
       question?: WebQuestionDefinition;
       field?: any;
       incoming: File[];
-      onCommitBlockUntilSaved?: (items: Array<string | File>) => void;
+      onCommitBlockUntilSaved?: (
+        items: Array<string | File>,
+        warning?: { warningMessage?: string; warningKind?: 'maxFilesPartial' | 'someRejected' }
+      ) => void;
     }): boolean => {
       if (!fileOverlay.open) return false;
       const overlayFieldPath =
@@ -423,7 +426,12 @@ export const useFormUploadController = (args: {
       if (fileOverlay.scope !== stageArgs.scope || overlayFieldPath !== stageArgs.fieldPath) return false;
       const uploadField = (stageArgs.question || stageArgs.field || {}) as WebQuestionDefinition;
       const existing = fileOverlay.draftItems || [];
-      const { items, errorMessage, warningMessage } = applyUploadConstraints(uploadField, existing, stageArgs.incoming, language);
+      const { items, errorMessage, warningMessage, warningKind } = applyUploadConstraints(
+        uploadField,
+        existing,
+        stageArgs.incoming,
+        language
+      );
       const accepted = Math.max(0, items.length - existing.length);
       const blockUntilSaved = resolveUploadBlockUntilSaved((uploadField as any)?.uploadConfig);
       const constraintMessage = errorMessage || warningMessage;
@@ -472,7 +480,7 @@ export const useFormUploadController = (args: {
         blockUntilSaved
       });
       if (blockUntilSaved && !errorMessage && accepted > 0) {
-        stageArgs.onCommitBlockUntilSaved?.(items);
+        stageArgs.onCommitBlockUntilSaved?.(items, { warningMessage, warningKind });
       }
       return true;
     },

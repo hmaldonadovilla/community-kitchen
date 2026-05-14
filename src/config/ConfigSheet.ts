@@ -626,6 +626,9 @@ export class ConfigSheet {
         const errorMessages = root.errorMessages ?? root.error_messages ?? root.errors ?? root.messages;
         if (errorMessages && typeof errorMessages === 'object') config.errorMessages = errorMessages;
 
+        const warningMessages = root.warningMessages ?? root.warning_messages ?? root.warnings;
+        if (warningMessages && typeof warningMessages === 'object') (config as any).warningMessages = warningMessages;
+
         const helperText =
           root.helperText ??
           root.helper_text ??
@@ -822,6 +825,9 @@ export class ConfigSheet {
 
     const errorMessages = root.errorMessages ?? root.error_messages ?? root.errors ?? root.messages;
     if (errorMessages && typeof errorMessages === 'object') cfg.errorMessages = errorMessages;
+
+    const warningMessages = root.warningMessages ?? root.warning_messages ?? root.warnings;
+    if (warningMessages && typeof warningMessages === 'object') (cfg as any).warningMessages = warningMessages;
 
     const helperText =
       root.helperText ??

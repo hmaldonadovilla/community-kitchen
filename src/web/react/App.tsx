@@ -357,7 +357,8 @@ import {
   shouldSuppressSelectionEffectInitAutoSave,
   shouldRetainPendingDebouncedAutoSave,
   shouldForceAutoSaveOnConfiguredBlur,
-  isBlockingDedupConflict
+  isBlockingDedupConflict,
+  shouldShowDedupProgressDialogState
 } from './app/autoSaveDedup';
 import {
   applyIngredientActivationSystemFields,
@@ -7330,7 +7331,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           dedupConflictRef.current = null;
           setDedupConflict(null);
           logEvent('dedup.ok', { recordId: candidateId || null });
-          if (showDedupProgress) {
+          if (
+            showDedupProgress &&
+            shouldShowDedupProgressDialogState({
+              title: dedupCheckDialogCopy.availableTitle,
+              message: dedupCheckDialogCopy.availableMessage
+            })
+          ) {
             showDedupProgressDialog({
               phase: 'available',
               title: dedupCheckDialogCopy.availableTitle,
@@ -13927,7 +13934,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
     const openCopyBusy = () =>
       copyRecordBusy.lock({
-        title: tSystem('navigation.waitTitle', language, 'Please wait'),
+        title: '',
         message: tSystem('navigation.waitCopyRecord', language, 'Please wait while we prepare your copied record...'),
         diagnosticMeta: { recordId: row.id }
       });

@@ -915,6 +915,11 @@ components:
         errorMessages:
           $ref: '#/components/schemas/FileUploadErrorMessages'
           description: Optional per-field localized overrides for upload validation messages.
+        warningMessages:
+          $ref: '#/components/schemas/FileUploadWarningMessages'
+          description: |
+            Optional per-field localized overrides for non-blocking upload warnings.
+            `maxFilesPartial` is shown after a successful blocking upload/save transaction when some selected files were skipped because `maxFiles` was reached.
         helperText:
           $ref: '#/components/schemas/FileUploadHelperText'
           description: |
@@ -1058,7 +1063,21 @@ components:
           description: |
             Message used when client-side image compression fails (best-effort).
             Variables: {name}
-      description: Optional per-field localized overrides for upload validation messages.
+
+    FileUploadWarningMessages:
+      type: object
+      properties:
+        maxFilesPartial:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Non-blocking message shown when a multi-select accepts some files and skips the rest because `maxFiles` was reached.
+            Variables: {accepted}, {attempted}, {rejected}, {max}
+        someRejected:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Non-blocking message shown when some selected files were accepted and others were rejected for type/size reasons.
+            Variables: {accepted}, {plural}, {reason}
+      description: Optional per-field localized overrides for non-blocking upload warnings.
 
     FileUploadCompressionConfig:
       oneOf:
@@ -5131,7 +5150,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'
             - type: string
-          description: Title shown while dedup check is running.
+          description: Title shown while dedup check is running. Set to an empty string to hide the title line.
         checkingMessage:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'
@@ -5146,7 +5165,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'
             - type: string
-          description: Message shown when dedup check completes without conflict.
+          description: Message shown when dedup check completes without conflict. If both availableTitle and availableMessage resolve to empty strings, the available-state popup is skipped.
         duplicateTitle:
           oneOf:
             - $ref: '#/components/schemas/LocalizedString'

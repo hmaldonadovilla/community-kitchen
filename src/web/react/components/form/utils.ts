@@ -350,7 +350,12 @@ export const applyUploadConstraints = (
   existing: Array<string | File>,
   incoming: File[],
   language: LangCode
-): { items: Array<string | File>; errorMessage?: string; warningMessage?: string } => {
+): {
+  items: Array<string | File>;
+  errorMessage?: string;
+  warningMessage?: string;
+  warningKind?: 'maxFilesPartial' | 'someRejected';
+} => {
   if (!incoming.length) {
     return { items: existing };
   }
@@ -363,11 +368,22 @@ export const applyUploadConstraints = (
         .filter(Boolean)
     : [];
   const maxBytes = uploadConfig?.maxFileSizeMb ? uploadConfig.maxFileSizeMb * 1024 * 1024 : undefined;
+  const warningMessages = uploadConfig?.warningMessages || uploadConfig?.warning_messages || uploadConfig?.warnings || {};
   const next = [...existing];
   const errors: Array<{ kind: 'fileType' | 'maxFileSizeMb' | 'maxFiles'; message: string }> = [];
   let acceptedCount = 0;
 
   const resolveUploadError = (args: {
+    custom?: any;
+    systemKey: string;
+    fallback: string;
+    vars?: TemplateVars;
+  }): string => {
+    const customText = args.custom ? resolveLocalizedString(args.custom, language, '') : '';
+    if (customText) return formatTemplate(customText, args.vars);
+    return tSystem(args.systemKey, language, args.fallback, args.vars);
+  };
+  const resolveUploadWarning = (args: {
     custom?: any;
     systemKey: string;
     fallback: string;
@@ -458,22 +474,32 @@ export const applyUploadConstraints = (
     return {
       items: next,
       warningMessage: maxOnly && maxFiles
-        ? tSystem(
-            'files.warning.maxFilesPartial',
-            language,
-            'Only {accepted} of {attempted} selected photos were added. Maximum: {max}.',
-            { accepted: acceptedCount, attempted: incoming.length, max: maxFiles }
-          )
-        : tSystem(
-            'files.warning.someRejected',
-            language,
-            '{accepted} photo{plural} added. Some selected files were not added: {reason}',
+        ? resolveUploadWarning(
             {
-              accepted: acceptedCount,
-              plural: acceptedCount === 1 ? '' : 's',
-              reason: message || ''
+              custom: warningMessages?.maxFilesPartial ?? (uploadConfig?.errorMessages as any)?.maxFilesPartial,
+              systemKey: 'files.warning.maxFilesPartial',
+              fallback: 'Only {accepted} of {attempted} selected photos were added. Maximum: {max}.',
+              vars: {
+                accepted: acceptedCount,
+                attempted: incoming.length,
+                rejected: Math.max(0, incoming.length - acceptedCount),
+                max: maxFiles
+              }
             }
           )
+        : resolveUploadWarning(
+            {
+              custom: warningMessages?.someRejected,
+              systemKey: 'files.warning.someRejected',
+              fallback: '{accepted} photo{plural} added. Some selected files were not added: {reason}',
+              vars: {
+                accepted: acceptedCount,
+                plural: acceptedCount === 1 ? '' : 's',
+                reason: message || ''
+              }
+            }
+          ),
+      warningKind: maxOnly && maxFiles ? 'maxFilesPartial' : 'someRejected'
     };
   }
 
