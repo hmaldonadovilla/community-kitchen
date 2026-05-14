@@ -43,7 +43,7 @@ describe('FollowupService meal production rendering', () => {
       {} as any,
       {} as any,
       (formKey, recordId) => {
-        if (formKey !== 'Config: Leftover Inventory') return null;
+        if (formKey !== 'Config: Leftover Bank') return null;
         if (recordId === 'leftover-single') {
           return {
             formKey,
@@ -144,7 +144,7 @@ describe('FollowupService meal production rendering', () => {
 
   it('caches linked leftover lookups across repeated meal production PDF preparation in one service request', () => {
     const resolveLinkedRecord = jest.fn((formKey, recordId) => {
-      if (formKey !== 'Config: Leftover Inventory') return null;
+      if (formKey !== 'Config: Leftover Bank') return null;
       if (recordId === 'leftover-single') {
         return {
           formKey,
@@ -199,6 +199,6 @@ describe('FollowupService meal production rendering', () => {
     expect(service.generatePdfArtifact(form, [], buildRecord('meal-record-2'), followup).success).toBe(true);
 
     expect(resolveLinkedRecord).toHaveBeenCalledTimes(1);
-    expect(resolveLinkedRecord).toHaveBeenCalledWith('Config: Leftover Inventory', 'leftover-single');
+    expect(resolveLinkedRecord).toHaveBeenCalledWith('Config: Leftover Bank', 'leftover-single');
   });
 });

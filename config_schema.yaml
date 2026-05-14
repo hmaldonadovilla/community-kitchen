@@ -1845,7 +1845,7 @@ components:
           type: boolean
           description: |
             When `true`, compact rows whose anchor field value is empty are hidden instead of rendering as blank rows.
-            Useful for inventory-backed or selector-driven compact subgroups where only anchored rows should be visible.
+            Useful for bank-backed or selector-driven compact subgroups where only anchored rows should be visible.
         compactActions:
           type: array
           items:
@@ -3000,9 +3000,9 @@ components:
             Recommended convention for source tabs: `Label [KEY]` headers (e.g., `Supplier [SUPPLIER]`, `Email [EMAIL]`).
             `projection` entries can reference either the raw header text or the bracket key.
 
-            Shared-inventory flows should project aggregate availability fields from the inventory table itself
-            (for example remaining quantity plus reserved quantity), so the UI can paint availability from one
-            datasource read without querying any reservation ledger directly.
+            Shared-bank flows should project aggregate availability fields from the bank table itself
+            (for example remaining quantity plus utilised quantity), so the UI can paint availability from one
+            datasource read without querying any utilisation utilisation directly.
         mapping:
           type: object
           additionalProperties:
@@ -3170,7 +3170,7 @@ components:
 
             Placeholders:
             - You can include `{FIELD_ID}` (or `{{FIELD_ID}}`) and the UI will substitute the current record’s values.
-            - `{field}` is reserved for required-field messages; prefer `{FIELD_ID}` for record values.
+            - `{field}` is utilised for required-field messages; prefer `{FIELD_ID}` for record values.
         submissionConfirmationConfirmLabel:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -3917,18 +3917,18 @@ components:
             When this condition does not match, the step remains visible but cannot be opened directly
             from the guided step carousel. Sequential navigation (Back/Next/auto-advance/milestones)
             is unaffected.
-        backgroundReservationSyncOnAdvance:
+        backgroundUtilisationSyncOnAdvance:
           type: boolean
           description: |
-            Optional per-step toggle for the normal guided-step advance background reservation sync.
+            Optional per-step toggle for the normal guided-step advance background utilisation sync.
 
             When false, advancing away from this step will not queue the generic
-            `applyInventoryReservationPlan` reconciliation pass.
+            `applyBankUtilisationPlan` sync pass.
 
-            Use this when step entry should only refresh shared inventory through
-            datasource fetches/heartbeats, and reservation writes should happen only
-            after real user reservation edits or when another mechanism already
-            detects reservation-managed row deletions.
+            Use this when step entry should only refresh shared bank through
+            datasource fetches/heartbeats, and utilisation writes should happen only
+            after real user utilisation edits or when another mechanism already
+            detects utilisation-managed row deletions.
         milestoneAction:
           $ref: '#/components/schemas/StepMilestoneActionConfig'
           description: Optional step-scoped action triggered by the primary button after the current step validates.
@@ -4870,16 +4870,16 @@ components:
             Optional guided-step datasource bootstrap coordination.
 
             Use this when the step loads shared datasource rows that may be updated by
-            in-flight guided reservation syncs from another step for the same record.
+            in-flight guided utilisation syncs from another step for the same record.
           properties:
-            waitForGuidedReservationSync:
+            waitForGuidedUtilisationSync:
               type: boolean
               description: |
                 When true, delay the initial guided-step datasource bootstrap until any
-                in-flight guided reservation draft sync for the current record has finished.
+                in-flight guided utilisation draft sync for the current record has finished.
 
-                This avoids fetching stale shared inventory immediately after another step
-                deleted reservation-managed output rows and queued a release plan.
+                This avoids fetching stale shared bank immediately after another step
+                deleted utilisation-managed output rows and queued a release plan.
             waitForSharedDataMutations:
               type: boolean
               description: |
@@ -4887,8 +4887,8 @@ components:
                 in-flight follow-up action that mutates one of this step's datasource form
                 keys has finished.
 
-                Use this when the datasource reads shared inventory that can be created,
-                updated, consumed, or released by background follow-up work in the same
+                Use this when the datasource reads shared bank that can be created
+                or updated by background follow-up work in the same
                 app session. This keeps the step from fetching stale shared data or
                 showing a freshness-change dialog before the previous mutation settles.
       required: [kind, id]
@@ -6440,164 +6440,28 @@ components:
           description: Optional day offset applied before comparison.
       required: [type, dateFieldId, toStatus]
 
-    LifecycleReleaseStaleReservationsRule:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Optional stable rule id for diagnostics.
-        type:
-          type: string
-          enum: [releaseStaleReservations]
-        dateFieldId:
-          type: string
-          description: Source-record date field used to detect stale active reservations.
-        statusFieldId:
-          type: string
-          description: |
-            Optional field id used to read the source-record business status.
-            When omitted, the form follow-up status field or record meta Status column is used.
-        fromStatuses:
-          type: array
-          items:
-            type: string
-          description: Optional eligible source statuses (case-insensitive).
-        compare:
-          type: string
-          enum: [beforeToday, onOrBeforeToday]
-          default: beforeToday
-        dayOffset:
-          type: integer
-          description: Optional day offset applied before comparison.
-        ledgerFormKey:
-          type: string
-          description: |
-            Optional override for the reservation ledger form.
-            Defaults to `reservationLifecycle.ledgerFormKey` or `Config: Inventory Reservation Ledger`.
-        releaseWhenSourceMissing:
-          type: boolean
-          description: |
-            When true (default), also release active reservations when the source record can no longer be found.
-      required: [type, dateFieldId]
-
-    LifecycleReleaseActiveReservationsRule:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Optional stable rule id for diagnostics.
-        type:
-          type: string
-          enum: [releaseActiveReservations]
-        ledgerFormKey:
-          type: string
-          description: |
-            Optional override for the reservation ledger form.
-            Defaults to `reservationLifecycle.ledgerFormKey` or `Config: Inventory Reservation Ledger`.
-      required: [type]
-
     LifecycleConfig:
       type: object
       properties:
         rules:
           type: array
           items:
-            oneOf:
-              - $ref: '#/components/schemas/LifecycleDateStatusTransitionRule'
-              - $ref: '#/components/schemas/LifecycleReleaseStaleReservationsRule'
-              - $ref: '#/components/schemas/LifecycleReleaseActiveReservationsRule'
+            $ref: '#/components/schemas/LifecycleDateStatusTransitionRule'
       description: |
         Generic daily lifecycle automation evaluated by the daily Apps Script trigger.
 
         Typical use:
         - mark leftovers `expired` when `LEFTOVER_EXP_DATE <= today`
-        - release all active reservations for a source form every day
-        - release stale active reservations for unfinished source records
-        - later reuse for other stock/inventory status rollovers
+        - later reuse for other stock/bank status rollovers
 
-    ReservationReleaseOnDeleteConfig:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: Enable/disable automatic release of active reservations when the source record is deleted.
-        ledgerFormKey:
-          type: string
-          description: Optional override for the reservation ledger form.
-      additionalProperties: true
-
-    ReservationReconcileOnFinalSubmitConfig:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: Enable/disable reservation reconciliation when the source record reaches a final status.
-        statuses:
-          type: array
-          items:
-            type: string
-          description: |
-            Source statuses that trigger final reconciliation. Defaults to
-            `followupConfig.statusTransitions.onClose` when omitted, then falls back to `["closed"]`.
-        ledgerFormKey:
-          type: string
-          description: Optional override for the reservation ledger form.
-        refreshMode:
-          type: string
-          enum: [full, revisionOnly, none]
-          description: |
-            Post-reconciliation cache refresh strategy.
-            - `full`: recompute affected form summaries and datasource revisions
-            - `revisionOnly`: bump revisions without warming broader caches
-            - `none`: skip cache refreshes entirely
-        feedback:
-          $ref: '#/components/schemas/ReservationReconciliationFeedbackConfig'
-      additionalProperties: true
-
-    ReservationReconciliationFeedbackConfig:
+    UtilisationConflictDialogConfig:
       type: object
       description: |
-        Optional user-facing submit feedback shown after final reservation reconciliation succeeds.
-
-        Supported placeholders in `message`:
-        - `{baseMessage}`
-        - `{reconciliationSummary}`
-        - `{consumedReservations}`
-        - `{releasedReservations}`
-
-        Supported placeholders in summary fragments:
-        - `{count}`
-      properties:
-        message:
-          oneOf:
-            - $ref: '#/components/schemas/LocalizedString'
-            - type: string
-        consumedSummarySingular:
-          oneOf:
-            - $ref: '#/components/schemas/LocalizedString'
-            - type: string
-        consumedSummaryPlural:
-          oneOf:
-            - $ref: '#/components/schemas/LocalizedString'
-            - type: string
-        releasedSummarySingular:
-          oneOf:
-            - $ref: '#/components/schemas/LocalizedString'
-            - type: string
-        releasedSummaryPlural:
-          oneOf:
-            - $ref: '#/components/schemas/LocalizedString'
-            - type: string
-      additionalProperties: true
-
-    ReservationConflictDialogConfig:
-      type: object
-      description: |
-        Optional dialog copy shown when a reservation request is rejected because the authoritative
+        Optional dialog copy shown when a utilisation request is rejected because the authoritative
         server-side availability changed before the write completed.
 
         Intended use:
-        - explain that another user or record already reserved part of the shared leftover
+        - explain that another user or record already utilised part of the shared leftover
         - offer a clear choice to use the remaining available quantity or cancel the attempted change
 
         Supported placeholders in `message`:
@@ -6609,9 +6473,9 @@ components:
         - `{requested}`
         - `{current}`
 
-        For guided datasource-row allocation steps that should avoid per-keystroke ledger writes, set
-        `reservation.commitMode: "step"` on the datasource-row config. The client updates availability locally
-        first, then live-syncs one batched step reservation plan on valid selection edits and quantity blur.
+        For guided datasource-row allocation steps that should avoid per-keystroke utilisation writes, set
+        `utilisation.commitMode: "step"` on the datasource-row config. The client updates availability locally
+        first, then live-syncs one batched step utilisation plan on valid selection edits and quantity blur.
       properties:
         title:
           oneOf:
@@ -6639,29 +6503,6 @@ components:
           type: string
           enum: [confirm, cancel]
       additionalProperties: true
-
-    ReservationLifecycleConfig:
-      type: object
-      properties:
-        ledgerFormKey:
-          type: string
-          description: Optional default ledger form key used by release hooks for this source form.
-        releaseOnDelete:
-          oneOf:
-            - type: boolean
-            - $ref: '#/components/schemas/ReservationReleaseOnDeleteConfig'
-          description: |
-            Automatically release active reservations when the source record is deleted.
-            This covers dedup-key delete/recreate flows and other configured delete paths.
-        reconcileOnFinalSubmit:
-          oneOf:
-            - type: boolean
-            - $ref: '#/components/schemas/ReservationReconcileOnFinalSubmitConfig'
-          description: |
-            Reconcile active reservations when the source record reaches its configured final status.
-            This is the generic submit-time closeout hook for reservation-backed inventory flows.
-      additionalProperties: true
-
 
     DedupRule:
       type: object
@@ -6880,7 +6721,7 @@ components:
             `type=addLineItemsFromDataSource` and `type=setValuesFromDataSource`.
 
             Use this when the triggering field value is not the same as the datasource key. For example, a
-            quantity or mode change can still regenerate rows using the current row's inventory id.
+            quantity or mode change can still regenerate rows using the current row's bank id.
         parentFieldMapping:
           type: object
           additionalProperties:
@@ -6918,7 +6759,7 @@ components:
           type: string
           description: |
             For `type=addLineItemsFromDataSource`, optionally match and fan out *all* data-source rows whose
-            `matchField` value equals the current selection. Useful for inventory-style selectors where one meal type
+            `matchField` value equals the current selection. Useful for bank-style selectors where one meal type
             should hydrate multiple available item rows.
         dataField:
           type: string
@@ -7561,10 +7402,6 @@ components:
         lifecycle:
           $ref: '#/components/schemas/LifecycleConfig'
           description: Config-driven daily lifecycle automation (dashboard-level).
-        reservationLifecycle:
-          $ref: '#/components/schemas/ReservationLifecycleConfig'
-          description: |
-            Optional reservation release hooks for source forms that own shared-inventory reservations.
         languages:
           type: array
           items:

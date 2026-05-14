@@ -4,7 +4,7 @@ import {
   shouldForceRefreshStepDataSourceOnBootstrap,
   shouldGateStepDataSourceUntilFresh,
   shouldStartStepDataSourceBootstrap,
-  shouldWaitForGuidedReservationSyncOnBootstrap,
+  shouldWaitForGuidedUtilisationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap
 } from '../../../src/web/react/app/stepDataSourceBootstrap';
 
@@ -17,8 +17,8 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         {
           id: 'leftoverRows',
           dataSource: {
-            id: 'Leftover Inventory Data',
-            formKey: 'Config: Leftover Inventory',
+            id: 'Leftover Bank Data',
+            formKey: 'Config: Leftover Bank',
             projection: ['Name', 'Status']
           },
           availability: { enabled: true }
@@ -32,8 +32,8 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         {
           id: 'leftoverRows',
           dataSource: {
-            id: 'Leftover Inventory Data',
-            formKey: 'Config: Leftover Inventory',
+            id: 'Leftover Bank Data',
+            formKey: 'Config: Leftover Bank',
             projection: ['Name', 'Status']
           },
           availability: { enabled: true }
@@ -52,7 +52,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
       configs: [
         {
           id: 'leftoverRows',
-          dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+          dataSource: { id: 'Leftover Bank Data', formKey: 'Config: Leftover Bank' },
           availability: { enabled: true }
         }
       ]
@@ -66,7 +66,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         configs: [
           {
             id: 'leftoverRows',
-            dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+            dataSource: { id: 'Leftover Bank Data', formKey: 'Config: Leftover Bank' },
             availability: { enabled: true }
           }
         ]
@@ -81,11 +81,11 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         configs: [
           {
             id: 'leftoverRows',
-            dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
-            reservationBehavior: { enabled: true }
+            dataSource: { id: 'Leftover Bank Data', formKey: 'Config: Leftover Bank' },
+            utilisationBehavior: { enabled: true }
           }
         ],
-        bootstrap: { waitForGuidedReservationSync: true }
+        bootstrap: { waitForGuidedUtilisationSync: true }
       })
     ).not.toBe(baseline);
 
@@ -97,7 +97,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
         configs: [
           {
             id: 'leftoverRows',
-            dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+            dataSource: { id: 'Leftover Bank Data', formKey: 'Config: Leftover Bank' },
             availability: { enabled: true }
           }
         ],
@@ -121,7 +121,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
       configs: [
         {
           id: 'leftoverRows',
-          dataSource: { id: 'Leftover Inventory Data', formKey: 'Config: Leftover Inventory' },
+          dataSource: { id: 'Leftover Bank Data', formKey: 'Config: Leftover Bank' },
           availability: { enabled: true }
         }
       ]
@@ -130,11 +130,11 @@ describe('buildStepDataSourceBootstrapSignature', () => {
     expect(leftoverSignature).not.toBe(orderSignature);
   });
 
-  it('normalizes the guided reservation wait flag', () => {
-    expect(shouldWaitForGuidedReservationSyncOnBootstrap(undefined)).toBe(false);
-    expect(shouldWaitForGuidedReservationSyncOnBootstrap({})).toBe(false);
+  it('normalizes the guided utilisation wait flag', () => {
+    expect(shouldWaitForGuidedUtilisationSyncOnBootstrap(undefined)).toBe(false);
+    expect(shouldWaitForGuidedUtilisationSyncOnBootstrap({})).toBe(false);
     expect(
-      shouldWaitForGuidedReservationSyncOnBootstrap({ waitForGuidedReservationSync: true })
+      shouldWaitForGuidedUtilisationSyncOnBootstrap({ waitForGuidedUtilisationSync: true })
     ).toBe(true);
   });
 
@@ -206,7 +206,7 @@ describe('buildStepDataSourceBootstrapSignature', () => {
   it('classifies freshness-gated source-first datasource configs', () => {
     expect(shouldForceRefreshStepDataSourceOnBootstrap({ forceRefreshOnMount: true })).toBe(true);
     expect(shouldForceRefreshStepDataSourceOnBootstrap({ availability: { enabled: true } })).toBe(true);
-    expect(shouldForceRefreshStepDataSourceOnBootstrap({ reservationBehavior: { enabled: true } })).toBe(true);
+    expect(shouldForceRefreshStepDataSourceOnBootstrap({ utilisationBehavior: { enabled: true } })).toBe(true);
     expect(shouldForceRefreshStepDataSourceOnBootstrap({}, true)).toBe(true);
     expect(shouldForceRefreshStepDataSourceOnBootstrap({})).toBe(false);
     expect(shouldGateStepDataSourceUntilFresh({ availability: { enabled: true } })).toBe(true);

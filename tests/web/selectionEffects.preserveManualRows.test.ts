@@ -683,7 +683,7 @@ describe('selectionEffects preserveManualRows', () => {
       definition,
       question: {
         id: 'LEFTOVER_SELECTED',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             id: 'leftoverIngredients',
@@ -754,7 +754,7 @@ describe('selectionEffects preserveManualRows', () => {
           id: 'seed_leftovers',
           type: 'addLineItemsFromDataSource',
           groupId: 'ING',
-          dataSource: { id: 'Leftover Inventory Data' },
+          dataSource: { id: 'Leftover Bank Data' },
           replaceAllAutoRows: true,
           preserveManualRows: false,
           lineItemMapping: {

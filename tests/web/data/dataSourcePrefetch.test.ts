@@ -7,8 +7,8 @@ describe('dataSourcePrefetch', () => {
   it('allows config-driven home prefetch override for transactional datasources', () => {
     expect(
       isHomePrefetchEligibleDataSource({
-        id: 'Leftover Inventory Data',
-        formKey: 'Config: Leftover Inventory',
+        id: 'Leftover Bank Data',
+        formKey: 'Config: Leftover Bank',
         mode: 'options',
         prefetchOnHome: true,
         statusFieldId: 'LEFTOVER_STATUS',
@@ -20,8 +20,8 @@ describe('dataSourcePrefetch', () => {
   it('still blocks transactional datasources without the override', () => {
     expect(
       isHomePrefetchEligibleDataSource({
-        id: 'Leftover Inventory Data',
-        formKey: 'Config: Leftover Inventory',
+        id: 'Leftover Bank Data',
+        formKey: 'Config: Leftover Bank',
         mode: 'options',
         statusFieldId: 'LEFTOVER_STATUS',
         statusAllowList: ['available']

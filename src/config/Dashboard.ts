@@ -17,7 +17,6 @@ import {
   FieldDisableRule,
   LifecycleConfig,
   LifecycleRule,
-  ReservationLifecycleConfig,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
@@ -157,7 +156,6 @@ export class Dashboard {
       const listViewMetric = dashboardConfig?.listViewMetric;
       const analytics = dashboardConfig?.analytics;
       const lifecycle = dashboardConfig?.lifecycle;
-      const reservationLifecycle = dashboardConfig?.reservationLifecycle;
       const autoSave = dashboardConfig?.autoSave;
       const recordFreshness = dashboardConfig?.recordFreshness;
       const auditLogging = dashboardConfig?.auditLogging;
@@ -201,7 +199,6 @@ export class Dashboard {
           rowIndex: dataStartRow + index,
           followupConfig,
           lifecycle,
-          reservationLifecycle,
           templateCacheTtlSeconds,
           listViewTitle,
           listViewDefaultSort,
@@ -283,7 +280,6 @@ export class Dashboard {
   ): {
     followup?: FollowupConfig;
     lifecycle?: LifecycleConfig;
-    reservationLifecycle?: ReservationLifecycleConfig;
     templateCacheTtlSeconds?: number;
     listViewTitle?: LocalizedString;
     listViewDefaultSort?: { fieldId: string; direction?: 'asc' | 'desc' };
@@ -417,16 +413,6 @@ export class Dashboard {
               ? { rules: parsed.lifecycleRules }
               : undefined;
     const lifecycle = this.normalizeLifecycleConfig(lifecycleRaw);
-    const reservationLifecycleRaw =
-      parsed.reservationLifecycle !== undefined
-        ? parsed.reservationLifecycle
-        : parsed.inventoryReservationLifecycle !== undefined
-          ? parsed.inventoryReservationLifecycle
-          : parsed.reservationRelease !== undefined
-            ? parsed.reservationRelease
-            : undefined;
-    const reservationLifecycle = this.normalizeReservationLifecycleConfig(reservationLifecycleRaw);
-
     const templateCacheObj =
       parsed.templateCache !== undefined && parsed.templateCache !== null && typeof parsed.templateCache === 'object'
         ? parsed.templateCache
@@ -1502,7 +1488,6 @@ export class Dashboard {
     if (
       !followup &&
       templateCacheTtlSeconds === undefined &&
-      !reservationLifecycle &&
       !listViewTitle &&
       !listViewDefaultSort &&
       listViewPageSize === undefined &&
@@ -1560,7 +1545,6 @@ export class Dashboard {
     return {
       followup,
       lifecycle,
-      reservationLifecycle,
       templateCacheTtlSeconds,
       listViewTitle,
       listViewDefaultSort,
@@ -1614,143 +1598,6 @@ export class Dashboard {
       steps,
       dedupDeleteOnKeyChange
     };
-  }
-
-  private normalizeReservationLifecycleConfig(raw: any): ReservationLifecycleConfig | undefined {
-    if (!raw || typeof raw !== 'object') return undefined;
-    const config: ReservationLifecycleConfig = {};
-    const normalizeLocalized = (value: any): LocalizedString | undefined => {
-      if (value === undefined || value === null) return undefined;
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed ? trimmed : undefined;
-      }
-      if (typeof value !== 'object') return undefined;
-      const out: Record<string, string> = {};
-      Object.entries(value).forEach(([key, rawVal]) => {
-        if (typeof rawVal !== 'string') return;
-        const trimmed = rawVal.trim();
-        if (!trimmed) return;
-        out[key.toLowerCase()] = trimmed;
-      });
-      return Object.keys(out).length ? (out as LocalizedString) : undefined;
-    };
-    const normalizeOptionalLocalized = (value: any): LocalizedString | string | undefined => {
-      if (value === undefined || value === null) return undefined;
-      if (typeof value === 'string') return value.trim();
-      if (typeof value !== 'object') return undefined;
-      const out: Record<string, string> = {};
-      Object.entries(value).forEach(([key, rawVal]) => {
-        if (typeof rawVal !== 'string') return;
-        out[key.toLowerCase()] = rawVal.trim();
-      });
-      return Object.keys(out).length ? (out as LocalizedString) : undefined;
-    };
-
-    const normalizeSystemDialogConfig = (raw: any): SystemActionGateDialogConfig | undefined => {
-      if (!raw || typeof raw !== 'object') return undefined;
-      const out: Record<string, any> = {};
-      const normalizeActionString = (input: any): string | undefined => {
-        if (input === undefined || input === null) return undefined;
-        const trimmed = input.toString().trim();
-        return trimmed || undefined;
-      };
-      const normalizeDialogAction = (value: any): Record<string, any> | undefined => {
-        if (!value || typeof value !== 'object') return undefined;
-        const type = normalizeActionString((value as any).type);
-        if (type !== 'guidedStepMilestone' && type !== 'formSubmit') return undefined;
-        const action: Record<string, any> = { type };
-        const id = normalizeActionString((value as any).id);
-        if (id) action.id = id;
-        if (type === 'guidedStepMilestone') {
-          const stepId = normalizeActionString((value as any).stepId);
-          if (stepId) action.stepId = stepId;
-        }
-        return action;
-      };
-      const title = normalizeOptionalLocalized((raw as any).title ?? (raw as any).header ?? (raw as any).heading);
-      const message = normalizeLocalized((raw as any).message ?? (raw as any).body ?? (raw as any).text);
-      const confirmLabel = normalizeLocalized((raw as any).confirmLabel ?? (raw as any).confirmButtonLabel);
-      const cancelLabel = normalizeLocalized((raw as any).cancelLabel ?? (raw as any).cancelButtonLabel);
-      const confirmAction = normalizeDialogAction((raw as any).confirmAction);
-      const cancelAction = normalizeDialogAction((raw as any).cancelAction);
-      if (title !== undefined) out.title = title;
-      if (message) out.message = message;
-      if (confirmLabel) out.confirmLabel = confirmLabel;
-      if (cancelLabel) out.cancelLabel = cancelLabel;
-      if (confirmAction) out.confirmAction = confirmAction;
-      if (cancelAction) out.cancelAction = cancelAction;
-      if ((raw as any).primaryAction === 'confirm' || (raw as any).primaryAction === 'cancel') {
-        out.primaryAction = (raw as any).primaryAction;
-      }
-      if ((raw as any).showCancel !== undefined) out.showCancel = Boolean((raw as any).showCancel);
-      if ((raw as any).showConfirm !== undefined) out.showConfirm = Boolean((raw as any).showConfirm);
-      if ((raw as any).showCloseButton !== undefined) out.showCloseButton = Boolean((raw as any).showCloseButton);
-      if ((raw as any).dismissOnBackdrop !== undefined) out.dismissOnBackdrop = Boolean((raw as any).dismissOnBackdrop);
-      return Object.keys(out).length ? (out as SystemActionGateDialogConfig) : undefined;
-    };
-    const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
-    if (ledgerFormKey) config.ledgerFormKey = ledgerFormKey;
-
-    const releaseOnDeleteRaw =
-      raw.releaseOnDelete !== undefined
-        ? raw.releaseOnDelete
-        : raw.releaseReservationsOnDelete !== undefined
-          ? raw.releaseReservationsOnDelete
-          : raw.deleteRelease !== undefined
-            ? raw.deleteRelease
-            : undefined;
-    if (typeof releaseOnDeleteRaw === 'boolean') {
-      config.releaseOnDelete = releaseOnDeleteRaw;
-    } else if (releaseOnDeleteRaw && typeof releaseOnDeleteRaw === 'object') {
-      const entry: any = {};
-      if (releaseOnDeleteRaw.enabled !== undefined) entry.enabled = Boolean(releaseOnDeleteRaw.enabled);
-      const releaseLedgerFormKey = (releaseOnDeleteRaw.ledgerFormKey ?? '').toString().trim();
-      if (releaseLedgerFormKey) entry.ledgerFormKey = releaseLedgerFormKey;
-      if (Object.keys(entry).length) config.releaseOnDelete = entry;
-    }
-
-    const reconcileOnFinalSubmitRaw =
-      raw.reconcileOnFinalSubmit !== undefined
-        ? raw.reconcileOnFinalSubmit
-        : raw.finalSubmitReconcile !== undefined
-          ? raw.finalSubmitReconcile
-          : raw.reconcileReservationsOnFinalSubmit !== undefined
-            ? raw.reconcileReservationsOnFinalSubmit
-            : undefined;
-    if (typeof reconcileOnFinalSubmitRaw === 'boolean') {
-      config.reconcileOnFinalSubmit = reconcileOnFinalSubmitRaw;
-    } else if (reconcileOnFinalSubmitRaw && typeof reconcileOnFinalSubmitRaw === 'object') {
-      const entry: any = {};
-      if (reconcileOnFinalSubmitRaw.enabled !== undefined) entry.enabled = Boolean(reconcileOnFinalSubmitRaw.enabled);
-      const statuses = Array.isArray(reconcileOnFinalSubmitRaw.statuses)
-        ? reconcileOnFinalSubmitRaw.statuses.map((value: any) => (value || '').toString().trim()).filter(Boolean)
-        : [];
-      if (statuses.length) entry.statuses = statuses;
-      const reconcileLedgerFormKey = (reconcileOnFinalSubmitRaw.ledgerFormKey ?? '').toString().trim();
-      if (reconcileLedgerFormKey) entry.ledgerFormKey = reconcileLedgerFormKey;
-      const refreshMode = (reconcileOnFinalSubmitRaw.refreshMode || '').toString().trim();
-      if (refreshMode === 'full' || refreshMode === 'revisionOnly' || refreshMode === 'none') {
-        entry.refreshMode = refreshMode;
-      }
-      const feedbackRaw = reconcileOnFinalSubmitRaw.feedback;
-      if (feedbackRaw && typeof feedbackRaw === 'object') {
-        const feedback: any = {};
-        const message = normalizeLocalized(feedbackRaw.message);
-        if (message) feedback.message = message;
-        const consumedSummarySingular = normalizeLocalized(feedbackRaw.consumedSummarySingular);
-        if (consumedSummarySingular) feedback.consumedSummarySingular = consumedSummarySingular;
-        const consumedSummaryPlural = normalizeLocalized(feedbackRaw.consumedSummaryPlural);
-        if (consumedSummaryPlural) feedback.consumedSummaryPlural = consumedSummaryPlural;
-        const releasedSummarySingular = normalizeLocalized(feedbackRaw.releasedSummarySingular);
-        if (releasedSummarySingular) feedback.releasedSummarySingular = releasedSummarySingular;
-        const releasedSummaryPlural = normalizeLocalized(feedbackRaw.releasedSummaryPlural);
-        if (releasedSummaryPlural) feedback.releasedSummaryPlural = releasedSummaryPlural;
-        if (Object.keys(feedback).length) entry.feedback = feedback;
-      }
-      if (Object.keys(entry).length) config.reconcileOnFinalSubmit = entry;
-    }
-    return Object.keys(config).length ? config : undefined;
   }
 
   private normalizeActionBars(value: any): ActionBarsConfig | undefined {
@@ -2236,14 +2083,14 @@ export class Dashboard {
       const dataSourceBootstrapRaw = (raw as any).dataSourceBootstrap;
       if (dataSourceBootstrapRaw && typeof dataSourceBootstrapRaw === 'object') {
         const dataSourceBootstrap: any = {};
-        const waitForGuidedReservationSync = normalizeOptionalBoolean(
-          (dataSourceBootstrapRaw as any).waitForGuidedReservationSync
+        const waitForGuidedUtilisationSync = normalizeOptionalBoolean(
+          (dataSourceBootstrapRaw as any).waitForGuidedUtilisationSync
         );
         const waitForSharedDataMutations = normalizeOptionalBoolean(
           (dataSourceBootstrapRaw as any).waitForSharedDataMutations
         );
-        if (waitForGuidedReservationSync !== undefined) {
-          dataSourceBootstrap.waitForGuidedReservationSync = waitForGuidedReservationSync;
+        if (waitForGuidedUtilisationSync !== undefined) {
+          dataSourceBootstrap.waitForGuidedUtilisationSync = waitForGuidedUtilisationSync;
         }
         if (waitForSharedDataMutations !== undefined) {
           dataSourceBootstrap.waitForSharedDataMutations = waitForSharedDataMutations;
@@ -2888,13 +2735,10 @@ export class Dashboard {
   private normalizeLifecycleRule(raw: any): LifecycleRule | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const type = (raw.type ?? raw.kind ?? 'dateStatusTransition').toString().trim();
-    if (type !== 'dateStatusTransition' && type !== 'releaseStaleReservations' && type !== 'releaseActiveReservations') {
-      return undefined;
-    }
+    if (type !== 'dateStatusTransition') return undefined;
     const dateFieldId = (raw.dateFieldId ?? raw.fieldId ?? raw.dateField ?? '').toString().trim();
     const toStatus = (raw.toStatus ?? raw.status ?? raw.nextStatus ?? '').toString().trim();
-    if ((type === 'dateStatusTransition' || type === 'releaseStaleReservations') && !dateFieldId) return undefined;
-    if (type === 'dateStatusTransition' && !toStatus) return undefined;
+    if (!dateFieldId || !toStatus) return undefined;
     const compareRaw = (raw.compare ?? raw.operator ?? 'beforeToday').toString().trim();
     const compare = compareRaw === 'onOrBeforeToday' ? 'onOrBeforeToday' : 'beforeToday';
     const statusFieldId = (raw.statusFieldId ?? raw.statusField ?? '').toString().trim();
@@ -2908,46 +2752,22 @@ export class Dashboard {
         )
       : undefined;
     const dayOffsetRaw = Number(raw.dayOffset ?? raw.offsetDays ?? 0);
-    const rule: LifecycleRule =
-      type === 'releaseStaleReservations'
-        ? {
-            type: 'releaseStaleReservations',
-            dateFieldId,
-            compare
-          }
-        : type === 'releaseActiveReservations'
-          ? {
-              type: 'releaseActiveReservations'
-            }
-        : {
-            type: 'dateStatusTransition',
-            dateFieldId,
-            toStatus,
-            compare
-          };
+    const rule: LifecycleRule = {
+      type: 'dateStatusTransition',
+      dateFieldId,
+      toStatus,
+      compare
+    };
     const id = (raw.id ?? '').toString().trim();
     if (id) rule.id = id;
-    if (type !== 'releaseActiveReservations') {
-      if (statusFieldId) {
-        (rule as any).statusFieldId = statusFieldId;
-      }
-      if (fromStatuses?.length) {
-        (rule as any).fromStatuses = fromStatuses;
-      }
-      if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
-        (rule as any).dayOffset = Math.trunc(dayOffsetRaw);
-      }
+    if (statusFieldId) {
+      (rule as any).statusFieldId = statusFieldId;
     }
-    if (type === 'releaseStaleReservations' || type === 'releaseActiveReservations') {
-      const ledgerFormKey = (raw.ledgerFormKey ?? raw.reservationLedgerFormKey ?? '').toString().trim();
-      if (ledgerFormKey) {
-        (rule as any).ledgerFormKey = ledgerFormKey;
-      }
+    if (fromStatuses?.length) {
+      (rule as any).fromStatuses = fromStatuses;
     }
-    if (type === 'releaseStaleReservations') {
-      if (raw.releaseWhenSourceMissing !== undefined) {
-        (rule as any).releaseWhenSourceMissing = Boolean(raw.releaseWhenSourceMissing);
-      }
+    if (Number.isFinite(dayOffsetRaw) && dayOffsetRaw !== 0) {
+      (rule as any).dayOffset = Math.trunc(dayOffsetRaw);
     }
     return rule;
   }

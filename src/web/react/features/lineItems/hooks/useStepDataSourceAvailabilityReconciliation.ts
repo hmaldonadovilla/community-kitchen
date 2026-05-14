@@ -2,7 +2,7 @@ import React from 'react';
 
 import { peekCachedDataSource } from '../../../../data/dataSources';
 import type { FieldValue, LineItemRowState } from '../../../../types';
-import type { InventoryAvailabilitySnapshot } from '../../../../../types';
+import type { BankAvailabilitySnapshot } from '../../../../../types';
 import {
   shouldPreserveSourceFirstAllocationOutputWhenExcluded,
   shouldRemoveSourceFirstAllocationOutputWhenExcluded
@@ -11,9 +11,9 @@ import type { LineItemState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
 import {
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-  type GuidedStepReservationAvailabilityEventDetail
-} from '../../reservations/liveSyncEvents';
-import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
+  type GuidedStepUtilisationAvailabilityEventDetail
+} from '../../utilisations/liveSyncEvents';
+import { resolveUtilisationSourceItemKey } from '../../utilisations/sourceFields';
 
 type UseStepDataSourceAvailabilityReconciliationArgs = {
   groupId: string;
@@ -24,27 +24,27 @@ type UseStepDataSourceAvailabilityReconciliationArgs = {
   lineItems: LineItemState;
   language: string;
   stepDataSourceDraftsRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
+  utilisationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
   buildStepDataSourceDraftKey: (config: any, parentRowId: string, sourceKey: string) => string;
   resolveDataSourceOutputGroup: (config: any, parentRowId: string) => { key: string; subConfig: any | null } | null;
   resolveStepDataSourceRowsForParent: (config: any, parentRow: LineItemRowState) => any[];
   isStepDataSourceLoading: (config: any) => boolean;
-  applyStepDataSourceAvailabilitySnapshots: (snapshots: InventoryAvailabilitySnapshot[] | null | undefined) => void;
-  queueStepReservationDraftSnapshotSync: (reason: string, snapshotLineItems?: LineItemState | null) => void;
+  applyStepDataSourceAvailabilitySnapshots: (snapshots: BankAvailabilitySnapshot[] | null | undefined) => void;
+  queueStepUtilisationDraftSnapshotSync: (reason: string, snapshotLineItems?: LineItemState | null) => void;
   syncStepDataSourceOutputRow: (args: {
     config: any;
     parentRow: LineItemRowState;
     sourceRow: Record<string, any>;
     patch: Record<string, FieldValue>;
   }) => LineItemState | null;
-  syncStepDataSourceOutputRowWithReservation: (
+  syncStepDataSourceOutputRowWithUtilisation: (
     args: {
       config: any;
       parentRow: LineItemRowState;
       sourceRow: Record<string, any>;
       patch: Record<string, FieldValue>;
     },
-    options?: { skipReservation?: boolean }
+    options?: { skipUtilisation?: boolean }
   ) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 };
@@ -52,7 +52,7 @@ type UseStepDataSourceAvailabilityReconciliationArgs = {
 /**
  * Owner: guided step data-source availability reconciliation.
  * Handles live availability events, stale allocation cleanup, and rejected
- * reservation rollback outside the line-item group renderer shell.
+ * utilisation rollback outside the line-item group renderer shell.
  */
 export const useStepDataSourceAvailabilityReconciliation = ({
   groupId,
@@ -63,20 +63,20 @@ export const useStepDataSourceAvailabilityReconciliation = ({
   lineItems,
   language,
   stepDataSourceDraftsRef,
-  reservationCommittedValuesRef,
+  utilisationCommittedValuesRef,
   buildStepDataSourceDraftKey,
   resolveDataSourceOutputGroup,
   resolveStepDataSourceRowsForParent,
   isStepDataSourceLoading,
   applyStepDataSourceAvailabilitySnapshots,
-  queueStepReservationDraftSnapshotSync,
+  queueStepUtilisationDraftSnapshotSync,
   syncStepDataSourceOutputRow,
-  syncStepDataSourceOutputRowWithReservation,
+  syncStepDataSourceOutputRowWithUtilisation,
   onDiagnostic
 }: UseStepDataSourceAvailabilityReconciliationArgs) => {
-  const rollbackRejectedStepReservations = React.useCallback(
-    (rejectedReservations: GuidedStepReservationAvailabilityEventDetail['rejectedReservations']): void => {
-      const entries = Array.isArray(rejectedReservations) ? rejectedReservations.filter(Boolean) : [];
+  const rollbackRejectedStepUtilisations = React.useCallback(
+    (rejectedUtilisations: GuidedStepUtilisationAvailabilityEventDetail['rejectedUtilisations']): void => {
+      const entries = Array.isArray(rejectedUtilisations) ? rejectedUtilisations.filter(Boolean) : [];
       if (!entries.length || !activeStepDataSourceRows.length) return;
       const parentRowsForGroup = Array.isArray(lineItems[groupId]) ? lineItems[groupId] : [];
       if (!parentRowsForGroup.length) return;
@@ -104,7 +104,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
               if (!item || typeof item !== 'object') return false;
               if (`${item.id ?? ''}`.trim() !== resourceRecordId) return false;
               if (!resourceItemId) return true;
-              return resolveReservationSourceItemKey(config, item) === resourceItemId;
+              return resolveUtilisationSourceItemKey(config, item) === resourceItemId;
             }) || null;
           if (!sourceRow) return;
 
@@ -126,23 +126,23 @@ export const useStepDataSourceAvailabilityReconciliation = ({
           if (handled.has(rollbackKey)) return;
           handled.add(rollbackKey);
 
-          syncStepDataSourceOutputRowWithReservation(
+          syncStepDataSourceOutputRowWithUtilisation(
             {
               config,
               parentRow,
               sourceRow,
               patch
             },
-            { skipReservation: true }
+            { skipUtilisation: true }
           );
         });
       });
     },
-    [activeStepDataSourceRows, groupId, language, lineItems, syncStepDataSourceOutputRowWithReservation]
+    [activeStepDataSourceRows, groupId, language, lineItems, syncStepDataSourceOutputRowWithUtilisation]
   );
 
-  const commitStepReservationValuesForAvailabilitySnapshots = React.useCallback(
-    (snapshots: InventoryAvailabilitySnapshot[] | null | undefined): void => {
+  const commitStepUtilisationValuesForAvailabilitySnapshots = React.useCallback(
+    (snapshots: BankAvailabilitySnapshot[] | null | undefined): void => {
       const entries = Array.isArray(snapshots) ? snapshots.filter(Boolean) : [];
       if (!entries.length || !activeStepDataSourceRows.length || !parentRows.length) return;
 
@@ -170,8 +170,8 @@ export const useStepDataSourceAvailabilityReconciliation = ({
             const draftValues = stepDataSourceDraftsRef.current[draftKey] || null;
 
             if (!existingOutputRow && !draftValues) {
-              if (reservationCommittedValuesRef.current[draftKey]) {
-                delete reservationCommittedValuesRef.current[draftKey];
+              if (utilisationCommittedValuesRef.current[draftKey]) {
+                delete utilisationCommittedValuesRef.current[draftKey];
               }
               return;
             }
@@ -198,7 +198,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
                   ? nextValues[modeFieldId]
                   : null;
             }
-            reservationCommittedValuesRef.current[draftKey] = committedValues;
+            utilisationCommittedValuesRef.current[draftKey] = committedValues;
           });
         });
       });
@@ -209,7 +209,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
       lineItems,
       parentRows,
       resolveDataSourceOutputGroup,
-      reservationCommittedValuesRef,
+      utilisationCommittedValuesRef,
       stepDataSourceDraftsRef
     ]
   );
@@ -302,7 +302,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     });
 
     const reason = `sourceRowExcluded:${staleEntries.map(entry => entry.sourceKey).join(',')}`;
-    queueStepReservationDraftSnapshotSync(reason, syncedLineItems);
+    queueStepUtilisationDraftSnapshotSync(reason, syncedLineItems);
   }, [
     activeStepDataSourceRows,
     currentGuidedStepId,
@@ -311,7 +311,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     language,
     lineItems,
     onDiagnostic,
-    queueStepReservationDraftSnapshotSync,
+    queueStepUtilisationDraftSnapshotSync,
     resolveDataSourceOutputGroup,
     resolveStepDataSourceRowsForParent,
     syncStepDataSourceOutputRow
@@ -322,15 +322,15 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const currentRecordId = `${recordId || ''}`.trim();
     const handleAvailability = (event: Event) => {
-      const detail = (event as CustomEvent<GuidedStepReservationAvailabilityEventDetail>)?.detail;
+      const detail = (event as CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>)?.detail;
       if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
       if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
       if (currentGuidedStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentGuidedStepId) return;
       applyStepDataSourceAvailabilitySnapshots(detail.availability);
-      if (!detail.rejectedReservations?.length) {
-        commitStepReservationValuesForAvailabilitySnapshots(detail.availability);
+      if (!detail.rejectedUtilisations?.length) {
+        commitStepUtilisationValuesForAvailabilitySnapshots(detail.availability);
       }
-      rollbackRejectedStepReservations(detail.rejectedReservations);
+      rollbackRejectedStepUtilisations(detail.rejectedUtilisations);
     };
     window.addEventListener(
       GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
@@ -345,9 +345,9 @@ export const useStepDataSourceAvailabilityReconciliation = ({
   }, [
     activeStepDataSourceRows.length,
     applyStepDataSourceAvailabilitySnapshots,
-    commitStepReservationValuesForAvailabilitySnapshots,
+    commitStepUtilisationValuesForAvailabilitySnapshots,
     currentGuidedStepId,
     recordId,
-    rollbackRejectedStepReservations
+    rollbackRejectedStepUtilisations
   ]);
 };

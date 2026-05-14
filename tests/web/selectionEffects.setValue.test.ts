@@ -261,8 +261,8 @@ describe('selectionEffects setValue', () => {
       languages: ['EN'] as any,
       dataSources: [
         {
-          id: 'Inventory',
-          formKey: 'Config: Inventory',
+          id: 'Bank',
+          formKey: 'Config: Bank',
           mode: 'options',
           projection: ['ITEM_ID', 'ITEM_NAME', 'ITEM_KIND']
         } as any
@@ -289,7 +289,7 @@ describe('selectionEffects setValue', () => {
                         id: 'sync_leftover_part_prep',
                         type: 'addLineItemsFromDataSource',
                         groupId: 'MP_TYPE_LI',
-                        dataSource: { id: 'Inventory' } as any,
+                        dataSource: { id: 'Bank' } as any,
                         lookupField: 'ITEM_ID',
                         lookupSourceFieldId: 'LEFTOVER_ID',
                         when: {
@@ -1405,7 +1405,7 @@ describe('selectionEffects setValue', () => {
       definition,
       question: {
         id: 'LEFTOVER_ID',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             type: 'setValuesFromDataSource',
@@ -1458,7 +1458,7 @@ describe('selectionEffects setValue', () => {
       definition,
       question: {
         id: 'LEFTOVER_ID',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             type: 'setValuesFromDataSource',
@@ -1485,7 +1485,7 @@ describe('selectionEffects setValue', () => {
     expect(begin).toHaveBeenCalledWith(
       expect.objectContaining({
         effectType: 'setValuesFromDataSource',
-        sourceId: 'Config: Leftover Inventory'
+        sourceId: 'Config: Leftover Bank'
       })
     );
     expect(finish).not.toHaveBeenCalled();
@@ -1808,7 +1808,7 @@ describe('selectionEffects setValue', () => {
       definition,
       question: {
         id: 'LEFTOVER_ID',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             type: 'setValuesFromDataSource',
@@ -2182,7 +2182,7 @@ describe('selectionEffects setValue', () => {
             groupId: 'LEFTOVERS',
             targetPath: 'LEFTOVERS',
             dataSource: {
-              id: 'Leftover Inventory Data'
+              id: 'Leftover Bank Data'
             },
             matchField: 'LEFTOVER_MEAL_TYPE',
             preserveManualRows: false,
@@ -2266,7 +2266,7 @@ describe('selectionEffects setValue', () => {
       definition,
       question: {
         id: 'LEFTOVER_SELECTED',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             type: 'setValuesFromDataSource',
@@ -2305,7 +2305,7 @@ describe('selectionEffects setValue', () => {
     (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
       items: [
         {
-          id: 'inventory-1',
+          id: 'bank-1',
           LEFTOVER_ID: 'LE-1',
           LEFTOVER_MEAL_TYPE: 'Standard',
           LEFTOVER_KIND: 'Entire dish',
@@ -2335,7 +2335,7 @@ describe('selectionEffects setValue', () => {
                 selectionEffects: [
                   {
                     type: 'setValuesFromDataSource',
-                    dataSource: { id: 'Leftover Inventory Data' },
+                    dataSource: { id: 'Leftover Bank Data' },
                     lookupField: 'LEFTOVER_ID',
                     fieldMapping: {
                       LEFTOVER_ID: 'LEFTOVER_ID',
@@ -2351,8 +2351,8 @@ describe('selectionEffects setValue', () => {
                 label: { en: 'Leftover', fr: 'Leftover', nl: 'Leftover' },
                 required: false,
                 dataSource: {
-                  id: 'Leftover Inventory Data',
-                  formKey: 'Config: Leftover Inventory',
+                  id: 'Leftover Bank Data',
+                  formKey: 'Config: Leftover Bank',
                   statusFieldId: 'LEFTOVER_STATUS',
                   statusAllowList: ['available'],
                   projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_MEAL_TYPE', 'LEFTOVER_KIND', 'LEFTOVER_PORTIONS']
@@ -2403,8 +2403,8 @@ describe('selectionEffects setValue', () => {
 
     expect(fetchDataSource).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'Leftover Inventory Data',
-        formKey: 'Config: Leftover Inventory',
+        id: 'Leftover Bank Data',
+        formKey: 'Config: Leftover Bank',
         statusFieldId: 'LEFTOVER_STATUS',
         statusAllowList: ['available']
       }),
@@ -2418,8 +2418,8 @@ describe('selectionEffects setValue', () => {
   it('seeds all datasource rows into a subgroup when no lookupField or matchField is configured', async () => {
     (fetchDataSource as unknown as jest.Mock).mockResolvedValue({
       items: [
-        { id: 'inventory-1', LEFTOVER_ID: 'LE-1', LEFTOVER_KIND: 'Entire dish', LEFTOVER_PORTIONS: 6 },
-        { id: 'inventory-2', LEFTOVER_ID: 'LP-1', LEFTOVER_KIND: 'Part dish', LEFTOVER_QTY: 250, LEFTOVER_UNIT: 'gr' }
+        { id: 'bank-1', LEFTOVER_ID: 'LE-1', LEFTOVER_KIND: 'Entire dish', LEFTOVER_PORTIONS: 6 },
+        { id: 'bank-2', LEFTOVER_ID: 'LP-1', LEFTOVER_KIND: 'Part dish', LEFTOVER_QTY: 250, LEFTOVER_UNIT: 'gr' }
       ]
     });
 
@@ -2446,7 +2446,7 @@ describe('selectionEffects setValue', () => {
                     type: 'addLineItemsFromDataSource',
                     groupId: 'LEFTOVERS',
                     targetPath: 'LEFTOVERS',
-                    dataSource: { id: 'Leftover Inventory Data' },
+                    dataSource: { id: 'Leftover Bank Data' },
                     preserveManualRows: false,
                     lineItemMapping: {
                       LEFTOVER_RECORD_ID: 'id',
@@ -2568,13 +2568,13 @@ describe('selectionEffects setValue', () => {
       definition,
       question: {
         id: 'LEFTOVER_ID',
-        dataSource: { id: 'Config: Leftover Inventory' },
+        dataSource: { id: 'Config: Leftover Bank' },
         selectionEffects: [
           {
             id: 'sync_leftover_entire_reheat_prep',
             type: 'addLineItemsFromDataSource',
             groupId: 'MP_TYPE_LI',
-            dataSource: { id: 'Leftover Inventory Data' },
+            dataSource: { id: 'Leftover Bank Data' },
             lookupField: 'LEFTOVER_ID',
             preset: {
               PREP_TYPE: 'Entire dish',

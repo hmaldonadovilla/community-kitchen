@@ -29,7 +29,7 @@ describe('lifecycle rule domain', () => {
     ).toBe(true);
   });
 
-  test('supports day offsets for stale-reservation windows', () => {
+  test('supports day offsets for stale-utilisation windows', () => {
     expect(
       shouldApplyLifecycleStatusDateRule({
         rule: { dayOffset: -2 } as any,

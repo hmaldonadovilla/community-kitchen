@@ -32,7 +32,7 @@ const compactFieldErrorStyle: React.CSSProperties = {
 };
 
 /**
- * Renders source-first compact sentence controls. Reservation and row mutation policy
+ * Renders source-first compact sentence controls. Utilisation and row mutation policy
  * remains injected by the parent so this component stays in the presentation layer.
  */
 export const SourceFirstSentenceParts: React.FC<{

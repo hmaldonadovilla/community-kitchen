@@ -1,11 +1,10 @@
 export {
-  computeAvailableFromAggregate,
-  computeOptimisticAggregateReservedQuantity,
+  computeAvailableFromBankQuantity,
   computeOptimisticFreeQuantity,
   computeOptimisticRowMaxQuantity,
   ensureEditableMaxIncludesCurrentValue,
   formatNumericConstraintValue,
-  resolveServerCurrentRecordReservedQuantity,
+  resolveServerCurrentRecordUtilisedQuantity,
   sanitizeNumericDraft,
   toFiniteNumberValue
 } from '../../app/quantityConstraints';

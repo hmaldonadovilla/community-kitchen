@@ -26,22 +26,22 @@ export const buildStepDataSourceBootstrapSignature = (args: {
         : [],
       forceRefreshOnMount: config?.forceRefreshOnMount === true,
       hasAvailability: Boolean(config?.availability),
-      hasReservationBehavior: Boolean(config?.reservationBehavior)
+      hasUtilisationBehavior: Boolean(config?.utilisationBehavior)
     };
   });
   return JSON.stringify({
     recordId,
     language,
     stepId,
-    waitForGuidedReservationSync: args.bootstrap?.waitForGuidedReservationSync === true,
+    waitForGuidedUtilisationSync: args.bootstrap?.waitForGuidedUtilisationSync === true,
     waitForSharedDataMutations: args.bootstrap?.waitForSharedDataMutations === true,
     configs: normalizedConfigs
   });
 };
 
-export const shouldWaitForGuidedReservationSyncOnBootstrap = (
+export const shouldWaitForGuidedUtilisationSyncOnBootstrap = (
   config?: StepDataSourceBootstrapConfig | null
-): boolean => config?.waitForGuidedReservationSync === true;
+): boolean => config?.waitForGuidedUtilisationSync === true;
 
 export const shouldWaitForSharedDataMutationsOnBootstrap = (
   config?: StepDataSourceBootstrapConfig | null
@@ -56,7 +56,7 @@ export const shouldForceRefreshStepDataSourceOnBootstrap = (
     recordChanged ||
     config.forceRefreshOnMount === true ||
     Boolean(config.availability) ||
-    Boolean(config.reservationBehavior)
+    Boolean(config.utilisationBehavior)
   );
 };
 
@@ -94,7 +94,7 @@ const normalizeBootstrapCoordinatorSignature = (signature?: string | null): stri
 /**
  * Coordinates guided datasource bootstrap across transient component remounts
  * while a request is running. Completed runs are intentionally not retained:
- * source-first inventory steps must force-refresh on every step entry.
+ * source-first bank steps must force-refresh on every step entry.
  */
 export const createStepDataSourceBootstrapCoordinator = (): StepDataSourceBootstrapCoordinator => {
   const running = new Map<string, Promise<unknown>>();

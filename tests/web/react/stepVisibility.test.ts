@@ -22,7 +22,7 @@ describe('stepVisibility', () => {
         {
           id: 'leftoverForm',
           includeWhen: {
-            fieldId: '__ckDataSourceCount.Leftover Inventory Data',
+            fieldId: '__ckDataSourceCount.Leftover Bank Data',
             greaterThan: 0
           }
         },
@@ -39,7 +39,7 @@ describe('stepVisibility', () => {
       ] as any[],
       {
         getValue: (fieldId: string) => {
-          if (fieldId === '__ckDataSourceCount.Leftover Inventory Data') return 0;
+          if (fieldId === '__ckDataSourceCount.Leftover Bank Data') return 0;
           if (fieldId === 'status') return 'Emailed';
           return undefined;
         }

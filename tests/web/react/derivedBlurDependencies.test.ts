@@ -28,7 +28,7 @@ describe('derived blur dependencies domain', () => {
         dependsOn: 'parent.customer',
         expression: 'SUM(lines.quantity) + { meal.count }',
         filters: [
-          { ref: 'inventory.item', when: { fieldId: 'status', equals: 'active' } },
+          { ref: 'bank.item', when: { fieldId: 'status', equals: 'active' } },
           { path: 'source.remaining' }
         ]
       },

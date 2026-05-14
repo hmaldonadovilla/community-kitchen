@@ -3,8 +3,7 @@ const {
   buildSkippedFollowupActionResults,
   isFollowupBatchSuccess,
   normalizeFollowupAction,
-  normalizeFollowupActions,
-  resolveParallelReconcileFollowupPlan
+  normalizeFollowupActions
 } = require('../cloud-run/api/domain/followupActionPlan');
 
 describe('Cloud Run follow-up action plan domain', () => {
@@ -19,12 +18,5 @@ describe('Cloud Run follow-up action plan domain', () => {
       { action: 'SEND_EMAIL', result: { success: false, message: 'Skipped because CREATE_PDF failed.' } }
     ]);
     expect(isFollowupBatchSuccess([{ result: { success: true } }])).toBe(true);
-    expect(resolveParallelReconcileFollowupPlan(['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'])).toEqual({
-      actions: ['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'],
-      reconcileAction: 'RECONCILE_RESERVATIONS',
-      createPdfAction: 'CREATE_PDF',
-      sendEmailAction: 'SEND_EMAIL'
-    });
-    expect(resolveParallelReconcileFollowupPlan(['RECONCILE_RESERVATIONS', 'CLOSE_RECORD'])).toBeNull();
   });
 });

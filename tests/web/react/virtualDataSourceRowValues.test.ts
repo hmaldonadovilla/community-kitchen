@@ -1,24 +1,24 @@
 import {
   buildVirtualDataSourceRowValuesAction,
-  resolveServerCurrentRecordReservedQuantityFromRow
+  resolveServerCurrentRecordUtilisedQuantityFromRow
 } from '../../../src/web/react/features/lineItems/domain/virtualDataSourceRowValues';
 
 describe('virtual data source row value helpers', () => {
-  const emptyReservationState = () => ({ totalReservedQuantity: 0, currentRowQuantity: 0 });
+  const emptyUtilisationState = () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 });
 
-  test('resolves server current-record reserved quantity markers with fallback support', () => {
+  test('resolves server current-record utilised quantity markers with fallback support', () => {
     expect(
-      resolveServerCurrentRecordReservedQuantityFromRow(
-        { __ckServerCurrentRecordReservedQuantity: '3', __ckCurrentRecordReservedQuantity: '8' },
+      resolveServerCurrentRecordUtilisedQuantityFromRow(
+        { __ckServerCurrentRecordUtilisedQuantity: '3', __ckCurrentRecordUtilisedQuantity: '8' },
         1
       )
     ).toBe(3);
 
     expect(
-      resolveServerCurrentRecordReservedQuantityFromRow({ __ckCurrentRecordReservedQuantity: '2' }, 1)
+      resolveServerCurrentRecordUtilisedQuantityFromRow({ __ckCurrentRecordUtilisedQuantity: '2' }, 1)
     ).toBe(2);
 
-    expect(resolveServerCurrentRecordReservedQuantityFromRow({ id: 'source-1' }, 4)).toBe(4);
+    expect(resolveServerCurrentRecordUtilisedQuantityFromRow({ id: 'source-1' }, 4)).toBe(4);
   });
 
   test('projects mapped source, output, draft, and selected values with expected precedence', () => {
@@ -45,8 +45,8 @@ describe('virtual data source row value helpers', () => {
         quantity: '4',
         selected: false
       },
-      resolveCurrentReservationStateForSource: emptyReservationState,
-      resolveCommittedReservationStateForSource: emptyReservationState
+      resolveCurrentUtilisationStateForSource: emptyUtilisationState,
+      resolveCommittedUtilisationStateForSource: emptyUtilisationState
     });
 
     expect(values).toMatchObject({
@@ -67,7 +67,6 @@ describe('virtual data source row value helpers', () => {
         quantityFieldId: 'quantity',
         availability: {
           sourceQuantityFieldId: 'remaining',
-          sourceReservedQuantityFieldId: 'reserved',
           targetQuantityFieldId: 'freeQuantity',
           targetMaxQuantityFieldId: 'maxQuantity',
           targetFreeQuantityFieldId: 'displayFreeQuantity'
@@ -77,8 +76,7 @@ describe('virtual data source row value helpers', () => {
         id: 'source-1',
         LEFTOVER_ID: 'leftover-1',
         remaining: 10,
-        reserved: 4,
-        __ckServerCurrentRecordReservedQuantity: 1
+        __ckServerCurrentRecordUtilisedQuantity: 1
       },
       outputRow: {
         id: 'row-1',
@@ -87,17 +85,17 @@ describe('virtual data source row value helpers', () => {
         }
       } as any,
       parentRowId: 'parent-1',
-      resolveCurrentReservationStateForSource: (_config, sourceKey, parentRowId) => {
+      resolveCurrentUtilisationStateForSource: (_config, sourceKey, parentRowId) => {
         expect(sourceKey).toBe('leftover-1');
         expect(parentRowId).toBe('parent-1');
-        return { totalReservedQuantity: 3, currentRowQuantity: 5 };
+        return { totalUtilisedQuantity: 3, currentRowQuantity: 5 };
       },
-      resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 1, currentRowQuantity: 5 })
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 1, currentRowQuantity: 5 })
     });
 
-    expect(values.freeQuantity).toBe(4);
-    expect(values.displayFreeQuantity).toBe(4);
-    expect(values.maxQuantity).toBe(9);
+    expect(values.freeQuantity).toBe(8);
+    expect(values.displayFreeQuantity).toBe(8);
+    expect(values.maxQuantity).toBe(13);
   });
 
   test('keeps max at true availability when the current draft exceeds available stock', () => {
@@ -108,7 +106,6 @@ describe('virtual data source row value helpers', () => {
         quantityFieldId: 'quantity',
         availability: {
           sourceQuantityFieldId: 'remaining',
-          sourceReservedQuantityFieldId: 'reserved',
           targetQuantityFieldId: 'freeQuantity',
           targetMaxQuantityFieldId: 'maxQuantity'
         }
@@ -116,8 +113,7 @@ describe('virtual data source row value helpers', () => {
       sourceRow: {
         LEFTOVER_ID: 'leftover-1',
         remaining: 5,
-        reserved: 5,
-        __ckServerCurrentRecordReservedQuantity: 5
+        __ckServerCurrentRecordUtilisedQuantity: 5
       },
       outputRow: {
         id: 'row-1',
@@ -127,11 +123,11 @@ describe('virtual data source row value helpers', () => {
         }
       } as any,
       parentRowId: 'parent-1',
-      resolveCurrentReservationStateForSource: () => ({ totalReservedQuantity: 6, currentRowQuantity: 6 }),
-      resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 5, currentRowQuantity: 5 })
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 6, currentRowQuantity: 6 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 5, currentRowQuantity: 5 })
     });
 
-    expect(values.freeQuantity).toBe(0);
-    expect(values.maxQuantity).toBe(5);
+    expect(values.freeQuantity).toBe(4);
+    expect(values.maxQuantity).toBe(10);
   });
 });

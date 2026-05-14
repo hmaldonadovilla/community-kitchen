@@ -6,7 +6,6 @@ const {
 
 const ROW_ID_KEY = '__ckRowId';
 const FOLLOWUP_LINE_ITEM_META_KEYS = new Set(['__ckRowId', '__ckParentRowId', '__ckParentGroupId']);
-const DEFAULT_LEDGER_FORM_KEY = 'Config: Inventory Reservation Ledger';
 
 const cloneJson = value => {
   if (value === undefined) return value;
@@ -23,29 +22,29 @@ const resolveSaveMutationPlan = payload => {
   const rawPlan = payload && payload.__ckMutationPlan && typeof payload.__ckMutationPlan === 'object'
     ? payload.__ckMutationPlan
     : {};
-  const reservationPlan = rawPlan.reservationPlan && typeof rawPlan.reservationPlan === 'object'
-    ? rawPlan.reservationPlan
-    : (payload && payload.__ckReservationPlan && typeof payload.__ckReservationPlan === 'object'
-      ? payload.__ckReservationPlan
+  const utilisationPlan = rawPlan.utilisationPlan && typeof rawPlan.utilisationPlan === 'object'
+    ? rawPlan.utilisationPlan
+    : (payload && payload.__ckUtilisationPlan && typeof payload.__ckUtilisationPlan === 'object'
+      ? payload.__ckUtilisationPlan
       : null);
-  const guidedReservationDraftSync = rawPlan.guidedReservationDraftSync && typeof rawPlan.guidedReservationDraftSync === 'object'
-    ? rawPlan.guidedReservationDraftSync
-    : (payload && payload.__ckGuidedReservationDraftSync && typeof payload.__ckGuidedReservationDraftSync === 'object'
-      ? payload.__ckGuidedReservationDraftSync
+  const guidedUtilisationDraftSync = rawPlan.guidedUtilisationDraftSync && typeof rawPlan.guidedUtilisationDraftSync === 'object'
+    ? rawPlan.guidedUtilisationDraftSync
+    : (payload && payload.__ckGuidedUtilisationDraftSync && typeof payload.__ckGuidedUtilisationDraftSync === 'object'
+      ? payload.__ckGuidedUtilisationDraftSync
       : null);
   return {
-    reservationPlan,
-    guidedReservationDraftSync
+    utilisationPlan,
+    guidedUtilisationDraftSync
   };
 };
 
 const stripSaveMutationPlanFields = payload => {
   if (!payload || typeof payload !== 'object') return payload;
-  if (!payload.__ckMutationPlan && !payload.__ckReservationPlan && !payload.__ckGuidedReservationDraftSync) return payload;
+  if (!payload.__ckMutationPlan && !payload.__ckUtilisationPlan && !payload.__ckGuidedUtilisationDraftSync) return payload;
   const stripped = { ...payload };
   delete stripped.__ckMutationPlan;
-  delete stripped.__ckReservationPlan;
-  delete stripped.__ckGuidedReservationDraftSync;
+  delete stripped.__ckUtilisationPlan;
+  delete stripped.__ckGuidedUtilisationDraftSync;
   return stripped;
 };
 
@@ -84,14 +83,6 @@ const parseRows = raw => {
     }
   }
   return [];
-};
-
-const buildReservationSubgroupKey = (parentGroupId, parentRowId, subGroupId) =>
-  `${toText(parentGroupId)}::${toText(parentRowId)}::${toText(subGroupId)}`;
-
-const toFiniteNumber = value => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
 };
 
 const toOptionalFiniteNumber = value => {
@@ -202,7 +193,7 @@ const buildRowContext = ({ row, groupKey, parentValues, topCtx }) => {
 class SubmitEffectsRepository {
   constructor(options = {}) {
     this.submissionRepository = options.submissionRepository;
-    this.inventoryReservationRepository = options.inventoryReservationRepository || null;
+    this.bankUtilisationRepository = options.bankUtilisationRepository || null;
     this.lookupCache = new Map();
   }
 
@@ -616,32 +607,6 @@ class SubmitEffectsRepository {
     return out;
   }
 
-  resolveFinalSubmitStatuses(form) {
-    const raw = form && form.reservationLifecycle && form.reservationLifecycle.reconcileOnFinalSubmit;
-    if (raw && typeof raw === 'object' && Array.isArray(raw.statuses) && raw.statuses.length) {
-      return raw.statuses.map(value => toText(value).toLowerCase()).filter(Boolean);
-    }
-    const closeStatus = toText(form && form.followupConfig && form.followupConfig.statusTransitions && form.followupConfig.statusTransitions.onClose);
-    return closeStatus ? [closeStatus.toLowerCase()] : ['closed'];
-  }
-
-  shouldReconcileReservations(form, nextStatus) {
-    const raw = form && form.reservationLifecycle && form.reservationLifecycle.reconcileOnFinalSubmit;
-    const enabled = raw === true || (raw && typeof raw === 'object' && raw.enabled !== false);
-    if (!enabled) return { enabled: false };
-    const normalizedStatus = toText(nextStatus).toLowerCase();
-    if (!normalizedStatus || !this.resolveFinalSubmitStatuses(form).includes(normalizedStatus)) return { enabled: false };
-    const ledgerFormKey =
-      (raw && typeof raw === 'object' ? raw.ledgerFormKey : '') ||
-      (form.reservationLifecycle && form.reservationLifecycle.ledgerFormKey) ||
-      DEFAULT_LEDGER_FORM_KEY;
-    const refreshMode =
-      raw && typeof raw === 'object' && ['full', 'revisionOnly', 'none'].includes(raw.refreshMode)
-        ? raw.refreshMode
-        : 'full';
-    return { enabled: true, ledgerFormKey: toText(ledgerFormKey) || DEFAULT_LEDGER_FORM_KEY, refreshMode };
-  }
-
   isStatusOnlyClosePayload(form, payload) {
     if (!isTruthyFlag(payload && payload.__ckStatusOnlyClose)) return false;
     if (!toText(payload && payload.id)) return false;
@@ -655,196 +620,6 @@ class SubmitEffectsRepository {
       )) ||
       'Closed';
     return requestedStatus.toLowerCase() === closeStatus.toLowerCase();
-  }
-
-  inferReservationFieldId(outputKeyFieldId, suffix) {
-    const key = toText(outputKeyFieldId);
-    const base = key.endsWith('_ID') ? key.slice(0, -3) : key;
-    return base ? `${base}_${suffix}` : '';
-  }
-
-  collectStepReservationConfigs(form) {
-    const steps = form && form.steps && form.steps.mode === 'guided' && Array.isArray(form.steps.items)
-      ? form.steps.items
-      : [];
-    const configs = [];
-    steps.forEach(step => {
-      (Array.isArray(step && step.include) ? step.include : []).forEach(target => {
-        if (!target || target.kind !== 'lineGroup') return;
-        const parentGroupId = toText(target.id);
-        if (!parentGroupId) return;
-        (Array.isArray(target.dataSourceRows) ? target.dataSourceRows : []).forEach(config => {
-          const reservation = config && config.reservation && typeof config.reservation === 'object' ? config.reservation : null;
-          if (!reservation || reservation.enabled === false) return;
-          if (toText(reservation.commitMode).toLowerCase() !== 'step') return;
-          const outputGroupId = toText(config.outputGroupId);
-          const outputKeyFieldId = toText(config.outputKeyFieldId || config.rowKeyFieldId);
-          const quantityFieldId = toText(config.quantityFieldId);
-          const resourceRecordIdFieldId =
-            toText(reservation.resourceRecordIdFieldId) || this.inferReservationFieldId(outputKeyFieldId, 'RECORD_ID');
-          if (!outputGroupId || !outputKeyFieldId || !quantityFieldId || !resourceRecordIdFieldId) return;
-          configs.push({
-            parentGroupId,
-            outputGroupId,
-            outputKeyFieldId,
-            quantityFieldId,
-            resourceRecordIdFieldId
-          });
-        });
-      });
-    });
-    return configs;
-  }
-
-  readRecordValue(record, fieldId) {
-    const key = toText(fieldId);
-    if (!record || !key) return undefined;
-    if (record.values && Object.prototype.hasOwnProperty.call(record.values, key)) return record.values[key];
-    if (record.values && Object.prototype.hasOwnProperty.call(record.values, `${key}_json`)) {
-      return record.values[`${key}_json`];
-    }
-    if (Object.prototype.hasOwnProperty.call(record, key)) return record[key];
-    return record[`${key}_json`];
-  }
-
-  readReservationRowValue(row, fieldId) {
-    const key = toText(fieldId);
-    if (!row || !key) return undefined;
-    if (row.values && Object.prototype.hasOwnProperty.call(row.values, key)) return row.values[key];
-    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
-    return row[`${key}_json`];
-  }
-
-  reservationRowId(row) {
-    return toText(row && (row[ROW_ID_KEY] || row.id));
-  }
-
-  recordHasReservationSelections(form, record) {
-    const configs = this.collectStepReservationConfigs(form);
-    if (!configs.length) return true;
-    if (!record) return false;
-    return configs.some(config => {
-      const parentRows = parseRows(this.readRecordValue(record, config.parentGroupId));
-      return parentRows.some(parentRow => {
-        const parentRowId = this.reservationRowId(parentRow);
-        const nestedRows = parseRows(this.readReservationRowValue(parentRow, config.outputGroupId));
-        const flattenedRows = parentRowId
-          ? parseRows(this.readRecordValue(record, buildReservationSubgroupKey(config.parentGroupId, parentRowId, config.outputGroupId)))
-          : [];
-        return [...nestedRows, ...flattenedRows].some(row => {
-          const resourceRecordId = toText(this.readReservationRowValue(row, config.resourceRecordIdFieldId));
-          const resourceItemId = toText(this.readReservationRowValue(row, config.outputKeyFieldId));
-          const quantity = toFiniteNumber(this.readReservationRowValue(row, config.quantityFieldId));
-          return Boolean(resourceRecordId && resourceItemId && quantity > 0);
-        });
-      });
-    });
-  }
-
-  buildSkippedReservationReconciliationMeta(recordId) {
-    return {
-      success: true,
-      sourceRecordId: recordId,
-      reconciledReservations: 0,
-      consumedReservations: 0,
-      releasedReservations: 0,
-      touchedInventoryRecords: 0
-    };
-  }
-
-  async applyReservationLifecycle(form, formKey, formObject, result) {
-    if (!this.inventoryReservationRepository || !result || !result.success) return result;
-    const savedRecordId = toText(result.meta && result.meta.id) || toText(formObject && formObject.id);
-    const deleteRecordId = toText(formObject && formObject.__ckDeleteRecordId);
-    const releaseOnDeleteConfig = form && form.reservationLifecycle && form.reservationLifecycle.releaseOnDelete;
-    const releaseOnDeleteEnabled =
-      releaseOnDeleteConfig === true ||
-      (releaseOnDeleteConfig && typeof releaseOnDeleteConfig === 'object' && releaseOnDeleteConfig.enabled !== false);
-    if (deleteRecordId && releaseOnDeleteEnabled) {
-      const ledgerFormKey =
-        (typeof releaseOnDeleteConfig === 'object' ? releaseOnDeleteConfig.ledgerFormKey : '') ||
-        (form.reservationLifecycle && form.reservationLifecycle.ledgerFormKey) ||
-        DEFAULT_LEDGER_FORM_KEY;
-      const releaseResult = await this.inventoryReservationRepository.reconcile({
-        sourceFormKey: formKey,
-        sourceRecordId: deleteRecordId,
-        ledgerFormKey,
-        mode: 'release',
-        refreshMode: 'revisionOnly'
-      });
-      if (!releaseResult.success) {
-        return {
-          success: false,
-          message: releaseResult.message || 'Record deleted but failed to release active reservations.',
-          meta: {
-            ...(result.meta || {}),
-            reservationRelease: { success: false, sourceRecordId: deleteRecordId }
-          }
-        };
-      }
-      result.meta = {
-        ...(result.meta || {}),
-        reservationRelease: {
-          success: true,
-          sourceRecordId: deleteRecordId,
-          releasedReservations: Number(releaseResult.reconciledReservations || 0) || 0,
-          touchedInventoryRecords: Number(releaseResult.touchedInventoryRecords || 0) || 0
-        }
-      };
-    }
-
-    const nextStatus =
-      formObject && formObject.__ckStatus !== undefined && formObject.__ckStatus !== null
-        ? formObject.__ckStatus
-        : formObject && formObject.status !== undefined && formObject.status !== null
-          ? formObject.status
-          : '';
-    const reconcileConfig = this.shouldReconcileReservations(form, nextStatus);
-    if (savedRecordId && !deleteRecordId && reconcileConfig.enabled) {
-      if (isTruthyFlag(formObject && formObject.__ckSkipReservationReconciliation)) {
-        result.meta = {
-          ...(result.meta || {}),
-          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
-        };
-        return result;
-      }
-      if (!this.recordHasReservationSelections(form, formObject)) {
-        result.meta = {
-          ...(result.meta || {}),
-          reservationReconciliation: this.buildSkippedReservationReconciliationMeta(savedRecordId)
-        };
-        return result;
-      }
-      const reconcileResult = await this.inventoryReservationRepository.reconcile({
-        sourceFormKey: formKey,
-        sourceRecordId: savedRecordId,
-        ledgerFormKey: reconcileConfig.ledgerFormKey,
-        refreshMode: reconcileConfig.refreshMode
-      });
-      if (!reconcileResult.success) {
-        return {
-          success: false,
-          message: reconcileResult.message || 'Record saved but failed to reconcile active reservations.',
-          meta: {
-            ...(result.meta || {}),
-            reservationReconciliation: { success: false, sourceRecordId: savedRecordId },
-            sourceSaved: true
-          }
-        };
-      }
-      result.meta = {
-        ...(result.meta || {}),
-        reservationReconciliation: {
-          success: true,
-          sourceRecordId: savedRecordId,
-          reconciledReservations: Number(reconcileResult.reconciledReservations || 0) || 0,
-          consumedReservations: Number(reconcileResult.consumedReservations || 0) || 0,
-          releasedReservations: Number(reconcileResult.releasedReservations || 0) || 0,
-          touchedInventoryRecords: Number(reconcileResult.touchedInventoryRecords || 0) || 0
-        }
-      };
-    }
-    return result;
   }
 
   async saveStatusOnlyCloseWithId(payload, context) {
@@ -866,18 +641,10 @@ class SubmitEffectsRepository {
       __ckSkipSubmitEffects: '1',
       __ckClientDataVersion: payload && payload.__ckClientDataVersion
     };
-    if (isTruthyFlag(payload && payload.__ckSkipReservationReconciliation)) {
-      sourcePayload.__ckSkipReservationReconciliation = '1';
-    }
     const statusResult = await this.submissionRepository.saveStatusOnlyWithId(sourcePayload);
     if (!statusResult || !statusResult.success) return statusResult;
 
-    const lifecycleResult = await this.applyReservationLifecycle(
-      context.form,
-      context.formKey,
-      sourcePayload,
-      statusResult
-    );
+    const lifecycleResult = statusResult;
     if (!lifecycleResult || !lifecycleResult.success) return lifecycleResult;
 
     const submitEffectsResult = await this.applySubmitEffects({
@@ -1006,48 +773,48 @@ class SubmitEffectsRepository {
     const mutationPlan = resolveSaveMutationPlan(payload);
     const sourcePayload = stripSaveMutationPlanFields({ ...payload, __ckSkipSubmitEffects: true });
     let result;
-    let reservationResult = null;
-    if (mutationPlan.reservationPlan && this.inventoryReservationRepository) {
-      [result, reservationResult] = await Promise.all([
+    let utilisationResult = null;
+    if (mutationPlan.utilisationPlan && this.bankUtilisationRepository) {
+      [result, utilisationResult] = await Promise.all([
         this.submissionRepository.saveSubmissionWithId(sourcePayload),
-        this.inventoryReservationRepository.applyPlan({
-          ...mutationPlan.reservationPlan,
+        this.bankUtilisationRepository.applyPlan({
+          ...mutationPlan.utilisationPlan,
           refreshMode: 'none'
         })
       ]);
       if (result) {
-        result.reservationResult = reservationResult;
-        result.availability = reservationResult && reservationResult.availability;
+        result.utilisationResult = utilisationResult;
+        result.availability = utilisationResult && utilisationResult.availability;
       }
     } else {
       result = await this.submissionRepository.saveSubmissionWithId(sourcePayload);
     }
     if (!result || !result.success) return result;
 
-    if (reservationResult && !reservationResult.success) {
+    if (utilisationResult && !utilisationResult.success) {
       return {
         success: false,
-        message: reservationResult.message || 'Record saved but failed to update inventory reservations.',
-        reservationResult,
-        availability: reservationResult.availability,
+        message: utilisationResult.message || 'Record saved but failed to update bank utilisations.',
+        utilisationResult,
+        availability: utilisationResult.availability,
         meta: {
           ...(result.meta || {}),
           sourceSaved: true,
-          reservationPlan: {
+          utilisationPlan: {
             success: false,
-            sourceRecordId: toText(mutationPlan.reservationPlan && mutationPlan.reservationPlan.sourceRecordId)
+            sourceRecordId: toText(mutationPlan.utilisationPlan && mutationPlan.utilisationPlan.sourceRecordId)
           }
         }
       };
     }
-    if (reservationResult) {
+    if (utilisationResult) {
       result.meta = {
         ...(result.meta || {}),
-        reservationPlan: {
+        utilisationPlan: {
           success: true,
-          sourceRecordId: toText(mutationPlan.reservationPlan && mutationPlan.reservationPlan.sourceRecordId),
-          reservationsApplied: Number(reservationResult.reservationsApplied || 0) || 0,
-          reservationsReleased: Number(reservationResult.reservationsReleased || 0) || 0
+          sourceRecordId: toText(mutationPlan.utilisationPlan && mutationPlan.utilisationPlan.sourceRecordId),
+          utilisationsApplied: Number(utilisationResult.utilisationsApplied || 0) || 0,
+          utilisationsReleased: Number(utilisationResult.utilisationsReleased || 0) || 0
         }
       };
     }
@@ -1055,7 +822,7 @@ class SubmitEffectsRepository {
     const operation = toText(result.meta && result.meta.operation).toLowerCase();
     if (operation === 'noop') return result;
 
-    const lifecycleResult = await this.applyReservationLifecycle(context.form, context.formKey || formKey, payload, result);
+    const lifecycleResult = result;
     if (!lifecycleResult || !lifecycleResult.success) return lifecycleResult;
 
     const submitEffectsResult = await this.applySubmitEffects({

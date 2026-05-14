@@ -45,7 +45,7 @@ The following clean-up actions must be applied mechanically across all applicati
 
 Colour conveys meaning and must be used sparingly and consistently.
 
-RED is reserved exclusively for STOP / ERROR semantics.
+RED is utilised exclusively for STOP / ERROR semantics.
 
 Red may be used ONLY for:
 

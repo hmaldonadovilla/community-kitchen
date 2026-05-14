@@ -42,7 +42,7 @@ describe('hydrateMealProductionPrepIngredientsFromLeftovers', () => {
       [
         'leftover-single',
         {
-          formKey: 'Config: Leftover Inventory',
+          formKey: 'Config: Leftover Bank',
           language: 'EN',
           id: 'leftover-single',
           values: {
@@ -57,7 +57,7 @@ describe('hydrateMealProductionPrepIngredientsFromLeftovers', () => {
       [
         'leftover-multi',
         {
-          formKey: 'Config: Leftover Inventory',
+          formKey: 'Config: Leftover Bank',
           language: 'EN',
           id: 'leftover-multi',
           values: {

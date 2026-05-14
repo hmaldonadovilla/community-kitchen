@@ -40,17 +40,16 @@ export const normalizeIdValue = (raw: unknown): string => (raw === undefined || 
 export const formatLineItemTotalValue = (total: { value: number; decimalPlaces?: number; pending?: boolean }): string =>
   total.pending ? '' : total.value.toFixed(total.decimalPlaces || 0);
 
-export const hasAvailabilityPairValue = (
+export const hasAvailabilityValue = (
   sourceRow: Record<string, any>,
-  remainingFieldId: string,
-  reservedFieldId: string
+  remainingFieldId: string
 ): boolean => {
   const hasValue = (raw: unknown): boolean => {
     if (raw === undefined || raw === null) return false;
     if (typeof raw === 'string') return raw.trim().length > 0;
     return true;
   };
-  return hasValue(sourceRow?.[remainingFieldId]) || hasValue(sourceRow?.[reservedFieldId]);
+  return hasValue(sourceRow?.[remainingFieldId]);
 };
 
 export const fieldByIdSafe = (fields: any, fieldId: string): any | null => {

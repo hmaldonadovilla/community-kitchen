@@ -1376,7 +1376,7 @@ describe('Cloud Run API server', () => {
                 {
                   id: 'captureLeftovers',
                   type: 'createRecord',
-                  targetFormKey: 'Config: Leftover Inventory',
+                  targetFormKey: 'Config: Leftover Bank',
                   runOn: 'both',
                   recordId: 'leftover::{{source.id}}::{{lineItem.rowId}}',
                   when: { fieldId: 'status', equals: ['Closed'] },
@@ -1430,11 +1430,11 @@ describe('Cloud Run API server', () => {
           dedupRules: []
         },
         {
-          formKey: 'Config: Leftover Inventory',
+          formKey: 'Config: Leftover Bank',
           form: {
-            title: 'Leftover Inventory',
-            configSheet: 'Config: Leftover Inventory',
-            destinationTab: 'Leftover Inventory Data',
+            title: 'Leftover Bank',
+            configSheet: 'Config: Leftover Bank',
+            destinationTab: 'Leftover Bank Data',
             followupConfig: { statusFieldId: 'LEFTOVER_STATUS' }
           },
           questions: targetQuestions,
@@ -1484,7 +1484,7 @@ describe('Cloud Run API server', () => {
     ];
     const rowsByTab: Record<string, any[][]> = {
       'Meal Production Data': mealRows,
-      'Leftover Inventory Data': leftoverRows,
+      'Leftover Bank Data': leftoverRows,
       'Ingredients Management Data': lookupRows
     };
     const getSheetValues = jest.fn().mockImplementation(async (_spreadsheetId, tabName) => rowsByTab[tabName].map(row => row.slice()));
@@ -1559,7 +1559,7 @@ describe('Cloud Run API server', () => {
             generatedRecords: [
               expect.objectContaining({
                 effectId: 'captureLeftovers',
-                targetFormKey: 'Config: Leftover Inventory',
+                targetFormKey: 'Config: Leftover Bank',
                 recordId: 'leftover::meal-submit-1::cook-standard',
                 values: expect.objectContaining({
                   LEFTOVER_MEAL_TYPE: 'Standard',
@@ -2125,26 +2125,26 @@ describe('Cloud Run API server', () => {
     }
   });
 
-  test('applies and releases inventory reservation plans through Sheets-backed RPC', async () => {
-    const inventoryQuestions = [
+  test('applies and releases bank utilisation plans through Sheets-backed RPC', async () => {
+    const bankQuestions = [
       { id: 'LEFTOVER_ID', type: 'TEXT', qEn: 'Leftover ID', status: 'Active' },
       { id: 'LEFTOVER_KIND', type: 'TEXT', qEn: 'Kind', status: 'Active' },
       { id: 'LEFTOVER_PORTIONS', type: 'NUMBER', qEn: 'Portions', status: 'Active' },
-      { id: 'LEFTOVER_RESERVED_PORTIONS', type: 'NUMBER', qEn: 'Reserved portions', status: 'Active' },
+      { id: '', type: 'NUMBER', qEn: 'Utilised portions', status: 'Active' },
       { id: 'LEFTOVER_STATUS', type: 'TEXT', qEn: 'Status', status: 'Active' }
     ];
-    const ledgerQuestions = [
-      'RESERVATION_ID',
+    const utilisationQuestions = [
+      'UTILISATION_ID',
       'RESOURCE_FORM_KEY',
       'RESOURCE_RECORD_ID',
       'RESOURCE_ITEM_ID',
       'RESOURCE_KIND',
       'RESOURCE_QTY_FIELD_ID',
-      'RESOURCE_RESERVED_QTY_FIELD_ID',
+      '',
       'RESOURCE_STATUS_FIELD_ID',
       'RESOURCE_UNIT_FIELD_ID',
-      'RESERVED_QTY',
-      'RESERVED_UNIT',
+      'UTILISED_QTY',
+      'UTILISED_UNIT',
       'STATUS',
       'SOURCE_FORM_KEY',
       'SOURCE_RECORD_ID',
@@ -2153,30 +2153,30 @@ describe('Cloud Run API server', () => {
       'SOURCE_OUTPUT_GROUP_ID',
       'SOURCE_OUTPUT_ROW_ID',
       'SOURCE_OUTPUT_KEY_FIELD_ID'
-    ].map(id => ({ id, type: id === 'RESERVED_QTY' ? 'NUMBER' : 'TEXT', qEn: id, status: 'Active' }));
+    ].map(id => ({ id, type: id === 'UTILISED_QTY' ? 'NUMBER' : 'TEXT', qEn: id, status: 'Active' }));
     const sourceQuestions = [{ id: 'NOTES', type: 'TEXT', qEn: 'Notes', status: 'Active' }];
     const bundle = {
       forms: [
         {
-          formKey: 'Config: Leftover Inventory',
+          formKey: 'Config: Leftover Bank',
           form: {
-            title: 'Leftover Inventory',
-            configSheet: 'Config: Leftover Inventory',
-            destinationTab: 'Leftover Inventory Data'
+            title: 'Leftover Bank',
+            configSheet: 'Config: Leftover Bank',
+            destinationTab: 'Leftover Bank Data'
           },
-          questions: inventoryQuestions,
-          definition: { questions: inventoryQuestions },
+          questions: bankQuestions,
+          definition: { questions: bankQuestions },
           dedupRules: []
         },
         {
-          formKey: 'Config: Inventory Reservation Ledger',
+          formKey: 'Config: Leftover Utilisation',
           form: {
-            title: 'Inventory Reservation Ledger',
-            configSheet: 'Config: Inventory Reservation Ledger',
-            destinationTab: 'Inventory Reservation Ledger Data'
+            title: 'Leftover Utilisation',
+            configSheet: 'Config: Leftover Utilisation',
+            destinationTab: 'Leftover Utilisation Data'
           },
-          questions: ledgerQuestions,
-          definition: { questions: ledgerQuestions },
+          questions: utilisationQuestions,
+          definition: { questions: utilisationQuestions },
           dedupRules: []
         },
         {
@@ -2193,13 +2193,12 @@ describe('Cloud Run API server', () => {
       ]
     };
     const rowsByTab: Record<string, any[][]> = {
-      'Leftover Inventory Data': [
+      'Leftover Bank Data': [
         [
           'Language',
           'Leftover ID [LEFTOVER_ID]',
           'Kind [LEFTOVER_KIND]',
           'Portions [LEFTOVER_PORTIONS]',
-          'Reserved portions [LEFTOVER_RESERVED_PORTIONS]',
           'Status [LEFTOVER_STATUS]',
           'Record ID',
           'Data Version',
@@ -2207,23 +2206,22 @@ describe('Cloud Run API server', () => {
           'Updated At',
           'Status'
         ],
-        ['EN', 'LO-1', 'Multi-ingredient', '10', '0', 'available', 'leftover-1', '2', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'available']
+        ['EN', 'LO-1', 'Multi-ingredient', '10', 'available', 'leftover-1', '2', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'available']
       ],
-      'Inventory Reservation Ledger Data': [
+      'Leftover Utilisation Data': [
         [
           'Language',
-          'Reservation ID [RESERVATION_ID]',
-          'Resource form key [RESOURCE_FORM_KEY]',
-          'Resource record ID [RESOURCE_RECORD_ID]',
-          'Resource item ID [RESOURCE_ITEM_ID]',
-          'Resource kind [RESOURCE_KIND]',
-          'Resource quantity field ID [RESOURCE_QTY_FIELD_ID]',
-          'Resource reserved quantity field ID [RESOURCE_RESERVED_QTY_FIELD_ID]',
-          'Resource status field ID [RESOURCE_STATUS_FIELD_ID]',
-          'Resource unit field ID [RESOURCE_UNIT_FIELD_ID]',
-          'Reserved quantity [RESERVED_QTY]',
-          'Reserved unit [RESERVED_UNIT]',
-          'Reservation status [STATUS]',
+          'Utilisation ID [UTILISATION_ID]',
+          'Bank form key [RESOURCE_FORM_KEY]',
+          'Bank record ID [RESOURCE_RECORD_ID]',
+          'Bank item ID [RESOURCE_ITEM_ID]',
+          'Bank item kind [RESOURCE_KIND]',
+          'Bank quantity field ID [RESOURCE_QTY_FIELD_ID]',
+          'Bank status field ID [RESOURCE_STATUS_FIELD_ID]',
+          'Bank unit field ID [RESOURCE_UNIT_FIELD_ID]',
+          'Utilised quantity [UTILISED_QTY]',
+          'Utilised unit [UTILISED_UNIT]',
+          'Utilisation status [STATUS]',
           'Source form key [SOURCE_FORM_KEY]',
           'Source record ID [SOURCE_RECORD_ID]',
           'Source parent group ID [SOURCE_PARENT_GROUP_ID]',
@@ -2283,16 +2281,16 @@ describe('Cloud Run API server', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          fnName: 'applyInventoryReservationPlan',
+          fnName: 'applyBankUtilisationPlan',
           args: [
             {
               sourceFormKey: 'Config: Meal Production',
               sourceRecordId: 'meal-1',
               clientDataVersion: 7,
-              ledgerFormKey: 'Config: Inventory Reservation Ledger',
-              reservations: [
+              utilisationFormKey: 'Config: Leftover Utilisation',
+              utilisations: [
                 {
-                  resourceFormKey: 'Config: Leftover Inventory',
+                  resourceFormKey: 'Config: Leftover Bank',
                   resourceRecordId: 'leftover-1',
                   resourceItemId: 'LO-1',
                   resourceKind: 'Multi-ingredient',
@@ -2310,41 +2308,40 @@ describe('Cloud Run API server', () => {
       expect(planRes.status).toBe(200);
       expect(planBody.result).toMatchObject({
         success: true,
-        message: 'Inventory reservations updated.',
-        reservationsApplied: 1,
-        reservationsReleased: 0,
+        message: 'Bank utilisations updated.',
+        utilisationsApplied: 1,
+        utilisationsReleased: 0,
         sourceClientDataVersionMatched: true,
         availability: [
           expect.objectContaining({
-            resourceFormKey: 'Config: Leftover Inventory',
+            resourceFormKey: 'Config: Leftover Bank',
             resourceRecordId: 'leftover-1',
             resourceItemId: 'LO-1',
-            remainingQuantity: 10,
-            reservedQuantity: 3,
+            remainingQuantity: 7,
             freeQuantity: 7,
-            currentReservationQuantity: 3,
-            currentRecordReservedQuantity: 3
+            currentUtilisationQuantity: 3,
+            currentRecordUtilisedQuantity: 3
           })
         ]
       });
-      expect(rowsByTab['Leftover Inventory Data'][1][4]).toBe(3);
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][10]).toBe(3);
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][12]).toBe('active');
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][20]).toMatch(/^reservation::/);
-      expect(appendRows).toHaveBeenCalledWith('spreadsheet-1', 'Inventory Reservation Ledger Data', expect.any(Array));
+      expect(rowsByTab['Leftover Bank Data'][1][3]).toBe(7);
+      expect(rowsByTab['Leftover Utilisation Data'][1][9]).toBe(3);
+      expect(rowsByTab['Leftover Utilisation Data'][1][11]).toBe('active');
+      expect(rowsByTab['Leftover Utilisation Data'][1][19]).toMatch(/^utilisation::/);
+      expect(appendRows).toHaveBeenCalledWith('spreadsheet-1', 'Leftover Utilisation Data', expect.any(Array));
       expect(batchUpdateValues).toHaveBeenCalled();
 
       const releaseRes = await fetch(`${baseUrl}/api/rpc`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          fnName: 'applyInventoryReservationPlan',
+          fnName: 'applyBankUtilisationPlan',
           args: [
             {
               sourceFormKey: 'Config: Meal Production',
               sourceRecordId: 'meal-1',
-              ledgerFormKey: 'Config: Inventory Reservation Ledger',
-              reservations: [],
+              utilisationFormKey: 'Config: Leftover Utilisation',
+              utilisations: [],
               refreshMode: 'none'
             }
           ]
@@ -2355,202 +2352,19 @@ describe('Cloud Run API server', () => {
       expect(releaseRes.status).toBe(200);
       expect(releaseBody.result).toMatchObject({
         success: true,
-        reservationsApplied: 0,
-        reservationsReleased: 1,
+        utilisationsApplied: 0,
+        utilisationsReleased: 1,
         availability: [
           expect.objectContaining({
-            reservedQuantity: 0,
             freeQuantity: 10,
-            currentReservationQuantity: 0,
-            currentRecordReservedQuantity: 0
+            currentUtilisationQuantity: 0,
+            currentRecordUtilisedQuantity: 0
           })
         ]
       });
-      expect(rowsByTab['Leftover Inventory Data'][1][4]).toBe(0);
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][10]).toBe(0);
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][12]).toBe('released');
-    } finally {
-      await closeServer(server);
-    }
-  });
-
-  test('reconciles active inventory reservations through Sheets-backed RPC', async () => {
-    const inventoryQuestions = [
-      { id: 'LEFTOVER_ID', type: 'TEXT', qEn: 'Leftover ID', status: 'Active' },
-      { id: 'LEFTOVER_KIND', type: 'TEXT', qEn: 'Kind', status: 'Active' },
-      { id: 'LEFTOVER_PORTIONS', type: 'NUMBER', qEn: 'Portions', status: 'Active' },
-      { id: 'LEFTOVER_RESERVED_PORTIONS', type: 'NUMBER', qEn: 'Reserved portions', status: 'Active' },
-      { id: 'LEFTOVER_STATUS', type: 'TEXT', qEn: 'Status', status: 'Active' }
-    ];
-    const ledgerQuestions = [
-      'RESERVATION_ID',
-      'RESOURCE_FORM_KEY',
-      'RESOURCE_RECORD_ID',
-      'RESOURCE_ITEM_ID',
-      'RESOURCE_KIND',
-      'RESOURCE_QTY_FIELD_ID',
-      'RESOURCE_RESERVED_QTY_FIELD_ID',
-      'RESOURCE_STATUS_FIELD_ID',
-      'RESOURCE_UNIT_FIELD_ID',
-      'RESERVED_QTY',
-      'RESERVED_UNIT',
-      'STATUS',
-      'SOURCE_FORM_KEY',
-      'SOURCE_RECORD_ID'
-    ].map(id => ({ id, type: id === 'RESERVED_QTY' ? 'NUMBER' : 'TEXT', qEn: id, status: 'Active' }));
-    const sourceQuestions = [{ id: 'NOTES', type: 'TEXT', qEn: 'Notes', status: 'Active' }];
-    const bundle = {
-      forms: [
-        {
-          formKey: 'Config: Leftover Inventory',
-          form: { title: 'Leftover Inventory', configSheet: 'Config: Leftover Inventory', destinationTab: 'Leftover Inventory Data' },
-          questions: inventoryQuestions,
-          definition: { questions: inventoryQuestions },
-          dedupRules: []
-        },
-        {
-          formKey: 'Config: Inventory Reservation Ledger',
-          form: {
-            title: 'Inventory Reservation Ledger',
-            configSheet: 'Config: Inventory Reservation Ledger',
-            destinationTab: 'Inventory Reservation Ledger Data'
-          },
-          questions: ledgerQuestions,
-          definition: { questions: ledgerQuestions },
-          dedupRules: []
-        },
-        {
-          formKey: 'Config: Meal Production',
-          form: { title: 'Meal Production', configSheet: 'Config: Meal Production', destinationTab: 'Meal Production Data' },
-          questions: sourceQuestions,
-          definition: { questions: sourceQuestions },
-          dedupRules: []
-        }
-      ]
-    };
-    const rowsByTab: Record<string, any[][]> = {
-      'Leftover Inventory Data': [
-        [
-          'Language',
-          'Leftover ID [LEFTOVER_ID]',
-          'Kind [LEFTOVER_KIND]',
-          'Portions [LEFTOVER_PORTIONS]',
-          'Reserved portions [LEFTOVER_RESERVED_PORTIONS]',
-          'Status [LEFTOVER_STATUS]',
-          'Record ID',
-          'Data Version',
-          'Created At',
-          'Updated At',
-          'Status'
-        ],
-        ['EN', 'LO-2', 'Multi-ingredient', '8', '3', 'available', 'leftover-2', '4', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'available']
-      ],
-      'Inventory Reservation Ledger Data': [
-        [
-          'Language',
-          'Reservation ID [RESERVATION_ID]',
-          'Resource form key [RESOURCE_FORM_KEY]',
-          'Resource record ID [RESOURCE_RECORD_ID]',
-          'Resource item ID [RESOURCE_ITEM_ID]',
-          'Resource kind [RESOURCE_KIND]',
-          'Resource quantity field ID [RESOURCE_QTY_FIELD_ID]',
-          'Resource reserved quantity field ID [RESOURCE_RESERVED_QTY_FIELD_ID]',
-          'Resource status field ID [RESOURCE_STATUS_FIELD_ID]',
-          'Resource unit field ID [RESOURCE_UNIT_FIELD_ID]',
-          'Reserved quantity [RESERVED_QTY]',
-          'Reserved unit [RESERVED_UNIT]',
-          'Reservation status [STATUS]',
-          'Source form key [SOURCE_FORM_KEY]',
-          'Source record ID [SOURCE_RECORD_ID]',
-          'Record ID',
-          'Data Version',
-          'Created At',
-          'Updated At',
-          'Status'
-        ],
-        [
-          'EN',
-          'reservation::existing',
-          'Config: Leftover Inventory',
-          'leftover-2',
-          'LO-2',
-          'Multi-ingredient',
-          'LEFTOVER_PORTIONS',
-          'LEFTOVER_RESERVED_PORTIONS',
-          'LEFTOVER_STATUS',
-          '',
-          '3',
-          '',
-          'active',
-          'Config: Meal Production',
-          'meal-2',
-          'reservation::existing',
-          '1',
-          '2026-04-30T08:00:00Z',
-          '2026-04-30T09:00:00Z',
-          'active'
-        ]
-      ],
-      'Meal Production Data': [
-        ['Language', 'Notes [NOTES]', 'Record ID', 'Data Version', 'Created At', 'Updated At', 'Status'],
-        ['EN', 'Source', 'meal-2', '2', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'Draft']
-      ]
-    };
-    const getSheetValues = jest.fn().mockImplementation(async (_spreadsheetId, tabName) => rowsByTab[tabName].map(row => row.slice()));
-    const updateRowValues = jest.fn().mockImplementation(async (_spreadsheetId, tabName, rowNumber, values) => {
-      rowsByTab[tabName][rowNumber - 1] = values.slice();
-      return { updatedRows: 1 };
-    });
-    const server = createServer({
-      env: {
-        CK_DATA_BACKEND: 'drive',
-        CK_FILE_BACKEND: 'drive',
-        CK_DEFAULT_SPREADSHEET_ID: 'spreadsheet-1'
-      },
-      formConfigRepository: new FormConfigRepository({ bundle }),
-      sheetsClient: { getSheetValues, updateRowValues }
-    });
-    const baseUrl = await listen(server);
-
-    try {
-      const reconcileRes = await fetch(`${baseUrl}/api/rpc`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          fnName: 'reconcileInventoryReservations',
-          args: [
-            {
-              sourceFormKey: 'Config: Meal Production',
-              sourceRecordId: 'meal-2',
-              ledgerFormKey: 'Config: Inventory Reservation Ledger',
-              mode: 'consume',
-              refreshMode: 'none'
-            }
-          ]
-        })
-      });
-      const reconcileBody = await reconcileRes.json();
-
-      expect(reconcileRes.status).toBe(200);
-      expect(reconcileBody.result).toMatchObject({
-        success: true,
-        message: 'Inventory reservations reconciled.',
-        reconciledReservations: 1,
-        consumedReservations: 1,
-        releasedReservations: 0,
-        touchedInventoryRecords: 1,
-        availability: [
-          expect.objectContaining({
-            resourceRecordId: 'leftover-2',
-            remainingQuantity: 5,
-            reservedQuantity: 0,
-            freeQuantity: 5
-          })
-        ]
-      });
-      expect(rowsByTab['Leftover Inventory Data'][1][3]).toBe(5);
-      expect(rowsByTab['Leftover Inventory Data'][1][4]).toBe(0);
-      expect(rowsByTab['Inventory Reservation Ledger Data'][1][12]).toBe('consumed');
+      expect(rowsByTab['Leftover Bank Data'][1][3]).toBe(10);
+      expect(rowsByTab['Leftover Utilisation Data'][1][9]).toBe(0);
+      expect(rowsByTab['Leftover Utilisation Data'][1][11]).toBe('released');
     } finally {
       await closeServer(server);
     }
@@ -2679,116 +2493,6 @@ describe('Cloud Run API server', () => {
       expect(rowsByTab['Target Data'][1][1]).toBe('source-1');
       expect(rowsByTab['Target Data'][1][2]).toBe('Meal');
       expect(rowsByTab['Target Data'][1][3]).toBe('target::source-1');
-    } finally {
-      await closeServer(server);
-    }
-  });
-
-  test('runs reservation reconciliation from follow-up batches through Sheets-backed Cloud Run RPC', async () => {
-    const ledgerQuestions = ['RESERVATION_ID', 'STATUS', 'SOURCE_FORM_KEY', 'SOURCE_RECORD_ID'].map(id => ({
-      id,
-      type: 'TEXT',
-      qEn: id,
-      status: 'Active'
-    }));
-    const sourceQuestions = [{ id: 'NOTES', type: 'TEXT', qEn: 'Notes', status: 'Active' }];
-    const bundle = {
-      forms: [
-        {
-          formKey: 'Config: Inventory Reservation Ledger',
-          form: {
-            title: 'Inventory Reservation Ledger',
-            configSheet: 'Config: Inventory Reservation Ledger',
-            destinationTab: 'Inventory Reservation Ledger Data'
-          },
-          questions: ledgerQuestions,
-          definition: { questions: ledgerQuestions },
-          dedupRules: []
-        },
-        {
-          formKey: 'Config: Meal Production',
-          form: {
-            title: 'Meal Production',
-            configSheet: 'Config: Meal Production',
-            destinationTab: 'Meal Production Data',
-            reservationLifecycle: {
-              ledgerFormKey: 'Config: Inventory Reservation Ledger',
-              reconcileOnFinalSubmit: {
-                enabled: true,
-                ledgerFormKey: 'Config: Inventory Reservation Ledger',
-                refreshMode: 'none'
-              }
-            }
-          },
-          questions: sourceQuestions,
-          definition: { questions: sourceQuestions },
-          dedupRules: []
-        }
-      ]
-    };
-    const rowsByTab: Record<string, any[][]> = {
-      'Inventory Reservation Ledger Data': [
-        [
-          'Language',
-          'Reservation ID [RESERVATION_ID]',
-          'Reservation status [STATUS]',
-          'Source form key [SOURCE_FORM_KEY]',
-          'Source record ID [SOURCE_RECORD_ID]',
-          'Record ID',
-          'Data Version',
-          'Created At',
-          'Updated At',
-          'Status'
-        ]
-      ],
-      'Meal Production Data': [
-        ['Language', 'Notes [NOTES]', 'Record ID', 'Data Version', 'Created At', 'Updated At', 'Status'],
-        ['EN', 'Source', 'meal-3', '2', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'Draft']
-      ]
-    };
-    const getSheetValues = jest.fn().mockImplementation(async (_spreadsheetId, tabName) => rowsByTab[tabName].map(row => row.slice()));
-    const server = createServer({
-      env: {
-        CK_DATA_BACKEND: 'drive',
-        CK_FILE_BACKEND: 'drive',
-        CK_DEFAULT_SPREADSHEET_ID: 'spreadsheet-1'
-      },
-      formConfigRepository: new FormConfigRepository({ bundle }),
-      sheetsClient: { getSheetValues, updateRowValues: jest.fn() }
-    });
-    const baseUrl = await listen(server);
-
-    try {
-      const followupRes = await fetch(`${baseUrl}/api/rpc`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          fnName: 'triggerFollowupActions',
-          args: ['Config: Meal Production', 'meal-3', ['RECONCILE_RESERVATIONS']]
-        })
-      });
-      const followupBody = await followupRes.json();
-
-      expect(followupRes.status).toBe(200);
-      expect(followupBody.result).toMatchObject({
-        success: true,
-        results: [
-          {
-            action: 'RECONCILE_RESERVATIONS',
-            result: {
-              success: true,
-              reservationReconciliation: {
-                success: true,
-                sourceRecordId: 'meal-3',
-                reconciledReservations: 0,
-                consumedReservations: 0,
-                releasedReservations: 0,
-                touchedInventoryRecords: 0
-              }
-            }
-          }
-        ]
-      });
     } finally {
       await closeServer(server);
     }
@@ -3782,11 +3486,11 @@ describe('GoogleSheetsSubmissionRepository', () => {
         bundle: {
           forms: [
             {
-              formKey: 'Config: Leftover Inventory',
+              formKey: 'Config: Leftover Bank',
               form: {
-                title: 'Leftover Inventory',
-                configSheet: 'Config: Leftover Inventory',
-                destinationTab: 'Leftover Inventory Data',
+                title: 'Leftover Bank',
+                configSheet: 'Config: Leftover Bank',
+                destinationTab: 'Leftover Bank Data',
                 followupConfig: { statusFieldId: 'LEFTOVER_STATUS' }
               },
               questions: [
@@ -3826,7 +3530,7 @@ describe('GoogleSheetsSubmissionRepository', () => {
     });
 
     const result = await repository.saveSubmissionWithId({
-      formKey: 'Config: Leftover Inventory',
+      formKey: 'Config: Leftover Bank',
       language: 'EN',
       id: 'leftover-new-si',
       values: {

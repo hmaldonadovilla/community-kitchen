@@ -5,8 +5,7 @@ describe('step data-source availability helpers', () => {
     rowKeyFieldId: 'LEFTOVER_ID',
     dataSource: { id: 'leftovers' },
     availability: {
-      sourceQuantityFieldId: 'remaining',
-      sourceReservedQuantityFieldId: 'reserved'
+      sourceQuantityFieldId: 'remaining'
     }
   };
 
@@ -17,55 +16,53 @@ describe('step data-source availability helpers', () => {
         id: 'record-1',
         LEFTOVER_ID: 'leftover-1',
         remaining: 10,
-        reserved: 4,
-        __ckServerCurrentRecordReservedQuantity: 1
+        __ckServerCurrentRecordUtilisedQuantity: 1
       },
       sourceKey: 'leftover-1',
       parentRowId: 'parent-1',
-      localCurrentRecordReservedQuantity: 3,
-      resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 1, currentRowQuantity: 1 }),
-      resolveCurrentReservationStateForSource: () => ({ totalReservedQuantity: 99, currentRowQuantity: 99 })
+      localCurrentRecordUtilisedQuantity: 3,
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 1, currentRowQuantity: 1 }),
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 99, currentRowQuantity: 99 })
     });
 
     expect(mutation?.dataSourceConfig).toEqual({ id: 'leftovers' });
 
     const rows = mutation?.updateItems([
-      { id: 'record-1', LEFTOVER_ID: 'leftover-1', remaining: 10, reserved: 4 },
-      { id: 'record-2', LEFTOVER_ID: 'leftover-1', remaining: 10, reserved: 4 },
-      { id: 'record-1', LEFTOVER_ID: 'leftover-2', remaining: 10, reserved: 4 }
+      { id: 'record-1', LEFTOVER_ID: 'leftover-1', remaining: 10 },
+      { id: 'record-2', LEFTOVER_ID: 'leftover-1', remaining: 10 },
+      { id: 'record-1', LEFTOVER_ID: 'leftover-2', remaining: 10 }
     ]);
 
     expect(rows?.[0]).toMatchObject({
-      reserved: 6,
-      __ckServerCurrentRecordReservedQuantity: 3,
-      __ckCurrentRecordReservedQuantity: 3,
-      __ckFreeQuantity: 4
+      remaining: 8,
+      __ckServerCurrentRecordUtilisedQuantity: 3,
+      __ckCurrentRecordUtilisedQuantity: 3,
+      __ckFreeQuantity: 8
     });
-    expect(rows?.[1]).toEqual({ id: 'record-2', LEFTOVER_ID: 'leftover-1', remaining: 10, reserved: 4 });
-    expect(rows?.[2]).toEqual({ id: 'record-1', LEFTOVER_ID: 'leftover-2', remaining: 10, reserved: 4 });
+    expect(rows?.[1]).toEqual({ id: 'record-2', LEFTOVER_ID: 'leftover-1', remaining: 10 });
+    expect(rows?.[2]).toEqual({ id: 'record-1', LEFTOVER_ID: 'leftover-2', remaining: 10 });
   });
 
-  test('falls back to current reservation state when no explicit local total is provided', () => {
+  test('falls back to current utilisation state when no explicit local total is provided', () => {
     const mutation = buildStepDataSourceAvailabilityOptimisticMutationAction({
       config,
       sourceRow: {
         id: 'record-1',
         LEFTOVER_ID: 'leftover-1',
-        remaining: 12,
-        reserved: 5
+        remaining: 12
       },
       sourceKey: 'leftover-1',
       parentRowId: 'parent-1',
-      serverCurrentRecordReservedQuantity: 2,
-      resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 2, currentRowQuantity: 2 }),
-      resolveCurrentReservationStateForSource: () => ({ totalReservedQuantity: 4, currentRowQuantity: 4 })
+      serverCurrentRecordUtilisedQuantity: 2,
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 2, currentRowQuantity: 2 }),
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 4, currentRowQuantity: 4 })
     });
 
     expect(
-      mutation?.updateItems([{ id: 'record-1', LEFTOVER_ID: 'leftover-1', remaining: 12, reserved: 5 }])[0]
+      mutation?.updateItems([{ id: 'record-1', LEFTOVER_ID: 'leftover-1', remaining: 12 }])[0]
     ).toMatchObject({
-      reserved: 7,
-      __ckFreeQuantity: 5
+      remaining: 10,
+      __ckFreeQuantity: 10
     });
   });
 
@@ -76,8 +73,8 @@ describe('step data-source availability helpers', () => {
         sourceRow: { id: 'record-1' },
         sourceKey: 'leftover-1',
         parentRowId: 'parent-1',
-        resolveCommittedReservationStateForSource: () => ({ totalReservedQuantity: 0, currentRowQuantity: 0 }),
-        resolveCurrentReservationStateForSource: () => ({ totalReservedQuantity: 0, currentRowQuantity: 0 })
+        resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 }),
+        resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 })
       })
     ).toBeNull();
   });

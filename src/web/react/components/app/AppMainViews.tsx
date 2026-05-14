@@ -64,9 +64,9 @@ interface AppMainViewsProps {
   setAutoSaveHoldFromUi: any;
   summarySubmitIntentRef: React.MutableRefObject<boolean>;
   ensureDraftRecordId: any;
-  queueGuidedStepReservationDraftSync: any;
-  handleGuidedStepReservationDraftStateChange: any;
-  waitForGuidedStepReservationDraftSync: any;
+  queueGuidedStepUtilisationDraftSync: any;
+  handleGuidedStepUtilisationDraftStateChange: any;
+  waitForGuidedStepUtilisationDraftSync: any;
   waitForPendingSharedDataMutations: any;
   handleBeforeGuidedStepAdvance: any;
   lastSubmissionMeta: any;
@@ -147,9 +147,9 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
   setAutoSaveHoldFromUi,
   summarySubmitIntentRef,
   ensureDraftRecordId,
-  queueGuidedStepReservationDraftSync,
-  handleGuidedStepReservationDraftStateChange,
-  waitForGuidedStepReservationDraftSync,
+  queueGuidedStepUtilisationDraftSync,
+  handleGuidedStepUtilisationDraftStateChange,
+  waitForGuidedStepUtilisationDraftSync,
   waitForPendingSharedDataMutations,
   handleBeforeGuidedStepAdvance,
   lastSubmissionMeta,
@@ -239,9 +239,9 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
         setAutoSaveHold={setAutoSaveHoldFromUi}
         summarySubmitIntentRef={summarySubmitIntentRef}
         ensureRecordId={ensureDraftRecordId}
-        queueGuidedStepReservationDraftSync={queueGuidedStepReservationDraftSync}
-        onGuidedStepReservationDraftStateChange={handleGuidedStepReservationDraftStateChange}
-        waitForGuidedStepReservationDraftSync={waitForGuidedStepReservationDraftSync}
+        queueGuidedStepUtilisationDraftSync={queueGuidedStepUtilisationDraftSync}
+        onGuidedStepUtilisationDraftStateChange={handleGuidedStepUtilisationDraftStateChange}
+        waitForGuidedStepUtilisationDraftSync={waitForGuidedStepUtilisationDraftSync}
         waitForPendingSharedDataMutations={waitForPendingSharedDataMutations}
         onBeforeGuidedStepAdvance={handleBeforeGuidedStepAdvance}
       />

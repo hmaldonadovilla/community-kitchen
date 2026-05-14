@@ -1,0 +1,75 @@
+import {
+  issueUtilisationRequestEpoch,
+  shouldApplyUtilisationPlanResponse
+} from '../../../src/web/react/features/utilisations/utilisationResponsePolicy';
+
+describe('shouldApplyUtilisationPlanResponse', () => {
+  test('allows the latest response for the same session and record', () => {
+    expect(
+      shouldApplyUtilisationPlanResponse({
+        requestEpoch: 4,
+        latestEpoch: 4,
+        requestSessionId: 9,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: 'record-1'
+      })
+    ).toBe(true);
+  });
+
+  test('rejects an older response after a newer utilisation version was queued', () => {
+    expect(
+      shouldApplyUtilisationPlanResponse({
+        requestEpoch: 4,
+        latestEpoch: 5,
+        requestSessionId: 9,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: 'record-1'
+      })
+    ).toBe(false);
+  });
+
+  test('rejects responses from a previous record session', () => {
+    expect(
+      shouldApplyUtilisationPlanResponse({
+        requestEpoch: 5,
+        latestEpoch: 5,
+        requestSessionId: 8,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: 'record-1'
+      })
+    ).toBe(false);
+  });
+
+  test('allows a matching session when the current record id has not been adopted yet', () => {
+    expect(
+      shouldApplyUtilisationPlanResponse({
+        requestEpoch: 5,
+        latestEpoch: 5,
+        requestSessionId: 9,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: ''
+      })
+    ).toBe(true);
+  });
+
+  test('issues a new epoch when a user change is queued before the previous response returns', () => {
+    const inFlightEpoch = issueUtilisationRequestEpoch(0);
+    const queuedEpoch = issueUtilisationRequestEpoch(inFlightEpoch);
+
+    expect(queuedEpoch).toBe(2);
+    expect(
+      shouldApplyUtilisationPlanResponse({
+        requestEpoch: inFlightEpoch,
+        latestEpoch: queuedEpoch,
+        requestSessionId: 9,
+        currentSessionId: 9,
+        requestRecordId: 'record-1',
+        currentRecordId: 'record-1'
+      })
+    ).toBe(false);
+  });
+});

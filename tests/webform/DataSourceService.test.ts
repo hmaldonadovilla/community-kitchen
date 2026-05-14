@@ -98,7 +98,7 @@ describe('DataSourceService', () => {
 
   test('filters by statusAllowList using a configured statusFieldId', () => {
     const ss = new MockSpreadsheet() as any;
-    const sheet = ss.insertSheet('Leftover Inventory Data');
+    const sheet = ss.insertSheet('Leftover Bank Data');
     sheet.setMockData([
       ['LEFTOVER_ID', 'LEFTOVER_STATUS', 'LEFTOVER_RECIPE'],
       ['LE-1', 'available', 'Soup'],
@@ -108,7 +108,7 @@ describe('DataSourceService', () => {
     const service = new DataSourceService(ss);
     const res = service.fetchDataSource(
       {
-        id: 'Leftover Inventory Data',
+        id: 'Leftover Bank Data',
         projection: ['LEFTOVER_ID', 'LEFTOVER_RECIPE'],
         statusFieldId: 'LEFTOVER_STATUS',
         statusAllowList: ['available']

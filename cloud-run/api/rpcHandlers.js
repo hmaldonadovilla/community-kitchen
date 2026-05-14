@@ -4,13 +4,13 @@ const { createDataSourceRepository } = require('./repositories/dataSourceReposit
 const { createFileRepository } = require('./repositories/fileRepository');
 const { createFollowupRepository } = require('./repositories/followupRepository');
 const { createFormConfigRepository } = require('./repositories/configRepository');
-const { createInventoryReservationRepository } = require('./repositories/inventoryReservationRepository');
+const { createBankUtilisationRepository } = require('./repositories/bankUtilisationRepository');
 const { createLifecycleRepository } = require('./repositories/lifecycleRepository');
 const { createSubmissionRepository } = require('./repositories/submissionRepository');
 const { createSubmitEffectsRepository } = require('./repositories/submitEffectsRepository');
 const { createTemplateRepository } = require('./repositories/templateRepository');
 const { createServerTiming } = require('./serverTiming');
-const { syncGuidedStepReservationDraft } = require('./services/guidedReservationDraftSync');
+const { syncGuidedStepUtilisationDraft } = require('./services/guidedUtilisationDraftSync');
 const {
   applyUpdateRecordDependencyMutationsToRecord,
   evaluateUpdateRecordDependencyPreview
@@ -314,11 +314,11 @@ const createRpcHandlers = deps => {
   const fileRepository = createFileRepository(options);
   const formConfigRepository = createFormConfigRepository(options);
   const submissionRepository = createSubmissionRepository({ ...options, configRepository: formConfigRepository, fileRepository });
-  const inventoryReservationRepository = createInventoryReservationRepository({ ...options, submissionRepository });
+  const bankUtilisationRepository = createBankUtilisationRepository({ ...options, submissionRepository });
   const submitEffectsRepository = createSubmitEffectsRepository({
     ...options,
     submissionRepository,
-    inventoryReservationRepository
+    bankUtilisationRepository
   });
   const templateRepository = createTemplateRepository({
     ...options,
@@ -331,7 +331,7 @@ const createRpcHandlers = deps => {
     ...options,
     submissionRepository,
     submitEffectsRepository,
-    inventoryReservationRepository,
+    bankUtilisationRepository,
     templateRepository,
     dataSourceRepository
   });
@@ -351,14 +351,14 @@ const createRpcHandlers = deps => {
     ...options,
     configRepository: formConfigRepository,
     submissionRepository,
-    inventoryReservationRepository
+    bankUtilisationRepository
   });
   const createRequestScopedRepositories = timing => {
     const scopedSubmissionRepository =
       submissionRepository && typeof submissionRepository.createRequestScope === 'function'
         ? submissionRepository.createRequestScope({ timing })
         : submissionRepository;
-    const scopedInventoryReservationRepository = createInventoryReservationRepository({
+    const scopedBankUtilisationRepository = createBankUtilisationRepository({
       ...options,
       submissionRepository: scopedSubmissionRepository,
       timing
@@ -366,11 +366,11 @@ const createRpcHandlers = deps => {
     const scopedSubmitEffectsRepository = createSubmitEffectsRepository({
       ...options,
       submissionRepository: scopedSubmissionRepository,
-      inventoryReservationRepository: scopedInventoryReservationRepository
+      bankUtilisationRepository: scopedBankUtilisationRepository
     });
     return {
       submissionRepository: scopedSubmissionRepository,
-      inventoryReservationRepository: scopedInventoryReservationRepository,
+      bankUtilisationRepository: scopedBankUtilisationRepository,
       submitEffectsRepository: scopedSubmitEffectsRepository
     };
   };
@@ -575,9 +575,9 @@ const createRpcHandlers = deps => {
     async saveSubmissionWithId(...args) {
       return submitEffectsRepository.saveSubmissionWithId(args[0]);
     },
-    async syncGuidedStepReservationDraft(...args) {
-      const timing = createServerTiming('syncGuidedStepReservationDraft');
-      return syncGuidedStepReservationDraft({
+    async syncGuidedStepUtilisationDraft(...args) {
+      const timing = createServerTiming('syncGuidedStepUtilisationDraft');
+      return syncGuidedStepUtilisationDraft({
         request: args[0],
         repositories: createRequestScopedRepositories(timing),
         timing
@@ -690,22 +690,13 @@ const createRpcHandlers = deps => {
         };
       }
     },
-    async upsertInventoryReservation(...args) {
-      return inventoryReservationRepository.upsert(args[0]);
+    async upsertBankUtilisation(...args) {
+      return bankUtilisationRepository.upsert(args[0]);
     },
-    async applyInventoryReservationPlan(...args) {
-      const timing = createServerTiming('applyInventoryReservationPlan');
+    async applyBankUtilisationPlan(...args) {
+      const timing = createServerTiming('applyBankUtilisationPlan');
       const scoped = createRequestScopedRepositories(timing);
-      const result = await scoped.inventoryReservationRepository.applyPlan(args[0]);
-      return {
-        ...result,
-        timing: timing.log({ success: Boolean(result && result.success) })
-      };
-    },
-    async reconcileInventoryReservations(...args) {
-      const timing = createServerTiming('reconcileInventoryReservations');
-      const scoped = createRequestScopedRepositories(timing);
-      const result = await scoped.inventoryReservationRepository.reconcile(args[0]);
+      const result = await scoped.bankUtilisationRepository.applyPlan(args[0]);
       return {
         ...result,
         timing: timing.log({ success: Boolean(result && result.success) })

@@ -8,18 +8,7 @@ const normalizeKey = value => (value || '').toString().trim().toLowerCase();
 const clone = value => JSON.parse(JSON.stringify(value));
 
 const normalizeConfigDefinition = config => {
-  const next = clone(config);
-  if (
-    next &&
-    next.definition &&
-    next.form &&
-    next.form.reservationLifecycle &&
-    typeof next.form.reservationLifecycle === 'object' &&
-    !next.definition.reservationLifecycle
-  ) {
-    next.definition.reservationLifecycle = clone(next.form.reservationLifecycle);
-  }
-  return next;
+  return clone(config);
 };
 
 const createTargetUrl = (form, env) => {

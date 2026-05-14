@@ -3,7 +3,7 @@ import { validateForm } from '../../../src/web/react/app/submission';
 describe('validateForm autoIncrement required checks', () => {
   it('does not require server-generated autoIncrement text fields before submit', () => {
     const definition: any = {
-      title: 'Leftover Inventory',
+      title: 'Leftover Bank',
       destinationTab: 'Leftovers',
       languages: ['EN'],
       questions: [

@@ -26,7 +26,7 @@ describe('snapshotSave', () => {
     ).toBe(false);
   });
 
-  it('does not skip reservation draft sync saves for clean records', () => {
+  it('does not skip utilisation draft sync saves for clean records', () => {
     expect(
       shouldSkipCleanDraftSnapshotSave({
         mode: 'draft',
@@ -34,7 +34,7 @@ describe('snapshotSave', () => {
         draftSaveRequestInFlight: false,
         autoSaveDirty: false,
         autoSaveQueued: false,
-        reservationDraftSync: true
+        utilisationDraftSync: true
       })
     ).toBe(false);
   });

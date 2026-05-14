@@ -57,7 +57,7 @@
         {
           "id": "captureProducedEntireDishLeftovers",
           "type": "createRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
           "sourceLink": {
             "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
             "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
@@ -153,7 +153,7 @@
         {
           "id": "captureProducedLeftovers",
           "type": "createRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
           "sourceLink": {
             "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
             "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
@@ -420,7 +420,7 @@
         {
           "stepId": "leftoverForm",
           "dataSourceIds": [
-            "Leftover Inventory Data"
+            "Leftover Bank Data"
           ],
           "quietWindowMs": 30000,
           "dialog": {
@@ -554,7 +554,7 @@
           "captureProducedEntireDishLeftovers",
           "captureProducedLeftovers"
         ],
-        "targetFormKey": "Config: Leftover Inventory",
+        "targetFormKey": "Config: Leftover Bank",
         "title": {
           "en": "Label and store Leftovers"
         },
@@ -576,44 +576,6 @@
           "en": "Keep this screen open until no leftovers statement is recorded."
         }
       }
-    },
-    "reservationLifecycle": {
-      "ledgerFormKey": "Config: Inventory Reservation Ledger",
-      "releaseOnDelete": true,
-      "reconcileOnFinalSubmit": {
-        "enabled": true,
-        "statuses": [
-          "Closed"
-        ],
-        "ledgerFormKey": "Config: Inventory Reservation Ledger",
-        "refreshMode": "revisionOnly",
-        "feedback": {
-          "message": {
-            "en": "{baseMessage} {reconciliationSummary}."
-          },
-          "consumedSummarySingular": {
-            "en": "{count} leftover reservation consumed"
-          },
-          "consumedSummaryPlural": {
-            "en": "{count} leftover reservations consumed"
-          },
-          "releasedSummarySingular": {
-            "en": "{count} stale leftover reservation released"
-          },
-          "releasedSummaryPlural": {
-            "en": "{count} stale leftover reservations released"
-          }
-        }
-      }
-    },
-    "lifecycle": {
-      "rules": [
-        {
-          "id": "releaseActiveInventoryReservations",
-          "type": "releaseActiveReservations",
-          "ledgerFormKey": "Config: Inventory Reservation Ledger"
-        }
-      ]
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
@@ -1004,7 +966,7 @@
           "navigation": {
             "forwardGate": "whenValid",
             "autoAdvance": "onValid",
-            "backgroundReservationSyncOnAdvance": false,
+            "backgroundUtilisationSyncOnAdvance": false,
             "autoAdvanceWhen": {
               "fieldId": "status",
               "equals": "In production"
@@ -1053,7 +1015,7 @@
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
               "dataSourceBootstrap": {
-                "waitForGuidedReservationSync": true,
+                "waitForGuidedUtilisationSync": true,
                 "waitForSharedDataMutations": true
               },
               "fields": [],
@@ -1080,7 +1042,7 @@
               },
               "dataSourceRows": [
                 {
-                  "id": "leftoverInventoryRows",
+                  "id": "leftoverBankRows",
                   "presentation": "sourceFirstAllocations",
                   "presentationWhen": {
                     "fieldId": "__ckStep",
@@ -1091,8 +1053,8 @@
                   "hideParentRowsWhenPresentationActive": true,
                   "allocationLabelFieldId": "MEAL_TYPE",
                   "dataSource": {
-                    "id": "Leftover Inventory Data",
-                    "formKey": "Config: Leftover Inventory",
+                    "id": "Leftover Bank Data",
+                    "formKey": "Config: Leftover Bank",
                     "mode": "options",
                     "prefetchOnHome": true,
                     "statusFieldId": "LEFTOVER_STATUS",
@@ -1114,9 +1076,9 @@
                       "LEFTOVER_CAT",
                       "LEFTOVER_ALLERGEN",
                       "LEFTOVER_PORTIONS",
-                      "LEFTOVER_RESERVED_PORTIONS",
+                      "",
                       "LEFTOVER_QTY",
-                      "LEFTOVER_RESERVED_QTY",
+                      "",
                       "LEFTOVER_UNIT",
                       "LEFTOVER_INGREDIENTS_LI",
                       "LEFTOVER_EXP_DATE"
@@ -1206,17 +1168,15 @@
                   },
                   "availability": {
                     "sourceQuantityFieldId": "LEFTOVER_QTY",
-                    "sourceReservedQuantityFieldId": "LEFTOVER_RESERVED_QTY",
                     "targetQuantityFieldId": "LEFTOVER_QTY_AVAILABLE",
                     "targetMaxQuantityFieldId": "LEFTOVER_QTY_MAX",
                     "sourcePortionsFieldId": "LEFTOVER_PORTIONS",
-                    "sourceReservedPortionsFieldId": "LEFTOVER_RESERVED_PORTIONS",
                     "targetPortionsFieldId": "LEFTOVER_PORTIONS_AVAILABLE",
                     "targetMaxPortionsFieldId": "LEFTOVER_PORTIONS_MAX"
                   },
-                  "reservation": {
+                  "utilisation": {
                     "enabled": true,
-                    "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                    "utilisationFormKey": "Config: Leftover Utilisation",
                     "commitMode": "step",
                     "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                     "allowedStatuses": [
@@ -2090,7 +2050,7 @@
                         {
                           "any": [
                             {
-                              "fieldId": "__ckCurrentRecordReservedQuantity",
+                              "fieldId": "__ckCurrentRecordUtilisedQuantity",
                               "greaterThan": 0
                             },
                             {
@@ -2112,7 +2072,7 @@
           },
           "navigation": {
             "autoAdvance": "off",
-            "backgroundReservationSyncOnAdvance": false
+            "backgroundUtilisationSyncOnAdvance": false
           },
           "render": {
             "subGroups": {
@@ -2807,7 +2767,6 @@
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [
-                "RECONCILE_RESERVATIONS",
                 "SEND_EMAIL"
               ],
               "ensureRecordId": true,
@@ -10771,7 +10730,7 @@
         {
           "id": "captureProducedEntireDishLeftovers",
           "type": "createRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
           "sourceLink": {
             "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
             "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
@@ -10867,7 +10826,7 @@
         {
           "id": "captureProducedLeftovers",
           "type": "createRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
           "sourceLink": {
             "sourceFormKeyFieldId": "LEFTOVER_SOURCE_FORM_KEY",
             "sourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID"
@@ -10914,7 +10873,7 @@
         {
           "id": "markUsedLeftovers",
           "type": "updateRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
           "runOn": "both",
           "when": {
             "fieldId": "status",
@@ -10987,7 +10946,7 @@
         {
           "stepId": "leftoverForm",
           "dataSourceIds": [
-            "Leftover Inventory Data"
+            "Leftover Bank Data"
           ],
           "quietWindowMs": 30000,
           "dialog": {
@@ -11121,7 +11080,7 @@
           "captureProducedEntireDishLeftovers",
           "captureProducedLeftovers"
         ],
-        "targetFormKey": "Config: Leftover Inventory",
+        "targetFormKey": "Config: Leftover Bank",
         "title": {
           "en": "Label and store Leftovers"
         },
@@ -11521,7 +11480,7 @@
           "navigation": {
             "forwardGate": "whenValid",
             "autoAdvance": "onValid",
-            "backgroundReservationSyncOnAdvance": false,
+            "backgroundUtilisationSyncOnAdvance": false,
             "autoAdvanceWhen": {
               "fieldId": "status",
               "equals": "In production"
@@ -11570,7 +11529,7 @@
               "kind": "lineGroup",
               "id": "MP_MEALS_REQUEST",
               "dataSourceBootstrap": {
-                "waitForGuidedReservationSync": true,
+                "waitForGuidedUtilisationSync": true,
                 "waitForSharedDataMutations": true
               },
               "fields": [],
@@ -11597,7 +11556,7 @@
               },
               "dataSourceRows": [
                 {
-                  "id": "leftoverInventoryRows",
+                  "id": "leftoverBankRows",
                   "presentation": "sourceFirstAllocations",
                   "presentationWhen": {
                     "fieldId": "__ckStep",
@@ -11608,8 +11567,8 @@
                   "hideParentRowsWhenPresentationActive": true,
                   "allocationLabelFieldId": "MEAL_TYPE",
                   "dataSource": {
-                    "id": "Leftover Inventory Data",
-                    "formKey": "Config: Leftover Inventory",
+                    "id": "Leftover Bank Data",
+                    "formKey": "Config: Leftover Bank",
                     "mode": "options",
                     "prefetchOnHome": true,
                     "statusFieldId": "LEFTOVER_STATUS",
@@ -11631,9 +11590,9 @@
                       "LEFTOVER_CAT",
                       "LEFTOVER_ALLERGEN",
                       "LEFTOVER_PORTIONS",
-                      "LEFTOVER_RESERVED_PORTIONS",
+                      "",
                       "LEFTOVER_QTY",
-                      "LEFTOVER_RESERVED_QTY",
+                      "",
                       "LEFTOVER_UNIT",
                       "LEFTOVER_INGREDIENTS_LI",
                       "LEFTOVER_EXP_DATE"
@@ -11723,17 +11682,15 @@
                   },
                   "availability": {
                     "sourceQuantityFieldId": "LEFTOVER_QTY",
-                    "sourceReservedQuantityFieldId": "LEFTOVER_RESERVED_QTY",
                     "targetQuantityFieldId": "LEFTOVER_QTY_AVAILABLE",
                     "targetMaxQuantityFieldId": "LEFTOVER_QTY_MAX",
                     "sourcePortionsFieldId": "LEFTOVER_PORTIONS",
-                    "sourceReservedPortionsFieldId": "LEFTOVER_RESERVED_PORTIONS",
                     "targetPortionsFieldId": "LEFTOVER_PORTIONS_AVAILABLE",
                     "targetMaxPortionsFieldId": "LEFTOVER_PORTIONS_MAX"
                   },
-                  "reservation": {
+                  "utilisation": {
                     "enabled": true,
-                    "ledgerFormKey": "Config: Inventory Reservation Ledger",
+                    "utilisationFormKey": "Config: Leftover Utilisation",
                     "commitMode": "step",
                     "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
                     "allowedStatuses": [
@@ -12589,7 +12546,7 @@
                         {
                           "any": [
                             {
-                              "fieldId": "__ckCurrentRecordReservedQuantity",
+                              "fieldId": "__ckCurrentRecordUtilisedQuantity",
                               "greaterThan": 0
                             },
                             {
@@ -12611,7 +12568,7 @@
           },
           "navigation": {
             "autoAdvance": "off",
-            "backgroundReservationSyncOnAdvance": false
+            "backgroundUtilisationSyncOnAdvance": false
           },
           "render": {
             "subGroups": {
@@ -13306,7 +13263,6 @@
             "milestoneAction": {
               "type": "followupBatch",
               "preActions": [
-                "RECONCILE_RESERVATIONS",
                 "SEND_EMAIL"
               ],
               "ensureRecordId": true,

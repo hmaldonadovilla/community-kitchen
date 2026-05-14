@@ -50,7 +50,7 @@ export const resolveSubmitEffectTargetFormKeys = (definition?: WebFormDefinition
   return uniqueFormKeys(effects.map(effect => (effect && typeof effect === 'object' ? (effect as any).targetFormKey : '')));
 };
 
-export const resolveReservationSharedDataTargetFormKeys = (
+export const resolveUtilisationSharedDataTargetFormKeys = (
   definition?: WebFormDefinition | null
 ): string[] => {
   const steps = (definition as any)?.steps;
@@ -62,9 +62,9 @@ export const resolveReservationSharedDataTargetFormKeys = (
       if (!target || target.kind !== 'lineGroup') return;
       const rows = Array.isArray(target.dataSourceRows) ? target.dataSourceRows : [];
       rows.forEach((row: any) => {
-        const reservation = row?.reservation && typeof row.reservation === 'object' ? row.reservation : null;
-        if (!reservation || reservation.enabled === false) return;
-        keys.push(reservation.resourceFormKey, row?.dataSource?.formKey);
+        const utilisation = row?.utilisation && typeof row.utilisation === 'object' ? row.utilisation : null;
+        if (!utilisation || utilisation.enabled === false) return;
+        keys.push(utilisation.resourceFormKey, row?.dataSource?.formKey);
       });
     });
   });
@@ -89,10 +89,7 @@ export const resolveFollowupSharedDataMutationTargetFormKeys = (args: {
   const keys: string[] = [];
   if (actions.has('CLOSE_RECORD')) {
     keys.push(...resolveSubmitEffectTargetFormKeys(args.definition));
-    keys.push(...resolveReservationSharedDataTargetFormKeys(args.definition));
-  }
-  if (actions.has('RECONCILE_RESERVATIONS')) {
-    keys.push(...resolveReservationSharedDataTargetFormKeys(args.definition));
+    keys.push(...resolveUtilisationSharedDataTargetFormKeys(args.definition));
   }
   return uniqueFormKeys(keys);
 };

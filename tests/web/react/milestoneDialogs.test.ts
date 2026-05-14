@@ -73,17 +73,17 @@ describe('milestoneDialogs', () => {
     const filtered = filterGeneratedRecordsForDialog({
       config: {
         submitEffectIds: ['captureProducedLeftovers'],
-        targetFormKey: 'Config: Leftover Inventory'
+        targetFormKey: 'Config: Leftover Bank'
       } as any,
       records: [
-        { effectId: 'captureProducedEntireDishLeftovers', targetFormKey: 'Config: Leftover Inventory', recordId: 'rec-1' },
-        { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Inventory', recordId: 'rec-2' },
+        { effectId: 'captureProducedEntireDishLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'rec-1' },
+        { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'rec-2' },
         { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Other', recordId: 'rec-3' }
       ]
     });
 
     expect(filtered).toEqual([
-      { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Inventory', recordId: 'rec-2' }
+      { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'rec-2' }
     ]);
   });
 
@@ -92,7 +92,7 @@ describe('milestoneDialogs', () => {
       renderGeneratedRecordLine(
         {
           effectId: 'captureProducedLeftovers',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           recordId: 'inv-1',
           values: {
             LEFTOVER_ID: 'SI-1',
@@ -110,7 +110,7 @@ describe('milestoneDialogs', () => {
       renderGeneratedRecordLine(
         {
           effectId: 'captureProducedEntireDishLeftovers',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           recordId: 'inv-1',
           values: {
             LEFTOVER_ID: 'MI-8',
@@ -130,7 +130,7 @@ describe('milestoneDialogs', () => {
       renderGeneratedRecordLine(
         {
           effectId: 'captureProducedLeftovers',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           recordId: 'inv-2',
           values: {
             LEFTOVER_ID: 'SI-4',
@@ -152,12 +152,12 @@ describe('milestoneDialogs', () => {
         success: true,
         submitEffects: {
           generatedRecords: [
-            { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Inventory', recordId: 'inv-1' }
+            { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'inv-1' }
           ]
         }
       } as any)
     ).toEqual([
-      { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Inventory', recordId: 'inv-1' }
+      { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'inv-1' }
     ]);
   });
 });

@@ -76,7 +76,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID',
                   LEFTOVER_KIND: 'LEFTOVER_KIND'
@@ -214,7 +214,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID'
                 }
@@ -260,7 +260,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID',
                   LEFTOVER_KIND: 'LEFTOVER_KIND',
@@ -326,7 +326,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID',
                   LEFTOVER_KIND: 'LEFTOVER_KIND',
@@ -385,7 +385,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID',
                   LEFTOVER_KIND: 'LEFTOVER_KIND',
@@ -460,7 +460,7 @@ describe('collectSelectionEffectInitTargets', () => {
                 id: 'seed_leftovers',
                 type: 'addLineItemsFromDataSource',
                 groupId: 'LEFTOVERS',
-                dataSource: { id: 'Leftover Inventory Data' },
+                dataSource: { id: 'Leftover Bank Data' },
                 lineItemMapping: {
                   LEFTOVER_ID: 'LEFTOVER_ID',
                   LEFTOVER_KIND: 'LEFTOVER_KIND'

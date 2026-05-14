@@ -94,7 +94,7 @@ describe('submission payload compaction', () => {
     expect(submitted.values.MEALS[0][CK_RECIPE_INGREDIENTS_DIRTY_KEY]).toBe(true);
   });
 
-  test('line item serialization strips reservation availability runtime fields', async () => {
+  test('line item serialization strips utilisation availability runtime fields', async () => {
     const lineDefinition: any = {
       title: 'Test',
       destinationTab: 'Dest',
@@ -145,8 +145,8 @@ describe('submission payload compaction', () => {
             LEFTOVER_USE_QTY: 2,
             LEFTOVER_QTY_AVAILABLE: 3,
             LEFTOVER_QTY_MAX: 5,
-            __ckCurrentRecordReservedQuantity: 2,
-            __ckServerCurrentRecordReservedQuantity: 2,
+            __ckCurrentRecordUtilisedQuantity: 2,
+            __ckServerCurrentRecordUtilisedQuantity: 2,
             __ckFreeQuantity: 3,
             [CK_RECIPE_INGREDIENTS_DIRTY_KEY]: true
           }
@@ -178,13 +178,13 @@ describe('submission payload compaction', () => {
     );
     expect(draft.values.MEALS[0].LEFTOVER_QTY_AVAILABLE).toBeUndefined();
     expect(draft.values.MEALS[0].LEFTOVER_QTY_MAX).toBeUndefined();
-    expect(draft.values.MEALS[0].__ckCurrentRecordReservedQuantity).toBeUndefined();
-    expect(draft.values.MEALS[0].__ckServerCurrentRecordReservedQuantity).toBeUndefined();
+    expect(draft.values.MEALS[0].__ckCurrentRecordUtilisedQuantity).toBeUndefined();
+    expect(draft.values.MEALS[0].__ckServerCurrentRecordUtilisedQuantity).toBeUndefined();
     expect(draft.values.MEALS[0].__ckFreeQuantity).toBeUndefined();
     expect(submitted.values.MEALS[0].LEFTOVER_QTY_MAX).toBeUndefined();
   });
 
-  test('autosave state fingerprints ignore reservation availability runtime fields', () => {
+  test('autosave state fingerprints ignore utilisation availability runtime fields', () => {
     const lineDefinition: any = {
       title: 'Test',
       destinationTab: 'Dest',
@@ -258,7 +258,7 @@ describe('submission payload compaction', () => {
         runtimeFieldIds
       )
     });
-    const changedReservation = buildDraftStateFingerprint({
+    const changedUtilisation = buildDraftStateFingerprint({
       formKey: 'FORM',
       language: 'EN',
       values: {},
@@ -282,6 +282,6 @@ describe('submission payload compaction', () => {
     });
 
     expect(first).toBe(second);
-    expect(first).not.toBe(changedReservation);
+    expect(first).not.toBe(changedUtilisation);
   });
 });

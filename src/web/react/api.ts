@@ -3,14 +3,12 @@ import {
   DataSourceConfig,
   FollowupActionResult,
   FormConfigExport,
-  GuidedStepReservationDraftSyncRequest,
-  GuidedStepReservationDraftSyncResult,
-  InventoryReservationPlanRequest,
-  InventoryReservationPlanResult,
-  InventoryReservationMutationRequest,
-  InventoryReservationMutationResult,
-  InventoryReservationReconciliationRequest,
-  InventoryReservationReconciliationResult,
+  GuidedStepUtilisationDraftSyncRequest,
+  GuidedStepUtilisationDraftSyncResult,
+  BankUtilisationPlanRequest,
+  BankUtilisationPlanResult,
+  BankUtilisationMutationRequest,
+  BankUtilisationMutationResult,
   PaginatedResult,
   TemplateIdMap,
   WebFormDefinition,
@@ -950,7 +948,7 @@ export const DEFAULT_HYBRID_HTTP_FUNCTIONS = [
   'renderSummaryHtmlTemplate'
 ] as const;
 
-const CLOUD_RUN_FOLLOWUP_ACTIONS = new Set(['CLOSE_RECORD', 'RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL']);
+const CLOUD_RUN_FOLLOWUP_ACTIONS = new Set(['CLOSE_RECORD', 'CREATE_PDF', 'SEND_EMAIL']);
 
 const normalizeBackendMode = (raw: any): BackendMode | null => {
   const value = (raw || '').toString().trim().toLowerCase();
@@ -1626,25 +1624,20 @@ export const getRecordVersionApi = (formKey: string, recordId: string, rowNumber
 export const fetchDataSourceApi = (req: DataSourceRequest): Promise<DataSourceResponse> =>
   invokeTransport<DataSourceResponse>('fetchDataSource', req.source, req.locale, req.projection, req.limit, req.pageToken);
 
-export const upsertInventoryReservationApi = (
-  request: InventoryReservationMutationRequest
-): Promise<InventoryReservationMutationResult> =>
-  invokeTransport<InventoryReservationMutationResult>('upsertInventoryReservation', request);
+export const upsertBankUtilisationApi = (
+  request: BankUtilisationMutationRequest
+): Promise<BankUtilisationMutationResult> =>
+  invokeTransport<BankUtilisationMutationResult>('upsertBankUtilisation', request);
 
-export const applyInventoryReservationPlanApi = (
-  request: InventoryReservationPlanRequest
-): Promise<InventoryReservationPlanResult> =>
-  invokeTransport<InventoryReservationPlanResult>('applyInventoryReservationPlan', request);
+export const applyBankUtilisationPlanApi = (
+  request: BankUtilisationPlanRequest
+): Promise<BankUtilisationPlanResult> =>
+  invokeTransport<BankUtilisationPlanResult>('applyBankUtilisationPlan', request);
 
-export const syncGuidedStepReservationDraftApi = (
-  request: GuidedStepReservationDraftSyncRequest
-): Promise<GuidedStepReservationDraftSyncResult> =>
-  invokeDriveUploadTransport<GuidedStepReservationDraftSyncResult>('syncGuidedStepReservationDraft', request);
-
-export const reconcileInventoryReservationsApi = (
-  request: InventoryReservationReconciliationRequest
-): Promise<InventoryReservationReconciliationResult> =>
-  invokeTransport<InventoryReservationReconciliationResult>('reconcileInventoryReservations', request);
+export const syncGuidedStepUtilisationDraftApi = (
+  request: GuidedStepUtilisationDraftSyncRequest
+): Promise<GuidedStepUtilisationDraftSyncResult> =>
+  invokeDriveUploadTransport<GuidedStepUtilisationDraftSyncResult>('syncGuidedStepUtilisationDraft', request);
 
 export const triggerFollowup = (
   formKey: string,

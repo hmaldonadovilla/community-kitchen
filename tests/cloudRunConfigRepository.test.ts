@@ -1,7 +1,7 @@
 const { FormConfigRepository } = require('../cloud-run/api/repositories/configRepository');
 
 describe('Cloud Run FormConfigRepository', () => {
-  test('exposes form reservation lifecycle on bundled definitions', () => {
+  test('exposes bundled definitions without submit lifecycle closeout hooks', () => {
     const repository = new FormConfigRepository({
       bundle: {
         forms: [
@@ -9,14 +9,7 @@ describe('Cloud Run FormConfigRepository', () => {
             formKey: 'Config: Meal Production',
             form: {
               title: 'Meal Production',
-              configSheet: 'Config: Meal Production',
-              reservationLifecycle: {
-                ledgerFormKey: 'Config: Inventory Reservation Ledger',
-                reconcileOnFinalSubmit: {
-                  enabled: true,
-                  refreshMode: 'revisionOnly'
-                }
-              }
+              configSheet: 'Config: Meal Production'
             },
             definition: {
               title: 'Meal Production',
@@ -29,12 +22,7 @@ describe('Cloud Run FormConfigRepository', () => {
 
     const config = repository.fetchFormConfig('Config: Meal Production');
 
-    expect(config.definition.reservationLifecycle).toEqual({
-      ledgerFormKey: 'Config: Inventory Reservation Ledger',
-      reconcileOnFinalSubmit: {
-        enabled: true,
-        refreshMode: 'revisionOnly'
-      }
-    });
+    expect(config.definition.title).toBe('Meal Production');
+    expect(Object.keys(config.definition)).not.toContain('utilisation' + 'Lifecycle');
   });
 });

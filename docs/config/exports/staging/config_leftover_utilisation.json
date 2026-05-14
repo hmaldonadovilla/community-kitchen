@@ -1,0 +1,221 @@
+{
+  "formKey": "Config: Leftover Utilisation",
+  "generatedAt": "2026-03-26T09:00:00.000Z",
+  "form": {
+    "title": "Leftover Utilisation",
+    "configSheet": "Config: Leftover Utilisation",
+    "destinationTab": "Leftover Utilisation Data",
+    "description": "Internal utilisation data used to track quantity-based leftover bank usage across records.",
+    "languages": [
+      "EN"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": false,
+    "summaryViewEnabled": false,
+    "copyCurrentRecordEnabled": false,
+    "createNewRecordEnabled": false,
+    "createRecordPresetButtonsEnabled": false,
+    "listViewTitle": {
+      "en": "Leftover utilisation"
+    },
+    "listViewMetaColumns": [
+      "updatedAt"
+    ],
+    "listViewDefaultSort": {
+      "fieldId": "updatedAt",
+      "direction": "desc"
+    },
+    "listViewPageSize": 25,
+    "listViewPaginationControlsEnabled": true,
+    "listViewHeaderSortEnabled": true,
+    "listViewRowClickEnabled": true,
+    "submitButtonLabel": {
+      "en": "Save"
+    },
+    "summaryButtonLabel": {
+      "en": "Summary"
+    },
+    "appHeader": {
+      "sidebarEnabled": false
+    }
+  },
+  "questions": [
+    {
+      "id": "UTILISATION_ID",
+      "type": "TEXT",
+      "qEn": "Utilisation ID",
+      "required": true,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_FORM_KEY",
+      "type": "TEXT",
+      "qEn": "Bank form key",
+      "required": true,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_RECORD_ID",
+      "type": "TEXT",
+      "qEn": "Bank record ID",
+      "required": true,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_ITEM_ID",
+      "type": "TEXT",
+      "qEn": "Bank item ID",
+      "required": false,
+      "readOnly": true,
+      "listView": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_KIND",
+      "type": "TEXT",
+      "qEn": "Bank item kind",
+      "required": false,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_QTY_FIELD_ID",
+      "type": "TEXT",
+      "qEn": "Bank quantity field ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_STATUS_FIELD_ID",
+      "type": "TEXT",
+      "qEn": "Bank status field ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RESOURCE_UNIT_FIELD_ID",
+      "type": "TEXT",
+      "qEn": "Bank unit field ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "UTILISED_QTY",
+      "type": "NUMBER",
+      "qEn": "Utilised quantity",
+      "required": false,
+      "readOnly": true,
+      "listView": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "UTILISED_UNIT",
+      "type": "TEXT",
+      "qEn": "Utilised unit",
+      "required": false,
+      "readOnly": true,
+      "listView": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "STATUS",
+      "type": "CHOICE",
+      "qEn": "Utilisation status",
+      "required": true,
+      "readOnly": true,
+      "defaultValue": "active",
+      "listView": false,
+      "options": [
+        "active",
+        "released"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_FORM_KEY",
+      "type": "TEXT",
+      "qEn": "Source form key",
+      "required": true,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_RECORD_ID",
+      "type": "TEXT",
+      "qEn": "Source record ID",
+      "required": true,
+      "readOnly": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_PARENT_GROUP_ID",
+      "type": "TEXT",
+      "qEn": "Source parent group ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_PARENT_ROW_ID",
+      "type": "TEXT",
+      "qEn": "Source parent row ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_OUTPUT_GROUP_ID",
+      "type": "TEXT",
+      "qEn": "Source output group ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_OUTPUT_ROW_ID",
+      "type": "TEXT",
+      "qEn": "Source output row ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "SOURCE_OUTPUT_KEY_FIELD_ID",
+      "type": "TEXT",
+      "qEn": "Source output key field ID",
+      "required": false,
+      "readOnly": true,
+      "options": [],
+      "status": "Active"
+    }
+  ],
+  "dedupRules": []
+}

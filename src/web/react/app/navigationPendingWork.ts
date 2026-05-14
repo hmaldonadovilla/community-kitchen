@@ -6,7 +6,7 @@ export const shouldWaitBeforeLeavingRecord = (args: {
   autoSaveQueued?: boolean;
   draftSaveInFlight?: boolean;
   recordSyncInFlight?: boolean;
-  reservationSyncInFlight?: boolean;
+  utilisationSyncInFlight?: boolean;
   dedupDeletePending?: boolean;
   dedupDeleteInFlight?: boolean;
   followupBatchInFlight?: boolean;
@@ -20,7 +20,7 @@ export const shouldWaitBeforeLeavingRecord = (args: {
       args.autoSaveInFlight === true ||
       args.draftSaveInFlight === true ||
       args.recordSyncInFlight === true ||
-      args.reservationSyncInFlight === true ||
+      args.utilisationSyncInFlight === true ||
       args.dedupDeletePending === true ||
       args.dedupDeleteInFlight === true ||
       args.followupBatchInFlight === true ||
@@ -35,7 +35,7 @@ export const shouldWaitBeforeLeavingRecord = (args: {
     args.autoSaveQueued === true ||
     args.draftSaveInFlight === true ||
     args.recordSyncInFlight === true ||
-    args.reservationSyncInFlight === true ||
+    args.utilisationSyncInFlight === true ||
     args.dedupDeletePending === true ||
     args.dedupDeleteInFlight === true ||
     args.followupBatchInFlight === true ||

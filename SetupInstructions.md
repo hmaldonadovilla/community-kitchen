@@ -246,7 +246,7 @@ Important positioning:
    DEPLOY_ENV=staging npm run deploy:cloud-run
    ```
 
-   The service source is in `cloud-run/api/` and returns JSON from `/` and `/status`. It also exposes `POST /api/rpc`; implemented RPC functions include bundled form config/bootstrap reads, Sheets-backed list and record reads, staging-safe `checkDedupConflict`, guarded `saveSubmissionWithId` with `createRecord` / `updateRecord` submit effects, dependency guard previews/applies (`previewUpdateRecordDependencies`, `applyUpdateRecordWithDependencies`), inventory reservation upsert/apply/reconcile and guided draft sync (`upsertInventoryReservation`, `applyInventoryReservationPlan`, `syncGuidedStepReservationDraft`, `reconcileInventoryReservations`), supported follow-up batches (`triggerFollowupAction`, `triggerFollowupActions`) for `CLOSE_RECORD`, `RECONCILE_RESERVATIONS`, bundled-HTML `CREATE_PDF`, and delegated-Gmail `SEND_EMAIL`, Drive-backed `uploadFiles`, non-Doc template reads/renders (`prefetchTemplates`, `renderHtmlTemplate`, `renderMarkdownTemplate`, `renderInlineHtmlTemplate`, `renderSummaryHtmlTemplate`, `fetchSummaryRecord`), bundled HTML PDF rendering and Google Doc template copy/placeholder mutation (`renderDocTemplate`, `renderDocTemplatePdfPreview`, `renderDocTemplateHtml`, `renderSubmissionReportHtml`, `trashPreviewArtifact`), analytics dashboard/snapshot reads and recompute (`fetchAnalyticsDashboard`, bootstrap `analytics`, `runDailyAnalyticsRecompute`), queued analytics XLSX exports (`queueAnalyticsPipelineRun`, `runQueuedAnalyticsPipelineJobs`), scheduled lifecycle recompute (`runDailyLifecycleRecompute`), `fetchDataSource`, and `fetchDriveFileMetadata`. Unsupported RPC functions return a clear `501` response.
+   The service source is in `cloud-run/api/` and returns JSON from `/` and `/status`. It also exposes `POST /api/rpc`; implemented RPC functions include bundled form config/bootstrap reads, Sheets-backed list and record reads, staging-safe `checkDedupConflict`, guarded `saveSubmissionWithId` with `createRecord` / `updateRecord` submit effects, dependency guard previews/applies (`previewUpdateRecordDependencies`, `applyUpdateRecordWithDependencies`), bank utilisation upsert/apply and guided draft sync (`upsertBankUtilisation`, `applyBankUtilisationPlan`, `syncGuidedStepUtilisationDraft`), supported follow-up batches (`triggerFollowupAction`, `triggerFollowupActions`) for `CLOSE_RECORD`, bundled-HTML `CREATE_PDF`, and delegated-Gmail `SEND_EMAIL`, Drive-backed `uploadFiles`, non-Doc template reads/renders (`prefetchTemplates`, `renderHtmlTemplate`, `renderMarkdownTemplate`, `renderInlineHtmlTemplate`, `renderSummaryHtmlTemplate`, `fetchSummaryRecord`), bundled HTML PDF rendering and Google Doc template copy/placeholder mutation (`renderDocTemplate`, `renderDocTemplatePdfPreview`, `renderDocTemplateHtml`, `renderSubmissionReportHtml`, `trashPreviewArtifact`), analytics dashboard/snapshot reads and recompute (`fetchAnalyticsDashboard`, bootstrap `analytics`, `runDailyAnalyticsRecompute`), queued analytics XLSX exports (`queueAnalyticsPipelineRun`, `runQueuedAnalyticsPipelineJobs`), scheduled lifecycle recompute (`runDailyLifecycleRecompute`), `fetchDataSource`, and `fetchDriveFileMetadata`. Unsupported RPC functions return a clear `501` response.
    - With `CK_DATA_BACKEND=drive`, Cloud Run reads existing Google Sheet tabs directly through Google Sheets API.
    - With `CK_DATA_BACKEND=firestore`, `fetchDataSource` reads the Firestore data-source collection.
    - Viewer access on the spreadsheet is enough for read validation. Sheets-backed Cloud Run writes require editor access on the target spreadsheet for the Cloud Run runtime service account. Guarded Cloud Run saves also create/update the hidden `__CK_INDEX__...` row used for record id lookup and indexed dedup, plus configured audit rows, when editor access is available.
@@ -255,7 +255,7 @@ Important positioning:
    - Google Doc template rendering through Cloud Run uses Drive API to copy the template and Docs API `batchUpdate` to replace placeholders in the copied document before exporting or previewing it. The runtime service account needs reader access to template docs and contributor/editor access to the PDF/preview output folder.
    - Scheduled job endpoints are available at `POST /api/jobs/runQueuedAnalyticsPipelineJobs`, `POST /api/jobs/runDailyAnalyticsRecompute`, and `POST /api/jobs/runDailyLifecycleRecompute`. Set `CK_SCHEDULER_SECRET` on Cloud Run and send it as `Authorization: Bearer <secret>` or `x-ck-scheduler-secret: <secret>` from Cloud Scheduler. After the Cloud Run deploy, run `DEPLOY_ENV=staging npm run deploy:cloud-scheduler` to create or update the three Cloud Scheduler jobs. Defaults poll queued analytics exports every 5 minutes, run analytics recompute at 23:00, and run lifecycle recompute at 02:00 in `CK_TIMEZONE` / `Europe/Brussels`.
    - `CK_API_RPC_MAX_BODY_MB` controls the JSON RPC request body limit for upload payloads. The default is `25`.
-   - `saveSubmissionWithId`, template rendering, bundled HTML/Google Doc PDF rendering, analytics dashboard reads, queued analytics exports, and `triggerFollowupAction(s)` can be routed through `CK_HTTP_FUNCTIONS` on staging once the Cloud Run service account has editor/contributor access to the affected response sheets, template files/folders, PDF output folders, analytics export folders, and data-source spreadsheets. Add `uploadFiles` only when the upload destination is a Shared Drive folder shared with the runtime service account; otherwise the client falls back upload saves to Apps Script when Drive returns the service-account storage-quota error. Cloud Run currently supports `CLOSE_RECORD`, `RECONCILE_RESERVATIONS`, bundled-HTML/Google-Doc `CREATE_PDF`, and `SEND_EMAIL` when `CK_GMAIL_DELEGATED_USER` is configured with Workspace domain-wide delegation for `https://www.googleapis.com/auth/gmail.send`. Without Gmail delegation, the React transport keeps preceding non-email follow-up actions such as `CREATE_PDF` on Cloud Run, then sends only the email through Apps Script using the generated PDF file id as the attachment source; when `emailDispatchMode: "direct"` is configured, the fallback calls Apps Script `SEND_EMAIL` directly rather than treating outbox queueing as success. Queued analytics export requests also fall back to Apps Script.
+   - `saveSubmissionWithId`, template rendering, bundled HTML/Google Doc PDF rendering, analytics dashboard reads, queued analytics exports, and `triggerFollowupAction(s)` can be routed through `CK_HTTP_FUNCTIONS` on staging once the Cloud Run service account has editor/contributor access to the affected response sheets, template files/folders, PDF output folders, analytics export folders, and data-source spreadsheets. Add `uploadFiles` only when the upload destination is a Shared Drive folder shared with the runtime service account; otherwise the client falls back upload saves to Apps Script when Drive returns the service-account storage-quota error. Cloud Run currently supports `CLOSE_RECORD`, bundled-HTML/Google-Doc `CREATE_PDF`, and `SEND_EMAIL` when `CK_GMAIL_DELEGATED_USER` is configured with Workspace domain-wide delegation for `https://www.googleapis.com/auth/gmail.send`. Without Gmail delegation, the React transport keeps preceding non-email follow-up actions such as `CREATE_PDF` on Cloud Run, then sends only the email through Apps Script using the generated PDF file id as the attachment source; when `emailDispatchMode: "direct"` is configured, the fallback calls Apps Script `SEND_EMAIL` directly rather than treating outbox queueing as success. Queued analytics export requests also fall back to Apps Script.
    - When `GCP_ALLOW_UNAUTHENTICATED=1`, the deploy script uses `--no-invoker-iam-check` rather than `allUsers` IAM binding. This avoids the common Workspace org-policy failure where public IAM members are blocked.
    - On the first deploy in a fresh project, `gcloud` prompts to create the `cloud-run-source-deploy` Artifact Registry repository in the selected region. Confirm with `y`.
    - Verify the deployed API service after deploy:
@@ -266,7 +266,7 @@ Important positioning:
 
    - `CK_BACKEND_MODE=hybrid`
    - `CK_API_BASE_URL=<cloud-run-service-url>`
-   - `CK_HTTP_FUNCTIONS=fetchBootstrapContext,fetchBootstrapContextWithOptions,fetchHomeBootstrap,fetchFormConfig,fetchFormCatalog,fetchAnalyticsDashboard,queueAnalyticsPipelineRun,fetchSubmissions,fetchSubmissionsBatch,fetchSubmissionsSortedBatch,fetchSubmissionById,fetchSubmissionByRowNumber,fetchSummaryRecord,fetchSubmissionsByRowNumbers,getRecordVersion,fetchDataSource,saveSubmissionWithId,uploadFiles,prefetchTemplates,renderHtmlTemplate,renderMarkdownTemplate,renderInlineHtmlTemplate,renderSummaryHtmlTemplate,renderDocTemplate,renderDocTemplatePdfPreview,renderDocTemplateHtml,renderSubmissionReportHtml,trashPreviewArtifact,previewUpdateRecordDependencies,applyUpdateRecordWithDependencies,upsertInventoryReservation,applyInventoryReservationPlan,syncGuidedStepReservationDraft,reconcileInventoryReservations,triggerFollowupAction,triggerFollowupActions`
+   - `CK_HTTP_FUNCTIONS=fetchBootstrapContext,fetchBootstrapContextWithOptions,fetchHomeBootstrap,fetchFormConfig,fetchFormCatalog,fetchAnalyticsDashboard,queueAnalyticsPipelineRun,fetchSubmissions,fetchSubmissionsBatch,fetchSubmissionsSortedBatch,fetchSubmissionById,fetchSubmissionByRowNumber,fetchSummaryRecord,fetchSubmissionsByRowNumbers,getRecordVersion,fetchDataSource,saveSubmissionWithId,uploadFiles,prefetchTemplates,renderHtmlTemplate,renderMarkdownTemplate,renderInlineHtmlTemplate,renderSummaryHtmlTemplate,renderDocTemplate,renderDocTemplatePdfPreview,renderDocTemplateHtml,renderSubmissionReportHtml,trashPreviewArtifact,previewUpdateRecordDependencies,applyUpdateRecordWithDependencies,upsertBankUtilisation,applyBankUtilisationPlan,syncGuidedStepUtilisationDraft,triggerFollowupAction,triggerFollowupActions`
    - `CK_DATA_BACKEND=drive`
    - `CK_FILE_BACKEND=drive`
 
@@ -1327,7 +1327,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - `ui.compactActions` for optional row actions such as opening a read-only subgroup overlay
         - `ui.persistRows: false` when the compact rows are UI-only selector state and must not be saved back into the record
         - compact-row actions can set `overlayLabel` separately from the button label when the overlay should not repeat the button text as a title
-        - use local hydrated fields for compact-row text when the selector already copied inventory data into the row; reserve `sourceFieldId + sourcePath` for true datasource lookups
+        - use local hydrated fields for compact-row text when the selector already copied bank data into the row; reserve `sourceFieldId + sourcePath` for true datasource lookups
         - use `type: "sourceListSummary"` inside compact headline/detail parts when the row should summarize a nested datasource list inline (for example, comma-separated ingredient names)
         - set `sourceListSummary.sort: "alphabetical"` when those nested values should be sorted alphabetically before joining
         - use `selectionEffects.addLineItems` with `replaceExistingByEffectId: true` when compact-row edits must immediately regenerate one downstream normalized line item
@@ -1377,7 +1377,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           - require actual email dispatch before success with `emailDispatchMode: "direct"` when a `SEND_EMAIL` action must be confirmed before the user can continue; use `queued` only when background outbox delivery is acceptable
           - serialize follow-up execution per record on the server so later milestone batches wait behind earlier in-flight batches for the same record
           - stop the batch after the first failed action so later actions do not run against a partially failed state
-          - retry transient lock-contention failures during reservation upserts and reservation reconciliation before surfacing the error to the user
+          - retry transient lock-contention failures during utilisation upserts and utilisation sync before surfacing the error to the user
           - auto-advance to the next step after the batch starts (`advanceAfterStart`)
           - redirect to another view after success (`navigateToAfterSuccess: "current" | "form" | "summary" | "list"`)
           - show configurable dialogs before/after start (`confirmationDialog`, `confirmationDialogCases[]`, `progressDialog`, `progressDialogCases[]`, `feedbackDialog`); set a localized `title` value to `""` to hide the title line instead of using the fallback title
@@ -1830,7 +1830,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       Uploads are persisted through the queued record mutation lane so Drive file creation and record URL updates happen in one save request. The React UI renders compact upload controls and a dedicated “Files (n)” overlay for managing selections. With `blockUntilSaved: true`, each overlay add/remove action is saved immediately and the user is blocked until the transaction completes. Without blocking, overlay add/remove actions stay local until the user clicks **Save photos**, which sends one upload-and-save transaction. If the transaction fails, the local file changes remain in the form and the field shows **Try saving photos again** so the same transaction can be retried.
       - File uploads are also supported inside line items and subgroups by setting a line-item field’s `type` to `FILE_UPLOAD` (with optional per-field `uploadConfig`).
       - When `CK_DEBUG` is enabled you’ll also see `[ReactForm] upload.*` events in DevTools that describe every add/remove/drop/save action for troubleshooting.
-    - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "INVENTORY_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
+    - **Dynamic data sources (options/prefills)**: For CHOICE/CHECKBOX questions, you can set `dataSource` in the Config JSON: `{ "dataSource": { "id": "BANK_PRODUCTS", "mode": "options" } }`. The backend `fetchDataSource(id, locale, projection, limit, pageToken)` Apps Script function is included in `dist/Code.js` and used by the web UI. Use this when options need to stay in sync with another form or sheet.
       - **Header convention (recommended)**: Use `Label [KEY]` headers in the source tab (e.g., `Supplier [SUPPLIER]`, `Email [EMAIL]`) so config can reference stable keys. `projection` / `mapping` can use either raw header text or the bracket key.
       - **Record status filter (optional)**: If your source table includes a `status` column and you only want certain rows (e.g., only “Active” recipes), set `dataSource.statusAllowList`:
 
@@ -1844,8 +1844,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         ```json
         {
           "dataSource": {
-            "id": "Leftover Inventory Data",
-            "formKey": "Config: Leftover Inventory",
+            "id": "Leftover Bank Data",
+            "formKey": "Config: Leftover Bank",
             "mode": "options",
             "statusFieldId": "LEFTOVER_STATUS",
             "statusAllowList": ["available"],
@@ -1993,8 +1993,8 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           {
             "type": "setValuesFromDataSource",
             "dataSource": {
-              "id": "Config: Leftover Inventory",
-              "tabName": "Leftover Inventory Data"
+              "id": "Config: Leftover Bank",
+              "tabName": "Leftover Bank Data"
             },
             "lookupField": "LEFTOVER_ID",
             "fieldMapping": {
@@ -2867,7 +2867,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
  - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
 - `submitEffects` (optional): declarative shared-table writes that run after the source record saves.
   - Supported types: `createRecord`, `updateRecord`
-  - Use this to create or update a downstream record in another form, for example a shared inventory row
+  - Use this to create or update a downstream record in another form, for example a shared bank row
   - Optional `id` gives the effect a stable name so milestone dialogs can target the generated records from specific effects
   - Use `recordId` when the downstream row should be updated in place on later source saves instead of creating duplicates
   - `recordId` is required for `updateRecord`
@@ -2892,7 +2892,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        {
          "id": "captureProducedLeftovers",
          "type": "createRecord",
-         "targetFormKey": "Config: Leftover Inventory",
+         "targetFormKey": "Config: Leftover Bank",
          "runOn": "create",
          "recordId": "leftover::{{source.id}}",
          "status": "Available",
@@ -2924,7 +2924,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        {
          "id": "captureProducedLeftovers",
          "type": "createRecord",
-          "targetFormKey": "Config: Leftover Inventory",
+          "targetFormKey": "Config: Leftover Bank",
          "runOn": "both",
          "recordId": "leftover::{{source.id}}::{{lineItem.rowId}}",
          "status": "Available",
@@ -2978,62 +2978,32 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    }
    ```
 
-   Meal Production now uses this pattern for the first leftover inventory slice:
+   Meal Production now uses this pattern for the first leftover bank slice:
    - Portioning captures produced leftovers in a dedicated `MP_LEFTOVER_CAPTURE_LI` group
-   - Each row writes to `Config: Leftover Inventory` through `submitEffects.createRecord`
-   - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream inventory row stable across autosave and later edits
-   - `sourceLink` lets the Leftovers step and summary template recover the generated `Config: Leftover Inventory` rows later from the Meal Production record
-   - Derived helper fields can resolve chilled vs frozen expiry in the source record first, then `submitEffects` can copy both storage mode and the final expiration date into the shared inventory record
-   - Final inventory usage updates can still be handled through `submitEffects.updateRecord`, but active leftover selection is now expected to use the dedicated reservation ledger flow instead of a status-only toggle
+   - Each row writes to `Config: Leftover Bank` through `submitEffects.createRecord`
+   - `recordId: "leftover::{{source.id}}::{{lineItem.rowId}}"` keeps the downstream bank row stable across autosave and later edits
+   - `sourceLink` lets the Leftovers step and summary template recover the generated `Config: Leftover Bank` rows later from the Meal Production record
+   - Derived helper fields can resolve chilled vs frozen expiry in the source record first, then `submitEffects` can copy both storage mode and the final expiration date into the shared bank record
+   - Final bank usage updates can still be handled through `submitEffects.updateRecord`, but active leftover selection is now expected to use the dedicated utilisation utilisation flow instead of a status-only toggle
 
-   Reservation-backed inventory lifecycle:
-   - Add aggregate reserved fields such as `LEFTOVER_RESERVED_QTY` / `LEFTOVER_RESERVED_PORTIONS` on the shared inventory form
-   - Add a dedicated internal form such as `Config: Inventory Reservation Ledger` to track `active`, `released`, and `consumed` reservations per source row
-   - Keep the UI read path on the inventory datasource only; do not query the ledger just to render availability
-   - Write reservation changes through one atomic server endpoint so the response can return the fresh authoritative availability snapshot after every mutation
-   - For guided leftover-selection steps that should avoid per-keystroke ledger writes, set `reservation.commitMode: "step"` on the datasource-row config. The app updates availability locally first, then live-syncs one batched step reservation plan on valid selection edits and quantity blur, replacing stale reservations in the managed step scopes.
-   - If a step should only enter with a fresh datasource fetch and should not queue the generic advance-time reservation reconciliation when the user taps `Next`, set `navigation.backgroundReservationSyncOnAdvance: false` on that step. This is useful for `Order`-style steps where a later `Leftover bank` screen should fetch inventory on entry, while reservation releases are already triggered immediately when managed output rows are deleted (for example, when changing an ordered quantity to `0` removes reservation-backed child rows).
-   - If a later guided step reads shared inventory that can still be changing because another step just deleted reservation-managed output rows, set `dataSourceBootstrap.waitForGuidedReservationSync: true` on that step's line-group target. The step will wait for the current record's in-flight guided reservation draft sync to finish before it bootstraps `fetchDataSource`, which prevents stale shared inventory from flashing in the UI.
-   - If the step reads shared inventory that can be created, updated, consumed, or released by follow-up actions still running in the current app session, also set `dataSourceBootstrap.waitForSharedDataMutations: true`. The web app resolves the step datasource `formKey` values and waits only for in-flight follow-up batches that target those same shared forms, then performs the forced datasource fetch.
-   - Optional: define `reservation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change
-   - Optional source-form cleanup hooks:
-     - `reservationLifecycle.releaseOnDelete: true` releases active reservations automatically when the source record is deleted
-     - `reservationLifecycle.reconcileOnFinalSubmit` consumes/releases active reservations in one batched closeout when the source record reaches its final status
-     - `lifecycle.rules[]` with `type: "releaseActiveReservations"` releases all remaining active reservations owned by that source form from the daily `2am` lifecycle trigger
-     - `lifecycle.rules[]` with `type: "releaseStaleReservations"` releases active reservations for stale unfinished source records from the daily `2am` lifecycle trigger
-
-   Example:
-
-   ```json
-   {
-     "reservationLifecycle": {
-       "ledgerFormKey": "Config: Inventory Reservation Ledger",
-       "releaseOnDelete": true,
-       "reconcileOnFinalSubmit": {
-         "enabled": true,
-         "statuses": ["Closed"],
-         "refreshMode": "full"
-       }
-     },
-     "lifecycle": {
-       "rules": [
-         {
-           "id": "releaseActiveReservations",
-           "type": "releaseActiveReservations",
-           "ledgerFormKey": "Config: Inventory Reservation Ledger"
-         }
-       ]
-     }
-   }
-   ```
+   Utilisation-backed bank flow:
+   - Use a shared bank form such as `Config: Leftover Bank` for the current authoritative availability. The quantity field on each bank row is the available quantity.
+   - Add a dedicated internal form such as `Config: Leftover Utilisation` to track `active` and `released` utilisations per source row.
+   - Keep the UI read path on the bank datasource only; do not query the utilisation form just to render availability.
+   - Write utilisation changes through one atomic server endpoint. Selecting a bank item immediately subtracts quantity from the bank row, and editing or clearing that usage gives quantity back to the bank row.
+   - For guided leftover-selection steps that should avoid per-keystroke utilisation writes, set `utilisation.commitMode: "step"` on the datasource-row config. The app updates availability locally first, then live-syncs one batched step utilisation plan on valid selection edits and quantity blur, replacing stale utilisations in the managed step scopes.
+   - If a step should only enter with a fresh datasource fetch and should not queue advance-time utilisation sync when the user taps `Next`, set `navigation.backgroundUtilisationSyncOnAdvance: false` on that step.
+   - If a later guided step reads shared bank that can still be changing because another step just edited utilisation-managed output rows, set `dataSourceBootstrap.waitForGuidedUtilisationSync: true` on that step's line-group target.
+   - If the step reads shared bank that can be created or updated by follow-up actions still running in the current app session, also set `dataSourceBootstrap.waitForSharedDataMutations: true`.
+   - Optional: define `utilisation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change.
 
    Example conflict dialog copy:
 
    ```json
    {
-     "reservation": {
+     "utilisation": {
        "enabled": true,
-       "ledgerFormKey": "Config: Inventory Reservation Ledger",
+       "utilisationFormKey": "Config: Leftover Utilisation",
        "commitMode": "step",
        "resourceRecordIdFieldId": "LEFTOVER_RECORD_ID",
        "allowedStatuses": ["available"],
@@ -3056,7 +3026,7 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    }
    ```
 
-   Supported placeholders in `reservation.conflictDialog.message`:
+   Supported placeholders in `utilisation.conflictDialog.message`:
    - `{itemLabel}`
    - `{itemId}`
    - `{available}`
@@ -3064,207 +3034,6 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    - `{availableWithUnit}`
    - `{requested}`
    - `{current}`
-
-   Example submit reconciliation feedback:
-
-   ```json
-   {
-     "reservationLifecycle": {
-       "reconcileOnFinalSubmit": {
-         "enabled": true,
-         "feedback": {
-           "message": {
-             "en": "{baseMessage} {reconciliationSummary}."
-           },
-           "consumedSummarySingular": {
-             "en": "{count} leftover reservation consumed"
-           },
-           "consumedSummaryPlural": {
-             "en": "{count} leftover reservations consumed"
-           },
-           "releasedSummarySingular": {
-             "en": "{count} stale leftover reservation released"
-           },
-           "releasedSummaryPlural": {
-             "en": "{count} stale leftover reservations released"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-   Supported placeholders in `reservationLifecycle.reconcileOnFinalSubmit.feedback.message`:
-   - `{baseMessage}`
-   - `{reconciliationSummary}`
-   - `{consumedReservations}`
-   - `{releasedReservations}`
-
-   Supported placeholders in the summary fragments:
-   - `{count}`
-   - `{available}`
-   - `{unit}`
-   - `{availableWithUnit}`
-   - `{requested}`
-   - `{current}`
- - `auditLogging` (optional): writes change/snapshot rows to a separate audit sheet.
-   - `enabled`: turn audit logging on/off.
-   - `statuses`: only write `auditType: "change"` rows when the record status matches one of these values (case-insensitive; previous or next status).
-   - `snapshotButtons`: list of custom BUTTON ids that trigger snapshot rows (`auditType: "snapshot"`, full record JSON in `snapshot`).
-   - `sheetName` (optional): custom audit tab name; defaults to `<Destination Tab Name> Audit`.
-
-  Example:
-
-  ```json
-  {
-    "auditLogging": {
-      "enabled": true,
-      "statuses": ["Ready for production"],
-      "snapshotButtons": ["MP_READY_FOR_PRODUCTION"],
-      "sheetName": "Meal Production Audit"
-    }
-  }
-  ```
-
-2. **Provide templates**:
-   - PDF / email templates live in Docs. Use literal placeholders (`{{FIELD_ID}}`, `{{RECORD_ID}}`, etc.). Line item groups render as bullet lists (`Label EN: value • ...`).
-   - Store the Doc IDs in the dashboard JSON. When the action runs we copy the Doc, replace tokens, export to PDF, and (optionally) email it as an attachment.
-
-3. **Run actions**:
-   - After submit, the Summary step now surfaces “Create PDF”, “Send PDF via email”, and “Close record” buttons when a record ID is available.
-   - The list view gained the `⋮` action menu so you can trigger the same follow-ups (or open the record) without leaving the table. Search/filter/sort all run client-side, so it feels instant even with ~200 rows.
-
-4. **Status & links**:
-   - The response tab automatically gains `Status` and `PDF URL` columns. Actions update those cells plus any custom `statusFieldId` you provided.
-   - Every action also refreshes the list view cache, so the new status is visible after a second or two.
-     - *List view support*: The web app list view is paginated and shows `createdAt`/`updatedAt`. Configure which columns to display via the form definition’s `listView` (field ids). Backend uses `fetchSubmissions`/`fetchSubmissionById`; save uses `saveSubmissionWithId`.
-     - *Dedup rules*: Create a sheet named `<Config Sheet Name> Dedup` (e.g., `Config: Fridge Dedup`) with columns:
-       1) Rule ID
-       2) Scope (`form` or a `dataSourceId` if dedup checks another tab)
-       3) Keys (comma-separated field ids forming the uniqueness composite)
-       4) Match mode (`exact` or `caseInsensitive`)
-       5) On conflict (`reject`, `ignore`, `merge` – merge not implemented)
-       6) Message (string or localized JSON)
-
-       Example row: `uniqueNameDate | form | name,date | caseInsensitive | reject | {"en":"Duplicate entry","fr":"Entrée dupliquée"}`. On submit, duplicates are rejected and the message is returned to the frontend.
-       - Note: DATE fields are supported even when Google Sheets stores them as Date cells (Apps Script `Date` values); the dedup matcher normalizes them to `yyyy-MM-dd` before comparing.
-
-### Web App (Custom UI)
-
-- Publish a **Web app** deployment pointing to `doGet`.
-- Share the deployment URL with volunteers; submissions will be writtendirectly to the destination tab and support line items + file uploads.
-- `doGet` now returns a **minimal shell**; the full form definition is fetched client-side via `fetchBootstrapContext`. Ensure that function is included in the deployment and that `warmDefinitions` is scheduled (recommended) to avoid cold-start delays.
-- **Operational note**: run `createAllForms()` and `warmDefinitions()` **only after config/dashboard changes**. For code-only changes, rebuild + re-deploy the bundle; no need to re-run those functions.
-- Optional: add `?app=<bundleKey>` to pick an app-specific React bundle (defaults to `full`). Bundle keys come from filenames you add under `src/web/react/entrypoints` (converted to kebab-case). If no entrypoints exist, only the `full` bundle is available.
-- Optional: add `?config=1` to the web app URL to return the full form configuration as JSON (includes dashboard config, questions including archived, dedup rules, and the computed `WebFormDefinition`).
-- Optional: in DevTools, run `window.__CK_EXPORT_FORM_CONFIG__()` to fetch the same export and store it in `window.__CK_FORM_CONFIG_JSON__` for easy copy (pass `{ logJson: true }` to print it).
-- **Destination “Responses” headers (stable keys)**: The destination tab stores field columns using the convention **`Label [ID]`** (example: `Meal Number [Q5]`). The bracket token is the canonical key, so labels can repeat and can be renamed without breaking storage.
-- The web app supports list views (paginated) and edit-in-place. The frontenduses `fetchSubmissions` and `fetchSubmissionById` to open existing records with`createdAt`/`updatedAt`. Save calls `saveSubmissionWithId` (or client helper`submitWithDedup`), which enforces dedup rules and returns any conflictmessages to display.
-- Validation errors surface in-context: the first invalid field is highlightedand auto-scrolled into view, and a red banner appears under the submit buttonon long forms.
-- Optional: add `?form=ConfigSheetName` to target a specific form (defaults tothe first dashboard entry).
-
-### Template placeholders (PDF/email)
-
-- **Basic fields (recommended)**: Use **ID-based** placeholders like `{{FIELD_ID}}` inside your Doc template. Standard metadata is available out of the box: `{{RECORD_ID}}`, `{{FORM_KEY}}`, `{{CREATED_AT}}`, `{{UPDATED_AT}}`, `{{STATUS}}`, etc. Placeholder matching is case-insensitive, so `{{Updated_At}}` works.
-  - Legacy support: slugified-label placeholders like `{{MEAL_NUMBER}}` still work, but they are **deprecated** because they can collide when labels repeat.
-  - **Template migration (one-time)**: Run `migrateFormTemplatesToIdPlaceholders(formKey)` to rewrite legacy label-based placeholders to ID-based placeholders in-place for a form’s configured templates (follow-up templates + `BUTTON` doc templates).
-- **Validation warnings**: Use `{{VALIDATION_WARNINGS}}` to place non-blocking validation warnings (rules with `"level": "warning"`) in the template. Warnings are only rendered in the PDF when this placeholder is present.
-- **Data source columns**: When a CHOICE/CHECKBOX question comes from a data source, you can access the columns returned in its `projection` via `{{QUESTION_ID.Column_Name}}` (spaces become underscores). Example: `{{MP_DISTRIBUTOR.Address_Line_1}}`, `{{MP_DISTRIBUTOR.CITY}}`, `{{MP_DISTRIBUTOR.EMAIL}}`.
-- **Default fallback values**: Use `{{DEFAULT(KEY, "fallback")}}` to render a fallback string when the referenced placeholder is empty.
-  - Example: `{{DEFAULT(COOK, "Unknown")}}`
-  - KEY can be a normal placeholder key (e.g., `COOK`, `MP_DISTRIBUTOR.EMAIL`) or even `{{COOK}}` (braces are tolerated).
-  - Works in **Doc templates (PDF/email)** and also in **Markdown/HTML templates**.
-- **Line item tables**: Build a table row whose cells contain placeholders such as `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`. The service duplicates that row for every line item entry and replaces the placeholders per row. Empty groups simply clear the template row.
-- **Line item data source fields**: if a line-item field uses a data source, you can reference its columns via `{{GROUP.FIELD.COLUMN_ID}}` or `{{GROUP.SUBGROUP.FIELD.COLUMN_ID}}` (nested subgroup paths supported).
-- **Grouped line item tables**: Add a directive placeholder like `{{GROUP_TABLE(MP_INGREDIENTS_LI.RECIPE)}}` or `{{GROUP_TABLE(PARENT.SUBGROUP.FIELD)}}` anywhere inside the table you want duplicated per distinct value. The renderer will:
-  1. Create a copy of the entire table for every distinct value of the referenced field (`RECIPE` in this example).
-  2. Replace the directive placeholder with the group value (so you can show it in the heading).
-  3. Populate the table rows with only the line items that belong to that recipe. If multiple line-item rows share the same recipe, the table’s placeholder rows will repeat for each matching row (e.g., you may see “Portions/Recipe/Core temp” repeated).
-  Combine this with row-level placeholders (e.g., `{{MP_INGREDIENTS_LI.ING}}`, `{{MP_INGREDIENTS_LI.CAT}}`, `{{MP_INGREDIENTS_LI.QTY}}`) to print a dedicated ingredient table per dish without manually duplicating sections in the template.
-- **Zebra striping (readability)**: Generated rows inside `GROUP_TABLE` and `CONSOLIDATED_TABLE` outputs use **alternating row background colors** automatically (no configuration needed).
-- **Per-row line item sections (recommended for key/value “section tables”)**: Add a directive placeholder like `{{ROW_TABLE(MP_MEALS_REQUEST.MEAL_TYPE)}}` anywhere inside the table you want duplicated once per line-item row (even if the title field repeats). The renderer will:
-  1. Create a copy of the entire table for each line-item row, preserving row order.
-  2. Replace the directive placeholder with the current row’s field value (so you can show it in the heading).
-  3. Populate the table rows using that single row (so “Portions/Recipe/Core temp” do **not** duplicate inside one section when titles repeat).
-- **System row identifiers (line items)**: Inside line-item expansion contexts you can reference the current row index/id via `{{GROUP.__ROWINDEX}}` and `{{GROUP.__ROWID}}` (also valid on subgroup paths like `{{GROUP.SUBGROUP.__ROWINDEX}}`).
-- **Deeper subgroup paths inside repeated subgroup tables**: When a table already repeats a parent subgroup (for example `{{ROW_TABLE(GROUP.SUBGROUP.FIELD)}}`), rows inside that same table can reference deeper subgroup paths (for example `{{GROUP.SUBGROUP.CHILD.FIELD}}`) and they will be flattened relative to the current repeated subgroup row.
-- **Nested subgroup tables (parent → child line items)**: To mirror Summary’s nested layout, add a table that uses `{{PARENT_ID.SUBGROUP_ID.FIELD_ID}}` placeholders inside the row cells (**IDs only**; subgroup `id` is required). The renderer will:
-  - Insert one copy of the table per parent row that has children.
-  - For each child row, duplicate the template row(s) and replace subgroup placeholders. You can also include parent fields in the same row via `{{PARENT_ID.FIELD_ID}}` if needed.
-  - Example: if `MP_DISHES` has a subgroup `INGREDIENTS`, a table row like `{{MP_DISHES.INGREDIENTS.ING}} | {{MP_DISHES.INGREDIENTS.QTY}} | {{MP_DISHES.INGREDIENTS.UNIT}}` will render all ingredients under each dish in separate tables.
-- **Consolidated values**: Use `{{CONSOLIDATED(GROUP_ID.FIELD_ID)}}` (**IDs only**) to list the unique values across a line item group. Example: `{{CONSOLIDATED(MP_INGREDIENTS_LI.ALLERGEN)}}` renders `GLUTEN, NUTS, SOY`. When empty, consolidated placeholders render `None`.
-  - **Row-scoped subgroup consolidation**: Inside a per-row section (recommended: within `ROW_TABLE` output), use `{{CONSOLIDATED_ROW(GROUP.SUBGROUP.FIELD)}}` to aggregate subgroup values for the current parent row (renders `None` when empty).
-  - **Consolidated calculations**:
-    - `{{COUNT(GROUP_ID)}}` counts group rows.
-    - `{{COUNT(GROUP_ID.SUBGROUP_ID)}}` counts subgroup rows across all parents.
-    - `{{SUM(GROUP_ID.FIELD_ID)}}` sums a `NUMBER` field across group rows (subgroup path supported: `{{SUM(GROUP_ID.SUBGROUP_ID.FIELD_ID)}}`).
-  - **Consolidated subgroup tables**: To build a *single* subgroup table across all parent rows (and dedupe rows by the placeholder combination), add `{{CONSOLIDATED_TABLE(GROUP.SUBGROUP)}}` somewhere inside the table. The directive is stripped at render time; the table rows are generated from the unique combinations of the row’s placeholders.
-- **Numeric aggregation in consolidated subgroup tables**: If the table row includes `NUMBER` placeholders (e.g., `{{GROUP.SUBGROUP.QTY}}`), then `CONSOLIDATED_TABLE` will **sum those numeric fields** when all **non-numeric** columns match (so duplicates collapse and quantities aggregate).
-  - **Item count in consolidated subgroup tables**: Use `{{GROUP.SUBGROUP.__COUNT}}` to show how many source rows were consolidated into the generated row.
-  - **Exclude rows**: Add `{{EXCLUDE_WHEN(KEY=VALUE[, KEY2=VALUE2 ...])}}` anywhere inside the table to exclude matching rows *before* consolidation/sorting.
-    - Keys: `FIELD_ID`, `GROUP.FIELD_ID`, or `GROUP.SUBGROUP.FIELD_ID`
-    - Values: use `|` to match multiple values (example: `{{EXCLUDE_WHEN(STATUS=Removed|Deleted)}}`)
-  - **Exclude rows with visibility-style logic**: Add `{{EXCLUDE_WHEN_WHEN(<WhenClause JSON>)}}` to use `fieldId` / `equals` / `notEmpty` / `all` / `any` / `not` rules.
-    - Row context: evaluates against row/subgroup values (parent row values are available in subgroup tables).
-    - Example: `{{EXCLUDE_WHEN_WHEN({"all":[{"fieldId":"MP_IS_REHEAT","equals":"Yes"},{"fieldId":"RECIPE","notEmpty":true}]})}}`
-- **Sorting generated rows (tables/lists)**: Add `{{ORDER_BY(...)}}` anywhere inside a table to control the order of generated rows (works with `CONSOLIDATED_TABLE`, normal line-item tables, and subgroup tables).
-  - **Syntax**: `{{ORDER_BY(KEY1 [ASC|DESC], KEY2 [ASC|DESC], ...)}}`
-  - **Keys**:
-    - `FIELD_ID` (e.g., `CAT`)
-    - `GROUP.FIELD_ID` (e.g., `MP_MEALS_REQUEST.MEAL_TYPE`)
-    - `GROUP.SUBGROUP.FIELD_ID` (e.g., `MP_MEALS_REQUEST.MP_INGREDIENTS_LI.ING`)
-  - **Examples**:
-    - Sort ingredients table by category then ingredient: `{{ORDER_BY(CAT ASC, ING ASC)}}`
-    - Sort by quantity descending: `{{ORDER_BY(QTY DESC)}}` (also accepts `QTY:DESC` or `-QTY`)
-
-### BUTTON fields (custom actions)
-
-`BUTTON` questions render as **custom actions** in the web UI. Six actions are supported:
-
-- **Doc template preview** (`action: "renderDocTemplate"`): render a Google Doc template (with the placeholders above) into a PDF preview. The app opens a new tab immediately (shows a Loading page) and then navigates that tab to the generated PDF blob (single click, no extra “Open” step).
-  - Optional: set `button.loadingLabel` to customize the loading text while the PDF is being generated.
-- **Markdown template preview** (`action: "renderMarkdownTemplate"`): read a Markdown template from Google Drive (plain text / `.md`), replace placeholders, and show the rendered content immediately in-app (fast preview, no Drive/Docs preview pages).
-- **HTML template preview** (`action: "renderHtmlTemplate"`): render an HTML template and show it immediately in-app (fast preview). You can source the template from:
-  - **Google Drive**: use a Drive file id (same as before)
-  - **Bundled template**: use `bundle:<filename>` to load from `/docs/templates/<filename>` embedded into the deployment bundle at build time.
-    - Rendered **client-side** (no `renderHtmlTemplate` Apps Script call).
-    - If the template references data-source projections like `{{FIELD_ID.PROJECTION_KEY}}` for a `dataSource`-backed field, the client will call `fetchDataSource` to resolve those values.
-    - Requires redeploy to update.
-    - **Scripts**: bundled templates may include small inline `<script>` blocks for dynamic UI (for example: the consolidated “Issues” card in the checklist templates).
-  - **Security**: Drive-sourced HTML templates must **not** include `<script>` tags (they are rejected).
-  
-  HTML templates also support an icon placeholder for photo/attachment fields:
-  - `{{FILES_ICON(FIELD_ID)}}` → a clickable camera/clip icon button that opens the field’s items in a **read-only Photos overlay** (works from List/Summary/Form).
-- **Browser render-result cache**: successful Markdown/HTML button renders are cached locally under the current app/server cache version.
-  - Default `cacheScope` is `record`, which includes record id, draft values, and record metadata in the key.
-  - For static help/procedure templates that do not depend on record placeholders, set `button.cacheScope: "template"` so repeat opens reuse one cache entry across records and draft changes.
-  - Set `button.cacheScope: "none"` only when a template must always render through the backend.
-- **Create preset record** (`action: "createRecordPreset"`): create a **new record** and prefill field values (stored values, not localized labels).
-- **Update the current record** (`action: "updateRecord"`): draft-save specific top-level fields and/or status changes on the current record, optionally show a confirmation dialog, optionally navigate to another view, and optionally run a reusable `dependencyGuard` against another form before saving.
-  - Set `ensureRecordId: true` when the button can be pressed before the current draft has been persisted yet. The client will block, wait for dedup/autosave to settle, create the draft record if needed, and only then apply the requested update.
-- **Open a saved link** (`action: "openUrlField"`): open (redirect to) the URL stored in a field of the current record (for example: a saved `pdfUrl`).
-  - Set `disableWhenValueMissing: true` to keep the button visible but disabled until the URL exists.
-
-Visibility:
-
-- You can use normal `visibility` config on a `BUTTON` question to show/hide it based on field values. This applies to inline buttons and to action-bar/menu buttons on Form/Summary views.
-
-#### Refreshing templates when keeping the same Drive file ID
-
-Markdown/HTML template contents are cached in Apps Script `CacheService` for speed.
-
-Notes:
-
-- Apps Script `CacheService` has a hard max TTL of **6 hours**.
-- You can configure the TTL per form via `templateCacheTtlSeconds` in the dashboard **Follow-up Config (JSON)**:
-
-```json
-{ "templateCacheTtlSeconds": 21600 }
-```
-
-When omitted (recommended) or set to `0`/negative, the app uses the maximum TTL and relies on the cache “epoch” flush below.
-
-To force an immediate refresh:
 
 - Run **Community Kitchen → Create/Update All Forms** from the Google Sheet menu.
 - This bumps a template-cache “epoch”, so the next render/prefetch reads the latest template from Drive.
@@ -3296,7 +3065,7 @@ Recommended steps after deploying a new bundle:
 - Run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)**:
   - Installs `onEdit` triggers to keep options + `Data Version` + indexes consistent when users manually edit sheets.
   - Installs a daily time-based trigger for `runDailyAnalyticsRecompute` to reconcile analytics snapshots.
-  - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Inventory` when `LEFTOVER_EXP_DATE <= today`, or daily `releaseActiveReservations` cleanup for reservation-backed source forms).
+  - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Bank` when `LEFTOVER_EXP_DATE <= today`).
 
 ### UI tips (React edit + Summary)
 

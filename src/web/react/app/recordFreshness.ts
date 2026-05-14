@@ -88,7 +88,7 @@ export const shouldDeferRecordFreshnessSync = (args: {
   submissionInFlight: boolean;
   uploadInFlight: boolean;
   recordSyncInFlight: boolean;
-  reservationSyncInFlight?: boolean;
+  utilisationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
   followupBatchInFlight?: boolean;
@@ -128,7 +128,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   submissionInFlight: boolean;
   uploadInFlight: boolean;
   recordSyncInFlight: boolean;
-  reservationSyncInFlight?: boolean;
+  utilisationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
   guidedStepBackgroundSyncInFlight: boolean;
   followupBatchInFlight?: boolean;
@@ -158,7 +158,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   if (args.submissionInFlight) blockers.push('submission.inFlight');
   if (args.uploadInFlight) blockers.push('upload.inFlight');
   if (args.recordSyncInFlight) blockers.push('recordSync.inFlight');
-  if (args.reservationSyncInFlight) blockers.push('reservationSync.inFlight');
+  if (args.utilisationSyncInFlight) blockers.push('utilisationSync.inFlight');
   if (args.guidedStepLiveSyncInFlight) blockers.push('guidedStep.liveSync');
   if (args.guidedStepBackgroundSyncInFlight) blockers.push('guidedStep.backgroundSync');
   if (args.followupBatchInFlight) blockers.push('followupBatch.inFlight');

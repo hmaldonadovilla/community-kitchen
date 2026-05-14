@@ -12,9 +12,9 @@ const getExport = (): any =>
     JSON.stringify(require('../../../docs/config/exports/staging/config_meal_production.json'))
   );
 
-const getInventoryExport = (): any =>
+const getBankExport = (): any =>
   JSON.parse(
-    JSON.stringify(require('../../../docs/config/exports/staging/config_leftover_inventory.json'))
+    JSON.stringify(require('../../../docs/config/exports/staging/config_leftover_bank.json'))
   );
 
 describe('meal production leftover selection config', () => {
@@ -38,7 +38,7 @@ describe('meal production leftover selection config', () => {
       "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
     );
     expect(target?.dataSourceBootstrap).toEqual({
-      waitForGuidedReservationSync: true,
+      waitForGuidedUtilisationSync: true,
       waitForSharedDataMutations: true
     });
     expect(formTarget?.dataSourceBootstrap).toEqual(target?.dataSourceBootstrap);
@@ -49,7 +49,7 @@ describe('meal production leftover selection config', () => {
     ).toEqual([]);
   });
 
-  it('configures a background freshness watch for the leftover inventory datasource', () => {
+  it('configures a background freshness watch for the leftover bank datasource', () => {
     const definition = getDefinition();
     const exported = getExport();
     const formWatches = Array.isArray(exported.form?.recordFreshness?.dataSourceWatches)
@@ -62,7 +62,7 @@ describe('meal production leftover selection config', () => {
     expect(formWatches).toEqual([
       expect.objectContaining({
         stepId: 'leftoverForm',
-        dataSourceIds: ['Leftover Inventory Data'],
+        dataSourceIds: ['Leftover Bank Data'],
         quietWindowMs: 30000,
         dialog: expect.objectContaining({
           message: expect.objectContaining({
@@ -75,8 +75,8 @@ describe('meal production leftover selection config', () => {
     expect(definitionWatches).toEqual(formWatches);
   });
 
-  it('renames leftover ids to MI and SI prefixes in the shared inventory form', () => {
-    const exported = getInventoryExport();
+  it('renames leftover ids to MI and SI prefixes in the shared bank form', () => {
+    const exported = getBankExport();
     const idField = (exported.questions || []).find((question: any) => question?.id === 'LEFTOVER_ID');
     const kindField = (exported.questions || []).find((question: any) => question?.id === 'LEFTOVER_KIND');
 
@@ -89,7 +89,7 @@ describe('meal production leftover selection config', () => {
     );
   });
 
-  it('does not queue the generic reservation sync when leaving Order for Leftover bank', () => {
+  it('does not queue the generic utilisation sync when leaving Order for Leftover bank', () => {
     const definition = getDefinition();
     const exported = getExport();
     const formOrderStep = exported.form?.steps?.items?.find((step: any) => step.id === 'orderInfo');
@@ -97,10 +97,10 @@ describe('meal production leftover selection config', () => {
     const formLeftoverStep = exported.form?.steps?.items?.find((step: any) => step.id === 'leftoverForm');
     const definitionLeftoverStep = definition.steps?.items?.find((step: any) => step.id === 'leftoverForm');
 
-    expect(formOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
-    expect(definitionOrderStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
-    expect(formLeftoverStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
-    expect(definitionLeftoverStep?.navigation?.backgroundReservationSyncOnAdvance).toBe(false);
+    expect(formOrderStep?.navigation?.backgroundUtilisationSyncOnAdvance).toBe(false);
+    expect(definitionOrderStep?.navigation?.backgroundUtilisationSyncOnAdvance).toBe(false);
+    expect(formLeftoverStep?.navigation?.backgroundUtilisationSyncOnAdvance).toBe(false);
+    expect(definitionLeftoverStep?.navigation?.backgroundUtilisationSyncOnAdvance).toBe(false);
   });
 
   it('defines direct MP_TYPE_LI output rules for part dish, reheat, and combine', () => {
@@ -112,8 +112,8 @@ describe('meal production leftover selection config', () => {
     expect(config).toEqual(
       expect.objectContaining({
         dataSource: expect.objectContaining({
-          id: 'Leftover Inventory Data',
-          formKey: 'Config: Leftover Inventory',
+          id: 'Leftover Bank Data',
+          formKey: 'Config: Leftover Bank',
           mode: 'options',
           statusFieldId: 'LEFTOVER_STATUS',
           statusAllowList: ['available'],
@@ -177,7 +177,7 @@ describe('meal production leftover selection config', () => {
           {
             any: [
               {
-                fieldId: '__ckCurrentRecordReservedQuantity',
+                fieldId: '__ckCurrentRecordUtilisedQuantity',
                 greaterThan: 0
               },
               {
@@ -343,10 +343,10 @@ describe('meal production leftover selection config', () => {
         targetMaxPortionsFieldId: 'LEFTOVER_PORTIONS_MAX'
       })
     );
-    expect(config?.reservation).toEqual(
+    expect(config?.utilisation).toEqual(
       expect.objectContaining({
         enabled: true,
-        ledgerFormKey: 'Config: Inventory Reservation Ledger'
+        utilisationFormKey: 'Config: Leftover Utilisation'
       })
     );
   });

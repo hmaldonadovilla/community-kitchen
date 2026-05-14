@@ -1,5 +1,5 @@
 import {
-  applyInventoryReservationPlanApi,
+  applyBankUtilisationPlanApi,
   configureBackendTransport,
   configureBackendTransportFromRuntime,
   consumePrefetchedHomeBootstrapApi,
@@ -15,12 +15,11 @@ import {
   resolveUserFacingErrorMessage,
   seedSummaryHtmlTemplateCache,
   submit,
-  syncGuidedStepReservationDraftApi,
+  syncGuidedStepUtilisationDraftApi,
   triggerFollowup,
   triggerFollowupBatch,
   uploadFilesApi,
-  upsertInventoryReservationApi,
-  reconcileInventoryReservationsApi,
+  upsertBankUtilisationApi,
   renderDocTemplateHtmlApi,
   type BackendTransport
 } from '../../../src/web/react/api';
@@ -264,38 +263,24 @@ describe('react api transport', () => {
     ).toBe('Failed to render preview.');
   });
 
-  test('routes inventory reservation upsert through the backend transport', async () => {
+  test('routes bank utilisation upsert through the backend transport', async () => {
     const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
     configureBackendTransport({ invoke });
 
     const payload: any = {
-      resourceFormKey: 'Config: Leftover Inventory',
+      resourceFormKey: 'Config: Leftover Bank',
       resourceRecordId: 'leftover-1',
       quantity: 3,
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'meal-1'
     };
 
-    await upsertInventoryReservationApi(payload);
+    await upsertBankUtilisationApi(payload);
 
-    expect(invoke).toHaveBeenCalledWith('upsertInventoryReservation', payload);
+    expect(invoke).toHaveBeenCalledWith('upsertBankUtilisation', payload);
   });
 
-  test('routes inventory reservation reconciliation through the backend transport', async () => {
-    const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
-    configureBackendTransport({ invoke });
-
-    const payload: any = {
-      sourceFormKey: 'Config: Meal Production',
-      sourceRecordId: 'meal-1'
-    };
-
-    await reconcileInventoryReservationsApi(payload);
-
-    expect(invoke).toHaveBeenCalledWith('reconcileInventoryReservations', payload);
-  });
-
-  test('routes inventory reservation plan apply through the backend transport', async () => {
+  test('routes bank utilisation plan apply through the backend transport', async () => {
     const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
     configureBackendTransport({ invoke });
 
@@ -309,26 +294,26 @@ describe('react api transport', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: []
+      utilisations: []
     };
 
-    await applyInventoryReservationPlanApi(payload);
+    await applyBankUtilisationPlanApi(payload);
 
-    expect(invoke).toHaveBeenCalledWith('applyInventoryReservationPlan', payload);
+    expect(invoke).toHaveBeenCalledWith('applyBankUtilisationPlan', payload);
   });
 
-  test('routes guided reservation draft sync through the backend transport', async () => {
+  test('routes guided utilisation draft sync through the backend transport', async () => {
     const invoke = jest.fn().mockResolvedValue({ success: true, message: 'ok' });
     configureBackendTransport({ invoke });
 
     const payload: any = {
       stepId: 'leftoverForm',
       clientMutationSeq: 7,
-      reservationPlan: {
+      utilisationPlan: {
         sourceFormKey: 'Config: Meal Production',
         sourceRecordId: 'meal-1',
         managedScopes: [],
-        reservations: []
+        utilisations: []
       },
       draftPayload: {
         formKey: 'Config: Meal Production',
@@ -338,9 +323,9 @@ describe('react api transport', () => {
       }
     };
 
-    await syncGuidedStepReservationDraftApi(payload);
+    await syncGuidedStepUtilisationDraftApi(payload);
 
-    expect(invoke).toHaveBeenCalledWith('syncGuidedStepReservationDraft', payload);
+    expect(invoke).toHaveBeenCalledWith('syncGuidedStepUtilisationDraft', payload);
   });
 
   test('routes Cloud Run supported follow-up batches through the configured transport', async () => {
@@ -350,12 +335,9 @@ describe('react api transport', () => {
       isHttpRouted: fnName => fnName === 'triggerFollowupActions'
     });
 
-    await triggerFollowupBatch('Config: Meal Production', 'meal-1', ['RECONCILE_RESERVATIONS', 'CLOSE_RECORD']);
+    await triggerFollowupBatch('Config: Meal Production', 'meal-1', ['CLOSE_RECORD']);
 
-    expect(invoke).toHaveBeenCalledWith('triggerFollowupActions', 'Config: Meal Production', 'meal-1', [
-      'RECONCILE_RESERVATIONS',
-      'CLOSE_RECORD'
-    ]);
+    expect(invoke).toHaveBeenCalledWith('triggerFollowupActions', 'Config: Meal Production', 'meal-1', ['CLOSE_RECORD']);
   });
 
   test('routes PDF and email follow-up batches to Cloud Run when follow-up RPC is enabled', async () => {

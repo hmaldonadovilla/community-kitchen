@@ -1,7 +1,5 @@
 const { shouldApplyLifecycleStatusDateRule } = require('../domain/lifecycleRules');
 
-const DEFAULT_LEDGER_FORM_KEY = 'Config: Inventory Reservation Ledger';
-
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
 
 const todayIso = env => {
@@ -31,7 +29,7 @@ class LifecycleRepository {
     this.env = options.env || process.env;
     this.configRepository = options.configRepository;
     this.submissionRepository = options.submissionRepository;
-    this.inventoryReservationRepository = options.inventoryReservationRepository;
+    this.bankUtilisationRepository = options.bankUtilisationRepository;
   }
 
   listEntries() {
@@ -112,50 +110,6 @@ class LifecycleRepository {
     if (!result || !result.success) throw new Error(result && result.message ? result.message : 'Failed to save lifecycle status update.');
   }
 
-  async releaseReservationsForSource(formKey, sourceRecordId, ledgerFormKey) {
-    if (!this.inventoryReservationRepository || typeof this.inventoryReservationRepository.reconcile !== 'function') {
-      throw new Error('Inventory reservation repository is not configured for lifecycle recompute.');
-    }
-    const result = await this.inventoryReservationRepository.reconcile({
-      sourceFormKey: formKey,
-      sourceRecordId,
-      ledgerFormKey,
-      mode: 'release'
-    });
-    if (!result || !result.success) throw new Error(result && result.message ? result.message : 'Failed to release inventory reservations.');
-    return Number(result.reconciledReservations || 0) || 0;
-  }
-
-  async activeReservationsForForm(formKey, ledgerFormKey) {
-    if (!this.inventoryReservationRepository || typeof this.inventoryReservationRepository.activeReservations !== 'function') {
-      throw new Error('Inventory reservation repository is not configured for lifecycle recompute.');
-    }
-    return this.inventoryReservationRepository.activeReservations(ledgerFormKey, { SOURCE_FORM_KEY: formKey });
-  }
-
-  async runReservationReleaseRule(entry, rule, recordsById, currentTodayIso) {
-    const ledgerFormKey = toText(rule.ledgerFormKey) || toText(entry.form.reservationLifecycle && entry.form.reservationLifecycle.ledgerFormKey) || DEFAULT_LEDGER_FORM_KEY;
-    const activeReservations = await this.activeReservationsForForm(entry.formKey, ledgerFormKey);
-    const sourceRecordIds = Array.from(new Set(activeReservations.map(record => this.readRecordField(record, 'SOURCE_RECORD_ID')).map(toText).filter(Boolean)));
-    let updatedRecords = 0;
-    for (const sourceRecordId of sourceRecordIds) {
-      const sourceRecord = recordsById.get(sourceRecordId);
-      if (rule.type === 'releaseActiveReservations') {
-        updatedRecords += await this.releaseReservationsForSource(entry.formKey, sourceRecordId, ledgerFormKey);
-        continue;
-      }
-      if (!sourceRecord) {
-        if (rule.releaseWhenSourceMissing === false) continue;
-        updatedRecords += await this.releaseReservationsForSource(entry.formKey, sourceRecordId, ledgerFormKey);
-        continue;
-      }
-      if (this.shouldApplyRule(entry.form, rule, sourceRecord, currentTodayIso)) {
-        updatedRecords += await this.releaseReservationsForSource(entry.formKey, sourceRecordId, ledgerFormKey);
-      }
-    }
-    return updatedRecords;
-  }
-
   async runDailyLifecycleRecompute() {
     const currentTodayIso = todayIso(this.env);
     const errors = [];
@@ -166,14 +120,9 @@ class LifecycleRepository {
       if (!rules.length) continue;
       try {
         const records = await this.records(entry.formKey);
-        const recordsById = new Map((records || []).map(record => [toText(record && record.id), record]).filter(([id]) => id));
         let formUpdates = 0;
         for (const rule of rules) {
           if (!rule || !rule.type) continue;
-          if (rule.type === 'releaseActiveReservations' || rule.type === 'releaseStaleReservations') {
-            formUpdates += await this.runReservationReleaseRule(entry, rule, recordsById, currentTodayIso);
-            continue;
-          }
           if (rule.type !== 'dateStatusTransition') continue;
           for (const record of records || []) {
             if (!record || !record.id || !this.shouldApplyRule(entry.form, rule, record, currentTodayIso)) continue;

@@ -70,7 +70,7 @@ describe('Dashboard', () => {
       submitEffects: [
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           runOn: 'create',
           status: 'Available',
           forEachLineItem: {
@@ -101,7 +101,7 @@ describe('Dashboard', () => {
     expect(forms[0].followupConfig?.submitEffects).toEqual([
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           runOn: 'create',
           status: 'Available',
           forEachLineItem: {
@@ -949,7 +949,7 @@ describe('Dashboard', () => {
               submitLabel: { EN: 'Create report' },
               milestoneAction: {
                 type: 'followupBatch',
-                preActions: ['RECONCILE_RESERVATIONS', 'SEND_EMAIL'],
+                preActions: ['SEND_EMAIL'],
                 ensureRecordId: true,
                 runInBackground: false,
                 emailDispatchMode: 'direct',
@@ -1001,7 +1001,7 @@ describe('Dashboard', () => {
                 },
                 generatedRecordsDialog: {
                   submitEffectIds: ['captureProducedLeftovers'],
-                  targetFormKey: 'Config: Leftover Inventory',
+                  targetFormKey: 'Config: Leftover Bank',
                   title: { EN: 'Generated leftovers' },
                   message: { EN: 'Label them now.' },
                   itemTemplate: { EN: '{{LEFTOVER_ID}}' },
@@ -1026,7 +1026,7 @@ describe('Dashboard', () => {
     expect(step?.navigation?.submitLabel).toEqual({ en: 'Create report' });
     expect(step?.navigation?.milestoneAction).toEqual({
       type: 'followupBatch',
-      preActions: ['RECONCILE_RESERVATIONS', 'SEND_EMAIL'],
+      preActions: ['SEND_EMAIL'],
       ensureRecordId: true,
       runInBackground: false,
       emailDispatchMode: 'direct',
@@ -1078,7 +1078,7 @@ describe('Dashboard', () => {
       },
       generatedRecordsDialog: {
         submitEffectIds: ['captureProducedLeftovers'],
-        targetFormKey: 'Config: Leftover Inventory',
+        targetFormKey: 'Config: Leftover Bank',
         title: { en: 'Generated leftovers' },
         message: { en: 'Label them now.' },
         itemTemplate: { en: '{{LEFTOVER_ID}}' },
@@ -1094,7 +1094,7 @@ describe('Dashboard', () => {
         items: [
           {
             id: 'leftoverBank',
-            includeWhen: { fieldId: '__ckDataSourceCount.Leftover Inventory Data', greaterThan: 0 },
+            includeWhen: { fieldId: '__ckDataSourceCount.Leftover Bank Data', greaterThan: 0 },
             excludeWhen: { fieldId: 'status', equals: ['Emailed', 'Closed'] },
             include: ['Q1']
           }
@@ -1111,7 +1111,7 @@ describe('Dashboard', () => {
     const dashboard = new Dashboard(mockSS as any);
     const forms = dashboard.getForms();
     const step = (forms[0].steps as any)?.items?.[0];
-    expect(step?.includeWhen).toEqual({ fieldId: '__ckDataSourceCount.Leftover Inventory Data', greaterThan: 0 });
+    expect(step?.includeWhen).toEqual({ fieldId: '__ckDataSourceCount.Leftover Bank Data', greaterThan: 0 });
     expect(step?.excludeWhen).toEqual({ fieldId: 'status', equals: ['Emailed', 'Closed'] });
   });
 
@@ -1212,7 +1212,7 @@ describe('Dashboard', () => {
           },
           generatedRecordsDialog: {
             submitEffectIds: ['captureProducedLeftovers'],
-            targetFormKey: 'Config: Leftover Inventory',
+            targetFormKey: 'Config: Leftover Bank',
             title: { EN: 'Generated leftovers' },
             message: { EN: 'Label them now.' },
             itemTemplate: { EN: '{{LEFTOVER_ID}}' },
@@ -1276,7 +1276,7 @@ describe('Dashboard', () => {
       },
       generatedRecordsDialog: {
         submitEffectIds: ['captureProducedLeftovers'],
-        targetFormKey: 'Config: Leftover Inventory',
+        targetFormKey: 'Config: Leftover Bank',
         title: { en: 'Generated leftovers' },
         message: { en: 'Label them now.' },
         itemTemplate: { en: '{{LEFTOVER_ID}}' },
@@ -1418,7 +1418,7 @@ describe('Dashboard', () => {
       submitEffects: [
         {
           type: 'updateRecord',
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           runOn: 'update',
           recordId: '{{row.LEFTOVER_RECORD_ID}}',
           forEachLineItem: {
@@ -1444,7 +1444,7 @@ describe('Dashboard', () => {
     expect(forms[0].followupConfig?.submitEffects).toEqual([
       {
         type: 'updateRecord',
-        targetFormKey: 'Config: Leftover Inventory',
+        targetFormKey: 'Config: Leftover Bank',
         runOn: 'update',
         recordId: '{{row.LEFTOVER_RECORD_ID}}',
         forEachLineItem: {
@@ -1479,7 +1479,7 @@ describe('Dashboard', () => {
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
-      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', configJson]
+      ['Leftover Bank', 'Config: Leftover Bank', 'Leftover Bank Data', 'Desc', '', configJson]
     ];
     sheet.setMockData(mockData);
     const dashboard = new Dashboard(mockSS as any);

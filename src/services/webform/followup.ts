@@ -401,7 +401,7 @@ export class FollowupService {
     }
     return this.markTemplateRecordHydrated(
       hydrateMealProductionPrepIngredientsFromLeftovers(record, leftoverRecordId =>
-        this.resolveLinkedRecordCached('Config: Leftover Inventory', leftoverRecordId)
+        this.resolveLinkedRecordCached('Config: Leftover Bank', leftoverRecordId)
       )
     );
   }

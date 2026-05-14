@@ -43,7 +43,7 @@ import { useRowFlowGroupOutputState } from '../../features/lineItems/hooks/useRo
 import { useRowFlowRuntimeState } from '../../features/lineItems/hooks/useRowFlowRuntimeState';
 import { useStepDataSourceAvailabilityReconciliation } from '../../features/lineItems/hooks/useStepDataSourceAvailabilityReconciliation';
 import { useStepDataSourceOutputSync } from '../../features/lineItems/hooks/useStepDataSourceOutputSync';
-import { useStepDataSourceReservationDrafts } from '../../features/lineItems/hooks/useStepDataSourceReservationDrafts';
+import { useStepDataSourceUtilisationDrafts } from '../../features/lineItems/hooks/useStepDataSourceUtilisationDrafts';
 import { useStepDataSourceRowProjection } from '../../features/lineItems/hooks/useStepDataSourceRowProjection';
 import type {
   LineFileUploadOrderedEntryCheckArgs,
@@ -98,9 +98,9 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     removeLineRow,
     setAutoSaveHold,
     ensureRecordId,
-    queueGuidedStepReservationDraftSync,
-    onGuidedStepReservationDraftStateChange,
-    waitForGuidedStepReservationDraftSync,
+    queueGuidedStepUtilisationDraftSync,
+    onGuidedStepUtilisationDraftStateChange,
+    waitForGuidedStepUtilisationDraftSync,
     waitForPendingSharedDataMutations,
     handleLineFieldChange,
     collapsedGroups,
@@ -247,15 +247,15 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     stepDataSourceDrafts,
     setStepDataSourceDrafts,
     stepDataSourceDraftsRef,
-    reservationDebounceTimersRef,
-    reservationRequestVersionRef,
-    reservationCommittedValuesRef,
-    reservationSyncCounterRef,
+    utilisationDebounceTimersRef,
+    utilisationRequestVersionRef,
+    utilisationCommittedValuesRef,
+    utilisationSyncCounterRef,
     latestStepDataSourceSyncedLineItemsRef,
-    deferredReservationAutoSaveHoldReleaseTimerRef,
+    deferredUtilisationAutoSaveHoldReleaseTimerRef,
     isStepDataSourceLoading,
-    queueStepReservationDraftSnapshotSync,
-    queueImmediateStepReservationDraftSync,
+    queueStepUtilisationDraftSnapshotSync,
+    queueImmediateStepUtilisationDraftSync,
     updateStepDataSourceAvailability,
     applyStepDataSourceAvailabilitySnapshots
   } = useGuidedStepDataSourceState({
@@ -269,8 +269,8 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     dataSourceBootstrap,
     parentRowCount: parentRows.length,
     resolveTopValue,
-    queueGuidedStepReservationDraftSync,
-    waitForGuidedStepReservationDraftSync,
+    queueGuidedStepUtilisationDraftSync,
+    waitForGuidedStepUtilisationDraftSync,
     waitForPendingSharedDataMutations,
     onDiagnostic
   });
@@ -283,8 +283,8 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     resolveVirtualPreset,
     buildStepDataSourceDraftKey,
     resolveDataSourceOutputGroup,
-    resolveCurrentReservationStateForSource,
-    resolveCommittedReservationStateForSource,
+    resolveCurrentUtilisationStateForSource,
+    resolveCommittedUtilisationStateForSource,
     buildVirtualDataSourceRowValues,
     resolveStepDataSourceRowsForParent,
     sourceFirstPresentationEntries,
@@ -300,7 +300,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     sourceFirstDataSourceRows,
     stepDataSourceDrafts,
     stepDataSourceDraftsRef,
-    reservationCommittedValuesRef,
+    utilisationCommittedValuesRef,
     stepDataSourceRefreshTick,
     isStepDataSourceLoading,
     hideSupplementalHelperWhenNoSourceRows,
@@ -453,7 +453,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
 
   const {
     syncStepDataSourceOutputRow,
-    syncStepDataSourceOutputRowWithReservation
+    syncStepDataSourceOutputRowWithUtilisation
   } = useStepDataSourceOutputSync({
     groupId: q.id,
     formKey,
@@ -465,10 +465,10 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     latestValuesRef,
     latestStepDataSourceSyncedLineItemsRef,
     stepDataSourceDraftsRef,
-    reservationCommittedValuesRef,
-    reservationDebounceTimersRef,
-    reservationRequestVersionRef,
-    reservationSyncCounterRef,
+    utilisationCommittedValuesRef,
+    utilisationDebounceTimersRef,
+    utilisationRequestVersionRef,
+    utilisationSyncCounterRef,
     setLineItems,
     setStepDataSourceDrafts,
     setValues,
@@ -479,32 +479,32 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     resolveVirtualPresetValue,
     resolveVirtualRowWhenContext,
     resolveRowFlowGroupConfig,
-    resolveCurrentReservationStateForSource,
-    resolveCommittedReservationStateForSource,
+    resolveCurrentUtilisationStateForSource,
+    resolveCommittedUtilisationStateForSource,
     queueStepDataSourceRefreshTick,
     updateStepDataSourceAvailability,
     validateVirtualFieldRules,
     toFiniteNumber,
     ensureRecordId,
-    onGuidedStepReservationDraftStateChange,
-    queueImmediateStepReservationDraftSync,
+    onGuidedStepUtilisationDraftStateChange,
+    queueImmediateStepUtilisationDraftSync,
     openConfirmDialog,
     onDiagnostic
   });
 
   const {
-    seedReservationCommittedValues,
+    seedUtilisationCommittedValues,
     stageStepDataSourceDraftPatch,
-    queueDeferredStepReservationSync,
-    hasPendingDeferredReservationChange,
-    cancelDeferredStepReservationSync,
-    scheduleDeferredStepReservationAutoSaveHoldRelease
-  } = useStepDataSourceReservationDrafts({
+    queueDeferredStepUtilisationSync,
+    hasPendingDeferredUtilisationChange,
+    cancelDeferredStepUtilisationSync,
+    scheduleDeferredStepUtilisationAutoSaveHoldRelease
+  } = useStepDataSourceUtilisationDrafts({
     groupId: q.id,
     buildStepDataSourceDraftKey,
-    reservationCommittedValuesRef,
-    reservationDebounceTimersRef,
-    deferredReservationAutoSaveHoldReleaseTimerRef,
+    utilisationCommittedValuesRef,
+    utilisationDebounceTimersRef,
+    deferredUtilisationAutoSaveHoldReleaseTimerRef,
     setAutoSaveHold,
     setStepDataSourceDrafts,
     stepDataSourceDraftsRef
@@ -519,15 +519,15 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     lineItems,
     language,
     stepDataSourceDraftsRef,
-    reservationCommittedValuesRef,
+    utilisationCommittedValuesRef,
     buildStepDataSourceDraftKey,
     resolveDataSourceOutputGroup,
     resolveStepDataSourceRowsForParent,
     isStepDataSourceLoading,
     applyStepDataSourceAvailabilitySnapshots,
-    queueStepReservationDraftSnapshotSync,
+    queueStepUtilisationDraftSnapshotSync,
     syncStepDataSourceOutputRow,
-    syncStepDataSourceOutputRowWithReservation,
+    syncStepDataSourceOutputRowWithUtilisation,
     onDiagnostic
   });
 
@@ -836,13 +836,13 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
             allowsVirtualIntegerOnly={allowsVirtualIntegerOnly}
             resolveVirtualMaxFieldId={resolveVirtualMaxFieldId}
             toFiniteNumber={toFiniteNumber}
-            seedReservationCommittedValues={seedReservationCommittedValues}
+            seedUtilisationCommittedValues={seedUtilisationCommittedValues}
             stageStepDataSourceDraftPatch={stageStepDataSourceDraftPatch}
-            queueDeferredStepReservationSync={queueDeferredStepReservationSync}
-            hasPendingDeferredReservationChange={hasPendingDeferredReservationChange}
-            cancelDeferredStepReservationSync={cancelDeferredStepReservationSync}
-            scheduleDeferredStepReservationAutoSaveHoldRelease={scheduleDeferredStepReservationAutoSaveHoldRelease}
-            syncStepDataSourceOutputRowWithReservation={syncStepDataSourceOutputRowWithReservation}
+            queueDeferredStepUtilisationSync={queueDeferredStepUtilisationSync}
+            hasPendingDeferredUtilisationChange={hasPendingDeferredUtilisationChange}
+            cancelDeferredStepUtilisationSync={cancelDeferredStepUtilisationSync}
+            scheduleDeferredStepUtilisationAutoSaveHoldRelease={scheduleDeferredStepUtilisationAutoSaveHoldRelease}
+            syncStepDataSourceOutputRowWithUtilisation={syncStepDataSourceOutputRowWithUtilisation}
           />
         );
 
@@ -944,11 +944,11 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
               allowsVirtualIntegerOnly={allowsVirtualIntegerOnly}
               resolveVirtualMaxFieldId={resolveVirtualMaxFieldId}
               toFiniteNumber={toFiniteNumber}
-              seedReservationCommittedValues={seedReservationCommittedValues}
-              queueDeferredStepReservationSync={queueDeferredStepReservationSync}
-              hasPendingDeferredReservationChange={hasPendingDeferredReservationChange}
-              cancelDeferredStepReservationSync={cancelDeferredStepReservationSync}
-              syncStepDataSourceOutputRowWithReservation={syncStepDataSourceOutputRowWithReservation}
+              seedUtilisationCommittedValues={seedUtilisationCommittedValues}
+              queueDeferredStepUtilisationSync={queueDeferredStepUtilisationSync}
+              hasPendingDeferredUtilisationChange={hasPendingDeferredUtilisationChange}
+              cancelDeferredStepUtilisationSync={cancelDeferredStepUtilisationSync}
+              syncStepDataSourceOutputRowWithUtilisation={syncStepDataSourceOutputRowWithUtilisation}
               hideInlineSubgroups={hideInlineSubgroups}
               collapsedSubgroups={collapsedSubgroups}
               subgroupSelectors={subgroupSelectors}

@@ -79,7 +79,7 @@ export const isRetryableMutationLockErrorMessage = (value: any): boolean => {
     message.includes('follow-up queue is busy') ||
     message.includes('another follow-up batch is still running') ||
     message.includes('could not queue follow-up actions') ||
-    message.includes('reservation transaction lock')
+    message.includes('utilisation transaction lock')
   );
 };
 

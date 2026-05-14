@@ -9,7 +9,7 @@ import {
   peekCachedDataSource
 } from '../../../../data/dataSources';
 import type { FieldValue, LangCode, VisibilityContext } from '../../../../types';
-import type { InventoryAvailabilitySnapshot, InventoryReservationPlanScope } from '../../../../../types';
+import type { BankAvailabilitySnapshot, BankUtilisationPlanScope } from '../../../../../types';
 import {
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstRowSortMode
@@ -19,35 +19,35 @@ import {
   shouldForceRefreshStepDataSourceOnBootstrap,
   shouldGateStepDataSourceUntilFresh,
   shouldStartStepDataSourceBootstrap,
-  shouldWaitForGuidedReservationSyncOnBootstrap,
+  shouldWaitForGuidedUtilisationSyncOnBootstrap,
   shouldWaitForSharedDataMutationsOnBootstrap,
   stepDataSourceBootstrapCoordinator
 } from '../../../app/stepDataSourceBootstrap';
 import { resolveStepDataSourceTargetFormKeys } from '../../../app/sharedDataMutations';
 import type { LineItemState } from '../../../types';
 import {
-  applyInventoryAvailabilitySnapshotToRow,
-  normalizeInventoryAvailabilitySnapshotForDisplay
-} from '../../reservations/availabilitySnapshots';
+  applyBankAvailabilitySnapshotToRow,
+  normalizeBankAvailabilitySnapshotForDisplay
+} from '../../utilisations/availabilitySnapshots';
 import {
-  shouldUseReservationSyncFreshnessForDataSource,
-  type GuidedReservationSyncWaitResult
-} from '../../reservations/domain/reservationSyncFreshness';
-import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
+  shouldUseUtilisationSyncFreshnessForDataSource,
+  type GuidedUtilisationSyncWaitResult
+} from '../../utilisations/domain/utilisationSyncFreshness';
+import { resolveUtilisationSourceItemKey } from '../../utilisations/sourceFields';
 
-type GuidedStepReservationDraftSyncQueue = (args: {
+type GuidedStepUtilisationDraftSyncQueue = (args: {
   stepId: string;
   reason: string;
   persistSnapshot?: boolean;
   snapshotLineItems?: LineItemState;
-  releaseScopes?: InventoryReservationPlanScope[];
+  releaseScopes?: BankUtilisationPlanScope[];
 }) => void;
 
-type GuidedStepReservationDraftSyncWaiter = (args: {
+type GuidedStepUtilisationDraftSyncWaiter = (args: {
   recordId: string;
   stepId?: string;
   reason: string;
-}) => Promise<GuidedReservationSyncWaitResult>;
+}) => Promise<GuidedUtilisationSyncWaitResult>;
 
 type PendingSharedDataMutationsWaiter = (args: {
   targetFormKeys: string[];
@@ -68,13 +68,13 @@ type UseGuidedStepDataSourceStateArgs = {
   dataSourceBootstrap?: any;
   parentRowCount: number;
   resolveTopValue: (fieldId: string) => FieldValue | undefined;
-  queueGuidedStepReservationDraftSync?: GuidedStepReservationDraftSyncQueue;
-  waitForGuidedStepReservationDraftSync?: GuidedStepReservationDraftSyncWaiter;
+  queueGuidedStepUtilisationDraftSync?: GuidedStepUtilisationDraftSyncQueue;
+  waitForGuidedStepUtilisationDraftSync?: GuidedStepUtilisationDraftSyncWaiter;
   waitForPendingSharedDataMutations?: PendingSharedDataMutationsWaiter;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 };
 
-type QueueImmediateStepReservationDraftSyncArgs = {
+type QueueImmediateStepUtilisationDraftSyncArgs = {
   config: any;
   parentRowId: string;
   sourceKey: string;
@@ -91,28 +91,28 @@ type UseGuidedStepDataSourceStateResult = {
   stepDataSourceDrafts: Record<string, Record<string, FieldValue>>;
   setStepDataSourceDrafts: React.Dispatch<React.SetStateAction<Record<string, Record<string, FieldValue>>>>;
   stepDataSourceDraftsRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationDebounceTimersRef: React.MutableRefObject<Record<string, ReturnType<typeof setTimeout>>>;
-  reservationRequestVersionRef: React.MutableRefObject<Record<string, number>>;
-  reservationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationSyncCounterRef: React.MutableRefObject<number>;
+  utilisationDebounceTimersRef: React.MutableRefObject<Record<string, ReturnType<typeof setTimeout>>>;
+  utilisationRequestVersionRef: React.MutableRefObject<Record<string, number>>;
+  utilisationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
+  utilisationSyncCounterRef: React.MutableRefObject<number>;
   latestStepDataSourceSyncedLineItemsRef: React.MutableRefObject<LineItemState | null>;
-  deferredReservationAutoSaveHoldReleaseTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  deferredUtilisationAutoSaveHoldReleaseTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
   isStepDataSourceLoading: (config: any) => boolean;
-  queueStepReservationDraftSnapshotSync: (reason: string, snapshotLineItems?: LineItemState | null) => void;
-  queueImmediateStepReservationDraftSync: (args: QueueImmediateStepReservationDraftSyncArgs) => void;
+  queueStepUtilisationDraftSnapshotSync: (reason: string, snapshotLineItems?: LineItemState | null) => void;
+  queueImmediateStepUtilisationDraftSync: (args: QueueImmediateStepUtilisationDraftSyncArgs) => void;
   updateStepDataSourceAvailability: (
     config: any,
-    availability: InventoryAvailabilitySnapshot | null | undefined
+    availability: BankAvailabilitySnapshot | null | undefined
   ) => void;
   applyStepDataSourceAvailabilitySnapshots: (
-    snapshots: InventoryAvailabilitySnapshot[] | null | undefined
+    snapshots: BankAvailabilitySnapshot[] | null | undefined
   ) => void;
 };
 
 /**
  * Owner: guided line-item data-source workflow.
- * Keeps data-source bootstrap/cache coordination and reservation draft refs out
- * of the line-item renderer while preserving the existing reservation adapter API.
+ * Keeps data-source bootstrap/cache coordination and utilisation draft refs out
+ * of the line-item renderer while preserving the existing utilisation adapter API.
  */
 export const useGuidedStepDataSourceState = ({
   groupId,
@@ -125,8 +125,8 @@ export const useGuidedStepDataSourceState = ({
   dataSourceBootstrap,
   parentRowCount,
   resolveTopValue,
-  queueGuidedStepReservationDraftSync,
-  waitForGuidedStepReservationDraftSync,
+  queueGuidedStepUtilisationDraftSync,
+  waitForGuidedStepUtilisationDraftSync,
   waitForPendingSharedDataMutations,
   onDiagnostic
 }: UseGuidedStepDataSourceStateArgs): UseGuidedStepDataSourceStateResult => {
@@ -208,26 +208,26 @@ export const useGuidedStepDataSourceState = ({
   const stepDataSourceBootstrapInFlightSignatureRef = React.useRef<string>('');
   const currentStepDataSourceBootstrapSignatureRef = React.useRef<string>('');
   const mountedRef = React.useRef(true);
-  const reservationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const reservationRequestVersionRef = React.useRef<Record<string, number>>({});
-  const reservationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
-  const reservationSyncCounterRef = React.useRef(0);
+  const utilisationDebounceTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const utilisationRequestVersionRef = React.useRef<Record<string, number>>({});
+  const utilisationCommittedValuesRef = React.useRef<Record<string, Record<string, FieldValue>>>({});
+  const utilisationSyncCounterRef = React.useRef(0);
   const latestStepDataSourceSyncedLineItemsRef = React.useRef<LineItemState | null>(null);
-  const deferredReservationAutoSaveHoldReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deferredUtilisationAutoSaveHoldReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceFirstPresentationLoggedRef = React.useRef<string>('');
-  const pendingStepReservationDraftSyncRef = React.useRef<{
+  const pendingStepUtilisationDraftSyncRef = React.useRef<{
     stepId: string;
     reason: string;
   } | null>(null);
-  const shouldWaitForReservationSyncBeforeBootstrap = React.useMemo(
-    () => shouldWaitForGuidedReservationSyncOnBootstrap(dataSourceBootstrap),
+  const shouldWaitForUtilisationSyncBeforeBootstrap = React.useMemo(
+    () => shouldWaitForGuidedUtilisationSyncOnBootstrap(dataSourceBootstrap),
     [dataSourceBootstrap]
   );
   const shouldWaitForSharedDataBeforeBootstrap = React.useMemo(
     () => shouldWaitForSharedDataMutationsOnBootstrap(dataSourceBootstrap),
     [dataSourceBootstrap]
   );
-  const [pendingStepReservationDraftSyncTick, setPendingStepReservationDraftSyncTick] = React.useState(0);
+  const [pendingStepUtilisationDraftSyncTick, setPendingStepUtilisationDraftSyncTick] = React.useState(0);
   const [stepDataSourceBootstrapRetryTick, setStepDataSourceBootstrapRetryTick] = React.useState(0);
   const stepDataSourceBootstrapSignature = React.useMemo(
     () =>
@@ -258,11 +258,11 @@ export const useGuidedStepDataSourceState = ({
 
   React.useEffect(() => {
     return () => {
-      Object.values(reservationDebounceTimersRef.current).forEach(timer => {
+      Object.values(utilisationDebounceTimersRef.current).forEach(timer => {
         clearTimeout(timer);
       });
-      reservationDebounceTimersRef.current = {};
-      reservationCommittedValuesRef.current = {};
+      utilisationDebounceTimersRef.current = {};
+      utilisationCommittedValuesRef.current = {};
     };
   }, []);
 
@@ -324,35 +324,35 @@ export const useGuidedStepDataSourceState = ({
     [buildStepDataSourceLoadKey, stepDataSourceBootstrapSignature, stepDataSourceLoadingCounts]
   );
 
-  const queueStepReservationDraftSnapshotSync = React.useCallback(
+  const queueStepUtilisationDraftSnapshotSync = React.useCallback(
     (reason: string, snapshotLineItems?: LineItemState | null) => {
-      if (!queueGuidedStepReservationDraftSync) return;
+      if (!queueGuidedStepUtilisationDraftSync) return;
       if (!currentGuidedStepId) return;
       const resolvedSnapshotLineItems = snapshotLineItems || latestStepDataSourceSyncedLineItemsRef.current || null;
       if (resolvedSnapshotLineItems) {
         latestStepDataSourceSyncedLineItemsRef.current = null;
-        queueGuidedStepReservationDraftSync({
+        queueGuidedStepUtilisationDraftSync({
           stepId: currentGuidedStepId,
           reason,
           snapshotLineItems: resolvedSnapshotLineItems
         });
         return;
       }
-      pendingStepReservationDraftSyncRef.current = {
+      pendingStepUtilisationDraftSyncRef.current = {
         stepId: currentGuidedStepId,
         reason
       };
-      setPendingStepReservationDraftSyncTick(prev => prev + 1);
+      setPendingStepUtilisationDraftSyncTick(prev => prev + 1);
     },
-    [currentGuidedStepId, queueGuidedStepReservationDraftSync]
+    [currentGuidedStepId, queueGuidedStepUtilisationDraftSync]
   );
 
-  const queueImmediateStepReservationDraftSync = React.useCallback(
-    (args: QueueImmediateStepReservationDraftSyncArgs) => {
-      if (!queueGuidedStepReservationDraftSync) return;
+  const queueImmediateStepUtilisationDraftSync = React.useCallback(
+    (args: QueueImmediateStepUtilisationDraftSyncArgs) => {
+      if (!queueGuidedStepUtilisationDraftSync) return;
       if (!currentGuidedStepId) return;
       const reason = `lineItem:${groupId}:${args.parentRowId}:${args.sourceKey}:${Object.keys(args.patch).sort().join(',') || 'change'}`;
-      onDiagnostic?.('guidedStep.reservationSync.queued', {
+      onDiagnostic?.('guidedStep.utilisationSync.queued', {
         groupId,
         stepId: currentGuidedStepId,
         parentRowId: args.parentRowId,
@@ -362,24 +362,24 @@ export const useGuidedStepDataSourceState = ({
       const snapshotLineItems = args.snapshotLineItems || latestStepDataSourceSyncedLineItemsRef.current || null;
       if (snapshotLineItems) {
         latestStepDataSourceSyncedLineItemsRef.current = null;
-        queueGuidedStepReservationDraftSync({
+        queueGuidedStepUtilisationDraftSync({
           stepId: currentGuidedStepId,
           reason,
           snapshotLineItems
         });
         return;
       }
-      pendingStepReservationDraftSyncRef.current = {
+      pendingStepUtilisationDraftSyncRef.current = {
         stepId: currentGuidedStepId,
         reason
       };
-      setPendingStepReservationDraftSyncTick(prev => prev + 1);
+      setPendingStepUtilisationDraftSyncTick(prev => prev + 1);
     },
-    [currentGuidedStepId, groupId, onDiagnostic, queueGuidedStepReservationDraftSync]
+    [currentGuidedStepId, groupId, onDiagnostic, queueGuidedStepUtilisationDraftSync]
   );
 
   const updateStepDataSourceAvailability = React.useCallback(
-    (config: any, availability: InventoryAvailabilitySnapshot | null | undefined): void => {
+    (config: any, availability: BankAvailabilitySnapshot | null | undefined): void => {
       if (!config?.dataSource || !availability) return;
       mutateCachedDataSource(config.dataSource, language, items =>
         items.map(item => {
@@ -387,9 +387,9 @@ export const useGuidedStepDataSourceState = ({
           const matchesRecord = `${item.id ?? ''}`.trim() === `${availability.resourceRecordId || ''}`.trim();
           const matchesItem =
             !availability.resourceItemId ||
-            resolveReservationSourceItemKey(config, item) === `${availability.resourceItemId}`.trim();
+            resolveUtilisationSourceItemKey(config, item) === `${availability.resourceItemId}`.trim();
           if (!matchesRecord || !matchesItem) return item;
-          return applyInventoryAvailabilitySnapshotToRow(item, availability);
+          return applyBankAvailabilitySnapshotToRow(item, availability);
         })
       );
       queueStepDataSourceRefreshTick();
@@ -398,7 +398,7 @@ export const useGuidedStepDataSourceState = ({
   );
 
   const applyStepDataSourceAvailabilitySnapshots = React.useCallback(
-    (snapshots: InventoryAvailabilitySnapshot[] | null | undefined): void => {
+    (snapshots: BankAvailabilitySnapshot[] | null | undefined): void => {
       const entries = Array.isArray(snapshots) ? snapshots.filter(Boolean) : [];
       if (!entries.length || !activeStepDataSourceRows.length) return;
       activeStepDataSourceRows.forEach(config => {
@@ -406,7 +406,7 @@ export const useGuidedStepDataSourceState = ({
         entries.forEach(snapshot => {
           if (!snapshot) return;
           if (dataSourceFormKey && dataSourceFormKey !== `${snapshot.resourceFormKey || ''}`.trim()) return;
-          updateStepDataSourceAvailability(config, normalizeInventoryAvailabilitySnapshotForDisplay(snapshot));
+          updateStepDataSourceAvailability(config, normalizeBankAvailabilitySnapshotForDisplay(snapshot));
         });
       });
     },
@@ -423,16 +423,16 @@ export const useGuidedStepDataSourceState = ({
     const recordChanged = stepDataSourceRecordIdRef.current !== normalizedRecordId;
     stepDataSourceRecordIdRef.current = normalizedRecordId;
     if (recordChanged) {
-      const timerKeys = Object.keys(reservationDebounceTimersRef.current);
+      const timerKeys = Object.keys(utilisationDebounceTimersRef.current);
       if (timerKeys.length) {
         timerKeys.forEach(key => {
-          const timer = reservationDebounceTimersRef.current[key];
+          const timer = utilisationDebounceTimersRef.current[key];
           if (timer) clearTimeout(timer);
-          delete reservationDebounceTimersRef.current[key];
+          delete utilisationDebounceTimersRef.current[key];
         });
       }
-      reservationRequestVersionRef.current = {};
-      reservationCommittedValuesRef.current = {};
+      utilisationRequestVersionRef.current = {};
+      utilisationCommittedValuesRef.current = {};
       if (Object.keys(stepDataSourceDraftsRef.current).length) {
         stepDataSourceDraftsRef.current = {};
         setStepDataSourceDrafts({});
@@ -466,18 +466,18 @@ export const useGuidedStepDataSourceState = ({
       const loadingEntries = configEntries.map(({ dataSource }) => ({ dataSource, id: dataSource?.id }));
       beginStepDataSourceLoading(loadingEntries);
       try {
-        let reservationSyncFreshness: GuidedReservationSyncWaitResult['freshness'] = null;
+        let utilisationSyncFreshness: GuidedUtilisationSyncWaitResult['freshness'] = null;
         if (
-          shouldWaitForReservationSyncBeforeBootstrap &&
+          shouldWaitForUtilisationSyncBeforeBootstrap &&
           normalizedRecordId &&
-          waitForGuidedStepReservationDraftSync
+          waitForGuidedStepUtilisationDraftSync
         ) {
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.start', {
             groupId,
             stepId: currentGuidedStepId || null,
             recordId: normalizedRecordId
           });
-          const waitResult = await waitForGuidedStepReservationDraftSync({
+          const waitResult = await waitForGuidedStepUtilisationDraftSync({
             recordId: normalizedRecordId,
             stepId: currentGuidedStepId || undefined,
             reason: `stepDataSourceBootstrap:${groupId}`
@@ -491,13 +491,13 @@ export const useGuidedStepDataSourceState = ({
             });
             return false;
           }
-          reservationSyncFreshness = waitResult.freshness || null;
+          utilisationSyncFreshness = waitResult.freshness || null;
           onDiagnostic?.('guidedStep.dataSourceBootstrap.wait.done', {
             groupId,
             stepId: currentGuidedStepId || null,
             recordId: normalizedRecordId,
-            freshnessDataSourceIds: reservationSyncFreshness?.dataSourceIds || [],
-            freshnessUpdatedRows: reservationSyncFreshness?.updatedRows || 0
+            freshnessDataSourceIds: utilisationSyncFreshness?.dataSourceIds || [],
+            freshnessUpdatedRows: utilisationSyncFreshness?.updatedRows || 0
           });
         }
 
@@ -538,22 +538,22 @@ export const useGuidedStepDataSourceState = ({
         const pendingFetches = configEntries
           .map(({ dataSource, shouldForceRefresh }) => {
             const cachedDataSource = peekCachedDataSource(dataSource, language);
-            const canUseReservationSyncFreshness =
+            const canUseUtilisationSyncFreshness =
               shouldForceRefresh &&
-              shouldUseReservationSyncFreshnessForDataSource({
-                freshness: reservationSyncFreshness,
+              shouldUseUtilisationSyncFreshnessForDataSource({
+                freshness: utilisationSyncFreshness,
                 recordId: normalizedRecordId,
                 stepId: currentGuidedStepId,
                 dataSource,
                 cachedDataSource
               });
-            if (canUseReservationSyncFreshness) {
-              onDiagnostic?.('guidedStep.dataSourceBootstrap.fetch.skippedFreshReservationSync', {
+            if (canUseUtilisationSyncFreshness) {
+              onDiagnostic?.('guidedStep.dataSourceBootstrap.fetch.skippedFreshUtilisationSync', {
                 groupId,
                 stepId: currentGuidedStepId || null,
                 recordId: normalizedRecordId || null,
                 dataSourceId: `${dataSource?.id || ''}`.trim() || 'default',
-                updatedRows: reservationSyncFreshness?.updatedRows || 0
+                updatedRows: utilisationSyncFreshness?.updatedRows || 0
               });
               return null;
             }
@@ -625,12 +625,12 @@ export const useGuidedStepDataSourceState = ({
     onDiagnostic,
     queueStepDataSourceRefreshTick,
     recordId,
-    shouldWaitForReservationSyncBeforeBootstrap,
+    shouldWaitForUtilisationSyncBeforeBootstrap,
     shouldWaitForSharedDataBeforeBootstrap,
     stepDataSourceBootstrapSignature,
     stepDataSourceBootstrapRetryTick,
     stepDataSourceRows,
-    waitForGuidedStepReservationDraftSync,
+    waitForGuidedStepUtilisationDraftSync,
     waitForPendingSharedDataMutations
   ]);
 
@@ -672,20 +672,20 @@ export const useGuidedStepDataSourceState = ({
   ]);
 
   React.useEffect(() => {
-    const pending = pendingStepReservationDraftSyncRef.current;
-    if (!pending || !queueGuidedStepReservationDraftSync) return;
-    pendingStepReservationDraftSyncRef.current = null;
+    const pending = pendingStepUtilisationDraftSyncRef.current;
+    if (!pending || !queueGuidedStepUtilisationDraftSync) return;
+    pendingStepUtilisationDraftSyncRef.current = null;
     const snapshotLineItems = latestStepDataSourceSyncedLineItemsRef.current || lineItems;
     latestStepDataSourceSyncedLineItemsRef.current = null;
-    queueGuidedStepReservationDraftSync({
+    queueGuidedStepUtilisationDraftSync({
       stepId: pending.stepId,
       reason: pending.reason,
       snapshotLineItems
     });
   }, [
     lineItems,
-    pendingStepReservationDraftSyncTick,
-    queueGuidedStepReservationDraftSync,
+    pendingStepUtilisationDraftSyncTick,
+    queueGuidedStepUtilisationDraftSync,
     stepDataSourceDrafts,
     values
   ]);
@@ -733,15 +733,15 @@ export const useGuidedStepDataSourceState = ({
     stepDataSourceDrafts,
     setStepDataSourceDrafts,
     stepDataSourceDraftsRef,
-    reservationDebounceTimersRef,
-    reservationRequestVersionRef,
-    reservationCommittedValuesRef,
-    reservationSyncCounterRef,
+    utilisationDebounceTimersRef,
+    utilisationRequestVersionRef,
+    utilisationCommittedValuesRef,
+    utilisationSyncCounterRef,
     latestStepDataSourceSyncedLineItemsRef,
-    deferredReservationAutoSaveHoldReleaseTimerRef,
+    deferredUtilisationAutoSaveHoldReleaseTimerRef,
     isStepDataSourceLoading,
-    queueStepReservationDraftSnapshotSync,
-    queueImmediateStepReservationDraftSync,
+    queueStepUtilisationDraftSnapshotSync,
+    queueImmediateStepUtilisationDraftSync,
     updateStepDataSourceAvailability,
     applyStepDataSourceAvailabilitySnapshots
   };

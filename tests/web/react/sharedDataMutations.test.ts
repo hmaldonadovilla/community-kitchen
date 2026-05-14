@@ -2,38 +2,38 @@ import {
   normalizeSharedDataFormKey,
   resolveFollowupSharedDataMutationTargetFormKeys,
   resolvePendingSharedDataMutationMatches,
-  resolveReservationSharedDataTargetFormKeys,
+  resolveUtilisationSharedDataTargetFormKeys,
   resolveStepDataSourceTargetFormKeys,
   resolveSubmitEffectTargetFormKeys
 } from '../../../src/web/react/app/sharedDataMutations';
 
 describe('sharedDataMutations helpers', () => {
   it('normalizes shared form keys and step datasource targets', () => {
-    expect(normalizeSharedDataFormKey(' Config: Leftover Inventory ')).toBe('Config: Leftover Inventory');
+    expect(normalizeSharedDataFormKey(' Config: Leftover Bank ')).toBe('Config: Leftover Bank');
     expect(
       resolveStepDataSourceTargetFormKeys([
         {
           dataSource: {
-            id: 'Leftover Inventory Data',
-            formKey: 'Config: Leftover Inventory'
+            id: 'Leftover Bank Data',
+            formKey: 'Config: Leftover Bank'
           }
         },
         {
-          id: 'Leftover Inventory Data',
-          formKey: ' Config: Leftover Inventory '
+          id: 'Leftover Bank Data',
+          formKey: ' Config: Leftover Bank '
         },
         'Config: Ingredients Management'
       ])
-    ).toEqual(['Config: Leftover Inventory', 'Config: Ingredients Management']);
+    ).toEqual(['Config: Leftover Bank', 'Config: Ingredients Management']);
   });
 
-  it('resolves shared forms touched by close submit effects and reservation reconciliation', () => {
+  it('resolves shared forms touched by close submit effects and active utilisations', () => {
     const definition: any = {
       followupConfig: {
         submitEffects: [
           {
             type: 'createRecord',
-            targetFormKey: 'Config: Leftover Inventory'
+            targetFormKey: 'Config: Leftover Bank'
           }
         ]
       },
@@ -48,9 +48,9 @@ describe('sharedDataMutations helpers', () => {
                 dataSourceRows: [
                   {
                     dataSource: {
-                      formKey: 'Config: Leftover Inventory'
+                      formKey: 'Config: Leftover Bank'
                     },
-                    reservation: {
+                    utilisation: {
                       enabled: true
                     }
                   }
@@ -62,25 +62,25 @@ describe('sharedDataMutations helpers', () => {
       }
     };
 
-    expect(resolveSubmitEffectTargetFormKeys(definition)).toEqual(['Config: Leftover Inventory']);
-    expect(resolveReservationSharedDataTargetFormKeys(definition)).toEqual(['Config: Leftover Inventory']);
+    expect(resolveSubmitEffectTargetFormKeys(definition)).toEqual(['Config: Leftover Bank']);
+    expect(resolveUtilisationSharedDataTargetFormKeys(definition)).toEqual(['Config: Leftover Bank']);
     expect(
       resolveFollowupSharedDataMutationTargetFormKeys({
         definition,
-        actions: ['CREATE_PDF', 'CLOSE_RECORD', 'RECONCILE_RESERVATIONS']
+        actions: ['CREATE_PDF', 'CLOSE_RECORD']
       })
-    ).toEqual(['Config: Leftover Inventory']);
+    ).toEqual(['Config: Leftover Bank']);
   });
 
   it('matches pending mutations by shared target form key', () => {
     expect(
       resolvePendingSharedDataMutationMatches({
-        targetFormKeys: ['Config: Leftover Inventory'],
+        targetFormKeys: ['Config: Leftover Bank'],
         pending: [
           {
             recordId: 'MP-1',
             reason: 'close.background',
-            targetFormKeys: [' Config: Leftover Inventory ']
+            targetFormKeys: [' Config: Leftover Bank ']
           },
           {
             recordId: 'MP-2',

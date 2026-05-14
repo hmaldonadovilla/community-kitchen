@@ -224,7 +224,7 @@ describe('ConfigSheet', () => {
           "selectionEffects": [
             {
               "type": "setValuesFromDataSource",
-              "dataSource": { "id": "Config: Leftover Inventory", "sheetId": "abc123", "tabName": "Leftover Inventory Data" },
+              "dataSource": { "id": "Config: Leftover Bank", "sheetId": "abc123", "tabName": "Leftover Bank Data" },
               "lookupField": "LEFTOVER_ID",
               "fieldMapping": {
                 "RECIPE": "LEFTOVER_RECIPE",
@@ -254,9 +254,9 @@ describe('ConfigSheet', () => {
         lookupField: 'LEFTOVER_ID',
         clearOnNoMatch: true,
         dataSource: expect.objectContaining({
-          id: 'Config: Leftover Inventory',
+          id: 'Config: Leftover Bank',
           sheetId: 'abc123',
-          tabName: 'Leftover Inventory Data'
+          tabName: 'Leftover Bank Data'
         }),
         fieldMapping: {
           RECIPE: 'LEFTOVER_RECIPE',

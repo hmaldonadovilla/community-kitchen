@@ -28,7 +28,7 @@ import {
   WebQuestionDefinition
 } from '../../types';
 import type {
-  InventoryReservationPlanScope,
+  BankUtilisationPlanScope,
   LineItemFieldConfig,
   LineItemGroupConfigOverride,
   LineItemOverlaySessionConfig,
@@ -52,11 +52,11 @@ import {
 import { shouldAutoOpenSubgroupForPendingAnchor } from '../features/overlays/domain/overlayDetailNavigation';
 import { resolveOverlayDetailErrors } from '../features/overlays/domain/overlayDetailValidation';
 import { applyOverlayCloseDeletePlan, resolveOverlayCloseDeletePlan, resolveOverlayCloseDeleteScope } from '../features/overlays/domain/overlayCloseEffects';
-import { shouldQueueBackgroundReservationSyncOnAdvance } from '../features/steps/domain/backgroundReservationSync';
+import { shouldQueueBackgroundUtilisationSyncOnAdvance } from '../features/steps/domain/backgroundUtilisationSync';
 import { isGuidedStepBarAccessAllowed } from '../features/steps/domain/stepAccess';
 import { resolveGuidedStepIdOnStructureChange } from '../features/steps/domain/resolveGuidedStepOnStructureChange';
 import { buildGuidedStepDefinitionAction } from '../features/steps/domain/guidedStepDefinition';
-import type { GuidedReservationSyncWaitResult } from '../features/reservations/domain/reservationSyncFreshness';
+import type { GuidedUtilisationSyncWaitResult } from '../features/utilisations/domain/utilisationSyncFreshness';
 import {
   resolveGuidedClearOnChangeOrderedFieldIdsAction,
   resolveGuidedOrderedQuestionsAction
@@ -162,13 +162,13 @@ import { useFormLineItemRows } from '../features/lineItems/hooks/useFormLineItem
 import { useFormFieldChangeHandlers } from '../features/formState/hooks/useFormFieldChangeHandlers';
 import { useOverlayOpenActions } from '../features/lineItems/hooks/useOverlayOpenActions';
 import {
-  buildGuidedReservationManagedRowRemovalFingerprint,
-  buildGuidedReservationManagedRowRemovalScopes,
+  buildGuidedUtilisationManagedRowRemovalFingerprint,
+  buildGuidedUtilisationManagedRowRemovalScopes,
   cloneLineItemStateSnapshot,
-  detectGuidedReservationManagedRowRemovals,
-  resolveGuidedReservationManagedRowRemovalDetectionScope,
-  type GuidedReservationManagedRowRemovalImpact
-} from '../features/reservations/stepReservationPlan';
+  detectGuidedUtilisationManagedRowRemovals,
+  resolveGuidedUtilisationManagedRowRemovalDetectionScope,
+  type GuidedUtilisationManagedRowRemovalImpact
+} from '../features/utilisations/stepUtilisationPlan';
 
 const OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS = 350;
 
@@ -384,7 +384,7 @@ interface FormViewProps {
     nextStepIndex?: number;
     trigger: 'next' | 'auto';
     waitDialog?: ConfirmDialogOpenArgs;
-    queueBackgroundReservationSync?: boolean;
+    queueBackgroundUtilisationSync?: boolean;
   }) => Promise<{ success: boolean; message?: string }>;
   requestedGuidedStepId?: string | null;
   guidedExternalSyncSignal?: GuidedExternalSyncSignal | null;
@@ -402,17 +402,17 @@ interface FormViewProps {
    */
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
   /**
-   * Optional guided-step hook that applies step-managed inventory reservations and persists
+   * Optional guided-step hook that applies step-managed bank utilisations and persists
    * the latest draft immediately after a valid datasource-row change.
    */
-  queueGuidedStepReservationDraftSync?: (args: {
+  queueGuidedStepUtilisationDraftSync?: (args: {
     stepId: string;
     reason: string;
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
-    releaseScopes?: InventoryReservationPlanScope[];
+    releaseScopes?: BankUtilisationPlanScope[];
   }) => void;
-  onGuidedStepReservationDraftStateChange?: (args: {
+  onGuidedStepUtilisationDraftStateChange?: (args: {
     stepId: string;
     groupId: string;
     parentRowId: string;
@@ -423,13 +423,13 @@ interface FormViewProps {
   }) => void;
   /**
    * Optional guided-step hook used by datasource-backed steps that must wait for an in-flight
-   * guided reservation sync before bootstrapping shared inventory rows.
+   * guided utilisation sync before bootstrapping shared bank rows.
    */
-  waitForGuidedStepReservationDraftSync?: (args: {
+  waitForGuidedStepUtilisationDraftSync?: (args: {
     recordId: string;
     stepId?: string;
     reason: string;
-  }) => Promise<GuidedReservationSyncWaitResult>;
+  }) => Promise<GuidedUtilisationSyncWaitResult>;
   waitForPendingSharedDataMutations?: (args: {
     targetFormKeys: string[];
     recordId?: string;
@@ -492,9 +492,9 @@ const FormView: React.FC<FormViewProps> = ({
   openConfirmDialog,
   setAutoSaveHold,
   ensureRecordId,
-  queueGuidedStepReservationDraftSync,
-  onGuidedStepReservationDraftStateChange,
-  waitForGuidedStepReservationDraftSync,
+  queueGuidedStepUtilisationDraftSync,
+  onGuidedStepUtilisationDraftStateChange,
+  waitForGuidedStepUtilisationDraftSync,
   waitForPendingSharedDataMutations
 }) => {
   const optionSortFor = (field: { optionSort?: any } | undefined): 'alphabetical' | 'source' => {
@@ -786,31 +786,31 @@ const FormView: React.FC<FormViewProps> = ({
   const guidedLastUserEditAtRef = useRef<number>(0);
 
   const activeGuidedStepIndex = Math.max(0, guidedStepIds.indexOf(activeGuidedStepId));
-  const guidedReservationRemovalSyncSnapshotRef = useRef<{
+  const guidedUtilisationRemovalSyncSnapshotRef = useRef<{
     recordId: string;
     lineItems: LineItemState | null;
   }>({ recordId: '', lineItems: null });
-  const guidedReservationRemovalSyncFingerprintRef = useRef<string>('');
+  const guidedUtilisationRemovalSyncFingerprintRef = useRef<string>('');
 
   useLayoutEffect(() => {
     const recordId = `${recordMeta?.id || ''}`.trim();
-    const previousSnapshot = guidedReservationRemovalSyncSnapshotRef.current;
+    const previousSnapshot = guidedUtilisationRemovalSyncSnapshotRef.current;
     const recordChanged = previousSnapshot.recordId !== recordId;
     const nextSnapshot = cloneLineItemStateSnapshot(lineItems);
-    if (!guidedEnabled || !queueGuidedStepReservationDraftSync || !recordId) {
-      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
-      guidedReservationRemovalSyncFingerprintRef.current = '';
+    if (!guidedEnabled || !queueGuidedStepUtilisationDraftSync || !recordId) {
+      guidedUtilisationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      guidedUtilisationRemovalSyncFingerprintRef.current = '';
       return;
     }
     if (!previousSnapshot.lineItems || recordChanged) {
-      guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
-      guidedReservationRemovalSyncFingerprintRef.current = '';
+      guidedUtilisationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+      guidedUtilisationRemovalSyncFingerprintRef.current = '';
       return;
     }
 
-    const detectionScope = resolveGuidedReservationManagedRowRemovalDetectionScope(activeGuidedStepId);
+    const detectionScope = resolveGuidedUtilisationManagedRowRemovalDetectionScope(activeGuidedStepId);
     const activeStepImpacts = detectionScope
-      ? detectGuidedReservationManagedRowRemovals({
+      ? detectGuidedUtilisationManagedRowRemovals({
           definition,
           stepId: detectionScope.stepId,
           previousLineItems: previousSnapshot.lineItems,
@@ -820,7 +820,7 @@ const FormView: React.FC<FormViewProps> = ({
       : [];
     const impacts = activeStepImpacts.length
       ? activeStepImpacts
-      : detectGuidedReservationManagedRowRemovals({
+      : detectGuidedUtilisationManagedRowRemovals({
           definition,
           stepId: activeGuidedStepId,
           previousLineItems: previousSnapshot.lineItems,
@@ -828,23 +828,23 @@ const FormView: React.FC<FormViewProps> = ({
           mode: 'all'
         });
 
-    guidedReservationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
+    guidedUtilisationRemovalSyncSnapshotRef.current = { recordId, lineItems: nextSnapshot };
     if (!impacts.length) return;
 
-    const removalFingerprint = buildGuidedReservationManagedRowRemovalFingerprint({
+    const removalFingerprint = buildGuidedUtilisationManagedRowRemovalFingerprint({
       recordId,
       activeStepId: activeGuidedStepId,
       impacts
     });
     if (
       removalFingerprint &&
-      guidedReservationRemovalSyncFingerprintRef.current === removalFingerprint
+      guidedUtilisationRemovalSyncFingerprintRef.current === removalFingerprint
     ) {
       return;
     }
-    guidedReservationRemovalSyncFingerprintRef.current = removalFingerprint;
+    guidedUtilisationRemovalSyncFingerprintRef.current = removalFingerprint;
 
-    const stepImpacts = new Map<string, GuidedReservationManagedRowRemovalImpact[]>();
+    const stepImpacts = new Map<string, GuidedUtilisationManagedRowRemovalImpact[]>();
     impacts.forEach(impact => {
       const list = stepImpacts.get(impact.stepId) || [];
       list.push(impact);
@@ -857,8 +857,8 @@ const FormView: React.FC<FormViewProps> = ({
           stepImpactList.flatMap(impact => Array.isArray(impact.removedRowIds) ? impact.removedRowIds : [])
         )
       );
-      const releaseScopes = buildGuidedReservationManagedRowRemovalScopes(stepImpactList);
-      onDiagnostic?.('guidedStep.reservationSync.queuedOnManagedRowRemoval', {
+      const releaseScopes = buildGuidedUtilisationManagedRowRemovalScopes(stepImpactList);
+      onDiagnostic?.('guidedStep.utilisationSync.queuedOnManagedRowRemoval', {
         recordId,
         activeStepId: activeGuidedStepId || null,
         stepId,
@@ -867,7 +867,7 @@ const FormView: React.FC<FormViewProps> = ({
         releaseScopes: releaseScopes.length,
         outputGroups: Array.from(new Set(stepImpactList.map(impact => impact.outputGroupId).filter(Boolean)))
       });
-      queueGuidedStepReservationDraftSync({
+      queueGuidedStepUtilisationDraftSync({
         stepId,
         reason: `managedRowRemoval:${removedRowIds.join(',') || 'unknown'}`,
         persistSnapshot: true,
@@ -881,7 +881,7 @@ const FormView: React.FC<FormViewProps> = ({
     guidedEnabled,
     lineItems,
     onDiagnostic,
-    queueGuidedStepReservationDraftSync,
+    queueGuidedStepUtilisationDraftSync,
     recordMeta?.id
   ]);
 
@@ -1407,7 +1407,7 @@ const FormView: React.FC<FormViewProps> = ({
           nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'next',
           waitDialog,
-          queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
+          queueBackgroundUtilisationSync: shouldQueueBackgroundUtilisationSyncOnAdvance(stepCfg?.navigation || null)
         });
         if (!outcome?.success) {
           onDiagnostic?.('steps.step.advance.blocked', {
@@ -1490,7 +1490,7 @@ const FormView: React.FC<FormViewProps> = ({
             nextStepIndex: targetIdx,
             trigger: 'next',
             waitDialog,
-            queueBackgroundReservationSync: false
+            queueBackgroundUtilisationSync: false
           });
           if (!outcome?.success) {
             onDiagnostic?.('steps.step.advance.blocked', {
@@ -1620,7 +1620,7 @@ const FormView: React.FC<FormViewProps> = ({
           nextStepIndex: activeGuidedStepIndex + 1,
           trigger: 'auto',
           waitDialog,
-          queueBackgroundReservationSync: shouldQueueBackgroundReservationSyncOnAdvance(stepCfg?.navigation || null)
+          queueBackgroundUtilisationSync: shouldQueueBackgroundUtilisationSyncOnAdvance(stepCfg?.navigation || null)
         });
         if (!outcome?.success) {
           onDiagnostic?.('steps.step.autoAdvance.blocked', {
@@ -5210,9 +5210,9 @@ const FormView: React.FC<FormViewProps> = ({
     runSelectionEffectsForAncestors: runSelectionEffectsForAncestorRows,
     setAutoSaveHold: setScopedAutoSaveHold,
     ensureRecordId,
-    queueGuidedStepReservationDraftSync,
-    onGuidedStepReservationDraftStateChange,
-    waitForGuidedStepReservationDraftSync,
+    queueGuidedStepUtilisationDraftSync,
+    onGuidedStepUtilisationDraftStateChange,
+    waitForGuidedStepUtilisationDraftSync,
     waitForPendingSharedDataMutations,
     ...(overrides || {})
   });

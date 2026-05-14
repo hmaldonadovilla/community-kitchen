@@ -9,21 +9,21 @@ import type {
   VisibilityContext,
   WebFormDefinition
 } from '../../../../types';
-import { resolveUserFacingErrorMessage, upsertInventoryReservationApi } from '../../../api';
+import { resolveUserFacingErrorMessage, upsertBankUtilisationApi } from '../../../api';
 import { applySourceFirstAncestorSelectionEffects } from '../../../app/sourceFirstAncestorSelectionSync';
 import { applyValueMapsToForm } from '../../../app/valueMaps';
 import type { LineItemState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
 import {
-  buildReservationConflictDialogCopy,
-  computeReservationConflictUsableQuantity
-} from '../../../components/form/reservationConflictDialog';
+  buildUtilisationConflictDialogCopy,
+  computeUtilisationConflictUsableQuantity
+} from '../../../components/form/utilisationConflictDialog';
 import {
-  buildReservationFailureMessage,
-  isStepReservationCommitEnabled,
-  resolveStepReservationDraftStateDecision,
-  shouldImmediatelySyncStepReservationChange
-} from '../../../components/form/reservationSyncPolicy';
+  buildUtilisationFailureMessage,
+  isStepUtilisationCommitEnabled,
+  resolveStepUtilisationDraftStateDecision,
+  shouldImmediatelySyncStepUtilisationChange
+} from '../../../components/form/utilisationSyncPolicy';
 import { applyStepDataSourceDraftUpdateAction } from '../domain/stepDataSourceDrafts';
 import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../domain/stepDataSourceExclusiveSelection';
 import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../domain/stepDataSourceAvailability';
@@ -31,10 +31,10 @@ import {
   applyStepDataSourceMatchedOutputRuleAction
 } from '../domain/stepDataSourceRows';
 import {
-  resolveServerCurrentRecordReservedQuantityFromRow
+  resolveServerCurrentRecordUtilisedQuantityFromRow
 } from '../domain/virtualDataSourceRowValues';
-import { resolveReservationDisplayLabel } from '../../reservations/displayLabel';
-import { resolveReservationResourceFieldIds } from '../../reservations/sourceFields';
+import { resolveUtilisationDisplayLabel } from '../../utilisations/displayLabel';
+import { resolveUtilisationResourceFieldIds } from '../../utilisations/sourceFields';
 import {
   fieldByIdSafe,
   normalizeIdValue
@@ -62,10 +62,10 @@ type UseStepDataSourceOutputSyncArgs = {
   latestValuesRef: React.MutableRefObject<Record<string, FieldValue>>;
   latestStepDataSourceSyncedLineItemsRef: React.MutableRefObject<LineItemState | null>;
   stepDataSourceDraftsRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationDebounceTimersRef: React.MutableRefObject<Record<string, ReturnType<typeof setTimeout>>>;
-  reservationRequestVersionRef: React.MutableRefObject<Record<string, number>>;
-  reservationSyncCounterRef: React.MutableRefObject<number>;
+  utilisationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
+  utilisationDebounceTimersRef: React.MutableRefObject<Record<string, ReturnType<typeof setTimeout>>>;
+  utilisationRequestVersionRef: React.MutableRefObject<Record<string, number>>;
+  utilisationSyncCounterRef: React.MutableRefObject<number>;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
   setStepDataSourceDrafts: React.Dispatch<React.SetStateAction<Record<string, Record<string, FieldValue>>>>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
@@ -102,16 +102,16 @@ type UseStepDataSourceOutputSyncArgs = {
     parentValues?: Record<string, FieldValue>;
   }) => VisibilityContext;
   resolveRowFlowGroupConfig: (groupKey: string) => { groupId: string; config: any } | null;
-  resolveCurrentReservationStateForSource: (
+  resolveCurrentUtilisationStateForSource: (
     config: any,
     sourceKey: string,
     currentParentRowId?: string
-  ) => { totalReservedQuantity: number; currentRowQuantity: number };
-  resolveCommittedReservationStateForSource: (
+  ) => { totalUtilisedQuantity: number; currentRowQuantity: number };
+  resolveCommittedUtilisationStateForSource: (
     config: any,
     sourceKey: string,
     currentParentRowId?: string
-  ) => { totalReservedQuantity: number; currentRowQuantity: number };
+  ) => { totalUtilisedQuantity: number; currentRowQuantity: number };
   queueStepDataSourceRefreshTick: () => void;
   updateStepDataSourceAvailability: (config: any, availability: any) => void;
   validateVirtualFieldRules: (
@@ -124,8 +124,8 @@ type UseStepDataSourceOutputSyncArgs = {
     reason: string;
     fieldPath: string;
   }) => Promise<{ success?: boolean; recordId?: string | null; message?: string | null } | null | undefined>;
-  onGuidedStepReservationDraftStateChange?: (event: any) => void;
-  queueImmediateStepReservationDraftSync: (args: {
+  onGuidedStepUtilisationDraftStateChange?: (event: any) => void;
+  queueImmediateStepUtilisationDraftSync: (args: {
     config: any;
     parentRowId: string;
     sourceKey: string;
@@ -138,7 +138,7 @@ type UseStepDataSourceOutputSyncArgs = {
 
 /**
  * Owner: guided step data-source output synchronization.
- * Keeps source-row output mutation, reservation sync, rollback, and value-map
+ * Keeps source-row output mutation, utilisation sync, rollback, and value-map
  * recomputation outside the line-item group renderer shell.
  */
 export const useStepDataSourceOutputSync = ({
@@ -152,10 +152,10 @@ export const useStepDataSourceOutputSync = ({
   latestValuesRef,
   latestStepDataSourceSyncedLineItemsRef,
   stepDataSourceDraftsRef,
-  reservationCommittedValuesRef,
-  reservationDebounceTimersRef,
-  reservationRequestVersionRef,
-  reservationSyncCounterRef,
+  utilisationCommittedValuesRef,
+  utilisationDebounceTimersRef,
+  utilisationRequestVersionRef,
+  utilisationSyncCounterRef,
   setLineItems,
   setStepDataSourceDrafts,
   setValues,
@@ -166,15 +166,15 @@ export const useStepDataSourceOutputSync = ({
   resolveVirtualPresetValue,
   resolveVirtualRowWhenContext,
   resolveRowFlowGroupConfig,
-  resolveCurrentReservationStateForSource,
-  resolveCommittedReservationStateForSource,
+  resolveCurrentUtilisationStateForSource,
+  resolveCommittedUtilisationStateForSource,
   queueStepDataSourceRefreshTick,
   updateStepDataSourceAvailability,
   validateVirtualFieldRules,
   toFiniteNumber,
   ensureRecordId,
-  onGuidedStepReservationDraftStateChange,
-  queueImmediateStepReservationDraftSync,
+  onGuidedStepUtilisationDraftStateChange,
+  queueImmediateStepUtilisationDraftSync,
   openConfirmDialog,
   onDiagnostic
 }: UseStepDataSourceOutputSyncArgs) => {
@@ -185,8 +185,8 @@ export const useStepDataSourceOutputSync = ({
         sourceRow: Record<string, any>;
         sourceKey: string;
         parentRowId: string;
-        serverCurrentRecordReservedQuantity?: number;
-        localCurrentRecordReservedQuantity?: number;
+        serverCurrentRecordUtilisedQuantity?: number;
+        localCurrentRecordUtilisedQuantity?: number;
       }
     ): void => {
       const mutation = buildStepDataSourceAvailabilityOptimisticMutationAction({
@@ -194,10 +194,10 @@ export const useStepDataSourceOutputSync = ({
         sourceRow: args.sourceRow,
         sourceKey: args.sourceKey,
         parentRowId: args.parentRowId,
-        serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
-        localCurrentRecordReservedQuantity: args.localCurrentRecordReservedQuantity,
-        resolveCommittedReservationStateForSource,
-        resolveCurrentReservationStateForSource
+        serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
+        localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity,
+        resolveCommittedUtilisationStateForSource,
+        resolveCurrentUtilisationStateForSource
       });
       if (!mutation) return;
 
@@ -207,8 +207,8 @@ export const useStepDataSourceOutputSync = ({
     [
       language,
       queueStepDataSourceRefreshTick,
-      resolveCommittedReservationStateForSource,
-      resolveCurrentReservationStateForSource
+      resolveCommittedUtilisationStateForSource,
+      resolveCurrentUtilisationStateForSource
     ]
   );
 
@@ -393,18 +393,18 @@ export const useStepDataSourceOutputSync = ({
     ]
   );
 
-  const syncStepDataSourceOutputRowWithReservation = React.useCallback(
+  const syncStepDataSourceOutputRowWithUtilisation = React.useCallback(
     (
       args: StepDataSourceOutputSyncArgs,
-      options?: { skipReservation?: boolean }
+      options?: { skipUtilisation?: boolean }
     ) => {
       const patchTouchesLine = Object.keys(args.patch || {}).length > 0;
       if (!patchTouchesLine) return;
-      const reservationConfig = args.config?.reservation && typeof args.config.reservation === 'object'
-        ? args.config.reservation
+      const utilisationConfig = args.config?.utilisation && typeof args.config.utilisation === 'object'
+        ? args.config.utilisation
         : null;
       const sourceFormKey = `${formKey || ''}`.trim();
-      const resourceFormKey = `${args.config?.dataSource?.formKey || reservationConfig?.resourceFormKey || ''}`.trim();
+      const resourceFormKey = `${args.config?.dataSource?.formKey || utilisationConfig?.resourceFormKey || ''}`.trim();
       const resourceRecordId = `${args.sourceRow?.id || ''}`.trim();
       const keyFieldId = `${args.config?.rowKeyFieldId || ''}`.trim();
       const output = resolveDataSourceOutputGroup(args.config, args.parentRow.id);
@@ -413,12 +413,12 @@ export const useStepDataSourceOutputSync = ({
       const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
       const modeFieldId = `${args.config?.modeFieldId || ''}`.trim();
       const sourceKey = `${args.sourceRow?.[keyFieldId] ?? ''}`.trim();
-      const patchTouchesReservation =
+      const patchTouchesUtilisation =
         Object.prototype.hasOwnProperty.call(args.patch, selectedFieldId) ||
         Object.prototype.hasOwnProperty.call(args.patch, quantityFieldId);
-      const canManageReservation =
-        !!reservationConfig &&
-        reservationConfig.enabled !== false &&
+      const canManageUtilisation =
+        !!utilisationConfig &&
+        utilisationConfig.enabled !== false &&
         !!sourceFormKey &&
         !!resourceFormKey &&
         !!resourceRecordId &&
@@ -427,16 +427,16 @@ export const useStepDataSourceOutputSync = ({
         !!output &&
         !!outputKeyFieldId &&
         !!sourceKey;
-      const draftKey = canManageReservation
+      const draftKey = canManageUtilisation
         ? buildStepDataSourceDraftKey(args.config, args.parentRow.id, sourceKey)
         : '';
 
       let virtualValues: Record<string, FieldValue> | null = null;
       let nextVirtualValues: Record<string, FieldValue> | null = null;
-      let optimisticServerCurrentRecordReservedQuantity: number | undefined;
-      let optimisticLocalCurrentRecordReservedQuantity: number | undefined;
+      let optimisticServerCurrentRecordUtilisedQuantity: number | undefined;
+      let optimisticLocalCurrentRecordUtilisedQuantity: number | undefined;
 
-      if (canManageReservation) {
+      if (canManageUtilisation) {
         const outputRows = lineItems[output.key] || [];
         const existingOutputRow =
           outputRows.find(candidate => `${(candidate.values as any)?.[outputKeyFieldId] ?? ''}` === sourceKey) || null;
@@ -447,41 +447,41 @@ export const useStepDataSourceOutputSync = ({
           draftValues: stepDataSourceDraftsRef.current[draftKey] || null,
           parentRowId: args.parentRow.id
         });
-        if (!reservationCommittedValuesRef.current[draftKey]) {
+        if (!utilisationCommittedValuesRef.current[draftKey]) {
           const committedValues: Record<string, FieldValue> = {};
           if (selectedFieldId) committedValues[selectedFieldId] = virtualValues[selectedFieldId];
           committedValues[quantityFieldId] = virtualValues[quantityFieldId];
           if (modeFieldId) committedValues[modeFieldId] = virtualValues[modeFieldId];
-          reservationCommittedValuesRef.current[draftKey] = committedValues;
+          utilisationCommittedValuesRef.current[draftKey] = committedValues;
         }
         nextVirtualValues = { ...virtualValues, ...args.patch } as Record<string, FieldValue>;
         const currentSelected = selectedFieldId ? virtualValues[selectedFieldId] === true : true;
         const nextSelected = selectedFieldId ? nextVirtualValues[selectedFieldId] === true : true;
         const currentRowQuantity = currentSelected ? toFiniteNumber(virtualValues[quantityFieldId]) : 0;
         const nextRowQuantity = nextSelected ? toFiniteNumber(nextVirtualValues[quantityFieldId]) : 0;
-        const currentReservationState = resolveCurrentReservationStateForSource(args.config, sourceKey, args.parentRow.id);
-        const committedReservationState = resolveCommittedReservationStateForSource(args.config, sourceKey, args.parentRow.id);
-        optimisticLocalCurrentRecordReservedQuantity = Math.max(
+        const currentUtilisationState = resolveCurrentUtilisationStateForSource(args.config, sourceKey, args.parentRow.id);
+        const committedUtilisationState = resolveCommittedUtilisationStateForSource(args.config, sourceKey, args.parentRow.id);
+        optimisticLocalCurrentRecordUtilisedQuantity = Math.max(
           0,
-          currentReservationState.totalReservedQuantity - currentRowQuantity + nextRowQuantity
+          currentUtilisationState.totalUtilisedQuantity - currentRowQuantity + nextRowQuantity
         );
-        optimisticServerCurrentRecordReservedQuantity = resolveServerCurrentRecordReservedQuantityFromRow(
+        optimisticServerCurrentRecordUtilisedQuantity = resolveServerCurrentRecordUtilisedQuantityFromRow(
           args.sourceRow,
-          committedReservationState.totalReservedQuantity
+          committedUtilisationState.totalUtilisedQuantity
         );
       }
 
       const syncedLineItems = syncStepDataSourceOutputRow(args);
 
-      if (!canManageReservation) return;
+      if (!canManageUtilisation) return;
 
       const resolvedVirtualValues = virtualValues || {};
-      if (!reservationCommittedValuesRef.current[draftKey]) {
+      if (!utilisationCommittedValuesRef.current[draftKey]) {
         const committedValues: Record<string, FieldValue> = {};
         if (selectedFieldId) committedValues[selectedFieldId] = resolvedVirtualValues[selectedFieldId];
         committedValues[quantityFieldId] = resolvedVirtualValues[quantityFieldId];
         if (modeFieldId) committedValues[modeFieldId] = resolvedVirtualValues[modeFieldId];
-        reservationCommittedValuesRef.current[draftKey] = committedValues;
+        utilisationCommittedValuesRef.current[draftKey] = committedValues;
       }
       const resolvedNextVirtualValues = (nextVirtualValues || { ...resolvedVirtualValues, ...args.patch }) as Record<string, FieldValue>;
       const quantityField = quantityFieldId ? fieldByIdSafe(args.config?.fields, quantityFieldId) : null;
@@ -493,7 +493,7 @@ export const useStepDataSourceOutputSync = ({
         (modeField
           ? validateVirtualFieldRules(modeField, resolvedNextVirtualValues, args.parentRow.values as Record<string, FieldValue>).length > 0
           : false);
-      const stepReservationDraftStateArgs = {
+      const stepUtilisationDraftStateArgs = {
         patch: args.patch,
         selectedFieldId,
         quantityFieldId,
@@ -501,15 +501,15 @@ export const useStepDataSourceOutputSync = ({
         quantityValue: resolvedNextVirtualValues[quantityFieldId],
         hasValidationErrors
       };
-      if (options?.skipReservation) {
-        if (isStepReservationCommitEnabled(reservationConfig) && patchTouchesReservation) {
-          const draftStateDecision = resolveStepReservationDraftStateDecision({
-            ...stepReservationDraftStateArgs,
+      if (options?.skipUtilisation) {
+        if (isStepUtilisationCommitEnabled(utilisationConfig) && patchTouchesUtilisation) {
+          const draftStateDecision = resolveStepUtilisationDraftStateDecision({
+            ...stepUtilisationDraftStateArgs,
             notifyWhenValid: true,
-            validReason: 'reservationDraftValid'
+            validReason: 'utilisationDraftValid'
           });
           if (draftStateDecision) {
-            onGuidedStepReservationDraftStateChange?.({
+            onGuidedStepUtilisationDraftStateChange?.({
               stepId: currentGuidedStepId,
               groupId,
               parentRowId: args.parentRow.id,
@@ -523,21 +523,21 @@ export const useStepDataSourceOutputSync = ({
         return;
       }
 
-      if (patchTouchesReservation) {
+      if (patchTouchesUtilisation) {
         updateStepDataSourceAvailabilityOptimistically(args.config, {
           sourceRow: args.sourceRow,
           sourceKey,
           parentRowId: args.parentRow.id,
-          serverCurrentRecordReservedQuantity: optimisticServerCurrentRecordReservedQuantity,
-          localCurrentRecordReservedQuantity: optimisticLocalCurrentRecordReservedQuantity
+          serverCurrentRecordUtilisedQuantity: optimisticServerCurrentRecordUtilisedQuantity,
+          localCurrentRecordUtilisedQuantity: optimisticLocalCurrentRecordUtilisedQuantity
         });
       }
 
-      if (isStepReservationCommitEnabled(reservationConfig)) {
-        const shouldSyncImmediately = shouldImmediatelySyncStepReservationChange(stepReservationDraftStateArgs);
-        const draftStateDecision = resolveStepReservationDraftStateDecision(stepReservationDraftStateArgs);
+      if (isStepUtilisationCommitEnabled(utilisationConfig)) {
+        const shouldSyncImmediately = shouldImmediatelySyncStepUtilisationChange(stepUtilisationDraftStateArgs);
+        const draftStateDecision = resolveStepUtilisationDraftStateDecision(stepUtilisationDraftStateArgs);
         if (draftStateDecision) {
-          onGuidedStepReservationDraftStateChange?.({
+          onGuidedStepUtilisationDraftStateChange?.({
             stepId: currentGuidedStepId,
             groupId,
             parentRowId: args.parentRow.id,
@@ -548,7 +548,7 @@ export const useStepDataSourceOutputSync = ({
           });
         }
         if (shouldSyncImmediately) {
-          queueImmediateStepReservationDraftSync({
+          queueImmediateStepUtilisationDraftSync({
             config: args.config,
             parentRowId: args.parentRow.id,
             sourceKey,
@@ -558,29 +558,29 @@ export const useStepDataSourceOutputSync = ({
         }
         return;
       }
-      if (!patchTouchesReservation) return;
+      if (!patchTouchesUtilisation) return;
       const selected = selectedFieldId ? resolvedNextVirtualValues[selectedFieldId] === true : true;
       const quantity = selected ? toFiniteNumber(resolvedNextVirtualValues[quantityFieldId]) : 0;
-      const debounceMs = Number.isFinite(Number(reservationConfig.debounceMs))
-        ? Number(reservationConfig.debounceMs)
+      const debounceMs = Number.isFinite(Number(utilisationConfig.debounceMs))
+        ? Number(utilisationConfig.debounceMs)
         : 250;
       const timerKey = `${groupId}::${args.parentRow.id}::${sourceKey}`;
-      const previousTimer = reservationDebounceTimersRef.current[timerKey];
+      const previousTimer = utilisationDebounceTimersRef.current[timerKey];
       if (previousTimer) {
         clearTimeout(previousTimer);
-        delete reservationDebounceTimersRef.current[timerKey];
+        delete utilisationDebounceTimersRef.current[timerKey];
       }
 
-      const runReservationSync = async () => {
+      const runUtilisationSync = async () => {
         let sourceRecordId = `${recordId || ''}`.trim();
         if (!sourceRecordId && ensureRecordId) {
           const ensured = await ensureRecordId({
-            reason: 'inventoryReservation',
+            reason: 'bankUtilisation',
             fieldPath: `${groupId}.${quantityFieldId || selectedFieldId || sourceKey}`
           });
           sourceRecordId = `${ensured?.recordId || ''}`.trim();
           if (!ensured?.success || !sourceRecordId) {
-            onDiagnostic?.('inventory.reservation.ensureRecordFailed', {
+            onDiagnostic?.('bank.utilisation.ensureRecordFailed', {
               groupId,
               parentRowId: args.parentRow.id,
               resourceRecordId,
@@ -591,18 +591,18 @@ export const useStepDataSourceOutputSync = ({
           }
         }
         if (!sourceRecordId) return;
-        const requestVersion = (reservationSyncCounterRef.current += 1);
-        reservationRequestVersionRef.current[timerKey] = requestVersion;
-        onDiagnostic?.('inventory.reservation.request', {
+        const requestVersion = (utilisationSyncCounterRef.current += 1);
+        utilisationRequestVersionRef.current[timerKey] = requestVersion;
+        onDiagnostic?.('bank.utilisation.request', {
           groupId,
           parentRowId: args.parentRow.id,
           resourceRecordId,
           resourceItemId: sourceKey,
           quantity
         });
-        const { kindFieldId, unitFieldId } = resolveReservationResourceFieldIds(args.config);
+        const { kindFieldId, unitFieldId } = resolveUtilisationResourceFieldIds(args.config);
         try {
-          const result = await upsertInventoryReservationApi({
+          const result = await upsertBankUtilisationApi({
             resourceFormKey,
             resourceRecordId,
             resourceItemId: sourceKey,
@@ -615,12 +615,12 @@ export const useStepDataSourceOutputSync = ({
             sourceParentRowId: args.parentRow.id,
             sourceOutputGroupId: `${args.config?.outputGroupId || ''}`.trim() || undefined,
             sourceOutputKeyFieldId: `${args.config?.outputKeyFieldId || ''}`.trim() || undefined,
-            ledgerFormKey: `${reservationConfig.ledgerFormKey || ''}`.trim() || undefined,
-            allowedStatuses: Array.isArray(reservationConfig.allowedStatuses) ? reservationConfig.allowedStatuses : undefined
+            utilisationFormKey: `${utilisationConfig.utilisationFormKey || ''}`.trim() || undefined,
+            allowedStatuses: Array.isArray(utilisationConfig.allowedStatuses) ? utilisationConfig.allowedStatuses : undefined
           });
-          if (reservationRequestVersionRef.current[timerKey] !== requestVersion) return;
+          if (utilisationRequestVersionRef.current[timerKey] !== requestVersion) return;
           updateStepDataSourceAvailability(args.config, result.availability);
-          onDiagnostic?.('inventory.reservation.response', {
+          onDiagnostic?.('bank.utilisation.response', {
             groupId,
             parentRowId: args.parentRow.id,
             resourceRecordId,
@@ -631,39 +631,39 @@ export const useStepDataSourceOutputSync = ({
             freeQuantity: result.availability?.freeQuantity
           });
           if (!result.success) {
-            const message = buildReservationFailureMessage(
+            const message = buildUtilisationFailureMessage(
               resolveUserFacingErrorMessage(
                 result,
-                result.message || tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.')
+                result.message || tSystem('bank.utilisationUpdateFailed', language, 'Failed to update the utilisation.')
               ) || '',
-              tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.'),
+              tSystem('bank.utilisationUpdateFailed', language, 'Failed to update the utilisation.'),
               tSystem(
-                'inventory.reservationUpdateFailedDetail',
+                'bank.utilisationUpdateFailedDetail',
                 language,
-                "We couldn't update the reservation properly. Please try again."
+                "We couldn't update the utilisation properly. Please try again."
               ),
               {
                 availability: result.availability,
                 itemId: sourceKey,
-                itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+                itemLabel: resolveUtilisationDisplayLabel(args.config, args.sourceRow, sourceKey),
                 unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : ''
               }
             );
             if (message) {
-              onDiagnostic?.('inventory.reservation.rejected', {
+              onDiagnostic?.('bank.utilisation.rejected', {
                 groupId,
                 parentRowId: args.parentRow.id,
                 resourceRecordId,
                 resourceItemId: sourceKey,
                 message
               });
-              const rollbackQty = Math.max(0, toFiniteNumber(result.availability?.currentReservationQuantity));
-              const committedValues = reservationCommittedValuesRef.current[draftKey] || {};
+              const rollbackQty = Math.max(0, toFiniteNumber(result.availability?.currentUtilisationQuantity));
+              const committedValues = utilisationCommittedValuesRef.current[draftKey] || {};
               const committedModeValue =
                 modeFieldId && Object.prototype.hasOwnProperty.call(committedValues, modeFieldId)
                   ? committedValues[modeFieldId]
                   : null;
-              const usableQty = computeReservationConflictUsableQuantity(result.availability);
+              const usableQty = computeUtilisationConflictUsableQuantity(result.availability);
               const rollbackPatch: Record<string, FieldValue> = {
                 ...(selectedFieldId ? { [selectedFieldId]: rollbackQty > 0 } : {}),
                 [quantityFieldId]: rollbackQty > 0 ? `${rollbackQty}` : null
@@ -679,30 +679,30 @@ export const useStepDataSourceOutputSync = ({
                 resolvedPatch[modeFieldId] = null;
               }
 
-              const conflictDialog = buildReservationConflictDialogCopy({
+              const conflictDialog = buildUtilisationConflictDialogCopy({
                 language,
                 dialog:
-                  reservationConfig?.conflictDialog && typeof reservationConfig.conflictDialog === 'object'
-                    ? reservationConfig.conflictDialog
+                  utilisationConfig?.conflictDialog && typeof utilisationConfig.conflictDialog === 'object'
+                    ? utilisationConfig.conflictDialog
                     : null,
                 availability: result.availability,
                 requestedQuantity: quantity,
                 itemId: sourceKey,
-                itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+                itemLabel: resolveUtilisationDisplayLabel(args.config, args.sourceRow, sourceKey),
                 unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : '',
                 fallbackTitle: tSystem('common.notice', language, 'Notice'),
                 fallbackMessage: tSystem(
-                  'inventory.reservationConflict',
+                  'bank.utilisationConflict',
                   language,
                   'This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?'
                 ),
                 fallbackConfirmLabel: tSystem(
-                  'inventory.useAvailable',
+                  'bank.useAvailable',
                   language,
                   'Use available amount'
                 ),
                 fallbackCancelLabel: tSystem(
-                  'inventory.cancelAction',
+                  'bank.cancelAction',
                   language,
                   'Cancel action'
                 )
@@ -718,24 +718,24 @@ export const useStepDataSourceOutputSync = ({
                   showCloseButton: conflictDialog.showCloseButton,
                   dismissOnBackdrop: conflictDialog.dismissOnBackdrop,
                   primaryAction: conflictDialog.primaryAction,
-                  kind: 'inventoryReservationConflict',
+                  kind: 'bankUtilisationConflict',
                   refId: `${groupId}::${args.parentRow.id}::${sourceKey}`,
                   onConfirm: () => {
-                    syncStepDataSourceOutputRowWithReservation(
+                    syncStepDataSourceOutputRowWithUtilisation(
                       {
                         ...args,
                         patch: resolvedPatch
                       },
-                      { skipReservation: Math.abs(usableQty - rollbackQty) < 1e-9 }
+                      { skipUtilisation: Math.abs(usableQty - rollbackQty) < 1e-9 }
                     );
                   },
                   onCancel: () => {
-                    syncStepDataSourceOutputRowWithReservation(
+                    syncStepDataSourceOutputRowWithUtilisation(
                       {
                         ...args,
                         patch: rollbackPatch
                       },
-                      { skipReservation: true }
+                      { skipUtilisation: true }
                     );
                   }
                 });
@@ -756,7 +756,7 @@ export const useStepDataSourceOutputSync = ({
                 showCancel: false,
                 showCloseButton: true,
                 dismissOnBackdrop: true,
-                kind: 'inventoryReservationRejected',
+                kind: 'bankUtilisationRejected',
                 refId: `${groupId}::${args.parentRow.id}::${sourceKey}`,
                 onConfirm: () => {},
                 onCancel: () => {}
@@ -767,11 +767,11 @@ export const useStepDataSourceOutputSync = ({
             if (selectedFieldId) committedValues[selectedFieldId] = selected;
             committedValues[quantityFieldId] = quantity > 0 ? `${quantity}` : null;
             if (modeFieldId) committedValues[modeFieldId] = resolvedNextVirtualValues[modeFieldId] ?? null;
-            reservationCommittedValuesRef.current[draftKey] = committedValues;
+            utilisationCommittedValuesRef.current[draftKey] = committedValues;
           }
         } catch (error) {
-          if (reservationRequestVersionRef.current[timerKey] !== requestVersion) return;
-          const committedValues = reservationCommittedValuesRef.current[draftKey] || {};
+          if (utilisationRequestVersionRef.current[timerKey] !== requestVersion) return;
+          const committedValues = utilisationCommittedValuesRef.current[draftKey] || {};
           const rollbackPatch: Record<string, FieldValue> = {
             ...(selectedFieldId
               ? {
@@ -801,24 +801,24 @@ export const useStepDataSourceOutputSync = ({
             ...args,
             patch: rollbackPatch
           });
-          const message = buildReservationFailureMessage(
+          const message = buildUtilisationFailureMessage(
             resolveUserFacingErrorMessage(
               error,
-              tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.')
+              tSystem('bank.utilisationUpdateFailed', language, 'Failed to update the utilisation.')
             ) || '',
-            tSystem('inventory.reservationUpdateFailed', language, 'Failed to update the reservation.'),
+            tSystem('bank.utilisationUpdateFailed', language, 'Failed to update the utilisation.'),
             tSystem(
-              'inventory.reservationUpdateFailedDetail',
+              'bank.utilisationUpdateFailedDetail',
               language,
-              "We couldn't update the reservation properly. Please try again."
+              "We couldn't update the utilisation properly. Please try again."
             ),
             {
               itemId: sourceKey,
-              itemLabel: resolveReservationDisplayLabel(args.config, args.sourceRow, sourceKey),
+              itemLabel: resolveUtilisationDisplayLabel(args.config, args.sourceRow, sourceKey),
               unit: unitFieldId ? normalizeIdValue(args.sourceRow?.[unitFieldId]) : ''
             }
           );
-          onDiagnostic?.('inventory.reservation.error', {
+          onDiagnostic?.('bank.utilisation.error', {
             groupId,
             parentRowId: args.parentRow.id,
             resourceRecordId,
@@ -833,7 +833,7 @@ export const useStepDataSourceOutputSync = ({
             showCancel: false,
             showCloseButton: true,
             dismissOnBackdrop: true,
-            kind: 'inventoryReservationRejected',
+            kind: 'bankUtilisationRejected',
             refId: `${groupId}::${args.parentRow.id}::${sourceKey}`,
             onConfirm: () => {},
             onCancel: () => {}
@@ -842,13 +842,13 @@ export const useStepDataSourceOutputSync = ({
       };
 
       if (quantity <= 0) {
-        void runReservationSync();
+        void runUtilisationSync();
         return;
       }
 
-      reservationDebounceTimersRef.current[timerKey] = setTimeout(() => {
-        delete reservationDebounceTimersRef.current[timerKey];
-        void runReservationSync();
+      utilisationDebounceTimersRef.current[timerKey] = setTimeout(() => {
+        delete utilisationDebounceTimersRef.current[timerKey];
+        void runUtilisationSync();
       }, Math.max(0, debounceMs));
     },
     [
@@ -860,18 +860,18 @@ export const useStepDataSourceOutputSync = ({
       groupId,
       language,
       lineItems,
-      onGuidedStepReservationDraftStateChange,
+      onGuidedStepUtilisationDraftStateChange,
       onDiagnostic,
       openConfirmDialog,
-      queueImmediateStepReservationDraftSync,
+      queueImmediateStepUtilisationDraftSync,
       recordId,
-      resolveCommittedReservationStateForSource,
-      resolveCurrentReservationStateForSource,
+      resolveCommittedUtilisationStateForSource,
+      resolveCurrentUtilisationStateForSource,
       resolveDataSourceOutputGroup,
-      reservationCommittedValuesRef,
-      reservationDebounceTimersRef,
-      reservationRequestVersionRef,
-      reservationSyncCounterRef,
+      utilisationCommittedValuesRef,
+      utilisationDebounceTimersRef,
+      utilisationRequestVersionRef,
+      utilisationSyncCounterRef,
       stepDataSourceDraftsRef,
       syncStepDataSourceOutputRow,
       toFiniteNumber,
@@ -883,6 +883,6 @@ export const useStepDataSourceOutputSync = ({
 
   return {
     syncStepDataSourceOutputRow,
-    syncStepDataSourceOutputRowWithReservation
+    syncStepDataSourceOutputRowWithUtilisation
   };
 };

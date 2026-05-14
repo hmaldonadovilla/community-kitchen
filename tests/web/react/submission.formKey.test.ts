@@ -3,7 +3,7 @@ import {
   chainSerializedSubmissionRequest,
   isSubmissionStaleMessage,
   prepareClientDataVersionDispatch,
-  resolveReservationPlanSourceMetaAdoption,
+  resolveUtilisationPlanSourceMetaAdoption,
   resolveCurrentClientDataVersion,
   resolveDraftPayloadFormKey,
   resolveFollowupActionResultMeta,
@@ -144,10 +144,10 @@ describe('settleClientDataVersionAfterDispatch', () => {
   });
 });
 
-describe('resolveReservationPlanSourceMetaAdoption', () => {
-  it('adopts matching source metadata when the reservation plan started from the current version', () => {
+describe('resolveUtilisationPlanSourceMetaAdoption', () => {
+  it('adopts matching source metadata when the utilisation plan started from the current version', () => {
     expect(
-      resolveReservationPlanSourceMetaAdoption({
+      resolveUtilisationPlanSourceMetaAdoption({
         currentRecordId: 'REC-1',
         currentDataVersion: 109,
         fallbackRecordId: 'REC-1',
@@ -173,9 +173,9 @@ describe('resolveReservationPlanSourceMetaAdoption', () => {
     );
   });
 
-  it('skips adoption when the reservation plan started from a stale client version', () => {
+  it('skips adoption when the utilisation plan started from a stale client version', () => {
     expect(
-      resolveReservationPlanSourceMetaAdoption({
+      resolveUtilisationPlanSourceMetaAdoption({
         currentRecordId: 'REC-1',
         currentDataVersion: 109,
         fallbackRecordId: 'REC-1',

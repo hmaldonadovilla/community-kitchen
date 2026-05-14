@@ -1,131 +1,111 @@
 import {
-  computeOptimisticAggregateReservedQuantity,
-  computeAvailableFromAggregate,
+  computeAvailableFromBankQuantity,
   ensureEditableMaxIncludesCurrentValue,
   computeOptimisticFreeQuantity,
   computeOptimisticRowMaxQuantity,
-  resolveServerCurrentRecordReservedQuantity,
+  resolveServerCurrentRecordUtilisedQuantity,
   sanitizeNumericDraft,
   toFiniteNumberValue
 } from '../../../src/web/react/components/form/quantityConstraints';
 
 describe('quantityConstraints', () => {
-  it('computes free availability from remaining and reserved only', () => {
-    expect(computeAvailableFromAggregate(10, 4)).toBe(6);
-    expect(computeAvailableFromAggregate('10', '4')).toBe(6);
-    expect(computeAvailableFromAggregate('10', '40')).toBe(0);
+  it('computes free availability directly from the bank quantity', () => {
+    expect(computeAvailableFromBankQuantity(10)).toBe(10);
+    expect(computeAvailableFromBankQuantity('10')).toBe(10);
+    expect(computeAvailableFromBankQuantity('-4')).toBe(0);
   });
 
-  it('computes optimistic free availability by replacing current record reservations with local reservations', () => {
+  it('computes optimistic free availability by applying the local utilisation delta to the bank quantity', () => {
     expect(
       computeOptimisticFreeQuantity({
         remainingQuantity: 10,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 2,
-        localCurrentRecordReservedQuantity: 4
+        serverCurrentRecordUtilisedQuantity: 2,
+        localCurrentRecordUtilisedQuantity: 4
       })
-    ).toBe(3);
+    ).toBe(8);
     expect(
       computeOptimisticFreeQuantity({
-        remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5
+        remainingQuantity: 0,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5
       })
     ).toBe(0);
     expect(
       computeOptimisticFreeQuantity({
         remainingQuantity: 500,
-        reservedQuantity: 400,
-        serverCurrentRecordReservedQuantity: 200,
-        localCurrentRecordReservedQuantity: 200
+        serverCurrentRecordUtilisedQuantity: 200,
+        localCurrentRecordUtilisedQuantity: 200
       })
-    ).toBe(100);
+    ).toBe(500);
   });
 
-  it('falls back to committed current-record reservations when datasource rows have no explicit metadata', () => {
+  it('falls back to committed current-record utilisations when datasource rows have no explicit metadata', () => {
     expect(
-      resolveServerCurrentRecordReservedQuantity({
-        hasExplicitServerCurrentRecordReservedQuantity: false,
-        serverCurrentRecordReservedQuantity: undefined,
-        fallbackCurrentRecordReservedQuantity: 3
+      resolveServerCurrentRecordUtilisedQuantity({
+        hasExplicitServerCurrentRecordUtilisedQuantity: false,
+        serverCurrentRecordUtilisedQuantity: undefined,
+        fallbackCurrentRecordUtilisedQuantity: 3
       })
     ).toBe(3);
     expect(
-      resolveServerCurrentRecordReservedQuantity({
-        hasExplicitServerCurrentRecordReservedQuantity: true,
-        serverCurrentRecordReservedQuantity: 0,
-        fallbackCurrentRecordReservedQuantity: 3
+      resolveServerCurrentRecordUtilisedQuantity({
+        hasExplicitServerCurrentRecordUtilisedQuantity: true,
+        serverCurrentRecordUtilisedQuantity: 0,
+        fallbackCurrentRecordUtilisedQuantity: 3
       })
     ).toBe(0);
-  });
-
-  it('computes optimistic aggregate reserved stock by replacing the current record quantity only once', () => {
-    expect(
-      computeOptimisticAggregateReservedQuantity({
-        reservedQuantity: 3,
-        serverCurrentRecordReservedQuantity: 3,
-        localCurrentRecordReservedQuantity: 2
-      })
-    ).toBe(2);
   });
 
   it('computes per-row editable max quantity from optimistic free quantity plus current row quantity', () => {
     expect(
       computeOptimisticRowMaxQuantity({
         remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5,
         currentRowQuantity: 2
       })
-    ).toBe(2);
+    ).toBe(7);
     expect(
       computeOptimisticRowMaxQuantity({
         remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5,
         currentRowQuantity: 1
       })
-    ).toBe(1);
+    ).toBe(6);
   });
 
-  it('lets an existing reservation increase up to free stock plus its current row quantity', () => {
+  it('lets an existing utilisation increase up to free stock plus its current row quantity', () => {
     expect(
       computeOptimisticRowMaxQuantity({
         remainingQuantity: 15,
-        reservedQuantity: 10,
-        serverCurrentRecordReservedQuantity: 6,
-        localCurrentRecordReservedQuantity: 6,
+        serverCurrentRecordUtilisedQuantity: 6,
+        localCurrentRecordUtilisedQuantity: 6,
         currentRowQuantity: 6
       })
-    ).toBe(11);
+    ).toBe(21);
     expect(
       computeOptimisticFreeQuantity({
         remainingQuantity: 15,
-        reservedQuantity: 10,
-        serverCurrentRecordReservedQuantity: 6,
-        localCurrentRecordReservedQuantity: 10
+        serverCurrentRecordUtilisedQuantity: 6,
+        localCurrentRecordUtilisedQuantity: 10
       })
-    ).toBe(1);
+    ).toBe(11);
   });
 
   it('keeps free stock at zero while preserving per-row editable max for fully allocated quantities', () => {
     expect(
       computeOptimisticFreeQuantity({
-        remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5
+        remainingQuantity: 0,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5
       })
     ).toBe(0);
     expect(
       computeOptimisticRowMaxQuantity({
-        remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5,
+        remainingQuantity: 0,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5,
         currentRowQuantity: 2
       })
     ).toBe(2);
@@ -135,12 +115,11 @@ describe('quantityConstraints', () => {
     expect(
       computeOptimisticRowMaxQuantity({
         remainingQuantity: 5,
-        reservedQuantity: 5,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 6,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 6,
         currentRowQuantity: 6
       })
-    ).toBe(5);
+    ).toBe(10);
   });
 
   it('keeps editable max at least equal to the current row quantity', () => {

@@ -2,7 +2,7 @@ import {
   decorateSourceFirstAllocationRowForVisibility,
   filterSourceFirstAllocationRows,
   resolveSourceFirstAllocationDisplayFreeQuantity,
-  resolveSourceFirstAllocationReservationVisibilityScope,
+  resolveSourceFirstAllocationUtilisationVisibilityScope,
   resolveSourceFirstAllocationLabelVisibility,
   resolveSourceFirstRowSortMode,
   shouldPreserveSourceFirstAllocationOutputWhenExcluded,
@@ -87,10 +87,10 @@ describe('sourceFirstAllocations helpers', () => {
     ).toEqual(['MI-1']);
   });
 
-  it('hides rows that have no free quantity and are not reserved by the current record', () => {
+  it('hides rows that have no free quantity and are not utilised by the current record', () => {
     const rows = [
-      { LEFTOVER_ID: 'MI-1', LEFTOVER_EXP_DATE: '2026-04-17', __ckCurrentRecordReservedQuantity: 0, __ckFreeQuantity: 0 },
-      { LEFTOVER_ID: 'MI-2', LEFTOVER_EXP_DATE: '2026-04-17', __ckCurrentRecordReservedQuantity: 0, __ckFreeQuantity: 2 }
+      { LEFTOVER_ID: 'MI-1', LEFTOVER_EXP_DATE: '2026-04-17', __ckCurrentRecordUtilisedQuantity: 0, __ckFreeQuantity: 0 },
+      { LEFTOVER_ID: 'MI-2', LEFTOVER_EXP_DATE: '2026-04-17', __ckCurrentRecordUtilisedQuantity: 0, __ckFreeQuantity: 2 }
     ];
 
     expect(
@@ -102,7 +102,7 @@ describe('sourceFirstAllocations helpers', () => {
               { fieldId: 'LEFTOVER_EXP_DATE', greaterThanOrEqualFieldId: 'MP_PREP_DATE' },
               {
                 any: [
-                  { fieldId: '__ckCurrentRecordReservedQuantity', greaterThan: 0 },
+                  { fieldId: '__ckCurrentRecordUtilisedQuantity', greaterThan: 0 },
                   { fieldId: '__ckFreeQuantity', greaterThan: 0 }
                 ]
               }
@@ -114,24 +114,22 @@ describe('sourceFirstAllocations helpers', () => {
     ).toEqual(['MI-2']);
   });
 
-  it('keeps rows visible when the current record already reserves them', () => {
+  it('keeps rows visible when the current record already uses them', () => {
     const decorated = decorateSourceFirstAllocationRowForVisibility({
       row: {
         LEFTOVER_ID: 'MI-1',
         LEFTOVER_EXP_DATE: '2026-04-17',
-        LEFTOVER_PORTIONS: 12,
-        LEFTOVER_RESERVED_PORTIONS: 12
+        LEFTOVER_PORTIONS: 12
       },
       availabilityConfig: {
-        sourcePortionsFieldId: 'LEFTOVER_PORTIONS',
-        sourceReservedPortionsFieldId: 'LEFTOVER_RESERVED_PORTIONS'
+        sourcePortionsFieldId: 'LEFTOVER_PORTIONS'
       },
-      localCurrentRecordReservedQuantity: 4,
-      committedCurrentRecordReservedQuantity: 4
+      localCurrentRecordUtilisedQuantity: 4,
+      committedCurrentRecordUtilisedQuantity: 4
     });
 
-    expect(decorated.__ckCurrentRecordReservedQuantity).toBe(4);
-    expect(decorated.__ckFreeQuantity).toBe(0);
+    expect(decorated.__ckCurrentRecordUtilisedQuantity).toBe(4);
+    expect(decorated.__ckFreeQuantity).toBe(12);
     expect(
       filterSourceFirstAllocationRows({
         rows: [decorated],
@@ -141,7 +139,7 @@ describe('sourceFirstAllocations helpers', () => {
               { fieldId: 'LEFTOVER_EXP_DATE', greaterThanOrEqualFieldId: 'MP_PREP_DATE' },
               {
                 any: [
-                  { fieldId: '__ckCurrentRecordReservedQuantity', greaterThan: 0 },
+                  { fieldId: '__ckCurrentRecordUtilisedQuantity', greaterThan: 0 },
                   { fieldId: '__ckFreeQuantity', greaterThan: 0 }
                 ]
               }
@@ -153,104 +151,96 @@ describe('sourceFirstAllocations helpers', () => {
     ).toHaveLength(1);
   });
 
-  it('uses the full current-record reservation total for parent-scoped source rows', () => {
+  it('uses the full current-record utilisation total for parent-scoped source rows', () => {
     expect(
-      resolveSourceFirstAllocationReservationVisibilityScope({
-        localTotalReservedQuantity: 5,
-        committedTotalReservedQuantity: 4
+      resolveSourceFirstAllocationUtilisationVisibilityScope({
+        localTotalUtilisedQuantity: 5,
+        committedTotalUtilisedQuantity: 4
       })
     ).toEqual({
-      localCurrentRecordReservedQuantity: 5,
-      committedCurrentRecordReservedQuantity: 4
+      localCurrentRecordUtilisedQuantity: 5,
+      committedCurrentRecordUtilisedQuantity: 4
     });
   });
 
-  it('updates visible free stock from local drafts while preserving other-record reservations', () => {
+  it('updates visible free stock from local drafts while preserving other-record utilisations', () => {
     const decorated = decorateSourceFirstAllocationRowForVisibility({
       row: {
         LEFTOVER_ID: 'MI-20',
-        LEFTOVER_PORTIONS: 15,
-        LEFTOVER_RESERVED_PORTIONS: 15,
-        __ckCurrentRecordReservedQuantity: 11
+        LEFTOVER_PORTIONS: 0,
+        __ckCurrentRecordUtilisedQuantity: 11
       },
       availabilityConfig: {
-        sourcePortionsFieldId: 'LEFTOVER_PORTIONS',
-        sourceReservedPortionsFieldId: 'LEFTOVER_RESERVED_PORTIONS'
+        sourcePortionsFieldId: 'LEFTOVER_PORTIONS'
       },
-      localCurrentRecordReservedQuantity: 10,
-      committedCurrentRecordReservedQuantity: 11
+      localCurrentRecordUtilisedQuantity: 10,
+      committedCurrentRecordUtilisedQuantity: 11
     });
 
-    expect(decorated.__ckCurrentRecordReservedQuantity).toBe(10);
-    expect(decorated.__ckServerCurrentRecordReservedQuantity).toBe(11);
+    expect(decorated.__ckCurrentRecordUtilisedQuantity).toBe(10);
+    expect(decorated.__ckServerCurrentRecordUtilisedQuantity).toBe(11);
     expect(decorated.__ckFreeQuantity).toBe(1);
   });
 
-  it('does not double-count local quantities already included in an optimistic aggregate', () => {
+  it('does not double-count local quantities already included in an optimistic bank quantity', () => {
     const decorated = decorateSourceFirstAllocationRowForVisibility({
       row: {
         LEFTOVER_ID: 'MI-20',
-        LEFTOVER_PORTIONS: 15,
-        LEFTOVER_RESERVED_PORTIONS: 9,
-        __ckServerCurrentRecordReservedQuantity: 5,
-        __ckCurrentRecordReservedQuantity: 5
+        LEFTOVER_PORTIONS: 6,
+        __ckServerCurrentRecordUtilisedQuantity: 5,
+        __ckCurrentRecordUtilisedQuantity: 5
       },
       availabilityConfig: {
-        sourcePortionsFieldId: 'LEFTOVER_PORTIONS',
-        sourceReservedPortionsFieldId: 'LEFTOVER_RESERVED_PORTIONS'
+        sourcePortionsFieldId: 'LEFTOVER_PORTIONS'
       },
-      localCurrentRecordReservedQuantity: 5,
-      committedCurrentRecordReservedQuantity: 2
+      localCurrentRecordUtilisedQuantity: 5,
+      committedCurrentRecordUtilisedQuantity: 2
     });
 
-    expect(decorated.__ckServerCurrentRecordReservedQuantity).toBe(5);
-    expect(decorated.__ckCurrentRecordReservedQuantity).toBe(5);
+    expect(decorated.__ckServerCurrentRecordUtilisedQuantity).toBe(5);
+    expect(decorated.__ckCurrentRecordUtilisedQuantity).toBe(5);
     expect(decorated.__ckFreeQuantity).toBe(6);
   });
 
-  it('uses explicit server free quantity after local and server reservations agree', () => {
+  it('uses explicit server free quantity after local and server utilisations agree', () => {
     expect(
       resolveSourceFirstAllocationDisplayFreeQuantity({
-        remainingQuantity: 15,
-        reservedQuantity: 9,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 5,
+        remainingQuantity: 6,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 5,
         explicitFreeQuantity: 6
       })
     ).toBe(6);
   });
 
-  it('recomputes free quantity while local reservation edits are ahead of the server snapshot', () => {
+  it('recomputes free quantity while local utilisation edits are ahead of the server snapshot', () => {
     expect(
       resolveSourceFirstAllocationDisplayFreeQuantity({
-        remainingQuantity: 15,
-        reservedQuantity: 9,
-        serverCurrentRecordReservedQuantity: 5,
-        localCurrentRecordReservedQuantity: 10,
+        remainingQuantity: 6,
+        serverCurrentRecordUtilisedQuantity: 5,
+        localCurrentRecordUtilisedQuantity: 10,
         explicitFreeQuantity: 6
       })
     ).toBe(1);
   });
 
-  it('keeps server and local current-record reservations separate during release drafts', () => {
+  it('keeps server and local current-record utilisations separate during release drafts', () => {
     const decorated = decorateSourceFirstAllocationRowForVisibility({
       row: {
         LEFTOVER_ID: 'MI-20',
-        LEFTOVER_PORTIONS: 15,
-        LEFTOVER_RESERVED_PORTIONS: 15,
-        __ckServerCurrentRecordReservedQuantity: 11,
-        __ckCurrentRecordReservedQuantity: 1
+        LEFTOVER_PORTIONS: 0,
+        __ckServerCurrentRecordUtilisedQuantity: 11,
+        __ckCurrentRecordUtilisedQuantity: 1
       },
       availabilityConfig: {
-        sourcePortionsFieldId: 'LEFTOVER_PORTIONS',
-        sourceReservedPortionsFieldId: 'LEFTOVER_RESERVED_PORTIONS'
+        sourcePortionsFieldId: 'LEFTOVER_PORTIONS'
       },
-      localCurrentRecordReservedQuantity: 0,
-      committedCurrentRecordReservedQuantity: 11
+      localCurrentRecordUtilisedQuantity: 0,
+      committedCurrentRecordUtilisedQuantity: 11
     });
 
-    expect(decorated.__ckServerCurrentRecordReservedQuantity).toBe(11);
-    expect(decorated.__ckCurrentRecordReservedQuantity).toBe(0);
+    expect(decorated.__ckServerCurrentRecordUtilisedQuantity).toBe(11);
+    expect(decorated.__ckCurrentRecordUtilisedQuantity).toBe(0);
     expect(decorated.__ckFreeQuantity).toBe(11);
   });
 
@@ -260,13 +250,13 @@ describe('sourceFirstAllocations helpers', () => {
     expect(shouldRemoveSourceFirstAllocationOutputWhenExcluded({})).toBe(false);
   });
 
-  it('preserves active managed reservation outputs when datasource rows become temporarily excluded', () => {
+  it('preserves active managed utilisation outputs when datasource rows become temporarily excluded', () => {
     const config = {
       rowKeyFieldId: 'LEFTOVER_ID',
       outputKeyFieldId: 'LEFTOVER_ID',
       quantityFieldId: 'LEFTOVER_USE_QTY',
       selectedFieldId: 'LEFTOVER_SELECTED',
-      reservation: {
+      utilisation: {
         enabled: true,
         resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
       }
@@ -286,14 +276,14 @@ describe('sourceFirstAllocations helpers', () => {
     ).toBe(true);
   });
 
-  it('prevents post-save datasource exclusion cleanup from releasing an active reservation', () => {
+  it('prevents post-save datasource exclusion cleanup from releasing an active utilisation', () => {
     const config = {
       rowKeyFieldId: 'LEFTOVER_ID',
       outputKeyFieldId: 'LEFTOVER_ID',
       quantityFieldId: 'LEFTOVER_USE_QTY',
       selectedFieldId: 'LEFTOVER_SELECTED',
       sourceRows: { removeOutputWhenExcluded: true },
-      reservation: {
+      utilisation: {
         enabled: true,
         resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
       }
@@ -316,12 +306,12 @@ describe('sourceFirstAllocations helpers', () => {
     expect(wouldCleanupOutput).toBe(false);
   });
 
-  it('infers the reservation record id field for legacy source-first configs', () => {
+  it('infers the utilisation record id field for legacy source-first configs', () => {
     const config = {
       rowKeyFieldId: 'LEFTOVER_ID',
       outputKeyFieldId: 'LEFTOVER_ID',
       quantityFieldId: 'LEFTOVER_USE_QTY',
-      reservation: {
+      utilisation: {
         enabled: true
       }
     };
@@ -340,13 +330,13 @@ describe('sourceFirstAllocations helpers', () => {
     ).toBe(true);
   });
 
-  it('does not preserve inactive reservation outputs during datasource exclusion cleanup', () => {
+  it('does not preserve inactive utilisation outputs during datasource exclusion cleanup', () => {
     const config = {
       rowKeyFieldId: 'LEFTOVER_ID',
       outputKeyFieldId: 'LEFTOVER_ID',
       quantityFieldId: 'LEFTOVER_USE_QTY',
       selectedFieldId: 'LEFTOVER_SELECTED',
-      reservation: {
+      utilisation: {
         enabled: true,
         resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
       }

@@ -59,9 +59,9 @@ const buildEntrypoint = async (fileName) => {
 
 const run = async () => {
   const files = listEntrypoints();
+  cleanupOldBundles();
   if (!files.length) {
     console.info('[build-react-entrypoints] No entrypoints found');
-    cleanupOldBundles();
     return;
   }
   for (const fileName of files) {

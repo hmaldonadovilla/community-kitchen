@@ -10,7 +10,7 @@ import {
   WebFormDefinition,
   WebFormSubmission
 } from '../../types';
-import type { InventoryReservationPlanResult, RecordMetadata } from '../../../types';
+import type { BankUtilisationPlanResult, RecordMetadata } from '../../../types';
 import { SubmissionPayload } from '../api';
 import { FormErrors, LineItemState } from '../types';
 import { resolveFieldLabel } from '../utils/labels';
@@ -62,9 +62,9 @@ type StepRowFilterOverrides = {
 };
 
 const RUNTIME_RESERVATION_LINE_ITEM_FIELD_IDS = [
-  '__ckCurrentRecordReservedQuantity',
-  '__ckServerCurrentRecordReservedQuantity',
-  '__ckCurrentReservationQuantity',
+  '__ckCurrentRecordUtilisedQuantity',
+  '__ckServerCurrentRecordUtilisedQuantity',
+  '__ckCurrentUtilisationQuantity',
   '__ckFreeQuantity'
 ];
 
@@ -1435,8 +1435,8 @@ export const settleClientDataVersionAfterDispatch = (args: {
   return resolveCurrentClientDataVersion(responseDataVersion, confirmedDataVersion);
 };
 
-export const resolveReservationPlanSourceMetaAdoption = (args: {
-  result?: InventoryReservationPlanResult | null;
+export const resolveUtilisationPlanSourceMetaAdoption = (args: {
+  result?: BankUtilisationPlanResult | null;
   currentRecordId?: string | null;
   currentDataVersion?: number | string | null;
   fallbackRecordId?: string | null;

@@ -10,12 +10,12 @@ import type {
   WebQuestionDefinition
 } from '../../../types';
 import type {
-  InventoryReservationPlanScope,
+  BankUtilisationPlanScope,
   LineItemOverlaySessionConfig,
   OverlayCloseConfirmLike
 } from '../../../../types';
 import type { ConfirmDialogOpenArgs } from '../../features/overlays/useConfirmDialog';
-import type { GuidedReservationSyncWaitResult } from '../../features/reservations/domain/reservationSyncFreshness';
+import type { GuidedUtilisationSyncWaitResult } from '../../features/utilisations/domain/utilisationSyncFreshness';
 import type { FormErrors, LineItemAddResult, LineItemState, OptionState } from '../../types';
 import type { LineOverlayState } from './overlays/LineSelectOverlay';
 
@@ -156,14 +156,14 @@ export interface LineItemGroupQuestionCtx {
   ) => void;
   setAutoSaveHold?: (hold: boolean, meta?: { reason?: string }) => void;
   ensureRecordId?: (args?: { reason?: string; fieldPath?: string }) => Promise<{ success: boolean; recordId?: string; message?: string }>;
-  queueGuidedStepReservationDraftSync?: (args: {
+  queueGuidedStepUtilisationDraftSync?: (args: {
     stepId: string;
     reason: string;
     persistSnapshot?: boolean;
     snapshotLineItems?: LineItemState;
-    releaseScopes?: InventoryReservationPlanScope[];
+    releaseScopes?: BankUtilisationPlanScope[];
   }) => void;
-  onGuidedStepReservationDraftStateChange?: (args: {
+  onGuidedStepUtilisationDraftStateChange?: (args: {
     stepId: string;
     groupId: string;
     parentRowId: string;
@@ -172,11 +172,11 @@ export interface LineItemGroupQuestionCtx {
     reason: string;
     patchFields?: string[];
   }) => void;
-  waitForGuidedStepReservationDraftSync?: (args: {
+  waitForGuidedStepUtilisationDraftSync?: (args: {
     recordId: string;
     stepId?: string;
     reason: string;
-  }) => Promise<GuidedReservationSyncWaitResult>;
+  }) => Promise<GuidedUtilisationSyncWaitResult>;
   waitForPendingSharedDataMutations?: (args: {
     targetFormKeys: string[];
     recordId?: string;

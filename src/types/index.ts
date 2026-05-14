@@ -557,7 +557,7 @@ export interface FollowupCreateRecordLineItemConfig {
   when?: WhenClause;
 }
 
-export interface InventoryReservationMutationRequest {
+export interface BankUtilisationMutationRequest {
   resourceFormKey: string;
   resourceRecordId: string;
   resourceItemId?: string;
@@ -571,48 +571,45 @@ export interface InventoryReservationMutationRequest {
   sourceOutputGroupId?: string;
   sourceOutputRowId?: string;
   sourceOutputKeyFieldId?: string;
-  ledgerFormKey?: string;
+  utilisationFormKey?: string;
   quantityFieldId?: string;
-  reservedQuantityFieldId?: string;
   statusFieldId?: string;
   unitFieldId?: string;
   allowedStatuses?: string[];
 }
 
-export interface InventoryAvailabilitySnapshot {
+export interface BankAvailabilitySnapshot {
   resourceFormKey: string;
   resourceRecordId: string;
   resourceItemId?: string;
   resourceKind?: string;
   quantityFieldId: string;
-  reservedQuantityFieldId: string;
   statusFieldId?: string;
   unitFieldId?: string;
   remainingQuantity: number;
-  reservedQuantity: number;
   freeQuantity: number;
-  currentReservationQuantity: number;
-  currentRecordReservedQuantity: number;
+  currentUtilisationQuantity: number;
+  currentRecordUtilisedQuantity: number;
   unit?: string;
   status?: string;
 }
 
-export interface InventoryReservationMutationResult {
+export interface BankUtilisationMutationResult {
   success: boolean;
   message: string;
-  reservationId?: string;
+  utilisationId?: string;
   conflict?: boolean;
   released?: boolean;
-  availability?: InventoryAvailabilitySnapshot;
+  availability?: BankAvailabilitySnapshot;
 }
 
-export interface InventoryReservationPlanScope {
+export interface BankUtilisationPlanScope {
   sourceParentGroupId?: string;
   sourceParentRowId?: string;
   sourceOutputGroupId?: string;
 }
 
-export interface InventoryReservationPlanEntry {
+export interface BankUtilisationPlanEntry {
   resourceFormKey: string;
   resourceRecordId: string;
   resourceItemId?: string;
@@ -625,24 +622,23 @@ export interface InventoryReservationPlanEntry {
   sourceOutputRowId?: string;
   sourceOutputKeyFieldId?: string;
   quantityFieldId?: string;
-  reservedQuantityFieldId?: string;
   statusFieldId?: string;
   unitFieldId?: string;
   allowedStatuses?: string[];
 }
 
-export interface InventoryReservationPlanRequest {
+export interface BankUtilisationPlanRequest {
   sourceFormKey: string;
   sourceRecordId: string;
   /**
    * Optional optimistic-lock baseline for the source record.
-   * Lets the server report whether the reservation plan started from the same
+   * Lets the server report whether the utilisation plan started from the same
    * source-record version the client currently has loaded.
    */
   clientDataVersion?: number;
-  ledgerFormKey?: string;
-  managedScopes?: InventoryReservationPlanScope[];
-  reservations?: InventoryReservationPlanEntry[];
+  utilisationFormKey?: string;
+  managedScopes?: BankUtilisationPlanScope[];
+  utilisations?: BankUtilisationPlanEntry[];
   /**
    * Controls post-mutation cache work for touched forms.
    * - `full`: recompute analytics and warm home bootstrap cache
@@ -652,51 +648,51 @@ export interface InventoryReservationPlanRequest {
   refreshMode?: 'full' | 'revisionOnly' | 'none';
 }
 
-export interface InventoryReservationPlanResult {
+export interface BankUtilisationPlanResult {
   success: boolean;
   message: string;
   conflict?: boolean;
-  reservationsApplied?: number;
-  reservationsReleased?: number;
-  availability?: InventoryAvailabilitySnapshot[];
+  utilisationsApplied?: number;
+  utilisationsReleased?: number;
+  availability?: BankAvailabilitySnapshot[];
   timing?: ServerOperationTiming;
   /**
-   * Latest known source-record metadata after the reservation plan completed.
+   * Latest known source-record metadata after the utilisation plan completed.
    */
   sourceRecordMeta?: RecordMetadata;
   /**
    * True when `clientDataVersion` matched the source record version at the
-   * start of the reservation-plan transaction.
+   * start of the utilisation-plan transaction.
    */
   sourceClientDataVersionMatched?: boolean;
 }
 
-export interface GuidedStepReservationDraftSyncRequest {
+export interface GuidedStepUtilisationDraftSyncRequest {
   stepId?: string;
   clientMutationSeq?: number;
-  reservationPlan: InventoryReservationPlanRequest;
+  utilisationPlan: BankUtilisationPlanRequest;
   draftPayload: WebFormSubmission;
 }
 
-export interface GuidedStepReservationDraftSyncResult {
+export interface GuidedStepUtilisationDraftSyncResult {
   success: boolean;
   message?: string;
   stepId?: string;
   clientMutationSeq?: number;
-  reservationResult?: InventoryReservationPlanResult;
+  utilisationResult?: BankUtilisationPlanResult;
   saveResult?: {
     success: boolean;
     message?: string;
     meta?: RecordMetadata;
   };
   meta?: RecordMetadata;
-  availability?: InventoryAvailabilitySnapshot[];
+  availability?: BankAvailabilitySnapshot[];
   timing?: ServerOperationTiming;
 }
 
 export interface SaveSubmissionMutationPlan {
-  reservationPlan?: InventoryReservationPlanRequest;
-  guidedReservationDraftSync?: {
+  utilisationPlan?: BankUtilisationPlanRequest;
+  guidedUtilisationDraftSync?: {
     stepId?: string;
     clientMutationSeq?: number;
   };
@@ -706,108 +702,6 @@ export interface ServerOperationTiming {
   totalMs: number;
   steps: Record<string, number>;
   counts?: Record<string, number>;
-}
-
-export interface InventoryReservationReconciliationRequest {
-  sourceFormKey: string;
-  sourceRecordId: string;
-  ledgerFormKey?: string;
-  mode?: 'consume' | 'release';
-  /**
-   * Controls post-mutation cache work for touched forms.
-   * - `full`: recompute analytics and warm home bootstrap cache
-   * - `revisionOnly`: bump the home revision without warming caches
-   * - `none`: skip all post-mutation cache work
-   */
-  refreshMode?: 'full' | 'revisionOnly' | 'none';
-}
-
-export interface InventoryReservationReconciliationResult {
-  success: boolean;
-  message: string;
-  reconciledReservations?: number;
-  consumedReservations?: number;
-  releasedReservations?: number;
-  touchedInventoryRecords?: number;
-  availability?: InventoryAvailabilitySnapshot[];
-}
-
-export interface ReservationReleaseOnDeleteConfig {
-  /**
-   * Enable/disable automatic release of active reservations when this source record is deleted.
-   */
-  enabled?: boolean;
-  /**
-   * Optional override for the reservation ledger form.
-   * Defaults to `Config: Inventory Reservation Ledger`.
-   */
-  ledgerFormKey?: string;
-}
-
-export interface ReservationReconcileOnFinalSubmitConfig {
-  /**
-   * Enable/disable automatic reconciliation of active reservations when the source record reaches a final submit status.
-   */
-  enabled?: boolean;
-  /**
-   * Optional explicit status values that should trigger reconciliation.
-   * Matching is case-insensitive.
-   * When omitted, the form falls back to `followupConfig.statusTransitions.onClose`, then `Closed`.
-   */
-  statuses?: string[];
-  /**
-   * Optional override for the reservation ledger form.
-   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
-   * `Config: Inventory Reservation Ledger`.
-   */
-  ledgerFormKey?: string;
-  /**
-   * Controls cache work after reconciliation.
-   * Defaults to `full`.
-   */
-  refreshMode?: 'full' | 'revisionOnly' | 'none';
-  /**
-   * Optional user-facing feedback shown after final reconciliation succeeds.
-   * When omitted, the client falls back to a concise built-in summary.
-   */
-  feedback?: ReservationReconciliationFeedbackConfig;
-}
-
-export interface ReservationReconciliationFeedbackConfig {
-  /**
-   * Full status message template shown after submit.
-   *
-   * Supported placeholders:
-   * - `{baseMessage}`
-   * - `{reconciliationSummary}`
-   * - `{consumedReservations}`
-   * - `{releasedReservations}`
-   */
-  message?: LocalizedString | string;
-  /**
-   * Summary fragment used when exactly one reservation is consumed.
-   * Supported placeholders:
-   * - `{count}`
-   */
-  consumedSummarySingular?: LocalizedString | string;
-  /**
-   * Summary fragment used when multiple reservations are consumed.
-   * Supported placeholders:
-   * - `{count}`
-   */
-  consumedSummaryPlural?: LocalizedString | string;
-  /**
-   * Summary fragment used when exactly one reservation is released.
-   * Supported placeholders:
-   * - `{count}`
-   */
-  releasedSummarySingular?: LocalizedString | string;
-  /**
-   * Summary fragment used when multiple reservations are released.
-   * Supported placeholders:
-   * - `{count}`
-   */
-  releasedSummaryPlural?: LocalizedString | string;
 }
 
 export type SystemActionId = 'home' | 'create' | 'edit' | 'summary' | 'submit' | 'copyCurrentRecord';
@@ -1213,7 +1107,7 @@ export interface SubmissionAfterSubmitConfig {
   /**
    * Follow-up action ids that must complete before the client navigates away from the submit flow.
    *
-   * Typical use: `["CLOSE_RECORD"]` so final reconciliation and status changes happen before
+   * Typical use: `["CLOSE_RECORD"]` so final follow-up work and status changes happen before
    * Summary/List views are shown.
    */
   preActions?: string[];
@@ -3213,94 +3107,13 @@ export interface LifecycleDateStatusTransitionRule {
   dayOffset?: number;
 }
 
-export interface LifecycleReleaseStaleReservationsRule {
-  /**
-   * Optional stable rule id for diagnostics.
-   */
-  id?: string;
-  /**
-   * Release active reservations for source records whose date is stale relative to the script-local current date.
-   */
-  type: 'releaseStaleReservations';
-  /**
-   * Field id containing the source-record date used for stale detection.
-   */
-  dateFieldId: string;
-  /**
-   * Optional field id used to read the source-record business status.
-   * When omitted, the form follow-up status field (if configured) or the record meta Status column is used.
-   */
-  statusFieldId?: string;
-  /**
-   * Optional list of statuses eligible for release.
-   * Comparisons are case-insensitive.
-   */
-  fromStatuses?: string[];
-  /**
-   * Date comparison used against the script-local current date.
-   *
-   * - `beforeToday`: release when `dateFieldId < today`
-   * - `onOrBeforeToday`: release when `dateFieldId <= today`
-   */
-  compare?: 'beforeToday' | 'onOrBeforeToday';
-  /**
-   * Optional day offset applied before comparison.
-   */
-  dayOffset?: number;
-  /**
-   * Optional override for the reservation ledger form.
-   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
-   * `Config: Inventory Reservation Ledger`.
-   */
-  ledgerFormKey?: string;
-  /**
-   * When true (default), also release reservations when the source record can no longer be found.
-   */
-  releaseWhenSourceMissing?: boolean;
-}
-
-export interface LifecycleReleaseActiveReservationsRule {
-  /**
-   * Optional stable rule id for diagnostics.
-   */
-  id?: string;
-  /**
-   * Release all active reservations owned by this source form whenever the daily lifecycle trigger runs.
-   */
-  type: 'releaseActiveReservations';
-  /**
-   * Optional override for the reservation ledger form.
-   * Defaults to `reservationLifecycle.ledgerFormKey` when present, otherwise
-   * `Config: Inventory Reservation Ledger`.
-   */
-  ledgerFormKey?: string;
-}
-
-export type LifecycleRule =
-  | LifecycleDateStatusTransitionRule
-  | LifecycleReleaseStaleReservationsRule
-  | LifecycleReleaseActiveReservationsRule;
+export type LifecycleRule = LifecycleDateStatusTransitionRule;
 
 export interface LifecycleConfig {
   /**
    * Config-driven lifecycle rules evaluated by the daily lifecycle trigger.
    */
   rules?: LifecycleRule[];
-}
-
-export interface ReservationLifecycleConfig {
-  /**
-   * Optional default ledger form key used by release hooks for this source form.
-   */
-  ledgerFormKey?: string;
-  /**
-   * Automatically release active reservations when this source record is deleted.
-   */
-  releaseOnDelete?: boolean | ReservationReleaseOnDeleteConfig;
-  /**
-   * Automatically reconcile active reservations when this source record reaches a final submit status.
-   */
-  reconcileOnFinalSubmit?: boolean | ReservationReconcileOnFinalSubmitConfig;
 }
 
 export interface AutoSaveConfig {
@@ -3653,10 +3466,6 @@ export interface FormConfig {
    * Optional config-driven lifecycle automation, evaluated by the daily lifecycle trigger.
    */
   lifecycle?: LifecycleConfig;
-  /**
-   * Optional reservation lifecycle hooks for source forms that own inventory reservations.
-   */
-  reservationLifecycle?: ReservationLifecycleConfig;
   /**
    * CacheService TTL (seconds) for cached HTML/Markdown templates for this form.
    *
@@ -4132,13 +3941,13 @@ export interface StepNavigationConfig {
    */
   stepBarAccessWhen?: WhenClause;
   /**
-   * Optional per-step toggle for the normal guided-step advance background reservation sync.
+   * Optional per-step toggle for the normal guided-step advance background utilisation sync.
    *
    * When false, advancing away from this step will not queue the background
-   * applyInventoryReservationPlan reconciliation pass. This does not affect immediate
-   * datasource-row reservation syncs, destructive clears, or milestone pre-actions.
+   * applyBankUtilisationPlan sync pass. This does not affect immediate
+   * datasource-row utilisation syncs, destructive clears, or milestone pre-actions.
    */
-  backgroundReservationSyncOnAdvance?: boolean;
+  backgroundUtilisationSyncOnAdvance?: boolean;
   /**
    * Optional step-scoped action triggered by the primary submit/next button after the current step validates.
    *
@@ -4161,7 +3970,7 @@ export interface StepMilestoneActionConfig {
   /**
    * Blocking follow-up action ids to trigger after the current form snapshot is saved.
    * Use this for actions that must complete before the user continues
-   * (for example inventory reconciliation).
+   * (for example bank utilisation updates).
    */
   preActions?: string[];
   /**
@@ -4181,7 +3990,7 @@ export interface StepMilestoneActionConfig {
   ensureRecordId?: boolean;
   /**
    * When true, do not block the user on follow-up completion; continue the UI flow immediately
-   * and reconcile record/cache state when the server responds.
+   * and update record/cache state when the server responds.
    * Default: false
    */
   runInBackground?: boolean;
@@ -4656,17 +4465,17 @@ export interface StepSubGroupCollectionConfig {
 export interface StepDataSourceBootstrapConfig {
   /**
    * When true, delay the initial guided-step datasource bootstrap until any in-flight
-   * guided reservation draft sync for the current record has finished.
+   * guided utilisation draft sync for the current record has finished.
    *
-   * Use this when a later step fetches shared inventory that may have been updated by
-   * reservation-managed output rows deleted in an earlier step.
+   * Use this when a later step fetches shared bank that may have been updated by
+   * utilisation-managed output rows deleted in an earlier step.
    */
-  waitForGuidedReservationSync?: boolean;
+  waitForGuidedUtilisationSync?: boolean;
   /**
    * When true, delay the initial guided-step datasource bootstrap until in-flight
    * follow-up actions that mutate the datasource's shared form keys have finished.
    *
-   * Use this when a step reads shared inventory that can be created or reconciled by
+   * Use this when a step reads shared bank that can be created or updated by
    * background follow-up work from the same app session.
    */
   waitForSharedDataMutations?: boolean;
@@ -4932,10 +4741,6 @@ export interface WebFormDefinition {
     maxEntries?: number;
   };
   /**
-   * Optional reservation lifecycle hooks for source forms that own inventory reservations.
-   */
-  reservationLifecycle?: ReservationLifecycleConfig;
-  /**
    * Enable/disable the Summary view in the React web app.
    * When false, list-row clicks always open the Form view
    * (records matching `statusTransitions.onClose` are read-only).
@@ -5128,10 +4933,10 @@ export interface WebFormSubmission {
    */
   __ckMutationPlan?: SaveSubmissionMutationPlan;
   /**
-   * Backward-compatible shorthand for __ckMutationPlan.reservationPlan.
+   * Backward-compatible shorthand for __ckMutationPlan.utilisationPlan.
    */
-  __ckReservationPlan?: InventoryReservationPlanRequest;
-  __ckGuidedReservationDraftSync?: SaveSubmissionMutationPlan['guidedReservationDraftSync'];
+  __ckUtilisationPlan?: BankUtilisationPlanRequest;
+  __ckGuidedUtilisationDraftSync?: SaveSubmissionMutationPlan['guidedUtilisationDraftSync'];
 }
 
 export interface ListViewFieldColumnConfig {
@@ -5913,20 +5718,6 @@ export interface RecordMetadata {
   noop?: boolean;
   noopReason?: string;
   autoIncrementValues?: Record<string, string>;
-  reservationRelease?: {
-    success?: boolean;
-    sourceRecordId?: string;
-    releasedReservations?: number;
-    touchedInventoryRecords?: number;
-  };
-  reservationReconciliation?: {
-    success?: boolean;
-    sourceRecordId?: string;
-    reconciledReservations?: number;
-    consumedReservations?: number;
-    releasedReservations?: number;
-    touchedInventoryRecords?: number;
-  };
   submitEffects?: {
     configured?: number;
     executed?: number;
@@ -5969,14 +5760,6 @@ export interface FollowupActionResult {
   emailDispatched?: boolean;
   emailMessageId?: string;
   emailThreadId?: string;
-  reservationReconciliation?: {
-    success: boolean;
-    sourceRecordId?: string;
-    reconciledReservations?: number;
-    consumedReservations?: number;
-    releasedReservations?: number;
-    touchedInventoryRecords?: number;
-  };
   submitEffects?: {
     configured?: number;
     executed?: number;

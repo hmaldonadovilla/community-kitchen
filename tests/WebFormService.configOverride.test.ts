@@ -94,13 +94,6 @@ const buildBundledExportWithEmbeddedDefinition = (): FormConfigExport => ({
         }
       ]
     },
-    reservationLifecycle: {
-      ledgerFormKey: 'Config: Inventory Reservation Ledger',
-      reconcileOnFinalSubmit: {
-        enabled: true,
-        refreshMode: 'revisionOnly'
-      }
-    }
   } as any,
   questions: [
     {
@@ -244,13 +237,6 @@ describe('WebFormService config override', () => {
     expect(def.destinationTab).toBe('Bundled Responses');
     expect(def.questions[0]?.label).toBe('Embedded Leftover ID');
     expect(def.steps?.items?.map((step: any) => step.id)).toEqual(['bundledStep', 'staleStep', 'insertedStep', 'finalStep']);
-    expect(def.reservationLifecycle).toEqual({
-      ledgerFormKey: 'Config: Inventory Reservation Ledger',
-      reconcileOnFinalSubmit: {
-        enabled: true,
-        refreshMode: 'revisionOnly'
-      }
-    });
     expect(buildSpy).not.toHaveBeenCalled();
   });
 });

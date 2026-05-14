@@ -118,7 +118,7 @@ Candidate feature slices:
 - Record load/save lifecycle and freshness.
 - Upload queue and upload persistence.
 - Guided step navigation and completion gates.
-- Reservations and source-first allocation behavior.
+- Utilisations and source-first allocation behavior.
 - Data-source prefetch, cache mutation, and freshness.
 - Line item row sorting, nested row behavior, and derived values.
 - Follow-up action orchestration and result display.
@@ -152,7 +152,7 @@ Target boundaries:
   - Extract row and subgroup table primitives into `src/web/react/features/lineItems/components`.
   - Extract compact/guided row summary rendering into focused components that receive already-resolved callbacks and values from the parent.
   - Extract repeated read-only field, warning, upload-failure, and action-button primitives where they can be reused without changing behavior.
-  - Keep the complex reservation/source-first state machine in the parent until it can be moved behind a dedicated hook with focused tests.
+  - Keep the complex utilisation/source-first state machine in the parent until it can be moved behind a dedicated hook with focused tests.
 - Form view orchestration:
   - Extract guided-step rendering shell and target rendering helpers where they only depend on resolved props.
   - Extract overlay/session controller helpers into hooks when they own a clear state machine and do not require transport or persistence access.
@@ -209,7 +209,7 @@ Target boundaries:
   - Split upload overlay controller and retry UI after the session boundary is isolated.
   - Split validation/error navigation into a focused hook with tests for guided and non-guided behavior.
 - `App.tsx`
-  - Split viewport/orientation shell state, then record load/save lifecycle, dedup dialog state, action/report orchestration, home/list cache orchestration, and guided reservation sync into hooks.
+  - Split viewport/orientation shell state, then record load/save lifecycle, dedup dialog state, action/report orchestration, home/list cache orchestration, and guided utilisation sync into hooks.
 
 Implementation rules:
 
@@ -277,18 +277,18 @@ Tenth-pass results:
 Eleventh-pass results:
 
 - `FormView.tsx`: extracted derived-value blur dependency parsing, line-item overlay-header completeness, config-entry collection, dedup message formatting, and synchronized mutable state refs into focused modules with unit coverage for the pure helpers. Current size: 14,956 lines.
-- `LineItemGroupQuestion.tsx`: extracted source-first allocation row chrome and source-first data-source row shell components, leaving reservation/edit callbacks in the parent while moving layout concerns out. Current size: 15,544 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first allocation row chrome and source-first data-source row shell components, leaving utilisation/edit callbacks in the parent while moving layout concerns out. Current size: 15,544 lines.
 - `App.tsx`: extracted navigation performance refs/effects into `useAppNavigationPerf`, keeping navigation-start decisions in the shell and moving completion measurement out. Current size: 16,246 lines.
 
 Twelfth-pass results:
 
 - `FormView.tsx`: extracted guided step/data-source visibility coordination into `useGuidedStepVisibility`, pure form group/page-section construction into `buildFormGroupSections`, and document-level blur side effects into `useFormBlurCoordinator`. Current size: 14,677 lines.
-- `LineItemGroupQuestion.tsx`: extracted source-first compact sentence controls plus the source-first allocation list renderer into line-item feature components, keeping data loading and reservation persistence injected from the parent. Current size: 14,763 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first compact sentence controls plus the source-first allocation list renderer into line-item feature components, keeping data loading and utilisation persistence injected from the parent. Current size: 14,763 lines.
 - `App.tsx`: extracted debug-mode and diagnostic logging policy into `useAppDiagnostics`. Current size: 16,232 lines.
 
 Thirteenth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted source-first compact data-source actions and inline source-first data-source row rendering into focused line-item feature components, keeping reservation sync and overlay state callbacks injected from the parent. Current size: 14,355 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first compact data-source actions and inline source-first data-source row rendering into focused line-item feature components, keeping utilisation sync and overlay state callbacks injected from the parent. Current size: 14,355 lines.
 - `FormView.tsx`: replaced the inline overlay-pill line-item completeness algorithm with the existing tested `isLineItemGroupQuestionComplete` helper, removing a duplicate business-rule copy from the renderer. Current size: 14,479 lines.
 - `App.tsx`: extracted system action gate and copy-current-record dialog state into `useAppDialogState`, leaving the shell to wire the modal callbacks. Current size: 16,133 lines.
 
@@ -465,18 +465,18 @@ Forty-sixth-pass results:
 
 Forty-seventh-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided reservation quantity derivation into `reservationQuantity`, keeping data-source and reservation state wiring in the component. Current size: 13,372 lines.
-- Validation for the pass used focused reservation quantity, virtual row context, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+- `LineItemGroupQuestion.tsx`: extracted guided utilisation quantity derivation into `utilisationQuantity`, keeping data-source and utilisation state wiring in the component. Current size: 13,372 lines.
+- Validation for the pass used focused utilisation quantity, virtual row context, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
 Forty-eighth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided virtual data-source row value projection and optimistic availability max/display derivation into `virtualDataSourceRowValues`, keeping live reservation-state callbacks injected by the component. Current size: 13,229 lines.
-- Validation for the pass used focused virtual data-source row value, reservation quantity, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+- `LineItemGroupQuestion.tsx`: extracted guided virtual data-source row value projection and optimistic availability max/display derivation into `virtualDataSourceRowValues`, keeping live utilisation-state callbacks injected by the component. Current size: 13,229 lines.
+- Validation for the pass used focused virtual data-source row value, utilisation quantity, and line-item presentation tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
 Forty-ninth-pass results:
 
 - `LineItemGroupQuestion.tsx`: extracted guided step data-source optimistic availability cache mutation into `stepDataSourceAvailability`, leaving the component responsible only for cache mutation and refresh tick wiring. Current size: 13,182 lines.
-- Validation for the pass used focused step data-source availability, virtual data-source row value, and reservation quantity tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
+- Validation for the pass used focused step data-source availability, virtual data-source row value, and utilisation quantity tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
 Fiftieth-pass results:
 
@@ -555,7 +555,7 @@ Sixty-fourth-pass results:
 
 Sixty-fifth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted source-first data-source output group and reservation-state calculations into `stepDataSourceRows`, keeping the component responsible for callback wiring and refs. Current size: 13,066 lines.
+- `LineItemGroupQuestion.tsx`: extracted source-first data-source output group and utilisation-state calculations into `stepDataSourceRows`, keeping the component responsible for callback wiring and refs. Current size: 13,066 lines.
 - Validation for the pass used focused step data-source row tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, and `npm run build`.
 
 Sixty-sixth-pass results:
@@ -763,7 +763,7 @@ One-hundred-second-pass results:
 
 One-hundred-third-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided step data-source bootstrap/cache coordination into `useGuidedStepDataSourceState`, moving refresh scheduling, loading counters, bootstrap fetches, cache event handling, reservation draft queue flushing, source-first diagnostics, availability patching, and shared reservation refs into a line-items feature hook. Current size: 2,973 lines.
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source bootstrap/cache coordination into `useGuidedStepDataSourceState`, moving refresh scheduling, loading counters, bootstrap fetches, cache event handling, utilisation draft queue flushing, source-first diagnostics, availability patching, and shared utilisation refs into a line-items feature hook. Current size: 2,973 lines.
 - Validation for the pass used direct ESLint on touched files, selection-effect init tests, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
@@ -793,25 +793,25 @@ One-hundred-seventh-pass results:
 
 One-hundred-eighth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided step data-source reservation draft controls into `useStepDataSourceReservationDrafts`, moving deferred autosave holds, deferred timer cancellation, committed reservation seeding, staged draft patching, and pending deferred-change checks into a line-items feature hook. Current size: 2,037 lines.
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source utilisation draft controls into `useStepDataSourceUtilisationDrafts`, moving deferred autosave holds, deferred timer cancellation, committed utilisation seeding, staged draft patching, and pending deferred-change checks into a line-items feature hook. Current size: 2,037 lines.
 - Validation for the pass used direct ESLint on touched files, selection-effect init tests, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
 One-hundred-ninth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided step data-source availability reconciliation into `useStepDataSourceAvailabilityReconciliation`, moving live availability event handling, stale source-row output cleanup, rejected-reservation rollback, and committed reservation snapshot updates into a line-items feature hook. Current size: 1,778 lines.
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source availability reconciliation into `useStepDataSourceAvailabilityReconciliation`, moving live availability event handling, stale source-row output cleanup, rejected-utilisation rollback, and committed utilisation snapshot updates into a line-items feature hook. Current size: 1,778 lines.
 - Validation for the pass used direct ESLint on touched files, selection-effect init tests, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
 One-hundred-tenth-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided step data-source output synchronization into `useStepDataSourceOutputSync`, moving source-row output mutation, optimistic reservation availability updates, immediate/debounced reservation API sync, conflict rollback handling, and source-first ancestor value-map recomputation into a line-items feature hook. Current size: 1,112 lines.
+- `LineItemGroupQuestion.tsx`: extracted guided step data-source output synchronization into `useStepDataSourceOutputSync`, moving source-row output mutation, optimistic utilisation availability updates, immediate/debounced utilisation API sync, conflict rollback handling, and source-first ancestor value-map recomputation into a line-items feature hook. Current size: 1,112 lines.
 - Validation for the pass used direct ESLint on touched files, selection-effect init tests, focused guided-header, line-item, overlay, and row-flow tests, `npm run lint:changed`, `npx tsc --noEmit --pretty false`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
 One-hundred-eleventh-pass results:
 
-- `LineItemGroupQuestion.tsx`: extracted guided data-source row projection into `useStepDataSourceRowProjection`, moving virtual row context, preset resolution, source-first presentation entries, supplemental-helper hiding, output-group lookup, reservation state lookup, and virtual numeric constraints into a line-items feature hook. Current size: 869 lines.
+- `LineItemGroupQuestion.tsx`: extracted guided data-source row projection into `useStepDataSourceRowProjection`, moving virtual row context, preset resolution, source-first presentation entries, supplemental-helper hiding, output-group lookup, utilisation state lookup, and virtual numeric constraints into a line-items feature hook. Current size: 869 lines.
 - Validation for the pass used direct ESLint on touched files, `npx tsc --noEmit --pretty false`, focused guided-header, line-item, overlay, row-flow, and selection-effect tests, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 - `App.tsx` was intentionally left untouched because the performance fix workstream is ongoing there.
 
@@ -841,13 +841,13 @@ One-hundred-fifteenth-pass results:
 
 One-hundred-sixteenth-pass results:
 
-- `App.tsx`: extracted guided reservation plan resolution, stale-response guarding, apply failure handling, source-meta adoption, availability cache dispatch, and serialized reservation plan queueing into `useGuidedReservationPlanSync`, keeping live-sync and background-sync callers in the shell while moving the reservation apply workflow into the reservations feature layer. Current size: 14,317 lines.
-- Validation for the pass used focused reservation tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+- `App.tsx`: extracted guided utilisation plan resolution, stale-response guarding, apply failure handling, source-meta adoption, availability cache dispatch, and serialized utilisation plan queueing into `useGuidedUtilisationPlanSync`, keeping live-sync and background-sync callers in the shell while moving the utilisation apply workflow into the utilisations feature layer. Current size: 14,317 lines.
+- Validation for the pass used focused utilisation tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
 One-hundred-seventeenth-pass results:
 
-- Moved guided source-first datasource/reservation pure helpers from `src/web/react/components/form` into `src/web/react/features/lineItems/domain`, including source-first presentation projection, row projection, optimistic availability, draft transitions, exclusive selection cleanup, virtual row values, virtual presets, virtual validation context, reservation quantity projection, and datasource row matching. This leaves `components/form` closer to shared form UI and keeps line-item business rules under the line-items feature boundary.
-- Validation for the pass used focused datasource/reservation helper tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
+- Moved guided source-first datasource/utilisation pure helpers from `src/web/react/components/form` into `src/web/react/features/lineItems/domain`, including source-first presentation projection, row projection, optimistic availability, draft transitions, exclusive selection cleanup, virtual row values, virtual presets, virtual validation context, utilisation quantity projection, and datasource row matching. This leaves `components/form` closer to shared form UI and keeps line-item business rules under the line-items feature boundary.
+- Validation for the pass used focused datasource/utilisation helper tests, `npx tsc --noEmit --pretty false`, `npm run lint:changed`, `git diff --check`, and `npm run build`.
 
 One-hundred-eighteenth-pass results:
 
@@ -997,16 +997,16 @@ Full gates for milestone completion:
 | Stage 1: Merge and stabilize UAT 7 | Complete | `release/uat-7` was merged without transport restructuring. Unit/build gates, staging deploy, and targeted Meal Production smoke validation completed during the stabilization slices. |
 | Stage 2: Frontend/business logic separation | Complete for current refactor pass | Slices extracted Home list cache behavior, upload completed-value projection, pure helper logic, data-source prefetch/cache coordination, record lifecycle/version-check helpers, upload queue coordination, guided step gates, line-item row/presentation helpers, and shared list/condition helpers into focused modules with targeted unit coverage. |
 | Stage 2B: Component/hook decomposition | Complete | Added guided-step, line-item control/footer, app notice/header/chrome, and dedup dialog boundaries; final targeted validation and staging smoke completed for the phase. |
-| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, guided target resolution, guided line-group rendering, guided content rendering, top-level question rendering, single-choice defaulting, and ordered-entry validation control, source-first allocation display/sorting/selection/list/upload renderers, row-flow runtime/prompt/output/field/row/action/render/output-state/action-controller renderers and hooks, line-item table/body-field/group-row rendering, guided data-source bootstrap/cache coordination, guided reservation draft controls, availability reconciliation, output synchronization, and row projection, line-item group presentation state, subgroup selector/add/table/field/row/open-stack/inline-subgroup rendering, group selector/add controls, automatic line-item row effects, hydrated-row selection-effect initialization, progressive attention auto-expand policy, guided row toggle/header layout, flattened overlay target helpers/rendering, and compact row source mapping with focused tests where practical. |
+| Stage 2C: Stateful workflow decomposition | In progress | Extracted App viewport shell state, diagnostics, performance tools/bridge/navigation hooks, action-gate/action-bar hooks, autosave/dedup and status/unlock policy hooks, FormView overlay session/autosave-hold plus validation navigation/state-ref/visibility/blur/upload coordination, guided target resolution, guided line-group rendering, guided content rendering, top-level question rendering, single-choice defaulting, and ordered-entry validation control, source-first allocation display/sorting/selection/list/upload renderers, row-flow runtime/prompt/output/field/row/action/render/output-state/action-controller renderers and hooks, line-item table/body-field/group-row rendering, guided data-source bootstrap/cache coordination, guided utilisation draft controls, availability reconciliation, output synchronization, and row projection, line-item group presentation state, subgroup selector/add/table/field/row/open-stack/inline-subgroup rendering, group selector/add controls, automatic line-item row effects, hydrated-row selection-effect initialization, progressive attention auto-expand policy, guided row toggle/header layout, flattened overlay target helpers/rendering, and compact row source mapping with focused tests where practical. |
 | Stage 3: Backend/domain separation follow-through | Complete for current refactor pass | Extracted Analytics queue/request helpers, follow-up action planning, template target collection, lifecycle rule evaluation, and Cloud Run scheduled-job guards into tested backend-domain modules while preserving Apps Script and Cloud Run adapters. |
 
-## Reservation Sync Follow-up
+## Utilisation Sync Follow-up
 
-- Added a latest-wins reservation epoch so an older in-flight inventory reservation response cannot update the form after the user has already queued a newer reservation change.
-- Added `syncGuidedStepReservationDraft` as a combined reservation-plan plus draft-save RPC. The React guided reservation path now uses this combined operation when it needs to persist the draft, while plan-only cleanup still uses `applyInventoryReservationPlan`.
-- Kept draft-save coalescing disabled for the combined reservation sync path so a cached or in-flight plain draft save cannot accidentally satisfy a reservation mutation.
+- Added a latest-wins utilisation epoch so an older in-flight bank utilisation response cannot update the form after the user has already queued a newer utilisation change.
+- Added `syncGuidedStepUtilisationDraft` as a combined utilisation-plan plus draft-save RPC. The React guided utilisation path now uses this combined operation when it needs to persist the draft, while plan-only cleanup still uses `applyBankUtilisationPlan`.
+- Kept draft-save coalescing disabled for the combined utilisation sync path so a cached or in-flight plain draft save cannot accidentally satisfy a utilisation mutation.
 - Fixed the Leftover bank recurrence by preserving datasource-refreshed row metadata when matching automatic line-item rows are rebuilt from recipe presets. This stops `ING_SOURCE_ID` / `ING_SOURCE_UPDATED_AT` from oscillating during bootstrap.
-- Validated the reservation flow on staging with `HUB | Lunch | Fri, 08-May-2026`: one Leftover bank bootstrap wait, one shared-data wait, stable form state during bootstrap, stale in-flight reservation response skipped, and the final rapid-toggle user choice persisted.
+- Validated the utilisation flow on staging with `HUB | Lunch | Fri, 08-May-2026`: one Leftover bank bootstrap wait, one shared-data wait, stable form state during bootstrap, stale in-flight utilisation response skipped, and the final rapid-toggle user choice persisted.
 
 ## Open Questions
 

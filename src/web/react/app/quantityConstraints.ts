@@ -9,62 +9,49 @@ export function toFiniteNumberValue(value: unknown): number {
   return 0;
 }
 
-export function computeAvailableFromAggregate(remaining: unknown, reserved: unknown): number {
-  return Math.max(0, toFiniteNumberValue(remaining) - toFiniteNumberValue(reserved));
+export function computeAvailableFromBankQuantity(remaining: unknown): number {
+  return Math.max(0, toFiniteNumberValue(remaining));
 }
 
-export function resolveServerCurrentRecordReservedQuantity(args: {
-  hasExplicitServerCurrentRecordReservedQuantity?: boolean;
-  serverCurrentRecordReservedQuantity?: unknown;
-  fallbackCurrentRecordReservedQuantity?: unknown;
+export function resolveServerCurrentRecordUtilisedQuantity(args: {
+  hasExplicitServerCurrentRecordUtilisedQuantity?: boolean;
+  serverCurrentRecordUtilisedQuantity?: unknown;
+  fallbackCurrentRecordUtilisedQuantity?: unknown;
 }): number {
-  if (args.hasExplicitServerCurrentRecordReservedQuantity) {
-    return Math.max(0, toFiniteNumberValue(args.serverCurrentRecordReservedQuantity));
+  if (args.hasExplicitServerCurrentRecordUtilisedQuantity) {
+    return Math.max(0, toFiniteNumberValue(args.serverCurrentRecordUtilisedQuantity));
   }
-  return Math.max(0, toFiniteNumberValue(args.fallbackCurrentRecordReservedQuantity));
-}
-
-export function computeOptimisticAggregateReservedQuantity(args: {
-  reservedQuantity: unknown;
-  serverCurrentRecordReservedQuantity?: unknown;
-  localCurrentRecordReservedQuantity?: unknown;
-}): number {
-  const reservedQuantity = Math.max(0, toFiniteNumberValue(args.reservedQuantity));
-  const serverCurrentRecordReservedQuantity = Math.max(0, toFiniteNumberValue(args.serverCurrentRecordReservedQuantity));
-  const localCurrentRecordReservedQuantity = Math.max(0, toFiniteNumberValue(args.localCurrentRecordReservedQuantity));
-  const reservedByOthers = Math.max(0, reservedQuantity - serverCurrentRecordReservedQuantity);
-  return Math.max(0, reservedByOthers + localCurrentRecordReservedQuantity);
+  return Math.max(0, toFiniteNumberValue(args.fallbackCurrentRecordUtilisedQuantity));
 }
 
 export function computeOptimisticFreeQuantity(args: {
   remainingQuantity: unknown;
-  reservedQuantity: unknown;
-  serverCurrentRecordReservedQuantity?: unknown;
-  localCurrentRecordReservedQuantity?: unknown;
+  serverCurrentRecordUtilisedQuantity?: unknown;
+  localCurrentRecordUtilisedQuantity?: unknown;
 }): number {
-  const optimisticReservedQuantity = computeOptimisticAggregateReservedQuantity({
-    reservedQuantity: args.reservedQuantity,
-    serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
-    localCurrentRecordReservedQuantity: args.localCurrentRecordReservedQuantity
-  });
-  return computeAvailableFromAggregate(args.remainingQuantity, optimisticReservedQuantity);
+  const serverCurrentRecordUtilisedQuantity = Math.max(0, toFiniteNumberValue(args.serverCurrentRecordUtilisedQuantity));
+  const localCurrentRecordUtilisedQuantity = Math.max(0, toFiniteNumberValue(args.localCurrentRecordUtilisedQuantity));
+  return Math.max(
+    0,
+    toFiniteNumberValue(args.remainingQuantity) +
+      serverCurrentRecordUtilisedQuantity -
+      localCurrentRecordUtilisedQuantity
+  );
 }
 
 export function computeOptimisticRowMaxQuantity(args: {
   remainingQuantity: unknown;
-  reservedQuantity: unknown;
-  serverCurrentRecordReservedQuantity?: unknown;
-  localCurrentRecordReservedQuantity?: unknown;
+  serverCurrentRecordUtilisedQuantity?: unknown;
+  localCurrentRecordUtilisedQuantity?: unknown;
   currentRowQuantity?: unknown;
 }): number {
-  const remainingQuantity = Math.max(0, toFiniteNumberValue(args.remainingQuantity));
-  const optimisticReservedQuantity = computeOptimisticAggregateReservedQuantity({
-    reservedQuantity: args.reservedQuantity,
-    serverCurrentRecordReservedQuantity: args.serverCurrentRecordReservedQuantity,
-    localCurrentRecordReservedQuantity: args.localCurrentRecordReservedQuantity
+  const optimisticFreeQuantity = computeOptimisticFreeQuantity({
+    remainingQuantity: args.remainingQuantity,
+    serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
+    localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity
   });
   const currentRowQuantity = Math.max(0, toFiniteNumberValue(args.currentRowQuantity));
-  return Math.max(0, remainingQuantity - optimisticReservedQuantity + currentRowQuantity);
+  return Math.max(0, optimisticFreeQuantity + currentRowQuantity);
 }
 
 export function ensureEditableMaxIncludesCurrentValue(maxValue: unknown, currentValue: unknown): number {

@@ -2,10 +2,9 @@ import { FormGenerator } from './services/FormGenerator';
 import { ConfigSheet } from './config/ConfigSheet';
 import { WebFormService } from './services/WebFormService';
 import {
-  GuidedStepReservationDraftSyncRequest,
-  InventoryReservationPlanRequest,
-  InventoryReservationMutationRequest,
-  InventoryReservationReconciliationRequest,
+  GuidedStepUtilisationDraftSyncRequest,
+  BankUtilisationPlanRequest,
+  BankUtilisationMutationRequest,
   WebFormDefinition,
   WebFormSubmission
 } from './types';
@@ -249,28 +248,22 @@ export function fetchDataSource(
   return service.fetchDataSource(dataSourceId, locale, projection, limit, pageToken);
 }
 
-export function upsertInventoryReservation(request: InventoryReservationMutationRequest): any {
+export function upsertBankUtilisation(request: BankUtilisationMutationRequest): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  return service.upsertInventoryReservation(request);
+  return service.upsertBankUtilisation(request);
 }
 
-export function applyInventoryReservationPlan(request: InventoryReservationPlanRequest): any {
+export function applyBankUtilisationPlan(request: BankUtilisationPlanRequest): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  return service.applyInventoryReservationPlan(request);
+  return service.applyBankUtilisationPlan(request);
 }
 
-export function syncGuidedStepReservationDraft(request: GuidedStepReservationDraftSyncRequest): any {
+export function syncGuidedStepUtilisationDraft(request: GuidedStepUtilisationDraftSyncRequest): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
-  return service.syncGuidedStepReservationDraft(request);
-}
-
-export function reconcileInventoryReservations(request: InventoryReservationReconciliationRequest): any {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const service = new WebFormService(ss);
-  return service.reconcileInventoryReservations(request);
+  return service.syncGuidedStepUtilisationDraft(request);
 }
 
 export function fetchSubmissions(

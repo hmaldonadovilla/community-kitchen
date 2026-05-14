@@ -318,13 +318,13 @@ describe('meal production bundled HTML rendering', () => {
     expect(recipe.html).toContain('Salt');
   });
 
-  it('hydrates leftover ingredients from linked inventory records when meal production prep rows are saved without MP_INGREDIENTS_LI', () => {
+  it('hydrates leftover ingredients from linked bank records when meal production prep rows are saved without MP_INGREDIENTS_LI', () => {
     const ss = new MockSpreadsheet();
     seedIngredientsData(ss);
     const service = new WebFormService(ss as any);
     const realFetchSubmissionById = service.fetchSubmissionById.bind(service);
     jest.spyOn(service, 'fetchSubmissionById').mockImplementation((formKey: string, recordId: string) => {
-      if (formKey !== 'Config: Leftover Inventory') {
+      if (formKey !== 'Config: Leftover Bank') {
         return realFetchSubmissionById(formKey, recordId);
       }
       if (recordId === 'leftover-single') {
@@ -474,8 +474,8 @@ describe('meal production bundled HTML rendering', () => {
   it('injects generated leftover records into the summary template payload for later rendering', () => {
     const ss = new MockSpreadsheet();
     seedIngredientsData(ss);
-    const inventoryConfig = ss.insertSheet('Config: Leftover Inventory');
-    inventoryConfig.setMockData([
+    const bankConfig = ss.insertSheet('Config: Leftover Bank');
+    bankConfig.setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -487,8 +487,8 @@ describe('meal production bundled HTML rendering', () => {
       ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', '']
     ]);
-    const inventoryData = ss.insertSheet('Leftover Inventory Data');
-    inventoryData.setMockData([
+    const bankData = ss.insertSheet('Leftover Bank Data');
+    bankData.setMockData([
       ['ID [ID]', 'Leftover ID [LEFTOVER_ID]', 'Kind [LEFTOVER_KIND]', 'Recipe [LEFTOVER_RECIPE]', 'Ingredient [LEFTOVER_INGREDIENT]', 'Portions [LEFTOVER_PORTIONS]', 'Qty [LEFTOVER_QTY]', 'Unit [LEFTOVER_UNIT]', 'Source form [LEFTOVER_SOURCE_FORM_KEY]', 'Source record [LEFTOVER_SOURCE_RECORD_ID]'],
       ['inv-1', 'LE-1', 'Multi-ingredient', 'Garlic green beans', '', 5, '', '', 'Config: Meal Production', 'MP-AA000818'],
       ['inv-2', 'LP-1', 'Single-ingredient', '', 'Rice', '', 250, 'gr', 'Config: Meal Production', 'MP-AA000818']

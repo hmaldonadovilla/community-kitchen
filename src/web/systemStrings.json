@@ -396,17 +396,17 @@
       "en": "Hide"
     }
   },
-  "inventory": {
-    "reservationUpdateFailed": {
-      "en": "Failed to update the reservation."
+  "bank": {
+    "utilisationUpdateFailed": {
+      "en": "Failed to update the utilisation."
     },
-    "reservationUpdateFailedDetail": {
-      "en": "We couldn't update the reservation properly. Please try again."
+    "utilisationUpdateFailedDetail": {
+      "en": "We couldn't update the utilisation properly. Please try again."
     },
-    "reservationConfirmFailed": {
-      "en": "Could not confirm reservation changes."
+    "utilisationConfirmFailed": {
+      "en": "Could not confirm utilisation changes."
     },
-    "reservationConflict": {
+    "utilisationConflict": {
       "en": "This item was updated by another user. {availableWithUnit} are available now for {itemLabel}. Do you want to use the available amount or cancel this change?"
     },
     "useAvailable": {
@@ -414,18 +414,6 @@
     },
     "cancelAction": {
       "en": "Cancel action"
-    },
-    "reservationConsumedSingular": {
-      "en": "{count} reservation consumed"
-    },
-    "reservationConsumedPlural": {
-      "en": "{count} reservations consumed"
-    },
-    "reservationReleasedSingular": {
-      "en": "{count} reservation released"
-    },
-    "reservationReleasedPlural": {
-      "en": "{count} reservations released"
     }
   },
   "list": {

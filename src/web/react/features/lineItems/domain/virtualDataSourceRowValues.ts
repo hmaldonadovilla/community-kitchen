@@ -1,27 +1,27 @@
 import type { FieldValue, LineItemRowState } from '../../../../types';
 import { resolveSourceFirstAllocationDisplayFreeQuantity } from '../../../app/sourceFirstAllocations';
-import { resolveReservationSourceItemKey } from '../../reservations/sourceFields';
-import { hasAvailabilityPairValue } from './lineItemPresentation';
+import { resolveUtilisationSourceItemKey } from '../../utilisations/sourceFields';
+import { hasAvailabilityValue } from './lineItemPresentation';
 import {
   computeOptimisticRowMaxQuantity,
-  resolveServerCurrentRecordReservedQuantity,
+  resolveServerCurrentRecordUtilisedQuantity,
   toFiniteNumberValue
 } from '../../../app/quantityConstraints';
 
-export const resolveServerCurrentRecordReservedQuantityFromRow = (
+export const resolveServerCurrentRecordUtilisedQuantityFromRow = (
   row: Record<string, any> | null | undefined,
-  fallbackCurrentRecordReservedQuantity: unknown
+  fallbackCurrentRecordUtilisedQuantity: unknown
 ): number => {
-  const hasServerCurrentRecordReservedQuantity =
-    !!row && Object.prototype.hasOwnProperty.call(row, '__ckServerCurrentRecordReservedQuantity');
-  return resolveServerCurrentRecordReservedQuantity({
-    hasExplicitServerCurrentRecordReservedQuantity:
-      hasServerCurrentRecordReservedQuantity ||
-      (!!row && Object.prototype.hasOwnProperty.call(row, '__ckCurrentRecordReservedQuantity')),
-    serverCurrentRecordReservedQuantity: hasServerCurrentRecordReservedQuantity
-      ? row?.__ckServerCurrentRecordReservedQuantity
-      : row?.__ckCurrentRecordReservedQuantity,
-    fallbackCurrentRecordReservedQuantity
+  const hasServerCurrentRecordUtilisedQuantity =
+    !!row && Object.prototype.hasOwnProperty.call(row, '__ckServerCurrentRecordUtilisedQuantity');
+  return resolveServerCurrentRecordUtilisedQuantity({
+    hasExplicitServerCurrentRecordUtilisedQuantity:
+      hasServerCurrentRecordUtilisedQuantity ||
+      (!!row && Object.prototype.hasOwnProperty.call(row, '__ckCurrentRecordUtilisedQuantity')),
+    serverCurrentRecordUtilisedQuantity: hasServerCurrentRecordUtilisedQuantity
+      ? row?.__ckServerCurrentRecordUtilisedQuantity
+      : row?.__ckCurrentRecordUtilisedQuantity,
+    fallbackCurrentRecordUtilisedQuantity
   });
 };
 
@@ -36,16 +36,16 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   outputRow?: LineItemRowState | null;
   draftValues?: Record<string, FieldValue> | null;
   parentRowId?: string;
-  resolveCurrentReservationStateForSource: (
+  resolveCurrentUtilisationStateForSource: (
     config: any,
     sourceKey: string,
     currentParentRowId?: string
-  ) => { totalReservedQuantity: number; currentRowQuantity: number };
-  resolveCommittedReservationStateForSource: (
+  ) => { totalUtilisedQuantity: number; currentRowQuantity: number };
+  resolveCommittedUtilisationStateForSource: (
     config: any,
     sourceKey: string,
     currentParentRowId?: string
-  ) => { totalReservedQuantity: number; currentRowQuantity: number };
+  ) => { totalUtilisedQuantity: number; currentRowQuantity: number };
 }): Record<string, FieldValue> => {
   const sourceFieldMapping =
     args.config?.sourceFieldMapping && typeof args.config.sourceFieldMapping === 'object'
@@ -86,25 +86,24 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
       : null;
   if (!availabilityConfig) return next;
 
-  const sourceKey = resolveReservationSourceItemKey(args.config, args.sourceRow);
-  const localReservationState = sourceKey
-    ? args.resolveCurrentReservationStateForSource(args.config, sourceKey, args.parentRowId)
-    : { totalReservedQuantity: 0, currentRowQuantity: 0 };
-  const committedReservationState = sourceKey
-    ? args.resolveCommittedReservationStateForSource(args.config, sourceKey, args.parentRowId)
-    : { totalReservedQuantity: 0, currentRowQuantity: 0 };
-  const localCurrentRecordReservedQuantity = localReservationState.totalReservedQuantity;
-  const serverCurrentRecordReservedQuantity = resolveServerCurrentRecordReservedQuantityFromRow(
+  const sourceKey = resolveUtilisationSourceItemKey(args.config, args.sourceRow);
+  const localUtilisationState = sourceKey
+    ? args.resolveCurrentUtilisationStateForSource(args.config, sourceKey, args.parentRowId)
+    : { totalUtilisedQuantity: 0, currentRowQuantity: 0 };
+  const committedUtilisationState = sourceKey
+    ? args.resolveCommittedUtilisationStateForSource(args.config, sourceKey, args.parentRowId)
+    : { totalUtilisedQuantity: 0, currentRowQuantity: 0 };
+  const localCurrentRecordUtilisedQuantity = localUtilisationState.totalUtilisedQuantity;
+  const serverCurrentRecordUtilisedQuantity = resolveServerCurrentRecordUtilisedQuantityFromRow(
     args.sourceRow,
-    committedReservationState.totalReservedQuantity
+    committedUtilisationState.totalUtilisedQuantity
   );
   const currentRowQuantity = Math.max(
-    localReservationState.currentRowQuantity,
+    localUtilisationState.currentRowQuantity,
     toFiniteNumberValue(next[`${args.config?.quantityFieldId || ''}`.trim()])
   );
 
   const sourceQuantityFieldId = `${availabilityConfig.sourceQuantityFieldId || ''}`.trim();
-  const sourceReservedQuantityFieldId = `${availabilityConfig.sourceReservedQuantityFieldId || ''}`.trim();
   const targetQuantityFieldId = `${availabilityConfig.targetQuantityFieldId || ''}`.trim();
   const targetMaxQuantityFieldId = `${availabilityConfig.targetMaxQuantityFieldId || ''}`.trim();
   const resolvedQuantityMaxFieldId = targetMaxQuantityFieldId || targetQuantityFieldId;
@@ -112,23 +111,20 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   const resolvedQuantityFreeValue = sourceQuantityFieldId
     ? resolveSourceFirstAllocationDisplayFreeQuantity({
         remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
-        reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
-        serverCurrentRecordReservedQuantity,
-        localCurrentRecordReservedQuantity,
+        serverCurrentRecordUtilisedQuantity,
+        localCurrentRecordUtilisedQuantity,
         explicitFreeQuantity: (args.sourceRow as any)?.__ckFreeQuantity,
-        allowExplicitFreeQuantity: hasAvailabilityPairValue(
+        allowExplicitFreeQuantity: hasAvailabilityValue(
           args.sourceRow,
-          sourceQuantityFieldId,
-          sourceReservedQuantityFieldId
+          sourceQuantityFieldId
         )
       })
     : 0;
   if (sourceQuantityFieldId && resolvedQuantityMaxFieldId) {
     next[resolvedQuantityMaxFieldId] = computeOptimisticRowMaxQuantity({
       remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
-      reservedQuantity: sourceReservedQuantityFieldId ? (args.sourceRow as any)?.[sourceReservedQuantityFieldId] : 0,
-      serverCurrentRecordReservedQuantity,
-      localCurrentRecordReservedQuantity,
+      serverCurrentRecordUtilisedQuantity,
+      localCurrentRecordUtilisedQuantity,
       currentRowQuantity
     });
   }
@@ -137,7 +133,6 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   }
 
   const sourcePortionsFieldId = `${availabilityConfig.sourcePortionsFieldId || ''}`.trim();
-  const sourceReservedPortionsFieldId = `${availabilityConfig.sourceReservedPortionsFieldId || ''}`.trim();
   const targetPortionsFieldId = `${availabilityConfig.targetPortionsFieldId || ''}`.trim();
   const targetMaxPortionsFieldId = `${availabilityConfig.targetMaxPortionsFieldId || ''}`.trim();
   const resolvedPortionsMaxFieldId = targetMaxPortionsFieldId || targetPortionsFieldId;
@@ -145,23 +140,20 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   const resolvedPortionsFreeValue = sourcePortionsFieldId
     ? resolveSourceFirstAllocationDisplayFreeQuantity({
         remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
-        reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
-        serverCurrentRecordReservedQuantity,
-        localCurrentRecordReservedQuantity,
+        serverCurrentRecordUtilisedQuantity,
+        localCurrentRecordUtilisedQuantity,
         explicitFreeQuantity: (args.sourceRow as any)?.__ckFreeQuantity,
-        allowExplicitFreeQuantity: hasAvailabilityPairValue(
+        allowExplicitFreeQuantity: hasAvailabilityValue(
           args.sourceRow,
-          sourcePortionsFieldId,
-          sourceReservedPortionsFieldId
+          sourcePortionsFieldId
         )
       })
     : 0;
   if (sourcePortionsFieldId && resolvedPortionsMaxFieldId) {
     next[resolvedPortionsMaxFieldId] = computeOptimisticRowMaxQuantity({
       remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
-      reservedQuantity: sourceReservedPortionsFieldId ? (args.sourceRow as any)?.[sourceReservedPortionsFieldId] : 0,
-      serverCurrentRecordReservedQuantity,
-      localCurrentRecordReservedQuantity,
+      serverCurrentRecordUtilisedQuantity,
+      localCurrentRecordUtilisedQuantity,
       currentRowQuantity
     });
   }

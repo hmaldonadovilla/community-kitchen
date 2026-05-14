@@ -5,7 +5,7 @@ import {
   fieldByIdSafe,
   formatLineItemTotalValue,
   getByPath,
-  hasAvailabilityPairValue,
+  hasAvailabilityValue,
   listSortFor,
   normalizeIdValue,
   optionSortFor,
@@ -23,13 +23,13 @@ describe('lineItem presentation domain', () => {
     expect(getByPath({ recipe: { name: 'Chili' } }, 'recipe.missing')).toBeUndefined();
   });
 
-  test('formats ids, totals, and availability pair presence', () => {
+  test('formats ids, totals, and availability presence', () => {
     expect(normalizeIdValue('  abc  ')).toBe('abc');
     expect(normalizeIdValue(null)).toBe('');
     expect(formatLineItemTotalValue({ value: 12.345, decimalPlaces: 1 })).toBe('12.3');
     expect(formatLineItemTotalValue({ value: 12, pending: true })).toBe('');
-    expect(hasAvailabilityPairValue({ remaining: ' ', reserved: 0 }, 'remaining', 'reserved')).toBe(true);
-    expect(hasAvailabilityPairValue({ remaining: '', reserved: null }, 'remaining', 'reserved')).toBe(false);
+    expect(hasAvailabilityValue({ remaining: 0 }, 'remaining')).toBe(true);
+    expect(hasAvailabilityValue({ remaining: '' }, 'remaining')).toBe(false);
   });
 
   test('resolves field lookup and sort modes', () => {

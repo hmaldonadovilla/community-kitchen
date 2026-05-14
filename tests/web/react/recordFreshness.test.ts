@@ -217,7 +217,7 @@ describe('recordFreshness helpers', () => {
     ).toEqual(['followupBatch.inFlight']);
   });
 
-  test('blocks auto-sync while a reservation sync is still running', () => {
+  test('blocks auto-sync while a utilisation sync is still running', () => {
     expect(
       resolveRecordFreshnessSyncBlockers({
         dirty: false,
@@ -228,13 +228,13 @@ describe('recordFreshness helpers', () => {
         submissionInFlight: false,
         uploadInFlight: false,
         recordSyncInFlight: false,
-        reservationSyncInFlight: true,
+        utilisationSyncInFlight: true,
         guidedStepLiveSyncInFlight: false,
         guidedStepBackgroundSyncInFlight: false,
         lastUserInteractionAt: 0,
         now: 90_000
       })
-    ).toEqual(['reservationSync.inFlight']);
+    ).toEqual(['utilisationSync.inFlight']);
   });
 
   test('clears deferred sync when the user has moved to another record', () => {

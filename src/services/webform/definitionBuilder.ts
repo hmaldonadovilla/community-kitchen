@@ -145,7 +145,6 @@ export class DefinitionBuilder {
       followup: form.followupConfig,
       autoSave: form.autoSave,
       recordFreshness: form.recordFreshness,
-      reservationLifecycle: form.reservationLifecycle,
       summaryViewEnabled: form.summaryViewEnabled,
       summaryHtmlTemplateId: form.summaryHtmlTemplateId,
       copyCurrentRecordEnabled: form.copyCurrentRecordEnabled,

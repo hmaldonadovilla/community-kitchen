@@ -79,22 +79,22 @@ describe('WebFormService', () => {
     (distributorSheet as any).setMockData(distributorRows);
   });
 
-  const setupInventoryReservationForms = () => {
-    const inventoryFormKey = 'Config: Test Leftover Inventory';
-    const ledgerFormKey = 'Config: Test Inventory Reservation Ledger';
+  const setupBankUtilisationForms = () => {
+    const bankFormKey = 'Config: Test Leftover Bank';
+    const utilisationFormKey = 'Config: Test Leftover Utilisation';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const dashboardData = [
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', bankFormKey, 'Test Leftover Bank Data', 'Desc', '', '', '', ''],
+      ['Leftover Utilisation', utilisationFormKey, 'Test Leftover Utilisation Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfig = ss.getSheetByName(inventoryFormKey) || ss.insertSheet(inventoryFormKey);
-    const inventoryRows = [
+    const bankConfig = ss.getSheetByName(bankFormKey) || ss.insertSheet(bankFormKey);
+    const bankRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
       ['LEFTOVER_STATUS', 'CHOICE', 'Leftover status', 'Leftover status', 'Leftover status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', 'TRUE', ''],
@@ -102,28 +102,25 @@ describe('WebFormService', () => {
       ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['LEFTOVER_RESERVED_QTY', 'NUMBER', 'Reserved quantity', 'Reserved quantity', 'Reserved quantity', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['LEFTOVER_RESERVED_PORTIONS', 'NUMBER', 'Reserved portions', 'Reserved portions', 'Reserved portions', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_USED_BY_FORM_KEY', 'TEXT', 'Used by form key', 'Used by form key', 'Used by form key', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_USED_BY_RECORD_ID', 'TEXT', 'Used by record ID', 'Used by record ID', 'Used by record ID', false, '', '', '', 'Active', '', '', '', '', '']
     ];
-    (inventoryConfig as any).setMockData(inventoryRows);
+    (bankConfig as any).setMockData(bankRows);
 
-    const ledgerConfig = ss.getSheetByName(ledgerFormKey) || ss.insertSheet(ledgerFormKey);
-    const ledgerRows = [
+    const utilisationConfig = ss.getSheetByName(utilisationFormKey) || ss.insertSheet(utilisationFormKey);
+    const utilisationRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
-      ['RESERVATION_ID', 'TEXT', 'Reservation ID', 'Reservation ID', 'Reservation ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['RESOURCE_FORM_KEY', 'TEXT', 'Resource form key', 'Resource form key', 'Resource form key', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['RESOURCE_RECORD_ID', 'TEXT', 'Resource record ID', 'Resource record ID', 'Resource record ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['RESOURCE_ITEM_ID', 'TEXT', 'Resource item ID', 'Resource item ID', 'Resource item ID', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['RESOURCE_KIND', 'TEXT', 'Resource kind', 'Resource kind', 'Resource kind', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['RESOURCE_QTY_FIELD_ID', 'TEXT', 'Resource quantity field ID', 'Resource quantity field ID', 'Resource quantity field ID', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['RESOURCE_RESERVED_QTY_FIELD_ID', 'TEXT', 'Resource reserved quantity field ID', 'Resource reserved quantity field ID', 'Resource reserved quantity field ID', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['RESOURCE_STATUS_FIELD_ID', 'TEXT', 'Resource status field ID', 'Resource status field ID', 'Resource status field ID', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['RESOURCE_UNIT_FIELD_ID', 'TEXT', 'Resource unit field ID', 'Resource unit field ID', 'Resource unit field ID', false, '', '', '', 'Active', '', '', '', '', ''],
-      ['RESERVED_QTY', 'NUMBER', 'Reserved quantity', 'Reserved quantity', 'Reserved quantity', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['RESERVED_UNIT', 'TEXT', 'Reserved unit', 'Reserved unit', 'Reserved unit', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
-      ['STATUS', 'CHOICE', 'Status', 'Status', 'Status', true, 'active,released,consumed', 'active,released,consumed', 'active,released,consumed', 'Active', '', '', '', 'TRUE', ''],
+      ['UTILISATION_ID', 'TEXT', 'Utilisation ID', 'Utilisation ID', 'Utilisation ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_FORM_KEY', 'TEXT', 'Bank form key', 'Bank form key', 'Bank form key', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_RECORD_ID', 'TEXT', 'Bank record ID', 'Bank record ID', 'Bank record ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_ITEM_ID', 'TEXT', 'Bank item ID', 'Bank item ID', 'Bank item ID', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['RESOURCE_KIND', 'TEXT', 'Bank item kind', 'Bank item kind', 'Bank item kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_QTY_FIELD_ID', 'TEXT', 'Bank quantity field ID', 'Bank quantity field ID', 'Bank quantity field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_STATUS_FIELD_ID', 'TEXT', 'Bank status field ID', 'Bank status field ID', 'Bank status field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['RESOURCE_UNIT_FIELD_ID', 'TEXT', 'Bank unit field ID', 'Bank unit field ID', 'Bank unit field ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['UTILISED_QTY', 'NUMBER', 'Utilised quantity', 'Utilised quantity', 'Utilised quantity', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['UTILISED_UNIT', 'TEXT', 'Utilised unit', 'Utilised unit', 'Utilised unit', false, '', '', '', 'Active', '', '', '', 'TRUE', ''],
+      ['STATUS', 'CHOICE', 'Status', 'Status', 'Status', true, 'active,released', 'active,released', 'active,released', 'Active', '', '', '', 'TRUE', ''],
       ['SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record ID', 'Source record ID', 'Source record ID', true, '', '', '', 'Active', '', '', '', 'TRUE', ''],
       ['SOURCE_PARENT_GROUP_ID', 'TEXT', 'Source parent group ID', 'Source parent group ID', 'Source parent group ID', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -132,9 +129,9 @@ describe('WebFormService', () => {
       ['SOURCE_OUTPUT_ROW_ID', 'TEXT', 'Source output row ID', 'Source output row ID', 'Source output row ID', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_OUTPUT_KEY_FIELD_ID', 'TEXT', 'Source output key field ID', 'Source output key field ID', 'Source output key field ID', false, '', '', '', 'Active', '', '', '', '', '']
     ];
-    (ledgerConfig as any).setMockData(ledgerRows);
+    (utilisationConfig as any).setMockData(utilisationRows);
 
-    return { inventoryFormKey, ledgerFormKey };
+    return { bankFormKey, utilisationFormKey };
   };
 
   const installFollowupLaneMocks = () => {
@@ -226,37 +223,6 @@ describe('WebFormService', () => {
       store,
       restore: () => {
         (global as any).CacheService = previousCacheService;
-      }
-    };
-  };
-
-  const installDocumentPropertiesMocks = () => {
-    const previousPropertiesService = (global as any).PropertiesService;
-    const store = new Map<string, string>();
-    const props: {
-      getProperty: jest.Mock<string | null, [string]>;
-      setProperty: jest.Mock<any, [string, string]>;
-      deleteProperty: jest.Mock<any, [string]>;
-    } = {
-      getProperty: jest.fn((key: string) => (store.has(key) ? store.get(key) || null : null)),
-      setProperty: jest.fn((key: string, value: string) => {
-        store.set(key, value);
-        return props;
-      }),
-      deleteProperty: jest.fn((key: string) => {
-        store.delete(key);
-        return props;
-      })
-    };
-    (global as any).PropertiesService = {
-      ...(previousPropertiesService || {}),
-      getDocumentProperties: () => props
-    };
-    return {
-      props,
-      store,
-      restore: () => {
-        (global as any).PropertiesService = previousPropertiesService;
       }
     };
   };
@@ -564,12 +530,12 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Inventory Form', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Bank Form', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfigSheet = ss.insertSheet('Config: Inventory');
-    (inventoryConfigSheet as any).setMockData([
+    const bankConfigSheet = ss.insertSheet('Config: Bank');
+    (bankConfigSheet as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
@@ -584,8 +550,8 @@ describe('WebFormService', () => {
     });
 
     const res = service.fetchDataSource({
-      id: 'Leftover Inventory Data',
-      formKey: 'Config: Inventory',
+      id: 'Leftover Bank Data',
+      formKey: 'Config: Bank',
       projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
       statusFieldId: 'LEFTOVER_STATUS',
       statusAllowList: ['available']
@@ -604,11 +570,11 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Inventory Form', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Bank Form', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ]);
 
-    const inventoryConfigSheet = ss.getSheetByName('Config: Inventory') || ss.insertSheet('Config: Inventory');
-    (inventoryConfigSheet as any).setMockData([
+    const bankConfigSheet = ss.getSheetByName('Config: Bank') || ss.insertSheet('Config: Bank');
+    (bankConfigSheet as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', '']
@@ -633,8 +599,8 @@ describe('WebFormService', () => {
       });
 
     const res = service.fetchDataSource({
-      id: 'Leftover Inventory Data',
-      formKey: 'Config: Inventory',
+      id: 'Leftover Bank Data',
+      formKey: 'Config: Bank',
       mode: 'options',
       projection: ['id', 'LEFTOVER_ID', 'LEFTOVER_STATUS'],
       statusFieldId: 'LEFTOVER_STATUS',
@@ -673,14 +639,14 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Leftover Bank', 'Config: Leftover Bank', 'Leftover Bank Data', 'Desc', '', '', '', ''],
       ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', '', '', ''],
       ['Ingredients Management', 'Config: Ingredients Management', 'Ingredients Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfigSheet = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
-    (inventoryConfigSheet as any).setMockData([
+    const bankConfigSheet = ss.getSheetByName('Config: Leftover Bank') || ss.insertSheet('Config: Leftover Bank');
+    (bankConfigSheet as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -761,8 +727,8 @@ describe('WebFormService', () => {
     });
 
     const res = service.fetchDataSource({
-      id: 'Leftover Inventory Data',
-      formKey: 'Config: Leftover Inventory',
+      id: 'Leftover Bank Data',
+      formKey: 'Config: Leftover Bank',
       backfill: {
         whenMissingAnyFieldIds: ['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'],
         sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
@@ -843,14 +809,14 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', ''],
+      ['Leftover Bank', 'Config: Leftover Bank', 'Leftover Bank Data', 'Desc', '', '', '', ''],
       ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', '', '', ''],
       ['Ingredients Management', 'Config: Ingredients Management', 'Ingredients Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfigSheet = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
-    (inventoryConfigSheet as any).setMockData([
+    const bankConfigSheet = ss.getSheetByName('Config: Leftover Bank') || ss.insertSheet('Config: Leftover Bank');
+    (bankConfigSheet as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', true, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -929,8 +895,8 @@ describe('WebFormService', () => {
     });
 
     const res = service.fetchDataSource({
-      id: 'Leftover Inventory Data',
-      formKey: 'Config: Leftover Inventory',
+      id: 'Leftover Bank Data',
+      formKey: 'Config: Leftover Bank',
       backfill: {
         whenMissingAnyFieldIds: ['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'],
         sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
@@ -1575,11 +1541,11 @@ describe('WebFormService', () => {
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const configSheet = ss.insertSheet('Config: Inventory');
+    const configSheet = ss.insertSheet('Config: Bank');
     const configRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
@@ -1604,22 +1570,22 @@ describe('WebFormService', () => {
     (configSheet as any).setMockData(configRows);
 
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'entireDish'
     } as any);
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'partialDish'
     } as any);
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'entireDish'
     } as any);
 
-    const sheet = ss.getSheetByName('Inventory Data');
+    const sheet = ss.getSheetByName('Bank Data');
     const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
     const header = values[0];
     const idCol = header.findIndex((c: string) => /\[LEFTOVER_ID\]\s*$/.test((c || '').toString().trim()));
@@ -1635,11 +1601,11 @@ describe('WebFormService', () => {
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const configSheet = ss.insertSheet('Config: Inventory');
+    const configSheet = ss.insertSheet('Config: Bank');
     const configRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'entireDish,partialDish', 'entireDish,partialDish', 'entireDish,partialDish', 'Active', '', '', '', '', ''],
@@ -1664,22 +1630,22 @@ describe('WebFormService', () => {
     (configSheet as any).setMockData(configRows);
 
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'entireDish'
     } as any);
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'entireDish'
     } as any);
     service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_KIND: 'partialDish'
     } as any);
 
-    const sheet = ss.getSheetByName('Inventory Data');
+    const sheet = ss.getSheetByName('Bank Data');
     const values = sheet!.getRange(1, 1, sheet!.getLastRow(), sheet!.getLastColumn()).getValues();
     const header = values[0];
     const idCol = header.findIndex((c: string) => /\[LEFTOVER_ID\]\s*$/.test((c || '').toString().trim()));
@@ -1695,7 +1661,7 @@ describe('WebFormService', () => {
       submitEffects: [
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Inventory',
+          targetFormKey: 'Config: Bank',
           runOn: 'create',
           status: 'Available',
           values: {
@@ -1711,12 +1677,12 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfig = ss.insertSheet('Config: Inventory');
-    const inventoryRows = [
+    const bankConfig = ss.insertSheet('Config: Bank');
+    const bankRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -1739,7 +1705,7 @@ describe('WebFormService', () => {
         ''
       ]
     ];
-    (inventoryConfig as any).setMockData(inventoryRows);
+    (bankConfig as any).setMockData(bankRows);
 
     const created = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
@@ -1782,11 +1748,11 @@ describe('WebFormService', () => {
       })
     );
 
-    const inventorySheet = ss.getSheetByName('Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    expect(inventorySheet!.getLastRow()).toBe(2);
-    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const bankSheet = ss.getSheetByName('Bank Data');
+    expect(bankSheet).toBeDefined();
+    expect(bankSheet!.getLastRow()).toBe(2);
+    const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+    const header = bankValues[0].map((value: any) => (value || '').toString().trim());
     const sourceIdCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
     const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
     const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
@@ -1795,10 +1761,10 @@ describe('WebFormService', () => {
     expect(sourceNameCol).toBeGreaterThanOrEqual(0);
     expect(leftoverIdCol).toBeGreaterThanOrEqual(0);
     expect(statusCol).toBeGreaterThanOrEqual(0);
-    expect((inventoryValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
-    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice');
-    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-000001');
-    expect((inventoryValues[1][statusCol] || '').toString()).toBe('Available');
+    expect((bankValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
+    expect((bankValues[1][sourceNameCol] || '').toString()).toBe('Alice');
+    expect((bankValues[1][leftoverIdCol] || '').toString()).toBe('LE-000001');
+    expect((bankValues[1][statusCol] || '').toString()).toBe('Available');
   });
 
   test('saveSubmissionWithId can create downstream records from source line-item rows', () => {
@@ -1807,7 +1773,7 @@ describe('WebFormService', () => {
       submitEffects: [
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Inventory',
+          targetFormKey: 'Config: Bank',
           runOn: 'create',
           status: 'Available',
           forEachLineItem: {
@@ -1834,12 +1800,12 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfig = ss.insertSheet('Config: Inventory');
-    const inventoryRows = [
+    const bankConfig = ss.insertSheet('Config: Bank');
+    const bankRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -1866,7 +1832,7 @@ describe('WebFormService', () => {
         ''
       ]
     ];
-    (inventoryConfig as any).setMockData(inventoryRows);
+    (bankConfig as any).setMockData(bankRows);
 
     const created = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
@@ -1893,11 +1859,11 @@ describe('WebFormService', () => {
       })
     );
 
-    const inventorySheet = ss.getSheetByName('Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    expect(inventorySheet!.getLastRow()).toBe(3);
-    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const bankSheet = ss.getSheetByName('Bank Data');
+    expect(bankSheet).toBeDefined();
+    expect(bankSheet!.getLastRow()).toBe(3);
+    const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+    const header = bankValues[0].map((value: any) => (value || '').toString().trim());
     const sourceIdCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
     const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
     const leftoverNameCol = header.findIndex((value: string) => /\[LEFTOVER_NAME\]\s*$/.test(value));
@@ -1905,19 +1871,19 @@ describe('WebFormService', () => {
     const leftoverSeqCol = header.findIndex((value: string) => /\[LEFTOVER_SEQ\]\s*$/.test(value));
     const leftoverSourceRowIdCol = header.findIndex((value: string) => /\[LEFTOVER_SOURCE_ROW_ID\]\s*$/.test(value));
     const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
-    expect((inventoryValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
-    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice');
-    expect((inventoryValues[1][leftoverNameCol] || '').toString()).toBe('Soup');
-    expect(Number(inventoryValues[1][leftoverQtyCol] || 0)).toBe(2);
-    expect((inventoryValues[1][leftoverSeqCol] || '').toString()).toBe('1');
-    expect((inventoryValues[1][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_0');
-    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
-    expect((inventoryValues[2][leftoverNameCol] || '').toString()).toBe('Salad');
-    expect(Number(inventoryValues[2][leftoverQtyCol] || 0)).toBe(3);
-    expect((inventoryValues[2][leftoverSeqCol] || '').toString()).toBe('2');
-    expect((inventoryValues[2][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_1');
-    expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
-    expect(inventoryValues.map((row: any[]) => (row[leftoverNameCol] || '').toString())).not.toContain('Waste');
+    expect((bankValues[1][sourceIdCol] || '').toString()).toBe((created.meta.id || '').toString());
+    expect((bankValues[1][sourceNameCol] || '').toString()).toBe('Alice');
+    expect((bankValues[1][leftoverNameCol] || '').toString()).toBe('Soup');
+    expect(Number(bankValues[1][leftoverQtyCol] || 0)).toBe(2);
+    expect((bankValues[1][leftoverSeqCol] || '').toString()).toBe('1');
+    expect((bankValues[1][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_0');
+    expect((bankValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
+    expect((bankValues[2][leftoverNameCol] || '').toString()).toBe('Salad');
+    expect(Number(bankValues[2][leftoverQtyCol] || 0)).toBe(3);
+    expect((bankValues[2][leftoverSeqCol] || '').toString()).toBe('2');
+    expect((bankValues[2][leftoverSourceRowIdCol] || '').toString()).toBe('Q2_1');
+    expect((bankValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
+    expect(bankValues.map((row: any[]) => (row[leftoverNameCol] || '').toString())).not.toContain('Waste');
   });
 
   test('saveSubmissionWithId can upsert downstream records by deterministic submit-effect record id', () => {
@@ -1926,7 +1892,7 @@ describe('WebFormService', () => {
       submitEffects: [
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Inventory',
+          targetFormKey: 'Config: Bank',
           runOn: 'both',
           recordId: 'leftover::{{source.id}}::{{lineItem.rowId}}',
           status: 'Available',
@@ -1953,12 +1919,12 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
-    const inventoryConfig = ss.insertSheet('Config: Inventory');
-    const inventoryRows = [
+    const bankConfig = ss.insertSheet('Config: Bank');
+    const bankRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -1984,7 +1950,7 @@ describe('WebFormService', () => {
         ''
       ]
     ];
-    (inventoryConfig as any).setMockData(inventoryRows);
+    (bankConfig as any).setMockData(bankRows);
 
     const created = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
@@ -2025,19 +1991,19 @@ describe('WebFormService', () => {
       })
     );
 
-    const inventorySheet = ss.getSheetByName('Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    expect(inventorySheet!.getLastRow()).toBe(3);
-    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const bankSheet = ss.getSheetByName('Bank Data');
+    expect(bankSheet).toBeDefined();
+    expect(bankSheet!.getLastRow()).toBe(3);
+    const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+    const header = bankValues[0].map((value: any) => (value || '').toString().trim());
     const sourceNameCol = header.findIndex((value: string) => /\[SOURCE_NAME\]\s*$/.test(value));
     const leftoverQtyCol = header.findIndex((value: string) => /\[LEFTOVER_QTY\]\s*$/.test(value));
     const leftoverIdCol = header.findIndex((value: string) => /\[LEFTOVER_ID\]\s*$/.test(value));
-    expect((inventoryValues[1][sourceNameCol] || '').toString()).toBe('Alice Updated');
-    expect(Number(inventoryValues[1][leftoverQtyCol] || 0)).toBe(4);
-    expect((inventoryValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
-    expect(Number(inventoryValues[2][leftoverQtyCol] || 0)).toBe(5);
-    expect((inventoryValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
+    expect((bankValues[1][sourceNameCol] || '').toString()).toBe('Alice Updated');
+    expect(Number(bankValues[1][leftoverQtyCol] || 0)).toBe(4);
+    expect((bankValues[1][leftoverIdCol] || '').toString()).toBe('LE-1');
+    expect(Number(bankValues[2][leftoverQtyCol] || 0)).toBe(5);
+    expect((bankValues[2][leftoverIdCol] || '').toString()).toBe('LE-2');
   });
 
   test('saveSubmissionWithId batches deterministic submit-effect records when target values are fully resolved', () => {
@@ -2046,7 +2012,7 @@ describe('WebFormService', () => {
       submitEffects: [
         {
           type: 'createRecord',
-          targetFormKey: 'Config: Inventory Batch',
+          targetFormKey: 'Config: Bank Batch',
           runOn: 'both',
           recordId: 'batch::{{source.id}}::{{lineItem.rowId}}',
           forEachLineItem: {
@@ -2069,11 +2035,11 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory Batch', 'Config: Inventory Batch', 'Inventory Batch Data', 'Desc', '', '', '', '']
+      ['Leftover Bank Batch', 'Config: Bank Batch', 'Bank Batch Data', 'Desc', '', '', '', '']
     ]);
 
-    const inventoryConfig = ss.insertSheet('Config: Inventory Batch');
-    (inventoryConfig as any).setMockData([
+    const bankConfig = ss.insertSheet('Config: Bank Batch');
+    (bankConfig as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_NAME', 'TEXT', 'Source name', 'Source name', 'Source name', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -2109,14 +2075,14 @@ describe('WebFormService', () => {
 
   test('saveSubmissionWithId can create produced entire-dish and partial leftovers on final close', () => {
     const mealProductionFormKey = 'Config: Test Meal Production Leftovers';
-    const inventoryFormKey = 'Config: Produced Leftover Inventory';
+    const bankFormKey = 'Config: Produced Leftover Bank';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const followupJson = JSON.stringify({
       submitEffects: [
         {
           id: 'captureProducedEntireDishLeftovers',
           type: 'createRecord',
-          targetFormKey: inventoryFormKey,
+          targetFormKey: bankFormKey,
           sourceLink: {
             sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
             sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID'
@@ -2175,7 +2141,7 @@ describe('WebFormService', () => {
         {
           id: 'captureProducedLeftovers',
           type: 'createRecord',
-          targetFormKey: inventoryFormKey,
+          targetFormKey: bankFormKey,
           sourceLink: {
             sourceFormKeyFieldId: 'LEFTOVER_SOURCE_FORM_KEY',
             sourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID'
@@ -2220,7 +2186,7 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Meal Production', mealProductionFormKey, 'Test Meal Production Leftovers Data', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Produced Leftover Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', bankFormKey, 'Produced Leftover Bank Data', 'Desc', '', '', '', '']
     ]);
 
     const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
@@ -2254,8 +2220,8 @@ describe('WebFormService', () => {
       ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '']
     ]);
 
-    const inventoryConfig = ss.insertSheet(inventoryFormKey);
-    (inventoryConfig as any).setMockData([
+    const bankConfig = ss.insertSheet(bankFormKey);
+    (bankConfig as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_STATUS', 'CHOICE', 'Status', 'Status', 'Status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', '', ''],
       ['LEFTOVER_KIND', 'CHOICE', 'Kind', 'Kind', 'Kind', true, 'Entire dish,Part dish', 'Entire dish,Part dish', 'Entire dish,Part dish', 'Active', '', '', '', '', ''],
@@ -2390,7 +2356,7 @@ describe('WebFormService', () => {
       expect.arrayContaining([
         expect.objectContaining({
           effectId: 'captureProducedEntireDishLeftovers',
-          targetFormKey: inventoryFormKey,
+          targetFormKey: bankFormKey,
           values: expect.objectContaining({
             LEFTOVER_ID: 'LE-1',
             LEFTOVER_RECIPE: 'Renamed curry & fish'
@@ -2398,7 +2364,7 @@ describe('WebFormService', () => {
         }),
         expect.objectContaining({
           effectId: 'captureProducedLeftovers',
-          targetFormKey: inventoryFormKey,
+          targetFormKey: bankFormKey,
           values: expect.objectContaining({
             LEFTOVER_ID: 'LP-1'
           })
@@ -2406,13 +2372,13 @@ describe('WebFormService', () => {
       ])
     );
 
-    const inventorySheet = ss.getSheets().find((sheet: any) => sheet.getName() === 'Produced Leftover Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    expect(inventorySheet!.getLastRow()).toBe(3);
+    const bankSheet = ss.getSheets().find((sheet: any) => sheet.getName() === 'Produced Leftover Bank Data');
+    expect(bankSheet).toBeDefined();
+    expect(bankSheet!.getLastRow()).toBe(3);
 
-    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
-    const rowObjects = inventoryValues.slice(1).map((row: any[]) =>
+    const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+    const header = bankValues[0].map((value: any) => (value || '').toString().trim());
+    const rowObjects = bankValues.slice(1).map((row: any[]) =>
       Object.fromEntries(header.map((key: string, index: number) => [key.replace(/^.*\[(.+)\]\s*$/, '$1'), row[index]]))
     );
 
@@ -2457,14 +2423,14 @@ describe('WebFormService', () => {
 
   test('saveSubmissionWithId scales produced leftover ingredients from the Cook row only', () => {
     const mealProductionFormKey = 'Config: Test Meal Production Combined Leftovers';
-    const inventoryFormKey = 'Config: Combined Leftover Inventory';
+    const bankFormKey = 'Config: Combined Leftover Bank';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const followupJson = JSON.stringify({
       submitEffects: [
         {
           id: 'captureProducedEntireDishLeftovers',
           type: 'createRecord',
-          targetFormKey: inventoryFormKey,
+          targetFormKey: bankFormKey,
           runOn: 'both',
           recordId: 'leftover::{{source.id}}::entire::{{parent.MEAL_TYPE}}',
           when: {
@@ -2506,7 +2472,7 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Meal Production', mealProductionFormKey, 'Test Meal Production Combined Leftovers Data', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Combined Leftover Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', bankFormKey, 'Combined Leftover Bank Data', 'Desc', '', '', '', '']
     ]);
 
     const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
@@ -2522,8 +2488,8 @@ describe('WebFormService', () => {
       ['MP_LEFTOVER_PORTIONS_CAPTURE', 'NUMBER', 'Leftover portions', 'Leftover portions', 'Leftover portions', false, '', '', '']
     ]);
 
-    const inventoryConfig = ss.insertSheet(inventoryFormKey);
-    (inventoryConfig as any).setMockData([
+    const bankConfig = ss.insertSheet(bankFormKey);
+    (bankConfig as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_PREP_TYPE', 'TEXT', 'Prep type', 'Prep type', 'Prep type', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -2535,8 +2501,8 @@ describe('WebFormService', () => {
       ['LEFTOVER_INGREDIENTS_LI', 'LINE_ITEM_GROUP', 'Ingredients', 'Ingredients', 'Ingredients', false, '', '', '', 'Active', 'REF:LineItems_LEFTOVER_INGREDIENTS_LI', '', '', '', '']
     ]);
 
-    const inventoryIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI');
-    (inventoryIngredientsSheet as any).setMockData([
+    const bankIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI');
+    (bankIngredientsSheet as any).setMockData([
       ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
       ['ING', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
       ['QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
@@ -2605,12 +2571,12 @@ describe('WebFormService', () => {
     );
 
     const generatedRecordId = 'leftover::MP-COMBINED-1::entire::Dinner';
-    const savedInventory = service.fetchSubmissionById(inventoryFormKey, generatedRecordId);
+    const savedBank = service.fetchSubmissionById(bankFormKey, generatedRecordId);
 
-    expect(savedInventory).toBeTruthy();
-    expect(savedInventory?.values?.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-COMBINED-1');
-    expect(savedInventory?.values?.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
-    expect(savedInventory?.values?.LEFTOVER_INGREDIENTS_LI).toEqual([
+    expect(savedBank).toBeTruthy();
+    expect(savedBank?.values?.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-COMBINED-1');
+    expect(savedBank?.values?.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
+    expect(savedBank?.values?.LEFTOVER_INGREDIENTS_LI).toEqual([
       { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
       { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
     ]);
@@ -2618,14 +2584,14 @@ describe('WebFormService', () => {
 
   test('fetchSubmissionById hydrates meal production prep ingredients from linked leftovers for form view', () => {
     const mealProductionFormKey = 'Config: Meal Production';
-    const inventoryFormKey = 'Config: Leftover Inventory';
+    const bankFormKey = 'Config: Leftover Bank';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     (dashboardSheet as any).setMockData([
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Meal Production', mealProductionFormKey, 'Test Meal Production Fetch Hydration Data', 'Desc', '', '', '', ''],
-      ['Leftover Inventory', inventoryFormKey, 'Leftover Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', bankFormKey, 'Leftover Bank Data', 'Desc', '', '', '', '']
     ]);
 
     const mealProductionConfig = ss.insertSheet(mealProductionFormKey);
@@ -2640,15 +2606,15 @@ describe('WebFormService', () => {
       ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', false, '', '', '']
     ]);
 
-    const inventoryConfig = ss.insertSheet(inventoryFormKey);
-    (inventoryConfig as any).setMockData([
+    const bankConfig = ss.insertSheet(bankFormKey);
+    (bankConfig as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_INGREDIENTS_LI', 'LINE_ITEM_GROUP', 'Ingredients', 'Ingredients', 'Ingredients', false, '', '', '', 'Active', 'REF:LineItems_LEFTOVER_INGREDIENTS_LI_FETCH', '', '', '', '']
     ]);
 
-    const inventoryIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI_FETCH');
-    (inventoryIngredientsSheet as any).setMockData([
+    const bankIngredientsSheet = ss.insertSheet('LineItems_LEFTOVER_INGREDIENTS_LI_FETCH');
+    (bankIngredientsSheet as any).setMockData([
       ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
       ['ING', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', ''],
       ['QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
@@ -2658,7 +2624,7 @@ describe('WebFormService', () => {
     ]);
 
     const leftover = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+      formKey: bankFormKey,
       language: 'EN',
       id: 'MI-TEST-1',
       LEFTOVER_KIND: 'Multi-ingredient',
@@ -2709,19 +2675,19 @@ describe('WebFormService', () => {
 
   test('saveSubmissionWithId can update downstream records from source line-item rows', () => {
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const inventoryConfig = ss.insertSheet('Config: Inventory');
-    const inventoryRows = [
+    const bankConfig = ss.insertSheet('Config: Bank');
+    const bankRows = [
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['LEFTOVER_STATUS', 'TEXT', 'Status', 'Status', 'Status', false, '', '', '', 'Active', '', '', '', '', ''],
       ['LEFTOVER_USED_BY_RECORD_ID', 'TEXT', 'Used by record id', 'Used by record id', 'Used by record id', false, '', '', '', 'Active', '', '', '', '', '']
     ];
-    (inventoryConfig as any).setMockData(inventoryRows);
+    (bankConfig as any).setMockData(bankRows);
 
     const followupJson = JSON.stringify({
       submitEffects: [
         {
           type: 'updateRecord',
-          targetFormKey: 'Config: Inventory',
+          targetFormKey: 'Config: Bank',
           runOn: 'update',
           recordId: '{{row.TARGET_RECORD_ID}}',
           status: 'used',
@@ -2744,12 +2710,12 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ];
     (dashboardSheet as any).setMockData(dashboardData);
 
     const seededTarget = service.saveSubmissionWithId({
-      formKey: 'Config: Inventory',
+      formKey: 'Config: Bank',
       language: 'EN',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_USED_BY_RECORD_ID: ''
@@ -2793,14 +2759,14 @@ describe('WebFormService', () => {
       })
     );
 
-    const inventorySheet = ss.getSheetByName('Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-    const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+    const bankSheet = ss.getSheetByName('Bank Data');
+    expect(bankSheet).toBeDefined();
+    const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+    const header = bankValues[0].map((value: any) => (value || '').toString().trim());
     const statusCol = header.findIndex((value: string) => /\[LEFTOVER_STATUS\]\s*$/.test(value));
     const usedByCol = header.findIndex((value: string) => /\[LEFTOVER_USED_BY_RECORD_ID\]\s*$/.test(value));
-    expect((inventoryValues[1][statusCol] || '').toString()).toBe('used');
-    expect((inventoryValues[1][usedByCol] || '').toString()).toBe('REC-DEL-1');
+    expect((bankValues[1][statusCol] || '').toString()).toBe('used');
+    expect((bankValues[1][usedByCol] || '').toString()).toBe('REC-DEL-1');
   });
 
   test('runDailyLifecycleRecompute applies config-driven date status transitions', () => {
@@ -2827,21 +2793,21 @@ describe('WebFormService', () => {
         [],
         [],
         ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-        ['Leftover Inventory', 'Config: Leftover Inventory', 'Leftover Inventory Data', 'Desc', '', '', '', lifecycleJson]
+        ['Leftover Bank', 'Config: Leftover Bank', 'Leftover Bank Data', 'Desc', '', '', '', lifecycleJson]
       ];
       (dashboardSheet as any).setMockData(dashboardData);
 
-      const inventoryConfig = ss.getSheetByName('Config: Leftover Inventory') || ss.insertSheet('Config: Leftover Inventory');
-      const inventoryRows = [
+      const bankConfig = ss.getSheetByName('Config: Leftover Bank') || ss.insertSheet('Config: Leftover Bank');
+      const bankRows = [
         ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
         ['LEFTOVER_STATUS', 'CHOICE', 'Leftover status', 'Leftover status', 'Leftover status', true, 'available,used,expired', 'available,used,expired', 'available,used,expired', 'Active', '', '', '', '', ''],
         ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', '', 'Active', '', '', '', '', ''],
         ['LEFTOVER_NAME', 'TEXT', 'Name', 'Name', 'Name', false, '', '', '', 'Active', '', '', '', '', '']
       ];
-      (inventoryConfig as any).setMockData(inventoryRows);
+      (bankConfig as any).setMockData(bankRows);
 
       const expired = service.saveSubmissionWithId({
-        formKey: 'Config: Leftover Inventory',
+        formKey: 'Config: Leftover Bank',
         language: 'EN',
         LEFTOVER_STATUS: 'available',
         LEFTOVER_EXP_DATE: '2026-03-20',
@@ -2850,7 +2816,7 @@ describe('WebFormService', () => {
       expect(expired.success).toBe(true);
 
       const stillAvailable = service.saveSubmissionWithId({
-        formKey: 'Config: Leftover Inventory',
+        formKey: 'Config: Leftover Bank',
         language: 'EN',
         LEFTOVER_STATUS: 'available',
         LEFTOVER_EXP_DATE: '2026-03-22',
@@ -2864,15 +2830,15 @@ describe('WebFormService', () => {
       expect(result.updatedRecords).toBe(1);
       expect(result.errors).toEqual([]);
 
-      const inventorySheet = ss.getSheetByName('Leftover Inventory Data');
-      expect(inventorySheet).toBeDefined();
-      const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-      const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
+      const bankSheet = ss.getSheetByName('Leftover Bank Data');
+      expect(bankSheet).toBeDefined();
+      const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
+      const header = bankValues[0].map((value: any) => (value || '').toString().trim());
       const statusCol = header.findIndex((value: string) => /\[LEFTOVER_STATUS\]\s*$/.test(value));
       const expCol = header.findIndex((value: string) => /\[LEFTOVER_EXP_DATE\]\s*$/.test(value));
-      expect((inventoryValues[1][expCol] || '').toString()).toContain('2026');
-      expect((inventoryValues[1][statusCol] || '').toString()).toBe('expired');
-      expect((inventoryValues[2][statusCol] || '').toString()).toBe('available');
+      expect((bankValues[1][expCol] || '').toString()).toContain('2026');
+      expect((bankValues[1][statusCol] || '').toString()).toBe('expired');
+      expect((bankValues[2][statusCol] || '').toString()).toBe('available');
     } finally {
       jest.useRealTimers();
     }
@@ -2936,22 +2902,21 @@ describe('WebFormService', () => {
     expect((values[1][q1Col] || '').toString()).toBe('Bob');
   });
 
-  test('upsertInventoryReservation creates an active ledger row and updates reserved aggregate', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('upsertBankUtilisation creates an active utilisation row and debits bank availability', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-1',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
-    const result = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const result = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-1',
       resourceKind: 'Entire dish',
       quantity: 3,
@@ -2959,174 +2924,34 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-1',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-1',
-      ledgerFormKey
+      utilisationFormKey
     });
 
     expect(result.success).toBe(true);
-    expect(result.availability?.reservedQuantity).toBe(3);
     expect(result.availability?.freeQuantity).toBe(7);
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (result.reservationId || '').toString());
-    expect(reservation).not.toBeNull();
-    expect((reservation?.values as any)?.STATUS).toBe('active');
-    expect((reservation?.values as any)?.RESERVED_QTY).toBe(3);
+    const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(7);
+    const utilisation = service.fetchSubmissionById(utilisationFormKey, (result.utilisationId || '').toString());
+    expect(utilisation).not.toBeNull();
+    expect((utilisation?.values as any)?.STATUS).toBe('active');
+    expect((utilisation?.values as any)?.UTILISED_QTY).toBe(3);
   });
 
-  test('applyInventoryReservationPlan refreshes stale form-backed datasource caches after noop inventory release writes', () => {
-    const serverCache = installServerCacheMocks();
-    const docProps = installDocumentPropertiesMocks();
-    try {
-      const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-      const inventory = service.saveSubmissionWithId({
-        formKey: inventoryFormKey,
-        language: 'EN',
-        LEFTOVER_ID: 'LP-CACHE-1',
-        LEFTOVER_STATUS: 'available',
-        LEFTOVER_KIND: 'Part dish',
-        LEFTOVER_QTY: 500,
-        LEFTOVER_UNIT: 'gr',
-        LEFTOVER_RESERVED_QTY: 0
-      } as any);
-      expect(inventory.success).toBe(true);
-
-      const dataSourceConfig = {
-        id: 'Leftover Inventory Data',
-        formKey: inventoryFormKey,
-        mode: 'options',
-        statusFieldId: 'LEFTOVER_STATUS',
-        statusAllowList: ['available'],
-        projection: [
-          'id',
-          'LEFTOVER_ID',
-          'LEFTOVER_STATUS',
-          'LEFTOVER_QTY',
-          'LEFTOVER_RESERVED_QTY',
-          'LEFTOVER_UNIT'
-        ]
-      } as any;
-
-      const initial = service.fetchDataSource(dataSourceConfig, 'EN');
-      expect(initial.items).toEqual([
-        expect.objectContaining({
-          LEFTOVER_ID: 'LP-CACHE-1',
-          LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: 0,
-          LEFTOVER_UNIT: 'gr',
-          LEFTOVER_STATUS: 'available'
-        })
-      ]);
-
-      const reserve = service.applyInventoryReservationPlan({
-        sourceFormKey: 'Config: Delivery',
-        sourceRecordId: 'REC-CACHE-1',
-        ledgerFormKey,
-        refreshMode: 'revisionOnly',
-        managedScopes: [
-          {
-            sourceParentGroupId: 'MP_MEALS_REQUEST',
-            sourceParentRowId: 'ROW-CACHE-1'
-          }
-        ],
-        reservations: [
-          {
-            resourceFormKey: inventoryFormKey,
-            resourceRecordId: (inventory.meta?.id || '').toString(),
-            resourceItemId: 'LP-CACHE-1',
-            resourceKind: 'Part dish',
-            quantity: 500,
-            unit: 'gr',
-            sourceParentGroupId: 'MP_MEALS_REQUEST',
-            sourceParentRowId: 'ROW-CACHE-1',
-            quantityFieldId: 'LEFTOVER_QTY',
-            reservedQuantityFieldId: 'LEFTOVER_RESERVED_QTY',
-            statusFieldId: 'LEFTOVER_STATUS',
-            unitFieldId: 'LEFTOVER_UNIT'
-          }
-        ]
-      } as any);
-      expect(reserve.success).toBe(true);
-
-      const cachedWideProjection = service.fetchDataSource(dataSourceConfig, 'EN');
-      expect(cachedWideProjection.items).toEqual([
-        expect.objectContaining({
-          LEFTOVER_ID: 'LP-CACHE-1',
-          LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: 500,
-          LEFTOVER_UNIT: 'gr',
-          LEFTOVER_STATUS: 'available'
-        })
-      ]);
-
-      const inventorySheet = ss.getSheetByName('Test Leftover Inventory Data');
-      expect(inventorySheet).toBeDefined();
-      const inventoryValues = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
-      const header = inventoryValues[0].map((value: any) => (value || '').toString().trim());
-      const reservedQtyCol = header.findIndex((value: string) => /\[LEFTOVER_RESERVED_QTY\]\s*$/.test(value));
-      expect(reservedQtyCol).toBeGreaterThanOrEqual(0);
-      inventorySheet!.getRange((inventory.meta?.rowNumber || 0) as number, reservedQtyCol + 1, 1, 1).setValue(0);
-
-      const refreshedRecord = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-      expect((refreshedRecord?.values as any)?.LEFTOVER_RESERVED_QTY).toBe(0);
-
-      const staleWideProjection = service.fetchDataSource(dataSourceConfig, 'EN');
-      expect(staleWideProjection.items).toEqual([
-        expect.objectContaining({
-          LEFTOVER_ID: 'LP-CACHE-1',
-          LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: 500,
-          LEFTOVER_UNIT: 'gr',
-          LEFTOVER_STATUS: 'available'
-        })
-      ]);
-
-      const release = service.applyInventoryReservationPlan({
-        sourceFormKey: 'Config: Delivery',
-        sourceRecordId: 'REC-CACHE-1',
-        ledgerFormKey,
-        refreshMode: 'revisionOnly',
-        managedScopes: [
-          {
-            sourceParentGroupId: 'MP_MEALS_REQUEST',
-            sourceParentRowId: 'ROW-CACHE-1'
-          }
-        ],
-        reservations: []
-      } as any);
-      expect(release.success).toBe(true);
-
-      const afterRelease = service.fetchDataSource(dataSourceConfig, 'EN');
-      expect(afterRelease.items).toEqual([
-        expect.objectContaining({
-          LEFTOVER_ID: 'LP-CACHE-1',
-          LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: 0,
-          LEFTOVER_UNIT: 'gr',
-          LEFTOVER_STATUS: 'available'
-        })
-      ]);
-    } finally {
-      docProps.restore();
-      serverCache.restore();
-    }
-  });
-
-  test('upsertInventoryReservation rejects over-reservation and returns fresh availability', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('upsertBankUtilisation rejects over-utilisation and returns fresh availability', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-2',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
-    const first = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const first = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-2',
       resourceKind: 'Entire dish',
       quantity: 7,
@@ -3134,13 +2959,13 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-1',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-1',
-      ledgerFormKey
+      utilisationFormKey
     });
     expect(first.success).toBe(true);
 
-    const second = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const second = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-2',
       resourceKind: 'Entire dish',
       quantity: 4,
@@ -3148,26 +2973,24 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-2',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-2',
-      ledgerFormKey
+      utilisationFormKey
     });
     expect(second.success).toBe(false);
     expect(second.conflict).toBe(true);
-    expect(second.availability?.reservedQuantity).toBe(7);
     expect(second.availability?.freeQuantity).toBe(3);
   });
 
-  test('upsertInventoryReservation retries transient reservation transaction lock failures', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('upsertBankUtilisation retries transient utilisation transaction lock failures', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-UPSERT-RETRY-1',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 6,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
     let tryLockCalls = 0;
     const docLock = installDocumentLockMocks(() => {
@@ -3175,9 +2998,9 @@ describe('WebFormService', () => {
       return tryLockCalls >= 2;
     });
     try {
-      const result = service.upsertInventoryReservation({
-        resourceFormKey: inventoryFormKey,
-        resourceRecordId: (inventory.meta?.id || '').toString(),
+      const result = service.upsertBankUtilisation({
+        resourceFormKey: bankFormKey,
+        resourceRecordId: (bank.meta?.id || '').toString(),
         resourceItemId: 'LE-UPSERT-RETRY-1',
         resourceKind: 'Entire dish',
         quantity: 3,
@@ -3185,7 +3008,7 @@ describe('WebFormService', () => {
         sourceRecordId: 'REC-UPSERT-RETRY-1',
         sourceParentGroupId: 'MP_MEALS_REQUEST',
         sourceParentRowId: 'ROW-UPSERT-RETRY-1',
-        ledgerFormKey
+        utilisationFormKey
       });
 
       expect(result.success).toBe(true);
@@ -3195,23 +3018,22 @@ describe('WebFormService', () => {
     }
   });
 
-  test('upsertInventoryReservation releases a reservation when quantity becomes zero', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('upsertBankUtilisation releases a utilisation when quantity becomes zero', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LP-1',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Part dish',
       LEFTOVER_QTY: 250,
       LEFTOVER_UNIT: 'gr',
-      LEFTOVER_RESERVED_QTY: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const utilised = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LP-1',
       resourceKind: 'Part dish',
       quantity: 125,
@@ -3220,13 +3042,13 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-3',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-3',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(reserved.success).toBe(true);
+    expect(utilised.success).toBe(true);
 
-    const released = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const released = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LP-1',
       resourceKind: 'Part dish',
       quantity: 0,
@@ -3235,44 +3057,41 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-3',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-3',
-      ledgerFormKey
+      utilisationFormKey
     });
     expect(released.success).toBe(true);
     expect(released.released).toBe(true);
-    expect(released.availability?.reservedQuantity).toBe(0);
     expect(released.availability?.freeQuantity).toBe(250);
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_QTY).toBe(0);
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('released');
+    const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((updatedBank?.values as any)?.LEFTOVER_QTY).toBe(250);
+    const utilisation = service.fetchSubmissionById(utilisationFormKey, (utilised.utilisationId || '').toString());
+    expect((utilisation?.values as any)?.STATUS).toBe('released');
   });
 
-  test('applyInventoryReservationPlan replaces managed-scope reservations in one batch', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventoryA = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('applyBankUtilisationPlan replaces managed-scope utilisations in one batch', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bankA = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-PLAN-A',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    const inventoryB = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bankB = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-PLAN-B',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventoryA.success).toBe(true);
-    expect(inventoryB.success).toBe(true);
+    expect(bankA.success).toBe(true);
+    expect(bankB.success).toBe(true);
 
-    const firstReservation = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+    const firstUtilisation = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankA.meta?.id || '').toString(),
       resourceItemId: 'LE-PLAN-A',
       resourceKind: 'Entire dish',
       quantity: 4,
@@ -3281,14 +3100,14 @@ describe('WebFormService', () => {
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-1',
       sourceOutputGroupId: 'MP_TYPE_LI',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(firstReservation.success).toBe(true);
+    expect(firstUtilisation.success).toBe(true);
 
-    const planResult = service.applyInventoryReservationPlan({
+    const planResult = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-PLAN-1',
-      ledgerFormKey,
+      utilisationFormKey,
       managedScopes: [
         {
           sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -3301,10 +3120,10 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: [
+      utilisations: [
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankB.meta?.id || '').toString(),
           resourceItemId: 'LE-PLAN-B',
           resourceKind: 'Entire dish',
           quantity: 2,
@@ -3316,33 +3135,33 @@ describe('WebFormService', () => {
     });
 
     expect(planResult.success).toBe(true);
-    expect(planResult.reservationsApplied).toBe(1);
-    expect(planResult.reservationsReleased).toBe(1);
+    expect(planResult.utilisationsApplied).toBe(1);
+    expect(planResult.utilisationsReleased).toBe(1);
 
-    const updatedInventoryA = service.fetchSubmissionById(inventoryFormKey, (inventoryA.meta?.id || '').toString());
-    const updatedInventoryB = service.fetchSubmissionById(inventoryFormKey, (inventoryB.meta?.id || '').toString());
-    expect((updatedInventoryA?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(2);
+    const updatedBankA = service.fetchSubmissionById(bankFormKey, (bankA.meta?.id || '').toString());
+    const updatedBankB = service.fetchSubmissionById(bankFormKey, (bankB.meta?.id || '').toString());
+    expect((updatedBankA?.values as any)?.LEFTOVER_PORTIONS).toBe(10);
+    expect((updatedBankB?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
 
-    const releasedReservation = service.fetchSubmissionById(ledgerFormKey, (firstReservation.reservationId || '').toString());
-    expect((releasedReservation?.values as any)?.STATUS).toBe('released');
+    const releasedUtilisation = service.fetchSubmissionById(utilisationFormKey, (firstUtilisation.utilisationId || '').toString());
+    expect((releasedUtilisation?.values as any)?.STATUS).toBe('released');
 
-    const expectedNextReservationId = (service as any).buildInventoryReservationId({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryB.meta?.id || '').toString(),
+    const expectedNextUtilisationId = (service as any).buildBankUtilisationId({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankB.meta?.id || '').toString(),
       resourceItemId: 'LE-PLAN-B',
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-PLAN-1',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-2'
     });
-    const nextReservation = service.fetchSubmissionById(ledgerFormKey, expectedNextReservationId);
-    expect((nextReservation?.values as any)?.STATUS).toBe('active');
-    expect((nextReservation?.values as any)?.RESERVED_QTY).toBe(2);
+    const nextUtilisation = service.fetchSubmissionById(utilisationFormKey, expectedNextUtilisationId);
+    expect((nextUtilisation?.values as any)?.STATUS).toBe('active');
+    expect((nextUtilisation?.values as any)?.UTILISED_QTY).toBe(2);
   });
 
-  test('applyInventoryReservationPlan reports safe source-record metadata for optimistic-lock adoption', () => {
-    const { ledgerFormKey } = setupInventoryReservationForms();
+  test('applyBankUtilisationPlan reports safe source-record metadata for optimistic-lock adoption', () => {
+    const { utilisationFormKey } = setupBankUtilisationForms();
     const createdSource = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
       language: 'EN',
@@ -3356,13 +3175,13 @@ describe('WebFormService', () => {
     } as any);
     expect(createdSource.success).toBe(true);
 
-    const matched = service.applyInventoryReservationPlan({
+    const matched = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Delivery',
       sourceRecordId: 'REC-PLAN-META',
-      ledgerFormKey,
+      utilisationFormKey,
       clientDataVersion: createdSource.meta?.dataVersion,
       managedScopes: [],
-      reservations: []
+      utilisations: []
     });
 
     expect(matched.success).toBe(true);
@@ -3390,13 +3209,13 @@ describe('WebFormService', () => {
     } as any);
     expect(updatedSource.success).toBe(true);
 
-    const stale = service.applyInventoryReservationPlan({
+    const stale = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Delivery',
       sourceRecordId: 'REC-PLAN-META',
-      ledgerFormKey,
+      utilisationFormKey,
       clientDataVersion: createdSource.meta?.dataVersion,
       managedScopes: [],
-      reservations: []
+      utilisations: []
     });
 
     expect(stale.success).toBe(true);
@@ -3411,32 +3230,30 @@ describe('WebFormService', () => {
     );
   });
 
-  test('applyInventoryReservationPlan reuses a single active-ledger scan for the batch', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventoryA = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('applyBankUtilisationPlan reuses a single active-utilisation scan for the batch', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bankA = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-BATCH-A',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    const inventoryB = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bankB = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-BATCH-B',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventoryA.success).toBe(true);
-    expect(inventoryB.success).toBe(true);
+    expect(bankA.success).toBe(true);
+    expect(bankB.success).toBe(true);
 
-    const seededReservation = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+    const seededUtilisation = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankA.meta?.id || '').toString(),
       resourceItemId: 'LE-BATCH-A',
       resourceKind: 'Entire dish',
       quantity: 4,
@@ -3445,9 +3262,9 @@ describe('WebFormService', () => {
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-1',
       sourceOutputGroupId: 'MP_TYPE_LI',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(seededReservation.success).toBe(true);
+    expect(seededUtilisation.success).toBe(true);
 
     const fetchByCriteriaSpy = jest.spyOn(service as any, 'fetchSubmissionRecordsByFieldCriteria');
     const bulkFetchSpy = jest.spyOn((service as any).listing, 'fetchSubmissionsByRowNumbers');
@@ -3456,10 +3273,10 @@ describe('WebFormService', () => {
     bulkFetchSpy.mockClear();
     singleRowFetchSpy.mockClear();
 
-    const result = service.applyInventoryReservationPlan({
+    const result = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-BATCH-1',
-      ledgerFormKey,
+      utilisationFormKey,
       managedScopes: [
         {
           sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -3472,10 +3289,10 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: [
+      utilisations: [
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryA.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankA.meta?.id || '').toString(),
           resourceItemId: 'LE-BATCH-A',
           resourceKind: 'Entire dish',
           quantity: 2,
@@ -3484,8 +3301,8 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         },
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankB.meta?.id || '').toString(),
           resourceItemId: 'LE-BATCH-B',
           resourceKind: 'Entire dish',
           quantity: 3,
@@ -3511,32 +3328,30 @@ describe('WebFormService', () => {
     expect(singleRowFetchSpy).not.toHaveBeenCalled();
   });
 
-  test('applyInventoryReservationPlan batches internal ledger and inventory writes', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventoryA = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('applyBankUtilisationPlan batches internal utilisation and bank writes', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bankA = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-BATCH-WRITE-A',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    const inventoryB = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bankB = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-BATCH-WRITE-B',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventoryA.success).toBe(true);
-    expect(inventoryB.success).toBe(true);
+    expect(bankA.success).toBe(true);
+    expect(bankB.success).toBe(true);
 
-    const firstReservation = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+    const firstUtilisation = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankA.meta?.id || '').toString(),
       resourceItemId: 'LE-BATCH-WRITE-A',
       resourceKind: 'Entire dish',
       quantity: 4,
@@ -3545,16 +3360,16 @@ describe('WebFormService', () => {
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-1',
       sourceOutputGroupId: 'MP_TYPE_LI',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(firstReservation.success).toBe(true);
+    expect(firstUtilisation.success).toBe(true);
 
     const batchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
 
-    const result = service.applyInventoryReservationPlan({
+    const result = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-BATCH-WRITE-1',
-      ledgerFormKey,
+      utilisationFormKey,
       managedScopes: [
         {
           sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -3567,10 +3382,10 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: [
+      utilisations: [
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryA.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankA.meta?.id || '').toString(),
           resourceItemId: 'LE-BATCH-WRITE-A',
           resourceKind: 'Entire dish',
           quantity: 2,
@@ -3579,8 +3394,8 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         },
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankB.meta?.id || '').toString(),
           resourceItemId: 'LE-BATCH-WRITE-B',
           resourceKind: 'Entire dish',
           quantity: 3,
@@ -3597,32 +3412,30 @@ describe('WebFormService', () => {
     expect(savedCounts).toEqual([2, 2]);
   });
 
-  test('applyInventoryReservationPlan releases deleted output-row reservations within the same parent row', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventoryA = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('applyBankUtilisationPlan releases deleted output-row utilisations within the same parent row', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bankA = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-DEL-A',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    const inventoryB = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bankB = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-DEL-B',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventoryA.success).toBe(true);
-    expect(inventoryB.success).toBe(true);
+    expect(bankA.success).toBe(true);
+    expect(bankB.success).toBe(true);
 
-    const reservationA = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryA.meta?.id || '').toString(),
+    const utilisationA = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankA.meta?.id || '').toString(),
       resourceItemId: 'LE-DEL-A',
       resourceKind: 'Entire dish',
       quantity: 4,
@@ -3632,11 +3445,11 @@ describe('WebFormService', () => {
       sourceParentRowId: 'ROW-1',
       sourceOutputGroupId: 'MP_TYPE_LI',
       sourceOutputRowId: 'OUT-1',
-      ledgerFormKey
+      utilisationFormKey
     });
-    const reservationB = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryB.meta?.id || '').toString(),
+    const utilisationB = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bankB.meta?.id || '').toString(),
       resourceItemId: 'LE-DEL-B',
       resourceKind: 'Entire dish',
       quantity: 3,
@@ -3646,15 +3459,15 @@ describe('WebFormService', () => {
       sourceParentRowId: 'ROW-1',
       sourceOutputGroupId: 'MP_TYPE_LI',
       sourceOutputRowId: 'OUT-2',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(reservationA.success).toBe(true);
-    expect(reservationB.success).toBe(true);
+    expect(utilisationA.success).toBe(true);
+    expect(utilisationB.success).toBe(true);
 
-    const result = service.applyInventoryReservationPlan({
+    const result = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-DEL-1',
-      ledgerFormKey,
+      utilisationFormKey,
       managedScopes: [
         {
           sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -3662,10 +3475,10 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: [
+      utilisations: [
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventoryB.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bankB.meta?.id || '').toString(),
           resourceItemId: 'LE-DEL-B',
           resourceKind: 'Entire dish',
           quantity: 3,
@@ -3679,120 +3492,32 @@ describe('WebFormService', () => {
     });
 
     expect(result.success).toBe(true);
-    const releasedReservation = service.fetchSubmissionById(ledgerFormKey, (reservationA.reservationId || '').toString());
-    const preservedReservation = service.fetchSubmissionById(ledgerFormKey, (reservationB.reservationId || '').toString());
-    expect((releasedReservation?.values as any)?.STATUS).toBe('released');
-    expect((preservedReservation?.values as any)?.STATUS).toBe('active');
+    const releasedUtilisation = service.fetchSubmissionById(utilisationFormKey, (utilisationA.utilisationId || '').toString());
+    const preservedUtilisation = service.fetchSubmissionById(utilisationFormKey, (utilisationB.utilisationId || '').toString());
+    expect((releasedUtilisation?.values as any)?.STATUS).toBe('released');
+    expect((preservedUtilisation?.values as any)?.STATUS).toBe('active');
 
-    const updatedInventoryA = service.fetchSubmissionById(inventoryFormKey, (inventoryA.meta?.id || '').toString());
-    const updatedInventoryB = service.fetchSubmissionById(inventoryFormKey, (inventoryB.meta?.id || '').toString());
-    expect((updatedInventoryA?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
+    const updatedBankA = service.fetchSubmissionById(bankFormKey, (bankA.meta?.id || '').toString());
+    const updatedBankB = service.fetchSubmissionById(bankFormKey, (bankB.meta?.id || '').toString());
+    expect((updatedBankA?.values as any)?.LEFTOVER_PORTIONS).toBe(10);
+    expect((updatedBankB?.values as any)?.LEFTOVER_PORTIONS).toBe(5);
   });
 
-  test('applyInventoryReservationPlan releases legacy reservations whose output group id was stored as the output row id', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-LEGACY-SCOPE',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const legacyOutputRowId = 'MP_TYPE_LI_legacy123';
-    const legacyReservation = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-LEGACY-SCOPE',
-      resourceKind: 'Entire dish',
-      quantity: 5,
-      sourceFormKey: 'Config: Meal Production',
-      sourceRecordId: 'REC-LEGACY-SCOPE-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-1',
-      sourceOutputGroupId: legacyOutputRowId,
-      sourceOutputRowId: legacyOutputRowId,
-      sourceOutputKeyFieldId: 'LEFTOVER_ID',
-      ledgerFormKey
-    });
-    expect(legacyReservation.success).toBe(true);
-
-    const nextOutputRowId = 'MP_TYPE_LI_next456';
-    const result = service.applyInventoryReservationPlan({
-      sourceFormKey: 'Config: Meal Production',
-      sourceRecordId: 'REC-LEGACY-SCOPE-1',
-      ledgerFormKey,
-      managedScopes: [
-        {
-          sourceParentGroupId: 'MP_MEALS_REQUEST',
-          sourceParentRowId: 'ROW-1',
-          sourceOutputGroupId: 'MP_TYPE_LI'
-        }
-      ],
-      reservations: [
-        {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventory.meta?.id || '').toString(),
-          resourceItemId: 'LE-LEGACY-SCOPE',
-          resourceKind: 'Entire dish',
-          quantity: 5,
-          sourceParentGroupId: 'MP_MEALS_REQUEST',
-          sourceParentRowId: 'ROW-1',
-          sourceOutputGroupId: 'MP_TYPE_LI',
-          sourceOutputRowId: nextOutputRowId,
-          sourceOutputKeyFieldId: 'LEFTOVER_ID'
-        }
-      ]
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.conflict).not.toBe(true);
-    expect(result.reservationsApplied).toBe(1);
-    expect(result.reservationsReleased).toBe(1);
-
-    const releasedLegacyReservation = service.fetchSubmissionById(
-      ledgerFormKey,
-      (legacyReservation.reservationId || '').toString()
-    );
-    expect((releasedLegacyReservation?.values as any)?.STATUS).toBe('released');
-
-    const nextReservationId = (service as any).buildInventoryReservationId({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-LEGACY-SCOPE',
-      sourceFormKey: 'Config: Meal Production',
-      sourceRecordId: 'REC-LEGACY-SCOPE-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-1',
-      sourceOutputRowId: nextOutputRowId
-    });
-    const nextReservation = service.fetchSubmissionById(ledgerFormKey, nextReservationId);
-    expect((nextReservation?.values as any)?.STATUS).toBe('active');
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(5);
-  });
-
-  test('applyInventoryReservationPlan reports the final availability snapshot after releases and re-applies on the same resource', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+  test('applyBankUtilisationPlan reports the final availability snapshot after releases and re-applies on the same resource', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-PLAN-FINAL',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
-    const reservationA = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const utilisationA = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-PLAN-FINAL',
       resourceKind: 'Entire dish',
       quantity: 3,
@@ -3803,11 +3528,11 @@ describe('WebFormService', () => {
       sourceOutputGroupId: 'MP_TYPE_LI',
       sourceOutputRowId: 'OUT-1',
       sourceOutputKeyFieldId: 'LEFTOVER_ID',
-      ledgerFormKey
+      utilisationFormKey
     });
-    const reservationB = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const utilisationB = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-PLAN-FINAL',
       resourceKind: 'Entire dish',
       quantity: 2,
@@ -3818,15 +3543,15 @@ describe('WebFormService', () => {
       sourceOutputGroupId: 'MP_TYPE_LI',
       sourceOutputRowId: 'OUT-2',
       sourceOutputKeyFieldId: 'LEFTOVER_ID',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(reservationA.success).toBe(true);
-    expect(reservationB.success).toBe(true);
+    expect(utilisationA.success).toBe(true);
+    expect(utilisationB.success).toBe(true);
 
-    const result = service.applyInventoryReservationPlan({
+    const result = service.applyBankUtilisationPlan({
       sourceFormKey: 'Config: Meal Production',
       sourceRecordId: 'REC-PLAN-FINAL-1',
-      ledgerFormKey,
+      utilisationFormKey,
       managedScopes: [
         {
           sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -3839,10 +3564,10 @@ describe('WebFormService', () => {
           sourceOutputGroupId: 'MP_TYPE_LI'
         }
       ],
-      reservations: [
+      utilisations: [
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventory.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bank.meta?.id || '').toString(),
           resourceItemId: 'LE-PLAN-FINAL',
           resourceKind: 'Entire dish',
           quantity: 2,
@@ -3853,8 +3578,8 @@ describe('WebFormService', () => {
           sourceOutputKeyFieldId: 'LEFTOVER_ID'
         },
         {
-          resourceFormKey: inventoryFormKey,
-          resourceRecordId: (inventory.meta?.id || '').toString(),
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bank.meta?.id || '').toString(),
           resourceItemId: 'LE-PLAN-FINAL',
           resourceKind: 'Entire dish',
           quantity: 2,
@@ -3871,502 +3596,25 @@ describe('WebFormService', () => {
     expect(result.availability).toEqual([
       expect.objectContaining({
         resourceItemId: 'LE-PLAN-FINAL',
-        reservedQuantity: 4,
-        currentRecordReservedQuantity: 4,
+        currentRecordUtilisedQuantity: 4,
         freeQuantity: 1
       })
     ]);
   });
 
-  test('reconcileInventoryReservations consumes reserved quantity and closes active ledger rows', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-3',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0,
-      LEFTOVER_USED_BY_FORM_KEY: '',
-      LEFTOVER_USED_BY_RECORD_ID: ''
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-3',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-4',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-4',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const reconcileBatchSpy = jest.spyOn((service as any).submissions, 'saveTrustedSubmissionBatch');
-
-    const reconciled = service.reconcileInventoryReservations({
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-4',
-      ledgerFormKey
-    });
-    expect(reconciled.success).toBe(true);
-    expect(reconcileBatchSpy).toHaveBeenCalledTimes(2);
-    expect(reconciled.reconciledReservations).toBe(1);
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
-    expect((updatedInventory?.values as any)?.LEFTOVER_USED_BY_FORM_KEY).toBe('Config: Delivery');
-    expect((updatedInventory?.values as any)?.LEFTOVER_USED_BY_RECORD_ID).toBe('REC-4');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('reconcileInventoryReservations heals stale ledger resource record ids using resource item id fallback', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-HEAL-1',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0,
-      LEFTOVER_USED_BY_FORM_KEY: '',
-      LEFTOVER_USED_BY_RECORD_ID: ''
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-HEAL-1',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-HEAL-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-HEAL-1',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const ledgerContext = (service as any).getFormContextLite(ledgerFormKey);
-    const staleReservationSave = (service as any).saveInternalRecord({
-      context: ledgerContext,
-      recordId: (reserved.reservationId || '').toString(),
-      language: 'EN',
-      status: 'active',
-      values: {
-        ...(service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString())?.values || {}),
-        RESOURCE_RECORD_ID: 'leftover.'
-      },
-      auditAction: 'test:corruptReservationRecordId'
-    });
-    expect(staleReservationSave.success).toBe(true);
-
-    const reconciled = service.reconcileInventoryReservations({
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-HEAL-1',
-      ledgerFormKey
-    });
-    expect(reconciled.success).toBe(true);
-    expect(reconciled.reconciledReservations).toBe(1);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-
-    const healedReservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((healedReservation?.values as any)?.STATUS).toBe('consumed');
-    expect((healedReservation?.values as any)?.RESOURCE_RECORD_ID).toBe((inventory.meta?.id || '').toString());
-  });
-
-  test('releaseInventoryReservations releases reserved quantity without consuming inventory', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-REL',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-REL',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-REL',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-REL',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const released = service.releaseInventoryReservations({
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-REL',
-      ledgerFormKey
-    });
-    expect(released.success).toBe(true);
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(10);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('released');
-  });
-
-  test('saveSubmissionWithId reconciles active reservations on final submit and keeps partially consumed inventory available', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+  test('triggerFollowupAction CLOSE_RECORD leaves active utilisations unchanged', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
     const followupJson = JSON.stringify({
-      statusTransitions: { onClose: 'Closed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: true
-      }
+      statusTransitions: { onClose: 'Closed' }
     });
     (dashboardSheet as any).setMockData([
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const source = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-FINAL-1',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-    expect(source.success).toBe(true);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-FINAL-1',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 10,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-FINAL-1',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-FINAL-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-FINAL-1',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const closeRes = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-FINAL-1',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'Closed'
-    } as any);
-    expect(closeRes.success).toBe(true);
-    expect((closeRes.meta as any)?.reservationReconciliation?.success).toBe(true);
-    expect((closeRes.meta as any)?.reservationReconciliation?.reconciledReservations).toBe(1);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(6);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('saveSubmissionWithId reconciles active reservations on final submit and marks fully consumed inventory used', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      statusTransitions: { onClose: 'Closed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: true
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const source = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-FINAL-2',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-    expect(source.success).toBe(true);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-FINAL-2',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 4,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-FINAL-2',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-FINAL-2',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-FINAL-2',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const closeRes = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-FINAL-2',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'Closed'
-    } as any);
-    expect(closeRes.success).toBe(true);
-    expect((closeRes.meta as any)?.reservationReconciliation?.success).toBe(true);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('reconcileInventoryReservations can consume matched reservations and release stale ones in one batch', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      statusTransitions: { onClose: 'Closed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: true
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-    const deliveryConfigSheet = ss.getSheetByName('Config: Delivery');
-    const deliveryRows = deliveryConfigSheet!.getRange(1, 1, deliveryConfigSheet!.getLastRow(), deliveryConfigSheet!.getLastColumn()).getValues();
-    deliveryRows.push([
-      'MP_MEALS_REQUEST',
-      'LINE_ITEM_GROUP',
-      'Meals request',
-      'Meals request',
-      'Meals request',
-      true,
-      '',
-      '',
-      '',
-      'Active',
-      'REF:LineItems_MP_MEALS_REQUEST',
-      '',
-      '',
-      '',
-      ''
-    ]);
-    (deliveryConfigSheet as any).setMockData(deliveryRows);
-    const mealsRequestSheet = ss.getSheetByName('LineItems_MP_MEALS_REQUEST') || ss.insertSheet('LineItems_MP_MEALS_REQUEST');
-    (mealsRequestSheet as any).setMockData([
-      ['ID', 'Type', 'Label EN', 'Label FR', 'Label NL', 'Req', 'Opt EN', 'Opt FR', 'Opt NL'],
-      ['MEAL_TYPE', 'TEXT', 'Meal type', 'Meal type', 'Meal type', true, '', '', '']
-    ]);
-
-    const mealRows = [
-      {
-        __ckRowId: 'MEAL-1',
-        MEAL_TYPE: 'Diabetic',
-        MP_TYPE_LI: [
-          {
-            __ckRowId: 'OUT-1',
-            LEFTOVER_ID: 'LE-FINAL-3A'
-          }
-        ]
-      }
-    ];
-
-    const source = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-FINAL-3',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-    expect(source.success).toBe(true);
-    const sourceContext = (service as any).getFormContextLite('Config: Delivery');
-    const patchResult = (service as any).saveInternalRecord({
-      context: sourceContext,
-      recordId: 'REC-FINAL-3',
-      language: 'EN',
-      status: 'In progress',
-      values: {
-        Q1: 'Alice',
-        Q2_json: JSON.stringify([]),
-        Q3: [],
-        Q4: 'ACME',
-        MP_MEALS_REQUEST: mealRows
-      },
-      auditAction: 'test:seedMixedReservationSource'
-    });
-    expect(patchResult.success).toBe(true);
-    const savedSource = service.fetchSubmissionById('Config: Delivery', 'REC-FINAL-3');
-    expect((savedSource?.values as any)?.MP_MEALS_REQUEST).toEqual(mealRows);
-
-    const inventoryA = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-FINAL-3A',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    const inventoryB = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-FINAL-3B',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 7,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventoryA.success).toBe(true);
-    expect(inventoryB.success).toBe(true);
-
-    const reservedA = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryA.meta?.id || '').toString(),
-      resourceItemId: 'LE-FINAL-3A',
-      resourceKind: 'Entire dish',
-      quantity: 2,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-FINAL-3',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'MEAL-1',
-      sourceOutputGroupId: 'MP_TYPE_LI',
-      sourceOutputKeyFieldId: 'LEFTOVER_ID',
-      ledgerFormKey
-    });
-    const reservedB = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventoryB.meta?.id || '').toString(),
-      resourceItemId: 'LE-FINAL-3B',
-      resourceKind: 'Entire dish',
-      quantity: 3,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-FINAL-3',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'MEAL-1',
-      sourceOutputGroupId: 'MP_TYPE_LI',
-      sourceOutputKeyFieldId: 'LEFTOVER_ID',
-      ledgerFormKey
-    });
-    expect(reservedA.success).toBe(true);
-    expect(reservedB.success).toBe(true);
-
-    const reconcileRes = service.reconcileInventoryReservations({
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-FINAL-3',
-      ledgerFormKey
-    });
-    expect(reconcileRes.success).toBe(true);
-    expect(reconcileRes.consumedReservations).toBe(1);
-    expect(reconcileRes.releasedReservations).toBe(1);
-
-    const updatedInventoryA = service.fetchSubmissionById(inventoryFormKey, (inventoryA.meta?.id || '').toString());
-    const updatedInventoryB = service.fetchSubmissionById(inventoryFormKey, (inventoryB.meta?.id || '').toString());
-    expect((updatedInventoryA?.values as any)?.LEFTOVER_PORTIONS).toBe(3);
-    expect((updatedInventoryA?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventoryA?.values as any)?.LEFTOVER_STATUS).toBe('available');
-    expect((updatedInventoryB?.values as any)?.LEFTOVER_PORTIONS).toBe(7);
-    expect((updatedInventoryB?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventoryB?.values as any)?.LEFTOVER_STATUS).toBe('available');
-
-    const reservationA = service.fetchSubmissionById(ledgerFormKey, (reservedA.reservationId || '').toString());
-    const reservationB = service.fetchSubmissionById(ledgerFormKey, (reservedB.reservationId || '').toString());
-    expect((reservationA?.values as any)?.STATUS).toBe('consumed');
-    expect((reservationB?.values as any)?.STATUS).toBe('released');
-  });
-
-  test('triggerFollowupAction CLOSE_RECORD reconciles active reservations', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      statusTransitions: { onClose: 'Closed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: true
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', bankFormKey, 'Test Leftover Bank Data', 'Desc', '', '', '', ''],
+      ['Leftover Utilisation', utilisationFormKey, 'Test Leftover Utilisation Data', 'Desc', '', '', '', '']
     ]);
 
     service.saveSubmissionWithId({
@@ -4381,20 +3629,19 @@ describe('WebFormService', () => {
       __ckStatus: 'In progress'
     } as any);
 
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-CLOSE-1',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
+      LEFTOVER_PORTIONS: 5
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
+    const utilised = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
       resourceItemId: 'LE-CLOSE-1',
       resourceKind: 'Entire dish',
       quantity: 2,
@@ -4402,101 +3649,18 @@ describe('WebFormService', () => {
       sourceRecordId: 'REC-CLOSE-1',
       sourceParentGroupId: 'MP_MEALS_REQUEST',
       sourceParentRowId: 'ROW-CLOSE-1',
-      ledgerFormKey
+      utilisationFormKey
     });
-    expect(reserved.success).toBe(true);
+    expect(utilised.success).toBe(true);
 
     const closeResult = service.triggerFollowupAction('Config: Delivery', 'REC-CLOSE-1', 'CLOSE_RECORD');
     expect(closeResult.success).toBe(true);
-    expect((closeResult as any).reservationReconciliation?.success).toBe(true);
 
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(3);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('triggerFollowupActions batch reconciles reservations when CLOSE_RECORD succeeds', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      pdfTemplateId: { EN: 'pdf-template-en' },
-      emailTemplateId: { EN: 'email-template-en' },
-      emailRecipients: ['ops@example.com'],
-      statusTransitions: { onClose: 'Closed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: true
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const followups = (service as any).followups || (service as any);
-    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
-      success: true,
-      url: 'http://pdf',
-      fileId: 'file-1',
-      blob: null
-    });
-
-    service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-CLOSE-2',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-CLOSE-2',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 4,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-CLOSE-2',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-CLOSE-2',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-CLOSE-2',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-CLOSE-2', ['SEND_EMAIL', 'CLOSE_RECORD']);
-    expect(result.success).toBe(true);
-    const closeEntry = result.results.find((entry: any) => entry.action === 'CLOSE_RECORD');
-    expect(closeEntry?.result?.success).toBe(true);
-    expect(closeEntry?.result?.reservationReconciliation?.success).toBe(true);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
+    const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(3);
+    expect((updatedBank?.values as any)?.LEFTOVER_STATUS).toBe('available');
+    const utilisation = service.fetchSubmissionById(utilisationFormKey, (utilised.utilisationId || '').toString());
+    expect((utilisation?.values as any)?.STATUS).toBe('active');
   });
 
   test('SEND_EMAIL does not downgrade a record that is already closed', () => {
@@ -4746,393 +3910,16 @@ describe('WebFormService', () => {
     expect(Array.isArray((saved?.values as any)?.Q2)).toBe(true);
   });
 
-  test('triggerFollowupAction RECONCILE_RESERVATIONS reconciles active reservations without closing the record', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: {
-          enabled: true,
-          ledgerFormKey,
-          refreshMode: 'full'
-        }
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-MILESTONE-1',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-MILESTONE-1',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-MILESTONE-1',
-      resourceKind: 'Entire dish',
-      quantity: 2,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-MILESTONE-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-MILESTONE-1',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const result = service.triggerFollowupAction('Config: Delivery', 'REC-MILESTONE-1', 'RECONCILE_RESERVATIONS');
-    expect(result.success).toBe(true);
-    expect(result.reservationReconciliation?.success).toBe(true);
-    expect(result.status).toBeUndefined();
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(3);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('available');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('triggerFollowupAction RECONCILE_RESERVATIONS skips when the record has no reservation selections', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: {
-          enabled: true,
-          ledgerFormKey,
-          refreshMode: 'full'
-        }
-      },
-      steps: {
-        mode: 'guided',
-        items: [
-          {
-            id: 'leftovers',
-            include: [
-              {
-                kind: 'lineGroup',
-                id: 'Q2',
-                dataSourceRows: [
-                  {
-                    outputGroupId: 'LEFTOVER_ROWS',
-                    outputKeyFieldId: 'LEFTOVER_ID',
-                    quantityFieldId: 'LEFTOVER_USE_QTY',
-                    reservation: {
-                      enabled: true,
-                      commitMode: 'step',
-                      ledgerFormKey,
-                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-NO-RESERVATION-SELECTIONS',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([{ __ckRowId: 'ROW-NO-RES', id: 'ROW-NO-RES', LEFTOVER_ROWS: [] }]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-NO-RES',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 5,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-NO-RES',
-      resourceKind: 'Entire dish',
-      quantity: 2,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-NO-RESERVATION-SELECTIONS',
-      sourceParentGroupId: 'Q2',
-      sourceParentRowId: 'ROW-NO-RES',
-      sourceOutputGroupId: 'LEFTOVER_ROWS',
-      sourceOutputRowId: 'LEFTOVER-ROW-1',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const result = service.triggerFollowupAction(
-      'Config: Delivery',
-      'REC-NO-RESERVATION-SELECTIONS',
-      'RECONCILE_RESERVATIONS'
-    );
-    expect(result.success).toBe(true);
-    expect(result.message).toBe('No reservation selections found on the record.');
-    expect(result.reservationReconciliation?.reconciledReservations).toBe(0);
-    let reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('active');
-
-    const closeResult = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-NO-RESERVATION-SELECTIONS',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([{ __ckRowId: 'ROW-NO-RES', id: 'ROW-NO-RES', LEFTOVER_ROWS: [] }]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'Closed'
-    } as any);
-    expect(closeResult.success).toBe(true);
-    expect((closeResult.meta as any)?.reservationReconciliation?.reconciledReservations).toBe(0);
-    reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('active');
-  });
-
-  test('triggerFollowupActions batch supports RECONCILE_RESERVATIONS before pdf and email', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      pdfTemplateId: { EN: 'pdf-template-en' },
-      emailTemplateId: { EN: 'email-template-en' },
-      emailRecipients: ['ops@example.com'],
-      statusTransitions: { onPdf: 'PDF Created', onEmail: 'Emailed' },
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: {
-          enabled: true,
-          ledgerFormKey,
-          refreshMode: 'full'
-        }
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const followups = (service as any).followups || (service as any);
-    jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
-      success: true,
-      url: 'http://pdf',
-      fileId: 'file-1',
-      blob: null
-    });
-
-    service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-MILESTONE-2',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-MILESTONE-2',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 4,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-MILESTONE-2',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-MILESTONE-2',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-MILESTONE-2',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const laneMocks = installFollowupLaneMocks();
-    const previousScriptApp = (global as any).ScriptApp;
-    const triggers: any[] = [];
-    (global as any).ScriptApp = {
-      newTrigger: jest.fn((handler: string) => ({
-        timeBased: () => ({
-          after: () => ({
-            create: () => {
-              const trigger = {
-                getHandlerFunction: () => handler,
-                getUniqueId: () => 'email-trigger-milestone-2'
-              };
-              triggers.push(trigger);
-              return trigger;
-            }
-          })
-        })
-      })),
-      getProjectTriggers: jest.fn(() => triggers),
-      deleteTrigger: jest.fn()
-    };
-
-    let result: any;
-    try {
-      result = (service as any).triggerFollowupActions('Config: Delivery', 'REC-MILESTONE-2', [
-        'RECONCILE_RESERVATIONS',
-        'CREATE_PDF',
-        'SEND_EMAIL'
-      ]);
-    } finally {
-      laneMocks.restore();
-      (global as any).ScriptApp = previousScriptApp;
-    }
-
-    expect(result.success).toBe(true);
-    const reconcileEntry = result.results.find((entry: any) => entry.action === 'RECONCILE_RESERVATIONS');
-    expect(reconcileEntry?.result?.success).toBe(true);
-    expect(reconcileEntry?.result?.reservationReconciliation?.success).toBe(true);
-    const emailEntry = result.results.find((entry: any) => entry.action === 'SEND_EMAIL');
-    expect(emailEntry?.result?.queued).toBe(true);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    expect((updatedInventory?.values as any)?.LEFTOVER_STATUS).toBe('used');
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('consumed');
-  });
-
-  test('RECONCILE_RESERVATIONS reuses the outer document lock while saving inventory and ledger rows', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      reservationLifecycle: {
-        ledgerFormKey,
-        reconcileOnFinalSubmit: {
-          enabled: true,
-          ledgerFormKey,
-          refreshMode: 'full'
-        }
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-LOCK-1',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-LOCK-1',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 4,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-LOCK-1',
-      resourceKind: 'Entire dish',
-      quantity: 2,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-LOCK-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-LOCK-1',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const docLock = installDocumentLockMocks();
-    try {
-      const result = service.triggerFollowupAction('Config: Delivery', 'REC-LOCK-1', 'RECONCILE_RESERVATIONS');
-      expect(result.success).toBe(true);
-      expect(docLock.lock.tryLock).toHaveBeenCalledTimes(1);
-    } finally {
-      docLock.restore();
-    }
-  });
-
   test('triggerFollowupActions stops the batch after the first failed action', () => {
     jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
     const actionSpy = jest
       .spyOn(service as any, 'runFollowupActionWithLifecycle')
       .mockImplementation((...args: any[]) => {
         const action = args[4];
-        if (action === 'RECONCILE_RESERVATIONS') {
+        if (action === 'CREATE_PDF') {
           return {
             success: false,
-            message: 'Reservation reconciliation is not configured for this form.'
+            message: 'PDF rendering failed.'
           };
         }
         return {
@@ -5143,37 +3930,17 @@ describe('WebFormService', () => {
       });
 
     const result = service.triggerFollowupActions('Config: Delivery', 'REC-STOP-1', [
-      'RECONCILE_RESERVATIONS',
+      'CREATE_PDF',
       'CLOSE_RECORD'
     ]);
 
     expect(actionSpy).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(false);
-    expect(result.results[0].action).toBe('RECONCILE_RESERVATIONS');
+    expect(result.results[0].action).toBe('CREATE_PDF');
     expect(result.results[0].result?.success).toBe(false);
     expect(result.results[1].action).toBe('CLOSE_RECORD');
     expect(result.results[1].result?.success).toBe(false);
-    expect(result.results[1].result?.message).toContain('Skipped because RECONCILE_RESERVATIONS failed.');
-  });
-
-  test('triggerFollowupActions retries transient reservation reconciliation lock failures', () => {
-    jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap').mockImplementation(() => {});
-    const actionSpy = jest
-      .spyOn(service as any, 'runFollowupActionWithLifecycle')
-      .mockImplementationOnce(() => ({
-        success: false,
-        message: 'Could not acquire the record save lock. Please retry.'
-      }))
-      .mockImplementationOnce(() => ({
-        success: true,
-        updatedAt: '2026-04-08T10:00:00.000Z'
-      }));
-
-    const result = service.triggerFollowupActions('Config: Delivery', 'REC-RETRY-1', ['RECONCILE_RESERVATIONS']);
-
-    expect(actionSpy).toHaveBeenCalledTimes(2);
-    expect(result.success).toBe(true);
-    expect(result.results[0].result?.success).toBe(true);
+    expect(result.results[1].result?.message).toContain('Skipped because CREATE_PDF failed.');
   });
 
   test('triggerFollowupActions waits for earlier queued batch on the same record', () => {
@@ -5241,16 +4008,12 @@ describe('WebFormService', () => {
       const result = service.triggerFollowupActions(
         'Config: Delivery',
         'REC-DIRECT-EMAIL-1',
-        ['RECONCILE_RESERVATIONS', 'CREATE_PDF', 'SEND_EMAIL'],
+        ['CREATE_PDF', 'SEND_EMAIL'],
         { emailDispatchMode: 'direct' }
       );
 
       expect(result.success).toBe(true);
-      expect(actionSpy.mock.calls.map(call => call[4])).toEqual([
-        'RECONCILE_RESERVATIONS',
-        'CREATE_PDF',
-        'SEND_EMAIL'
-      ]);
+      expect(actionSpy.mock.calls.map(call => call[4])).toEqual(['CREATE_PDF', 'SEND_EMAIL']);
       expect(enqueueSpy).not.toHaveBeenCalled();
     } finally {
       lane.restore();
@@ -5375,7 +4138,7 @@ describe('WebFormService', () => {
         {
           id: 'captureOnClose',
           type: 'createRecord',
-          targetFormKey: 'Config: Inventory',
+          targetFormKey: 'Config: Bank',
           runOn: 'both',
           when: {
             fieldId: 'status',
@@ -5394,11 +4157,11 @@ describe('WebFormService', () => {
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
       ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', 'Config: Inventory', 'Inventory Data', 'Desc', '', '', '', '']
+      ['Leftover Bank', 'Config: Bank', 'Bank Data', 'Desc', '', '', '', '']
     ]);
 
-    const inventoryConfig = ss.getSheetByName('Config: Inventory') || ss.insertSheet('Config: Inventory');
-    (inventoryConfig as any).setMockData([
+    const bankConfig = ss.getSheetByName('Config: Bank') || ss.insertSheet('Config: Bank');
+    (bankConfig as any).setMockData([
       ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
       ['SOURCE_RECORD_ID', 'TEXT', 'Source record', 'Source record', 'Source record', false, '', '', '', 'Active', '', '', '', '', ''],
       ['SOURCE_STATUS', 'TEXT', 'Source status', 'Source status', 'Source status', false, '', '', '', 'Active', '', '', '', '', ''],
@@ -5433,10 +4196,10 @@ describe('WebFormService', () => {
     const closedRecord = service.fetchSubmissionById('Config: Delivery', 'REC-CLOSE-EFFECT');
     expect((closedRecord as any)?.status).toBe('Closed');
 
-    const inventorySheet = ss.getSheetByName('Inventory Data');
-    expect(inventorySheet).toBeDefined();
-    expect(inventorySheet!.getLastRow()).toBe(2);
-    const values = inventorySheet!.getRange(1, 1, inventorySheet!.getLastRow(), inventorySheet!.getLastColumn()).getValues();
+    const bankSheet = ss.getSheetByName('Bank Data');
+    expect(bankSheet).toBeDefined();
+    expect(bankSheet!.getLastRow()).toBe(2);
+    const values = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
     const header = values[0].map((value: any) => (value || '').toString().trim());
     const sourceRecordCol = header.findIndex((value: string) => /\[SOURCE_RECORD_ID\]\s*$/.test(value));
     const sourceStatusCol = header.findIndex((value: string) => /\[SOURCE_STATUS\]\s*$/.test(value));
@@ -5472,99 +4235,8 @@ describe('WebFormService', () => {
     expect(sheet!.getLastRow()).toBe(1);
   });
 
-  test('saveSubmissionWithId releases active reservations when delete-only flow removes the source record', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const followupJson = JSON.stringify({
-      dedupDeleteOnKeyChange: true,
-      reservationLifecycle: {
-        ledgerFormKey,
-        releaseOnDelete: true
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', followupJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const source = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-DELETE-1',
-      Q1: 'Alice',
-      Q2_json: JSON.stringify([]),
-      Q3: [],
-      Q4: 'ACME',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-    expect(source.success).toBe(true);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-DEL',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-DEL',
-      resourceKind: 'Entire dish',
-      quantity: 3,
-      sourceFormKey: 'Config: Delivery',
-      sourceRecordId: 'REC-DELETE-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-DELETE',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const refreshSpy = jest.spyOn(service as any, 'refreshMutationCaches');
-    const refreshAnalyticsSpy = jest.spyOn(service as any, 'refreshAnalyticsAndHomeBootstrap');
-    const bumpSpy = jest.spyOn(service as any, 'bumpHomeRevision');
-    refreshSpy.mockClear();
-    refreshAnalyticsSpy.mockClear();
-    bumpSpy.mockClear();
-
-    const deleted = service.saveSubmissionWithId({
-      formKey: 'Config: Delivery',
-      language: 'EN',
-      id: 'REC-DELETE-1',
-      __ckDeleteRecordId: 'REC-DELETE-1',
-      __ckSaveMode: 'draft'
-    } as any);
-    expect(deleted.success).toBe(true);
-    expect((deleted.meta as any)?.reservationRelease?.releasedReservations).toBe(1);
-    const sourceRefreshCalls = refreshSpy.mock.calls.filter(
-      (call: any[]) => call[2] === 'saveSubmissionWithId'
-    );
-    expect(sourceRefreshCalls).toHaveLength(1);
-    expect(sourceRefreshCalls[0][0]).toEqual(expect.objectContaining({ configSheet: 'Config: Delivery' }));
-    expect(sourceRefreshCalls[0][1]).toEqual(expect.any(Array));
-    expect(sourceRefreshCalls[0][3]).toBe('revisionOnly');
-    expect(refreshAnalyticsSpy).not.toHaveBeenCalled();
-    const bumpReasons = bumpSpy.mock.calls.map((call: any[]) => call[1]);
-    expect(bumpReasons.filter((reason: string) => reason === 'inventoryReservation.reconcile')).toHaveLength(2);
-    expect(bumpReasons.filter((reason: string) => reason === 'saveSubmissionWithId')).toHaveLength(1);
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('released');
-  });
-
-  test('saveSubmissionWithId applies embedded reservation plan as part of the same mutation', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
+  test('saveSubmissionWithId applies embedded utilisation plan as part of the same mutation', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
     const source = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
       language: 'EN',
@@ -5578,16 +4250,15 @@ describe('WebFormService', () => {
     } as any);
     expect(source.success).toBe(true);
 
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
       language: 'EN',
       LEFTOVER_ID: 'LE-EMBEDDED',
       LEFTOVER_STATUS: 'available',
       LEFTOVER_KIND: 'Entire dish',
       LEFTOVER_PORTIONS: 8,
-      LEFTOVER_RESERVED_PORTIONS: 0
     } as any);
-    expect(inventory.success).toBe(true);
+    expect(bank.success).toBe(true);
 
     const saved = service.saveSubmissionWithId({
       formKey: 'Config: Delivery',
@@ -5600,10 +4271,10 @@ describe('WebFormService', () => {
       __ckSaveMode: 'draft',
       __ckStatus: 'In progress',
       __ckMutationPlan: {
-        reservationPlan: {
+        utilisationPlan: {
           sourceFormKey: 'Config: Delivery',
           sourceRecordId: 'REC-EMBEDDED-PLAN',
-          ledgerFormKey,
+          utilisationFormKey,
           managedScopes: [
             {
               sourceParentGroupId: 'MP_MEALS_REQUEST',
@@ -5611,10 +4282,10 @@ describe('WebFormService', () => {
               sourceOutputGroupId: 'MP_TYPE_LI'
             }
           ],
-          reservations: [
+          utilisations: [
             {
-              resourceFormKey: inventoryFormKey,
-              resourceRecordId: (inventory.meta?.id || '').toString(),
+              resourceFormKey: bankFormKey,
+              resourceRecordId: (bank.meta?.id || '').toString(),
               resourceItemId: 'LE-EMBEDDED',
               resourceKind: 'Entire dish',
               quantity: 3,
@@ -5632,190 +4303,17 @@ describe('WebFormService', () => {
     } as any);
 
     expect(saved.success).toBe(true);
-    expect((saved as any).reservationResult).toEqual(expect.objectContaining({
+    expect((saved as any).utilisationResult).toEqual(expect.objectContaining({
       success: true,
-      reservationsApplied: 1
+      utilisationsApplied: 1
     }));
-    expect((saved.meta as any)?.reservationPlan).toEqual(expect.objectContaining({
+    expect((saved.meta as any)?.utilisationPlan).toEqual(expect.objectContaining({
       success: true,
-      reservationsApplied: 1
+      utilisationsApplied: 1
     }));
 
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(3);
-  });
-
-  test('runDailyLifecycleRecompute releases stale active reservations for configured source forms', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const sourceFormKey = 'Config: Source Reservations';
-    const lifecycleJson = JSON.stringify({
-      reservationLifecycle: {
-        ledgerFormKey,
-        releaseOnDelete: true
-      },
-      lifecycle: {
-        rules: [
-          {
-            id: 'releaseStaleReservations',
-            type: 'releaseStaleReservations',
-            dateFieldId: 'SRC_DATE',
-            compare: 'beforeToday',
-            ledgerFormKey
-          }
-        ]
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Source Reservations', sourceFormKey, 'Source Reservation Data', 'Desc', '', '', '', lifecycleJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const sourceConfig = ss.getSheetByName(sourceFormKey) || ss.insertSheet(sourceFormKey);
-    (sourceConfig as any).setMockData([
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
-      ['SRC_DATE', 'DATE', 'Source date', 'Source date', 'Source date', true, '', '', '', 'Active', '', '', '', '', '']
-    ]);
-
-    const source = service.saveSubmissionWithId({
-      formKey: sourceFormKey,
-      language: 'EN',
-      id: 'SRC-1',
-      SRC_DATE: '2026-03-28',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any);
-    expect(source.success).toBe(true);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-STALE',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 9,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-STALE',
-      resourceKind: 'Entire dish',
-      quantity: 5,
-      sourceFormKey,
-      sourceRecordId: 'SRC-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-STALE',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const todaySpy = jest.spyOn(service as any, 'scriptTodayIso').mockReturnValue('2026-03-29');
-    const primeSpy = jest.spyOn(service as any, 'primeHomeBootstrapCache');
-    try {
-      const result = service.runDailyLifecycleRecompute();
-      expect(result.success).toBe(true);
-      expect(primeSpy).toHaveBeenCalledTimes(1);
-      expect(primeSpy).toHaveBeenCalledWith(sourceFormKey, expect.any(Number), 'runDailyLifecycleRecompute');
-      const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-      expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(9);
-      expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-      const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-      expect((reservation?.values as any)?.STATUS).toBe('released');
-    } finally {
-      todaySpy.mockRestore();
-    }
-  });
-
-  test('runDailyLifecycleRecompute releases active reservations for configured source forms without date checks', () => {
-    const { inventoryFormKey, ledgerFormKey } = setupInventoryReservationForms();
-    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
-    const sourceFormKey = 'Config: Source Reservations';
-    const lifecycleJson = JSON.stringify({
-      reservationLifecycle: {
-        ledgerFormKey,
-        releaseOnDelete: true
-      },
-      lifecycle: {
-        rules: [
-          {
-            id: 'releaseActiveReservations',
-            type: 'releaseActiveReservations',
-            ledgerFormKey
-          }
-        ]
-      }
-    });
-    (dashboardSheet as any).setMockData([
-      [],
-      [],
-      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
-      ['Source Reservations', sourceFormKey, 'Source Reservation Data', 'Desc', '', '', '', lifecycleJson],
-      ['Leftover Inventory', inventoryFormKey, 'Test Leftover Inventory Data', 'Desc', '', '', '', ''],
-      ['Inventory Reservation Ledger', ledgerFormKey, 'Test Inventory Reservation Ledger Data', 'Desc', '', '', '', '']
-    ]);
-
-    const sourceConfig = ss.getSheetByName(sourceFormKey) || ss.insertSheet(sourceFormKey);
-    (sourceConfig as any).setMockData([
-      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
-      ['SRC_LABEL', 'TEXT', 'Source label', 'Source label', 'Source label', false, '', '', '', 'Active', '', '', '', '', '']
-    ]);
-
-    expect(service.saveSubmissionWithId({
-      formKey: sourceFormKey,
-      language: 'EN',
-      id: 'SRC-DAILY-1',
-      SRC_LABEL: 'Open reservation owner',
-      __ckSaveMode: 'draft',
-      __ckStatus: 'In progress'
-    } as any).success).toBe(true);
-
-    const inventory = service.saveSubmissionWithId({
-      formKey: inventoryFormKey,
-      language: 'EN',
-      LEFTOVER_ID: 'LE-DAILY',
-      LEFTOVER_STATUS: 'available',
-      LEFTOVER_KIND: 'Entire dish',
-      LEFTOVER_PORTIONS: 7,
-      LEFTOVER_RESERVED_PORTIONS: 0
-    } as any);
-    expect(inventory.success).toBe(true);
-
-    const reserved = service.upsertInventoryReservation({
-      resourceFormKey: inventoryFormKey,
-      resourceRecordId: (inventory.meta?.id || '').toString(),
-      resourceItemId: 'LE-DAILY',
-      resourceKind: 'Entire dish',
-      quantity: 4,
-      sourceFormKey,
-      sourceRecordId: 'SRC-DAILY-1',
-      sourceParentGroupId: 'MP_MEALS_REQUEST',
-      sourceParentRowId: 'ROW-DAILY',
-      ledgerFormKey
-    });
-    expect(reserved.success).toBe(true);
-
-    const primeSpy = jest.spyOn(service as any, 'primeHomeBootstrapCache');
-    const result = service.runDailyLifecycleRecompute();
-    expect(result.success).toBe(true);
-    expect(result.updatedForms).toBe(1);
-    expect(result.updatedRecords).toBe(1);
-    expect(primeSpy).toHaveBeenCalledTimes(1);
-    expect(primeSpy).toHaveBeenCalledWith(sourceFormKey, expect.any(Number), 'runDailyLifecycleRecompute');
-
-    const updatedInventory = service.fetchSubmissionById(inventoryFormKey, (inventory.meta?.id || '').toString());
-    expect((updatedInventory?.values as any)?.LEFTOVER_PORTIONS).toBe(7);
-    expect((updatedInventory?.values as any)?.LEFTOVER_RESERVED_PORTIONS).toBe(0);
-    const reservation = service.fetchSubmissionById(ledgerFormKey, (reserved.reservationId || '').toString());
-    expect((reservation?.values as any)?.STATUS).toBe('released');
+    const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(5);
   });
 
   test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {

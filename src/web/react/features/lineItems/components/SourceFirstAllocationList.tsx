@@ -9,9 +9,9 @@ import {
   shouldShowSourceFirstAllocationLabel
 } from '../../../app/sourceFirstAllocations';
 import {
-  buildReservationFieldPatch,
-  shouldDeferReservationSync
-} from '../../../components/form/reservationSyncPolicy';
+  buildUtilisationFieldPatch,
+  shouldDeferUtilisationSync
+} from '../../../components/form/utilisationSyncPolicy';
 import {
   buildSourceFirstSelectionTogglePatch,
   collectSourceFirstSentenceFieldErrorMap,
@@ -21,7 +21,7 @@ import {
   resolveSourceFirstListScrollStyle,
   sortSourceFirstVisibleSourceRows
 } from '../domain/lineItemPresentation';
-import { shouldKeepInvalidSourceFirstQuantityDraft } from '../domain/sourceFirstReservationDraftDecision';
+import { shouldKeepInvalidSourceFirstQuantityDraft } from '../domain/sourceFirstUtilisationDraftDecision';
 import { SourceFirstAllocationRow } from './SourceFirstAllocationRow';
 import { SourceFirstSentenceParts } from './SourceFirstSentenceParts';
 
@@ -44,7 +44,7 @@ type SourceFirstSyncArgs = {
 
 /**
  * Renders the source-first allocation list for a line-item group. Data loading and
- * reservation persistence stay injected by LineItemGroupQuestion through callbacks.
+ * utilisation persistence stay injected by LineItemGroupQuestion through callbacks.
  */
 export const SourceFirstAllocationList: React.FC<{
   entries: SourceFirstPresentationEntry[];
@@ -82,7 +82,7 @@ export const SourceFirstAllocationList: React.FC<{
     parentValues: Record<string, FieldValue>
   ) => string;
   toFiniteNumber: (value: any) => number;
-  seedReservationCommittedValues: (args: {
+  seedUtilisationCommittedValues: (args: {
     config: any;
     parentRowId: string;
     sourceKey: string;
@@ -95,24 +95,24 @@ export const SourceFirstAllocationList: React.FC<{
     virtualValues: Record<string, FieldValue>;
     patch: Record<string, FieldValue>;
   }) => void;
-  queueDeferredStepReservationSync: (args: {
+  queueDeferredStepUtilisationSync: (args: {
     config: any;
     parentRow: LineItemRowState;
     sourceRow: Record<string, any>;
     sourceKey: string;
     patch: Record<string, FieldValue>;
   }) => void;
-  hasPendingDeferredReservationChange: (args: {
+  hasPendingDeferredUtilisationChange: (args: {
     config: any;
     parentRowId: string;
     sourceKey: string;
     patch: Record<string, FieldValue>;
   }) => boolean;
-  cancelDeferredStepReservationSync: (args: { parentRowId: string; sourceKey: string }) => void;
-  scheduleDeferredStepReservationAutoSaveHoldRelease: () => void;
-  syncStepDataSourceOutputRowWithReservation: (
+  cancelDeferredStepUtilisationSync: (args: { parentRowId: string; sourceKey: string }) => void;
+  scheduleDeferredStepUtilisationAutoSaveHoldRelease: () => void;
+  syncStepDataSourceOutputRowWithUtilisation: (
     args: SourceFirstSyncArgs,
-    options?: { skipReservation?: boolean }
+    options?: { skipUtilisation?: boolean }
   ) => void;
 }> = ({
   entries,
@@ -129,13 +129,13 @@ export const SourceFirstAllocationList: React.FC<{
   allowsVirtualIntegerOnly,
   resolveVirtualMaxFieldId,
   toFiniteNumber,
-  seedReservationCommittedValues,
+  seedUtilisationCommittedValues,
   stageStepDataSourceDraftPatch,
-  queueDeferredStepReservationSync,
-  hasPendingDeferredReservationChange,
-  cancelDeferredStepReservationSync,
-  scheduleDeferredStepReservationAutoSaveHoldRelease,
-  syncStepDataSourceOutputRowWithReservation
+  queueDeferredStepUtilisationSync,
+  hasPendingDeferredUtilisationChange,
+  cancelDeferredStepUtilisationSync,
+  scheduleDeferredStepUtilisationAutoSaveHoldRelease,
+  syncStepDataSourceOutputRowWithUtilisation
 }) => {
   if (!entries.length) return null;
 
@@ -187,21 +187,21 @@ export const SourceFirstAllocationList: React.FC<{
       fieldErrors={args.fieldErrors}
       onNumberChange={({ fieldId, value, virtualValues, sourceRow }) => {
         const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-        const patch = buildReservationFieldPatch({
+        const patch = buildUtilisationFieldPatch({
           fieldId,
           value,
           selectedFieldId: args.selectedFieldId,
           selectedValue: args.selectedFieldId ? virtualValues[args.selectedFieldId] : true,
           quantityFieldId
         }) as Record<string, FieldValue>;
-        const deferReservation = shouldDeferReservationSync({
+        const deferUtilisation = shouldDeferUtilisationSync({
           patch,
           selectedFieldId: args.selectedFieldId,
           quantityFieldId
         });
         const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
-        if (deferReservation) {
-          seedReservationCommittedValues({
+        if (deferUtilisation) {
+          seedUtilisationCommittedValues({
             config: args.config,
             parentRowId: args.parentRow.id,
             sourceKey,
@@ -210,7 +210,7 @@ export const SourceFirstAllocationList: React.FC<{
         }
         const quantityNumber = Number(value);
         const shouldStageDeferredQuantityEdit =
-          deferReservation &&
+          deferUtilisation &&
           !!quantityFieldId &&
           fieldId === quantityFieldId &&
           (isEmptyValue(value as any) || (Number.isFinite(quantityNumber) && quantityNumber <= 0));
@@ -222,7 +222,7 @@ export const SourceFirstAllocationList: React.FC<{
             virtualValues,
             patch
           });
-          queueDeferredStepReservationSync({
+          queueDeferredStepUtilisationSync({
             config: args.config,
             parentRow: args.parentRow,
             sourceRow,
@@ -231,16 +231,16 @@ export const SourceFirstAllocationList: React.FC<{
           });
           return;
         }
-        syncStepDataSourceOutputRowWithReservation({
+        syncStepDataSourceOutputRowWithUtilisation({
           config: args.config,
           parentRow: args.parentRow,
           sourceRow,
           patch
         }, {
-          skipReservation: deferReservation
+          skipUtilisation: deferUtilisation
         });
-        if (deferReservation) {
-          queueDeferredStepReservationSync({
+        if (deferUtilisation) {
+          queueDeferredStepUtilisationSync({
             config: args.config,
             parentRow: args.parentRow,
             sourceRow,
@@ -251,7 +251,7 @@ export const SourceFirstAllocationList: React.FC<{
       }}
       onNumberBlur={({ fieldId, value, virtualValues, sourceRow }) => {
         const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
-        const patch = buildReservationFieldPatch({
+        const patch = buildUtilisationFieldPatch({
           fieldId,
           value,
           selectedFieldId: args.selectedFieldId,
@@ -260,15 +260,15 @@ export const SourceFirstAllocationList: React.FC<{
         }) as Record<string, FieldValue>;
         const sourceKey = `${sourceRow?.[(args.config?.rowKeyFieldId || '').toString().trim()] ?? ''}`.trim();
         if (!sourceKey) {
-          scheduleDeferredStepReservationAutoSaveHoldRelease();
+          scheduleDeferredStepUtilisationAutoSaveHoldRelease();
           return;
         }
-        const deferReservation = shouldDeferReservationSync({
+        const deferUtilisation = shouldDeferUtilisationSync({
           patch,
           selectedFieldId: args.selectedFieldId,
           quantityFieldId
         });
-        if (!deferReservation) return;
+        if (!deferUtilisation) return;
         if (
           shouldKeepInvalidSourceFirstQuantityDraft({
             fieldId,
@@ -276,41 +276,41 @@ export const SourceFirstAllocationList: React.FC<{
             value: value as FieldValue
           })
         ) {
-          cancelDeferredStepReservationSync({
+          cancelDeferredStepUtilisationSync({
             parentRowId: args.parentRow.id,
             sourceKey
           });
-          scheduleDeferredStepReservationAutoSaveHoldRelease();
+          scheduleDeferredStepUtilisationAutoSaveHoldRelease();
           return;
         }
-        if (deferReservation) {
-          if (!hasPendingDeferredReservationChange({
+        if (deferUtilisation) {
+          if (!hasPendingDeferredUtilisationChange({
             config: args.config,
             parentRowId: args.parentRow.id,
             sourceKey,
             patch
           })) {
-            scheduleDeferredStepReservationAutoSaveHoldRelease();
+            scheduleDeferredStepUtilisationAutoSaveHoldRelease();
             return;
           }
         }
-        cancelDeferredStepReservationSync({
+        cancelDeferredStepUtilisationSync({
           parentRowId: args.parentRow.id,
           sourceKey
         });
-        syncStepDataSourceOutputRowWithReservation({
+        syncStepDataSourceOutputRowWithUtilisation({
           config: args.config,
           parentRow: args.parentRow,
           sourceRow,
           patch
         });
-        if (deferReservation) {
-          scheduleDeferredStepReservationAutoSaveHoldRelease();
+        if (deferUtilisation) {
+          scheduleDeferredStepUtilisationAutoSaveHoldRelease();
         }
       }}
       onChoiceChange={({ fieldId, value, virtualValues, sourceRow }) => {
         if (`${value ?? ''}` === `${virtualValues[fieldId] ?? ''}`) return;
-        syncStepDataSourceOutputRowWithReservation({
+        syncStepDataSourceOutputRowWithUtilisation({
           config: args.config,
           parentRow: args.parentRow,
           sourceRow,
@@ -511,7 +511,7 @@ export const SourceFirstAllocationList: React.FC<{
                           selected={isSelected}
                           errors={Object.keys(sentenceFieldErrorMap).length ? [] : sentenceFieldErrors}
                           onSelectionChange={checked =>
-                            syncStepDataSourceOutputRowWithReservation({
+                            syncStepDataSourceOutputRowWithUtilisation({
                               config,
                               parentRow,
                               sourceRow,

@@ -7,7 +7,7 @@ import {
 describe('data source prefetch policy', () => {
   it('keeps freshness-watched data sources out of form-open background prefetch', () => {
     const configs = [
-      { id: 'Leftover Inventory Data' },
+      { id: 'Leftover Bank Data' },
       { id: 'Recipes Data' },
       { id: 'Customers Data' }
     ];
@@ -15,7 +15,7 @@ describe('data source prefetch policy', () => {
     expect(
       filterFormOpenPrefetchDataSources({
         configs,
-        freshnessWatches: [{ dataSourceIds: ['leftover-inventory-data'] }]
+        freshnessWatches: [{ dataSourceIds: ['leftover-bank-data'] }]
       })
     ).toEqual([{ id: 'Recipes Data' }, { id: 'Customers Data' }]);
   });

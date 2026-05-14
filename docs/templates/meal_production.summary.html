@@ -796,8 +796,8 @@
         if (generatedPayloadRaw && !isTemplateToken(generatedPayloadRaw)) {
           var generatedPayload = JSON.parse(generatedPayloadRaw);
           var generatedByTarget = generatedPayload && generatedPayload.byTargetFormKey ? generatedPayload.byTargetFormKey : {};
-          var leftoverRows = Array.isArray(generatedByTarget['Config: Leftover Inventory'])
-            ? generatedByTarget['Config: Leftover Inventory']
+          var leftoverRows = Array.isArray(generatedByTarget['Config: Leftover Bank'])
+            ? generatedByTarget['Config: Leftover Bank']
             : [];
           var seenIds = {};
           leftoverRows.forEach(function (entry) {

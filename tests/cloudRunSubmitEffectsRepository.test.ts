@@ -9,17 +9,17 @@ const createDeferred = () => {
 };
 
 describe('Cloud Run SubmitEffectsRepository', () => {
-  test('saveSubmissionWithId runs embedded reservation plan and draft save in parallel', async () => {
+  test('saveSubmissionWithId runs embedded utilisation plan and draft save in parallel', async () => {
     const events: string[] = [];
     const draftSave = createDeferred();
-    const reservationApply = createDeferred();
+    const utilisationApply = createDeferred();
     const saveSubmissionWithId = jest.fn(() => {
       events.push('draftSave.start');
       return draftSave.promise;
     });
     const applyPlan = jest.fn(() => {
-      events.push('reservationApply.start');
-      return reservationApply.promise;
+      events.push('utilisationApply.start');
+      return utilisationApply.promise;
     });
     const repository = new SubmitEffectsRepository({
       submissionRepository: {
@@ -30,7 +30,7 @@ describe('Cloud Run SubmitEffectsRepository', () => {
         })),
         saveSubmissionWithId
       },
-      inventoryReservationRepository: {
+      bankUtilisationRepository: {
         applyPlan
       }
     });
@@ -42,18 +42,18 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       values: { status: 'In progress' },
       __ckSaveMode: 'draft',
       __ckMutationPlan: {
-        reservationPlan: {
+        utilisationPlan: {
           sourceFormKey: 'Config: Meal Production',
           sourceRecordId: 'meal-1',
           managedScopes: [],
-          reservations: [],
+          utilisations: [],
           refreshMode: 'revisionOnly'
         }
       }
     });
 
     await Promise.resolve();
-    expect(events).toEqual(['draftSave.start', 'reservationApply.start']);
+    expect(events).toEqual(['draftSave.start', 'utilisationApply.start']);
     expect(saveSubmissionWithId).toHaveBeenCalledWith(
       expect.not.objectContaining({
         __ckMutationPlan: expect.anything()
@@ -67,11 +67,11 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       })
     );
 
-    reservationApply.resolve({
+    utilisationApply.resolve({
       success: true,
-      message: 'Inventory reservations updated.',
-      reservationsApplied: 1,
-      reservationsReleased: 0,
+      message: 'Bank utilisations updated.',
+      utilisationsApplied: 1,
+      utilisationsReleased: 0,
       availability: [{ resourceRecordId: 'leftover-1' }]
     });
     draftSave.resolve({
@@ -82,15 +82,15 @@ describe('Cloud Run SubmitEffectsRepository', () => {
 
     await expect(resultPromise).resolves.toMatchObject({
       success: true,
-      reservationResult: {
+      utilisationResult: {
         success: true,
-        reservationsApplied: 1
+        utilisationsApplied: 1
       },
       availability: [{ resourceRecordId: 'leftover-1' }],
       meta: {
-        reservationPlan: {
+        utilisationPlan: {
           success: true,
-          reservationsApplied: 1
+          utilisationsApplied: 1
         }
       }
     });
@@ -125,7 +125,7 @@ describe('Cloud Run SubmitEffectsRepository', () => {
             {
               id: 'captureLeftover',
               type: 'createRecord',
-              targetFormKey: 'Config: Leftover Inventory',
+              targetFormKey: 'Config: Leftover Bank',
               runOn: 'update',
               recordId: 'leftover::{{source.id}}',
               when: { fieldId: 'status', equals: ['Closed'] },
@@ -140,7 +140,7 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       questions: [{ id: 'Q1', type: 'TEXT' }]
     };
     const targetContext = {
-      formKey: 'Config: Leftover Inventory',
+      formKey: 'Config: Leftover Bank',
       form: {},
       questions: [
         { id: 'SOURCE_RECORD_ID', type: 'TEXT' },
@@ -149,7 +149,7 @@ describe('Cloud Run SubmitEffectsRepository', () => {
     };
     const repository = new SubmitEffectsRepository({
       submissionRepository: {
-        getFormContext: jest.fn(formKey => (formKey === 'Config: Leftover Inventory' ? targetContext : sourceContext)),
+        getFormContext: jest.fn(formKey => (formKey === 'Config: Leftover Bank' ? targetContext : sourceContext)),
         fetchSubmissionById: jest.fn(async () => ({
           id: 'meal-1',
           formKey: 'Config: Meal Production',
@@ -185,7 +185,7 @@ describe('Cloud Run SubmitEffectsRepository', () => {
     }));
     expect(saveSubmissionWithId).toHaveBeenCalledTimes(1);
     expect((saveSubmissionWithId.mock.calls[0] as any[])[0]).toEqual(expect.objectContaining({
-      formKey: 'Config: Leftover Inventory',
+      formKey: 'Config: Leftover Bank',
       id: 'leftover::meal-1',
       SOURCE_RECORD_ID: 'meal-1',
       SOURCE_NAME: 'Alice'
@@ -199,71 +199,6 @@ describe('Cloud Run SubmitEffectsRepository', () => {
         created: 1
       })
     }));
-  });
-
-  test('skips final-submit reservation reconciliation when guided record has no reservation selections', async () => {
-    const reconcile = jest.fn();
-    const repository = new SubmitEffectsRepository({
-      inventoryReservationRepository: { reconcile }
-    });
-    const form = {
-      reservationLifecycle: {
-        ledgerFormKey: 'Config: Inventory Reservation Ledger',
-        reconcileOnFinalSubmit: {
-          enabled: true,
-          ledgerFormKey: 'Config: Inventory Reservation Ledger',
-          refreshMode: 'revisionOnly'
-        }
-      },
-      steps: {
-        mode: 'guided',
-        items: [
-          {
-            id: 'leftovers',
-            include: [
-              {
-                kind: 'lineGroup',
-                id: 'Q2',
-                dataSourceRows: [
-                  {
-                    outputGroupId: 'LEFTOVER_ROWS',
-                    outputKeyFieldId: 'LEFTOVER_ID',
-                    quantityFieldId: 'LEFTOVER_USE_QTY',
-                    reservation: {
-                      enabled: true,
-                      commitMode: 'step',
-                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    };
-
-    const result = await repository.applyReservationLifecycle(
-      form,
-      'Config: Meal Production',
-      {
-        id: 'meal-1',
-        __ckStatus: 'Closed',
-        Q2_json: JSON.stringify([{ __ckRowId: 'ROW-1', LEFTOVER_ROWS: [] }])
-      },
-      { success: true, meta: { id: 'meal-1' } }
-    );
-
-    expect(result.success).toBe(true);
-    expect(reconcile).not.toHaveBeenCalled();
-    expect(result.meta.reservationReconciliation).toEqual({
-      success: true,
-      sourceRecordId: 'meal-1',
-      reconciledReservations: 0,
-      consumedReservations: 0,
-      releasedReservations: 0,
-      touchedInventoryRecords: 0
-    });
   });
 
   test('scaleCollection derives produced leftovers from the Cook row ingredient list only', async () => {

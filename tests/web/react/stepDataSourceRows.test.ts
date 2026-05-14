@@ -4,7 +4,7 @@ import {
   buildStepDataSourceNestedPresetNormalizationSignatureAction,
   collectStepDataSourceNestedPresetNormalizationsAction,
   resolveDataSourceOutputGroupAction,
-  resolveStepDataSourceReservationStateForSourceAction
+  resolveStepDataSourceUtilisationStateForSourceAction
 } from '../../../src/web/react/features/lineItems/domain/stepDataSourceRows';
 import {
   ROW_HIDE_REMOVE_KEY,
@@ -18,17 +18,17 @@ import {
 
 describe('step data source rows domain', () => {
   test('resolves output subgroup metadata for a parent row', () => {
-    const subConfig = { id: 'reservations', fields: [] };
+    const subConfig = { id: 'utilisations', fields: [] };
 
     expect(
       resolveDataSourceOutputGroupAction({
-        config: { outputGroupId: 'reservations' },
+        config: { outputGroupId: 'utilisations' },
         groupId: 'meals',
         subGroups: [subConfig],
         parentRowId: 'parent1'
       })
     ).toEqual({
-      key: 'meals::parent1::reservations',
+      key: 'meals::parent1::utilisations',
       subConfig
     });
 
@@ -42,15 +42,15 @@ describe('step data source rows domain', () => {
     ).toBeNull();
   });
 
-  test('resolves local and committed reservation state for a source row', () => {
+  test('resolves local and committed utilisation state for a source row', () => {
     const config = {
-      outputGroupId: 'reservations',
+      outputGroupId: 'utilisations',
       outputKeyFieldId: 'sourceId',
       selectedFieldId: 'selected',
       quantityFieldId: 'quantity'
     };
     const parentRows: any[] = [{ id: 'parent1', values: {} }, { id: 'parent2', values: {} }];
-    const outputFor = (parentRowId: string) => ({ key: `meals::${parentRowId}::reservations`, subConfig: null });
+    const outputFor = (parentRowId: string) => ({ key: `meals::${parentRowId}::utilisations`, subConfig: null });
     const quantityFrom = (values: any, selectedFieldId: string, quantityFieldId: string): number =>
       values?.[selectedFieldId] ? Number(values?.[quantityFieldId] || 0) : 0;
     const commonArgs = {
@@ -65,28 +65,28 @@ describe('step data source rows domain', () => {
       stepDataSourceDrafts: {
         'parent2:item1': { selected: true, quantity: 4 }
       },
-      reservationCommittedValues: {
+      utilisationCommittedValues: {
         'parent2:item1': { selected: true, quantity: 1 }
       },
       buildStepDataSourceDraftKey: (_config: any, parentRowId: string, sourceKey: string) => `${parentRowId}:${sourceKey}`,
       resolveDataSourceOutputGroup: (_config: any, parentRowId: string) => outputFor(parentRowId),
-      resolveLocalReservationQuantityForVisibility: (args: any) =>
+      resolveLocalUtilisationQuantityForVisibility: (args: any) =>
         quantityFrom(args.draftValues || args.outputValues || args.committedValues, args.selectedFieldId, args.quantityFieldId),
-      resolveReservationQuantityFromValues: quantityFrom
+      resolveUtilisationQuantityFromValues: quantityFrom
     };
 
-    expect(resolveStepDataSourceReservationStateForSourceAction({ ...commonArgs, mode: 'local' })).toEqual({
-      totalReservedQuantity: 6,
+    expect(resolveStepDataSourceUtilisationStateForSourceAction({ ...commonArgs, mode: 'local' })).toEqual({
+      totalUtilisedQuantity: 6,
       currentRowQuantity: 4
     });
-    expect(resolveStepDataSourceReservationStateForSourceAction({ ...commonArgs, mode: 'committed' })).toEqual({
-      totalReservedQuantity: 3,
+    expect(resolveStepDataSourceUtilisationStateForSourceAction({ ...commonArgs, mode: 'committed' })).toEqual({
+      totalUtilisedQuantity: 3,
       currentRowQuantity: 1
     });
   });
 
   test('applies a matched output rule with nested child row presets', () => {
-    const outputKey = 'meals::parent1::reservations';
+    const outputKey = 'meals::parent1::utilisations';
     const result = applyStepDataSourceMatchedOutputRuleAction({
       previousLineItems: {},
       nextState: {},
@@ -95,7 +95,7 @@ describe('step data source rows domain', () => {
       existingOutputRow: null,
       parentGroupId: 'meals',
       parentRowId: 'parent1',
-      outputGroupId: 'reservations',
+      outputGroupId: 'utilisations',
       outputKeyFieldId: 'sourceId',
       sourceKey: 'item1',
       quantityFieldId: 'quantity',
@@ -143,7 +143,7 @@ describe('step data source rows domain', () => {
   });
 
   test('returns the previous line-item state when a matched output rule is unchanged', () => {
-    const outputKey = 'meals::parent1::reservations';
+    const outputKey = 'meals::parent1::utilisations';
     const previousLineItems: any = {
       [outputKey]: [
         {
@@ -172,7 +172,7 @@ describe('step data source rows domain', () => {
       existingOutputRow: previousLineItems[outputKey][0],
       parentGroupId: 'meals',
       parentRowId: 'parent1',
-      outputGroupId: 'reservations',
+      outputGroupId: 'utilisations',
       outputKeyFieldId: 'sourceId',
       sourceKey: 'item1',
       quantityFieldId: 'quantity',
@@ -186,7 +186,7 @@ describe('step data source rows domain', () => {
   });
 
   test('collects and applies nested preset normalizations for existing output rows', () => {
-    const outputKey = 'meals::parent1::reservations';
+    const outputKey = 'meals::parent1::utilisations';
     const lineItems = {
       [outputKey]: [{ id: 'out1', values: { sourceId: 'item1', quantity: 1 } }]
     };

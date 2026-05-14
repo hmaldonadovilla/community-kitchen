@@ -75,7 +75,7 @@ const resolveOptionSetForField = (optionState: any, field: any, parentId?: strin
 /**
  * Owner: line-items feature renderer.
  * Renders parent line-item rows for standard and row-flow modes. The parent
- * still owns stateful data-source/reservation wiring and passes callbacks in.
+ * still owns stateful data-source/utilisation wiring and passes callbacks in.
  */
 export const LineItemGroupRowsRenderer: React.FC<LineItemGroupRowsRendererProps> = props => {
   const {
@@ -152,11 +152,11 @@ export const LineItemGroupRowsRenderer: React.FC<LineItemGroupRowsRendererProps>
     allowsVirtualIntegerOnly,
     resolveVirtualMaxFieldId,
     toFiniteNumber,
-    seedReservationCommittedValues,
-    queueDeferredStepReservationSync,
-    hasPendingDeferredReservationChange,
-    cancelDeferredStepReservationSync,
-    syncStepDataSourceOutputRowWithReservation,
+    seedUtilisationCommittedValues,
+    queueDeferredStepUtilisationSync,
+    hasPendingDeferredUtilisationChange,
+    cancelDeferredStepUtilisationSync,
+    syncStepDataSourceOutputRowWithUtilisation,
     hideInlineSubgroups,
     collapsedSubgroups,
     subgroupSelectors,
@@ -2024,11 +2024,11 @@ export const LineItemGroupRowsRenderer: React.FC<LineItemGroupRowsRendererProps>
                     allowsVirtualIntegerOnly={allowsVirtualIntegerOnly}
                     resolveVirtualMaxFieldId={resolveVirtualMaxFieldId}
                     toFiniteNumber={toFiniteNumber}
-                    seedReservationCommittedValues={seedReservationCommittedValues}
-                    queueDeferredStepReservationSync={queueDeferredStepReservationSync}
-                    hasPendingDeferredReservationChange={hasPendingDeferredReservationChange}
-                    cancelDeferredStepReservationSync={cancelDeferredStepReservationSync}
-                    syncStepDataSourceOutputRowWithReservation={syncStepDataSourceOutputRowWithReservation}
+                    seedUtilisationCommittedValues={seedUtilisationCommittedValues}
+                    queueDeferredStepUtilisationSync={queueDeferredStepUtilisationSync}
+                    hasPendingDeferredUtilisationChange={hasPendingDeferredUtilisationChange}
+                    cancelDeferredStepUtilisationSync={cancelDeferredStepUtilisationSync}
+                    syncStepDataSourceOutputRowWithUtilisation={syncStepDataSourceOutputRowWithUtilisation}
                     setLineItems={setLineItems}
                     openInfoOverlay={openInfoOverlay}
                     openLineItemGroupOverlay={openLineItemGroupOverlay}

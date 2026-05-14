@@ -1,7 +1,7 @@
 import { shouldWaitBeforeLeavingRecord } from '../../../src/web/react/app/navigationPendingWork';
 
 describe('navigationPendingWork', () => {
-  test('waits before leaving while guided reservation live sync is running', () => {
+  test('waits before leaving while guided utilisation live sync is running', () => {
     expect(
       shouldWaitBeforeLeavingRecord({
         guidedStepLiveSyncInFlight: true
@@ -9,7 +9,7 @@ describe('navigationPendingWork', () => {
     ).toBe(true);
   });
 
-  test('waits before leaving while a guided reservation sync has been queued', () => {
+  test('waits before leaving while a guided utilisation sync has been queued', () => {
     expect(
       shouldWaitBeforeLeavingRecord({
         guidedStepLiveSyncPending: true

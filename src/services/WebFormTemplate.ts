@@ -251,7 +251,7 @@ export function buildWebFormHtml(
         flex-direction: column;
         gap: 16px;
       }
-      /* (legacy) ck-page-form is still applied, but bottom-bar room is now reserved for all views. */
+      /* (legacy) ck-page-form is still applied, but bottom-bar room is now utilised for all views. */
       /* App header (Excel-style: avatar + title) */
       .ck-app-header {
         position: sticky;

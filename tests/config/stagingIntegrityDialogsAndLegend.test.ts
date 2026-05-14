@@ -376,23 +376,23 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftoverDataSourceRows = Array.isArray(leftoverBankMeals?.dataSourceRows)
         ? leftoverBankMeals.dataSourceRows
         : [];
-      const leftoverInventoryRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverInventoryRows');
+      const leftoverBankRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverBankRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
         "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
       );
-      expect(leftoverInventoryRows?.presentation).toBe('sourceFirstAllocations');
-      expect(leftoverInventoryRows?.presentationWhen).toEqual({
+      expect(leftoverBankRows?.presentation).toBe('sourceFirstAllocations');
+      expect(leftoverBankRows?.presentationWhen).toEqual({
         fieldId: '__ckStep',
         equals: ['leftoverForm']
       });
-      expect(leftoverInventoryRows?.hideParentRowsWhenPresentationActive).toBe(true);
-      expect(leftoverInventoryRows?.allocationLabelFieldId).toBe('MEAL_TYPE');
-      expect(leftoverInventoryRows?.ui?.allocationLabelVisibility).toBe('always');
-      expect(leftoverInventoryRows?.sourceMatchFieldId).toBe('DIETARY_APPLICABILITY');
-      expect(leftoverInventoryRows?.parentMatchFieldId).toBe('MEAL_TYPE');
-      expect(leftoverInventoryRows?.sourceMatchMode).toBe('includesDelimited');
-      expect(leftoverInventoryRows?.sourceMatchDelimiter).toBe(',');
-      expect(leftoverInventoryRows?.dataSource?.projection).toEqual(
+      expect(leftoverBankRows?.hideParentRowsWhenPresentationActive).toBe(true);
+      expect(leftoverBankRows?.allocationLabelFieldId).toBe('MEAL_TYPE');
+      expect(leftoverBankRows?.ui?.allocationLabelVisibility).toBe('always');
+      expect(leftoverBankRows?.sourceMatchFieldId).toBe('DIETARY_APPLICABILITY');
+      expect(leftoverBankRows?.parentMatchFieldId).toBe('MEAL_TYPE');
+      expect(leftoverBankRows?.sourceMatchMode).toBe('includesDelimited');
+      expect(leftoverBankRows?.sourceMatchDelimiter).toBe(',');
+      expect(leftoverBankRows?.dataSource?.projection).toEqual(
         expect.arrayContaining([
           'DIETARY_APPLICABILITY',
           'LEFTOVER_SOURCE_FORM_KEY',
@@ -400,7 +400,7 @@ describe('staging integrity dialogs and list legend config', () => {
           'LEFTOVER_SOURCE_ROW_ID'
         ])
       );
-      expect(leftoverInventoryRows?.dataSource?.prefetchOnHome).toBe(true);
+      expect(leftoverBankRows?.dataSource?.prefetchOnHome).toBe(true);
       const hiddenLeftoverIdFields = collectObjects(root, (entry: any) => entry?.id === 'LEFTOVER_ID');
       expect(hiddenLeftoverIdFields.length).toBeGreaterThan(0);
       hiddenLeftoverIdFields.forEach((field: any) => {
@@ -412,13 +412,13 @@ describe('staging integrity dialogs and list legend config', () => {
         });
         expect(field?.dataSource).toBeUndefined();
       });
-      expect(leftoverInventoryRows?.dataSource?.backfill?.whenMissingAnyFieldIds).toEqual(
+      expect(leftoverBankRows?.dataSource?.backfill?.whenMissingAnyFieldIds).toEqual(
         expect.arrayContaining(['LEFTOVER_RECIPE', 'LEFTOVER_INGREDIENT', 'LEFTOVER_MEAL_TYPE', 'DIETARY_APPLICABILITY'])
       );
-      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceFormKeyFieldId).toBe('LEFTOVER_SOURCE_FORM_KEY');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceRecordIdFieldId).toBe('LEFTOVER_SOURCE_RECORD_ID');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.sourceRowIdFieldId).toBe('LEFTOVER_SOURCE_ROW_ID');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.scopes).toEqual(
+      expect(leftoverBankRows?.dataSource?.backfill?.sourceFormKeyFieldId).toBe('LEFTOVER_SOURCE_FORM_KEY');
+      expect(leftoverBankRows?.dataSource?.backfill?.sourceRecordIdFieldId).toBe('LEFTOVER_SOURCE_RECORD_ID');
+      expect(leftoverBankRows?.dataSource?.backfill?.sourceRowIdFieldId).toBe('LEFTOVER_SOURCE_ROW_ID');
+      expect(leftoverBankRows?.dataSource?.backfill?.scopes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'mealRow', groupId: 'MP_MEALS_REQUEST' }),
           expect.objectContaining({ id: 'cookRow', groupId: 'MP_TYPE_LI' }),
@@ -429,14 +429,14 @@ describe('staging integrity dialogs and list legend config', () => {
         (entry: any) => entry?.id === 'MP_LEFTOVER_CAPTURE_LI'
       );
       expect(partialLeftoversTarget?.kind).toBe('lineGroup');
-      const partialRowScope = (leftoverInventoryRows?.dataSource?.backfill?.scopes || []).find(
+      const partialRowScope = (leftoverBankRows?.dataSource?.backfill?.scopes || []).find(
         (entry: any) => entry?.id === 'partialRow'
       );
       expect(partialRowScope?.fallbackMatch).toBeUndefined();
-      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_RECIPE).toBe('{{cookRow.RECIPE}}');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_MEAL_TYPE).toBe('{{mealRow.MEAL_TYPE}}');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.LEFTOVER_INGREDIENT).toBe('{{partialRow.LEFTOVER_INGREDIENT}}');
-      expect(leftoverInventoryRows?.dataSource?.backfill?.values?.DIETARY_APPLICABILITY).toEqual(
+      expect(leftoverBankRows?.dataSource?.backfill?.values?.LEFTOVER_RECIPE).toBe('{{cookRow.RECIPE}}');
+      expect(leftoverBankRows?.dataSource?.backfill?.values?.LEFTOVER_MEAL_TYPE).toBe('{{mealRow.MEAL_TYPE}}');
+      expect(leftoverBankRows?.dataSource?.backfill?.values?.LEFTOVER_INGREDIENT).toBe('{{partialRow.LEFTOVER_INGREDIENT}}');
+      expect(leftoverBankRows?.dataSource?.backfill?.values?.DIETARY_APPLICABILITY).toEqual(
         expect.objectContaining({
           op: 'lookupSetIntersection',
           collectionPath: 'cookRow.MP_INGREDIENTS_LI',
@@ -447,14 +447,14 @@ describe('staging integrity dialogs and list legend config', () => {
           fallback: '{{partialRow.LEFTOVER_DIETARY_APPLICABILITY}}'
         })
       );
-      expect(leftoverInventoryRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
-      expect(leftoverInventoryRows?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
-      expect(leftoverInventoryRows?.ui?.sourceFirstRowSort).toBe('alphabetical');
-      expect(leftoverInventoryRows?.reservation?.commitMode).toBe('step');
-      expect(leftoverInventoryRows?.reservation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
-      expect(leftoverInventoryRows?.defaultModeValue).toBeUndefined();
-      const compactSentenceRows = Array.isArray(leftoverInventoryRows?.ui?.compactSentenceRows)
-        ? leftoverInventoryRows.ui.compactSentenceRows
+      expect(leftoverBankRows?.ui?.emptyStateMessage?.en).toBe('No compatible leftovers are available for the current dishes.');
+      expect(leftoverBankRows?.ui?.noSourceRowsMessage?.en).toBe('There is currently no leftover.');
+      expect(leftoverBankRows?.ui?.sourceFirstRowSort).toBe('alphabetical');
+      expect(leftoverBankRows?.utilisation?.commitMode).toBe('step');
+      expect(leftoverBankRows?.utilisation?.resourceRecordIdFieldId).toBe('LEFTOVER_RECORD_ID');
+      expect(leftoverBankRows?.defaultModeValue).toBeUndefined();
+      const compactSentenceRows = Array.isArray(leftoverBankRows?.ui?.compactSentenceRows)
+        ? leftoverBankRows.ui.compactSentenceRows
         : [];
       const hasEqualsValue = (when: any, value: string) => {
         const equals = when?.equals;
@@ -471,7 +471,7 @@ describe('staging integrity dialogs and list legend config', () => {
         'LEFTOVER_USE_QTY',
         'LEFTOVER_USAGE_MODE'
       ]);
-      expect(leftoverInventoryRows?.sourceFieldMapping).toEqual(
+      expect(leftoverBankRows?.sourceFieldMapping).toEqual(
         expect.objectContaining({
           LEFTOVER_MEAL_TYPE: 'LEFTOVER_MEAL_TYPE',
           LEFTOVER_RECIPE: 'LEFTOVER_RECIPE',
@@ -479,7 +479,7 @@ describe('staging integrity dialogs and list legend config', () => {
           DIETARY_APPLICABILITY: 'DIETARY_APPLICABILITY'
         })
       );
-      expect(leftoverInventoryRows?.ui?.compactDetailRows).toEqual(
+      expect(leftoverBankRows?.ui?.compactDetailRows).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             when: expect.objectContaining({ fieldId: 'LEFTOVER_KIND', equals: ['Single-ingredient', 'Part dish'] })
@@ -573,7 +573,6 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(portioning?.navigation?.submitLabel?.en).toBe('Create report');
       expect(portioning?.navigation?.milestoneAction?.type).toBe('followupBatch');
       expect(portioning?.navigation?.milestoneAction?.preActions).toEqual([
-        'RECONCILE_RESERVATIONS',
         'SEND_EMAIL'
       ]);
       expect(portioning?.navigation?.milestoneAction?.backgroundActions).toBeUndefined();
@@ -665,7 +664,7 @@ describe('staging integrity dialogs and list legend config', () => {
       );
       expect(root?.submissionAfterSubmit?.generatedRecordsDialog).toEqual(
         expect.objectContaining({
-          targetFormKey: 'Config: Leftover Inventory',
+          targetFormKey: 'Config: Leftover Bank',
           title: expect.objectContaining({ en: 'Label and store Leftovers' }),
           message: expect.objectContaining({
             en: 'Use the ID and name below to label each leftover container for easy identification later.'
@@ -921,7 +920,6 @@ describe('staging integrity dialogs and list legend config', () => {
     assertSearchPresets(cfg.definition?.questions || []);
     assertUnlockDialog(cfg.questions);
     assertUnlockDialog(cfg.definition?.questions || []);
-    expect(cfg.form?.reservationLifecycle?.reconcileOnFinalSubmit?.refreshMode).toBe('revisionOnly');
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
 

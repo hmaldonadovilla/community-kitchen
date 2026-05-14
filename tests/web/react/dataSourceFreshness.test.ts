@@ -17,8 +17,8 @@ describe('dataSourceFreshness helpers', () => {
         dataSourceWatches: [
           {
             stepId: 'leftoverForm',
-            dataSourceId: 'Leftover Inventory Data',
-            dataSourceIds: ['Leftover Inventory Data', ' Leftover Inventory Data '],
+            dataSourceId: 'Leftover Bank Data',
+            dataSourceIds: ['Leftover Bank Data', ' Leftover Bank Data '],
             quietWindowMs: 1000
           }
         ]
@@ -27,10 +27,10 @@ describe('dataSourceFreshness helpers', () => {
       expect.objectContaining({
         key: buildDataSourceFreshnessWatchKey({
           stepId: 'leftoverForm',
-          dataSourceIds: ['Leftover Inventory Data']
+          dataSourceIds: ['Leftover Bank Data']
         }),
         stepId: 'leftoverForm',
-        dataSourceIds: ['Leftover Inventory Data'],
+        dataSourceIds: ['Leftover Bank Data'],
         quietWindowMs: 5000
       })
     ]);
@@ -41,7 +41,7 @@ describe('dataSourceFreshness helpers', () => {
       dataSourceWatches: [
         {
           stepId: 'leftoverForm',
-          dataSourceIds: ['Leftover Inventory Data'],
+          dataSourceIds: ['Leftover Bank Data'],
           quietWindowMs: 30000
         },
         {
@@ -58,7 +58,7 @@ describe('dataSourceFreshness helpers', () => {
     });
 
     expect(active).toHaveLength(1);
-    expect(active[0]?.dataSourceIds).toEqual(['Leftover Inventory Data']);
+    expect(active[0]?.dataSourceIds).toEqual(['Leftover Bank Data']);
     expect(
       resolveDataSourceFreshnessTimerDelay({
         watches: active,
@@ -78,7 +78,7 @@ describe('dataSourceFreshness helpers', () => {
       dataSourceWatches: [
         {
           stepId: 'leftoverForm',
-          dataSourceIds: ['Leftover Inventory Data'],
+          dataSourceIds: ['Leftover Bank Data'],
           quietWindowMs: 30000
         }
       ]
@@ -121,10 +121,10 @@ describe('dataSourceFreshness helpers', () => {
   test('uses a scoped datasource baseline key per watch and source', () => {
     expect(
       buildDataSourceFreshnessBaselineKey({
-        watchKey: 'leftoverForm::Leftover Inventory Data',
-        dataSourceId: 'Leftover Inventory Data'
+        watchKey: 'leftoverForm::Leftover Bank Data',
+        dataSourceId: 'Leftover Bank Data'
       })
-    ).toBe('leftoverForm::Leftover Inventory Data::Leftover Inventory Data');
+    ).toBe('leftoverForm::Leftover Bank Data::Leftover Bank Data');
   });
 
   test('primes datasource signature baseline before reporting freshness changes', () => {
@@ -162,11 +162,11 @@ describe('dataSourceFreshness helpers', () => {
   test('uses datasource projection fields for freshness comparisons', () => {
     expect(
       resolveDataSourceFreshnessSignatureFieldIds({
-        id: 'Leftover Inventory Data',
-        projection: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY'],
+        id: 'Leftover Bank Data',
+        projection: ['LEFTOVER_QTY'],
         statusFieldId: 'LEFTOVER_STATUS'
       } as any)
-    ).toEqual(['id', 'value', 'status', 'LEFTOVER_STATUS', 'LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']);
+    ).toEqual(['id', 'value', 'status', 'LEFTOVER_STATUS', 'LEFTOVER_QTY']);
   });
 
   test('ignores metadata-only datasource changes when projected fields are unchanged', () => {
@@ -175,7 +175,6 @@ describe('dataSourceFreshness helpers', () => {
         {
           id: 'leftover-1',
           LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: 0,
           updatedAt: '2026-04-16T10:00:00.000Z',
           __rowNumber: 68
         }
@@ -187,7 +186,6 @@ describe('dataSourceFreshness helpers', () => {
         {
           id: 'leftover-1',
           LEFTOVER_QTY: 500,
-          LEFTOVER_RESERVED_QTY: '',
           updatedAt: '2026-04-16T10:00:30.000Z',
           __rowNumber: 68
         }
@@ -197,11 +195,11 @@ describe('dataSourceFreshness helpers', () => {
 
     expect(
       buildDataSourceFreshnessSnapshotSignature(before, {
-        fieldIds: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']
+        fieldIds: ['LEFTOVER_QTY']
       })
     ).toBe(
       buildDataSourceFreshnessSnapshotSignature(after, {
-        fieldIds: ['LEFTOVER_QTY', 'LEFTOVER_RESERVED_QTY']
+        fieldIds: ['LEFTOVER_QTY']
       })
     );
   });

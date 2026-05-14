@@ -3,7 +3,7 @@ import React from 'react';
 import { buildLocalizedOptions, matchesWhenClause, toOptionSet } from '../../../../core';
 import { resolveLocalizedString } from '../../../../i18n';
 import type { FieldValue, LangCode, LineItemRowState, VisibilityContext } from '../../../../types';
-import { buildReservationFieldPatch, shouldDeferReservationSync } from '../../../components/form/reservationSyncPolicy';
+import { buildUtilisationFieldPatch, shouldDeferUtilisationSync } from '../../../components/form/utilisationSyncPolicy';
 import { toDateInputValue } from '../../../components/form/utils';
 import type { LineItemState } from '../../../types';
 import {
@@ -65,29 +65,29 @@ type SourceFirstInlineDataSourceRowsProps = {
     parentValues: Record<string, FieldValue>
   ) => string;
   toFiniteNumber: (value: any) => number;
-  seedReservationCommittedValues: (args: {
+  seedUtilisationCommittedValues: (args: {
     config: any;
     parentRowId: string;
     sourceKey: string;
     virtualValues: Record<string, FieldValue>;
   }) => void;
-  queueDeferredStepReservationSync: (args: {
+  queueDeferredStepUtilisationSync: (args: {
     config: any;
     parentRow: LineItemRowState;
     sourceRow: Record<string, any>;
     sourceKey: string;
     patch: Record<string, FieldValue>;
   }) => void;
-  hasPendingDeferredReservationChange: (args: {
+  hasPendingDeferredUtilisationChange: (args: {
     config: any;
     parentRowId: string;
     sourceKey: string;
     patch: Record<string, FieldValue>;
   }) => boolean;
-  cancelDeferredStepReservationSync: (args: { parentRowId: string; sourceKey: string }) => void;
-  syncStepDataSourceOutputRowWithReservation: (
+  cancelDeferredStepUtilisationSync: (args: { parentRowId: string; sourceKey: string }) => void;
+  syncStepDataSourceOutputRowWithUtilisation: (
     args: SourceFirstSyncArgs,
-    options?: { skipReservation?: boolean }
+    options?: { skipUtilisation?: boolean }
   ) => void;
   setLineItems: React.Dispatch<React.SetStateAction<LineItemState>>;
   openInfoOverlay: React.ComponentProps<typeof SourceFirstDataSourceActions>['openInfoOverlay'];
@@ -113,11 +113,11 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
   allowsVirtualIntegerOnly,
   resolveVirtualMaxFieldId,
   toFiniteNumber,
-  seedReservationCommittedValues,
-  queueDeferredStepReservationSync,
-  hasPendingDeferredReservationChange,
-  cancelDeferredStepReservationSync,
-  syncStepDataSourceOutputRowWithReservation,
+  seedUtilisationCommittedValues,
+  queueDeferredStepUtilisationSync,
+  hasPendingDeferredUtilisationChange,
+  cancelDeferredStepUtilisationSync,
+  syncStepDataSourceOutputRowWithUtilisation,
   setLineItems,
   openInfoOverlay,
   openLineItemGroupOverlay
@@ -301,7 +301,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                   showSentence={!!sentenceParts.length && isSelected}
                   errors={Object.keys(sentenceFieldErrorMap).length ? [] : sentenceFieldErrors}
                   onSelectionChange={checked =>
-                    syncStepDataSourceOutputRowWithReservation({
+                    syncStepDataSourceOutputRowWithUtilisation({
                       config,
                       parentRow: row,
                       sourceRow,
@@ -328,36 +328,36 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                     compactChoicePlaceholder
                     onNumberChange={({ fieldId, value, virtualValues: currentVirtualValues }) => {
                       const quantityFieldId = `${config?.quantityFieldId || ''}`.trim();
-                      const patch = buildReservationFieldPatch({
+                      const patch = buildUtilisationFieldPatch({
                         fieldId,
                         value,
                         selectedFieldId,
                         selectedValue: selectedFieldId ? currentVirtualValues[selectedFieldId] : true,
                         quantityFieldId
                       }) as Record<string, FieldValue>;
-                      const deferReservation = shouldDeferReservationSync({
+                      const deferUtilisation = shouldDeferUtilisationSync({
                         patch,
                         selectedFieldId,
                         quantityFieldId
                       });
-                      if (deferReservation) {
-                        seedReservationCommittedValues({
+                      if (deferUtilisation) {
+                        seedUtilisationCommittedValues({
                           config,
                           parentRowId: row.id,
                           sourceKey,
                           virtualValues: currentVirtualValues
                         });
                       }
-                      syncStepDataSourceOutputRowWithReservation({
+                      syncStepDataSourceOutputRowWithUtilisation({
                         config,
                         parentRow: row,
                         sourceRow,
                         patch
                       }, {
-                        skipReservation: deferReservation
+                        skipUtilisation: deferUtilisation
                       });
-                      if (deferReservation) {
-                        queueDeferredStepReservationSync({
+                      if (deferUtilisation) {
+                        queueDeferredStepUtilisationSync({
                           config,
                           parentRow: row,
                           sourceRow,
@@ -367,7 +367,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                       }
                     }}
                     onNumberBlur={({ fieldId, value, virtualValues: currentVirtualValues }) => {
-                      const patch = buildReservationFieldPatch({
+                      const patch = buildUtilisationFieldPatch({
                         fieldId,
                         value,
                         selectedFieldId,
@@ -375,7 +375,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                         quantityFieldId: `${config?.quantityFieldId || ''}`.trim()
                       }) as Record<string, FieldValue>;
                       if (
-                        !hasPendingDeferredReservationChange({
+                        !hasPendingDeferredUtilisationChange({
                           config,
                           parentRowId: row.id,
                           sourceKey,
@@ -384,11 +384,11 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                       ) {
                         return;
                       }
-                      cancelDeferredStepReservationSync({
+                      cancelDeferredStepUtilisationSync({
                         parentRowId: row.id,
                         sourceKey
                       });
-                      syncStepDataSourceOutputRowWithReservation({
+                      syncStepDataSourceOutputRowWithUtilisation({
                         config,
                         parentRow: row,
                         sourceRow,
@@ -396,7 +396,7 @@ export const SourceFirstInlineDataSourceRows: React.FC<SourceFirstInlineDataSour
                       });
                     }}
                     onChoiceChange={({ fieldId, value }) =>
-                      syncStepDataSourceOutputRowWithReservation({
+                      syncStepDataSourceOutputRowWithUtilisation({
                         config,
                         parentRow: row,
                         sourceRow,

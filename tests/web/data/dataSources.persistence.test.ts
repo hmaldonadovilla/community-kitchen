@@ -82,8 +82,8 @@ describe('web dataSources persistence', () => {
     );
     clearFetchDataSourceCache();
 
-    const projectionA = { id: 'Leftover Inventory Data', projection: ['A'] } as any;
-    const projectionB = { id: 'Leftover Inventory Data', projection: ['B'] } as any;
+    const projectionA = { id: 'Leftover Bank Data', projection: ['A'] } as any;
+    const projectionB = { id: 'Leftover Bank Data', projection: ['B'] } as any;
 
     await fetchDataSource(projectionA, 'EN', { forceRefresh: true });
     await fetchDataSource(projectionB, 'EN', { forceRefresh: true });
@@ -102,12 +102,12 @@ describe('web dataSources persistence', () => {
     );
     clearFetchDataSourceCache();
 
-    const nonEmpty = { id: 'Leftover Inventory Data', projection: ['A'] } as any;
-    const empty = { id: 'Leftover Inventory Data', projection: ['B'] } as any;
+    const nonEmpty = { id: 'Leftover Bank Data', projection: ['A'] } as any;
+    const empty = { id: 'Leftover Bank Data', projection: ['B'] } as any;
 
     await fetchDataSource(nonEmpty, 'EN', { forceRefresh: true });
     localStorage.setItem(
-      'ck.ds.Leftover%20Inventory%20Data.EN.v4.default.empty',
+      'ck.ds.Leftover%20Bank%20Data.EN.v4.default.empty',
       JSON.stringify({
         savedAtMs: Date.now() + 1000,
         response: { items: [] }
@@ -126,16 +126,16 @@ describe('web dataSources persistence', () => {
     const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    await fetchDataSource({ id: 'Shared Inventory', formKey: 'Config: Leftover Inventory' } as any, 'EN', {
+    await fetchDataSource({ id: 'Shared Bank', formKey: 'Config: Leftover Bank' } as any, 'EN', {
       forceRefresh: true
     });
-    await fetchDataSource({ id: 'Shared Inventory', formKey: 'Config: Pantry Inventory' } as any, 'EN', {
+    await fetchDataSource({ id: 'Shared Bank', formKey: 'Config: Pantry Bank' } as any, 'EN', {
       forceRefresh: true
     });
 
     const keys = localStorage.__keys().filter(k => k.startsWith('ck.ds.'));
     expect(keys.length).toBe(1);
-    expect(localStorage.getItem(keys[0]!) || '').toContain('Config: Pantry Inventory');
+    expect(localStorage.getItem(keys[0]!) || '').toContain('Config: Pantry Bank');
   });
 
   it('clears persisted dataSource entries on clearFetchDataSourceCache()', async () => {
@@ -252,9 +252,9 @@ describe('web dataSources persistence', () => {
     const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
     clearFetchDataSourceCache();
 
-    const cfg = { id: 'Leftover Inventory Data', persistMaxAgeMinutes: 1 } as any;
+    const cfg = { id: 'Leftover Bank Data', persistMaxAgeMinutes: 1 } as any;
     await fetchDataSource(cfg, 'EN', { forceRefresh: true });
-    const key = localStorage.__keys().find(k => k.startsWith('ck.ds.Leftover%20Inventory%20Data.EN.v4.default.'));
+    const key = localStorage.__keys().find(k => k.startsWith('ck.ds.Leftover%20Bank%20Data.EN.v4.default.'));
     expect(key).toBeTruthy();
     localStorage.setItem(
       key!,
@@ -268,7 +268,7 @@ describe('web dataSources persistence', () => {
     const result = await fetchDataSource(cfg, 'EN');
 
     expect(tracker.getCallCount()).toBe(2);
-    expect(result?.items?.[0]?.id).toBe('Leftover Inventory Data');
+    expect(result?.items?.[0]?.id).toBe('Leftover Bank Data');
   });
 
   it('drops legacy persisted datasource payloads without envelope metadata', async () => {

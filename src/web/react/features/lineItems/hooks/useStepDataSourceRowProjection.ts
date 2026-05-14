@@ -20,16 +20,16 @@ import {
   validateVirtualFieldRulesAction
 } from '../domain/virtualRowContext';
 import {
-  resolveLocalReservationQuantityForVisibility,
-  resolveReservationQuantityFromValues
-} from '../domain/reservationQuantity';
+  resolveLocalUtilisationQuantityForVisibility,
+  resolveUtilisationQuantityFromValues
+} from '../domain/utilisationQuantity';
 import {
   buildVirtualDataSourceRowValuesAction
 } from '../domain/virtualDataSourceRowValues';
 import {
   decorateStepDataSourceRowForVisibilityAction,
   resolveDataSourceOutputGroupAction,
-  resolveStepDataSourceReservationStateForSourceAction,
+  resolveStepDataSourceUtilisationStateForSourceAction,
   resolveStepDataSourceRowsAction,
   resolveStepDataSourceRowsForParentAction
 } from '../domain/stepDataSourceRows';
@@ -44,7 +44,7 @@ type UseStepDataSourceRowProjectionArgs = {
   sourceFirstDataSourceRows: any[];
   stepDataSourceDrafts: Record<string, Record<string, FieldValue>>;
   stepDataSourceDraftsRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
-  reservationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
+  utilisationCommittedValuesRef: React.MutableRefObject<Record<string, Record<string, FieldValue>>>;
   stepDataSourceRefreshTick: number;
   isStepDataSourceLoading: (config: any) => boolean;
   hideSupplementalHelperWhenNoSourceRows?: boolean;
@@ -54,7 +54,7 @@ type UseStepDataSourceRowProjectionArgs = {
 
 /**
  * Owner: guided step data-source row projection.
- * Resolves source-first row visibility, virtual row values, reservation views,
+ * Resolves source-first row visibility, virtual row values, utilisation views,
  * and related datasource callbacks outside the line-item renderer shell.
  */
 export const useStepDataSourceRowProjection = ({
@@ -66,7 +66,7 @@ export const useStepDataSourceRowProjection = ({
   sourceFirstDataSourceRows,
   stepDataSourceDrafts,
   stepDataSourceDraftsRef,
-  reservationCommittedValuesRef,
+  utilisationCommittedValuesRef,
   stepDataSourceRefreshTick,
   isStepDataSourceLoading,
   hideSupplementalHelperWhenNoSourceRows,
@@ -148,14 +148,14 @@ export const useStepDataSourceRowProjection = ({
     [q.id, q.lineItemConfig?.subGroups]
   );
 
-  const resolveReservationStateForSource = React.useCallback(
+  const resolveUtilisationStateForSource = React.useCallback(
     (
       config: any,
       sourceKey: string,
       currentParentRowId?: string,
       mode: 'local' | 'committed' = 'local'
-    ): { totalReservedQuantity: number; currentRowQuantity: number } => {
-      return resolveStepDataSourceReservationStateForSourceAction({
+    ): { totalUtilisedQuantity: number; currentRowQuantity: number } => {
+      return resolveStepDataSourceUtilisationStateForSourceAction({
         config,
         sourceKey,
         currentParentRowId,
@@ -163,11 +163,11 @@ export const useStepDataSourceRowProjection = ({
         parentRows,
         lineItems,
         stepDataSourceDrafts: stepDataSourceDraftsRef.current,
-        reservationCommittedValues: reservationCommittedValuesRef.current,
+        utilisationCommittedValues: utilisationCommittedValuesRef.current,
         buildStepDataSourceDraftKey,
         resolveDataSourceOutputGroup,
-        resolveLocalReservationQuantityForVisibility,
-        resolveReservationQuantityFromValues
+        resolveLocalUtilisationQuantityForVisibility,
+        resolveUtilisationQuantityFromValues
       });
     },
     [
@@ -175,21 +175,21 @@ export const useStepDataSourceRowProjection = ({
       lineItems,
       parentRows,
       resolveDataSourceOutputGroup,
-      reservationCommittedValuesRef,
+      utilisationCommittedValuesRef,
       stepDataSourceDraftsRef
     ]
   );
 
-  const resolveCurrentReservationStateForSource = React.useCallback(
-    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } =>
-      resolveReservationStateForSource(config, sourceKey, currentParentRowId, 'local'),
-    [resolveReservationStateForSource]
+  const resolveCurrentUtilisationStateForSource = React.useCallback(
+    (config: any, sourceKey: string, currentParentRowId?: string): { totalUtilisedQuantity: number; currentRowQuantity: number } =>
+      resolveUtilisationStateForSource(config, sourceKey, currentParentRowId, 'local'),
+    [resolveUtilisationStateForSource]
   );
 
-  const resolveCommittedReservationStateForSource = React.useCallback(
-    (config: any, sourceKey: string, currentParentRowId?: string): { totalReservedQuantity: number; currentRowQuantity: number } =>
-      resolveReservationStateForSource(config, sourceKey, currentParentRowId, 'committed'),
-    [resolveReservationStateForSource]
+  const resolveCommittedUtilisationStateForSource = React.useCallback(
+    (config: any, sourceKey: string, currentParentRowId?: string): { totalUtilisedQuantity: number; currentRowQuantity: number } =>
+      resolveUtilisationStateForSource(config, sourceKey, currentParentRowId, 'committed'),
+    [resolveUtilisationStateForSource]
   );
 
   const buildVirtualDataSourceRowValues = React.useCallback(
@@ -202,10 +202,10 @@ export const useStepDataSourceRowProjection = ({
     }): Record<string, FieldValue> =>
       buildVirtualDataSourceRowValuesAction({
         ...args,
-        resolveCurrentReservationStateForSource,
-        resolveCommittedReservationStateForSource
+        resolveCurrentUtilisationStateForSource,
+        resolveCommittedUtilisationStateForSource
       }),
-    [resolveCommittedReservationStateForSource, resolveCurrentReservationStateForSource]
+    [resolveCommittedUtilisationStateForSource, resolveCurrentUtilisationStateForSource]
   );
 
   const decorateStepDataSourceRowForVisibility = React.useCallback(
@@ -217,13 +217,13 @@ export const useStepDataSourceRowProjection = ({
         parentRows,
         lineItems,
         stepDataSourceDrafts: stepDataSourceDraftsRef.current,
-        reservationCommittedValues: reservationCommittedValuesRef.current,
+        utilisationCommittedValues: utilisationCommittedValuesRef.current,
         buildStepDataSourceDraftKey,
-        resolveLocalReservationQuantityForVisibility,
-        resolveReservationQuantityFromValues
+        resolveLocalUtilisationQuantityForVisibility,
+        resolveUtilisationQuantityFromValues
       });
     },
-    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, reservationCommittedValuesRef, stepDataSourceDraftsRef]
+    [buildStepDataSourceDraftKey, lineItems, parentRows, q.id, utilisationCommittedValuesRef, stepDataSourceDraftsRef]
   );
 
   const resolveStepDataSourceRows = React.useCallback(
@@ -334,8 +334,8 @@ export const useStepDataSourceRowProjection = ({
     resolveVirtualPreset,
     buildStepDataSourceDraftKey,
     resolveDataSourceOutputGroup,
-    resolveCurrentReservationStateForSource,
-    resolveCommittedReservationStateForSource,
+    resolveCurrentUtilisationStateForSource,
+    resolveCommittedUtilisationStateForSource,
     buildVirtualDataSourceRowValues,
     resolveStepDataSourceRowsForParent,
     sourceFirstPresentationEntries,

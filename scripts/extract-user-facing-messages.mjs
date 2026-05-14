@@ -17,15 +17,15 @@ const AREA_BY_FORM_KEY = new Map([
   ['Config: Recipes', 'recipe mgmt'],
   ['Config: Ingredients Management', 'ingredient mgmt'],
   ['Config: Distributor', 'customer mgmt'],
-  ['Config: Leftover Inventory', 'ingredient mgmt'],
-  ['Config: Inventory Reservation Ledger', 'ingredient mgmt']
+  ['Config: Leftover Bank', 'ingredient mgmt'],
+  ['Config: Leftover Utilisation', 'ingredient mgmt']
 ]);
 
 const AREA_BY_FILE = [
   [/meal[_-]?production|mealProduction|mp\./i, 'meal production'],
   [/checklist|storage|cleaning|hygiene|checks/i, 'storage & cleaning'],
   [/recipe|recipes/i, 'recipe mgmt'],
-  [/ingredient|leftover|inventory|reservation/i, 'ingredient mgmt'],
+  [/ingredient|leftover|bank|utilisation/i, 'ingredient mgmt'],
   [/distributor|customer/i, 'customer mgmt'],
   [/analytics|report/i, 'reports'],
   [/landing/i, 'landing page']
@@ -1018,7 +1018,7 @@ function isDialogOrTopActionRow(row) {
     return true;
   }
 
-  if (/^(dedup|record|inventory\.reservation|navigation\.wait|autosavenotice|fieldchangedialog)\b/.test(messageKey)) {
+  if (/^(dedup|record|bank\.utilisation|navigation\.wait|autosavenotice|fieldchangedialog)\b/.test(messageKey)) {
     return true;
   }
 
