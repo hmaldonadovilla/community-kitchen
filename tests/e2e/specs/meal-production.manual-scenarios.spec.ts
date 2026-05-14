@@ -13,6 +13,7 @@ import {
   cleanupMealProductionRecordBestEffort,
   confirmDialog,
   createMealProductionDraftRecord,
+  dismissAutosaveReminderIfPresent,
   expectDialogCopy,
   expectMealTypesHidden,
   expectMealTypesVisible,
@@ -114,15 +115,16 @@ test.describe('Meal Production manual script scenarios', () => {
     try {
       const dateInput = frame.locator('input[aria-label="Date"]').first();
       await expect(frame.getByText('Date is required.')).toBeVisible();
+      await dismissAutosaveReminderIfPresent(frame);
       await dateInput.click();
       await dateInput.fill(pastDate);
       await dateInput.dispatchEvent('change');
-      await expect(frame.getByText('Dates in the past are not allowed. Please select today or a future date.')).toBeVisible();
+      await expect(frame.getByText('Past dates are not allowed. Select today or a future date.')).toBeVisible();
       await setProductionDate(frame, futureProductionDate);
       await expect(dateInput).toHaveValue(futureProductionDate);
       await setProductionDate(frame, serviceChangeDate);
 
-      const cookSelect = frame.locator('select').nth(1);
+      const cookSelect = frame.locator('select').first();
       await cookSelect.selectOption({ index: 1 });
       await expect(cookSelect).toHaveValue('');
 

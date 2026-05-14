@@ -133,7 +133,7 @@ describe('staging integrity dialogs and list legend config', () => {
             isInPast: true
           },
           message: {
-            en: 'Dates in the past are not allowed. Please select today or a future date.'
+            en: 'Past dates are not allowed. Select today or a future date.'
           }
         }
       ]);
@@ -187,6 +187,18 @@ describe('staging integrity dialogs and list legend config', () => {
           { fieldId: 'PREP_TYPE', equals: ['Cook'] },
           { fieldId: 'MP_TO_COOK', greaterThan: 0 }
         ]
+      });
+      const ingredientQty = (meals?.lineItemConfig?.subGroups || [])
+        .find((entry: any) => entry?.id === 'MP_TYPE_LI')
+        ?.subGroups?.find((entry: any) => entry?.id === 'MP_INGREDIENTS_LI')
+        ?.fields?.find((field: any) => field?.id === 'QTY');
+      expect(ingredientQty?.validationRules?.[0]?.then).toEqual({
+        fieldId: 'QTY',
+        required: true,
+        greaterThan: 0
+      });
+      expect(ingredientQty?.validationRules?.[0]?.message).toEqual({
+        en: 'Enter a quantity > 0'
       });
       expect(recipe?.changeDialog?.when).toEqual({
         any: [

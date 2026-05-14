@@ -156,10 +156,10 @@
       "en": ""
     },
     "waitSaving": {
-      "en": "Do not leave this page while your data is being saved"
+      "en": "Do not leave this page while your changes are being saved"
     },
     "waitForms": {
-      "en": "Please wait while we open the forms page..."
+      "en": "Please wait while we open the app. This may take a few seconds."
     },
     "waitCopyRecord": {
       "en": "Do not leave this page while we create your copied record."

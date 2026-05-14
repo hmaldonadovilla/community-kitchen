@@ -37,7 +37,7 @@ export const useAppHeaderNavigation = (args: {
     onDiagnostic?.('ui.header.back.navigate', { targetUrl });
     const seq = navigateHomeBusy.lock({
       title: tSystem('navigation.waitTitle', language, 'Please wait'),
-      message: tSystem('navigation.waitForms', language, 'Please wait while we open the forms page...')
+      message: tSystem('navigation.waitForms', language, 'Please wait while we open the app. This may take a few seconds.')
     });
     globalThis.requestAnimationFrame?.(() => {
       globalThis.requestAnimationFrame?.(() => {

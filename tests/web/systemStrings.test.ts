@@ -20,6 +20,6 @@ describe('systemStrings', () => {
 
   test('optional system strings preserve explicitly blank values', () => {
     expect(tSystemOptional('navigation.waitSavingTitle', 'EN', 'Saving…')).toBe('');
-    expect(tSystem('navigation.waitSaving', 'EN', '')).toBe('Do not leave this page while your data is being saved');
+    expect(tSystem('navigation.waitSaving', 'EN', '')).toBe('Do not leave this page while your changes are being saved');
   });
 });

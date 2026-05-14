@@ -1995,6 +1995,14 @@ export interface ValidationRule {
     required?: boolean;
     min?: number | string;
     /**
+     * Optional numeric constraint: target numeric value must be greater than the configured value.
+     *
+     * Notes:
+     * - Empty values are skipped unless `required` is also set.
+     * - Use this instead of `min` when zero must be rejected while positive decimals remain valid.
+     */
+    greaterThan?: number | string;
+    /**
      * Optional cross-field numeric constraint: interpret the target numeric value as needing to be >=
      * the numeric value of another field.
      *

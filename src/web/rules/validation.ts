@@ -162,6 +162,25 @@ export function checkRule(
     );
   }
 
+  if (thenCfg?.greaterThan !== undefined) {
+    const n = toFiniteNumber(thenCfg.greaterThan);
+    if (n !== null && ((numVals.length && numVals.some(v => v <= n)) || hasMinusOnly)) {
+      return (
+        (customMessage
+          ? formatValidationMessage(customMessage, {
+              GREATER_THAN: thenCfg.greaterThan,
+              MIN: thenCfg.greaterThan
+            })
+          : '') ||
+        resolveLocalizedString(
+          withLimitMessage('Value must be >', thenCfg.greaterThan),
+          language,
+          'Value must be > ' + thenCfg.greaterThan + '.'
+        )
+      );
+    }
+  }
+
   const maxSpec = resolveMaxSpec();
   if (maxSpec && numVals.length && numVals.some(v => v > maxSpec.limit)) {
     if (maxSpec.source && maxSpec.source.startsWith('maxFieldId:')) {

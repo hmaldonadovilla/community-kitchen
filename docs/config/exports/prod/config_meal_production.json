@@ -3445,7 +3445,7 @@
                       "required": true
                     },
                     "message": {
-                      "en": "Please select a recipe",
+                      "en": "Select a recipe",
                       "fr": "Veuillez sélectionner une recette",
                       "nl": "Veelijks selecteren een recept"
                     }
@@ -3760,10 +3760,11 @@
                         },
                         "then": {
                           "fieldId": "QTY",
-                          "required": true
+                          "required": true,
+                          "greaterThan": 0
                         },
                         "message": {
-                          "en": "Please enter the quantity",
+                          "en": "Enter a quantity > 0",
                           "fr": "Veuillez entrer la quantité",
                           "nl": "Voer de hoeveelheid in"
                         }
@@ -3802,7 +3803,7 @@
                           "required": true
                         },
                         "message": {
-                          "en": "Please select a unit",
+                          "en": "Select a unit",
                           "fr": "Veuillez sélectionner une unité",
                           "nl": "Veelijks selecteren een eenheid"
                         }
@@ -3854,29 +3855,6 @@
                 },
                 "ui": {
                   "mode": "table",
-                  "rowDisclaimer": {
-                    "cases": [
-                      {
-                        "text": {
-                          "en": "Please enter the `Quantity` based on the ordered number of portions",
-                          "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
-                          "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
-                        },
-                        "when": {
-                          "all": [
-                            {
-                              "fieldId": "__ckRowSource",
-                              "equals": "manual"
-                            },
-                            {
-                              "fieldId": "PREP_TYPE",
-                              "equals": "Cook"
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  },
                   "tableColumns": [
                     "ING",
                     "QTY",
@@ -5894,7 +5872,7 @@
                         "required": true
                       },
                       "message": {
-                        "en": "Please select a recipe",
+                        "en": "Select a recipe",
                         "fr": "Veuillez sélectionner une recette",
                         "nl": "Veelijks selecteren een recept"
                       }
@@ -6209,10 +6187,11 @@
                           },
                           "then": {
                             "fieldId": "QTY",
-                            "required": true
+                            "required": true,
+                            "greaterThan": 0
                           },
                           "message": {
-                            "en": "Please enter the quantity",
+                            "en": "Enter a quantity > 0",
                             "fr": "Veuillez entrer la quantité",
                             "nl": "Voer de hoeveelheid in"
                           }
@@ -6251,7 +6230,7 @@
                             "required": true
                           },
                           "message": {
-                            "en": "Please select a unit",
+                            "en": "Select a unit",
                             "fr": "Veuillez sélectionner une unité",
                             "nl": "Veelijks selecteren een eenheid"
                           }
@@ -6303,29 +6282,6 @@
                   },
                   "ui": {
                     "mode": "table",
-                    "rowDisclaimer": {
-                      "cases": [
-                        {
-                          "text": {
-                            "en": "Please enter the `Quantity` based on the ordered number of portions",
-                            "fr": "Veuillez entrer la `Quantité` en fonction du nombre de portions demandé",
-                            "nl": "Voer de `Aantal` in op basis van het gevraagde aantal porties"
-                          },
-                          "when": {
-                            "all": [
-                              {
-                                "fieldId": "__ckRowSource",
-                                "equals": "manual"
-                              },
-                              {
-                                "fieldId": "PREP_TYPE",
-                                "equals": "Cook"
-                              }
-                            ]
-                          }
-                        }
-                      ]
-                    },
                     "tableColumns": [
                       "ING",
                       "QTY",

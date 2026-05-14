@@ -7307,6 +7307,11 @@ components:
                 - type: number
                 - type: string
               description: Enforce target numeric value >= min.
+            greaterThan:
+              oneOf:
+                - type: number
+                - type: string
+              description: Enforce target numeric value > greaterThan. Use when zero must be rejected while positive decimals remain valid.
             minFieldId:
               type: string
               description: Enforce target numeric value >= the numeric value of another field (skips if the referenced field is empty/non-numeric). If both `min` and `minFieldId` are set, `min` wins.

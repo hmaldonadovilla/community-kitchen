@@ -248,7 +248,7 @@ export const AppOverlays: React.FC<{
     <BlockingOverlay
       open={submitPreparationBusy.state.open && !submitting}
       title={submitPreparationBusy.state.title}
-      message={submitPreparationBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your data is being saved')}
+      message={submitPreparationBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your changes are being saved')}
       zIndex={12039}
     />
 
@@ -262,14 +262,14 @@ export const AppOverlays: React.FC<{
     <BlockingOverlay
       open={destructiveChangeBusy.state.open}
       title={destructiveChangeBusy.state.title}
-      message={destructiveChangeBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your data is being saved')}
+      message={destructiveChangeBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your changes are being saved')}
       zIndex={12045}
     />
 
     <BlockingOverlay
       open={guidedMilestoneBusy.state.open}
       title={guidedMilestoneBusy.state.title}
-      message={guidedMilestoneBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your data is being saved')}
+      message={guidedMilestoneBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your changes are being saved')}
       zIndex={12046}
     />
 
@@ -333,7 +333,7 @@ export const AppOverlays: React.FC<{
     <BlockingOverlay
       open={navigateHomeBusy.state.open}
       title={navigateHomeBusy.state.title}
-      message={navigateHomeBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your data is being saved')}
+      message={navigateHomeBusy.state.message || tSystem('navigation.waitSaving', language, 'Do not leave this page while your changes are being saved')}
       zIndex={12050}
     />
 

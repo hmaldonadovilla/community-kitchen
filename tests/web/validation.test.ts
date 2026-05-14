@@ -11,6 +11,11 @@ describe('validation rules', () => {
     expect(checkRule('5', { fieldId: 'x', max: 2 }, 'EN', undefined)).toContain('<=');
   });
 
+  it('validates strict greater-than rules', () => {
+    expect(checkRule('0', { fieldId: 'x', greaterThan: 0 } as any, 'EN', undefined)).toContain('>');
+    expect(checkRule('0.5', { fieldId: 'x', greaterThan: 0 } as any, 'EN', undefined)).toBe('');
+  });
+
   it('does not apply min/max to empty values when not required', () => {
     expect(checkRule('', { fieldId: 'x', min: 2 }, 'EN', undefined)).toBe('');
     expect(checkRule('', { fieldId: 'x', max: 2 }, 'EN', undefined)).toBe('');

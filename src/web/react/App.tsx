@@ -869,7 +869,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (!pending) return;
       const lockSeq = destructiveChangeBusy.lock({
         title: tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
-        message: tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your data is being saved'),
+        message: tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your changes are being saved'),
         kind: 'fieldChangeDialog',
         diagnosticMeta: { fieldPath: pending.fieldPath, fieldId: pending.fieldId }
       });
@@ -8544,7 +8544,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               languageRef.current,
               'Please wait while we finish the previous action...'
             )
-          : tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your data is being saved'),
+          : tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your changes are being saved'),
         kind: 'navigateHome',
         diagnosticMeta: {
           trigger,
@@ -8578,7 +8578,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (!uploadWait.ok) {
           const message = (
             uploadWait.message ||
-            tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your data is being saved')
+            tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your changes are being saved')
           ).toString();
           setStatus(message);
           setStatusLevel('error');
@@ -8700,7 +8700,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           }) || '';
           const busySeq = navigateHomeBusy.lock({
             title: tSystemOptional('navigation.waitSavingTitle', languageRef.current, ''),
-            message: tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your data is being saved'),
+            message: tSystem('navigation.waitSaving', languageRef.current, 'Do not leave this page while your changes are being saved'),
             kind: 'dedupIncompleteHome',
             diagnosticMeta: {
               criteria: homeLeaveCriteria,
@@ -11132,7 +11132,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           message: tSystem(
             'navigation.waitSaving',
             languageRef.current,
-            'Do not leave this page while your data is being saved'
+            'Do not leave this page while your changes are being saved'
           ),
           kind: 'guidedStepRecordId',
           diagnosticMeta: {
@@ -11365,13 +11365,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             tSystem(
               'navigation.waitSaving',
               languageRef.current,
-              'Do not leave this page while your data is being saved'
+              'Do not leave this page while your changes are being saved'
             )
           ) ||
           tSystem(
             'navigation.waitSaving',
             languageRef.current,
-            'Do not leave this page while your data is being saved'
+            'Do not leave this page while your changes are being saved'
           ),
         kind: 'guidedStepMilestone',
         diagnosticMeta: { stepId: args.stepId, nextStepId: args.nextStepId || null }
@@ -12628,7 +12628,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       return tSystem(
         'navigation.waitSaving',
         languageRef.current,
-        'Do not leave this page while your data is being saved'
+        'Do not leave this page while your changes are being saved'
       );
     };
     const lockSubmitPreparationIfNeeded = (args: {
