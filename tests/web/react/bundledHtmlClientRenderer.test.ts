@@ -355,6 +355,118 @@ describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {
     expect(fetchDataSource).toHaveBeenCalledTimes(2);
   });
 
+  it('renders mp.ing_recipe.html locally from a filtered overlay payload', async () => {
+    const fetchDataSource = jest.fn(async () => ({
+      items: [
+        {
+          QFTD5RD2EM: 'Bulgur & vegetable sauce',
+          REC_INST: 'Simmer gently.'
+        }
+      ]
+    }));
+    const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
+
+    const definition: any = {
+      title: 'Meal Production',
+      destinationTab: 'MP',
+      languages: ['EN'],
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          label: { en: 'Meals' },
+          lineItemConfig: {
+            fields: [{ id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type' }],
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                fields: [
+                  { id: 'PREP_TYPE', type: 'TEXT', labelEn: 'Prep type' },
+                  { id: 'PREP_QTY', type: 'NUMBER', labelEn: 'Prep quantity' },
+                  {
+                    id: 'RECIPE',
+                    type: 'CHOICE',
+                    labelEn: 'Recipe',
+                    dataSource: {
+                      id: 'Recipes Data',
+                      mapping: { QFTD5RD2EM: 'value' },
+                      projection: ['QFTD5RD2EM', 'REC_INST']
+                    }
+                  }
+                ],
+                subGroups: [
+                  {
+                    id: 'MP_INGREDIENTS_LI',
+                    fields: [
+                      { id: 'ING', type: 'TEXT', labelEn: 'Ingredient' },
+                      { id: 'QTY', type: 'NUMBER', labelEn: 'Quantity' },
+                      { id: 'UNIT', type: 'TEXT', labelEn: 'Unit' },
+                      { id: 'CAT', type: 'TEXT', labelEn: 'Category' },
+                      { id: 'ALLERGEN', type: 'TEXT', labelEn: 'Allergen' }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+    const payload: any = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-1',
+      values: {
+        MP_MEALS_REQUEST: [
+          {
+            id: 'meal-1',
+            MEAL_TYPE: 'Vegetarian',
+            MP_TYPE_LI: [
+              {
+                id: 'prep-1',
+                PREP_TYPE: 'Cook',
+                PREP_QTY: 2,
+                RECIPE: 'Bulgur & vegetable sauce',
+                MP_INGREDIENTS_LI: [
+                  {
+                    id: 'ing-1',
+                    ING: 'Bulgur',
+                    QTY: 2,
+                    UNIT: 'kg',
+                    CAT: 'Dry carbohydrates',
+                    ALLERGEN: 'Gluten'
+                  },
+                  {
+                    id: 'ing-2',
+                    ING: 'Salt',
+                    QTY: 1,
+                    UNIT: 'Tbsp',
+                    CAT: 'Herbs - spices - condiments',
+                    ALLERGEN: 'None'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const res = await renderBundledHtmlTemplateClient({
+      definition,
+      payload,
+      templateIdMap: { EN: 'bundle:mp.ing_recipe.html' },
+      fetchDataSource
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Bulgur');
+    expect(res.html).toContain('2 kg');
+    expect(res.html).toContain('Salt');
+    expect(res.html).toContain('Simmer gently.');
+    expect(fetchDataSource).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves template-authored <script> blocks for bundled templates', async () => {
     const { renderBundledHtmlTemplateClient } = require('../../../src/web/react/app/bundledHtmlClientRenderer') as typeof import('../../../src/web/react/app/bundledHtmlClientRenderer');
 

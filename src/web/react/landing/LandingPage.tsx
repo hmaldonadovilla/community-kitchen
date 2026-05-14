@@ -14,7 +14,8 @@ import {
   isTruthyParam,
   LandingAppItem,
   resolveLandingCatalogItems,
-  resolveLandingLogoUrl
+  resolveLandingLogoUrl,
+  sortLandingAppItemsAlphabetically
 } from './model';
 
 const LANDING_PAGE_STYLES = `
@@ -751,7 +752,11 @@ const LandingPage: React.FC = () => {
     [adminEnabled, analyticsLandingItem, catalogItems]
   );
   const visibleLandingApps = useMemo(
-    () => [...landingLayout.primaryApps, ...(adminEnabled ? landingLayout.adminApps : [])],
+    () =>
+      sortLandingAppItemsAlphabetically([
+        ...landingLayout.primaryApps,
+        ...(adminEnabled ? landingLayout.adminApps : [])
+      ]),
     [adminEnabled, landingLayout.adminApps, landingLayout.primaryApps]
   );
 

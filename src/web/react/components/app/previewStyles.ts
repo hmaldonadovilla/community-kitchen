@@ -42,6 +42,7 @@ export const MARKDOWN_PREVIEW_STYLES = `
 export const HTML_PREVIEW_STYLES = `
   .ck-html-preview {
     padding: 16px;
+    padding-bottom: 150px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;

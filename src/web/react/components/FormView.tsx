@@ -124,6 +124,7 @@ import { applyLineItemGroupOverride, serializeLineItemTree } from '../app/lineIt
 import { isIngredientsManagementForm } from '../app/ingredientsCreateRules';
 import { runSelectionEffectsForAncestors } from '../app/runSelectionEffectsForAncestors';
 import { resolveTemplateIdForRecord } from '../app/templateId';
+import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../app/bundledHtmlClientRenderer';
 import {
   computeParagraphDisclaimerUpdates as computeParagraphDisclaimerUpdatesAction,
 } from '../app/paragraphDisclaimer';
@@ -4279,8 +4280,9 @@ const FormView: React.FC<FormViewProps> = ({
       setOverlayDetailHtmlError(tSystem('overlay.detail.templateMissing', language, 'Template not configured.'));
       return;
     }
+    const renderBundledClient = isBundledHtmlTemplateId(resolvedTemplateId);
 
-    if (selectionEffectAsyncPendingCount > 0) {
+    if (selectionEffectAsyncPendingCount > 0 && !renderBundledClient) {
       clearPendingOverlayDetailRender();
       overlayDetailRenderSeqRef.current += 1;
       overlayDetailRenderSignatureRef.current = '';
@@ -4293,6 +4295,14 @@ const FormView: React.FC<FormViewProps> = ({
         templateId: resolvedTemplateId
       });
       return;
+    }
+    if (selectionEffectAsyncPendingCount > 0 && renderBundledClient) {
+      onDiagnostic?.('lineItems.overlayDetail.view.bundle.renderWhileSelectionEffectsPending', {
+        pendingCount: selectionEffectAsyncPendingCount,
+        groupId: context.groupId,
+        rowId: overlayDetailSelection.rowId,
+        templateId: resolvedTemplateId
+      });
     }
 
     let renderSignature = '';
@@ -4327,7 +4337,7 @@ const FormView: React.FC<FormViewProps> = ({
       }
     })();
     const renderSeq = ++overlayDetailRenderSeqRef.current;
-    const cachedRender = peekInlineHtmlTemplateCache(payload, templateIdMap as any, renderKey);
+    const cachedRender = renderBundledClient ? null : peekInlineHtmlTemplateCache(payload, templateIdMap as any, renderKey);
     if (cachedRender?.success && cachedRender?.html) {
       setOverlayDetailHtml(cachedRender.html);
       setOverlayDetailHtmlError('');
@@ -4338,43 +4348,55 @@ const FormView: React.FC<FormViewProps> = ({
     setOverlayDetailHtmlError('');
     overlayDetailRenderTimerRef.current = globalThis.setTimeout(() => {
       overlayDetailRenderTimerRef.current = null;
-      renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey)
-      .then(res => {
-        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
-        if (res?.success && res?.html) {
-          setOverlayDetailHtml(res.html);
-          setOverlayDetailHtmlError('');
-          onDiagnostic?.('lineItems.overlayDetail.view.rendered', {
+      const renderPromise = renderBundledClient
+        ? renderBundledHtmlTemplateClient({
+            definition,
+            payload,
+            templateIdMap: templateIdMap as any,
+            buttonId: renderKey,
+            onDiagnostic
+          })
+        : renderInlineHtmlTemplateApi(payload, templateIdMap as any, renderKey);
+      renderPromise
+        .then(res => {
+          if (renderSeq !== overlayDetailRenderSeqRef.current) return;
+          if (res?.success && res?.html) {
+            setOverlayDetailHtml(res.html);
+            setOverlayDetailHtmlError('');
+            onDiagnostic?.(
+              renderBundledClient ? 'lineItems.overlayDetail.view.bundle.rendered' : 'lineItems.overlayDetail.view.rendered',
+              {
+                groupId: context.groupId,
+                rowId: overlayDetailSelection.rowId,
+                templateId: resolvedTemplateId
+              }
+            );
+            return;
+          }
+          setOverlayDetailHtml('');
+          const message = (res?.message || tSystem('overlay.detail.templateFailed', language, 'Unable to render template.')).toString();
+          setOverlayDetailHtmlError(message);
+          onDiagnostic?.('lineItems.overlayDetail.view.failed', {
             groupId: context.groupId,
             rowId: overlayDetailSelection.rowId,
-            templateId: resolvedTemplateId
+            message
           });
-          return;
-        }
-        setOverlayDetailHtml('');
-        const message = (res?.message || tSystem('overlay.detail.templateFailed', language, 'Unable to render template.')).toString();
-        setOverlayDetailHtmlError(message);
-        onDiagnostic?.('lineItems.overlayDetail.view.failed', {
-          groupId: context.groupId,
-          rowId: overlayDetailSelection.rowId,
-          message
+        })
+        .catch(err => {
+          if (renderSeq !== overlayDetailRenderSeqRef.current) return;
+          setOverlayDetailHtml('');
+          const message = (err?.message || tSystem('overlay.detail.templateFailed', language, 'Unable to render template.')).toString();
+          setOverlayDetailHtmlError(message);
+          onDiagnostic?.('lineItems.overlayDetail.view.failed', {
+            groupId: context.groupId,
+            rowId: overlayDetailSelection.rowId,
+            message
+          });
+        })
+        .finally(() => {
+          if (renderSeq !== overlayDetailRenderSeqRef.current) return;
+          setOverlayDetailHtmlLoading(false);
         });
-      })
-      .catch(err => {
-        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
-        setOverlayDetailHtml('');
-        const message = (err?.message || tSystem('overlay.detail.templateFailed', language, 'Unable to render template.')).toString();
-        setOverlayDetailHtmlError(message);
-        onDiagnostic?.('lineItems.overlayDetail.view.failed', {
-          groupId: context.groupId,
-          rowId: overlayDetailSelection.rowId,
-          message
-        });
-      })
-      .finally(() => {
-        if (renderSeq !== overlayDetailRenderSeqRef.current) return;
-        setOverlayDetailHtmlLoading(false);
-      });
     }, OVERLAY_DETAIL_INLINE_RENDER_DEBOUNCE_MS);
   }, [
     definition,

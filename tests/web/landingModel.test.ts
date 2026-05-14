@@ -8,7 +8,8 @@ import {
   pickLandingLogoUrlByFormKey,
   resolveLandingCatalogItems,
   resolveLandingLogoUrl,
-  resolveLandingHeaderTitle
+  resolveLandingHeaderTitle,
+  sortLandingAppItemsAlphabetically
 } from '../../src/web/react/landing/model';
 import type { LandingPageConfig } from '../../src/config/landingPageTypes';
 
@@ -485,5 +486,47 @@ describe('landing model helpers', () => {
       ],
       overflowAdminApps: []
     });
+  });
+
+  test('sortLandingAppItemsAlphabetically orders visible landing cards by display title', () => {
+    const layout = appendLandingSpecialItems(
+      buildLandingCatalogLayout(
+        [
+          { formKey: 'Config: Checklist', title: 'Checklist', targetUrl: 'https://example.test/checks' },
+          { formKey: 'Config: Distributor', title: 'Distributors', targetUrl: 'https://example.test/distributors' },
+          { formKey: 'Config: Meal Production', title: 'Meal Production', targetUrl: 'https://example.test/meal' },
+          { formKey: 'Config: Ingredients Management', title: 'Ingredients Management', targetUrl: 'https://example.test/ingredients' },
+          { formKey: 'Config: Recipes', title: 'Recipe Management', targetUrl: 'https://example.test/recipes' }
+        ] as any,
+        true,
+        landingConfigFixture
+      ),
+      true,
+      [
+        {
+          id: '__analytics__',
+          section: 'admin',
+          order: 15,
+          illustration: 'analytics',
+          targetUrl: 'https://example.test/analytics',
+          title: 'Reports',
+          description: 'Send operational reports by email.'
+        }
+      ]
+    );
+
+    expect(
+      sortLandingAppItemsAlphabetically([
+        ...layout.primaryApps,
+        ...layout.adminApps
+      ]).map(item => item.displayTitle)
+    ).toEqual([
+      'Customer Management',
+      'Ingredient Management',
+      'Meal Production',
+      'Recipe Management',
+      'Reports',
+      'Storage & cleaning checks'
+    ]);
   });
 });
