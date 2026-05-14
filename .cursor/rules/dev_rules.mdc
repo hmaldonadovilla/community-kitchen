@@ -33,7 +33,9 @@ description: Development Rules
 
 ## Deployment flow (staging only, mandatory)
 
-- Only deploy using `npm run deploy:apps-script`.
+- Deployments should be primarily done with `npm run deploy:firebase-web-app`.
+- `npm run deploy:firebase-web-app` is the normal staging web app deploy path because it deploys Firebase-hosted web assets first and then updates the Apps Script web app shell.
+- Use `npm run deploy:apps-script` only when the human developer explicitly asks for an Apps Script-only deploy, or when forcing an embedded rollback with `CK_WEB_ASSET_MODE_OVERRIDE=embedded`.
 - Do not deploy by manually copy/pasting `dist/Code.js` in the Apps Script editor.
 - Do not run `clasp push` or `clasp deploy` directly.
 - Do not create new web app deployments for this project.
@@ -42,9 +44,9 @@ description: Development Rules
 - The human developer owns `CLASP_DEPLOYMENT_ID` and `CLASP_TARGET_WEB_APP_URL` values in `.env.deploy.staging`.
 - Honor `.env.deploy.staging` as the source of truth for deployment id and target web URL.
 - Do not override, regenerate, or replace deployment id / web URL values unless the human developer explicitly asks for it.
-- Treat lint as part of CI/CD for staging deploys. `npm run deploy:apps-script` must run the lint gate before tests/build/deploy.
+- Treat lint as part of CI/CD for staging deploys. `npm run deploy:firebase-web-app` and its underlying deploy scripts must run the lint gate before tests/build/deploy.
 - The deploy-time lint gate is `npm run lint:changed`, not a raw full-repo eslint run, because the repo currently uses a baseline commit to allow historical warnings while blocking new ones.
-- Before deploying, run `npm run build` (or rely on the build step inside `npm run deploy:apps-script`).
+- Before deploying, run `npm run build` (or rely on the build steps inside `npm run deploy:firebase-web-app`).
 - After deploying, refresh the page before validating behavior.
 - After deployment changes, run validation tests using Playwright.
 

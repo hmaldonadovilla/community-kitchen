@@ -30,6 +30,7 @@ import {
   PresetValue,
   SelectionEffect,
   UpdateRecordDependencyGuardConfig,
+  UpdateRecordDependencyMutation,
   ValidationRule,
   VisibilityCondition,
   WhenClause,
@@ -1693,6 +1694,10 @@ export class ConfigSheet {
     const dialog = dialogRaw && typeof dialogRaw === 'object' ? dialogRaw : undefined;
     if (!dialog) return undefined;
 
+    const modeRaw = raw.mode ?? raw.behavior ?? raw.actionMode ?? raw.dependencyMode;
+    const modeText = modeRaw !== undefined && modeRaw !== null ? modeRaw.toString().trim().toLowerCase() : '';
+    const mode = modeText === 'block' || modeText === 'blocking' ? 'block' : 'confirm';
+
     const mutationsRaw = Array.isArray(raw.mutations)
       ? raw.mutations
       : Array.isArray(raw.apply)
@@ -1702,18 +1707,19 @@ export class ConfigSheet {
           : [];
     const mutations = mutationsRaw
       .map((entry: any) => this.normalizeUpdateRecordDependencyMutation(entry))
-      .filter(Boolean) as UpdateRecordDependencyGuardConfig['mutations'];
-    if (!mutations.length) return undefined;
+      .filter(Boolean) as UpdateRecordDependencyMutation[];
+    if (!mutations?.length && mode !== 'block') return undefined;
 
     return {
       targetFormKey,
+      ...(mode !== 'confirm' ? { mode } : {}),
       when,
       dialog,
       mutations
     };
   }
 
-  private static normalizeUpdateRecordDependencyMutation(raw: any): UpdateRecordDependencyGuardConfig['mutations'][number] | undefined {
+  private static normalizeUpdateRecordDependencyMutation(raw: any): UpdateRecordDependencyMutation | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const typeRaw = raw.type ?? raw.kind ?? '';
     const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';

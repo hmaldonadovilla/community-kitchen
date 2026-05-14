@@ -5197,10 +5197,10 @@
                 ]
               },
               "title": {
-                "en": "Change ordered portions?"
+                "en": "Changing ordered portions to 0?"
               },
               "message": {
-                "en": "Changing ordered portions will delete all data and photos captured in later steps. This cannot be undone."
+                "en": "Reducing ordered portions to 0 will delete corresponding dietary category data. This cannot be undone."
               },
               "confirmLabel": {
                 "en": "Yes, delete subsequent data"
@@ -8654,10 +8654,10 @@
                   ]
                 },
                 "title": {
-                  "en": "Change ordered portions?"
+                  "en": "Changing ordered portions to 0?"
                 },
                 "message": {
-                  "en": "Changing ordered portions will delete all data and photos captured in later steps. This cannot be undone."
+                  "en": "Reducing ordered portions to 0 will delete corresponding dietary category data. This cannot be undone."
                 },
                 "confirmLabel": {
                   "en": "Yes, delete subsequent data"

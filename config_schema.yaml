@@ -632,7 +632,15 @@ components:
       properties:
         targetFormKey:
           type: string
-          description: Target form whose saved records should be checked and updated.
+          description: Target form whose saved records should be checked.
+        mode:
+          type: string
+          enum: [confirm, block]
+          default: confirm
+          description: |
+            Behavior when impacted target records are found.
+            - `confirm`: show the dialog and apply configured target mutations when the user confirms.
+            - `block`: show the dialog and prevent the current record update from being saved.
         when:
           $ref: '#/components/schemas/WhenClause'
           description: |
@@ -645,20 +653,64 @@ components:
             - `{{source.createdAt}}`
             - `{{source.updatedAt}}`
         dialog:
-          $ref: '#/components/schemas/ButtonConfirmConfig'
+          $ref: '#/components/schemas/UpdateRecordDependencyDialogConfig'
           description: |
-            Confirmation dialog shown only when impacted target records are found.
+            Dialog shown only when impacted target records are found.
 
             Supported placeholders in localized strings:
             - `{{count}}`
             - `{{targetFormKey}}`
+            - `{{recordsList}}` when `dialog.recordList` is configured
             - `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, `{{source.updatedAt}}`
         mutations:
           type: array
           items:
             $ref: '#/components/schemas/UpdateRecordDependencyMutation'
-          description: Mutations to apply to each impacted target record when the user confirms.
-      required: [targetFormKey, when, dialog, mutations]
+          description: |
+            Mutations to apply to each impacted target record when the user confirms. Optional for `mode: block`.
+      required: [targetFormKey, when, dialog]
+
+    UpdateRecordDependencyDialogConfig:
+      allOf:
+        - $ref: '#/components/schemas/ButtonConfirmConfig'
+        - type: object
+          properties:
+            recordList:
+              $ref: '#/components/schemas/UpdateRecordDependencyRecordListConfig'
+              description: Optional formatter for listing impacted records via the `{{recordsList}}` placeholder.
+            showCancel:
+              type: boolean
+              description: Set false for single-action informational or blocking dialogs.
+            showConfirm:
+              type: boolean
+              description: Set false to hide the confirm button.
+            primaryAction:
+              type: string
+              enum: [confirm, cancel]
+              description: Which dialog action receives primary styling and autofocus.
+            dismissOnBackdrop:
+              type: boolean
+              description: Whether clicking outside or pressing Escape may close the dialog.
+            showCloseButton:
+              type: boolean
+              description: Whether to show the dialog close button.
+
+    UpdateRecordDependencyRecordListConfig:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Template for each impacted target record. Supports `{{target.FIELD_ID}}`, `{{target.id}}`, `{{target.status}}`,
+            source placeholders, `{{count}}`, and `{{targetFormKey}}`.
+        limit:
+          type: integer
+          minimum: 1
+          description: Optional maximum number of impacted target records to include in the dialog list.
+        emptyText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional fallback when no target records are impacted.
+      required: [template]
 
     UpdateRecordDependencyMutation:
       oneOf:

@@ -4515,7 +4515,19 @@ export class WebFormService {
     success: boolean;
     impactedCount?: number;
     targetFormKey?: string;
-    dialog?: { title: string; message: string; confirmLabel: string; cancelLabel: string };
+    mode?: 'confirm' | 'block';
+    blocked?: boolean;
+    dialog?: {
+      title: string;
+      message: string;
+      confirmLabel: string;
+      cancelLabel: string;
+      showCancel?: boolean;
+      showConfirm?: boolean;
+      primaryAction?: 'confirm' | 'cancel';
+      dismissOnBackdrop?: boolean;
+      showCloseButton?: boolean;
+    };
     message?: string;
   } {
     const formKey = (formObject.formKey || (formObject as any).form || '').toString();
@@ -4547,6 +4559,8 @@ export class WebFormService {
       formKey,
       buttonId: parsed.id || buttonId,
       impactedCount: preview.impactedCount,
+      mode: preview.mode,
+      blocked: preview.blocked,
       targetFormKey: preview.targetFormKey
     });
 
@@ -4554,6 +4568,8 @@ export class WebFormService {
       success: true,
       impactedCount: preview.impactedCount,
       targetFormKey: preview.targetFormKey,
+      mode: preview.mode,
+      blocked: preview.blocked,
       dialog: preview.dialog
     };
   }
@@ -4598,6 +4614,26 @@ export class WebFormService {
           targetFormKey: preview.targetFormKey,
           impactedCount: 0,
           updatedCount: 0
+        }
+      };
+    }
+
+    if (preview.blocked) {
+      debugLog('updateRecordDependencies.apply.blocked', {
+        formKey,
+        buttonId: parsed.id || buttonId,
+        targetFormKey: preview.targetFormKey,
+        impactedCount: preview.impactedCount
+      });
+      return {
+        success: false,
+        message: preview.dialog.message || 'Update is blocked by dependent records.',
+        meta: {},
+        dependency: {
+          targetFormKey: preview.targetFormKey,
+          impactedCount: preview.impactedCount,
+          updatedCount: 0,
+          blocked: true
         }
       };
     }

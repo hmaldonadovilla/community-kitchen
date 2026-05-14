@@ -1878,7 +1878,8 @@ describe('Cloud Run API server', () => {
     }
   });
 
-  test('previews and applies updateRecord dependency guards through Sheets-backed RPC', async () => {
+  test('blocks updateRecord dependency guards through Sheets-backed RPC', async () => {
+    const today = new Date().toISOString().slice(0, 10);
     const recipeQuestions = [
       { id: 'QFTD5RD2EM', type: 'TEXT', qEn: 'Recipe name', status: 'Active' },
       {
@@ -1891,45 +1892,44 @@ describe('Cloud Run API server', () => {
           set: { status: 'Disabled' },
           dependencyGuard: {
             targetFormKey: 'Meal Production',
+            mode: 'block',
             when: {
               all: [
-                { fieldId: 'status', notEquals: 'Closed' },
-                {
-                  any: [
-                    { fieldId: 'MP_PREP_DATE', isToday: true },
-                    { fieldId: 'MP_PREP_DATE', isInFuture: true }
-                  ]
-                },
+                { fieldId: 'status', equals: 'In progress' },
+                { fieldId: 'MP_PREP_DATE', isToday: true },
                 {
                   lineItems: {
                     groupId: 'MP_MEALS_REQUEST',
                     subGroupId: 'MP_TYPE_LI',
-                    when: { fieldId: 'RECIPE', equals: '{{source.QFTD5RD2EM}}' }
+                    when: {
+                      all: [
+                        { fieldId: 'PREP_TYPE', equals: 'Cook' },
+                        { fieldId: 'RECIPE', equals: '{{source.QFTD5RD2EM}}' }
+                      ]
+                    }
                   }
                 }
               ]
             },
             dialog: {
               title: { en: 'Recipe used in meal production' },
-              message: { en: '{{count}} open meal production record(s) will be updated.' },
-              confirmLabel: { en: 'Deactivate and clear' },
-              cancelLabel: { en: 'Cancel' }
-            },
-            mutations: [
-              {
-                type: 'setLineItemValues',
-                groupId: 'MP_MEALS_REQUEST',
-                subGroupPath: ['MP_TYPE_LI'],
-                when: { fieldId: 'RECIPE', equals: '{{source.QFTD5RD2EM}}' },
-                values: { RECIPE: null },
-                clearSubGroups: ['MP_INGREDIENTS_LI']
+              message: {
+                en: 'This recipe is currently used in today’s meal production and cannot be deactivated. Concerned records:\n{{recordsList}}'
+              },
+              confirmLabel: { en: 'OK' },
+              cancelLabel: { en: 'Cancel' },
+              showCancel: false,
+              recordList: {
+                template: { en: '- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}' }
               }
-            ]
+            }
           }
         }
       }
     ];
     const mealQuestions = [
+      { id: 'MP_DISTRIBUTOR', type: 'TEXT', qEn: 'Customer', status: 'Active' },
+      { id: 'MP_SERVICE', type: 'TEXT', qEn: 'Service', status: 'Active' },
       { id: 'MP_PREP_DATE', type: 'DATE', qEn: 'Prep date', status: 'Active' },
       {
         id: 'MP_MEALS_REQUEST',
@@ -1942,6 +1942,7 @@ describe('Cloud Run API server', () => {
             {
               id: 'MP_TYPE_LI',
               fields: [
+                { id: 'PREP_TYPE', type: 'TEXT' },
                 { id: 'RECIPE', type: 'TEXT' },
                 { id: 'PORTIONS', type: 'NUMBER' }
               ],
@@ -1999,12 +2000,14 @@ describe('Cloud Run API server', () => {
         MP_TYPE_LI: [
           {
             __ckRowId: 'type-row-1',
+            PREP_TYPE: 'Cook',
             RECIPE: 'Chili',
             PORTIONS: 10,
             MP_INGREDIENTS_LI: [{ __ckRowId: 'ingredient-row-1', INGREDIENT: 'Beans' }]
           },
           {
             __ckRowId: 'type-row-2',
+            PREP_TYPE: 'Cook',
             RECIPE: 'Soup',
             PORTIONS: 5,
             MP_INGREDIENTS_LI: [{ __ckRowId: 'ingredient-row-2', INGREDIENT: 'Carrots' }]
@@ -2018,9 +2021,42 @@ describe('Cloud Run API server', () => {
         ['EN', 'Chili', 'recipe-1', '2', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'Active']
       ],
       'Meal Production Data': [
-        ['Language', 'Prep date [MP_PREP_DATE]', 'Meals [MP_MEALS_REQUEST]', 'Record ID', 'Data Version', 'Created At', 'Updated At', 'Status'],
-        ['EN', '2999-01-01', JSON.stringify(mealLines), 'meal-1', '4', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'Draft'],
-        ['EN', '2999-01-02', JSON.stringify(mealLines).replace('Chili', 'Lasagna'), 'meal-2', '1', '2026-04-30T08:00:00Z', '2026-04-30T09:00:00Z', 'Closed']
+        [
+          'Language',
+          'Customer [MP_DISTRIBUTOR]',
+          'Service [MP_SERVICE]',
+          'Prep date [MP_PREP_DATE]',
+          'Meals [MP_MEALS_REQUEST]',
+          'Record ID',
+          'Data Version',
+          'Created At',
+          'Updated At',
+          'Status'
+        ],
+        [
+          'EN',
+          'Belliard',
+          'Dinner',
+          today,
+          JSON.stringify(mealLines),
+          'meal-1',
+          '4',
+          '2026-04-30T08:00:00Z',
+          '2026-04-30T09:00:00Z',
+          'In progress'
+        ],
+        [
+          'EN',
+          'Belliard',
+          'Lunch',
+          today,
+          JSON.stringify(mealLines).replace('Chili', 'Lasagna'),
+          'meal-2',
+          '1',
+          '2026-04-30T08:00:00Z',
+          '2026-04-30T09:00:00Z',
+          'Closed'
+        ]
       ]
     };
     const getSheetValues = jest.fn().mockImplementation(async (_spreadsheetId, tabName) => rowsByTab[tabName].map(row => row.slice()));
@@ -2073,53 +2109,42 @@ describe('Cloud Run API server', () => {
         success: true,
         impactedCount: 1,
         targetFormKey: 'Config: Meal Production',
+        mode: 'block',
+        blocked: true,
         dialog: {
           title: 'Recipe used in meal production',
-          message: '1 open meal production record(s) will be updated.',
-          confirmLabel: 'Deactivate and clear',
-          cancelLabel: 'Cancel'
+          message:
+            'This recipe is currently used in today’s meal production and cannot be deactivated. Concerned records:\n- Belliard | Dinner',
+          confirmLabel: 'OK',
+          cancelLabel: 'Cancel',
+          showCancel: false
         }
       });
       expect(applyRes.status).toBe(200);
       expect(applyBody.result).toMatchObject({
-        success: true,
+        success: false,
         dependency: {
           targetFormKey: 'Config: Meal Production',
           impactedCount: 1,
-          updatedCount: 1
-        },
-        meta: {
-          id: 'recipe-1',
-          rowNumber: 2,
-          operation: 'update'
+          updatedCount: 0,
+          blocked: true
         }
       });
 
-      const updatedMealLines = JSON.parse(rowsByTab['Meal Production Data'][1][2]);
+      const updatedMealLines = JSON.parse(rowsByTab['Meal Production Data'][1][4]);
       expect(updatedMealLines[0].MP_TYPE_LI[0]).toMatchObject({
         __ckRowId: 'type-row-1',
-        RECIPE: null,
+        RECIPE: 'Chili',
         PORTIONS: 10,
-        MP_INGREDIENTS_LI: []
+        MP_INGREDIENTS_LI: [{ __ckRowId: 'ingredient-row-1', INGREDIENT: 'Beans' }]
       });
       expect(updatedMealLines[0].MP_TYPE_LI[1]).toMatchObject({
         __ckRowId: 'type-row-2',
         RECIPE: 'Soup',
         MP_INGREDIENTS_LI: [{ __ckRowId: 'ingredient-row-2', INGREDIENT: 'Carrots' }]
       });
-      expect(rowsByTab['Recipes Data'][1][6]).toBe('Disabled');
-      expect(updateRowValues).toHaveBeenCalledWith(
-        'spreadsheet-1',
-        'Meal Production Data',
-        2,
-        expect.arrayContaining(['EN', '2999-01-01', expect.any(String), 'meal-1', 5])
-      );
-      expect(updateRowValues).toHaveBeenCalledWith(
-        'spreadsheet-1',
-        'Recipes Data',
-        2,
-        expect.arrayContaining(['EN', 'Chili', 'recipe-1', 3])
-      );
+      expect(rowsByTab['Recipes Data'][1][6]).toBe('Active');
+      expect(updateRowValues).not.toHaveBeenCalled();
     } finally {
       await closeServer(server);
     }

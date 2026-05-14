@@ -24,10 +24,17 @@ export interface ResolvedUpdateRecordDependencyDialog {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  showCancel?: boolean;
+  showConfirm?: boolean;
+  primaryAction?: 'confirm' | 'cancel';
+  dismissOnBackdrop?: boolean;
+  showCloseButton?: boolean;
 }
 
 export interface UpdateRecordDependencyPreviewResult<TRecord extends WebFormSubmission = WebFormSubmission> {
   targetFormKey: string;
+  mode: 'confirm' | 'block';
+  blocked: boolean;
   impactedCount: number;
   impactedRecords: TRecord[];
   dialog: ResolvedUpdateRecordDependencyDialog;
@@ -248,6 +255,14 @@ const stringifyTemplateValue = (value: any): string => {
       .filter(Boolean)
       .join(', ');
   }
+  if (isPlainObject(value)) {
+    const displayKeys = ['label', 'displayLabel', 'display', 'name', 'value', 'id'];
+    for (const key of displayKeys) {
+      const displayValue = (value as Record<string, any>)[key];
+      if (typeof displayValue === 'string' && displayValue.trim()) return displayValue;
+      if (typeof displayValue === 'number' || typeof displayValue === 'boolean') return displayValue.toString();
+    }
+  }
   try {
     return JSON.stringify(value);
   } catch (_) {
@@ -282,6 +297,7 @@ export const buildTemplateVars = (args: {
   targetFormKey: string;
   targetFormTitle?: string;
   impactedCount?: number;
+  targetRecord?: WebFormSubmission;
   row?: Record<string, any>;
   parent?: Record<string, any>;
   lineItem?: {
@@ -291,7 +307,7 @@ export const buildTemplateVars = (args: {
     rowId?: string;
   };
 }): TemplateVars => {
-  const { sourceRecord, targetFormKey, targetFormTitle, impactedCount, row, parent, lineItem } = args;
+  const { sourceRecord, targetFormKey, targetFormTitle, impactedCount, targetRecord, row, parent, lineItem } = args;
   return {
     count: impactedCount ?? 0,
     targetFormKey,
@@ -303,6 +319,16 @@ export const buildTemplateVars = (args: {
       status: sourceRecord.status || '',
       ...(sourceRecord.values || {})
     },
+    target: targetRecord
+      ? {
+          id: targetRecord.id || '',
+          createdAt: targetRecord.createdAt || '',
+          updatedAt: targetRecord.updatedAt || '',
+          status: targetRecord.status || '',
+          pdfUrl: targetRecord.pdfUrl || '',
+          ...(targetRecord.values || {})
+        }
+      : {},
     row: cloneJson(row || {}),
     parent: cloneJson(parent || {}),
     lineItem: {
@@ -314,12 +340,73 @@ export const buildTemplateVars = (args: {
   };
 };
 
+export const resolveUpdateRecordDependencyGuardMode = (
+  guard: UpdateRecordDependencyGuardConfig | undefined | null
+): 'confirm' | 'block' => {
+  const mode = (guard?.mode || '').toString().trim().toLowerCase();
+  return mode === 'block' || mode === 'blocking' ? 'block' : 'confirm';
+};
+
+const resolveDialogRecordList = <TRecord extends WebFormSubmission = WebFormSubmission>(args: {
+  dialog: ButtonConfirmConfig;
+  language: LangCode;
+  baseVars: TemplateVars;
+  sourceRecord: WebFormSubmission;
+  targetFormKey: string;
+  targetFormTitle?: string;
+  impactedRecords: TRecord[];
+}): string => {
+  const recordListCfg = (args.dialog as any)?.recordList;
+  if (!recordListCfg || typeof recordListCfg !== 'object') return '';
+  const templateRaw = recordListCfg.template ?? recordListCfg.lineTemplate ?? recordListCfg.itemTemplate;
+  const template = resolveLocalizedString(templateRaw, args.language, '').toString();
+  if (!template.trim()) return '';
+
+  if (!args.impactedRecords.length) {
+    return resolveLocalizedString(recordListCfg.emptyText, args.language, '').toString().trim();
+  }
+
+  const limitRaw = Number(recordListCfg.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : args.impactedRecords.length;
+  return args.impactedRecords
+    .slice(0, limit)
+    .map(record => {
+      const vars = buildTemplateVars({
+        sourceRecord: args.sourceRecord,
+        targetRecord: record,
+        targetFormKey: args.targetFormKey,
+        targetFormTitle: args.targetFormTitle,
+        impactedCount: args.impactedRecords.length
+      });
+      return resolveTemplateValue(template, { ...args.baseVars, ...vars }).toString().trim();
+    })
+    .filter(Boolean)
+    .join('\n');
+};
+
 const resolveDialog = (args: {
   dialog: ButtonConfirmConfig;
   language: LangCode;
   vars: TemplateVars;
+  sourceRecord: WebFormSubmission;
+  targetFormKey: string;
+  targetFormTitle?: string;
+  impactedRecords: WebFormSubmission[];
 }): ResolvedUpdateRecordDependencyDialog => {
-  const dialogResolved = resolveTemplateValue(args.dialog, args.vars) as ButtonConfirmConfig;
+  const recordsList = resolveDialogRecordList({
+    dialog: args.dialog,
+    language: args.language,
+    baseVars: args.vars,
+    sourceRecord: args.sourceRecord,
+    targetFormKey: args.targetFormKey,
+    targetFormTitle: args.targetFormTitle,
+    impactedRecords: args.impactedRecords
+  });
+  const dialogVars = {
+    ...args.vars,
+    recordsList
+  };
+  const dialogResolved = resolveTemplateValue(args.dialog, dialogVars) as ButtonConfirmConfig;
   return {
     title: resolveOptionalLocalizedString(dialogResolved?.title, args.language, 'Confirm').toString().trim(),
     message: resolveLocalizedString(
@@ -330,7 +417,12 @@ const resolveDialog = (args: {
       .toString()
       .trim(),
     confirmLabel: resolveLocalizedString(dialogResolved?.confirmLabel, args.language, 'Confirm').toString().trim(),
-    cancelLabel: resolveLocalizedString(dialogResolved?.cancelLabel, args.language, 'Cancel').toString().trim()
+    cancelLabel: resolveLocalizedString(dialogResolved?.cancelLabel, args.language, 'Cancel').toString().trim(),
+    showCancel: (dialogResolved as any)?.showCancel,
+    showConfirm: (dialogResolved as any)?.showConfirm,
+    primaryAction: (dialogResolved as any)?.primaryAction === 'cancel' ? 'cancel' : undefined,
+    dismissOnBackdrop: (dialogResolved as any)?.dismissOnBackdrop,
+    showCloseButton: (dialogResolved as any)?.showCloseButton
   };
 };
 
@@ -461,6 +553,7 @@ export const evaluateUpdateRecordDependencyPreview = <TRecord extends WebFormSub
   now?: Date;
 }): UpdateRecordDependencyPreviewResult<TRecord> => {
   const now = args.now instanceof Date && !Number.isNaN(args.now.getTime()) ? args.now : new Date();
+  const mode = resolveUpdateRecordDependencyGuardMode(args.guard);
   const initialVars = buildTemplateVars({
     sourceRecord: args.sourceRecord,
     targetFormKey: args.targetFormKey,
@@ -483,16 +576,24 @@ export const evaluateUpdateRecordDependencyPreview = <TRecord extends WebFormSub
   const dialog = resolveDialog({
     dialog: args.guard.dialog,
     language: args.language,
-    vars
+    vars,
+    sourceRecord: args.sourceRecord,
+    targetFormKey: args.targetFormKey,
+    targetFormTitle: args.targetFormTitle,
+    impactedRecords
   });
 
   debugLog('updateRecordDependencies.preview', {
     targetFormKey: args.targetFormKey,
-    impactedCount: impactedRecords.length
+    impactedCount: impactedRecords.length,
+    mode,
+    blocked: mode === 'block' && impactedRecords.length > 0
   });
 
   return {
     targetFormKey: args.targetFormKey,
+    mode,
+    blocked: mode === 'block' && impactedRecords.length > 0,
     impactedCount: impactedRecords.length,
     impactedRecords,
     dialog

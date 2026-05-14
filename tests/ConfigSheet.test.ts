@@ -986,34 +986,35 @@ describe('ConfigSheet', () => {
             "set": { "status": "Disabled" },
             "dependencyGuard": {
               "targetFormKey": "Meal Production",
+              "mode": "block",
               "when": {
                 "all": [
-                  { "fieldId": "status", "notEquals": "Closed" },
+                  { "fieldId": "status", "equals": "In progress" },
+                  { "fieldId": "MP_PREP_DATE", "isToday": true },
                   {
                     "lineItems": {
                       "groupId": "MP_MEALS_REQUEST",
                       "subGroupId": "MP_TYPE_LI",
-                      "when": { "fieldId": "RECIPE", "equals": "{{source.RECIPE_NAME}}" }
+                      "when": {
+                        "all": [
+                          { "fieldId": "PREP_TYPE", "equals": "Cook" },
+                          { "fieldId": "RECIPE", "equals": "{{source.RECIPE_NAME}}" }
+                        ]
+                      }
                     }
                   }
                 ]
               },
               "dialog": {
                 "title": { "en": "Recipe used" },
-                "message": { "en": "This recipe is still used on {{count}} records." },
-                "confirmLabel": { "en": "Deactivate and clear" },
-                "cancelLabel": { "en": "Cancel" }
-              },
-              "mutations": [
-                {
-                  "type": "setLineItemValues",
-                  "groupId": "MP_MEALS_REQUEST",
-                  "subGroupPath": ["MP_TYPE_LI"],
-                  "when": { "fieldId": "RECIPE", "equals": "{{source.RECIPE_NAME}}" },
-                  "values": { "RECIPE": null },
-                  "clearSubGroups": ["MP_INGREDIENTS_LI"]
+                "message": { "en": "Concerned records:\\n{{recordsList}}" },
+                "confirmLabel": { "en": "OK" },
+                "cancelLabel": { "en": "Cancel" },
+                "showCancel": false,
+                "recordList": {
+                  "template": { "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}" }
                 }
-              ]
+              }
             }
           }
         }`,
@@ -1032,34 +1033,36 @@ describe('ConfigSheet', () => {
       navigateTo: 'auto',
       dependencyGuard: {
         targetFormKey: 'Meal Production',
+        mode: 'block',
         when: {
           all: [
-            { fieldId: 'status', notEquals: 'Closed' },
+            { fieldId: 'status', equals: 'In progress' },
+            { fieldId: 'MP_PREP_DATE', isToday: true },
             {
               lineItems: {
                 groupId: 'MP_MEALS_REQUEST',
                 subGroupId: 'MP_TYPE_LI',
-                when: { fieldId: 'RECIPE', equals: '{{source.RECIPE_NAME}}' }
+                when: {
+                  all: [
+                    { fieldId: 'PREP_TYPE', equals: 'Cook' },
+                    { fieldId: 'RECIPE', equals: '{{source.RECIPE_NAME}}' }
+                  ]
+                }
               }
             }
           ]
         },
         dialog: {
           title: { en: 'Recipe used' },
-          message: { en: 'This recipe is still used on {{count}} records.' },
-          confirmLabel: { en: 'Deactivate and clear' },
-          cancelLabel: { en: 'Cancel' }
-        },
-        mutations: [
-          {
-            type: 'setLineItemValues',
-            groupId: 'MP_MEALS_REQUEST',
-            subGroupPath: ['MP_TYPE_LI'],
-            when: { fieldId: 'RECIPE', equals: '{{source.RECIPE_NAME}}' },
-            values: { RECIPE: null },
-            clearSubGroups: ['MP_INGREDIENTS_LI']
+          message: { en: 'Concerned records:\n{{recordsList}}' },
+          confirmLabel: { en: 'OK' },
+          cancelLabel: { en: 'Cancel' },
+          showCancel: false,
+          recordList: {
+            template: { en: '- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}' }
           }
-        ]
+        },
+        mutations: []
       }
     });
   });

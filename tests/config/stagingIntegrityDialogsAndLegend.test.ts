@@ -97,6 +97,40 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(serialized).not.toMatch(/No-salt|Sans sel|Zonder zout|no_salt/);
   });
 
+  test('recipe deactivation blocks only today in-progress meal production records', () => {
+    const cfg = readConfig('config_recipes.json');
+    const assertGuard = (questions: any[]) => {
+      const deactivate = findQuestion(questions, 'RE_OPEN');
+      const guard = deactivate?.button?.dependencyGuard;
+      expect(guard?.mode).toBe('block');
+      expect(guard?.when).toEqual({
+        all: [
+          { fieldId: 'status', equals: 'In progress' },
+          { fieldId: 'MP_PREP_DATE', isToday: true },
+          {
+            lineItems: {
+              groupId: 'MP_MEALS_REQUEST',
+              subGroupId: 'MP_TYPE_LI',
+              when: {
+                all: [
+                  { fieldId: 'PREP_TYPE', equals: 'Cook' },
+                  { fieldId: 'RECIPE', equals: '{{source.QFTD5RD2EM}}' }
+                ]
+              }
+            }
+          }
+        ]
+      });
+      expect(guard?.dialog?.message?.en).toContain('cannot be deactivated');
+      expect(guard?.dialog?.message?.en).toContain('{{recordsList}}');
+      expect(guard?.dialog?.recordList?.template?.en).toBe('- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}');
+      expect(guard?.mutations).toBeUndefined();
+    };
+
+    assertGuard(cfg.questions || []);
+    assertGuard(cfg.definition?.questions || []);
+  });
+
   test('meal production keeps critical data-integrity dialogs wired', () => {
     const cfg = readConfig('config_meal_production.json');
 

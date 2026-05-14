@@ -381,11 +381,51 @@ export type UpdateRecordDependencyMutation =
   | UpdateRecordDependencySetRecordMutation
   | UpdateRecordDependencySetLineItemValuesMutation;
 
+export interface UpdateRecordDependencyRecordListConfig {
+  /**
+   * Template used for each impacted target record in `{{recordsList}}`.
+   *
+   * Supported placeholders include `{{target.FIELD_ID}}`, `{{target.id}}`,
+   * `{{target.status}}`, source placeholders, `{{count}}`, and `{{targetFormKey}}`.
+   */
+  template: LocalizedString | string;
+  /**
+   * Optional maximum number of target records shown in the dialog list.
+   */
+  limit?: number;
+  /**
+   * Optional text shown when the guard has no impacted records.
+   */
+  emptyText?: LocalizedString | string;
+}
+
+export interface UpdateRecordDependencyDialogConfig extends ButtonConfirmConfig {
+  /**
+   * Optional formatter for listing impacted records in the dialog message via `{{recordsList}}`.
+   */
+  recordList?: UpdateRecordDependencyRecordListConfig;
+  /**
+   * Standard dialog presentation controls.
+   */
+  showCancel?: boolean;
+  showConfirm?: boolean;
+  primaryAction?: 'confirm' | 'cancel';
+  dismissOnBackdrop?: boolean;
+  showCloseButton?: boolean;
+}
+
 export interface UpdateRecordDependencyGuardConfig {
   /**
-   * Target form where impacted downstream records should be checked and updated.
+   * Target form where impacted downstream records should be checked.
    */
   targetFormKey: string;
+  /**
+   * Guard behavior when impacted records are found.
+   *
+   * - `confirm` (default): show the dialog and apply configured target mutations when the user confirms.
+   * - `block`: show the dialog and prevent the source update from being saved.
+   */
+  mode?: 'confirm' | 'block';
   /**
    * Condition evaluated against each target record. Reuses the standard `WhenClause` DSL.
    *
@@ -400,12 +440,15 @@ export interface UpdateRecordDependencyGuardConfig {
    * - `{{count}}`: number of impacted records
    * - `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, `{{source.updatedAt}}`
    * - `{{targetFormKey}}`
+   * - `{{recordsList}}` when `dialog.recordList` is configured
    */
-  dialog: ButtonConfirmConfig;
+  dialog: UpdateRecordDependencyDialogConfig;
   /**
    * Mutations applied to each impacted target record when the user confirms.
+   *
+   * Optional for `mode: "block"` guards.
    */
-  mutations: UpdateRecordDependencyMutation[];
+  mutations?: UpdateRecordDependencyMutation[];
 }
 
 export interface FollowupCreateRecordEffect {

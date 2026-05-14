@@ -601,6 +601,8 @@ const createRpcHandlers = deps => {
         success: true,
         impactedCount: context.preview.impactedCount,
         targetFormKey: context.preview.targetFormKey,
+        mode: context.preview.mode,
+        blocked: context.preview.blocked,
         dialog: context.preview.dialog
       };
     },
@@ -620,6 +622,19 @@ const createRpcHandlers = deps => {
           dependency: {
             ...dependencyBase,
             updatedCount: 0
+          }
+        };
+      }
+
+      if (context.preview.blocked) {
+        return {
+          success: false,
+          message: (context.preview.dialog && context.preview.dialog.message) || 'Update is blocked by dependent records.',
+          meta: {},
+          dependency: {
+            ...dependencyBase,
+            updatedCount: 0,
+            blocked: true
           }
         };
       }

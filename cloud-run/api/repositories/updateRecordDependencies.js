@@ -493,6 +493,13 @@ const stringifyTemplateValue = value => {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
   if (Array.isArray(value)) return value.map(stringifyTemplateValue).filter(Boolean).join(', ');
+  if (isPlainObject(value)) {
+    for (const key of ['label', 'displayLabel', 'display', 'name', 'value', 'id']) {
+      const displayValue = value[key];
+      if (typeof displayValue === 'string' && displayValue.trim()) return displayValue;
+      if (typeof displayValue === 'number' || typeof displayValue === 'boolean') return displayValue.toString();
+    }
+  }
   try {
     return JSON.stringify(value);
   } catch {
@@ -529,6 +536,16 @@ const buildTemplateVars = args => ({
     status: (args.sourceRecord && args.sourceRecord.status) || '',
     ...((args.sourceRecord && args.sourceRecord.values) || {})
   },
+  target: args.targetRecord
+    ? {
+        id: args.targetRecord.id || '',
+        createdAt: args.targetRecord.createdAt || '',
+        updatedAt: args.targetRecord.updatedAt || '',
+        status: args.targetRecord.status || '',
+        pdfUrl: args.targetRecord.pdfUrl || '',
+        ...((args.targetRecord && args.targetRecord.values) || {})
+      }
+    : {},
   row: cloneJson(args.row || {}),
   parent: cloneJson(args.parent || {}),
   lineItem: {
@@ -539,13 +556,51 @@ const buildTemplateVars = args => ({
   }
 });
 
-const resolveDialog = (dialog, language, vars) => {
-  const resolved = resolveTemplateValue(dialog || {}, vars);
+const resolveUpdateRecordDependencyGuardMode = guard => {
+  const mode = normalizeMetaString(guard && guard.mode).toLowerCase();
+  return mode === 'block' || mode === 'blocking' ? 'block' : 'confirm';
+};
+
+const resolveDialogRecordList = args => {
+  const recordList = args.dialog && args.dialog.recordList;
+  if (!recordList || typeof recordList !== 'object') return '';
+  const templateRaw = recordList.template || recordList.lineTemplate || recordList.itemTemplate;
+  const template = resolveLocalizedString(templateRaw, args.language, '').toString();
+  if (!template.trim()) return '';
+  if (!args.impactedRecords.length) {
+    return resolveLocalizedString(recordList.emptyText, args.language, '').toString().trim();
+  }
+  const limitRaw = Number(recordList.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : args.impactedRecords.length;
+  return args.impactedRecords
+    .slice(0, limit)
+    .map(record => {
+      const vars = buildTemplateVars({
+        sourceRecord: args.sourceRecord,
+        targetRecord: record,
+        targetFormKey: args.targetFormKey,
+        targetFormTitle: args.targetFormTitle,
+        impactedCount: args.impactedRecords.length
+      });
+      return resolveTemplateValue(template, { ...args.baseVars, ...vars }).toString().trim();
+    })
+    .filter(Boolean)
+    .join('\n');
+};
+
+const resolveDialog = args => {
+  const recordsList = resolveDialogRecordList(args);
+  const resolved = resolveTemplateValue(args.dialog || {}, { ...args.vars, recordsList });
   return {
-    title: resolveLocalizedString(resolved.title, language, 'Confirm').toString().trim(),
-    message: resolveLocalizedString(resolved.message !== undefined ? resolved.message : resolved.body, language, '').toString().trim(),
-    confirmLabel: resolveLocalizedString(resolved.confirmLabel, language, 'Confirm').toString().trim(),
-    cancelLabel: resolveLocalizedString(resolved.cancelLabel, language, 'Cancel').toString().trim()
+    title: resolveLocalizedString(resolved.title, args.language, 'Confirm').toString().trim(),
+    message: resolveLocalizedString(resolved.message !== undefined ? resolved.message : resolved.body, args.language, '').toString().trim(),
+    confirmLabel: resolveLocalizedString(resolved.confirmLabel, args.language, 'Confirm').toString().trim(),
+    cancelLabel: resolveLocalizedString(resolved.cancelLabel, args.language, 'Cancel').toString().trim(),
+    showCancel: resolved.showCancel,
+    showConfirm: resolved.showConfirm,
+    primaryAction: resolved.primaryAction === 'cancel' ? 'cancel' : undefined,
+    dismissOnBackdrop: resolved.dismissOnBackdrop,
+    showCloseButton: resolved.showCloseButton
   };
 };
 
@@ -638,6 +693,7 @@ const applyLineItemMutation = ({ mutation, recordValues, questions, topCtx, now 
 const evaluateUpdateRecordDependencyPreview = args => {
   const now = args.now instanceof Date && !Number.isNaN(args.now.getTime()) ? args.now : new Date();
   const language = normalizeLanguage(args.language || (args.sourceRecord && args.sourceRecord.language));
+  const mode = resolveUpdateRecordDependencyGuardMode(args.guard);
   const initialVars = buildTemplateVars({
     sourceRecord: args.sourceRecord,
     targetFormKey: args.targetFormKey,
@@ -656,9 +712,20 @@ const evaluateUpdateRecordDependencyPreview = args => {
   });
   return {
     targetFormKey: args.targetFormKey,
+    mode,
+    blocked: mode === 'block' && impactedRecords.length > 0,
     impactedCount: impactedRecords.length,
     impactedRecords,
-    dialog: resolveDialog(args.guard && args.guard.dialog, language, vars)
+    dialog: resolveDialog({
+      dialog: args.guard && args.guard.dialog,
+      language,
+      vars,
+      baseVars: vars,
+      sourceRecord: args.sourceRecord,
+      targetFormKey: args.targetFormKey,
+      targetFormTitle: args.targetFormTitle,
+      impactedRecords
+    })
   };
 };
 

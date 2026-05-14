@@ -530,6 +530,22 @@ describe('meal production leftover selection config', () => {
         { fieldId: 'PREP_TYPE', equals: ['Cook'] }
       ]
     });
+    expect(recipeSync?.sourceSync).toEqual(
+      expect.objectContaining({
+        refreshOnInit: true,
+        forceRefresh: true,
+        forceRefreshMaxCacheAgeMs: 120000,
+        stopWhen: { fieldId: 'status', equals: 'Closed' }
+      })
+    );
+    expect(recipeSync?.clearOnNoMatch).toBe(true);
+    expect(recipeSync?.parentFieldMapping).toEqual(
+      expect.objectContaining({
+        RECIPE_SOURCE_ID: 'id',
+        RECIPE_SOURCE_UPDATED_AT: 'updatedAt',
+        RECIPE: 'QFTD5RD2EM'
+      })
+    );
     expect(ingredientSync?.when).toEqual({ fieldId: 'PREP_TYPE', equals: ['Cook'] });
     expect(toCookField?.derivedValue).toEqual(expect.objectContaining({ min: 0 }));
     expect(rawConfig?.derivedValue).toEqual(expect.objectContaining({ min: 0 }));

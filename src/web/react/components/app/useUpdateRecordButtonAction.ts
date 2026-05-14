@@ -295,20 +295,29 @@ export const useUpdateRecordButtonAction = (args: {
           });
 
           if (impactedCount > 0) {
-            const dialog = preview.dialog || { title: undefined, message: '', confirmLabel: '', cancelLabel: '' };
+            const dialog = (preview.dialog || { title: undefined, message: '', confirmLabel: '', cancelLabel: '' }) as any;
             const hasDialogTitle = Boolean(dialog && Object.prototype.hasOwnProperty.call(dialog, 'title'));
+            const blocked = preview.blocked === true || preview.mode === 'block';
             customConfirm.openConfirm({
               title: hasDialogTitle
                 ? (dialog.title ?? '').toString().trim()
                 : tSystem('common.confirm', languageRef.current, 'Confirm'),
               message: dialog.message || '',
-              confirmLabel: dialog.confirmLabel || tSystem('common.confirm', languageRef.current, 'Confirm'),
+              confirmLabel: dialog.confirmLabel || (blocked ? 'OK' : tSystem('common.confirm', languageRef.current, 'Confirm')),
               cancelLabel: dialog.cancelLabel || tSystem('common.cancel', languageRef.current, 'Cancel'),
-              kind: 'updateRecord.dependencyGuard',
+              primaryAction: dialog.primaryAction,
+              showCancel: blocked ? dialog.showCancel === true : dialog.showCancel,
+              showConfirm: dialog.showConfirm,
+              dismissOnBackdrop: dialog.dismissOnBackdrop,
+              showCloseButton: dialog.showCloseButton,
+              kind: blocked ? 'updateRecord.dependencyBlock' : 'updateRecord.dependencyGuard',
               refId: buttonId,
-              onConfirm: () => run('dependencyGuard')
+              onConfirm: () => {
+                if (blocked) return;
+                run('dependencyGuard');
+              }
             });
-            logEvent('button.updateRecord.dependencyConfirm.open', {
+            logEvent(blocked ? 'button.updateRecord.dependencyBlock.open' : 'button.updateRecord.dependencyConfirm.open', {
               buttonId: baseId,
               qIdx: qIdx ?? null,
               impactedCount,

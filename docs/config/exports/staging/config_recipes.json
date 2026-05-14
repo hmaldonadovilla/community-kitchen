@@ -885,31 +885,32 @@
         },
         "dependencyGuard": {
           "targetFormKey": "Meal Production",
+          "mode": "block",
           "when": {
             "all": [
               {
                 "fieldId": "status",
-                "notEquals": "Closed"
+                "equals": "In progress"
               },
               {
-                "any": [
-                  {
-                    "fieldId": "MP_PREP_DATE",
-                    "isToday": true
-                  },
-                  {
-                    "fieldId": "MP_PREP_DATE",
-                    "isInFuture": true
-                  }
-                ]
+                "fieldId": "MP_PREP_DATE",
+                "isToday": true
               },
               {
                 "lineItems": {
                   "groupId": "MP_MEALS_REQUEST",
                   "subGroupId": "MP_TYPE_LI",
                   "when": {
-                    "fieldId": "RECIPE",
-                    "equals": "{{source.QFTD5RD2EM}}"
+                    "all": [
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "equals": "Cook"
+                      },
+                      {
+                        "fieldId": "RECIPE",
+                        "equals": "{{source.QFTD5RD2EM}}"
+                      }
+                    ]
                   }
                 }
               }
@@ -920,34 +921,21 @@
               "en": "Recipe used in meal production"
             },
             "message": {
-              "en": "This recipe is still selected on {{count}} open Meal Production record(s) scheduled for today or later. If you continue, the recipe and its linked ingredients will be cleared from those records. Do you want to continue?"
+              "en": "This recipe is currently used in today’s meal production and cannot be deactivated. Select another recipe in Meal Production first, or return after today’s production is completed. Concerned records:\n{{recordsList}}"
             },
             "confirmLabel": {
-              "en": "Deactivate and clear"
+              "en": "OK"
             },
             "cancelLabel": {
               "en": "Cancel"
+            },
+            "showCancel": false,
+            "recordList": {
+              "template": {
+                "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}"
+              }
             }
-          },
-          "mutations": [
-            {
-              "type": "setLineItemValues",
-              "groupId": "MP_MEALS_REQUEST",
-              "subGroupPath": [
-                "MP_TYPE_LI"
-              ],
-              "when": {
-                "fieldId": "RECIPE",
-                "equals": "{{source.QFTD5RD2EM}}"
-              },
-              "values": {
-                "RECIPE": null
-              },
-              "clearSubGroups": [
-                "MP_INGREDIENTS_LI"
-              ]
-            }
-          ]
+          }
         },
         "placements": [
           "summaryBar"
@@ -1598,6 +1586,60 @@
             },
             "cancelLabel": {
               "en": "No"
+            }
+          },
+          "dependencyGuard": {
+            "targetFormKey": "Meal Production",
+            "mode": "block",
+            "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "equals": "In progress"
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isToday": true
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": "Cook"
+                        },
+                        {
+                          "fieldId": "RECIPE",
+                          "equals": "{{source.QFTD5RD2EM}}"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Recipe used in meal production"
+              },
+              "message": {
+                "en": "This recipe is currently used in today’s meal production and cannot be deactivated. Select another recipe in Meal Production first, or return after today’s production is completed. Concerned records:\n{{recordsList}}"
+              },
+              "confirmLabel": {
+                "en": "OK"
+              },
+              "cancelLabel": {
+                "en": "Cancel"
+              },
+              "showCancel": false,
+              "recordList": {
+                "template": {
+                  "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}"
+                }
+              }
             }
           },
           "placements": [

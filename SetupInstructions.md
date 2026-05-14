@@ -1073,7 +1073,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       Optional: add a reusable downstream dependency check before the update is applied.
       Use `button.dependencyGuard` when changing the current record would invalidate data on other forms that still reference it.
 
-      Example: before deactivating a Recipe, check open Meal Production records scheduled for today or later; if matches are found, show a dedicated dialog and clear the matching recipe rows plus their linked ingredient subgroup on confirm:
+      Example: before deactivating a Recipe, block the update when the recipe is used by an in-progress Meal Production record for today. Future records are not mutated here; their recipe datasource sync can refresh or clear recipe details when the user enters the relevant guided step.
 
       ```json
       {
@@ -1088,15 +1088,11 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           },
           "dependencyGuard": {
             "targetFormKey": "Meal Production",
+            "mode": "block",
             "when": {
               "all": [
-                { "fieldId": "status", "notEquals": "Closed" },
-                {
-                  "any": [
-                    { "fieldId": "MP_PREP_DATE", "isToday": true },
-                    { "fieldId": "MP_PREP_DATE", "isInFuture": true }
-                  ]
-                },
+                { "fieldId": "status", "equals": "In progress" },
+                { "fieldId": "MP_PREP_DATE", "isToday": true },
                 {
                   "lineItems": {
                     "groupId": "MP_MEALS_REQUEST",
@@ -1114,26 +1110,17 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             "dialog": {
               "title": { "en": "Recipe used in meal production" },
               "message": {
-                "en": "This recipe is still selected on {{count}} open Meal Production record(s) scheduled for today or later. If you continue, the recipe and its linked ingredients will be cleared from those records. Do you want to continue?"
+                "en": "This recipe is currently used in today’s meal production and cannot be deactivated. Select another recipe in Meal Production first, or return after today’s production is completed. Concerned records:\n{{recordsList}}"
               },
-              "confirmLabel": { "en": "Deactivate and clear" },
-              "cancelLabel": { "en": "Cancel" }
-            },
-            "mutations": [
-              {
-                "type": "setLineItemValues",
-                "groupId": "MP_MEALS_REQUEST",
-                "subGroupPath": ["MP_TYPE_LI"],
-                "when": {
-                  "all": [
-                    { "fieldId": "PREP_TYPE", "equals": "Cook" },
-                    { "fieldId": "RECIPE", "equals": "{{source.QFTD5RD2EM}}" }
-                  ]
-                },
-                "values": { "RECIPE": null },
-                "clearSubGroups": ["MP_INGREDIENTS_LI"]
+              "confirmLabel": { "en": "OK" },
+              "cancelLabel": { "en": "Cancel" },
+              "showCancel": false,
+              "recordList": {
+                "template": {
+                  "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}"
+                }
               }
-            ]
+            }
           }
         }
       }
@@ -1143,6 +1130,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `dependencyGuard.when` reuses the standard `WhenClause` DSL, including `all` / `any` / `not`, date comparisons, and `lineItems` conditions.
       - String values can reference the current source record via `{{source.FIELD_ID}}`, `{{source.id}}`, `{{source.status}}`, `{{source.createdAt}}`, and `{{source.updatedAt}}`.
       - The dedicated `dependencyGuard.dialog` only appears when impacted downstream records are found. If there are no matches, the normal `confirm` dialog (if configured) is used.
+      - `dependencyGuard.mode: "block"` prevents the source update from being saved when matches are found. Use `dialog.recordList.template` with `{{recordsList}}` to show the concerned target records; target placeholders use `{{target.FIELD_ID}}`.
       - `mutations.type: "setRecord"` updates top-level fields on each impacted target record.
       - `mutations.type: "setLineItemValues"` updates matching rows inside a line-item group or subgroup path. Use `clearSubGroups` to empty direct child subgroup arrays on those matched rows.
 

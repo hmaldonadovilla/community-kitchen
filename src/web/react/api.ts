@@ -54,11 +54,18 @@ export interface UpdateRecordDependencyPreviewResult {
   success: boolean;
   impactedCount?: number;
   targetFormKey?: string;
+  mode?: 'confirm' | 'block';
+  blocked?: boolean;
   dialog?: {
     title: string;
     message: string;
     confirmLabel: string;
     cancelLabel: string;
+    showCancel?: boolean;
+    showConfirm?: boolean;
+    primaryAction?: 'confirm' | 'cancel';
+    dismissOnBackdrop?: boolean;
+    showCloseButton?: boolean;
   };
   message?: string;
 }
@@ -68,6 +75,7 @@ export interface UpdateRecordDependencyApplyResult extends SubmissionResult {
     targetFormKey?: string;
     impactedCount?: number;
     updatedCount?: number;
+    blocked?: boolean;
     rollbackFailed?: boolean;
   };
 }
